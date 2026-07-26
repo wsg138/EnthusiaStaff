@@ -1,7 +1,9 @@
 package net.enthusia.staff.domain.application;
 
 import java.time.Clock;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -10,6 +12,7 @@ import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.EscalationDecision;
 import net.enthusia.staff.domain.escalation.EscalationEngine;
+import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
@@ -40,9 +43,32 @@ public final class PunishmentService {
     }
 
     public PunishmentResult create(CreatePunishmentRequest request, OperationalMode mode) {
-        return createConfirmed(request, mode, null);
+        return createConfirmed(request, mode, (PunishmentExpectation) null);
     }
 
+    public PunishmentResult createConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            PunishmentExpectation expectation
+    ) {
+        PunishmentEvaluation evaluation = evaluate(request, mode);
+        if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
+            return new PunishmentResult.Rejected(rejected.code(), rejected.message());
+        }
+        PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        if (expectation != null && !expectation.matches(assessment)) {
+            return new PunishmentResult.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The authoritative recommendation changed; review again before confirming"
+            );
+        }
+        return createEvaluated(request, assessment);
+    }
+
+    /**
+     * Compatibility overload for callers that have not yet adopted complete recommendation snapshots.
+     */
+    @Deprecated(forRemoval = false)
     public PunishmentResult createConfirmed(
             CreatePunishmentRequest request,
             OperationalMode mode,
@@ -60,6 +86,13 @@ public final class PunishmentService {
                     "The authoritative recommendation changed; review again before confirming"
             );
         }
+        return createEvaluated(request, assessment);
+    }
+
+    private PunishmentResult createEvaluated(
+            CreatePunishmentRequest request,
+            PunishmentAssessment assessment
+    ) {
         ReasonPolicy policy = assessment.policy();
         PunishmentPlan plan = new PunishmentPlan(
                 identifiers.newCaseId(),
@@ -70,7 +103,7 @@ public final class PunishmentService {
                 policy.family(),
                 policy.publicReason(),
                 request.internalExplanation(),
-                policies.activeVersion(),
+                assessment.configurationVersion(),
                 request.visibility(),
                 clock.instant(),
                 assessment.escalation(),
@@ -87,10 +120,11 @@ public final class PunishmentService {
         if (!authorization.permits(request.actor(), ModerationAction.ISSUE_POLICY_SANCTION)) {
             return new PunishmentEvaluation.Rejected("FORBIDDEN", "The actor is not permitted to issue sanctions");
         }
-        ReasonPolicy policy = policies.find(request.reasonId()).orElse(null);
-        if (policy == null) {
+        ReasonPolicyRepository.VersionedReasonPolicy resolved = policies.resolve(request.reasonId()).orElse(null);
+        if (resolved == null) {
             return new PunishmentEvaluation.Rejected("UNKNOWN_REASON", "The configured reason does not exist");
         }
+        ReasonPolicy policy = resolved.policy();
         if (request.actor().rank() == StaffRank.SYSTEM && !policy.automaticDetectionAllowed()) {
             return new PunishmentEvaluation.Rejected(
                     "AUTOMATION_NOT_ALLOWED",
@@ -109,26 +143,61 @@ public final class PunishmentService {
                 store.relatedHistory(request.targetId(), policy.family()),
                 clock.instant()
         );
-        List<SanctionSpec> sanctions = selectedSanctions(request, decision);
+        List<SanctionSpec> sanctions = selectedSanctions(request, policy, decision);
         if (sanctions == null) {
             return new PunishmentEvaluation.Rejected(
                     "FORBIDDEN_OVERRIDE",
                     "The requested override exceeds the actor's authority"
             );
         }
-        return new PunishmentEvaluation.Allowed(new PunishmentAssessment(policy, decision, sanctions));
+        return new PunishmentEvaluation.Allowed(new PunishmentAssessment(
+                resolved.version(), policy, decision, sanctions
+        ));
     }
 
     private List<SanctionSpec> selectedSanctions(
             CreatePunishmentRequest request,
+            ReasonPolicy policy,
             EscalationDecision decision
     ) {
         if (!request.usesOverride()) {
             return decision.selectedStep().sanctions();
         }
-        if (!authorization.permits(request.actor(), ModerationAction.USE_CUSTOM_COMBINATION)) {
-            return null;
+
+        List<SanctionSpec> requested = request.overrideSanctions();
+        List<PunishmentStep> exactSteps = policy.steps().stream()
+                .filter(step -> step.sanctions().equals(requested))
+                .toList();
+        if (!exactSteps.isEmpty()) {
+            int selectedOrdinal = decision.selectedStep().ordinal();
+            if (exactSteps.stream().anyMatch(step -> step.ordinal() == selectedOrdinal)) {
+                return requested;
+            }
+            ModerationAction action = exactSteps.stream().anyMatch(step -> step.ordinal() < selectedOrdinal)
+                    ? ModerationAction.LOWER_RECOMMENDATION
+                    : ModerationAction.RAISE_RECOMMENDATION;
+            return authorization.permits(request.actor(), action) ? requested : null;
         }
-        return request.overrideSanctions();
+
+        boolean configuredTypes = policy.steps().stream()
+                .map(PunishmentStep::sanctions)
+                .anyMatch(configured -> sameTypeShape(configured, requested));
+        ModerationAction action = configuredTypes
+                ? ModerationAction.USE_CUSTOM_DURATION
+                : ModerationAction.USE_CUSTOM_COMBINATION;
+        return authorization.permits(request.actor(), action) ? requested : null;
+    }
+
+    private static boolean sameTypeShape(List<SanctionSpec> left, List<SanctionSpec> right) {
+        return typeCounts(left).equals(typeCounts(right));
+    }
+
+    private static Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> typeCounts(
+            List<SanctionSpec> sanctions
+    ) {
+        Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> counts =
+                new EnumMap<>(net.enthusia.staff.domain.sanction.SanctionType.class);
+        sanctions.forEach(spec -> counts.merge(spec.type(), 1, Integer::sum));
+        return counts;
     }
 }

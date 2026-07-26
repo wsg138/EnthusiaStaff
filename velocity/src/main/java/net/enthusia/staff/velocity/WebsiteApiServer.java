@@ -39,6 +39,8 @@ import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
@@ -52,14 +54,6 @@ import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 final class WebsiteApiServer implements AutoCloseable {
-    private static final UUID WEBSITE_SERVICE_ACTOR_ID = UUID.nameUUIDFromBytes(
-            "enthusia:website-appeal-service".getBytes(StandardCharsets.UTF_8)
-    );
-    private static final Actor WEBSITE_SERVICE_ACTOR = new Actor(
-            WEBSITE_SERVICE_ACTOR_ID,
-            "Website Appeals",
-            StaffRank.ADMIN
-    );
     private static final Set<String> CLAIM_FIELDS =
             Set.of("accountId", "username", "punishmentCode");
     private static final Set<String> REVALIDATE_FIELDS =
@@ -70,6 +64,7 @@ final class WebsiteApiServer implements AutoCloseable {
             "caseId",
             "playerAccountId",
             "actorAccountId",
+            "actorRank",
             "reason"
     );
 
@@ -79,6 +74,7 @@ final class WebsiteApiServer implements AutoCloseable {
     private final int queueCapacity;
     private final int workerThreads;
     private final WebsiteModerationStore store;
+    private final AuthorizationPolicy authorization;
     private final SanctionChangeService sanctionChanges;
     private final Supplier<OperationalMode> authorityMode;
     private final Clock clock;
@@ -98,6 +94,7 @@ final class WebsiteApiServer implements AutoCloseable {
             String hmacSecret,
             Duration maximumSkew,
             WebsiteModerationStore store,
+            AuthorizationPolicy authorization,
             SanctionChangeService sanctionChanges,
             Supplier<OperationalMode> authorityMode,
             Clock clock,
@@ -106,7 +103,7 @@ final class WebsiteApiServer implements AutoCloseable {
         if (bindAddress == null || !bindAddress.isLoopbackAddress()
                 || port < 1 || port > 65_535
                 || maximumBodyBytes < 1_024 || workerThreads < 1 || queueCapacity < 8
-                || store == null || sanctionChanges == null || authorityMode == null
+                || store == null || authorization == null || sanctionChanges == null || authorityMode == null
                 || clock == null || errors == null) {
             throw new IllegalArgumentException("Website API server configuration is invalid");
         }
@@ -116,6 +113,7 @@ final class WebsiteApiServer implements AutoCloseable {
         this.workerThreads = workerThreads;
         this.queueCapacity = queueCapacity;
         this.store = store;
+        this.authorization = authorization;
         this.sanctionChanges = sanctionChanges;
         this.authorityMode = authorityMode;
         this.clock = clock;
@@ -319,7 +317,15 @@ final class WebsiteApiServer implements AutoCloseable {
             throw badRequest("INVALID_CASE_ID", "The case ID is invalid");
         }
         String playerAccountId = uuidText(input, "playerAccountId");
-        String reviewerAccountId = uuidText(input, "actorAccountId");
+        UUID reviewerAccountId = uuid(input, "actorAccountId");
+        Actor reviewer = websiteActor(reviewerAccountId, text(input, "actorRank", 16));
+        if (!authorization.permits(reviewer, ModerationAction.ACCEPT_APPEAL)) {
+            throw new WebsiteApiException(
+                    403,
+                    "APPEAL_MUTATION_FORBIDDEN",
+                    "The website reviewer has read-only punishment access"
+            );
+        }
         String reason = text(input, "reason", 1_000).trim();
         if (reason.length() < 10) {
             throw badRequest("INVALID_REASON", "The appeal decision reason is too short");
@@ -342,7 +348,7 @@ final class WebsiteApiServer implements AutoCloseable {
         SanctionChangeRequest request = new SanctionChangeRequest(
                 new IdempotencyKey("website-appeal:" + digestIdempotency(idempotencyKey)),
                 caseId,
-                WEBSITE_SERVICE_ACTOR,
+                reviewer,
                 SanctionChangeAction.END_EARLY,
                 Optional.empty(),
                 internalReason
@@ -376,6 +382,20 @@ final class WebsiteApiServer implements AutoCloseable {
                 safeOutcomeCode(rejected.code()),
                 "The accepted appeal could not change the punishment"
         );
+    }
+
+    static Actor websiteActor(UUID actorId, String rankName) {
+        if (actorId == null || rankName == null) {
+            throw badRequest("INVALID_ACTOR", "The website reviewer identity is invalid");
+        }
+        StaffRank rank = switch (rankName) {
+            case "MOD" -> StaffRank.MOD;
+            case "DEVELOPER" -> StaffRank.DEVELOPER;
+            case "ADMIN" -> StaffRank.ADMIN;
+            case "FOUNDER" -> StaffRank.FOUNDER;
+            default -> throw badRequest("INVALID_ACTOR_RANK", "The website reviewer rank is invalid");
+        };
+        return new Actor(actorId, "Website Reviewer", rank);
     }
 
     private ObjectNode jsonBody(HttpExchange exchange, byte[] body, Set<String> allowedFields) {

@@ -79,3 +79,5 @@ The website database account receives `SELECT` only on sanitized views such as `
 ## Migration and recovery
 
 Flyway validation runs during `BOOTSTRAP`. A checksum mismatch or unsupported future schema enters `READ_ONLY_FAILURE`; repair is a deliberate operator action, never automatic. Migration imports keep source IDs and checksums, use upsert-safe mappings, and write a run manifest. Rollback disables the new authority and preserves imported rows for forensic comparison rather than deleting production history.
+
+Historical actor identity is immutable. Cases previously issued by a Developer retain the original actor ID, name, and `DEVELOPER` rank and remain valid history; the current authorization policy is applied only to new mutation requests. LiteBans does not expose a trustworthy historical rank, so its imports retain the original staff name as provenance and use the non-interactive `SYSTEM` rank instead of guessing Mod, Developer, or Admin authority.

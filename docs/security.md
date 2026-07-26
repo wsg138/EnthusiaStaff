@@ -7,9 +7,13 @@ Players, chat, commands, plugin messages, website forms, uploaded media, Discord
 ## Authorization
 
 - Commands, GUI clicks, automation, network messages, and website actions call the same application services.
-- Mod and Developer cannot raise above policy or directly overturn. Admin can use approved custom durations/types. Founder-only recovery and override operations require an explicit reason and immutable audit.
+- Mod may apply configured punishment steps, lower or end sanctions while retaining history, and request a full overturn. Mod cannot raise a ladder result, create an arbitrary sanction combination, or directly overturn a case.
+- Developer has read-only punishment, case, report, and diagnostic access. Developer cannot create, confirm, change, end, revoke, overturn, request an overturn, accept an appeal, or perform case-linked confiscation or restrictions. This denial is enforced by application services even if a stale command permission remains granted.
+- Admin may apply configured punishments, raise or lower a result, use a custom duration with configured sanction types, fully overturn, and decide overturn requests. Founder has full punishment and recovery authority.
+- Developer retains non-punishment staff-mode, vanish, inventory inspection/editing, freeze, development, and testing permissions. Those permissions do not grant sanction authority.
+- Every Bukkit permission and rank node defaults to false. Explicit rank nodes grant command visibility, while the domain authorization policy remains authoritative for writes.
 - Inventory, economy, market, reputation, alt, and private evidence permissions are separate.
-- Website staff roles are revalidated for every request; stale sessions cannot retain removed authority.
+- Website staff roles are revalidated for every request. Developer can read the appeal queue and evidence but cannot claim or decide an appeal. Accepted appeals carry the server-derived reviewer rank to Velocity, which reauthorizes before reserving or changing a sanction.
 
 ## Secrets and cryptography
 

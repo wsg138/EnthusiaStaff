@@ -69,6 +69,34 @@ public final class JdbcCaseLookup implements CaseLookup {
     }
 
     @Override
+    public boolean containsSanction(
+            CaseId caseId,
+            Set<SanctionType> types,
+            boolean activeOnly
+    ) {
+        if (caseId == null || types == null || types.isEmpty() || types.size() > 32) {
+            throw new IllegalArgumentException("case and bounded sanction types are required");
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(types.size(), "?"));
+        String active = activeOnly ? " AND status IN ('PENDING', 'ACTIVE', 'APPLIED')" : "";
+        String sql = "SELECT 1 FROM sanctions WHERE case_id = ? AND sanction_type IN ("
+                + placeholders + ')' + active + " LIMIT 1";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, caseId.value());
+            int index = 2;
+            for (SanctionType type : types) {
+                statement.setString(index++, type.name());
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to resolve case sanctions", exception);
+        }
+    }
+
+    @Override
     public boolean exists(CaseId caseId) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("SELECT 1 FROM cases WHERE case_id = ?")) {

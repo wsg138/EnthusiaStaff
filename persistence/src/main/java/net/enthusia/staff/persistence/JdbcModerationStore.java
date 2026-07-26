@@ -42,7 +42,9 @@ public final class JdbcModerationStore implements ModerationStore {
                 SELECT c.sanction_family, ps.effective_ordinal, c.issued_at,
                        COALESCE(MAX(s.ended_at), MAX(s.expiration_at), c.issued_at) ended_at,
                        ps.escalation_contributes, c.state,
-                       COALESCE(MAX(CASE WHEN s.sanction_type IN ('BAN', 'NETWORK_BAN') THEN 80
+                       COALESCE(MAX(CASE WHEN s.sanction_type IN (
+                                                    'BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN'
+                                                ) THEN 80
                                          WHEN s.sanction_type = 'MUTE' THEN 50
                                          ELSE 20 END), 0) severity
                 FROM cases c

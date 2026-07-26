@@ -8,6 +8,15 @@ public enum StaffRank {
     SYSTEM;
 
     public boolean atLeast(StaffRank required) {
-        return ordinal() >= required.ordinal();
+        if (required == null) {
+            return false;
+        }
+        return switch (this) {
+            case MOD -> required == MOD;
+            case DEVELOPER -> required == DEVELOPER;
+            case ADMIN -> required == MOD || required == ADMIN;
+            case FOUNDER -> required == MOD || required == ADMIN || required == FOUNDER;
+            case SYSTEM -> required == SYSTEM;
+        };
     }
 }

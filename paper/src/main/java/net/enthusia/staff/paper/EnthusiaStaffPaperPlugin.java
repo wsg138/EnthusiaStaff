@@ -23,6 +23,7 @@ import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.application.SanctionChangeService;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.escalation.EscalationEngine;
 import net.enthusia.staff.domain.ports.ModerationStore;
@@ -82,6 +83,7 @@ import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
+    private final AuthorizationPolicy authorizationPolicy = new DefaultAuthorizationPolicy();
     private final RuntimeHealth health = new RuntimeHealth();
     private final AtomicReference<OperationalMode> mode = new AtomicReference<>(OperationalMode.BOOTSTRAP);
     private final ConcurrentHashMap<String, String> featureIssues = new ConcurrentHashMap<>();
@@ -288,13 +290,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             punishmentService = new PunishmentService(
                     Clock.systemUTC(),
                     new SecureIdentifiers(new SecureRandom()),
-                    new DefaultAuthorizationPolicy(),
+                    authorizationPolicy,
                     reasonPolicies,
                     moderationStore,
                     new EscalationEngine()
             );
             sanctionChangeService = new SanctionChangeService(
-                    new DefaultAuthorizationPolicy(), opened.sanctionMutationStore()
+                    authorizationPolicy, opened.sanctionMutationStore()
             );
             promoteAfterBootstrap();
             try {
@@ -476,6 +478,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     Clock.systemUTC(),
                     getConfig().getString("network.server-id", "SMP"),
                     this::effectiveWriteMode,
+                    authorizationPolicy,
                     () -> economyJournalStore,
                     workers,
                     discovery.gateway().orElseThrow(),
@@ -492,6 +495,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     ),
                     getConfig().getString("network.server-id", "SMP"),
                     this::effectiveWriteMode,
+                    authorizationPolicy,
                     () -> inventoryJournalStore,
                     workers,
                     inventoryCoordinator,
@@ -551,7 +555,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         reputationIntegration = ReputationIntegration.discover(
                 getServer().getServicesManager(),
-                getServer().getPluginManager().isPluginEnabled("EnthusiaCommend")
+                getServer().getPluginManager().isPluginEnabled("EnthusiaCommend"),
+                authorizationPolicy
         );
         if (marketIntegration.availability()
                 == net.enthusia.staff.domain.evidence.IntegrationAvailability.INCOMPATIBLE) {
@@ -577,6 +582,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this::effectiveWriteMode,
                 () -> punishmentService,
                 () -> playerDirectory,
+                authorizationPolicy,
                 reasonPolicies,
                 workers
         );
@@ -591,13 +597,17 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 () -> sanctionChangeService,
                 () -> playerDirectory,
                 () -> caseLookup,
+                authorizationPolicy,
                 workers
         );
         for (String name : java.util.List.of(
                 "removepunishment", "unban", "unmute", "removewarning", "unwarn"
         )) {
-            Objects.requireNonNull(getCommand(name), name + " command is missing from plugin.yml")
-                    .setExecutor(changes);
+            PluginCommand command = Objects.requireNonNull(
+                    getCommand(name), name + " command is missing from plugin.yml"
+            );
+            command.setExecutor(changes);
+            command.setTabCompleter(changes);
         }
         ReportCommand report = new ReportCommand(
                 this,
@@ -668,6 +678,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 () -> economyCoordinator,
                 () -> confiscationCoordinator,
                 inventoryCoordinator,
+                authorizationPolicy,
                 () -> marketIntegration,
                 () -> reputationIntegration,
                 workers
@@ -683,6 +694,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         this,
                         () -> caseLookup,
                         () -> confiscationCoordinator,
+                        authorizationPolicy,
                         workers
                 ));
     }

@@ -16,7 +16,7 @@ import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -24,21 +24,28 @@ import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class SanctionChangeCommand implements CommandExecutor {
+public final class SanctionChangeCommand implements CommandExecutor, TabCompleter {
     private static final Set<SanctionType> ALL_TYPES = Set.copyOf(EnumSet.allOf(SanctionType.class));
+    private static final List<String> CENTRAL_ACTIONS = List.of(
+            "end", "reduce", "replace-expiration", "revoke", "full-overturn",
+            "remove-escalation", "restore-escalation", "request-overturn",
+            "approve-overturn", "deny-overturn"
+    );
 
     private final JavaPlugin plugin;
     private final Supplier<OperationalMode> mode;
     private final Supplier<SanctionChangeService> service;
     private final Supplier<PlayerDirectory> players;
     private final Supplier<CaseLookup> cases;
+    private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
 
     public SanctionChangeCommand(
@@ -47,6 +54,7 @@ public final class SanctionChangeCommand implements CommandExecutor {
             Supplier<SanctionChangeService> service,
             Supplier<PlayerDirectory> players,
             Supplier<CaseLookup> cases,
+            AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
         this.plugin = plugin;
@@ -54,11 +62,17 @@ public final class SanctionChangeCommand implements CommandExecutor {
         this.service = service;
         this.players = players;
         this.cases = cases;
+        this.authorization = authorization;
         this.workers = workers;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null || !canChangeAnything(actor)) {
+            sender.sendMessage(Component.text("You do not have punishment modification authority."));
+            return true;
+        }
         String lowerLabel = label.toLowerCase(Locale.ROOT);
         boolean central = lowerLabel.equals("removepunishment");
         int minimum = central ? 3 : 2;
@@ -71,6 +85,14 @@ public final class SanctionChangeCommand implements CommandExecutor {
         SanctionChangeAction action = central ? parseAction(arguments[1]) : aliasAction(lowerLabel);
         if (action == null) {
             sender.sendMessage(Component.text("Unknown sanction change action."));
+            return true;
+        }
+        if (!authorization.permits(actor, action.requiredModerationAction())) {
+            sender.sendMessage(Component.text("You are not permitted to perform that punishment change."));
+            return true;
+        }
+        if (!sender.hasPermission(permissionFor(action))) {
+            sender.sendMessage(Component.text("You do not have permission for that punishment change."));
             return true;
         }
         int reasonStart = central ? 2 : 1;
@@ -101,7 +123,6 @@ public final class SanctionChangeCommand implements CommandExecutor {
             sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
             return true;
         }
-        Actor actor = actor(sender);
         Optional<Instant> requestedExpiration = expiration;
         submit(sender, () -> apply(
                 sender, lowerLabel, arguments[0], action, requestedExpiration, reason, actor
@@ -179,21 +200,6 @@ public final class SanctionChangeCommand implements CommandExecutor {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
     }
 
-    private static Actor actor(CommandSender sender) {
-        UUID id = sender instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
-        StaffRank rank;
-        if (sender.hasPermission("enthusiastaff.rank.founder")) {
-            rank = StaffRank.FOUNDER;
-        } else if (sender.hasPermission("enthusiastaff.rank.admin")) {
-            rank = StaffRank.ADMIN;
-        } else if (sender.hasPermission("enthusiastaff.rank.developer")) {
-            rank = StaffRank.DEVELOPER;
-        } else {
-            rank = StaffRank.MOD;
-        }
-        return new Actor(id, sender.getName(), rank);
-    }
-
     private static SanctionChangeAction aliasAction(String label) {
         return switch (label) {
             case "unban", "unmute" -> SanctionChangeAction.END_EARLY;
@@ -226,6 +232,48 @@ public final class SanctionChangeCommand implements CommandExecutor {
             case "approve-overturn" -> SanctionChangeAction.APPROVE_FULL_OVERTURN;
             case "deny-overturn" -> SanctionChangeAction.DENY_FULL_OVERTURN;
             default -> null;
+        };
+    }
+
+    private boolean canChangeAnything(Actor actor) {
+        return Arrays.stream(SanctionChangeAction.values())
+                .anyMatch(action -> authorization.permits(actor, action.requiredModerationAction()));
+    }
+
+    @Override
+    public List<String> onTabComplete(
+            CommandSender sender,
+            Command command,
+            String alias,
+            String[] arguments
+    ) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null || !canChangeAnything(actor)
+                || !alias.equalsIgnoreCase("removepunishment") || arguments.length != 2) {
+            return List.of();
+        }
+        String prefix = arguments[1].toLowerCase(Locale.ROOT);
+        return CENTRAL_ACTIONS.stream()
+                .filter(value -> value.startsWith(prefix))
+                .filter(value -> {
+                    SanctionChangeAction action = parseAction(value);
+                    return action != null
+                            && authorization.permits(actor, action.requiredModerationAction())
+                            && sender.hasPermission(permissionFor(action));
+                })
+                .toList();
+    }
+
+    private static String permissionFor(SanctionChangeAction action) {
+        return switch (action) {
+            case END_EARLY -> "enthusiastaff.remove.end";
+            case REVOKE -> "enthusiastaff.remove.revoke";
+            case REDUCE_DURATION, REMOVE_ESCALATION_CONTRIBUTION -> "enthusiastaff.remove.lower";
+            case REPLACE_EXPIRATION -> "enthusiastaff.remove.custom-duration";
+            case RESTORE_ESCALATION_CONTRIBUTION -> "enthusiastaff.remove.raise";
+            case FULL_OVERTURN -> "enthusiastaff.remove.full-overturn";
+            case REQUEST_FULL_OVERTURN -> "enthusiastaff.remove.request-overturn";
+            case APPROVE_FULL_OVERTURN, DENY_FULL_OVERTURN -> "enthusiastaff.remove.approve-overturn";
         };
     }
 }

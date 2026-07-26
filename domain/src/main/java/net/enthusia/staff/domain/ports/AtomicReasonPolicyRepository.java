@@ -22,7 +22,17 @@ public final class AtomicReasonPolicyRepository implements ReasonPolicyRepositor
 
     @Override
     public Optional<ReasonPolicy> find(String reasonId) {
-        Map<String, ReasonPolicy> policies = state.get().policies();
+        return policy(state.get().policies(), reasonId);
+    }
+
+    @Override
+    public Optional<VersionedReasonPolicy> resolve(String reasonId) {
+        State snapshot = state.get();
+        return policy(snapshot.policies(), reasonId)
+                .map(policy -> new VersionedReasonPolicy(snapshot.version(), policy));
+    }
+
+    private static Optional<ReasonPolicy> policy(Map<String, ReasonPolicy> policies, String reasonId) {
         ReasonPolicy direct = policies.get(reasonId);
         if (direct != null) {
             return Optional.of(direct);

@@ -6,15 +6,24 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
         if (actor == null || action == null) {
             return false;
         }
-        if (actor.rank() == StaffRank.SYSTEM) {
-            return action == ModerationAction.ISSUE_POLICY_SANCTION;
-        }
-        return switch (action) {
-            case ISSUE_POLICY_SANCTION, LOWER_RECOMMENDATION, END_SANCTION,
-                    REVOKE_SANCTION, REQUEST_FULL_OVERTURN, RESTORE_ASSETS -> true;
-            case RAISE_RECOMMENDATION, USE_CUSTOM_DURATION, FULL_OVERTURN,
-                    APPROVE_OVERTURN -> actor.rank().atLeast(StaffRank.ADMIN);
-            case USE_CUSTOM_COMBINATION, OWNER_RECOVERY -> actor.rank().atLeast(StaffRank.FOUNDER);
+        return switch (actor.rank()) {
+            case SYSTEM -> action == ModerationAction.ISSUE_POLICY_SANCTION;
+            case DEVELOPER -> false;
+            case MOD -> switch (action) {
+                case ISSUE_POLICY_SANCTION, LOWER_RECOMMENDATION, END_SANCTION,
+                        REVOKE_SANCTION, REQUEST_FULL_OVERTURN, ACCEPT_APPEAL,
+                        APPLY_CASE_CONFISCATION -> true;
+                default -> false;
+            };
+            case ADMIN -> switch (action) {
+                case ISSUE_POLICY_SANCTION, LOWER_RECOMMENDATION, RAISE_RECOMMENDATION,
+                        USE_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
+                        REQUEST_FULL_OVERTURN, APPROVE_OVERTURN, ACCEPT_APPEAL,
+                        APPLY_CASE_CONFISCATION, MODIFY_MARKET_RESTRICTION,
+                        MODIFY_REPUTATION_RESTRICTION -> true;
+                default -> false;
+            };
+            case FOUNDER -> true;
         };
     }
 }

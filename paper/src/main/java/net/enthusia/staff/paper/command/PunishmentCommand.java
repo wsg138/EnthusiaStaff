@@ -20,10 +20,12 @@ import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentEvaluation;
+import net.enthusia.staff.domain.application.PunishmentExpectation;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
@@ -32,12 +34,12 @@ import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentCommand implements CommandExecutor, TabCompleter {
@@ -45,7 +47,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static final int MAX_DRAFTS = 2_048;
     private static final Map<String, Set<SanctionType>> FILTERS = Map.of(
             "ban", Set.of(SanctionType.BAN, SanctionType.NETWORK_BAN),
-            "ipban", Set.of(SanctionType.NETWORK_BAN),
+            "ipban", Set.of(SanctionType.NETWORK_IDENTITY_BAN),
             "mute", Set.of(SanctionType.MUTE),
             "warn", Set.of(SanctionType.WARNING),
             "kick", Set.of(SanctionType.KICK)
@@ -56,6 +58,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final Supplier<OperationalMode> mode;
     private final Supplier<PunishmentService> punishmentService;
     private final Supplier<PlayerDirectory> playerDirectory;
+    private final AuthorizationPolicy authorization;
     private final ReasonPolicyRepository policies;
     private final ExecutorService workers;
     private final Map<String, Draft> drafts = new ConcurrentHashMap<>();
@@ -66,6 +69,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             Supplier<OperationalMode> mode,
             Supplier<PunishmentService> punishmentService,
             Supplier<PlayerDirectory> playerDirectory,
+            AuthorizationPolicy authorization,
             ReasonPolicyRepository policies,
             ExecutorService workers
     ) {
@@ -74,35 +78,46 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.mode = mode;
         this.punishmentService = punishmentService;
         this.playerDirectory = playerDirectory;
+        this.authorization = authorization;
         this.policies = policies;
         this.workers = workers;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null
+                || !authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || !sender.hasPermission("enthusiastaff.punish.configured")) {
+            sender.sendMessage(Component.text("You do not have punishment authority."));
+            return true;
+        }
         if (arguments.length == 2 && arguments[0].equalsIgnoreCase("confirm")) {
-            confirm(sender, label, arguments[1]);
+            confirm(sender, label, arguments[1], actor);
             return true;
         }
         if (arguments.length < 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " <player|uuid> <reason-id> [internal explanation]"));
+            sender.sendMessage(Component.text(
+                    "Usage: /" + label + " <player|uuid> <reason-id> [--private] [internal explanation]"
+            ));
             sender.sendMessage(Component.text("Confirm with /" + label + " confirm <token> after reviewing the result."));
             return true;
         }
-        preview(sender, label, arguments);
+        preview(sender, label, arguments, actor);
         return true;
     }
 
-    private void preview(CommandSender sender, String label, String[] arguments) {
-        Actor actor = actor(sender);
+    private void preview(CommandSender sender, String label, String[] arguments, Actor actor) {
         ReasonPolicy policy = policies.find(arguments[1]).orElse(null);
         if (policy == null) {
             sender.sendMessage(Component.text("Unknown configured reason: " + arguments[1]));
             return;
         }
-        CaseVisibility visibility = policy.publicByDefault() ? CaseVisibility.PUBLIC : CaseVisibility.PRIVATE;
-        String explanation = arguments.length > 2
-                ? String.join(" ", Arrays.copyOfRange(arguments, 2, arguments.length)).trim()
+        boolean explicitlyPrivate = arguments.length > 2 && arguments[2].equalsIgnoreCase("--private");
+        CaseVisibility visibility = explicitlyPrivate ? CaseVisibility.PRIVATE : CaseVisibility.PUBLIC;
+        int explanationStart = explicitlyPrivate ? 3 : 2;
+        String explanation = arguments.length > explanationStart
+                ? String.join(" ", Arrays.copyOfRange(arguments, explanationStart, arguments.length)).trim()
                 : "Issued through the central punishment command";
         submit(sender, () -> {
             PlayerDirectory directory = playerDirectory.get();
@@ -141,7 +156,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                     explanation,
                     visibility,
                     label.toLowerCase(Locale.ROOT),
-                    assessment.escalation().selectedStep().label(),
+                    PunishmentExpectation.from(assessment),
                     clock.instant().plus(DRAFT_LIFETIME)
             ));
             send(sender, "Review: " + displayName(target) + " | " + policy.id() + " | step "
@@ -150,8 +165,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         });
     }
 
-    private void confirm(CommandSender sender, String label, String token) {
-        Actor actor = actor(sender);
+    private void confirm(CommandSender sender, String label, String token, Actor actor) {
         Draft draft = drafts.remove(token.toUpperCase(Locale.ROOT));
         if (draft == null || draft.expiresAt().isBefore(clock.instant())) {
             sender.sendMessage(Component.text("That confirmation token is missing or expired."));
@@ -170,18 +184,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             CreatePunishmentRequest request = request(
                     draft.token(), draft.targetId(), actor, draft.reasonId(), draft.explanation(), draft.visibility()
             );
-            PunishmentEvaluation current = service.evaluate(request, mode.get());
-            if (current instanceof PunishmentEvaluation.Rejected rejected) {
-                send(sender, rejected.code() + ": " + rejected.message());
-                return;
-            }
-            PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) current).assessment();
-            if (!assessment.escalation().selectedStep().label().equals(draft.expectedStep())
-                    || !matchesFilter(label, assessment.sanctions())) {
-                send(sender, "The authoritative recommendation changed; review again before confirming.");
-                return;
-            }
-            PunishmentResult result = service.createConfirmed(request, mode.get(), draft.expectedStep());
+            PunishmentResult result = service.createConfirmed(request, mode.get(), draft.expectation());
             if (result instanceof PunishmentResult.Accepted accepted) {
                 send(sender, "Punishment committed as case " + accepted.caseId()
                         + (accepted.replayed() ? " (idempotent replay)" : "") + ".");
@@ -228,21 +231,6 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         );
     }
 
-    private static Actor actor(CommandSender sender) {
-        UUID id = sender instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
-        StaffRank rank;
-        if (sender.hasPermission("enthusiastaff.rank.founder")) {
-            rank = StaffRank.FOUNDER;
-        } else if (sender.hasPermission("enthusiastaff.rank.admin")) {
-            rank = StaffRank.ADMIN;
-        } else if (sender.hasPermission("enthusiastaff.rank.developer")) {
-            rank = StaffRank.DEVELOPER;
-        } else {
-            rank = StaffRank.MOD;
-        }
-        return new Actor(id, sender.getName(), rank);
-    }
-
     private static boolean matchesFilter(String label, List<SanctionSpec> sanctions) {
         Set<SanctionType> required = FILTERS.get(label.toLowerCase(Locale.ROOT));
         return required == null || sanctions.stream().anyMatch(spec -> required.contains(spec.type()));
@@ -270,6 +258,12 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null
+                || !authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || !sender.hasPermission("enthusiastaff.punish.configured")) {
+            return List.of();
+        }
         if (arguments.length == 1 && "confirm".startsWith(arguments[0].toLowerCase(Locale.ROOT))) {
             return List.of("confirm");
         }
@@ -287,6 +281,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             matches.sort(Comparator.naturalOrder());
             return matches.size() > 50 ? matches.subList(0, 50) : matches;
         }
+        if (arguments.length == 3 && !arguments[0].equalsIgnoreCase("confirm")
+                && "--private".startsWith(arguments[2].toLowerCase(Locale.ROOT))) {
+            return List.of("--private");
+        }
         return List.of();
     }
 
@@ -298,7 +296,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             String explanation,
             CaseVisibility visibility,
             String command,
-            String expectedStep,
+            PunishmentExpectation expectation,
             Instant expiresAt
     ) {
     }

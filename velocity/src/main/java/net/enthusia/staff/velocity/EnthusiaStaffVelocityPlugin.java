@@ -49,6 +49,7 @@ import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.migration.MigrationMode;
 import net.enthusia.staff.domain.migration.FounderOverride;
 import net.enthusia.staff.domain.player.PlayerPlatform;
@@ -366,6 +367,7 @@ public final class EnthusiaStaffVelocityPlugin {
             WebsiteModerationStore store = runtime.websiteModerationStore(
                     loaded.punishmentCodeProtectorFromEnvironment()
             );
+            AuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
             int created = store.ensureEligibleCodes(Clock.systemUTC().instant(), 5_000);
             server = new WebsiteApiServer(
                     InetAddress.getByName(loaded.websiteApiBindAddress()),
@@ -377,8 +379,9 @@ public final class EnthusiaStaffVelocityPlugin {
                     loaded.websiteApiHmacSecretFromEnvironment(),
                     Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
                     store,
+                    authorization,
                     new SanctionChangeService(
-                            new DefaultAuthorizationPolicy(),
+                            authorization,
                             runtime.sanctionMutationStore()
                     ),
                     authorityMode::get,

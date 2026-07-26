@@ -14,5 +14,13 @@ public enum SanctionType {
     ENDER_CHEST_CONFISCATION,
     ECONOMY_CONFISCATION,
     CONTENT_REMOVAL,
-    STALL_OWNERSHIP_REMOVAL
+    STALL_OWNERSHIP_REMOVAL;
+
+    public boolean isBan() {
+        return this == BAN || this == NETWORK_BAN || this == NETWORK_IDENTITY_BAN;
+    }
+
+    public boolean inheritsAcrossAltRelationships() {
+        return isBan() || this == MUTE;
+    }
 }

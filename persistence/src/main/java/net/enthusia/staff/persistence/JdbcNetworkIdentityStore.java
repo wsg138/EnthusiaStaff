@@ -10,6 +10,8 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,6 +28,9 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final int PROTOCOL_VERSION = 1;
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
+    private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
+            .filter(SanctionType::inheritsAcrossAltRelationships)
+            .toList();
 
     private final DataSource dataSource;
     private final ObjectMapper json;
@@ -372,18 +377,24 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             UUID playerId,
             Instant now
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
+        String placeholders = String.join(",", Collections.nCopies(INHERITABLE_SANCTION_TYPES.size(), "?"));
+        String sql = """
                 SELECT s.sanction_id, s.case_id, s.sanction_type, s.expiration_at
                 FROM sanctions s JOIN cases c ON c.case_id = s.case_id
                 WHERE s.target_id = ? AND s.status = 'ACTIVE'
-                  AND s.sanction_type IN ('BAN', 'MUTE')
+                  AND s.sanction_type IN (%s)
                   AND (s.expiration_at IS NULL OR s.expiration_at > ?)
                   AND c.state <> 'FULLY_OVERTURNED'
                 ORDER BY s.issued_at
                 FOR UPDATE
-                """)) {
+                """.formatted(placeholders);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(playerId));
-            statement.setTimestamp(2, Timestamp.from(now));
+            int index = 2;
+            for (SanctionType type : INHERITABLE_SANCTION_TYPES) {
+                statement.setString(index++, type.name());
+            }
+            statement.setTimestamp(index, Timestamp.from(now));
             try (ResultSet result = statement.executeQuery()) {
                 List<SourceSanction> sanctions = new ArrayList<>();
                 while (result.next()) {

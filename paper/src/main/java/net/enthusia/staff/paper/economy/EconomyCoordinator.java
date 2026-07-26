@@ -18,6 +18,9 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.economy.EconomyAmountMode;
 import net.enthusia.staff.domain.economy.EconomyJournalResult;
 import net.enthusia.staff.domain.economy.EconomyOperation;
@@ -28,6 +31,7 @@ import net.enthusia.staff.domain.economy.EconomyReconciliationDecision;
 import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -46,6 +50,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     private final Clock clock;
     private final String serverId;
     private final Supplier<OperationalMode> mode;
+    private final AuthorizationPolicy authorization;
     private final Supplier<EconomyJournalStore> store;
     private final ExecutorService workers;
     private final CurrencyGateway currency;
@@ -60,6 +65,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             Clock clock,
             String serverId,
             Supplier<OperationalMode> mode,
+            AuthorizationPolicy authorization,
             Supplier<EconomyJournalStore> store,
             ExecutorService workers,
             CurrencyGateway currency,
@@ -70,6 +76,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.serverId = requireIdentifier(serverId);
         this.mode = java.util.Objects.requireNonNull(mode, "mode");
+        this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.currency = java.util.Objects.requireNonNull(currency, "currency");
@@ -85,6 +92,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     ) {
         if (actor == null || target == null || requestedAmount == null) {
             throw new IllegalArgumentException("actor, target, and requestedAmount must be present");
+        }
+        if (!authorize(actor, ModerationAction.APPLY_CASE_CONFISCATION)) {
+            message(actor, "You do not have case confiscation authority.");
+            return;
         }
         if (mode.get() != OperationalMode.ACTIVE) {
             message(actor, "Economy confiscation is available only while moderation is ACTIVE.");
@@ -1178,6 +1189,11 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             throw new IllegalArgumentException("serverId must contain 1-64 characters");
         }
         return value;
+    }
+
+    private boolean authorize(Player player, ModerationAction action) {
+        Actor actor = PaperActorResolver.resolve(player).orElse(null);
+        return actor != null && authorization.permits(actor, action);
     }
 
     private static List<CurrencyAssetSource> validateSourceOrder(

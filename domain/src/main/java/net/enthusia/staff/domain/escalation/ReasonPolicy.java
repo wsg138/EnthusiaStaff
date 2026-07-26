@@ -37,6 +37,9 @@ public record ReasonPolicy(
         if (requiredRank == null || altInheritance == null) {
             throw new IllegalArgumentException("requiredRank and altInheritance must be present");
         }
+        if (requiredRank == StaffRank.DEVELOPER || requiredRank == StaffRank.SYSTEM) {
+            throw new IllegalArgumentException("configured punishments require MOD, ADMIN, or FOUNDER authority");
+        }
         for (int index = 0; index < steps.size(); index++) {
             if (steps.get(index).ordinal() != index) {
                 throw new IllegalArgumentException("step ordinals must be contiguous and zero based");

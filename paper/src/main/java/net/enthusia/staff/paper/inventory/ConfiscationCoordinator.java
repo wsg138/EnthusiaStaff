@@ -21,6 +21,9 @@ import java.util.logging.Level;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.inventory.ConfiscatedAssetReservation;
 import net.enthusia.staff.domain.inventory.ConfiscatedAssetSnapshot;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationCommitRequest;
@@ -33,6 +36,7 @@ import net.enthusia.staff.domain.inventory.InventoryPatch;
 import net.enthusia.staff.domain.inventory.InventoryPreparation;
 import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -66,6 +70,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     private final String scopeId;
     private final String serverId;
     private final Supplier<OperationalMode> mode;
+    private final AuthorizationPolicy authorization;
     private final Supplier<InventoryJournalStore> store;
     private final ExecutorService workers;
     private final InventoryCoordinator inventories;
@@ -84,6 +89,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             String scopeId,
             String serverId,
             Supplier<OperationalMode> mode,
+            AuthorizationPolicy authorization,
             Supplier<InventoryJournalStore> store,
             ExecutorService workers,
             InventoryCoordinator inventories,
@@ -94,6 +100,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         this.scopeId = requireIdentifier(scopeId, "scopeId");
         this.serverId = requireIdentifier(serverId, "serverId");
         this.mode = java.util.Objects.requireNonNull(mode, "mode");
+        this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.inventories = java.util.Objects.requireNonNull(inventories, "inventories");
@@ -103,6 +110,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     public void open(Player viewer, Player target, CaseId caseId) {
         if (viewer == null || target == null || caseId == null) {
             throw new IllegalArgumentException("viewer, target, and caseId must be present");
+        }
+        if (!authorize(viewer, ModerationAction.APPLY_CASE_CONFISCATION)) {
+            viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+            return;
         }
         if (mode.get() != OperationalMode.ACTIVE) {
             viewer.sendMessage(Component.text(
@@ -139,6 +150,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     public void restore(Player viewer, Player target, CaseId caseId) {
         if (viewer == null || target == null || caseId == null) {
             throw new IllegalArgumentException("viewer, target, and caseId must be present");
+        }
+        if (!authorize(viewer, ModerationAction.RESTORE_ASSETS)) {
+            viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
+            return;
         }
         if (mode.get() != OperationalMode.ACTIVE) {
             viewer.sendMessage(Component.text(
@@ -1020,6 +1035,15 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     private void confirm(SelectionSession session) {
+        if (!authorize(session.viewer(), ModerationAction.APPLY_CASE_CONFISCATION)) {
+            cancel(
+                    session,
+                    "ACTOR_AUTHORITY_REVOKED",
+                    "Staff punishment authority changed before confirmation",
+                    true
+            );
+            return;
+        }
         if (session.selectionCount() == 0) {
             session.viewer().sendMessage(Component.text("Select at least one item or container."));
             return;
@@ -1453,6 +1477,11 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             throw new IllegalArgumentException(field + " must contain 1-64 characters");
         }
         return value;
+    }
+
+    private boolean authorize(Player player, ModerationAction action) {
+        Actor actor = PaperActorResolver.resolve(player).orElse(null);
+        return actor != null && authorization.permits(actor, action);
     }
 
     @Override

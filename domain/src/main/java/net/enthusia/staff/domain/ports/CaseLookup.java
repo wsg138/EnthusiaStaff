@@ -11,5 +11,7 @@ public interface CaseLookup {
 
     Optional<UUID> target(CaseId caseId);
 
+    boolean containsSanction(CaseId caseId, Set<SanctionType> types, boolean activeOnly);
+
     boolean exists(CaseId caseId);
 }

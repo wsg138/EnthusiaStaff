@@ -97,9 +97,11 @@ public final class ReasonPolicyConfigurationLoader {
         String path = "root.defaults";
         requireObject(node, path);
         rejectUnknown(node, DEFAULT_FIELDS, path);
+        boolean publicByDefault = bool(node, "public-default", path);
+        requirePublicDefault(publicByDefault, path + ".public-default");
         return new Defaults(
                 bool(node, "decay-eligible", path),
-                bool(node, "public-default", path),
+                publicByDefault,
                 bool(node, "reportable", path),
                 bool(node, "confiscation-options", path),
                 enumValue(StaffRank.class, text(node, "required-rank", path), path + ".required-rank"),
@@ -133,6 +135,8 @@ public final class ReasonPolicyConfigurationLoader {
         for (int index = 0; index < ladder.size(); index++) {
             steps.add(parseStep(ladder.get(index), index, path + ".ladder[" + index + "]"));
         }
+        boolean publicByDefault = bool(node, "public-default", defaults.publicByDefault(), path);
+        requirePublicDefault(publicByDefault, path + ".public-default");
         return new ReasonPolicy(
                 id,
                 text(node, "family", path),
@@ -141,7 +145,7 @@ public final class ReasonPolicyConfigurationLoader {
                 bool(node, "decay-eligible", defaults.decayEligible(), path),
                 steps,
                 examples,
-                bool(node, "public-default", defaults.publicByDefault(), path),
+                publicByDefault,
                 bool(node, "reportable", defaults.reportable(), path),
                 bool(node, "confiscation-options", defaults.confiscationAllowed(), path),
                 enumValue(StaffRank.class, optionalText(node, "required-rank", defaults.requiredRank().name()), path + ".required-rank"),
@@ -262,6 +266,12 @@ public final class ReasonPolicyConfigurationLoader {
 
     private static ConfigurationValidationException invalid(String message) {
         return new ConfigurationValidationException(message);
+    }
+
+    private static void requirePublicDefault(boolean publicByDefault, String path) {
+        if (!publicByDefault) {
+            throw invalid(path + " must be true; staff may explicitly select private during review");
+        }
     }
 
     public record LoadedPolicies(String version, List<ReasonPolicy> policies) {

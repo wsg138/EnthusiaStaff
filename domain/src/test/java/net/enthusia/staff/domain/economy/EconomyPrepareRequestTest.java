@@ -35,7 +35,7 @@ final class EconomyPrepareRequestTest {
         return new EconomyPrepareRequest(
                 UUID.randomUUID(),
                 "economy:test:" + UUID.randomUUID(),
-                "ABC123",
+                "01J0000000000000",
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 mode,

@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
@@ -13,10 +14,15 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPresence;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -38,6 +44,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     private final Supplier<EconomyCoordinator> economy;
     private final Supplier<ConfiscationCoordinator> confiscation;
     private final InventoryCoordinator inventories;
+    private final AuthorizationPolicy authorization;
     private final Supplier<MarketIntegration> market;
     private final Supplier<ReputationIntegration> reputation;
     private final ExecutorService workers;
@@ -50,6 +57,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             Supplier<EconomyCoordinator> economy,
             Supplier<ConfiscationCoordinator> confiscation,
             InventoryCoordinator inventories,
+            AuthorizationPolicy authorization,
             Supplier<MarketIntegration> market,
             Supplier<ReputationIntegration> reputation,
             ExecutorService workers
@@ -61,6 +69,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         this.economy = java.util.Objects.requireNonNull(economy, "economy");
         this.confiscation = java.util.Objects.requireNonNull(confiscation, "confiscation");
         this.inventories = java.util.Objects.requireNonNull(inventories, "inventories");
+        this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.market = java.util.Objects.requireNonNull(market, "market");
         this.reputation = java.util.Objects.requireNonNull(reputation, "reputation");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
@@ -86,19 +95,28 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (arguments.length == 5 && arguments[0].equalsIgnoreCase("economy")) {
+            if (!canApplyCaseConfiscation(viewer)) {
+                viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+                return true;
+            }
             confiscateEconomy(viewer, arguments);
             return true;
         }
         if (arguments.length == 3 && arguments[0].equalsIgnoreCase("items")) {
+            if (!canApplyCaseConfiscation(viewer)) {
+                viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+                return true;
+            }
             confiscateItems(viewer, arguments[1], arguments[2]);
             return true;
         }
-        viewer.sendMessage(Component.text(
-                "Usage: /" + label + " <player> | /" + label
-                        + " <inventory|ender> <player> | /" + label
-                        + " items <player> <case-id> | /" + label
-                        + " economy <player> <case-id> <all|amount> CONFIRM"
-        ));
+        String usage = "Usage: /" + label + " <player> | /" + label
+                + " <inventory|ender> <player>";
+        if (canApplyCaseConfiscation(viewer)) {
+            usage += " | /" + label + " items <player> <case-id> | /" + label
+                    + " economy <player> <case-id> <all|amount> CONFIRM";
+        }
+        viewer.sendMessage(Component.text(usage));
         return true;
     }
 
@@ -282,6 +300,17 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                 message(viewer, "That case belongs to another player; no asset lock was created.");
                 return;
             }
+            if (!loadedCases.containsSanction(
+                    caseId,
+                    java.util.Set.of(
+                            SanctionType.INVENTORY_CONFISCATION,
+                            SanctionType.ENDER_CHEST_CONFISCATION
+                    ),
+                    true
+            )) {
+                message(viewer, "That case has no active item-confiscation sanction.");
+                return;
+            }
             onViewer(viewer, () -> {
                 Player onlineTarget = plugin.getServer().getPlayer(target.playerId());
                 if (onlineTarget == null) {
@@ -330,6 +359,14 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                 message(viewer, "That case belongs to another player; no assets changed.");
                 return;
             }
+            if (!loadedCases.containsSanction(
+                    caseId,
+                    java.util.Set.of(SanctionType.ECONOMY_CONFISCATION),
+                    true
+            )) {
+                message(viewer, "That case has no active economy-confiscation sanction.");
+                return;
+            }
             onViewer(viewer, () -> {
                 Player onlineTarget = plugin.getServer().getPlayer(target.playerId());
                 if (onlineTarget == null) {
@@ -354,13 +391,19 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             String[] arguments
     ) {
         if (arguments.length == 1) {
-            return prefix(arguments[0], List.of("inventory", "ender", "items", "economy"));
+            List<String> actions = new ArrayList<>(List.of("inventory", "ender"));
+            if (canApplyCaseConfiscation(sender)) {
+                if (sender.hasPermission("enthusiastaff.confiscate.items")) {
+                    actions.add("items");
+                }
+                if (sender.hasPermission("enthusiastaff.confiscate.economy")) {
+                    actions.add("economy");
+                }
+            }
+            return prefix(arguments[0], actions);
         }
         if (arguments.length == 2
-                && (arguments[0].equalsIgnoreCase("inventory")
-                || arguments[0].equalsIgnoreCase("ender")
-                || arguments[0].equalsIgnoreCase("items")
-                || arguments[0].equalsIgnoreCase("economy"))) {
+                && visibleTargetSubcommand(sender, arguments[0])) {
             String prefix = arguments[1].toLowerCase(Locale.ROOT);
             return plugin.getServer().getOnlinePlayers().stream()
                     .map(Player::getName)
@@ -369,13 +412,36 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                     .limit(50)
                     .toList();
         }
-        if (arguments.length == 4 && arguments[0].equalsIgnoreCase("economy")) {
+        if (arguments.length == 4 && arguments[0].equalsIgnoreCase("economy")
+                && canApplyCaseConfiscation(sender)
+                && sender.hasPermission("enthusiastaff.confiscate.economy")) {
             return prefix(arguments[3], List.of("all"));
         }
-        if (arguments.length == 5 && arguments[0].equalsIgnoreCase("economy")) {
+        if (arguments.length == 5 && arguments[0].equalsIgnoreCase("economy")
+                && canApplyCaseConfiscation(sender)
+                && sender.hasPermission("enthusiastaff.confiscate.economy")) {
             return prefix(arguments[4], List.of("CONFIRM"));
         }
         return List.of();
+    }
+
+    private boolean visibleTargetSubcommand(CommandSender sender, String input) {
+        if (input.equalsIgnoreCase("inventory") || input.equalsIgnoreCase("ender")) {
+            return true;
+        }
+        if (!canApplyCaseConfiscation(sender)) {
+            return false;
+        }
+        return input.equalsIgnoreCase("items")
+                ? sender.hasPermission("enthusiastaff.confiscate.items")
+                : input.equalsIgnoreCase("economy")
+                        && sender.hasPermission("enthusiastaff.confiscate.economy");
+    }
+
+    private boolean canApplyCaseConfiscation(CommandSender sender) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        return actor != null
+                && authorization.permits(actor, ModerationAction.APPLY_CASE_CONFISCATION);
     }
 
     private static List<String> prefix(String input, List<String> candidates) {

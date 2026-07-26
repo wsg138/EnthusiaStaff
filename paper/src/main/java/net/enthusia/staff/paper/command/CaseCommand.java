@@ -6,7 +6,11 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -19,17 +23,20 @@ public final class CaseCommand implements CommandExecutor {
     private final JavaPlugin plugin;
     private final Supplier<CaseLookup> cases;
     private final Supplier<ConfiscationCoordinator> confiscation;
+    private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
 
     public CaseCommand(
             JavaPlugin plugin,
             Supplier<CaseLookup> cases,
             Supplier<ConfiscationCoordinator> confiscation,
+            AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.cases = java.util.Objects.requireNonNull(cases, "cases");
         this.confiscation = java.util.Objects.requireNonNull(confiscation, "confiscation");
+        this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
     }
 
@@ -42,6 +49,11 @@ public final class CaseCommand implements CommandExecutor {
     ) {
         if (!(sender instanceof Player viewer)) {
             sender.sendMessage("Confiscated-item restoration requires an in-game staff actor.");
+            return true;
+        }
+        Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
+        if (actor == null || !authorization.permits(actor, ModerationAction.RESTORE_ASSETS)) {
+            viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
             return true;
         }
         if (arguments.length != 2 || !arguments[0].equalsIgnoreCase("restoreitems")) {

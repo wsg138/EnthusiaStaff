@@ -1,4 +1,4 @@
-version: "2026-07-22.1"
+version: "2026-07-26.1"
 defaults:
   decay-eligible: true
   public-default: true
@@ -126,7 +126,7 @@ reasons:
     family: safety
     display-name: Encouraging self-harm
     severity: 85
-    public-default: false
+    public-default: true
     ladder:
       - { label: "30 day mute and 14 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 14d }] }
       - { label: "60 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 60d }, { type: NETWORK_BAN, duration: 30d }] }
@@ -138,7 +138,7 @@ reasons:
     family: privacy
     display-name: Exposing personal information without harmful intent
     severity: 60
-    public-default: false
+    public-default: true
     ladder:
       - { label: "Warning and removal", sanctions: [{ type: WARNING, duration: instant }, { type: CONTENT_REMOVAL, duration: instant }] }
       - { label: "3 day mute and removal", sanctions: [{ type: MUTE, duration: 3d }, { type: CONTENT_REMOVAL, duration: instant }] }
@@ -149,7 +149,7 @@ reasons:
     family: safety
     display-name: Credible threat
     severity: 95
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -160,7 +160,7 @@ reasons:
     family: privacy
     display-name: Doxxing
     severity: 100
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -171,7 +171,7 @@ reasons:
     family: safety
     display-name: Blackmail or extortion
     severity: 100
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -181,7 +181,7 @@ reasons:
     family: safety
     display-name: Grooming
     severity: 100
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -191,7 +191,7 @@ reasons:
     family: safety
     display-name: Illegal sexual or exploitative content
     severity: 100
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -295,7 +295,7 @@ reasons:
     family: content
     display-name: Explicit sexual content
     severity: 80
-    public-default: false
+    public-default: true
     ladder:
       - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
       - { label: "14 day mute and 1 day ban", sanctions: [{ type: MUTE, duration: 14d }, { type: NETWORK_BAN, duration: 1d }] }
@@ -436,7 +436,7 @@ reasons:
     family: account
     display-name: Account theft
     severity: 95
-    public-default: false
+    public-default: true
     required-rank: ADMIN
     decay-eligible: false
     ladder:
@@ -502,7 +502,7 @@ reasons:
     family: dishonesty
     display-name: Falsifying evidence
     severity: 85
-    public-default: false
+    public-default: true
     ladder:
       - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
       - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
@@ -512,7 +512,7 @@ reasons:
     family: dishonesty
     display-name: Lying during a staff investigation
     severity: 50
-    public-default: false
+    public-default: true
     ladder:
       - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
       - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }

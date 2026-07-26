@@ -88,6 +88,7 @@ No platform module may be referenced from a shared module. Paper and Velocity ne
 - Read only sanitized MariaDB views through a restricted Hyperdrive user or restricted internal API.
 - Keep accounts, sessions, punishment-code claims, appeals, rate limits, and security events in D1.
 - Keep private appeal media in R2 and serve it only through short-lived authorized responses.
+- Allow Developer to inspect appeal records but not claim or decide them. Mod, Admin, and Founder decisions carry an immutable server-derived rank to the normal sanction-change service for authorization.
 - Never expose staff notes, reporters, coordinates, network identity, alt evidence, confiscation detail, or raw automation metadata.
 - Remain private and unlinked until an explicit public-launch operation.
 

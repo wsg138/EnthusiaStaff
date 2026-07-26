@@ -121,48 +121,144 @@ commands:
     permission: enthusiastaff.case.restoreitems
 permissions:
   enthusiastaff.status:
-    default: op
+    default: false
   enthusiastaff.verify:
-    default: op
+    default: false
   enthusiastaff.reload:
-    default: op
+    default: false
+  enthusiastaff.diagnostics:
+    default: false
+  enthusiastaff.punishment.read:
+    default: false
+  enthusiastaff.case.read:
+    default: false
   enthusiastaff.punish:
-    default: op
+    default: false
+  enthusiastaff.punish.configured:
+    default: false
   enthusiastaff.punish.ip:
-    default: op
+    default: false
+  enthusiastaff.punish.custom-duration:
+    default: false
+  enthusiastaff.punish.custom-combination:
+    default: false
   enthusiastaff.remove:
-    default: op
+    default: false
+  enthusiastaff.remove.lower:
+    default: false
+  enthusiastaff.remove.raise:
+    default: false
+  enthusiastaff.remove.custom-duration:
+    default: false
+  enthusiastaff.remove.end:
+    default: false
+  enthusiastaff.remove.revoke:
+    default: false
+  enthusiastaff.remove.request-overturn:
+    default: false
+  enthusiastaff.remove.full-overturn:
+    default: false
+  enthusiastaff.remove.approve-overturn:
+    default: false
   enthusiastaff.reports.manage:
-    default: op
+    default: false
   enthusiastaff.alerts:
-    default: op
+    default: false
   enthusiastaff.freeze:
-    default: op
+    default: false
   enthusiastaff.freeze.chat:
-    default: op
+    default: false
   enthusiastaff.staffmode:
-    default: op
+    default: false
   enthusiastaff.vanish:
-    default: op
+    default: false
   enthusiastaff.staffchat:
-    default: op
+    default: false
   enthusiastaff.client:
-    default: op
+    default: false
   enthusiastaff.inventory.view:
-    default: op
+    default: false
   enthusiastaff.inventory.edit:
-    default: op
+    default: false
   enthusiastaff.inspect:
-    default: op
+    default: false
   enthusiastaff.confiscate.economy:
-    default: op
+    default: false
   enthusiastaff.confiscate.items:
-    default: op
+    default: false
   enthusiastaff.case.restoreitems:
-    default: op
+    default: false
+  enthusiastaff.market.restrict:
+    default: false
+  enthusiastaff.reputation.restrict:
+    default: false
+  enthusiastaff.owner.recovery:
+    default: false
   enthusiastaff.rank.developer:
     default: false
+    children:
+      enthusiastaff.status: true
+      enthusiastaff.verify: true
+      enthusiastaff.reload: true
+      enthusiastaff.diagnostics: true
+      enthusiastaff.punishment.read: true
+      enthusiastaff.case.read: true
+      enthusiastaff.reports.manage: true
+      enthusiastaff.alerts: true
+      enthusiastaff.freeze: true
+      enthusiastaff.freeze.chat: true
+      enthusiastaff.staffmode: true
+      enthusiastaff.vanish: true
+      enthusiastaff.staffchat: true
+      enthusiastaff.client: true
+      enthusiastaff.inventory.view: true
+      enthusiastaff.inventory.edit: true
+      enthusiastaff.inspect: true
+  enthusiastaff.rank.mod:
+    default: false
+    children:
+      enthusiastaff.status: true
+      enthusiastaff.verify: true
+      enthusiastaff.punishment.read: true
+      enthusiastaff.case.read: true
+      enthusiastaff.punish: true
+      enthusiastaff.punish.configured: true
+      enthusiastaff.punish.ip: true
+      enthusiastaff.remove: true
+      enthusiastaff.remove.lower: true
+      enthusiastaff.remove.end: true
+      enthusiastaff.remove.revoke: true
+      enthusiastaff.remove.request-overturn: true
+      enthusiastaff.reports.manage: true
+      enthusiastaff.alerts: true
+      enthusiastaff.freeze: true
+      enthusiastaff.freeze.chat: true
+      enthusiastaff.staffmode: true
+      enthusiastaff.vanish: true
+      enthusiastaff.staffchat: true
+      enthusiastaff.client: true
+      enthusiastaff.inventory.view: true
+      enthusiastaff.inventory.edit: true
+      enthusiastaff.inspect: true
+      enthusiastaff.confiscate.economy: true
+      enthusiastaff.confiscate.items: true
   enthusiastaff.rank.admin:
-    default: op
+    default: false
+    children:
+      enthusiastaff.rank.mod: true
+      enthusiastaff.reload: true
+      enthusiastaff.diagnostics: true
+      enthusiastaff.punish.custom-duration: true
+      enthusiastaff.remove.raise: true
+      enthusiastaff.remove.custom-duration: true
+      enthusiastaff.remove.full-overturn: true
+      enthusiastaff.remove.approve-overturn: true
+      enthusiastaff.market.restrict: true
+      enthusiastaff.reputation.restrict: true
   enthusiastaff.rank.founder:
     default: false
+    children:
+      enthusiastaff.rank.admin: true
+      enthusiastaff.punish.custom-combination: true
+      enthusiastaff.case.restoreitems: true
+      enthusiastaff.owner.recovery: true
