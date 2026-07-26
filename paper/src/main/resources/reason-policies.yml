@@ -1,0 +1,928 @@
+version: "2026-07-22.1"
+defaults:
+  decay-eligible: true
+  public-default: true
+  reportable: true
+  confiscation-options: false
+  required-rank: MOD
+  automatic-detection-eligible: false
+  alt-inheritance: ACTIVE_SANCTIONS
+
+reasons:
+  - id: hate.general-toxicity
+    family: hate
+    display-name: General toxicity or insulting
+    severity: 10
+    examples: ["General insults", "Disruptive toxicity"]
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+
+  - id: hate.targeted-harassment
+    family: hate
+    display-name: Targeted harassment or bullying
+    severity: 25
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute", sanctions: [{ type: MUTE, duration: 14d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: hate.discriminatory-statement
+    family: hate
+    display-name: Discriminatory statement without a slur
+    severity: 40
+    ladder:
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute", sanctions: [{ type: MUTE, duration: 14d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+      - { label: "60 day mute", sanctions: [{ type: MUTE, duration: 60d }] }
+      - { label: "Permanent mute", sanctions: [{ type: MUTE, duration: permanent }] }
+
+  - id: hate.abbreviated-slur-untargeted
+    family: hate
+    display-name: Abbreviated slur, not targeted
+    severity: 50
+    ladder:
+      - { label: "14 day mute", sanctions: [{ type: MUTE, duration: 14d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+      - { label: "45 day mute", sanctions: [{ type: MUTE, duration: 45d }] }
+      - { label: "60 day mute", sanctions: [{ type: MUTE, duration: 60d }] }
+      - { label: "90 day mute", sanctions: [{ type: MUTE, duration: 90d }] }
+      - { label: "Permanent mute", sanctions: [{ type: MUTE, duration: permanent }] }
+
+  - id: hate.abbreviated-slur-targeted
+    family: hate
+    display-name: Abbreviated slur, targeted
+    severity: 60
+    ladder:
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+      - { label: "45 day mute", sanctions: [{ type: MUTE, duration: 45d }] }
+      - { label: "60 day mute", sanctions: [{ type: MUTE, duration: 60d }] }
+      - { label: "90 day mute", sanctions: [{ type: MUTE, duration: 90d }] }
+      - { label: "Permanent mute", sanctions: [{ type: MUTE, duration: permanent }] }
+
+  - id: hate.full-slur-untargeted
+    family: hate
+    display-name: Full slur, not targeted
+    severity: 65
+    automatic-detection-eligible: true
+    ladder:
+      - { label: "21 day mute", sanctions: [{ type: MUTE, duration: 21d }] }
+      - { label: "45 day mute", sanctions: [{ type: MUTE, duration: 45d }] }
+      - { label: "60 day mute", sanctions: [{ type: MUTE, duration: 60d }] }
+      - { label: "90 day mute", sanctions: [{ type: MUTE, duration: 90d }] }
+      - { label: "Permanent mute", sanctions: [{ type: MUTE, duration: permanent }] }
+
+  - id: hate.full-slur-targeted
+    family: hate
+    display-name: Full slur, targeted
+    severity: 75
+    ladder:
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+      - { label: "60 day mute", sanctions: [{ type: MUTE, duration: 60d }] }
+      - { label: "90 day mute", sanctions: [{ type: MUTE, duration: 90d }] }
+      - { label: "Permanent mute", sanctions: [{ type: MUTE, duration: permanent }] }
+
+  - id: hate.extremist-symbol
+    family: hate
+    display-name: Hate symbol or extremist imagery
+    severity: 80
+    ladder:
+      - { label: "21 day ban", sanctions: [{ type: NETWORK_BAN, duration: 21d }] }
+      - { label: "45 day ban", sanctions: [{ type: NETWORK_BAN, duration: 45d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: hate.advocating-hate-violence
+    family: hate
+    display-name: Glorifying or advocating genocide or hate-based violence
+    severity: 90
+    required-rank: ADMIN
+    ladder:
+      - { label: "45 day ban", sanctions: [{ type: NETWORK_BAN, duration: 45d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: harassment.sexual
+    family: harassment
+    display-name: Sexual harassment
+    severity: 80
+    ladder:
+      - { label: "30 day mute and 14 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 14d }] }
+      - { label: "60 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 60d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day mute and 60 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: safety.encouraging-self-harm
+    family: safety
+    display-name: Encouraging self-harm
+    severity: 85
+    public-default: false
+    ladder:
+      - { label: "30 day mute and 14 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 14d }] }
+      - { label: "60 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 60d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day mute and 60 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: privacy.personal-information-careless
+    family: privacy
+    display-name: Exposing personal information without harmful intent
+    severity: 60
+    public-default: false
+    ladder:
+      - { label: "Warning and removal", sanctions: [{ type: WARNING, duration: instant }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "3 day mute and removal", sanctions: [{ type: MUTE, duration: 3d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+
+  - id: safety.credible-threat
+    family: safety
+    display-name: Credible threat
+    severity: 95
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: privacy.doxxing
+    family: privacy
+    display-name: Doxxing
+    severity: 100
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: safety.blackmail-extortion
+    family: safety
+    display-name: Blackmail or extortion
+    severity: 100
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: safety.grooming
+    family: safety
+    display-name: Grooming
+    severity: 100
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: safety.illegal-exploitative-content
+    family: safety
+    display-name: Illegal sexual or exploitative content
+    severity: 100
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: spam.low-level
+    family: spam
+    display-name: Low-level chat spam, caps, or repeated characters
+    severity: 10
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+
+  - id: spam.message-flooding
+    family: spam
+    display-name: Message flooding
+    severity: 20
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: spam.private-message
+    family: spam
+    display-name: Private-message spam
+    severity: 20
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: spam.noise-pollution
+    family: spam
+    display-name: Noise pollution or sound spam
+    severity: 20
+    examples: ["Voice-chat mic spam", "Repeated sound effects", "Note-block or portal noise"]
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: language.non-english-public-chat
+    family: language
+    display-name: Non-English public chat
+    severity: 15
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day ban", sanctions: [{ type: NETWORK_BAN, duration: 1d }] }
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+
+  - id: spam.begging
+    family: spam
+    display-name: Begging for ranks, items, permissions, or creative
+    severity: 10
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+
+  - id: content.moderate-inappropriate
+    family: content
+    display-name: Moderate inappropriate or disruptive content
+    severity: 35
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "7 day mute and 1 day ban", sanctions: [{ type: MUTE, duration: 7d }, { type: NETWORK_BAN, duration: 1d }] }
+      - { label: "14 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 14d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day mute and 14 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 14d }] }
+
+  - id: content.extreme-inappropriate
+    family: content
+    display-name: Extreme inappropriate or disruptive content
+    severity: 70
+    ladder:
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute and 1 day ban", sanctions: [{ type: MUTE, duration: 14d }, { type: NETWORK_BAN, duration: 1d }] }
+      - { label: "30 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "60 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 60d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: content.explicit-sexual
+    family: content
+    display-name: Explicit sexual content
+    severity: 80
+    public-default: false
+    ladder:
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute and 1 day ban", sanctions: [{ type: MUTE, duration: 14d }, { type: NETWORK_BAN, duration: 1d }] }
+      - { label: "30 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "60 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 60d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day mute and 60 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: identity.inappropriate-profile
+    family: identity
+    display-name: Inappropriate username, skin, or profile
+    severity: 45
+    ladder:
+      - { label: "Kick with correction instruction", sanctions: [{ type: KICK, duration: instant }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: advertising.minecraft-server
+    family: advertising
+    display-name: Advertising another Minecraft server
+    severity: 65
+    ladder:
+      - { label: "30 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "90 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: advertising.unrelated-self-promotion
+    family: advertising
+    display-name: Unrelated advertising or self-promotion
+    severity: 30
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "14 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 14d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+
+  - id: identity.staff-impersonation
+    family: identity
+    display-name: Staff impersonation
+    severity: 55
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "7 day mute and 1 day ban", sanctions: [{ type: MUTE, duration: 7d }, { type: NETWORK_BAN, duration: 1d }] }
+      - { label: "30 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "90 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: advertising.malicious-link
+    family: advertising
+    display-name: Malicious, deceptive, phishing, or scam link
+    severity: 90
+    ladder:
+      - { label: "90 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Permanent mute and 90 day ban", sanctions: [{ type: MUTE, duration: permanent }, { type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: politics.casual
+    family: politics
+    display-name: Casual politics or sensitive IRL topic
+    severity: 10
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+
+  - id: politics.moderate
+    family: politics
+    display-name: Moderate politics or sensitive IRL topic
+    severity: 25
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute", sanctions: [{ type: MUTE, duration: 14d }] }
+
+  - id: politics.extreme
+    family: politics
+    display-name: Extreme politics or sensitive IRL topic
+    severity: 45
+    ladder:
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "14 day mute", sanctions: [{ type: MUTE, duration: 14d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: account.unapproved-vpn
+    family: account
+    display-name: Unapproved VPN use
+    severity: 30
+    ladder:
+      - { label: "Warning and kick", sanctions: [{ type: WARNING, duration: instant }, { type: KICK, duration: instant }] }
+      - { label: "1 day ban", sanctions: [{ type: NETWORK_BAN, duration: 1d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: account.sharing
+    family: account
+    display-name: Account sharing
+    severity: 55
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: account.headless-client
+    family: account
+    display-name: Headless client or headless alt
+    severity: 65
+    ladder:
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: account.unsafe-download
+    family: account
+    display-name: Sharing an unsafe or questionable download
+    severity: 60
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: account.theft
+    family: account
+    display-name: Account theft
+    severity: 95
+    public-default: false
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: complicity.encouraging-rule-breaking
+    family: complicity
+    display-name: Encouraging general rule breaking
+    severity: 25
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day ban", sanctions: [{ type: NETWORK_BAN, duration: 1d }] }
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+
+  - id: complicity.encouraging-cheating
+    family: complicity
+    display-name: Encouraging cheating or exploit abuse
+    severity: 50
+    ladder:
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: complicity.assisting-cheating
+    family: complicity
+    display-name: Assisting or knowingly benefiting from cheating
+    severity: 65
+    confiscation-options: true
+    ladder:
+      - { label: "7 day ban with confiscation review", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: complicity.laundering-duplicated-items
+    family: complicity
+    display-name: Storing or laundering duplicated items
+    severity: 75
+    confiscation-options: true
+    ladder:
+      - { label: "14 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 14d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "30 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "90 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: evasion.harboring-ban-evader
+    family: evasion
+    display-name: Harboring a ban evader
+    severity: 55
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: dishonesty.falsifying-evidence
+    family: dishonesty
+    display-name: Falsifying evidence
+    severity: 85
+    public-default: false
+    ladder:
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: dishonesty.lying-investigation
+    family: dishonesty
+    display-name: Lying during a staff investigation
+    severity: 50
+    public-default: false
+    ladder:
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: staff.refusing-instruction
+    family: staff
+    display-name: Refusing a direct staff instruction
+    severity: 30
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day ban", sanctions: [{ type: NETWORK_BAN, duration: 1d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+
+  - id: evasion.mute
+    family: evasion
+    display-name: Mute evasion
+    severity: 65
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: evasion.ban
+    family: evasion
+    display-name: Ban evasion
+    severity: 80
+    ladder:
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: evasion.helping-another
+    family: evasion
+    display-name: Helping another player evade punishment
+    severity: 60
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: exploit.illegal-duplication
+    family: exploit
+    display-name: Illegal item or block duplication
+    severity: 90
+    confiscation-options: true
+    ladder:
+      - { label: "45 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 45d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "90 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "Permanent ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: permanent }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+
+  - id: exploit.duplicated-possession-unclear
+    family: exploit
+    display-name: Possessing duplicated items with unclear knowledge
+    severity: 45
+    confiscation-options: true
+    ladder:
+      - { label: "Warning with confiscation", sanctions: [{ type: WARNING, duration: instant }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "7 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "30 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "90 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+
+  - id: exploit.duplicated-possession-knowing
+    family: exploit
+    display-name: Knowingly possessing duplicated items
+    severity: 70
+    confiscation-options: true
+    ladder:
+      - { label: "14 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 14d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "30 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "90 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "Permanent ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: permanent }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+
+  - id: exploit.withholding
+    family: exploit
+    display-name: Withholding a discovered bug or exploit
+    severity: 60
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: exploit.minor-abuse
+    family: exploit
+    display-name: Minor exploit abuse
+    severity: 60
+    confiscation-options: true
+    ladder:
+      - { label: "7 day ban with remediation", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: exploit.major-abuse
+    family: exploit
+    display-name: Major exploit abuse or major economic/server damage
+    severity: 85
+    confiscation-options: true
+    ladder:
+      - { label: "30 day ban with remediation", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "60 day ban with remediation", sanctions: [{ type: NETWORK_BAN, duration: 60d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "90 day ban with remediation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: mechanics.chunk-loader
+    family: mechanics
+    display-name: Prohibited chunk loader or offline chunk loading
+    severity: 35
+    ladder:
+      - { label: "Warning and removal", sanctions: [{ type: WARNING, duration: instant }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "1 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 1d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "7 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "30 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: CONTENT_REMOVAL, duration: instant }] }
+
+  - id: mechanics.laggy-farm
+    family: mechanics
+    display-name: Unreasonably laggy farm after staff instruction
+    severity: 35
+    ladder:
+      - { label: "Warning and removal", sanctions: [{ type: WARNING, duration: instant }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "1 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 1d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "7 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "30 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: CONTENT_REMOVAL, duration: instant }] }
+
+  - id: mechanics.end-portal-obstruction
+    family: mechanics
+    display-name: Prohibited End portal obstruction
+    severity: 65
+    ladder:
+      - { label: "7 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 7d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "30 day ban and removal", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: CONTENT_REMOVAL, duration: instant }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: exploit.server-crash-attempt
+    family: exploit
+    display-name: Attempting to crash or seriously damage the server
+    severity: 100
+    required-rank: ADMIN
+    decay-eligible: false
+    ladder:
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: market.compliance-failure
+    family: market
+    display-name: Failed market compliance review
+    severity: 50
+    decay-eligible: false
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "Remove stall and 7 day stall blacklist", sanctions: [{ type: STALL_OWNERSHIP_REMOVAL, duration: instant }, { type: MARKET_BLACKLIST, duration: 7d }] }
+      - { label: "Remove stall and 30 day stall blacklist", sanctions: [{ type: STALL_OWNERSHIP_REMOVAL, duration: instant }, { type: MARKET_BLACKLIST, duration: 30d }] }
+      - { label: "Remove stall and 90 day stall blacklist", sanctions: [{ type: STALL_OWNERSHIP_REMOVAL, duration: instant }, { type: MARKET_BLACKLIST, duration: 90d }] }
+      - { label: "Remove stall and permanent stall blacklist", sanctions: [{ type: STALL_OWNERSHIP_REMOVAL, duration: instant }, { type: MARKET_BLACKLIST, duration: permanent }] }
+
+  - id: market.extra-stall-alt
+    family: market
+    display-name: Using an alt to obtain an additional stall
+    severity: 45
+    decay-eligible: false
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "Remove extra stall and warn", sanctions: [{ type: STALL_OWNERSHIP_REMOVAL, duration: instant }, { type: WARNING, duration: instant }] }
+      - { label: "7 day stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: 7d }] }
+      - { label: "30 day stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: 30d }] }
+      - { label: "90 day stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: 90d }] }
+      - { label: "Permanent stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: permanent }] }
+
+  - id: market.blacklist-evasion
+    family: market
+    display-name: Bypassing a stall blacklist through another account or player
+    severity: 75
+    decay-eligible: false
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "30 day stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: 30d }] }
+      - { label: "90 day stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: 90d }] }
+      - { label: "Permanent stall blacklist", sanctions: [{ type: MARKET_BLACKLIST, duration: permanent }] }
+
+  - id: reputation.false
+    family: reputation
+    display-name: False or unjustified reputation
+    severity: 30
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "7 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 7d }] }
+      - { label: "30 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 30d }] }
+      - { label: "90 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 90d }] }
+      - { label: "Permanent reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: permanent }] }
+
+  - id: reputation.coordinated
+    family: reputation
+    display-name: Organized reputation manipulation, mass reputation, or review bombing
+    severity: 70
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "30 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 30d }] }
+      - { label: "90 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 90d }] }
+      - { label: "Permanent reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: permanent }] }
+
+  - id: reputation.alt-manipulation
+    family: reputation
+    display-name: Using alts to manipulate reputation
+    severity: 75
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "30 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 30d }] }
+      - { label: "90 day reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: 90d }] }
+      - { label: "Permanent reputation blacklist", sanctions: [{ type: REPUTATION_BLACKLIST, duration: permanent }] }
+
+  - id: reputation.blacklist-evasion
+    family: reputation
+    display-name: Evading a reputation blacklist
+    severity: 80
+    alt-inheritance: FAMILY_BLACKLIST
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: cheating.polar.template
+    family: cheating.polar.template
+    display-name: Polar automatic detection
+    severity: 75
+    automatic-detection-eligible: true
+    decay-eligible: false
+    ladder:
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "Second 30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: cheating.manual-client
+    family: cheating
+    display-name: Manually confirmed hacked client
+    severity: 80
+    ladder:
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: cheating.xray-esp
+    family: cheating
+    display-name: X-ray or ESP
+    severity: 80
+    confiscation-options: true
+    ladder:
+      - { label: "30 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 30d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "60 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 60d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "90 day ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: 90d }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+      - { label: "Permanent ban with confiscation", sanctions: [{ type: NETWORK_BAN, duration: permanent }, { type: INVENTORY_CONFISCATION, duration: instant }] }
+
+  - id: cheating.freecam
+    family: cheating
+    display-name: Freecam
+    severity: 65
+    ladder:
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: cheating.baritone
+    family: cheating
+    display-name: Baritone or pathfinding automation
+    severity: 65
+    ladder:
+      - { label: "14 day ban", sanctions: [{ type: NETWORK_BAN, duration: 14d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: cheating.easy-place-printer
+    family: cheating
+    display-name: Easy Place or Printer Mode
+    severity: 45
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: cheating.pvp-indicator
+    family: cheating
+    display-name: Prohibited health, damage, or armor-durability indicator
+    severity: 45
+    ladder:
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "21 day ban", sanctions: [{ type: NETWORK_BAN, duration: 21d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+
+  - id: cheating.minimap-display
+    family: cheating
+    display-name: Prohibited minimap entity or cave display
+    severity: 45
+    ladder:
+      - { label: "3 day ban", sanctions: [{ type: NETWORK_BAN, duration: 3d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "21 day ban", sanctions: [{ type: NETWORK_BAN, duration: 21d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+
+  - id: cheating.unauthorized-autoclicker-mod
+    family: cheating
+    display-name: Unauthorized autoclicker mod
+    severity: 35
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day ban", sanctions: [{ type: NETWORK_BAN, duration: 1d }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+
+  - id: cheating.combat-autoclicker
+    family: cheating
+    display-name: Any autoclicker used in combat
+    severity: 65
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: cheating.autoclicker-bypass
+    family: cheating
+    display-name: Modified Enthusia AutoClicker or bypassing its restrictions
+    severity: 70
+    ladder:
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+      - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: cheating.other-modification
+    family: cheating
+    display-name: Other unauthorized unfair-advantage modification
+    severity: 40
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "7 day ban", sanctions: [{ type: NETWORK_BAN, duration: 7d }] }
+      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
+      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
+      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
+
+  - id: staff.public-punishment-argument
+    family: staff
+    display-name: Arguing a punishment publicly instead of using a ticket
+    severity: 15
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "6 hour mute", sanctions: [{ type: MUTE, duration: 6h }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "3 day mute", sanctions: [{ type: MUTE, duration: 3d }] }
+
+  - id: reports.spam
+    family: reports
+    display-name: Report or ticket spam
+    severity: 25
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "Second warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: 1d }] }
+      - { label: "7 day report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: 7d }] }
+      - { label: "30 day report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: 30d }] }
+
+  - id: reports.false
+    family: reports
+    display-name: Knowingly false reports
+    severity: 50
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "7 day report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: 7d }] }
+      - { label: "30 day report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: 30d }] }
+      - { label: "Permanent report restriction", sanctions: [{ type: REPORT_RESTRICTION, duration: permanent }] }
+
+  - id: reports.abusive-content
+    family: reports
+    display-name: Abusive content in a report or ticket
+    severity: 40
+    ladder:
+      - { label: "Warning", sanctions: [{ type: WARNING, duration: instant }] }
+      - { label: "1 day mute", sanctions: [{ type: MUTE, duration: 1d }] }
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "30 day mute", sanctions: [{ type: MUTE, duration: 30d }] }
+
+  - id: reports.harassing-staff
+    family: reports
+    display-name: Harassing staff through reports, tickets, or DMs
+    severity: 65
+    ladder:
+      - { label: "7 day mute", sanctions: [{ type: MUTE, duration: 7d }] }
+      - { label: "30 day mute and 7 day ban", sanctions: [{ type: MUTE, duration: 30d }, { type: NETWORK_BAN, duration: 7d }] }
+      - { label: "90 day mute and 30 day ban", sanctions: [{ type: MUTE, duration: 90d }, { type: NETWORK_BAN, duration: 30d }] }

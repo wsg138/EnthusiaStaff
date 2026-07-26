@@ -1,0 +1,54 @@
+config-version: 1
+
+# BOOTSTRAP promotes to SHADOW_MIGRATION after MariaDB and schema verification.
+# ACTIVE is refused until a successful cutover record exists.
+operational-mode: BOOTSTRAP
+
+storage:
+  # Secrets are read from the environment and are never written into this file.
+  jdbc-url-environment: ES_DATABASE_URL
+  username-environment: ES_DATABASE_USER
+  password-environment: ES_DATABASE_PASSWORD
+  maximum-pool-size: 8
+  connection-timeout-millis: 5000
+
+workers:
+  threads: 4
+  queue-capacity: 256
+
+network:
+  # Use a stable identifier such as HUB or SMP on each backend.
+  server-id: SMP
+
+inventory:
+  # HUB and SMP intentionally use separate inventory profiles.
+  scope-id: SMP
+
+economy:
+  # Each source must appear exactly once. Nested shulkers and bundles are handled by Currency.
+  removal-order: [BANK, INVENTORY, ENDER_CHEST]
+
+rosechat:
+  staff-channel: staff
+  global-channel: global
+  private-channels: []
+
+channel:
+  enabled: false
+  host: 127.0.0.1
+  port: 28765
+  proxy-id: VELOCITY
+  backend-secret-environment: ES_CHANNEL_SMP_SECRET
+  proxy-secret-environment: ES_CHANNEL_VELOCITY_SECRET
+
+automod:
+  # Exact variants are intentionally empty. Populate them privately and enable only after review.
+  enabled: false
+  exact-variants: []
+
+visibility:
+  matrix:
+    MOD: [MOD, DEVELOPER]
+    DEVELOPER: [MOD, DEVELOPER]
+    ADMIN: [MOD, DEVELOPER, ADMIN]
+    FOUNDER: [MOD, DEVELOPER, ADMIN, FOUNDER]

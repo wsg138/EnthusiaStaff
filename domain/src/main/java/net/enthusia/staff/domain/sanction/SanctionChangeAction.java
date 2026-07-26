@@ -1,0 +1,14 @@
+package net.enthusia.staff.domain.sanction;
+
+public enum SanctionChangeAction {
+    END_EARLY,
+    REDUCE_DURATION,
+    REPLACE_EXPIRATION,
+    REVOKE,
+    FULL_OVERTURN,
+    REMOVE_ESCALATION_CONTRIBUTION,
+    RESTORE_ESCALATION_CONTRIBUTION,
+    REQUEST_FULL_OVERTURN,
+    APPROVE_FULL_OVERTURN,
+    DENY_FULL_OVERTURN
+}

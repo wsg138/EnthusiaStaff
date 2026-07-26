@@ -1,0 +1,326 @@
+package net.enthusia.staff.paper.freeze;
+
+import io.papermc.paper.event.player.AsyncChatEvent;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+import net.enthusia.staff.domain.ports.FreezeStore;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Location;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+
+public final class FreezeManager implements Listener {
+    private static final Duration OFFLINE_EXPIRATION = Duration.ofMinutes(10);
+
+    private final JavaPlugin plugin;
+    private final Clock clock;
+    private final Supplier<FreezeStore> store;
+    private final ExecutorService workers;
+    private final Set<UUID> frozen = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> pendingVerification = ConcurrentHashMap.newKeySet();
+
+    public FreezeManager(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<FreezeStore> store,
+            ExecutorService workers
+    ) {
+        this.plugin = plugin;
+        this.clock = clock;
+        this.store = store;
+        this.workers = workers;
+    }
+
+    public boolean isFrozen(UUID playerId) {
+        return frozen.contains(playerId);
+    }
+
+    public void applyOnline(UUID playerId) {
+        frozen.add(playerId);
+        pendingVerification.remove(playerId);
+        Player player = plugin.getServer().getPlayer(playerId);
+        if (player != null) {
+            onEntity(player, () -> {
+                player.closeInventory();
+                player.sendMessage(Component.text("You have been frozen by network staff."));
+            });
+        }
+    }
+
+    public void releaseOnline(UUID playerId) {
+        frozen.remove(playerId);
+        pendingVerification.remove(playerId);
+        Player player = plugin.getServer().getPlayer(playerId);
+        if (player != null) {
+            onEntity(player, () -> player.sendMessage(Component.text("Your staff freeze has been released.")));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onJoin(PlayerJoinEvent event) {
+        verify(event.getPlayer());
+    }
+
+    public void verify(Player player) {
+        UUID playerId = player.getUniqueId();
+        pendingVerification.add(playerId);
+        submit(() -> {
+            FreezeStore loaded = store.get();
+            if (loaded == null) {
+                pendingVerification.remove(playerId);
+                return;
+            }
+            try {
+                boolean active = loaded.active(playerId, clock.instant()).isPresent();
+                if (active) {
+                    applyOnline(playerId);
+                    alertStaff("Freeze restored for " + player.getName()
+                            + ". Use /unfreeze or /freeze keep after review.");
+                } else {
+                    frozen.remove(playerId);
+                    pendingVerification.remove(playerId);
+                }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.SEVERE,
+                        "Freeze recovery lookup failed; the joining player remains restricted", exception);
+            }
+        });
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        pendingVerification.remove(playerId);
+        if (!frozen.remove(playerId)) {
+            return;
+        }
+        Instant now = clock.instant();
+        submit(() -> {
+            FreezeStore loaded = store.get();
+            if (loaded != null) {
+                loaded.disconnected(playerId, now.plus(OFFLINE_EXPIRATION), now);
+            }
+        });
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onMove(PlayerMoveEvent event) {
+        if (!restricted(event.getPlayer())) {
+            return;
+        }
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (to == null || (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ())) {
+            return;
+        }
+        Location stationary = from.clone();
+        stationary.setYaw(to.getYaw());
+        stationary.setPitch(to.getPitch());
+        event.setTo(stationary);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onDamage(EntityDamageEvent event) {
+        if (event.getEntity() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onDamageByEntity(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        } else if (event.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onDrop(PlayerDropItemEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAttemptPickup(PlayerAttemptPickupItemEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInteract(PlayerInteractEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onInteractEntity(PlayerInteractEntityEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBreak(BlockBreakEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPlace(BlockPlaceEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPortal(PlayerPortalEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onSwap(PlayerSwapHandItemsEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketFill(PlayerBucketFillEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        cancel(event.getPlayer(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPaperChat(AsyncChatEvent event) {
+        if (!restricted(event.getPlayer())) {
+            return;
+        }
+        event.setCancelled(true);
+        relayFrozenChat(event.getPlayer(), event.message());
+    }
+
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onLegacyChat(AsyncPlayerChatEvent event) {
+        if (!restricted(event.getPlayer())) {
+            return;
+        }
+        event.setCancelled(true);
+        relayFrozenChat(event.getPlayer(), Component.text(event.getMessage()));
+    }
+
+    private boolean restricted(Player player) {
+        UUID playerId = player.getUniqueId();
+        return frozen.contains(playerId) || pendingVerification.contains(playerId);
+    }
+
+    private void cancel(Player player, java.util.function.Consumer<Boolean> cancellation) {
+        if (restricted(player)) {
+            cancellation.accept(true);
+        }
+    }
+
+    private void relayFrozenChat(Player player, Component body) {
+        Component rendered = Component.text("<" + player.getName() + "> ").append(body);
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            player.sendMessage(rendered);
+            plugin.getServer().getOnlinePlayers().stream()
+                    .filter(staff -> !staff.getUniqueId().equals(player.getUniqueId()))
+                    .filter(staff -> staff.hasPermission("enthusiastaff.freeze.chat"))
+                    .forEach(staff -> staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered)));
+        });
+    }
+
+    private void alertStaff(String message) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
+                plugin.getServer().getOnlinePlayers().stream()
+                        .filter(player -> player.hasPermission("enthusiastaff.freeze"))
+                        .forEach(player -> player.sendMessage(Component.text(message))));
+    }
+
+    private void submit(Runnable operation) {
+        try {
+            workers.execute(operation);
+        } catch (RejectedExecutionException exception) {
+            plugin.getLogger().warning("Freeze persistence operation skipped because the bounded queue is full");
+        }
+    }
+
+    private void onEntity(Player player, Runnable operation) {
+        player.getScheduler().execute(plugin, operation, null, 1L);
+    }
+}

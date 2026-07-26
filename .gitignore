@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+**/build/
+**/run/
+libs/private/
+*.log
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example

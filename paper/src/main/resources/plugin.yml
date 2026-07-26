@@ -1,0 +1,168 @@
+name: EnthusiaStaff
+version: '${version}'
+main: net.enthusia.staff.paper.EnthusiaStaffPaperPlugin
+api-version: '1.21'
+author: P2wn
+description: Enthusia Network staff and moderation runtime for Paper
+load: POSTWORLD
+softdepend:
+  - RoseChat
+  - voicechat
+  - ViaVersion
+  - floodgate
+  - Geyser-Spigot
+  - CombatLogX
+  - PolarLoader
+  - ProtocolLib
+  - DiscordSRV
+  - LuckPerms
+  - EnthusiaCurrency
+  - EnthusiaMarket
+  - EnthusiaCommend
+  - EnthusiaTeleport
+  - PlayTimePlugin
+  - InventoryRollbackPlus
+  - EnthusiaServerAutoClicker
+commands:
+  estaff:
+    description: EnthusiaStaff status, verification, and recovery commands
+    usage: /estaff <status|verify|reload>
+    permission: enthusiastaff.status
+  punish:
+    description: Open or execute the central punishment workflow
+    usage: /punish <player> <reason-id>
+    permission: enthusiastaff.punish
+  ban:
+    description: Open a ban-filtered central punishment workflow
+    usage: /ban <player> <reason-id>
+    permission: enthusiastaff.punish
+  mute:
+    description: Open a mute-filtered central punishment workflow
+    usage: /mute <player> <reason-id>
+    permission: enthusiastaff.punish
+  warn:
+    description: Open a warning-filtered central punishment workflow
+    usage: /warn <player> <reason-id>
+    permission: enthusiastaff.punish
+  kick:
+    description: Open a kick-filtered central punishment workflow
+    usage: /kick <player> <reason-id>
+    permission: enthusiastaff.punish
+  ipban:
+    description: Open a network-ban-filtered central punishment workflow
+    usage: /ipban <player> <reason-id>
+    permission: enthusiastaff.punish.ip
+  removepunishment:
+    description: Change, revoke, or overturn a punishment while retaining audit history
+    usage: /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]
+    permission: enthusiastaff.remove
+  unban:
+    description: End the latest active ban through the central sanction-change workflow
+    usage: /unban <player|case> <reason> [CONFIRM]
+    permission: enthusiastaff.remove
+  unmute:
+    description: End the latest active mute through the central sanction-change workflow
+    usage: /unmute <player|case> <reason> [CONFIRM]
+    permission: enthusiastaff.remove
+  removewarning:
+    description: Revoke the latest warning while retaining history
+    usage: /removewarning <player|case> <reason> [CONFIRM]
+    permission: enthusiastaff.remove
+  unwarn:
+    description: Alias for removing the latest warning
+    usage: /unwarn <player|case> <reason> [CONFIRM]
+    permission: enthusiastaff.remove
+  report:
+    description: Submit a private player report with recent context
+    usage: /report <player|uuid> <reason-id> <description>
+  reports:
+    description: Open staff report management
+    usage: /reports
+    permission: enthusiastaff.reports.manage
+  freeze:
+    description: Durably restrict a player for staff investigation
+    usage: /freeze <player> <reason>
+    permission: enthusiastaff.freeze
+  unfreeze:
+    description: Release a durable staff freeze
+    usage: /unfreeze <player> <reason> CONFIRM
+    permission: enthusiastaff.freeze
+  staff:
+    description: Enter or exit durable staff mode
+    usage: /staff
+    permission: enthusiastaff.staffmode
+  vanish:
+    description: Toggle durable rank-aware vanish
+    usage: /vanish
+    permission: enthusiastaff.vanish
+  staffchat:
+    description: Toggle the configured RoseChat staff channel
+    usage: /staffchat
+    permission: enthusiastaff.staffchat
+  client:
+    description: Inspect or save a point-in-time client evidence snapshot
+    usage: /client <player|uuid> [save CONFIRM]
+    permission: enthusiastaff.client
+  invsee:
+    description: Inspect and safely edit a live or offline player inventory
+    usage: /invsee <player|uuid>
+    permission: enthusiastaff.inventory.view
+  endersee:
+    description: Inspect and safely edit a live or offline Ender chest
+    usage: /endersee <player|uuid>
+    permission: enthusiastaff.inventory.view
+  inspect:
+    description: Inspect a player and run case-linked asset actions
+    usage: /inspect <player>
+    permission: enthusiastaff.inspect
+  case:
+    description: Manage case-linked recovery actions
+    usage: /case restoreitems <case-id>
+    permission: enthusiastaff.case.restoreitems
+permissions:
+  enthusiastaff.status:
+    default: op
+  enthusiastaff.verify:
+    default: op
+  enthusiastaff.reload:
+    default: op
+  enthusiastaff.punish:
+    default: op
+  enthusiastaff.punish.ip:
+    default: op
+  enthusiastaff.remove:
+    default: op
+  enthusiastaff.reports.manage:
+    default: op
+  enthusiastaff.alerts:
+    default: op
+  enthusiastaff.freeze:
+    default: op
+  enthusiastaff.freeze.chat:
+    default: op
+  enthusiastaff.staffmode:
+    default: op
+  enthusiastaff.vanish:
+    default: op
+  enthusiastaff.staffchat:
+    default: op
+  enthusiastaff.client:
+    default: op
+  enthusiastaff.inventory.view:
+    default: op
+  enthusiastaff.inventory.edit:
+    default: op
+  enthusiastaff.inspect:
+    default: op
+  enthusiastaff.confiscate.economy:
+    default: op
+  enthusiastaff.confiscate.items:
+    default: op
+  enthusiastaff.case.restoreitems:
+    default: op
+  enthusiastaff.rank.developer:
+    default: false
+  enthusiastaff.rank.admin:
+    default: op
+  enthusiastaff.rank.founder:
+    default: false
