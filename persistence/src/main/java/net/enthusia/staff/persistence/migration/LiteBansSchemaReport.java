@@ -17,7 +17,7 @@ public record LiteBansSchemaReport(
     }
 
     public boolean importReady() {
-        return blockers.isEmpty() && importTables.keySet().containsAll(Set.of("bans", "mutes"));
+        return blockers.isEmpty() && importTables.keySet().containsAll(Set.of("bans", "mutes", "history"));
     }
 
     public record TableMapping(String tableName, Map<String, String> canonicalColumns) {

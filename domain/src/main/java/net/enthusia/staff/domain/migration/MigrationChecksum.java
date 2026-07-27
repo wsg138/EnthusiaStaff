@@ -33,6 +33,8 @@ public final class MigrationChecksum {
                 sanction.originalStaffName(),
                 sanction.issuedAt().toString(),
                 sanction.expiresAt().map(Object::toString).orElse("PERMANENT"),
+                sanction.endedAt().map(Object::toString).orElse("NOT_ENDED"),
+                sanction.networkAddress().map(LegacyNetworkAddress::canonicalHex).orElse("NO_NETWORK_ADDRESS"),
                 Boolean.toString(sanction.active())
         ) + '\n';
     }

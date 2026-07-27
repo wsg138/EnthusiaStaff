@@ -10,7 +10,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,7 +25,6 @@ import net.enthusia.staff.domain.migration.CutoverGate;
 import net.enthusia.staff.domain.migration.DecisionComparison;
 import net.enthusia.staff.domain.migration.FounderOverride;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
-import net.enthusia.staff.persistence.JdbcOperationalStateStore;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import net.enthusia.staff.persistence.UuidBytes;
 
@@ -31,7 +32,6 @@ public final class CutoverCoordinator {
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final Clock clock;
-    private final JdbcOperationalStateStore states;
     private final CutoverGate gate = new CutoverGate();
 
     public CutoverCoordinator(DataSource dataSource, ObjectMapper json, Clock clock) {
@@ -41,45 +41,45 @@ public final class CutoverCoordinator {
         this.dataSource = dataSource;
         this.json = json;
         this.clock = clock;
-        this.states = new JdbcOperationalStateStore(dataSource);
     }
 
     public boolean enterMaintenance(UUID actorId, String reason) {
-        OperationalStateSnapshot current = states.current();
-        if (current.mode() != OperationalMode.SHADOW_MIGRATION) {
-            return false;
-        }
-        return states.transition(
-                current.revision(), OperationalMode.MAINTENANCE, actorId, reason, clock.instant()
+        validateTransition(actorId, reason);
+        return transitionMode(
+                OperationalMode.SHADOW_MIGRATION,
+                OperationalMode.MAINTENANCE,
+                actorId,
+                reason,
+                "LITEBANS_CUTOVER_MAINTENANCE_ENTERED"
+        );
+    }
+
+    public boolean abortMaintenance(UUID actorId, String reason) {
+        validateTransition(actorId, reason);
+        return transitionMode(
+                OperationalMode.MAINTENANCE,
+                OperationalMode.SHADOW_MIGRATION,
+                actorId,
+                reason,
+                "LITEBANS_CUTOVER_MAINTENANCE_ABORTED"
+        );
+    }
+
+    public boolean freezeActiveAuthority(UUID actorId, String reason) {
+        validateTransition(actorId, reason);
+        return transitionMode(
+                OperationalMode.ACTIVE,
+                OperationalMode.READ_ONLY_FAILURE,
+                actorId,
+                reason,
+                "LITEBANS_CUTOVER_EMERGENCY_FREEZE"
         );
     }
 
     public Optional<CutoverEvidence> latestEvidence() {
         try (Connection connection = dataSource.getConnection()) {
-            Instant shadowStarted = uninterruptedShadowStart(connection);
-            LatestShadow latest = latestShadow(connection);
-            if (shadowStarted == null || latest == null) {
-                return Optional.empty();
-            }
-            OperationalStateSnapshot state = states.current();
-            boolean writesFrozen = state.mode() == OperationalMode.MAINTENANCE;
-            boolean finalImport = writesFrozen && finalImportCompletedAfter(connection, state.updatedAt());
-            long unresolved = unresolvedOperations(connection);
-            return Optional.of(new CutoverEvidence(
-                    shadowStarted,
-                    clock.instant(),
-                    latest.matched("COUNTS"),
-                    latest.matched("CHECKSUMS"),
-                    latest.matched("ACTIVE_SANCTIONS"),
-                    latest.matched("UUID_MAPPINGS"),
-                    latest.matched("EXPIRATIONS"),
-                    latest.decisions("LOGIN_DECISIONS"),
-                    latest.decisions("MUTE_DECISIONS"),
-                    latest.decisions("IP_BAN_DECISIONS"),
-                    unresolved,
-                    writesFrozen,
-                    finalImport
-            ));
+            OperationalStateSnapshot state = readOperationalState(connection, false);
+            return assembleEvidence(connection, state, clock.instant()).map(EvidenceBundle::evidence);
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to assemble cutover evidence", exception);
         }
@@ -95,23 +95,17 @@ public final class CutoverCoordinator {
         if (actorId == null || override == null) {
             throw new IllegalArgumentException("cutover actor and override container are required");
         }
-        CutoverEvidence evidence = latestEvidence().orElse(null);
-        if (evidence == null) {
-            return new CutoverOutcome(
-                    new CutoverAssessment(false, false, List.of("NO_COMPLETED_SHADOW_EVIDENCE")),
-                    false,
-                    Optional.empty()
-            );
-        }
-        CutoverAssessment assessment = gate.assess(evidence, override);
-        if (!assessment.allowed()) {
-            return new CutoverOutcome(assessment, false, Optional.empty());
+        if (override.filter(value -> !value.actorId().equals(actorId)).isPresent()) {
+            throw new IllegalArgumentException("Founder override actor must match the cutover actor");
         }
         UUID cutoverId = UUID.randomUUID();
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                OperationalStateSnapshot current = lockOperationalState(connection);
+        MigrationDatabaseLock migrationLock = MigrationDatabaseLock.acquire(dataSource);
+        Throwable operationFailure = null;
+        try {
+            try (Connection connection = dataSource.getConnection()) {
+                connection.setAutoCommit(false);
+                try {
+                OperationalStateSnapshot current = readOperationalState(connection, true);
                 if (current.mode() != OperationalMode.MAINTENANCE) {
                     connection.rollback();
                     return new CutoverOutcome(
@@ -120,17 +114,40 @@ public final class CutoverCoordinator {
                             Optional.empty()
                     );
                 }
+                Optional<EvidenceBundle> assembled = assembleEvidence(connection, current, clock.instant());
+                if (assembled.isEmpty()) {
+                    connection.rollback();
+                    return new CutoverOutcome(
+                            new CutoverAssessment(false, false, List.of("NO_COMPLETED_SHADOW_EVIDENCE")),
+                            false,
+                            Optional.empty()
+                    );
+                }
+                EvidenceBundle bundle = assembled.orElseThrow();
+                CutoverEvidence evidence = bundle.evidence();
+                CutoverAssessment assessment = gate.assess(evidence, override);
+                if (!assessment.allowed()) {
+                    connection.rollback();
+                    return new CutoverOutcome(assessment, false, Optional.empty());
+                }
                 try (PreparedStatement cutover = connection.prepareStatement("""
-                        INSERT INTO cutover_records(cutover_id, assessment_json, blockers_json,
-                            founder_override_used, authorized_by, authorized_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO cutover_records(cutover_id, migration_run_id, assessment_json,
+                            blockers_json, founder_override_used, authorized_by, authorized_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         """)) {
                     cutover.setBytes(1, UuidBytes.toBytes(cutoverId));
-                    cutover.setString(2, json.writeValueAsString(evidence));
-                    cutover.setString(3, json.writeValueAsString(assessment.blockers()));
-                    cutover.setBoolean(4, assessment.founderOverrideUsed());
-                    cutover.setBytes(5, UuidBytes.toBytes(actorId));
-                    cutover.setTimestamp(6, Timestamp.from(clock.instant()));
+                    if (bundle.finalRunId().isPresent()) {
+                        cutover.setBytes(2, UuidBytes.toBytes(bundle.finalRunId().orElseThrow()));
+                    } else {
+                        cutover.setNull(2, java.sql.Types.BINARY);
+                    }
+                    cutover.setString(3, json.writeValueAsString(
+                            assessmentJson(evidence, assessment, override)
+                    ));
+                    cutover.setString(4, json.writeValueAsString(assessment.blockers()));
+                    cutover.setBoolean(5, assessment.founderOverrideUsed());
+                    cutover.setBytes(6, UuidBytes.toBytes(actorId));
+                    cutover.setTimestamp(7, Timestamp.from(clock.instant()));
                     cutover.executeUpdate();
                 }
                 try (PreparedStatement transition = connection.prepareStatement("""
@@ -146,61 +163,190 @@ public final class CutoverCoordinator {
                         throw new SQLException("operational state changed during cutover");
                     }
                 }
-                appendAudit(connection, cutoverId, actorId, assessment);
+                appendAudit(connection, cutoverId, actorId, assessment, override);
                 connection.commit();
                 return new CutoverOutcome(assessment, true, Optional.of(cutoverId));
-            } catch (SQLException | JsonProcessingException exception) {
-                rollback(connection, exception);
-                throw new ModerationPersistenceException("Cutover activation transaction failed", exception);
-            } finally {
-                restoreAutoCommit(connection);
+                } catch (SQLException | JsonProcessingException exception) {
+                    rollback(connection, exception);
+                    throw new ModerationPersistenceException("Cutover activation transaction failed", exception);
+                } catch (RuntimeException exception) {
+                    rollback(connection, exception);
+                    throw exception;
+                } finally {
+                    restoreAutoCommit(connection);
+                }
             }
         } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to open cutover transaction", exception);
+            ModerationPersistenceException failure =
+                    new ModerationPersistenceException("Unable to open cutover transaction", exception);
+            operationFailure = failure;
+            throw failure;
+        } catch (RuntimeException | Error exception) {
+            operationFailure = exception;
+            throw exception;
+        } finally {
+            migrationLock.closeAfter(operationFailure);
         }
     }
 
-    private Instant uninterruptedShadowStart(Connection connection) throws SQLException {
+    private Optional<EvidenceBundle> assembleEvidence(
+            Connection connection,
+            OperationalStateSnapshot state,
+            Instant assessedAt
+    ) throws SQLException {
+        Instant shadowEndedAt = state.mode() == OperationalMode.MAINTENANCE
+                ? state.updatedAt()
+                : assessedAt;
+        ShadowWindow window = uninterruptedShadowWindow(connection, shadowEndedAt);
+        if (window == null) {
+            return Optional.empty();
+        }
+        ComparisonSummary latestShadow = readComparisons(
+                connection, window.runs().getLast().runId(), window.runs().getLast().completedAt()
+        );
+        if (latestShadow == null) {
+            return Optional.empty();
+        }
+        FinalRun finalRun = state.mode() == OperationalMode.MAINTENANCE
+                ? latestFinalRun(connection, state.updatedAt())
+                : null;
+        ComparisonSummary authoritativeComparison = finalRun == null
+                ? latestShadow
+                : finalRun.comparisons();
+        CutoverEvidence evidence = new CutoverEvidence(
+                window.startedAt(),
+                shadowEndedAt,
+                assessedAt,
+                window.runs().stream().map(ShadowRun::completedAt).toList(),
+                authoritativeComparison.matched("COUNTS"),
+                authoritativeComparison.matched("CHECKSUMS"),
+                authoritativeComparison.matched("ACTIVE_SANCTIONS"),
+                authoritativeComparison.matched("UUID_MAPPINGS"),
+                authoritativeComparison.matched("EXPIRATIONS"),
+                authoritativeComparison.decisions("LOGIN_DECISIONS"),
+                authoritativeComparison.decisions("MUTE_DECISIONS"),
+                authoritativeComparison.decisions("IP_BAN_DECISIONS"),
+                unresolvedOperations(connection),
+                migrationIdle(connection),
+                state.mode() == OperationalMode.MAINTENANCE,
+                finalRun != null
+        );
+        return Optional.of(new EvidenceBundle(
+                evidence,
+                finalRun == null ? Optional.empty() : Optional.of(finalRun.runId())
+        ));
+    }
+
+    private ShadowWindow uninterruptedShadowWindow(Connection connection, Instant shadowEndedAt) throws SQLException {
         Timestamp lastFailure;
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT MAX(COALESCE(completed_at, started_at))
                 FROM migration_runs
-                WHERE mode = 'SHADOW' AND (state <> 'COMPLETED' OR mismatch_count > 0)
-                """);
-             ResultSet result = statement.executeQuery()) {
-            result.next();
-            lastFailure = result.getTimestamp(1);
+                WHERE mode = 'SHADOW' AND started_at <= ?
+                  AND (state <> 'COMPLETED' OR mismatch_count > 0)
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(shadowEndedAt));
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                lastFailure = result.getTimestamp(1);
+            }
         }
-        String sql = lastFailure == null ? """
-                SELECT MIN(started_at) FROM migration_runs
-                WHERE mode = 'SHADOW' AND state = 'COMPLETED' AND mismatch_count = 0
+        Timestamp lastMaintenanceAbort = lastMaintenanceAbort(connection, shadowEndedAt);
+        Timestamp resetAt = later(lastFailure, lastMaintenanceAbort);
+        String sql = resetAt == null ? """
+                SELECT r.run_id, r.started_at, r.completed_at
+                FROM migration_runs r
+                WHERE r.mode = 'SHADOW' AND r.state = 'COMPLETED' AND r.mismatch_count = 0
+                  AND r.completed_at <= ?
+                  AND (SELECT COUNT(DISTINCT s.comparison_type)
+                       FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
+                ORDER BY r.completed_at
                 """ : """
-                SELECT MIN(started_at) FROM migration_runs
-                WHERE mode = 'SHADOW' AND state = 'COMPLETED' AND mismatch_count = 0 AND started_at > ?
+                SELECT r.run_id, r.started_at, r.completed_at
+                FROM migration_runs r
+                WHERE r.mode = 'SHADOW' AND r.state = 'COMPLETED' AND r.mismatch_count = 0
+                  AND r.started_at >= ? AND r.completed_at <= ?
+                  AND (SELECT COUNT(DISTINCT s.comparison_type)
+                       FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
+                ORDER BY r.completed_at
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (lastFailure != null) {
-                statement.setTimestamp(1, lastFailure);
+            int index = 1;
+            if (resetAt != null) {
+                statement.setTimestamp(index++, resetAt);
             }
+            statement.setTimestamp(index++, Timestamp.from(shadowEndedAt));
+            statement.setInt(index, ComparisonType.values().length);
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getTimestamp(1) != null ? result.getTimestamp(1).toInstant() : null;
+                List<ShadowRun> runs = new ArrayList<>();
+                while (result.next()) {
+                    runs.add(new ShadowRun(
+                            UuidBytes.fromBytes(result.getBytes("run_id")),
+                            result.getTimestamp("started_at").toInstant(),
+                            result.getTimestamp("completed_at").toInstant()
+                    ));
+                }
+                if (runs.isEmpty()) {
+                    return null;
+                }
+                return new ShadowWindow(runs.getFirst().startedAt(), runs);
             }
         }
     }
 
-    private LatestShadow latestShadow(Connection connection) throws SQLException {
-        UUID runId;
+    private static Timestamp lastMaintenanceAbort(Connection connection, Instant shadowEndedAt) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT run_id FROM migration_runs
-                WHERE mode = 'SHADOW' AND state = 'COMPLETED'
-                ORDER BY completed_at DESC LIMIT 1
-                """);
-             ResultSet result = statement.executeQuery()) {
-            if (!result.next()) {
-                return null;
+                SELECT MAX(occurred_at)
+                FROM audit_events
+                WHERE event_type = 'LITEBANS_CUTOVER_MAINTENANCE_ABORTED' AND occurred_at <= ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(shadowEndedAt));
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getTimestamp(1);
             }
-            runId = UuidBytes.fromBytes(result.getBytes(1));
         }
+    }
+
+    private static Timestamp later(Timestamp first, Timestamp second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.after(second) ? first : second;
+    }
+
+    private FinalRun latestFinalRun(Connection connection, Instant maintenanceStarted) throws SQLException {
+        UUID runId;
+        Instant completedAt;
+        String state;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT run_id, state, completed_at
+                FROM migration_runs
+                WHERE mode = 'CUTOVER' AND started_at >= ?
+                ORDER BY started_at DESC LIMIT 1
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(maintenanceStarted));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+                state = result.getString("state");
+                if (!"COMPLETED".equals(state) || result.getTimestamp("completed_at") == null) {
+                    return null;
+                }
+                runId = UuidBytes.fromBytes(result.getBytes("run_id"));
+                completedAt = result.getTimestamp("completed_at").toInstant();
+            }
+        }
+        ComparisonSummary comparisons = readComparisons(connection, runId, completedAt);
+        return comparisons == null ? null : new FinalRun(runId, comparisons);
+    }
+
+    private ComparisonSummary readComparisons(Connection connection, UUID runId, Instant completedAt)
+            throws SQLException {
         Map<ComparisonType, Comparison> comparisons = new EnumMap<>(ComparisonType.class);
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT comparison_type, matched, detail_json
@@ -222,23 +368,20 @@ public final class CutoverCoordinator {
                             detail.path("mismatched").asLong()
                     ));
                 }
+            } catch (IllegalArgumentException exception) {
+                throw new SQLException("unknown persisted shadow comparison type", exception);
             }
         }
-        return comparisons.size() == ComparisonType.values().length ? new LatestShadow(comparisons) : null;
+        return comparisons.size() == ComparisonType.values().length
+                ? new ComparisonSummary(runId, completedAt, comparisons)
+                : null;
     }
 
-    private static boolean finalImportCompletedAfter(Connection connection, Instant maintenanceStarted)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT EXISTS(
-                    SELECT 1 FROM migration_runs
-                    WHERE mode = 'IMPORT' AND state = 'COMPLETED' AND completed_at >= ?
-                )
-                """)) {
-            statement.setTimestamp(1, Timestamp.from(maintenanceStarted));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getBoolean(1);
-            }
+    private static boolean migrationIdle(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT NOT EXISTS(SELECT 1 FROM migration_runs WHERE state = 'RUNNING')");
+             ResultSet result = statement.executeQuery()) {
+            return result.next() && result.getBoolean(1);
         }
     }
 
@@ -248,7 +391,12 @@ public final class CutoverCoordinator {
                     (SELECT COUNT(*) FROM recovery_quarantine WHERE resolved_at IS NULL)
                   + (SELECT COUNT(*) FROM network_outbox WHERE state = 'DEAD_LETTER')
                   + (SELECT COUNT(*) FROM discord_outbox WHERE state = 'DEAD_LETTER')
-                  + (SELECT COUNT(*) FROM inventory_pending_patches WHERE state IN ('CONFLICT', 'QUARANTINED'))
+                  + (SELECT COUNT(*) FROM inventory_operations
+                     WHERE state NOT IN ('COMMITTED', 'RESTORED', 'ROLLED_BACK'))
+                  + (SELECT COUNT(*) FROM inventory_pending_patches WHERE state <> 'APPLIED')
+                  + (SELECT COUNT(*) FROM economy_operations WHERE state <> 'UNLOCKED')
+                  + (SELECT COUNT(*) FROM confiscated_asset_snapshots
+                     WHERE restoration_state = 'RESERVED' AND restored_at IS NULL)
                 """);
              ResultSet result = statement.executeQuery()) {
             result.next();
@@ -256,11 +404,16 @@ public final class CutoverCoordinator {
         }
     }
 
-    private static OperationalStateSnapshot lockOperationalState(Connection connection) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
+    private static OperationalStateSnapshot readOperationalState(Connection connection, boolean forUpdate)
+            throws SQLException {
+        String sql = forUpdate ? """
                 SELECT mode, revision, reason, updated_at
                 FROM operational_state WHERE singleton_id = 1 FOR UPDATE
-                """);
+                """ : """
+                SELECT mode, revision, reason, updated_at
+                FROM operational_state WHERE singleton_id = 1
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet result = statement.executeQuery()) {
             if (!result.next()) {
                 throw new SQLException("operational state singleton missing");
@@ -274,12 +427,165 @@ public final class CutoverCoordinator {
         }
     }
 
+    private boolean transitionMode(
+            OperationalMode expected,
+            OperationalMode next,
+            UUID actorId,
+            String reason,
+            String auditType
+    ) {
+        MigrationDatabaseLock migrationLock = MigrationDatabaseLock.acquire(dataSource);
+        Throwable operationFailure = null;
+        try {
+            try (Connection connection = dataSource.getConnection()) {
+                connection.setAutoCommit(false);
+                try {
+                OperationalStateSnapshot current = readOperationalState(connection, true);
+                if (current.mode() != expected) {
+                    connection.rollback();
+                    return false;
+                }
+                Instant now = clock.instant();
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        UPDATE operational_state
+                        SET mode = ?, revision = revision + 1, reason = ?, updated_by = ?, updated_at = ?
+                        WHERE singleton_id = 1 AND revision = ? AND mode = ?
+                        """)) {
+                    statement.setString(1, next.name());
+                    statement.setString(2, reason.trim());
+                    statement.setBytes(3, UuidBytes.toBytes(actorId));
+                    statement.setTimestamp(4, Timestamp.from(now));
+                    statement.setLong(5, current.revision());
+                    statement.setString(6, expected.name());
+                    if (statement.executeUpdate() != 1) {
+                        throw new SQLException("operational mode changed during migration transition");
+                    }
+                }
+                appendTransitionAudit(connection, actorId, expected, next, reason, auditType, now);
+                connection.commit();
+                return true;
+                } catch (SQLException | JsonProcessingException exception) {
+                    rollback(connection, exception);
+                    throw new ModerationPersistenceException("Migration operational transition failed", exception);
+                } catch (RuntimeException exception) {
+                    rollback(connection, exception);
+                    throw exception;
+                } finally {
+                    restoreAutoCommit(connection);
+                }
+            }
+        } catch (SQLException exception) {
+            ModerationPersistenceException failure = new ModerationPersistenceException(
+                    "Unable to open migration transition transaction", exception
+            );
+            operationFailure = failure;
+            throw failure;
+        } catch (RuntimeException | Error exception) {
+            operationFailure = exception;
+            throw exception;
+        } finally {
+            migrationLock.closeAfter(operationFailure);
+        }
+    }
+
+    private void appendTransitionAudit(
+            Connection connection,
+            UUID actorId,
+            OperationalMode previous,
+            OperationalMode next,
+            String reason,
+            String auditType,
+            Instant now
+    ) throws SQLException, JsonProcessingException {
+        UUID correlationId = UUID.randomUUID();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO audit_events(event_id, correlation_id, actor_id, event_type,
+                    outcome, event_json, occurred_at)
+                VALUES (?, ?, ?, ?, 'COMMITTED', ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setBytes(2, UuidBytes.toBytes(correlationId));
+            statement.setBytes(3, UuidBytes.toBytes(actorId));
+            statement.setString(4, auditType);
+            statement.setString(5, json.writeValueAsString(Map.of(
+                    "previousMode", previous.name(),
+                    "nextMode", next.name(),
+                    "reason", reason.trim()
+            )));
+            statement.setTimestamp(6, Timestamp.from(now));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void validateTransition(UUID actorId, String reason) {
+        if (actorId == null || reason == null || reason.isBlank() || reason.length() > 512) {
+            throw new IllegalArgumentException("migration transition actor and bounded reason are required");
+        }
+    }
+
+    private static Map<String, Object> evidenceJson(CutoverEvidence evidence) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("shadowStartedAt", evidence.shadowStartedAt().toString());
+        value.put("shadowEndedAt", evidence.shadowEndedAt().toString());
+        value.put("assessedAt", evidence.assessedAt().toString());
+        value.put("successfulShadowSummaries", evidence.successfulShadowSummaries().stream()
+                .map(Instant::toString).toList());
+        value.put("countsMatch", evidence.countsMatch());
+        value.put("checksumsMatch", evidence.checksumsMatch());
+        value.put("activeSanctionsMatch", evidence.activeSanctionsMatch());
+        value.put("uuidMappingsMatch", evidence.uuidMappingsMatch());
+        value.put("expirationsMatch", evidence.expirationsMatch());
+        value.put("loginDecisions", decisionJson(evidence.loginDecisions()));
+        value.put("muteDecisions", decisionJson(evidence.muteDecisions()));
+        value.put("ipBanDecisions", decisionJson(evidence.ipBanDecisions()));
+        value.put("unresolvedOperations", evidence.unresolvedOperations());
+        value.put("migrationIdle", evidence.migrationIdle());
+        value.put("writesFrozen", evidence.writesFrozen());
+        value.put("finalIncrementalImportComplete", evidence.finalIncrementalImportComplete());
+        return Map.copyOf(value);
+    }
+
+    private static Map<String, Long> decisionJson(DecisionComparison comparison) {
+        return Map.of(
+                "compared", comparison.compared(),
+                "mismatched", comparison.mismatched()
+        );
+    }
+
+    private static Map<String, Object> assessmentJson(
+            CutoverEvidence evidence,
+            CutoverAssessment assessment,
+            Optional<FounderOverride> override
+    ) {
+        Map<String, Object> value = new LinkedHashMap<>(evidenceJson(evidence));
+        value.put("allowed", assessment.allowed());
+        value.put("founderOverrideUsed", assessment.founderOverrideUsed());
+        if (assessment.founderOverrideUsed()) {
+            FounderOverride used = override.orElseThrow();
+            value.put("founderOverride", Map.of(
+                    "actorId", used.actorId().toString(),
+                    "warningAcknowledgement", used.warningAcknowledgement(),
+                    "reason", used.reason()
+            ));
+        }
+        return Map.copyOf(value);
+    }
+
     private void appendAudit(
             Connection connection,
             UUID cutoverId,
             UUID actorId,
-            CutoverAssessment assessment
+            CutoverAssessment assessment,
+            Optional<FounderOverride> override
     ) throws SQLException, JsonProcessingException {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("founderOverrideUsed", assessment.founderOverrideUsed());
+        payload.put("blockers", assessment.blockers());
+        if (assessment.founderOverrideUsed()) {
+            FounderOverride used = override.orElseThrow();
+            payload.put("founderOverrideWarningAcknowledgement", used.warningAcknowledgement());
+            payload.put("founderOverrideReason", used.reason());
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO audit_events(event_id, correlation_id, actor_id, event_type,
                     outcome, event_json, occurred_at)
@@ -288,10 +594,7 @@ public final class CutoverCoordinator {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             statement.setBytes(2, UuidBytes.toBytes(cutoverId));
             statement.setBytes(3, UuidBytes.toBytes(actorId));
-            statement.setString(4, json.writeValueAsString(Map.of(
-                    "founderOverrideUsed", assessment.founderOverrideUsed(),
-                    "blockers", assessment.blockers()
-            )));
+            statement.setString(4, json.writeValueAsString(payload));
             statement.setTimestamp(5, Timestamp.from(clock.instant()));
             statement.executeUpdate();
         }
@@ -327,8 +630,21 @@ public final class CutoverCoordinator {
     private record Comparison(boolean matched, long compared, long mismatched) {
     }
 
-    private record LatestShadow(Map<ComparisonType, Comparison> comparisons) {
-        private LatestShadow {
+    private record ShadowRun(UUID runId, Instant startedAt, Instant completedAt) {
+    }
+
+    private record ShadowWindow(Instant startedAt, List<ShadowRun> runs) {
+        private ShadowWindow {
+            runs = List.copyOf(runs);
+        }
+    }
+
+    private record ComparisonSummary(
+            UUID runId,
+            Instant completedAt,
+            Map<ComparisonType, Comparison> comparisons
+    ) {
+        private ComparisonSummary {
             comparisons = Map.copyOf(comparisons);
         }
 
@@ -340,5 +656,11 @@ public final class CutoverCoordinator {
             Comparison comparison = comparisons.get(ComparisonType.valueOf(type));
             return new DecisionComparison(comparison.compared(), comparison.mismatched());
         }
+    }
+
+    private record FinalRun(UUID runId, ComparisonSummary comparisons) {
+    }
+
+    private record EvidenceBundle(CutoverEvidence evidence, Optional<UUID> finalRunId) {
     }
 }

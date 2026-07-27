@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,6 +72,7 @@ import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
 import net.enthusia.staff.persistence.migration.CutoverOutcome;
+import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
 import net.enthusia.staff.protocol.PersistentChannelServer;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
@@ -112,6 +114,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private WebsiteModerationStore websiteModerationStore;
     private WebsiteApiServer websiteApiServer;
     private ScheduledTask websiteMaintenanceTask;
+    private ScheduledTask shadowMigrationTask;
     private final java.util.concurrent.atomic.AtomicBoolean migrationRunning = new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -158,6 +161,9 @@ public final class EnthusiaStaffVelocityPlugin {
         }
         if (websiteMaintenanceTask != null) {
             websiteMaintenanceTask.cancel();
+        }
+        if (shadowMigrationTask != null) {
+            shadowMigrationTask.cancel();
         }
         if (websiteApiServer != null) {
             websiteApiServer.close();
@@ -255,6 +261,7 @@ public final class EnthusiaStaffVelocityPlugin {
             operationalStateTask = proxy.getScheduler().buildTask(this, this::refreshOperationalState)
                     .repeat(5, TimeUnit.SECONDS)
                     .schedule();
+            initializeShadowMigrationSchedule(loaded);
             logger.info("MariaDB verified; Velocity moderation authority is {}", state.mode());
         } catch (RuntimeException | java.io.IOException exception) {
             health.update(OperationalMode.DEGRADED, Map.of(
@@ -262,6 +269,80 @@ public final class EnthusiaStaffVelocityPlugin {
             ));
             logger.error("Velocity moderation storage initialization failed", exception);
         }
+    }
+
+    private void initializeShadowMigrationSchedule(VelocityConfiguration loaded) {
+        if (!loaded.liteBansShadowScheduleEnabled()) {
+            logger.warn("Automatic LiteBans shadow summaries are disabled; the daily cutover gate must be satisfied manually");
+            return;
+        }
+        shadowMigrationTask = proxy.getScheduler().buildTask(this, this::scheduleShadowMigration)
+                .repeat(loaded.liteBansShadowIntervalHours(), TimeUnit.HOURS)
+                .schedule();
+        logger.info(
+                "Automatic LiteBans shadow summaries scheduled every {} hours while in SHADOW_MIGRATION",
+                loaded.liteBansShadowIntervalHours()
+        );
+    }
+
+    private void scheduleShadowMigration() {
+        MariaDbRuntime runtime = databaseRuntime;
+        VelocityConfiguration loaded = configuration;
+        if (runtime == null || loaded == null || authorityMode.get() != OperationalMode.SHADOW_MIGRATION
+                || !migrationRunning.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            workers.execute(() -> {
+                try {
+                    MigrationExecutionReport report = migrationService(runtime, MigrationMode.SHADOW).execute(
+                            loaded.liteBansDatabaseFromEnvironment(),
+                            loaded.liteBansTablePrefix(),
+                            loaded.liteBansBatchSize(),
+                            MigrationMode.SHADOW
+                    );
+                    long mismatches = report.shadowSummary().map(
+                            net.enthusia.staff.persistence.migration.ShadowSummary::mismatchCount
+                    ).orElse(0L);
+                    if (mismatches == 0) {
+                        logger.info(
+                                "Scheduled LiteBans shadow run {} completed: source={}, imported={}, reconciled={}, replayed={}",
+                                report.runId(),
+                                report.sourceRecords(),
+                                report.importedRecords(),
+                                report.reconciledRecords(),
+                                report.replayedRecords()
+                        );
+                    } else {
+                        logger.error(
+                                "Scheduled LiteBans shadow run {} recorded {} mismatches; cutover continuity reset",
+                                report.runId(),
+                                mismatches
+                        );
+                    }
+                } catch (RuntimeException exception) {
+                    logger.error("Scheduled LiteBans shadow run failed; cutover continuity is not advanced", exception);
+                } finally {
+                    migrationRunning.set(false);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException exception) {
+            migrationRunning.set(false);
+            logger.warn("Scheduled LiteBans shadow run skipped because the bounded worker queue is full");
+        }
+    }
+
+    private LiteBansMigrationService migrationService(MariaDbRuntime runtime, MigrationMode mode) {
+        if (mode == MigrationMode.DRY_RUN) {
+            return runtime.liteBansMigrationService();
+        }
+        NetworkIdentityProtector protector = networkIdentityProtector;
+        if (protector == null) {
+            throw new IllegalStateException(
+                    "Protected network identity support must be enabled before importing LiteBans history"
+            );
+        }
+        return runtime.liteBansMigrationService(protector);
     }
 
     private void initializeChannel(VelocityConfiguration loaded, NetworkOutboxStore outbox) {
@@ -521,10 +602,7 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         byte[] rawAddress = event.getPlayer().getRemoteAddress().getAddress().getAddress();
-        boolean suppressEvidence = current == OperationalMode.MAINTENANCE
-                || current == OperationalMode.BOOTSTRAP
-                || current == OperationalMode.DEGRADED
-                || current == OperationalMode.READ_ONLY_FAILURE;
+        boolean suppressEvidence = current != OperationalMode.ACTIVE;
         try {
             identityStore.observeAndInherit(playerId, protector.protect(rawAddress), now, suppressEvidence);
         } finally {
@@ -856,27 +934,55 @@ public final class EnthusiaStaffVelocityPlugin {
         public List<String> suggest(Invocation invocation) {
             String[] arguments = invocation.arguments();
             if (arguments.length <= 1) {
-                return List.of("status", "verify", "migration", "cutover", "discord", "website");
+                List<String> suggestions = new ArrayList<>(List.of("status", "verify"));
+                if (sourceHas(invocation.source(), "enthusiastaff.migration")) {
+                    suggestions.add("migration");
+                }
+                if (sourceHas(invocation.source(), "enthusiastaff.cutover")) {
+                    suggestions.add("cutover");
+                }
+                if (sourceHas(invocation.source(), "enthusiastaff.discord.manage")) {
+                    suggestions.add("discord");
+                }
+                if (sourceHas(invocation.source(), "enthusiastaff.website.manage")) {
+                    suggestions.add("website");
+                }
+                return List.copyOf(suggestions);
             }
             if (arguments.length == 2 && arguments[0].equalsIgnoreCase("migration")) {
-                return List.of("inspect", "dry-run", "import", "shadow");
+                return sourceHas(invocation.source(), "enthusiastaff.migration")
+                        ? List.of("inspect", "dry-run", "import", "shadow", "final")
+                        : List.of();
             }
             if (arguments.length == 2 && arguments[0].equalsIgnoreCase("cutover")) {
-                return List.of("status", "maintenance", "activate", "override");
+                if (!sourceHas(invocation.source(), "enthusiastaff.cutover")) {
+                    return List.of();
+                }
+                return sourceHas(invocation.source(), "enthusiastaff.cutover.founder")
+                        ? List.of("status", "maintenance", "abort", "freeze", "activate", "override")
+                        : List.of("status", "maintenance", "activate");
             }
             if (arguments.length == 2 && arguments[0].equalsIgnoreCase("discord")) {
-                return List.of("status", "retry");
+                return sourceHas(invocation.source(), "enthusiastaff.discord.manage")
+                        ? List.of("status", "retry")
+                        : List.of();
             }
             if (arguments.length == 3 && arguments[0].equalsIgnoreCase("discord")
                     && arguments[1].equalsIgnoreCase("retry")) {
-                return List.of("punishments", "reports", "logs-staffmode", "alerts");
+                return sourceHas(invocation.source(), "enthusiastaff.discord.manage")
+                        ? List.of("punishments", "reports", "logs-staffmode", "alerts")
+                        : List.of();
             }
             if (arguments.length == 2 && arguments[0].equalsIgnoreCase("website")) {
-                return List.of("status", "code");
+                return sourceHas(invocation.source(), "enthusiastaff.website.manage")
+                        ? List.of("status", "code")
+                        : List.of();
             }
             if (arguments.length == 3 && arguments[0].equalsIgnoreCase("website")
                     && arguments[1].equalsIgnoreCase("code")) {
-                return List.of("show", "rotate", "revoke");
+                return sourceHas(invocation.source(), "enthusiastaff.website.manage")
+                        ? List.of("show", "rotate", "revoke")
+                        : List.of();
             }
             return List.of();
         }
@@ -1035,7 +1141,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 return;
             }
             if (arguments.length != 2) {
-                source.sendMessage(Component.text("Usage: /estaff migration <inspect|dry-run|import|shadow>"));
+                source.sendMessage(Component.text("Usage: /estaff migration <inspect|dry-run|import|shadow|final>"));
                 return;
             }
             MariaDbRuntime runtime = databaseRuntime;
@@ -1048,14 +1154,25 @@ public final class EnthusiaStaffVelocityPlugin {
                 case "dry-run", "inspect" -> MigrationMode.DRY_RUN;
                 case "import" -> MigrationMode.IMPORT;
                 case "shadow" -> MigrationMode.SHADOW;
+                case "final" -> MigrationMode.CUTOVER;
                 default -> null;
             };
             if (migrationMode == null) {
                 source.sendMessage(Component.text("Unknown migration operation."));
                 return;
             }
-            if (migrationMode != MigrationMode.DRY_RUN && authorityMode.get() == OperationalMode.ACTIVE) {
-                source.sendMessage(Component.text("Import and shadow writes are blocked while EnthusiaStaff is ACTIVE."));
+            if (migrationMode == MigrationMode.SHADOW
+                    && authorityMode.get() != OperationalMode.SHADOW_MIGRATION) {
+                source.sendMessage(Component.text("Shadow runs require SHADOW_MIGRATION mode."));
+                return;
+            }
+            if (migrationMode == MigrationMode.CUTOVER && authorityMode.get() != OperationalMode.MAINTENANCE) {
+                source.sendMessage(Component.text("The final import and comparison require MAINTENANCE mode."));
+                return;
+            }
+            if (migrationMode == MigrationMode.IMPORT && authorityMode.get() != OperationalMode.SHADOW_MIGRATION
+                    && authorityMode.get() != OperationalMode.MAINTENANCE) {
+                source.sendMessage(Component.text("Imports require SHADOW_MIGRATION or MAINTENANCE mode."));
                 return;
             }
             if (!migrationRunning.compareAndSet(false, true)) {
@@ -1066,7 +1183,7 @@ public final class EnthusiaStaffVelocityPlugin {
             try {
                 workers.execute(() -> {
                     try {
-                        MigrationExecutionReport report = runtime.liteBansMigrationService().execute(
+                        MigrationExecutionReport report = migrationService(runtime, migrationMode).execute(
                                 loaded.liteBansDatabaseFromEnvironment(),
                                 loaded.liteBansTablePrefix(),
                                 loaded.liteBansBatchSize(),
@@ -1075,10 +1192,32 @@ public final class EnthusiaStaffVelocityPlugin {
                         source.sendMessage(Component.text(
                                 "Migration " + report.mode() + " run " + report.runId() + ": source="
                                         + report.sourceRecords() + ", imported=" + report.importedRecords()
+                                        + ", reconciled=" + report.reconciledRecords()
                                         + ", replayed=" + report.replayedRecords() + ", rejected="
                                         + report.rejectedRows().size() + ", schema-blockers="
-                                        + report.schema().blockers().size()
+                                        + report.schema().blockers().size() + ", protected-identities="
+                                        + report.protectedIdentityRecords() + '/' + report.networkIdentityRecords()
                         ));
+                        report.shadowSummary().ifPresent(summary -> source.sendMessage(Component.text(
+                                "Comparison: mismatches=" + summary.mismatchCount()
+                                        + ", counts=" + summary.countsMatch()
+                                        + ", checksums=" + summary.checksumsMatch()
+                                        + ", active=" + summary.activeSanctionsMatch()
+                                        + ", UUIDs=" + summary.uuidMappingsMatch()
+                                        + ", expirations=" + summary.expirationsMatch()
+                                        + ", login=" + comparison(summary.loginDecisions())
+                                        + ", mute=" + comparison(summary.muteDecisions())
+                                        + ", IP-ban=" + comparison(summary.ipBanDecisions())
+                        )));
+                        report.rejectedRows().stream().limit(20).forEach(row -> source.sendMessage(Component.text(
+                                "Rejected " + row.tableName() + '#' + row.externalId() + ": " + row.reasonCode()
+                        )));
+                        if (report.rejectedRows().size() > 20) {
+                            source.sendMessage(Component.text(
+                                    (report.rejectedRows().size() - 20)
+                                            + " additional rejected rows are recorded in the durable migration report."
+                            ));
+                        }
                     } catch (RuntimeException exception) {
                         logger.error("Migration command failed", exception);
                         source.sendMessage(Component.text("Migration failed; inspect the sanitized proxy log and durable run record."));
@@ -1099,7 +1238,7 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             if (arguments.length < 2) {
                 source.sendMessage(Component.text(
-                        "Usage: /estaff cutover <status|maintenance|activate|override>"
+                        "Usage: /estaff cutover <status|maintenance|abort|freeze|activate|override>"
                 ));
                 return;
             }
@@ -1111,8 +1250,33 @@ public final class EnthusiaStaffVelocityPlugin {
             String operation = arguments[1].toLowerCase(java.util.Locale.ROOT);
             if (operation.equals("status")) {
                 submitCutover(source, () -> {
-                    net.enthusia.staff.domain.migration.CutoverAssessment assessment =
-                            runtime.cutoverCoordinator().assess(java.util.Optional.empty());
+                    net.enthusia.staff.persistence.migration.CutoverCoordinator coordinator =
+                            runtime.cutoverCoordinator();
+                    coordinator.latestEvidence().ifPresentOrElse(evidence -> {
+                        long observedHours = Duration.between(
+                                evidence.shadowStartedAt(), evidence.shadowEndedAt()
+                        ).toHours();
+                        source.sendMessage(Component.text(
+                                "Shadow evidence: observed=" + observedHours + "h, summaries="
+                                        + evidence.successfulShadowSummaries().size() + ", unresolved="
+                                        + evidence.unresolvedOperations() + ", migration-idle="
+                                        + evidence.migrationIdle() + ", writes-frozen=" + evidence.writesFrozen()
+                                        + ", final-import=" + evidence.finalIncrementalImportComplete()
+                        ));
+                        source.sendMessage(Component.text(
+                                "Checks: counts=" + evidence.countsMatch()
+                                        + ", checksums=" + evidence.checksumsMatch()
+                                        + ", active=" + evidence.activeSanctionsMatch()
+                                        + ", UUIDs=" + evidence.uuidMappingsMatch()
+                                        + ", expirations=" + evidence.expirationsMatch()
+                                        + ", login=" + comparison(evidence.loginDecisions())
+                                        + ", mute=" + comparison(evidence.muteDecisions())
+                                        + ", IP-ban=" + comparison(evidence.ipBanDecisions())
+                        ));
+                    }, () -> source.sendMessage(Component.text("No complete shadow evidence is available.")));
+                    net.enthusia.staff.domain.migration.CutoverAssessment assessment = coordinator.assess(
+                            java.util.Optional.empty()
+                    );
                     source.sendMessage(Component.text("Cutover allowed: " + assessment.allowed()
                             + "; blockers: " + String.join(", ", assessment.blockers())));
                 });
@@ -1127,6 +1291,46 @@ public final class EnthusiaStaffVelocityPlugin {
                     source.sendMessage(Component.text(changed
                             ? "Maintenance committed. Run the final incremental import, then reassess cutover."
                             : "Maintenance was not entered; the current mode is not SHADOW_MIGRATION or changed concurrently."));
+                });
+                return;
+            }
+            if (operation.equals("abort")) {
+                if (!source.hasPermission("enthusiastaff.cutover.founder")) {
+                    source.sendMessage(Component.text("Founder permission is required to abort cutover maintenance."));
+                    return;
+                }
+                if (arguments.length < 4 || !arguments[2].equals("CONFIRM-ABORT-MAINTENANCE")) {
+                    source.sendMessage(Component.text(
+                            "Abort requires the exact acknowledgement and a written reason."
+                    ));
+                    return;
+                }
+                String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
+                submitCutover(source, () -> {
+                    boolean changed = runtime.cutoverCoordinator().abortMaintenance(actorId, reason);
+                    source.sendMessage(Component.text(changed
+                            ? "Maintenance aborted; LiteBans remains authoritative and the shadow gate must be reassessed."
+                            : "Maintenance was not aborted because the current mode is not MAINTENANCE."));
+                });
+                return;
+            }
+            if (operation.equals("freeze")) {
+                if (!source.hasPermission("enthusiastaff.cutover.founder")) {
+                    source.sendMessage(Component.text("Founder permission is required to freeze active authority."));
+                    return;
+                }
+                if (arguments.length < 4 || !arguments[2].equals("CONFIRM-READ-ONLY-FAILURE")) {
+                    source.sendMessage(Component.text(
+                            "Emergency freeze requires the exact acknowledgement and a written reason."
+                    ));
+                    return;
+                }
+                String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
+                submitCutover(source, () -> {
+                    boolean changed = runtime.cutoverCoordinator().freezeActiveAuthority(actorId, reason);
+                    source.sendMessage(Component.text(changed
+                            ? "ACTIVE authority is now READ_ONLY_FAILURE; destructive writes are disabled and logins fail closed."
+                            : "Authority was not frozen because the current mode is not ACTIVE."));
                 });
                 return;
             }
@@ -1145,7 +1349,8 @@ public final class EnthusiaStaffVelocityPlugin {
                     source.sendMessage(Component.text("Founder permission is required for a blocked cutover override."));
                     return;
                 }
-                if (arguments.length < 4 || !arguments[2].equals("I_UNDERSTAND_CUTOVER_BLOCKERS")) {
+                if (arguments.length < 4
+                        || !arguments[2].equals(FounderOverride.REQUIRED_ACKNOWLEDGEMENT)) {
                     source.sendMessage(Component.text(
                             "Override requires the exact acknowledgement and a written reason."
                     ));
@@ -1159,6 +1364,14 @@ public final class EnthusiaStaffVelocityPlugin {
                 return;
             }
             source.sendMessage(Component.text("Unknown cutover operation."));
+        }
+
+        private boolean sourceHas(CommandSource source, String permission) {
+            return source.hasPermission(permission);
+        }
+
+        private String comparison(net.enthusia.staff.domain.migration.DecisionComparison value) {
+            return value.mismatched() + "/" + value.compared() + " mismatched";
         }
 
         private void executeDiscord(CommandSource source, String[] arguments) {

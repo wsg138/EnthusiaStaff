@@ -25,6 +25,13 @@ public final class LiteBansSchemaInspector {
             "expires_at", List.of("until", "expires_at"),
             "active", List.of("active")
     );
+    private static final Map<String, List<String>> HISTORY_REQUIRED = Map.of(
+            "id", List.of("id"),
+            "uuid", List.of("uuid"),
+            "username", List.of("name", "username"),
+            "ip", List.of("ip", "address"),
+            "observed_at", List.of("date", "observed_at", "created_at")
+    );
 
     public LiteBansSchemaReport inspect(Connection connection, String prefix) {
         if (connection == null || prefix == null || !PREFIX.matcher(prefix).matches()) {
@@ -52,10 +59,27 @@ public final class LiteBansSchemaInspector {
                 }
                 if (kind.equals("bans")) {
                     resolve(columns, List.of("ipban", "ip_ban")).ifPresent(value -> resolved.put("ip_ban", value));
+                    resolve(columns, List.of("ip", "address")).ifPresentOrElse(
+                            value -> resolved.put("ip", value),
+                            () -> blockers.add("MISSING_COLUMN:" + actual + ":ip")
+                    );
                 }
                 importTables.put(kind, new LiteBansSchemaReport.TableMapping(actual, resolved));
             }
-            for (String kind : List.of("kicks", "warnings", "history")) {
+            String historyTable = tables.get((prefix + "history").toLowerCase(Locale.ROOT));
+            if (historyTable == null) {
+                blockers.add("MISSING_TABLE:" + prefix + "history");
+            } else {
+                Set<String> historyColumns = columns(metadata, connection.getCatalog(), historyTable);
+                Map<String, String> historyResolved = resolveRequired(historyColumns, HISTORY_REQUIRED);
+                for (String canonical : HISTORY_REQUIRED.keySet()) {
+                    if (!historyResolved.containsKey(canonical)) {
+                        blockers.add("MISSING_COLUMN:" + historyTable + ':' + canonical);
+                    }
+                }
+                importTables.put("history", new LiteBansSchemaReport.TableMapping(historyTable, historyResolved));
+            }
+            for (String kind : List.of("kicks", "warnings")) {
                 String actual = tables.get((prefix + kind).toLowerCase(Locale.ROOT));
                 if (actual != null) {
                     auditOnly.put(kind, columns(metadata, connection.getCatalog(), actual));
@@ -78,6 +102,18 @@ public final class LiteBansSchemaInspector {
             resolve(availableColumns, List.of("muted_by_name", "staff_name", "executor"))
                     .ifPresent(value -> resolved.put("staff", value));
         }
+        resolve(availableColumns, List.of("removed_by_date", "removed_at", "ended_at"))
+                .ifPresent(value -> resolved.put("ended_at", value));
+        return resolved;
+    }
+
+    private static Map<String, String> resolveRequired(
+            Set<String> availableColumns,
+            Map<String, List<String>> required
+    ) {
+        Map<String, String> resolved = new LinkedHashMap<>();
+        required.forEach((canonical, aliases) -> resolve(availableColumns, aliases)
+                .ifPresent(value -> resolved.put(canonical, value)));
         return resolved;
     }
 

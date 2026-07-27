@@ -33,6 +33,8 @@ class MigrationChecksumTest {
                 "Staff",
                 Instant.parse("2026-07-01T00:00:00Z"),
                 expiration,
+                Optional.empty(),
+                Optional.empty(),
                 true
         );
     }

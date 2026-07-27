@@ -57,7 +57,9 @@ public record VelocityConfiguration(
         int liteBansMaximumPoolSize,
         long liteBansConnectionTimeoutMillis,
         String liteBansTablePrefix,
-        int liteBansBatchSize
+        int liteBansBatchSize,
+        boolean liteBansShadowScheduleEnabled,
+        int liteBansShadowIntervalHours
 ) {
     public VelocityConfiguration {
         backendSecretEnvironments = Map.copyOf(backendSecretEnvironments);
@@ -124,7 +126,9 @@ public record VelocityConfiguration(
                 integer(properties, "litebans.maximum-pool-size", 1, 8),
                 integer(properties, "litebans.connection-timeout-millis", 250, 60_000),
                 required(properties, "litebans.table-prefix"),
-                integer(properties, "litebans.batch-size", 1, 5_000)
+                integer(properties, "litebans.batch-size", 1, 5_000),
+                bool(properties, "litebans.shadow-schedule-enabled", true),
+                integer(properties, "litebans.shadow-interval-hours", 24, 1, 24)
         );
     }
 
@@ -247,11 +251,30 @@ public record VelocityConfiguration(
         }
     }
 
+    private static int integer(
+            Properties properties,
+            String key,
+            int defaultValue,
+            int minimum,
+            int maximum
+    ) {
+        String configured = properties.getProperty(key);
+        if (configured == null || configured.isBlank()) {
+            return defaultValue;
+        }
+        return integer(properties, key, minimum, maximum);
+    }
+
     private static boolean bool(Properties properties, String key) {
         String value = required(properties, key);
         if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
             throw new IllegalArgumentException(key + " must be true or false");
         }
         return Boolean.parseBoolean(value);
+    }
+
+    private static boolean bool(Properties properties, String key, boolean defaultValue) {
+        String configured = properties.getProperty(key);
+        return configured == null || configured.isBlank() ? defaultValue : bool(properties, key);
     }
 }

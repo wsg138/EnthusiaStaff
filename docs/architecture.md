@@ -152,7 +152,7 @@ Paper owns GUI, staff-mode, vanish, inventory, staff tools, reports, automod, an
 
 Implementation order is domain and schema, migration importer and shadow comparison, Velocity authority, protocol, Paper sanctions, removal/overturn, reports, inventories/economy, staff mode/vanish/freeze/tools, alts and integrations, Discord, website, then full failure testing. Each phase adds its rollback or quarantine behavior before the next phase begins.
 
-Schema changes are forward-only Flyway migrations. Feature activation is configuration-gated. Rollback disables new writes, returns to the previous authority mode, drains no destructive queue automatically, and follows `docs/rollback.md`. Cutover never drops LiteBans data or removes legacy jars; jar removal is a later manual step after acceptance.
+Schema changes are forward-only Flyway migrations. Feature activation is configuration-gated. A pre-activation abort returns to a fresh shadow window. A post-activation emergency freeze enters `READ_ONLY_FAILURE`; legacy authority is restored only after post-cutover sanctions are reconciled. No destructive queue is drained automatically. Cutover never drops LiteBans data or removes legacy jars; jar removal is a later manual step after acceptance. See `docs/rollback.md`.
 
 ## Future topology
 

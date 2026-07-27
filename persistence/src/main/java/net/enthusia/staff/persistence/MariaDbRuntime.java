@@ -3,6 +3,7 @@ package net.enthusia.staff.persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
+import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
@@ -133,6 +134,13 @@ public final class MariaDbRuntime implements AutoCloseable {
 
     public LiteBansMigrationService liteBansMigrationService() {
         return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC());
+    }
+
+    public LiteBansMigrationService liteBansMigrationService(NetworkIdentityProtector protector) {
+        if (protector == null) {
+            throw new IllegalArgumentException("network identity protector must be present");
+        }
+        return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC(), protector);
     }
 
     public CutoverCoordinator cutoverCoordinator() {
