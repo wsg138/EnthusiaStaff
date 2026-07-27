@@ -14,7 +14,7 @@ This is a review and staging manifest. Nothing listed here has been merged, depl
 | `BadgersMC/Enthusia-RoseChat` | `BadgersMC/Enthusia-RoseChat` | `agent/staff-bridge-api` | `a276749` | Moderation/chat evidence bridge |
 | `BadgersMC/EnthusiaMarket` | `BadgersMC/EnthusiaMarket` | `agent/moderation-api` | `224410d` | Market moderation compatibility API |
 
-The RoseChat and Market remotes do not match the requested `wsg138` ownership. Do not push or open PRs until the intended fork/target is confirmed. GitHub authentication and write access must also be restored before draft PR creation.
+Staff review is open as draft PR [wsg138/EnthusiaStaff#1](https://github.com/wsg138/EnthusiaStaff/pull/1). The RoseChat and Market remotes do not match the requested `wsg138` ownership. Do not push or open PRs until the intended fork/target is confirmed. Write access to the remaining intended repositories must be available before their draft PRs can be created.
 
 ## Required installation order
 
