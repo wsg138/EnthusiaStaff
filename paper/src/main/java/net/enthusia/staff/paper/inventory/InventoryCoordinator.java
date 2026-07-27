@@ -18,6 +18,7 @@ import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryObservation;
+import net.enthusia.staff.domain.inventory.InventoryOperationState;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
 import net.enthusia.staff.domain.inventory.InventoryPatchDecision;
 import net.enthusia.staff.domain.inventory.InventoryPreparation;
@@ -516,6 +517,13 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 finishLiveFailure(viewer, session, request.playerId(), "The prepared inventory lease could not be claimed.");
                 return;
             }
+            if (patch.state() == InventoryOperationState.APPLIED) {
+                assetLocks.remove(request.playerId());
+                session.finishWork();
+                message(viewer, "That exact inventory edit was already committed.");
+                reconcile(session);
+                return;
+            }
             target.getScheduler().execute(
                     plugin,
                     () -> applyLiveOnTarget(viewer, target, session, patch, replacement),
@@ -541,18 +549,38 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     ) {
         InventoryImage current = codec.capture(target);
         InventoryImageCodec.EncodedImage currentBytes = codec.encodeWithChecksum(current);
-        if (!currentBytes.checksum().equals(patch.expectedChecksum())) {
-            submit(() -> {
-                quarantine(patch, "LIVE_STATE_CHANGED", "Target inventory changed after the edit was prepared");
-                finishLiveFailure(viewer, session, target.getUniqueId(), "The target inventory changed; the edit was rejected.");
-                reconcile(session);
-            });
-            return;
-        }
         try {
-            codec.apply(target, replacement);
-            InventoryImage applied = codec.capture(target);
-            InventoryImageCodec.EncodedImage appliedBytes = codec.encodeWithChecksum(applied);
+            InventoryImage applied;
+            InventoryImageCodec.EncodedImage appliedBytes;
+            switch (InventoryPatchDecision.decide(
+                    currentBytes.checksum(),
+                    patch.expectedChecksum(),
+                    patch.replacementChecksum()
+            )) {
+                case APPLY_REPLACEMENT -> {
+                    codec.apply(target, replacement);
+                    applied = codec.capture(target);
+                    appliedBytes = codec.encodeWithChecksum(applied);
+                }
+                case FINALIZE_ALREADY_APPLIED -> {
+                    applied = current;
+                    appliedBytes = currentBytes;
+                }
+                case QUARANTINE_CONFLICT -> {
+                    submit(() -> {
+                        quarantine(patch, "LIVE_STATE_CHANGED", "Target inventory changed after the edit was prepared");
+                        finishLiveFailure(
+                                viewer,
+                                session,
+                                target.getUniqueId(),
+                                "The target inventory changed; the edit was rejected."
+                        );
+                        reconcile(session);
+                    });
+                    return;
+                }
+                default -> throw new IllegalStateException("Unhandled inventory patch decision");
+            }
             submit(() -> finalizeLive(viewer, session, patch, applied, appliedBytes));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Live inventory application failed", exception);
@@ -669,6 +697,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 ).orElse(null);
                 if (claimed == null) {
                     retryLoginApply(player, original, attempt, "Inventory recovery lease is busy.");
+                    return;
+                }
+                if (claimed.state() == InventoryOperationState.APPLIED) {
+                    loginBlocks.remove(player.getUniqueId());
                     return;
                 }
                 onEntity(player, () -> applyPendingOnPlayer(player, claimed, attempt));

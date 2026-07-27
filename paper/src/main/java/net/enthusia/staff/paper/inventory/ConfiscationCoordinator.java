@@ -32,7 +32,9 @@ import net.enthusia.staff.domain.inventory.InventoryConfiscationStart;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationStartRequest;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryObservation;
+import net.enthusia.staff.domain.inventory.InventoryOperationState;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
+import net.enthusia.staff.domain.inventory.InventoryPatchDecision;
 import net.enthusia.staff.domain.inventory.InventoryPreparation;
 import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
@@ -529,6 +531,16 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
+            if (claimed.state() == InventoryOperationState.APPLIED) {
+                loaded.finalizeRestoration(
+                        context.caseId(),
+                        context.operationId(),
+                        claimed.replacementChecksum(),
+                        clock.instant()
+                );
+                releaseRestoration(context, "That exact confiscated-asset restoration was already committed.");
+                return;
+            }
             context.applying();
             onEntity(
                     context.target(),
@@ -561,18 +573,28 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         try {
             InventoryImage current = imageCodec.capture(context.target());
             InventoryImageCodec.EncodedImage currentBytes = imageCodec.encodeWithChecksum(current);
-            if (!currentBytes.checksum().equals(patch.expectedChecksum())) {
-                quarantineRestoration(
-                        context,
-                        patch,
-                        "RESTORATION_STATE_CHANGED",
-                        "Target inventory changed after restoration was prepared"
-                );
-                return;
+            InventoryImageCodec.EncodedImage appliedBytes;
+            switch (InventoryPatchDecision.decide(
+                    currentBytes.checksum(),
+                    patch.expectedChecksum(),
+                    patch.replacementChecksum()
+            )) {
+                case APPLY_REPLACEMENT -> {
+                    imageCodec.apply(context.target(), replacement);
+                    appliedBytes = imageCodec.encodeWithChecksum(imageCodec.capture(context.target()));
+                }
+                case FINALIZE_ALREADY_APPLIED -> appliedBytes = currentBytes;
+                case QUARANTINE_CONFLICT -> {
+                    quarantineRestoration(
+                            context,
+                            patch,
+                            "RESTORATION_STATE_CHANGED",
+                            "Target inventory changed after restoration was prepared"
+                    );
+                    return;
+                }
+                default -> throw new IllegalStateException("Unhandled inventory patch decision");
             }
-            imageCodec.apply(context.target(), replacement);
-            InventoryImage applied = imageCodec.capture(context.target());
-            InventoryImageCodec.EncodedImage appliedBytes = imageCodec.encodeWithChecksum(applied);
             if (!submit(() -> finalizeRestorationPatch(context, patch, appliedBytes))) {
                 alertStaff(
                         "Restoration reached the target for " + patch.operationId()
@@ -1152,6 +1174,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 quarantine(session, patch, "PATCH_CLAIM_FAILED", "Prepared confiscation patch lost its lease");
                 return;
             }
+            if (claimed.state() == InventoryOperationState.APPLIED) {
+                releaseAfterCompletion(session, "That exact confiscation was already committed.");
+                return;
+            }
             onEntity(
                     session.target(),
                     () -> applyPatch(session, claimed, replacement),
@@ -1184,18 +1210,28 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         try {
             InventoryImage current = imageCodec.capture(session.target());
             InventoryImageCodec.EncodedImage currentBytes = imageCodec.encodeWithChecksum(current);
-            if (!currentBytes.checksum().equals(patch.expectedChecksum())) {
-                quarantine(
-                        session,
-                        patch,
-                        "LIVE_STATE_CHANGED",
-                        "Target inventory changed after confiscation was prepared"
-                );
-                return;
+            InventoryImageCodec.EncodedImage appliedBytes;
+            switch (InventoryPatchDecision.decide(
+                    currentBytes.checksum(),
+                    patch.expectedChecksum(),
+                    patch.replacementChecksum()
+            )) {
+                case APPLY_REPLACEMENT -> {
+                    imageCodec.apply(session.target(), replacement);
+                    appliedBytes = imageCodec.encodeWithChecksum(imageCodec.capture(session.target()));
+                }
+                case FINALIZE_ALREADY_APPLIED -> appliedBytes = currentBytes;
+                case QUARANTINE_CONFLICT -> {
+                    quarantine(
+                            session,
+                            patch,
+                            "LIVE_STATE_CHANGED",
+                            "Target inventory changed after confiscation was prepared"
+                    );
+                    return;
+                }
+                default -> throw new IllegalStateException("Unhandled inventory patch decision");
             }
-            imageCodec.apply(session.target(), replacement);
-            InventoryImage applied = imageCodec.capture(session.target());
-            InventoryImageCodec.EncodedImage appliedBytes = imageCodec.encodeWithChecksum(applied);
             if (!submit(() -> finalizePatch(session, patch, appliedBytes))) {
                 alertStaff(
                         "Confiscation reached the target for " + patch.operationId()

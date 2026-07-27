@@ -164,6 +164,9 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                     || operation.state() == EconomyOperationState.QUARANTINED) {
                 return Optional.empty();
             }
+            if (ownsLiveLease(connection, operation, now)) {
+                return Optional.empty();
+            }
             long fence = claimLease(
                     connection,
                     operation,
@@ -317,6 +320,14 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 return result(EconomyJournalResult.Status.NOT_FOUND, null, "Economy operation was not found");
             }
             if (operation.state() == EconomyOperationState.APPLYING) {
+                if (operation.fencingToken() != fencingToken
+                        || !ownsLiveLease(connection, operation, now)) {
+                    return result(
+                            EconomyJournalResult.Status.FENCE_LOST,
+                            operation,
+                            "Economy operation is already applying under another lease"
+                    );
+                }
                 return result(EconomyJournalResult.Status.REPLAYED, operation, "Economy operation is already applying");
             }
             if (operation.state() != EconomyOperationState.VALIDATED) {
@@ -1245,23 +1256,28 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             try {
                 T result = work.execute(connection);
                 connection.commit();
+                connection.setAutoCommit(true);
                 return result;
-            } catch (SQLException | RuntimeException exception) {
+            } catch (SQLException | RuntimeException | Error exception) {
                 rollback(connection, exception);
                 throw exception;
-            } finally {
-                connection.setAutoCommit(true);
             }
         } catch (SQLException exception) {
             throw failure("Economy journal transaction failed", exception);
         }
     }
 
-    private static void rollback(Connection connection, Exception cause) {
+    private static void rollback(Connection connection, Throwable cause) {
         try {
             connection.rollback();
         } catch (SQLException rollback) {
             cause.addSuppressed(rollback);
+            return;
+        }
+        try {
+            connection.setAutoCommit(true);
+        } catch (SQLException reset) {
+            cause.addSuppressed(reset);
         }
     }
 

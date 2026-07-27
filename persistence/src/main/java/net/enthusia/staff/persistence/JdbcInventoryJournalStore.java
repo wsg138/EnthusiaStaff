@@ -57,6 +57,11 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 || now == null) {
             throw new IllegalArgumentException("confiscation request, leaseDuration, and now are invalid");
         }
+        BinarySnapshotIntegrity.requireMatch(
+                request.beforeChecksum(),
+                request.beforeSnapshot(),
+                "confiscation before"
+        );
         return transaction(connection -> {
             Optional<InventoryConfiscationSession> replay = lockConfiscationSessionByIdentity(
                     connection,
@@ -173,6 +178,16 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         if (request == null || now == null) {
             throw new IllegalArgumentException("confiscation commit request and now are required");
         }
+        BinarySnapshotIntegrity.requireMatch(
+                request.replacementChecksum(),
+                request.replacementSnapshot(),
+                "confiscation replacement"
+        );
+        BinarySnapshotIntegrity.requireMatch(
+                request.assetsChecksum(),
+                request.assetsSnapshot(),
+                "confiscated assets"
+        );
         return transaction(connection -> {
             InventoryConfiscationSession session =
                     lockConfiscationSession(connection, request.operationId()).orElse(null);
@@ -460,6 +475,11 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         InventoryObservation validated = new InventoryObservation(
                 UUID.randomUUID(), playerId, scopeId, owningServerId, 0L, checksum, snapshot, observedAt
         );
+        BinarySnapshotIntegrity.requireMatch(
+                validated.checksum(),
+                validated.snapshot(),
+                "inventory observation"
+        );
         return transaction(connection -> {
             Profile profile = lockOrCreateProfile(connection, playerId, scopeId, owningServerId);
             Optional<InventoryObservation> existing = observation(connection, profile, true);
@@ -516,6 +536,16 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 || leaseDuration.isZero() || leaseDuration.compareTo(Duration.ofMinutes(5)) > 0 || now == null) {
             throw new IllegalArgumentException("request, leaseDuration, and now are invalid");
         }
+        BinarySnapshotIntegrity.requireMatch(
+                request.expectedChecksum(),
+                request.beforeSnapshot(),
+                "inventory before"
+        );
+        BinarySnapshotIntegrity.requireMatch(
+                request.replacementChecksum(),
+                request.replacementSnapshot(),
+                "inventory replacement"
+        );
         return transaction(connection -> {
             Optional<InventoryPatch> replay = findReplay(connection, request);
             if (replay.isPresent()) {
@@ -653,6 +683,10 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                     && patch.state() != InventoryOperationState.APPLYING) {
                 return Optional.empty();
             }
+            if (patch.state() == InventoryOperationState.APPLYING
+                    && ownsLease(connection, patch, now)) {
+                return Optional.empty();
+            }
             long fence = claimLease(connection, patch, now.plus(leaseDuration), now);
             if (fence < 1L) {
                 return Optional.empty();
@@ -699,6 +733,11 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 observedSnapshot,
                 now
         );
+        BinarySnapshotIntegrity.requireMatch(
+                validation.checksum(),
+                validation.snapshot(),
+                "applied inventory"
+        );
         return transaction(connection -> {
             InventoryPatch patch = lockPatch(connection, patchId).orElse(null);
             if (patch == null || !patch.operationId().equals(operationId)) {
@@ -709,6 +748,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             if (patch.state() == InventoryOperationState.APPLIED
                     && current.checksum().equals(patch.replacementChecksum())) {
                 markRestorationApplied(connection, patch, now);
+                insertCommitAudit(connection, patch, current.revision(), now);
                 return finalized(
                         InventoryFinalizeResult.Status.REPLAYED,
                         current.revision(),
@@ -738,6 +778,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 if (profile.revision() == patch.expectedRevision() + 1L
                         && current.checksum().equals(patch.replacementChecksum())) {
                     markApplied(connection, patch, now);
+                    insertCommitAudit(connection, patch, current.revision(), now);
                     releaseLease(connection, patch);
                     return finalized(
                             InventoryFinalizeResult.Status.REPLAYED,
@@ -767,23 +808,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             );
             saveRevision(connection, profile.profileId(), nextRevision, patch.replacementChecksum(), now);
             markApplied(connection, patch, now);
-            insertAudit(
-                    connection,
-                    patch.operationId(),
-                    patch.actorId(),
-                    patch.playerId(),
-                    patch.caseId(),
-                    "INVENTORY_OPERATION_COMMITTED",
-                    "COMMITTED",
-                    Map.of(
-                            "operationType", patch.operationType(),
-                            "scopeId", patch.scopeId(),
-                            "resultingRevision", nextRevision,
-                            "changedSlots", patch.changedSlots()
-                    ),
-                    "inventory:commit:" + patch.operationId(),
-                    now
-            );
+            insertCommitAudit(connection, patch, nextRevision, now);
             releaseLease(connection, patch);
             return finalized(
                     InventoryFinalizeResult.Status.COMMITTED,
@@ -809,7 +834,10 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
         transaction(connection -> {
             InventoryPatch patch = lockPatch(connection, patchId).orElse(null);
-            if (patch != null && patch.operationId().equals(operationId) && patch.fencingToken() == fencingToken) {
+            if (patch != null && patch.operationId().equals(operationId)
+                    && patch.fencingToken() == fencingToken
+                    && (patch.state() == InventoryOperationState.PENDING
+                    || patch.state() == InventoryOperationState.APPLYING)) {
                 quarantineInternal(connection, patch, reasonCode, detail, now);
             }
             return null;
@@ -1881,10 +1909,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 if (currentExpiry.isAfter(now) && !sameOwner) {
                     return 0L;
                 }
-                long fence = sameOwner && currentFence == patch.fencingToken()
-                        && currentExpiry.isAfter(now)
-                        ? currentFence
-                        : Math.max(currentFence, patch.fencingToken()) + 1L;
+                long fence = Math.max(currentFence, patch.fencingToken()) + 1L;
                 try (PreparedStatement update = connection.prepareStatement("""
                         UPDATE operation_leases
                         SET owner_id = ?, fencing_token = ?, lease_until = ?, updated_at = ?
@@ -1950,6 +1975,31 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             operation.executeUpdate();
         }
         markRestorationApplied(connection, patch, now);
+    }
+
+    private void insertCommitAudit(
+            Connection connection,
+            InventoryPatch patch,
+            long resultingRevision,
+            Instant now
+    ) throws SQLException {
+        insertAudit(
+                connection,
+                patch.operationId(),
+                patch.actorId(),
+                patch.playerId(),
+                patch.caseId(),
+                "INVENTORY_OPERATION_COMMITTED",
+                "COMMITTED",
+                Map.of(
+                        "operationType", patch.operationType(),
+                        "scopeId", patch.scopeId(),
+                        "resultingRevision", resultingRevision,
+                        "changedSlots", patch.changedSlots()
+                ),
+                "inventory:commit:" + patch.operationId(),
+                now
+        );
     }
 
     private static void markRestorationApplied(
@@ -2108,23 +2158,28 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             try {
                 T result = work.execute(connection);
                 connection.commit();
+                connection.setAutoCommit(true);
                 return result;
-            } catch (SQLException | RuntimeException exception) {
+            } catch (SQLException | RuntimeException | Error exception) {
                 rollback(connection, exception);
                 throw exception;
-            } finally {
-                connection.setAutoCommit(true);
             }
         } catch (SQLException exception) {
             throw failure("Inventory journal transaction failed", exception);
         }
     }
 
-    private static void rollback(Connection connection, Exception cause) {
+    private static void rollback(Connection connection, Throwable cause) {
         try {
             connection.rollback();
         } catch (SQLException rollback) {
             cause.addSuppressed(rollback);
+            return;
+        }
+        try {
+            connection.setAutoCommit(true);
+        } catch (SQLException reset) {
+            cause.addSuppressed(reset);
         }
     }
 

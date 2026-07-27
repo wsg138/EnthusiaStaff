@@ -232,6 +232,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 message(actor, "Economy confiscation rejected: " + preparation.detail());
                 return;
             }
+            if (preparation.status() == EconomyPreparation.Status.REPLAYED) {
+                message(actor, "That exact economy operation already exists; recovery will finish it safely.");
+                return;
+            }
             onEntity(
                     target,
                     () -> lockAndSnapshot(actor, target, request, operation),
@@ -387,6 +391,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
+            if (saved.status() == EconomyJournalResult.Status.REPLAYED) {
+                message(actor, "That exact economy plan is already durable; recovery will finish it safely.");
+                return;
+            }
             EconomyJournalResult applying = loaded.markApplying(
                     operation.operationId(),
                     operation.fencingToken(),
@@ -402,6 +410,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                         "APPLY_FENCE_REJECTED",
                         applying.detail()
                 );
+                return;
+            }
+            if (applying.status() == EconomyJournalResult.Status.REPLAYED) {
+                message(actor, "That economy operation is already applying; it was not executed again.");
                 return;
             }
             EconomyOperation current = applying.operation().orElse(operation);
