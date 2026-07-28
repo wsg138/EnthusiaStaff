@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.network.NetworkOutboxMessage;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
@@ -26,7 +25,6 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
     private static final int MAX_SERVER_ID_LENGTH = 64;
     private static final int MAX_CONSUMER_ID_LENGTH = 64;
     private static final int MAX_MESSAGE_TYPE_LENGTH = 64;
-    private static final Pattern ERROR_CODE_PATTERN = Pattern.compile("[A-Z0-9_]{1,64}");
 
     private final DataSource dataSource;
 
@@ -118,13 +116,13 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
     @Override
     public void retry(UUID messageId, String owner, Instant availableAt, String errorCode) {
         validateLeaseMutation(messageId, owner, availableAt);
-        retryMessage(messageId, owner, availableAt, safeError(errorCode));
+        retryMessage(messageId, owner, availableAt, JdbcOutboxSupport.safeError(errorCode));
     }
 
     @Override
     public void deadLetter(UUID messageId, String owner, String errorCode) {
         validateLeaseOwner(messageId, owner);
-        deadLetterMessage(messageId, owner, safeError(errorCode));
+        deadLetterMessage(messageId, owner, JdbcOutboxSupport.safeError(errorCode));
     }
 
     @Override
@@ -238,10 +236,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
                 ORDER BY available_at, created_at
                 LIMIT ? FOR UPDATE SKIP LOCKED
                 """)) {
-            Timestamp timestamp = Timestamp.from(now);
-            select.setTimestamp(1, timestamp);
-            select.setTimestamp(2, timestamp);
-            select.setInt(3, limit);
+            select.setInt(JdbcOutboxSupport.bindDueWindow(select, now, 2), limit);
             try (ResultSet result = select.executeQuery()) {
                 List<NetworkOutboxMessage> messages = new ArrayList<>();
                 while (result.next()) {
@@ -266,10 +261,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
                 """)) {
             Timestamp leaseUntil = Timestamp.from(now.plus(lease));
             for (NetworkOutboxMessage message : messages) {
-                update.setString(1, owner);
-                update.setTimestamp(2, leaseUntil);
-                update.setBytes(3, UuidBytes.toBytes(message.messageId()));
-                update.addBatch();
+                JdbcOutboxSupport.addLeaseBatchEntry(update, owner, leaseUntil, message.messageId());
             }
             JdbcTransactionSupport.requireBatchUpdate(
                     update.executeBatch(),
@@ -329,10 +321,10 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
     }
 
     private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
-        if (!validIdentifier(owner, MAX_OWNER_LENGTH)) {
+        if (!JdbcOutboxSupport.validIdentifier(owner, MAX_OWNER_LENGTH)) {
             throw new IllegalArgumentException("valid bounded outbox lease fields are required");
         }
-        if (limit < MINIMUM_COUNT || limit > MAX_BATCH || !positive(lease) || now == null) {
+        if (limit < MINIMUM_COUNT || limit > MAX_BATCH || !JdbcOutboxSupport.positive(lease) || now == null) {
             throw new IllegalArgumentException("valid bounded outbox lease fields are required");
         }
     }
@@ -344,7 +336,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
         }
         Set<String> unique = new LinkedHashSet<>(serverIds);
         for (String serverId : unique) {
-            if (!validIdentifier(serverId, MAX_SERVER_ID_LENGTH)) {
+            if (!JdbcOutboxSupport.validIdentifier(serverId, MAX_SERVER_ID_LENGTH)) {
                 throw new IllegalArgumentException("invalid backend server ID");
             }
         }
@@ -353,7 +345,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
 
     private static void validateDelivery(UUID messageId, String serverId, Instant now) {
         requireMessageId(messageId);
-        if (!validIdentifier(serverId, MAX_SERVER_ID_LENGTH) || now == null) {
+        if (!JdbcOutboxSupport.validIdentifier(serverId, MAX_SERVER_ID_LENGTH) || now == null) {
             throw new IllegalArgumentException("valid network delivery fields are required");
         }
     }
@@ -367,7 +359,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
 
     private static void validateLeaseOwner(UUID messageId, String owner) {
         requireMessageId(messageId);
-        if (!validIdentifier(owner, MAX_OWNER_LENGTH)) {
+        if (!JdbcOutboxSupport.validIdentifier(owner, MAX_OWNER_LENGTH)) {
             throw new IllegalArgumentException("valid network outbox lease mutation fields are required");
         }
     }
@@ -380,8 +372,8 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
             Instant now
     ) {
         requireMessageId(messageId);
-        if (!validIdentifier(consumerId, MAX_CONSUMER_ID_LENGTH)
-                || !validIdentifier(messageType, MAX_MESSAGE_TYPE_LENGTH)) {
+        if (!JdbcOutboxSupport.validIdentifier(consumerId, MAX_CONSUMER_ID_LENGTH)
+                || !JdbcOutboxSupport.validIdentifier(messageType, MAX_MESSAGE_TYPE_LENGTH)) {
             throw new IllegalArgumentException("valid inbox fields are required");
         }
         if (outcomeJson == null || outcomeJson.isBlank() || now == null) {
@@ -395,18 +387,4 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
         }
     }
 
-    private static boolean validIdentifier(String value, int maximumLength) {
-        return value != null && !value.isBlank() && value.length() <= maximumLength;
-    }
-
-    private static boolean positive(Duration duration) {
-        return duration != null && !duration.isZero() && !duration.isNegative();
-    }
-
-    private static String safeError(String errorCode) {
-        if (errorCode == null || !ERROR_CODE_PATTERN.matcher(errorCode).matches()) {
-            throw new IllegalArgumentException("errorCode must be a stable sanitized identifier");
-        }
-        return errorCode;
-    }
 }
