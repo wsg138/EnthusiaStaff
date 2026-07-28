@@ -104,7 +104,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                     now
             );
             saveRevision(connection, profile.profileId(), revision, request.beforeChecksum(), now);
-            long fence = acquireLease(
+            long fence = JdbcOperationLeaseSupport.acquire(
                     connection,
                     resourceKey(request.playerId(), request.scopeId()),
                     request.operationId(),
@@ -583,7 +583,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                         "Another prepared inventory patch must be applied or quarantined first"
                 );
             }
-            long fence = acquireLease(
+            long fence = JdbcOperationLeaseSupport.acquire(
                     connection,
                     resourceKey(request.playerId(), request.scopeId()),
                     request.operationId(),
@@ -1818,59 +1818,6 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
-    private static long acquireLease(
-            Connection connection,
-            String resourceKey,
-            UUID operationId,
-            Instant leaseUntil,
-            Instant now
-    ) throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement("""
-                SELECT owner_id, fencing_token, lease_until
-                FROM operation_leases
-                WHERE resource_key = ?
-                FOR UPDATE
-                """)) {
-            select.setString(1, resourceKey);
-            try (ResultSet result = select.executeQuery()) {
-                if (!result.next()) {
-                    try (PreparedStatement insert = connection.prepareStatement("""
-                            INSERT INTO operation_leases(
-                                resource_key, owner_id, fencing_token, lease_until, updated_at
-                            ) VALUES (?, ?, 1, ?, ?)
-                            """)) {
-                        insert.setString(1, resourceKey);
-                        insert.setString(2, operationId.toString());
-                        insert.setTimestamp(3, Timestamp.from(leaseUntil));
-                        insert.setTimestamp(4, Timestamp.from(now));
-                        insert.executeUpdate();
-                    }
-                    return 1L;
-                }
-                String owner = result.getString("owner_id");
-                long currentFence = result.getLong("fencing_token");
-                Instant currentExpiry = result.getTimestamp("lease_until").toInstant();
-                if (currentExpiry.isAfter(now) && !owner.equals(operationId.toString())) {
-                    return 0L;
-                }
-                long nextFence = currentFence + 1L;
-                try (PreparedStatement update = connection.prepareStatement("""
-                        UPDATE operation_leases
-                        SET owner_id = ?, fencing_token = ?, lease_until = ?, updated_at = ?
-                        WHERE resource_key = ?
-                        """)) {
-                    update.setString(1, operationId.toString());
-                    update.setLong(2, nextFence);
-                    update.setTimestamp(3, Timestamp.from(leaseUntil));
-                    update.setTimestamp(4, Timestamp.from(now));
-                    update.setString(5, resourceKey);
-                    update.executeUpdate();
-                }
-                return nextFence;
-            }
-        }
-    }
-
     private static long claimLease(
             Connection connection,
             InventoryPatch patch,
@@ -2152,44 +2099,16 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         return new InventoryFinalizeResult(status, revision, detail);
     }
 
-    private <T> T transaction(SqlWork<T> work) {
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                T result = work.execute(connection);
-                connection.commit();
-                connection.setAutoCommit(true);
-                return result;
-            } catch (SQLException | RuntimeException | Error exception) {
-                rollback(connection, exception);
-                throw exception;
-            }
-        } catch (SQLException exception) {
-            throw failure("Inventory journal transaction failed", exception);
-        }
-    }
-
-    private static void rollback(Connection connection, Throwable cause) {
-        try {
-            connection.rollback();
-        } catch (SQLException rollback) {
-            cause.addSuppressed(rollback);
-            return;
-        }
-        try {
-            connection.setAutoCommit(true);
-        } catch (SQLException reset) {
-            cause.addSuppressed(reset);
-        }
+    private <T> T transaction(JdbcTransactionSupport.TransactionWork<T> work) {
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Inventory journal transaction failed",
+                work
+        );
     }
 
     private static ModerationPersistenceException failure(String message, Exception cause) {
         return new ModerationPersistenceException(message, cause);
-    }
-
-    @FunctionalInterface
-    private interface SqlWork<T> {
-        T execute(Connection connection) throws SQLException;
     }
 
     private record Profile(

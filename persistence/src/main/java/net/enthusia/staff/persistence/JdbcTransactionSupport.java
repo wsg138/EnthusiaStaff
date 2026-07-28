@@ -18,15 +18,17 @@ final class JdbcTransactionSupport {
     ) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
+            Throwable transactionFailure = null;
             try {
                 T result = work.execute(connection);
                 connection.commit();
                 return result;
-            } catch (SQLException | RuntimeException exception) {
+            } catch (SQLException | RuntimeException | Error exception) {
+                transactionFailure = exception;
                 rollback(connection, exception);
                 throw exception;
             } finally {
-                restoreAutoCommit(connection);
+                restoreAutoCommit(connection, transactionFailure);
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException(failureMessage, exception);
@@ -92,11 +94,13 @@ final class JdbcTransactionSupport {
         }
     }
 
-    private static void restoreAutoCommit(Connection connection) {
+    private static void restoreAutoCommit(Connection connection, Throwable transactionFailure) {
         try {
             connection.setAutoCommit(true);
-        } catch (SQLException ignored) {
-            // Closing returns the connection to the pool; the original failure remains authoritative.
+        } catch (SQLException resetFailure) {
+            if (transactionFailure != null) {
+                transactionFailure.addSuppressed(resetFailure);
+            }
         }
     }
 
