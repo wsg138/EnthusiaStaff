@@ -163,17 +163,17 @@ public final class PersistentChannelServer implements AutoCloseable {
                 accepted.setSoTimeout(120_000);
                 Socket owned = accepted;
                 connections.execute(() -> serve(owned));
+                accepted = null;
             } catch (java.util.concurrent.RejectedExecutionException exception) {
-                closeSocket(accepted);
                 warningSink.accept("Persistent channel connection limit reached");
             } catch (SocketException exception) {
-                closeSocket(accepted);
                 if (running.get()) {
                     warningSink.accept("Persistent channel accept failed");
                 }
             } catch (IOException exception) {
-                closeSocket(accepted);
                 warningSink.accept("Persistent channel accept failed");
+            } finally {
+                closeSocket(accepted);
             }
         }
     }

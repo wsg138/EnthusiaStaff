@@ -140,34 +140,36 @@ public final class PersistentChannelClient implements AutoCloseable {
 
     private void connectAndRead() throws IOException {
         Socket opened = new Socket();
-        opened.connect(remoteAddress, 5_000);
-        opened.setKeepAlive(true);
-        opened.setTcpNoDelay(true);
-        opened.setSoTimeout(120_000);
-        DataOutputStream openedOutput = new DataOutputStream(new BufferedOutputStream(opened.getOutputStream()));
-        socket = opened;
-        output = openedOutput;
-        ProtocolEnvelope hello = signer.sign(new UnsignedEnvelope(
-                PROTOCOL_VERSION, UUID.randomUUID(), backendId, "HELLO", clock.millis(), nonce(), "{}"
-        ));
-        synchronized (openedOutput) {
-            FrameTransport.write(openedOutput, codec, hello);
-        }
-        stateSink.accept("CONNECTED");
-        try (opened;
-             openedOutput;
-             DataInputStream input = new DataInputStream(new BufferedInputStream(opened.getInputStream()))) {
-            while (running.get()) {
-                ProtocolEnvelope envelope = FrameTransport.read(input, codec);
-                VerificationResult result = verifier.verify(envelope);
-                if (!result.accepted()) {
-                    stateSink.accept("REJECTED_" + result.status());
-                    continue;
+        try (opened) {
+            opened.connect(remoteAddress, 5_000);
+            opened.setKeepAlive(true);
+            opened.setTcpNoDelay(true);
+            opened.setSoTimeout(120_000);
+            try (DataOutputStream openedOutput =
+                         new DataOutputStream(new BufferedOutputStream(opened.getOutputStream()));
+                 DataInputStream input =
+                         new DataInputStream(new BufferedInputStream(opened.getInputStream()))) {
+                socket = opened;
+                output = openedOutput;
+                ProtocolEnvelope hello = signer.sign(new UnsignedEnvelope(
+                        PROTOCOL_VERSION, UUID.randomUUID(), backendId, "HELLO", clock.millis(), nonce(), "{}"
+                ));
+                synchronized (openedOutput) {
+                    FrameTransport.write(openedOutput, codec, hello);
                 }
-                if ("ACK".equals(envelope.messageType())) {
-                    receiveAck(envelope.payloadJson());
-                } else if (handler.handle(envelope)) {
-                    acknowledge(envelope.messageId());
+                stateSink.accept("CONNECTED");
+                while (running.get()) {
+                    ProtocolEnvelope envelope = FrameTransport.read(input, codec);
+                    VerificationResult result = verifier.verify(envelope);
+                    if (!result.accepted()) {
+                        stateSink.accept("REJECTED_" + result.status());
+                        continue;
+                    }
+                    if ("ACK".equals(envelope.messageType())) {
+                        receiveAck(envelope.payloadJson());
+                    } else if (handler.handle(envelope)) {
+                        acknowledge(envelope.messageId());
+                    }
                 }
             }
         }

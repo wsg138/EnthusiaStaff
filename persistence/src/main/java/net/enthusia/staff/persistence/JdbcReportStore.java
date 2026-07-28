@@ -152,8 +152,8 @@ public final class JdbcReportStore implements ReportStore {
                     return Optional.empty();
                 }
                 ReportSummary summary = readSummary(result);
-                List<String> publicChat = snapshots(connection, "report_chat_snapshots", reportId);
-                List<String> privateMessages = snapshots(connection, "report_private_message_snapshots", reportId);
+                List<String> publicChat = chatSnapshots(connection, reportId);
+                List<String> privateMessages = privateMessageSnapshots(connection, reportId);
                 List<String> clientEvidence = clientEvidenceSnapshots(connection, reportId);
                 return Optional.of(new ReportDetails(
                         summary,
@@ -240,22 +240,79 @@ public final class JdbcReportStore implements ReportStore {
         );
     }
 
-    private static List<String> snapshots(Connection connection, String table, UUID reportId) throws SQLException {
-        if (!table.equals("report_chat_snapshots") && !table.equals("report_private_message_snapshots")) {
-            throw new IllegalArgumentException("unsupported report snapshot table");
+    private static List<String> chatSnapshots(Connection connection, UUID reportId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT messages_json FROM report_chat_snapshots
+                WHERE report_id = ? AND expires_at > CURRENT_TIMESTAMP(6)
+                ORDER BY captured_at
+                """)) {
+            return readSnapshots(statement, reportId);
         }
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT messages_json FROM " + table + " WHERE report_id = ? AND expires_at > CURRENT_TIMESTAMP(6)"
-                        + " ORDER BY captured_at")) {
-            statement.setBytes(1, UuidBytes.toBytes(reportId));
-            try (ResultSet result = statement.executeQuery()) {
-                List<String> snapshots = new ArrayList<>();
-                while (result.next()) {
-                    snapshots.add(result.getString(1));
-                }
-                return List.copyOf(snapshots);
+    }
+
+    private static List<String> privateMessageSnapshots(Connection connection, UUID reportId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT messages_json FROM report_private_message_snapshots
+                WHERE report_id = ? AND expires_at > CURRENT_TIMESTAMP(6)
+                ORDER BY captured_at
+                """)) {
+            return readSnapshots(statement, reportId);
+        }
+    }
+
+    private static List<String> readSnapshots(PreparedStatement statement, UUID reportId) throws SQLException {
+        statement.setBytes(1, UuidBytes.toBytes(reportId));
+        try (ResultSet result = statement.executeQuery()) {
+            List<String> snapshots = new ArrayList<>();
+            while (result.next()) {
+                snapshots.add(result.getString(1));
             }
+            return List.copyOf(snapshots);
         }
+    }
+
+    private void insertChatContextSnapshot(
+            Connection connection,
+            UUID reportId,
+            Instant capturedAt,
+            List<?> messages
+    ) throws SQLException, JsonProcessingException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO report_chat_snapshots
+                    (snapshot_id, report_id, captured_at, expires_at, messages_json)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            writeContextSnapshot(statement, reportId, capturedAt, messages);
+        }
+    }
+
+    private void insertPrivateMessageContextSnapshot(
+            Connection connection,
+            UUID reportId,
+            Instant capturedAt,
+            List<?> messages
+    ) throws SQLException, JsonProcessingException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO report_private_message_snapshots
+                    (snapshot_id, report_id, captured_at, expires_at, messages_json)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            writeContextSnapshot(statement, reportId, capturedAt, messages);
+        }
+    }
+
+    private void writeContextSnapshot(
+            PreparedStatement statement,
+            UUID reportId,
+            Instant capturedAt,
+            List<?> messages
+    ) throws SQLException, JsonProcessingException {
+        statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+        statement.setBytes(2, UuidBytes.toBytes(reportId));
+        statement.setTimestamp(3, Timestamp.from(capturedAt));
+        statement.setTimestamp(4, Timestamp.from(capturedAt.plus(CONTEXT_RETENTION)));
+        statement.setString(5, json.writeValueAsString(messages));
+        statement.executeUpdate();
     }
 
     private static List<String> clientEvidenceSnapshots(Connection connection, UUID reportId)
@@ -583,16 +640,14 @@ public final class JdbcReportStore implements ReportStore {
             UUID reportId,
             CreateReportRequest request
     ) throws SQLException, JsonProcessingException {
-        insertContextSnapshot(
+        insertChatContextSnapshot(
                 connection,
-                "report_chat_snapshots",
                 reportId,
                 request.createdAt(),
                 request.publicChatContext()
         );
-        insertContextSnapshot(
+        insertPrivateMessageContextSnapshot(
                 connection,
-                "report_private_message_snapshots",
                 reportId,
                 request.createdAt(),
                 request.privateMessageContext()
@@ -622,31 +677,6 @@ public final class JdbcReportStore implements ReportStore {
             statement.setBytes(1, UuidBytes.toBytes(reportId));
             statement.setBytes(2, UuidBytes.toBytes(snapshotId));
             statement.setTimestamp(3, Timestamp.from(capturedAt));
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertContextSnapshot(
-            Connection connection,
-            String table,
-            UUID reportId,
-            Instant capturedAt,
-            List<?> messages
-    ) throws SQLException, JsonProcessingException {
-        if (!table.equals("report_chat_snapshots")
-                && !table.equals("report_private_message_snapshots")) {
-            throw new IllegalArgumentException("unsupported report snapshot table");
-        }
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO " + table
-                        + "(snapshot_id, report_id, captured_at, expires_at, messages_json)"
-                        + " VALUES (?, ?, ?, ?, ?)"
-        )) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(reportId));
-            statement.setTimestamp(3, Timestamp.from(capturedAt));
-            statement.setTimestamp(4, Timestamp.from(capturedAt.plus(CONTEXT_RETENTION)));
-            statement.setString(5, json.writeValueAsString(messages));
             statement.executeUpdate();
         }
     }

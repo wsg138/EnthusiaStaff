@@ -164,17 +164,23 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
             Instant now,
             boolean includeApplied
     ) throws SQLException {
-        String eligible = includeApplied ? "('PENDING', 'ACTIVE', 'APPLIED')" : "('PENDING', 'ACTIVE')";
-        List<UUID> sanctions = lockSanctions(
-                connection, request.caseId().value(), " AND status IN " + eligible
+        List<UUID> sanctions = lockChangeableSanctions(
+                connection,
+                request.caseId().value(),
+                includeApplied
         );
         if (sanctions.isEmpty()) {
             return Change.rejected("NO_ACTIVE_SANCTIONS", "The case has no active sanctions to change");
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
-                WHERE case_id = ? AND status IN %s
-                """.formatted(eligible))) {
+        try (PreparedStatement statement = includeApplied
+                ? connection.prepareStatement("""
+                        UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
+                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
+                        """)
+                : connection.prepareStatement("""
+                        UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
+                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE')
+                        """)) {
             statement.setString(1, status);
             statement.setTimestamp(2, Timestamp.from(now));
             statement.setString(3, request.caseId().value());
@@ -354,21 +360,42 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
     }
 
     private static List<UUID> lockAllSanctions(Connection connection, String caseId) throws SQLException {
-        return lockSanctions(connection, caseId, "");
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT sanction_id FROM sanctions WHERE case_id = ? FOR UPDATE
+                """)) {
+            return lockedSanctions(statement, caseId);
+        }
     }
 
-    private static List<UUID> lockSanctions(Connection connection, String caseId, String condition)
+    private static List<UUID> lockChangeableSanctions(
+            Connection connection,
+            String caseId,
+            boolean includeApplied
+    ) throws SQLException {
+        try (PreparedStatement statement = includeApplied
+                ? connection.prepareStatement("""
+                        SELECT sanction_id FROM sanctions
+                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
+                        FOR UPDATE
+                        """)
+                : connection.prepareStatement("""
+                        SELECT sanction_id FROM sanctions
+                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE')
+                        FOR UPDATE
+                        """)) {
+            return lockedSanctions(statement, caseId);
+        }
+    }
+
+    private static List<UUID> lockedSanctions(PreparedStatement statement, String caseId)
             throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT sanction_id FROM sanctions WHERE case_id = ?" + condition + " FOR UPDATE")) {
-            statement.setString(1, caseId);
-            try (ResultSet result = statement.executeQuery()) {
-                List<UUID> sanctions = new ArrayList<>();
-                while (result.next()) {
-                    sanctions.add(UuidBytes.fromBytes(result.getBytes(1)));
-                }
-                return List.copyOf(sanctions);
+        statement.setString(1, caseId);
+        try (ResultSet result = statement.executeQuery()) {
+            List<UUID> sanctions = new ArrayList<>();
+            while (result.next()) {
+                sanctions.add(UuidBytes.fromBytes(result.getBytes(1)));
             }
+            return List.copyOf(sanctions);
         }
     }
 

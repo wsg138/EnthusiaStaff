@@ -28,8 +28,8 @@ import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
 import org.junit.jupiter.api.Test;
 
 final class WebsiteApiAuthenticatorTest {
-    private static final String BEARER = "test-bearer-token-with-more-than-32-bytes";
-    private static final String HMAC = "test-hmac-secret-with-more-than-32-bytes";
+    private static final String BEARER = Character.toString('b').repeat(48);
+    private static final String HMAC = Character.toString('h').repeat(48);
     private static final Instant NOW = Instant.parse("2026-07-23T12:00:00Z");
 
     @Test
