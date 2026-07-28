@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,9 @@ import net.enthusia.staff.common.CaseId;
 
 public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final Duration SNAPSHOT_RETENTION = Duration.ofDays(30);
+    private static final String CONFISCATION_OPERATION_TYPE = "CONFISCATION";
+    private static final String RESTORATION_OPERATION_TYPE = "RESTORE_CONFISCATED";
+    private static final long NO_SNAPSHOTS = 0L;
 
     private final DataSource dataSource;
     private final ObjectMapper json;
@@ -332,10 +336,27 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             throw new IllegalArgumentException("restoration reservation identity is invalid");
         }
         return transaction(connection -> {
+            Optional<RestorationOperationBinding> operation =
+                    lockRestorationOperation(connection, restorationOperationId);
+            if (operation.isPresent() && !operation.orElseThrow().matches(caseId)) {
+                return new ConfiscatedAssetReservation(
+                        ConfiscatedAssetReservation.Status.LOCKED,
+                        restorationOperationId,
+                        List.of(),
+                        "The restoration identifier belongs to another inventory operation"
+                );
+            }
             finalizeCommittedRestorationReservations(connection, caseId, now);
-            List<ConfiscatedAssetSnapshot> available =
-                    lockRestorationSnapshots(connection, caseId, now);
-            if (available.isEmpty()) {
+            RestorationSnapshotSet locked = lockRestorationSnapshots(connection, caseId, now);
+            if (!locked.safe()) {
+                return new ConfiscatedAssetReservation(
+                        ConfiscatedAssetReservation.Status.LOCKED,
+                        restorationOperationId,
+                        List.of(),
+                        "At least one active snapshot is not backed by a committed confiscation"
+                );
+            }
+            if (locked.snapshots().isEmpty()) {
                 return new ConfiscatedAssetReservation(
                         ConfiscatedAssetReservation.Status.NOT_FOUND,
                         restorationOperationId,
@@ -343,52 +364,120 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                         "The case has no unexpired unrestored confiscated asset snapshots"
                 );
             }
-            Optional<UUID> existingReservation = available.stream()
-                    .map(ConfiscatedAssetSnapshot::restorationOperationId)
-                    .flatMap(Optional::stream)
-                    .findFirst();
-            boolean conflictingReservation = available.stream()
-                    .map(ConfiscatedAssetSnapshot::restorationOperationId)
-                    .flatMap(Optional::stream)
-                    .anyMatch(existing -> !existing.equals(restorationOperationId));
-            if (conflictingReservation) {
-                return new ConfiscatedAssetReservation(
-                        ConfiscatedAssetReservation.Status.LOCKED,
-                        restorationOperationId,
-                        List.of(),
-                        "Another restoration operation owns this case"
-                );
-            }
-            long unreserved = available.stream()
-                    .filter(snapshot -> snapshot.restorationOperationId().isEmpty())
-                    .count();
-            if (unreserved > 0L) {
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE confiscated_asset_snapshots
-                        SET restoration_operation_id = ?, restoration_state = 'RESERVED',
-                            restoration_reserved_at = ?
-                        WHERE case_id = ? AND restored_at IS NULL AND expires_at > ?
-                            AND restoration_operation_id IS NULL
-                        """)) {
-                    statement.setBytes(1, UuidBytes.toBytes(restorationOperationId));
-                    statement.setTimestamp(2, Timestamp.from(now));
-                    statement.setString(3, caseId.value());
-                    statement.setTimestamp(4, Timestamp.from(now));
-                    if (statement.executeUpdate() != unreserved) {
-                        throw new SQLException("Confiscated asset reservation changed concurrently");
-                    }
-                }
-                available = lockRestorationSnapshots(connection, caseId, now);
-            }
-            return new ConfiscatedAssetReservation(
-                    existingReservation.isPresent()
-                            ? ConfiscatedAssetReservation.Status.REPLAYED
-                            : ConfiscatedAssetReservation.Status.RESERVED,
+            return reserveRestorationSnapshots(
+                    connection,
+                    caseId,
                     restorationOperationId,
-                    available,
-                    "Confiscated asset snapshots are reserved for exact restoration"
+                    now,
+                    operation,
+                    locked.snapshots()
             );
         });
+    }
+
+    private static ConfiscatedAssetReservation reserveRestorationSnapshots(
+            Connection connection,
+            CaseId caseId,
+            UUID restorationOperationId,
+            Instant now,
+            Optional<RestorationOperationBinding> operation,
+            List<ConfiscatedAssetSnapshot> snapshots
+    ) throws SQLException {
+        List<ConfiscatedAssetSnapshot> available = snapshots;
+        Optional<UUID> existingReservation = available.stream()
+                .map(ConfiscatedAssetSnapshot::restorationOperationId)
+                .flatMap(Optional::stream)
+                .findFirst();
+        boolean conflictingReservation = available.stream()
+                .map(ConfiscatedAssetSnapshot::restorationOperationId)
+                .flatMap(Optional::stream)
+                .anyMatch(existing -> !existing.equals(restorationOperationId));
+        if (conflictingReservation) {
+            return restorationLocked(
+                    restorationOperationId,
+                    "Another restoration operation owns this case"
+            );
+        }
+        long unreserved = unreservedSnapshotCount(available);
+        if (existingRestorationConflicts(operation, existingReservation, unreserved)) {
+            return restorationLocked(
+                    restorationOperationId,
+                    "The existing restoration operation does not match this reservation"
+            );
+        }
+        if (unreserved > NO_SNAPSHOTS) {
+            reserveUnreservedSnapshots(
+                    connection, caseId, restorationOperationId, now, unreserved
+            );
+            RestorationSnapshotSet updated = lockRestorationSnapshots(connection, caseId, now);
+            if (!updated.safe() || updated.snapshots().isEmpty()) {
+                throw new SQLException("Confiscated asset reservation became unsafe");
+            }
+            available = updated.snapshots();
+        }
+        return new ConfiscatedAssetReservation(
+                existingReservation.isPresent()
+                        ? ConfiscatedAssetReservation.Status.REPLAYED
+                        : ConfiscatedAssetReservation.Status.RESERVED,
+                restorationOperationId,
+                available,
+                "Confiscated asset snapshots are reserved for exact restoration"
+        );
+    }
+
+    private static long unreservedSnapshotCount(List<ConfiscatedAssetSnapshot> snapshots) {
+        return snapshots.stream()
+                .filter(snapshot -> snapshot.restorationOperationId().isEmpty())
+                .count();
+    }
+
+    private static ConfiscatedAssetReservation restorationLocked(
+            UUID operationId,
+            String detail
+    ) {
+        return new ConfiscatedAssetReservation(
+                ConfiscatedAssetReservation.Status.LOCKED,
+                operationId,
+                List.of(),
+                detail
+        );
+    }
+
+    private static boolean existingRestorationConflicts(
+            Optional<RestorationOperationBinding> operation,
+            Optional<UUID> existingReservation,
+            long unreserved
+    ) {
+        if (operation.isEmpty()) {
+            return false;
+        }
+        return !operation.orElseThrow().replayable()
+                || existingReservation.isEmpty()
+                || unreserved > NO_SNAPSHOTS;
+    }
+
+    private static void reserveUnreservedSnapshots(
+            Connection connection,
+            CaseId caseId,
+            UUID operationId,
+            Instant now,
+            long expectedCount
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE confiscated_asset_snapshots
+                SET restoration_operation_id = ?, restoration_state = 'RESERVED',
+                    restoration_reserved_at = ?
+                WHERE case_id = ? AND restored_at IS NULL AND expires_at > ?
+                    AND restoration_operation_id IS NULL
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(operationId));
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setString(3, caseId.value());
+            statement.setTimestamp(4, Timestamp.from(now));
+            if (statement.executeUpdate() != expectedCount) {
+                throw new SQLException("Confiscated asset reservation changed concurrently");
+            }
+        }
     }
 
     @Override
@@ -432,27 +521,10 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             throw new IllegalArgumentException("restoration finalization identity is invalid");
         }
         return transaction(connection -> {
-            if (!restorationCommitted(
-                    connection,
-                    caseId,
-                    restorationOperationId,
-                    restoredChecksum
-            )) {
-                return false;
-            }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE confiscated_asset_snapshots
-                    SET restoration_state = 'APPLIED', restored_at = ?, restored_checksum = ?
-                    WHERE case_id = ? AND restoration_operation_id = ?
-                        AND restoration_state = 'RESERVED' AND restored_at IS NULL
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setString(2, restoredChecksum);
-                statement.setString(3, caseId.value());
-                statement.setBytes(4, UuidBytes.toBytes(restorationOperationId));
-                if (statement.executeUpdate() > 0) {
-                    return true;
-                }
+            if (finalizeCommittedRestoration(
+                    connection, caseId, restorationOperationId, restoredChecksum, now
+            ) > 0) {
+                return true;
             }
             return restorationAlreadyFinalized(
                     connection,
@@ -555,6 +627,11 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                         replay,
                         "The inventory operation was already prepared"
                 );
+            }
+            Optional<InventoryPreparation> restorationFailure =
+                    validateRestorationReservation(connection, request, now);
+            if (restorationFailure.isPresent()) {
+                return restorationFailure.orElseThrow();
             }
             if (request.requireNetworkOffline() && playerOnline(connection, request.playerId())) {
                 return rejected(InventoryPreparation.Status.PLAYER_ONLINE, "The player is online network-wide");
@@ -895,64 +972,218 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             CaseId caseId,
             Instant now
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE confiscated_asset_snapshots a
-                JOIN inventory_operations o
-                    ON o.operation_id = a.restoration_operation_id
-                JOIN inventory_pending_patches q
-                    ON q.operation_id = o.operation_id
-                SET a.restoration_state = 'APPLIED', a.restored_at = ?,
-                    a.restored_checksum = q.replacement_checksum
-                WHERE a.case_id = ? AND a.restoration_state = 'RESERVED'
-                    AND a.restored_at IS NULL AND o.state = 'COMMITTED'
-                    AND q.replacement_checksum IS NOT NULL
-                """)) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.FINALIZE_COMMITTED_RESERVATIONS
+        )) {
             statement.setTimestamp(1, Timestamp.from(now));
             statement.setString(2, caseId.value());
+            statement.setString(3, CONFISCATION_OPERATION_TYPE);
+            statement.setString(4, RESTORATION_OPERATION_TYPE);
             statement.executeUpdate();
         }
     }
 
-    private static List<ConfiscatedAssetSnapshot> lockRestorationSnapshots(
+    private static int finalizeCommittedRestoration(
+            Connection connection,
+            CaseId caseId,
+            UUID operationId,
+            String restoredChecksum,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.FINALIZE_COMMITTED_RESERVATION
+        )) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setString(2, restoredChecksum);
+            statement.setString(3, caseId.value());
+            statement.setBytes(4, UuidBytes.toBytes(operationId));
+            statement.setString(5, CONFISCATION_OPERATION_TYPE);
+            statement.setString(6, RESTORATION_OPERATION_TYPE);
+            statement.setString(7, restoredChecksum);
+            return statement.executeUpdate();
+        }
+    }
+
+    private static Optional<RestorationOperationBinding> lockRestorationOperation(
+            Connection connection,
+            UUID operationId
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT case_id, operation_type, state
+                FROM inventory_operations
+                WHERE operation_id = ?
+                FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(operationId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new RestorationOperationBinding(
+                        result.getString("case_id"),
+                        result.getString("operation_type"),
+                        result.getString("state")
+                ));
+            }
+        }
+    }
+
+    private static RestorationSnapshotSet lockRestorationSnapshots(
             Connection connection,
             CaseId caseId,
             Instant now
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT snapshot_id, case_id, inventory_operation_id, checksum,
-                    asset_blob, created_at, expires_at, restoration_operation_id,
-                    restored_at
-                FROM confiscated_asset_snapshots
-                WHERE case_id = ? AND restored_at IS NULL AND expires_at > ?
-                ORDER BY created_at
-                FOR UPDATE
-                """)) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.LOCK_ACTIVE_SNAPSHOTS
+        )) {
             statement.setString(1, caseId.value());
             statement.setTimestamp(2, Timestamp.from(now));
             try (ResultSet result = statement.executeQuery()) {
                 List<ConfiscatedAssetSnapshot> snapshots = new ArrayList<>();
+                boolean safe = true;
                 while (result.next()) {
                     byte[] restorationBytes = result.getBytes("restoration_operation_id");
-                    Timestamp restoredAt = result.getTimestamp("restored_at");
+                    Instant expiresAt = result.getTimestamp("expires_at").toInstant();
+                    safe &= sourceRestorable(result, caseId.value())
+                            && restorationMarkerConsistent(
+                                    result, restorationBytes, expiresAt, now
+                            );
                     snapshots.add(new ConfiscatedAssetSnapshot(
                             UuidBytes.fromBytes(result.getBytes("snapshot_id")),
-                            new CaseId(result.getString("case_id")),
+                            caseId,
                             UuidBytes.fromBytes(result.getBytes("inventory_operation_id")),
                             result.getString("checksum"),
                             result.getBytes("asset_blob"),
                             result.getTimestamp("created_at").toInstant(),
-                            result.getTimestamp("expires_at").toInstant(),
+                            expiresAt,
                             restorationBytes == null
                                     ? Optional.empty()
                                     : Optional.of(UuidBytes.fromBytes(restorationBytes)),
-                            restoredAt == null
-                                    ? Optional.empty()
-                                    : Optional.of(restoredAt.toInstant())
+                            Optional.empty()
                     ));
                 }
-                return List.copyOf(snapshots);
+                return new RestorationSnapshotSet(List.copyOf(snapshots), safe);
             }
         }
+    }
+
+    private static boolean sourceRestorable(ResultSet result, String caseId) throws SQLException {
+        return caseId.equals(result.getString("source_case_id"))
+                && CONFISCATION_OPERATION_TYPE.equals(result.getString("source_operation_type"))
+                && "COMMITTED".equals(result.getString("source_operation_state"))
+                && Arrays.equals(
+                        result.getBytes("source_player_id"),
+                        result.getBytes("case_target_id")
+                )
+                && result.getBoolean("source_patch_applied");
+    }
+
+    private static boolean restorationMarkerConsistent(
+            ResultSet result,
+            byte[] restorationOperationId,
+            Instant expiresAt,
+            Instant now
+    ) throws SQLException {
+        String state = result.getString("restoration_state");
+        Timestamp reservedAt = result.getTimestamp("restoration_reserved_at");
+        String restoredChecksum = result.getString("restored_checksum");
+        if (restorationOperationId == null) {
+            return state == null && reservedAt == null && restoredChecksum == null;
+        }
+        return "RESERVED".equals(state)
+                && reservedAt != null
+                && !reservedAt.toInstant().isAfter(now)
+                && reservedAt.toInstant().isBefore(expiresAt)
+                && restoredChecksum == null;
+    }
+
+    private static Optional<InventoryPreparation> validateRestorationReservation(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Instant now
+    ) throws SQLException {
+        boolean restoration = RESTORATION_OPERATION_TYPE.equals(request.operationType());
+        if (request.caseId().isEmpty()) {
+            return restoration
+                    ? Optional.of(rejected(
+                            InventoryPreparation.Status.STALE,
+                            "A restoration operation requires its reserved case"
+                    ))
+                    : Optional.empty();
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.VALIDATE_RESERVATION
+        )) {
+            String caseId = request.caseId().orElseThrow();
+            statement.setString(1, caseId);
+            statement.setBytes(2, UuidBytes.toBytes(request.operationId()));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!restoration) {
+                    return result.next()
+                            ? Optional.of(rejected(
+                                    InventoryPreparation.Status.LOCKED,
+                                    "The operation identifier is reserved for confiscated assets"
+                            ))
+                            : Optional.empty();
+                }
+                return validateRestorationRows(result, request, caseId, now);
+            }
+        }
+    }
+
+    private static Optional<InventoryPreparation> validateRestorationRows(
+            ResultSet result,
+            InventoryPrepareRequest request,
+            String caseId,
+            Instant now
+    ) throws SQLException {
+        boolean found = false;
+        byte[] playerId = UuidBytes.toBytes(request.playerId());
+        while (result.next()) {
+            found = true;
+            if (!restorationReservationMatches(result, request, caseId, playerId, now)) {
+                return Optional.of(rejected(
+                        InventoryPreparation.Status.STALE,
+                        "The restoration reservation does not match the case inventory"
+                ));
+            }
+        }
+        return found
+                ? Optional.empty()
+                : Optional.of(rejected(
+                        InventoryPreparation.Status.STALE,
+                        "No active confiscated-asset reservation matches this operation"
+                ));
+    }
+
+    private static boolean restorationReservationMatches(
+            ResultSet result,
+            InventoryPrepareRequest request,
+            String caseId,
+            byte[] playerId,
+            Instant now
+    ) throws SQLException {
+        return activeRestorationReservation(result, now)
+                && sourceRestorable(result, caseId)
+                && Arrays.equals(playerId, result.getBytes("source_player_id"))
+                && Arrays.equals(playerId, result.getBytes("case_target_id"))
+                && request.scopeId().equals(result.getString("source_scope_id"));
+    }
+
+    private static boolean activeRestorationReservation(
+            ResultSet result,
+            Instant now
+    ) throws SQLException {
+        Timestamp reservedAt = result.getTimestamp("restoration_reserved_at");
+        Timestamp restoredAt = result.getTimestamp("restored_at");
+        Instant expiresAt = result.getTimestamp("expires_at").toInstant();
+        return "RESERVED".equals(result.getString("restoration_state"))
+                && reservedAt != null
+                && !reservedAt.toInstant().isAfter(now)
+                && reservedAt.toInstant().isBefore(expiresAt)
+                && restoredAt == null
+                && result.getString("restored_checksum") == null
+                && expiresAt.isAfter(now);
     }
 
     private static String inventoryOperationState(
@@ -972,50 +1203,21 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
-    private static boolean restorationCommitted(
-            Connection connection,
-            CaseId caseId,
-            UUID operationId,
-            String restoredChecksum
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT 1
-                FROM inventory_operations o
-                JOIN inventory_pending_patches q ON q.operation_id = o.operation_id
-                WHERE o.operation_id = ? AND o.case_id = ?
-                    AND o.operation_type = 'RESTORE_CONFISCATED'
-                    AND o.state = 'COMMITTED'
-                    AND q.replacement_checksum = ?
-                FOR UPDATE
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(operationId));
-            statement.setString(2, caseId.value());
-            statement.setString(3, restoredChecksum);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next();
-            }
-        }
-    }
-
     private static boolean restorationAlreadyFinalized(
             Connection connection,
             CaseId caseId,
             UUID operationId,
             String restoredChecksum
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT COUNT(*) AS total_count,
-                    SUM(CASE
-                        WHEN restoration_state = 'APPLIED' AND restored_at IS NOT NULL
-                            AND restored_checksum = ? THEN 1
-                        ELSE 0
-                    END) AS applied_count
-                FROM confiscated_asset_snapshots
-                WHERE case_id = ? AND restoration_operation_id = ?
-                """)) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.ALREADY_FINALIZED
+        )) {
             statement.setString(1, restoredChecksum);
             statement.setString(2, caseId.value());
             statement.setBytes(3, UuidBytes.toBytes(operationId));
+            statement.setString(4, CONFISCATION_OPERATION_TYPE);
+            statement.setString(5, RESTORATION_OPERATION_TYPE);
+            statement.setString(6, restoredChecksum);
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
                     return false;
@@ -1954,18 +2156,21 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             InventoryPatch patch,
             Instant now
     ) throws SQLException {
-        if (!patch.operationType().equals("RESTORE_CONFISCATED")) {
+        if (!patch.operationType().equals(RESTORATION_OPERATION_TYPE)
+                || patch.caseId().isEmpty()) {
             return;
         }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE confiscated_asset_snapshots
-                SET restoration_state = 'APPLIED', restored_at = ?, restored_checksum = ?
-                WHERE restoration_operation_id = ? AND restoration_state = 'RESERVED'
-                    AND restored_at IS NULL
-                """)) {
-            statement.setTimestamp(1, Timestamp.from(now));
-            statement.setString(2, patch.replacementChecksum());
-            statement.setBytes(3, UuidBytes.toBytes(patch.operationId()));
+        try (PreparedStatement statement = connection.prepareStatement(
+                JdbcInventoryRestorationSql.MARK_APPLIED
+        )) {
+            statement.setBytes(1, UuidBytes.toBytes(patch.patchId()));
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setString(3, patch.replacementChecksum());
+            statement.setString(4, patch.caseId().orElseThrow());
+            statement.setBytes(5, UuidBytes.toBytes(patch.operationId()));
+            statement.setString(6, CONFISCATION_OPERATION_TYPE);
+            statement.setString(7, RESTORATION_OPERATION_TYPE);
+            statement.setString(8, patch.replacementChecksum());
             statement.executeUpdate();
         }
     }
@@ -2117,6 +2322,27 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             String scopeId,
             String owningServerId,
             long revision
+    ) {
+    }
+
+    private record RestorationOperationBinding(
+            String caseId,
+            String operationType,
+            String state
+    ) {
+        private boolean matches(CaseId expectedCaseId) {
+            return expectedCaseId.value().equals(caseId)
+                    && RESTORATION_OPERATION_TYPE.equals(operationType);
+        }
+
+        private boolean replayable() {
+            return "PENDING".equals(state);
+        }
+    }
+
+    private record RestorationSnapshotSet(
+            List<ConfiscatedAssetSnapshot> snapshots,
+            boolean safe
     ) {
     }
 }
