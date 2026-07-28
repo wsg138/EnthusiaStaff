@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.LinkedHashMap;
 import javax.crypto.SecretKey;
+import javax.net.ssl.SSLContext;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.common.security.HmacTokenService;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
@@ -74,6 +76,7 @@ import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
 import net.enthusia.staff.persistence.migration.CutoverOutcome;
 import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
 import net.enthusia.staff.protocol.PersistentChannelServer;
+import net.enthusia.staff.protocol.TlsContextLoader;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
@@ -360,26 +363,10 @@ public final class EnthusiaStaffVelocityPlugin {
         loaded.backendSecretEnvironments().forEach((serverId, environment) ->
                 backendKeys.put(serverId, secretFromEnvironment(environment)));
         SecretKey proxyKey = secretFromEnvironment(loaded.channelProxySecretEnvironment());
+        SSLContext tlsContext = serverTlsContext(loaded);
         try {
-            PersistentChannelServer server = new PersistentChannelServer(
-                    loaded.channelProxyId(),
-                    InetAddress.getByName(loaded.channelBindAddress()),
-                    loaded.channelPort(),
-                    backendKeys,
-                    proxyKey,
-                    Clock.systemUTC(),
-                    backendKeys.size() + 2,
-                    envelope -> {
-                        outbox.recordInboxOnce(
-                                loaded.serverId(),
-                                envelope.messageId(),
-                                envelope.messageType(),
-                                "{\"outcome\":\"accepted\"}",
-                                Clock.systemUTC().instant()
-                        );
-                        return true;
-                    },
-                    warning -> logger.warn("{}", warning)
+            PersistentChannelServer server = createChannelServer(
+                    loaded, outbox, backendKeys, proxyKey, tlsContext
             );
             server.start();
             channelServer = server;
@@ -397,6 +384,38 @@ public final class EnthusiaStaffVelocityPlugin {
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("Unable to bind the persistent backend channel", exception);
         }
+    }
+
+    private PersistentChannelServer createChannelServer(
+            VelocityConfiguration loaded,
+            NetworkOutboxStore outbox,
+            Map<String, SecretKey> backendKeys,
+            SecretKey proxyKey,
+            SSLContext tlsContext
+    ) throws java.net.UnknownHostException {
+        return new PersistentChannelServer(
+                new PersistentChannelServer.Configuration(
+                        loaded.channelProxyId(),
+                        InetAddress.getByName(loaded.channelBindAddress()),
+                        loaded.channelPort(),
+                        backendKeys,
+                        proxyKey,
+                        tlsContext,
+                        backendKeys.size() + 2
+                ),
+                Clock.systemUTC(),
+                envelope -> {
+                    outbox.recordInboxOnce(
+                            loaded.serverId(),
+                            envelope.messageId(),
+                            envelope.messageType(),
+                            "{\"outcome\":\"accepted\"}",
+                            Clock.systemUTC().instant()
+                    );
+                    return true;
+                },
+                warning -> logger.warn("{}", warning)
+        );
     }
 
     private void initializeNetworkIdentity(VelocityConfiguration loaded, NetworkIdentityStore store) {
@@ -511,6 +530,23 @@ public final class EnthusiaStaffVelocityPlugin {
     private static SecretKey secretFromEnvironment(String environment) {
         String encoded = System.getenv(environment);
         return SecretKeyMaterial.hmacSha256FromBase64(encoded);
+    }
+
+    private static SSLContext serverTlsContext(VelocityConfiguration configuration) {
+        char[] password = passwordFromEnvironment(configuration.channelTlsKeyStorePasswordEnvironment());
+        try {
+            return TlsContextLoader.server(configuration.channelTlsKeyStorePath(), password);
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    private static char[] passwordFromEnvironment(String environment) {
+        String value = System.getenv(environment);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("A required channel TLS store password environment variable is missing");
+        }
+        return value.toCharArray();
     }
 
     @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are enums.

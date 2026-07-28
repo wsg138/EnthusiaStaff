@@ -230,6 +230,8 @@ class PunishmentDraftWorkflowTest {
     }
 
     private static final class InMemoryDraftStore implements PunishmentDraftStore {
+        // This test fake is created and exercised synchronously by one test thread.
+        @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
         private final Map<UUID, PunishmentDraft> entries = new HashMap<>();
         private boolean failDelete;
 

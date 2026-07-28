@@ -19,7 +19,8 @@ Players, chat, commands, plugin messages, website forms, uploaded media, Discord
 
 - Secrets come from environment variables or platform secret stores and are never written to generated configuration, logs, commits, command output, or exception messages.
 - Network identity equality uses HMAC-SHA-256 with a dedicated versioned key. Recoverable material uses authenticated encryption with a distinct versioned key and random nonce.
-- Inter-server envelopes use a per-server HMAC key, canonical bytes, timestamp, nonce, message ID, server ID, and protocol version. Verification uses constant-time comparison. Expired timestamps, reused nonces, unknown servers, and unsupported versions are rejected before payload parsing.
+- The persistent inter-server channel requires TLS 1.3. Paper validates the Velocity certificate chain and the configured host against the certificate Subject Alternative Name; missing or invalid TLS material fails closed without a cleartext fallback.
+- Inter-server envelopes additionally use a per-server HMAC key, canonical bytes, timestamp, nonce, message ID, server ID, and protocol version. Verification uses constant-time comparison. Expired timestamps, reused nonces, unknown servers, and unsupported versions are rejected before payload parsing.
 - Punishment codes and password reset/verification tokens are generated from a cryptographically secure random source and stored only as slow or keyed hashes appropriate to the token type.
 - Passwords use a maintained password-hashing implementation supported by the selected Cloudflare runtime; custom cryptography is forbidden.
 
@@ -28,7 +29,7 @@ Players, chat, commands, plugin messages, website forms, uploaded media, Discord
 - SQL is parameterized. Identifiers used in migration-source discovery are selected from an allowlist, never user input.
 - Plugin database accounts cannot alter Flyway history. The website account can read only sanitized views.
 - Pools, statements, result sizes, executor queues, protocol frames, and evidence payloads have hard bounds.
-- The live channel is allowlisted and authenticated. No raw IP address or encrypted address blob is sent through routine moderation messages.
+- The live channel is encrypted, certificate-authenticated on Paper, and allowlisted/HMAC-authenticated per backend. No raw IP address or encrypted address blob is sent through routine moderation messages.
 - MariaDB remains the durable source of truth; in-memory caches cannot authorize destructive work when stale.
 
 ## Website

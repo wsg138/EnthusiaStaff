@@ -81,6 +81,7 @@ final class WebsiteApiServer implements AutoCloseable {
     private final ErrorReporter errors;
     private final WebsiteApiAuthenticator authenticator;
     private final ObjectMapper json = new ObjectMapper();
+    private final Object lifecycleLock = new Object();
     private HttpServer server;
     private ExecutorService executor;
 
@@ -126,42 +127,44 @@ final class WebsiteApiServer implements AutoCloseable {
         );
     }
 
-    synchronized void start() throws IOException {
-        if (server != null) {
-            throw new IllegalStateException("Website API server is already running");
-        }
-        AtomicInteger sequence = new AtomicInteger();
-        ThreadFactory threads = runnable -> {
-            Thread thread = new Thread(
-                    runnable,
-                    "EnthusiaStaff-Website-API-" + sequence.incrementAndGet()
-            );
-            thread.setDaemon(true);
-            return thread;
-        };
-        ThreadPoolExecutor bounded = new ThreadPoolExecutor(
-                workerThreads,
-                workerThreads,
-                0L,
-                TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(queueCapacity),
-                threads,
-                new ThreadPoolExecutor.AbortPolicy()
-        );
-        HttpServer created = null;
-        try {
-            created = HttpServer.create(new InetSocketAddress(bindAddress, port), queueCapacity);
-            created.createContext("/", this::handle);
-            created.setExecutor(bounded);
-            created.start();
-            executor = bounded;
-            server = created;
-        } catch (IOException | RuntimeException exception) {
-            if (created != null) {
-                created.stop(0);
+    void start() throws IOException {
+        synchronized (lifecycleLock) {
+            if (server != null) {
+                throw new IllegalStateException("Website API server is already running");
             }
-            bounded.shutdownNow();
-            throw exception;
+            AtomicInteger sequence = new AtomicInteger();
+            ThreadFactory threads = runnable -> {
+                Thread thread = new Thread(
+                        runnable,
+                        "EnthusiaStaff-Website-API-" + sequence.incrementAndGet()
+                );
+                thread.setDaemon(true);
+                return thread;
+            };
+            ThreadPoolExecutor bounded = new ThreadPoolExecutor(
+                    workerThreads,
+                    workerThreads,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(queueCapacity),
+                    threads,
+                    new ThreadPoolExecutor.AbortPolicy()
+            );
+            HttpServer created = null;
+            try {
+                created = HttpServer.create(new InetSocketAddress(bindAddress, port), queueCapacity);
+                created.createContext("/", this::handle);
+                created.setExecutor(bounded);
+                created.start();
+                executor = bounded;
+                server = created;
+            } catch (IOException | RuntimeException exception) {
+                if (created != null) {
+                    created.stop(0);
+                }
+                bounded.shutdownNow();
+                throw exception;
+            }
         }
     }
 
@@ -687,23 +690,25 @@ final class WebsiteApiServer implements AutoCloseable {
 
     @Override
     @SuppressWarnings("PMD.NullAssignment") // Clearing lifecycle fields prevents reuse after shutdown.
-    public synchronized void close() {
-        HttpServer currentServer = server;
-        ExecutorService currentExecutor = executor;
-        server = null;
-        executor = null;
-        if (currentServer != null) {
-            currentServer.stop(1);
-        }
-        if (currentExecutor != null) {
-            currentExecutor.shutdown();
-            try {
-                if (!currentExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+    public void close() {
+        synchronized (lifecycleLock) {
+            HttpServer currentServer = server;
+            ExecutorService currentExecutor = executor;
+            server = null;
+            executor = null;
+            if (currentServer != null) {
+                currentServer.stop(1);
+            }
+            if (currentExecutor != null) {
+                currentExecutor.shutdown();
+                try {
+                    if (!currentExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                        currentExecutor.shutdownNow();
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
                     currentExecutor.shutdownNow();
                 }
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                currentExecutor.shutdownNow();
             }
         }
     }

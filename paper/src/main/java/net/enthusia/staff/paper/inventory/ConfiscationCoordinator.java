@@ -1692,6 +1692,9 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         private final Player target;
         private final InventoryConfiscationSession durable;
         private final InventoryImage before;
+        private final Object selectionLock = new Object();
+        // Every access is serialized by selectionLock; insertion order makes commits deterministic.
+        @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
         private final Map<ItemPath, String> selections = new LinkedHashMap<>();
         private final AtomicReference<State> state = new AtomicReference<>(State.SELECTING);
         private final AtomicBoolean suppressClose = new AtomicBoolean();
@@ -1746,34 +1749,48 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             return durable.beforeChecksum();
         }
 
-        synchronized Map<ItemPath, String> selections() {
-            return Map.copyOf(selections);
+        Map<ItemPath, String> selections() {
+            synchronized (selectionLock) {
+                return Map.copyOf(selections);
+            }
         }
 
-        synchronized int selectionCount() {
-            return selections.size();
+        int selectionCount() {
+            synchronized (selectionLock) {
+                return selections.size();
+            }
         }
 
-        synchronized boolean selectedExact(ItemPath path) {
-            return selections.containsKey(path);
+        boolean selectedExact(ItemPath path) {
+            synchronized (selectionLock) {
+                return selections.containsKey(path);
+            }
         }
 
-        synchronized boolean coveredByAncestor(ItemPath path) {
-            return selections.keySet().stream()
-                    .anyMatch(selected -> !selected.equals(path) && selected.ancestorOf(path));
+        boolean coveredByAncestor(ItemPath path) {
+            synchronized (selectionLock) {
+                return selections.keySet().stream()
+                        .anyMatch(selected -> !selected.equals(path) && selected.ancestorOf(path));
+            }
         }
 
-        synchronized boolean covered(ItemPath path) {
-            return selections.keySet().stream().anyMatch(selected -> selected.ancestorOf(path));
+        boolean covered(ItemPath path) {
+            synchronized (selectionLock) {
+                return selections.keySet().stream().anyMatch(selected -> selected.ancestorOf(path));
+            }
         }
 
-        synchronized void select(ItemPath path, ItemStack item) {
-            selections.keySet().removeIf(path::ancestorOf);
-            selections.put(path, NestedInventorySelection.fingerprint(item));
+        void select(ItemPath path, ItemStack item) {
+            synchronized (selectionLock) {
+                selections.keySet().removeIf(path::ancestorOf);
+                selections.put(path, NestedInventorySelection.fingerprint(item));
+            }
         }
 
-        synchronized void deselect(ItemPath path) {
-            selections.remove(path);
+        void deselect(ItemPath path) {
+            synchronized (selectionLock) {
+                selections.remove(path);
+            }
         }
 
         boolean selecting() {

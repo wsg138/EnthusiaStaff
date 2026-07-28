@@ -18,6 +18,7 @@ final class ModerationInventoryHolder implements InventoryHolder {
     private final Kind kind;
     private final boolean offline;
     private final InventoryObservation base;
+    private final Object stateLock = new Object();
     private Inventory inventory;
     private InventoryImage image;
     private boolean dirty;
@@ -80,25 +81,33 @@ final class ModerationInventoryHolder implements InventoryHolder {
         return base;
     }
 
-    synchronized InventoryImage image() {
-        return image;
-    }
-
-    synchronized void image(InventoryImage replacement, boolean markDirty) {
-        image = Objects.requireNonNull(replacement, "replacement");
-        dirty |= markDirty;
-    }
-
-    synchronized boolean dirty() {
-        return dirty;
-    }
-
-    synchronized boolean closeOnce() {
-        if (closed) {
-            return false;
+    InventoryImage image() {
+        synchronized (stateLock) {
+            return image;
         }
-        closed = true;
-        return true;
+    }
+
+    void image(InventoryImage replacement, boolean markDirty) {
+        synchronized (stateLock) {
+            image = Objects.requireNonNull(replacement, "replacement");
+            dirty |= markDirty;
+        }
+    }
+
+    boolean dirty() {
+        synchronized (stateLock) {
+            return dirty;
+        }
+    }
+
+    boolean closeOnce() {
+        synchronized (stateLock) {
+            if (closed) {
+                return false;
+            }
+            closed = true;
+            return true;
+        }
     }
 
     int logicalSlot(int rawSlot) {
