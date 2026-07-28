@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS punishment_drafts (
+    draft_id BINARY(16) NOT NULL,
+    actor_id BINARY(16) NOT NULL,
+    target_id BINARY(16) NOT NULL,
+    reason_id VARCHAR(96) NOT NULL,
+    internal_explanation TEXT NOT NULL,
+    visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC',
+    command_name VARCHAR(32) NOT NULL,
+    configuration_version VARCHAR(128) NOT NULL,
+    step_ordinal INT UNSIGNED NOT NULL,
+    step_label VARCHAR(80) NOT NULL,
+    sanctions_json JSON NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (draft_id),
+    UNIQUE KEY uq_punishment_drafts_actor_target (actor_id, target_id),
+    INDEX idx_punishment_drafts_expiration (expires_at),
+    CONSTRAINT fk_punishment_drafts_target FOREIGN KEY (target_id) REFERENCES players(player_id),
+    CONSTRAINT ck_punishment_drafts_expiration CHECK (expires_at > created_at)
+) ENGINE=InnoDB;

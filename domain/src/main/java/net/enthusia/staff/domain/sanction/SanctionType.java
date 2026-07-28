@@ -1,0 +1,26 @@
+package net.enthusia.staff.domain.sanction;
+
+public enum SanctionType {
+    WARNING,
+    KICK,
+    MUTE,
+    BAN,
+    NETWORK_BAN,
+    NETWORK_IDENTITY_BAN,
+    REPORT_RESTRICTION,
+    REPUTATION_BLACKLIST,
+    MARKET_BLACKLIST,
+    INVENTORY_CONFISCATION,
+    ENDER_CHEST_CONFISCATION,
+    ECONOMY_CONFISCATION,
+    CONTENT_REMOVAL,
+    STALL_OWNERSHIP_REMOVAL;
+
+    public boolean isBan() {
+        return this == BAN || this == NETWORK_BAN || this == NETWORK_IDENTITY_BAN;
+    }
+
+    public boolean inheritsAcrossAltRelationships() {
+        return isBan() || this == MUTE;
+    }
+}
