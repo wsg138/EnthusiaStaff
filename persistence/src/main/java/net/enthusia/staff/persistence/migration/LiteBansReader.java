@@ -108,8 +108,9 @@ public final class LiteBansReader {
             int batchSize
     ) {
         Map<String, String> columns = mapping.canonicalColumns();
-        String sql = "SELECT " + selectList(columns) + " FROM " + quote(mapping.tableName())
-                + " WHERE " + quote(columns.get("id")) + " > ? ORDER BY " + quote(columns.get("id")) + " LIMIT ?";
+        String sql = "SELECT " + selectList(columns) + " FROM " + quoteInspectedIdentifier(mapping.tableName())
+                + " WHERE " + quoteInspectedIdentifier(columns.get("id")) + " > ? ORDER BY "
+                + quoteInspectedIdentifier(columns.get("id")) + " LIMIT ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, lastId);
             statement.setInt(2, batchSize);
@@ -192,22 +193,22 @@ public final class LiteBansReader {
 
     private static String selectList(Map<String, String> columns) {
         List<String> selection = new ArrayList<>();
-        selection.add(quote(columns.get("id")) + " AS source_id");
-        selection.add(quote(columns.get("uuid")) + " AS source_uuid");
-        selection.add(quote(columns.get("username")) + " AS source_username");
-        selection.add(quote(columns.get("reason")) + " AS source_reason");
-        selection.add(quote(columns.get("staff")) + " AS source_staff");
-        selection.add(quote(columns.get("issued_at")) + " AS source_issued_at");
-        selection.add(quote(columns.get("expires_at")) + " AS source_expires_at");
-        selection.add(quote(columns.get("active")) + " AS source_active");
+        selection.add(quoteInspectedIdentifier(columns.get("id")) + " AS source_id");
+        selection.add(quoteInspectedIdentifier(columns.get("uuid")) + " AS source_uuid");
+        selection.add(quoteInspectedIdentifier(columns.get("username")) + " AS source_username");
+        selection.add(quoteInspectedIdentifier(columns.get("reason")) + " AS source_reason");
+        selection.add(quoteInspectedIdentifier(columns.get("staff")) + " AS source_staff");
+        selection.add(quoteInspectedIdentifier(columns.get("issued_at")) + " AS source_issued_at");
+        selection.add(quoteInspectedIdentifier(columns.get("expires_at")) + " AS source_expires_at");
+        selection.add(quoteInspectedIdentifier(columns.get("active")) + " AS source_active");
         if (columns.containsKey("ip_ban")) {
-            selection.add(quote(columns.get("ip_ban")) + " AS source_ip_ban");
+            selection.add(quoteInspectedIdentifier(columns.get("ip_ban")) + " AS source_ip_ban");
         }
         if (columns.containsKey("ip")) {
-            selection.add(quote(columns.get("ip")) + " AS source_ip");
+            selection.add(quoteInspectedIdentifier(columns.get("ip")) + " AS source_ip");
         }
         if (columns.containsKey("ended_at")) {
-            selection.add(quote(columns.get("ended_at")) + " AS source_ended_at");
+            selection.add(quoteInspectedIdentifier(columns.get("ended_at")) + " AS source_ended_at");
         }
         return String.join(", ", selection);
     }
@@ -266,13 +267,14 @@ public final class LiteBansReader {
     ) {
         Map<String, String> columns = mapping.canonicalColumns();
         String sql = "SELECT "
-                + quote(columns.get("id")) + " AS source_id, "
-                + quote(columns.get("uuid")) + " AS source_uuid, "
-                + quote(columns.get("username")) + " AS source_username, "
-                + quote(columns.get("ip")) + " AS source_ip, "
-                + quote(columns.get("observed_at")) + " AS source_observed_at FROM "
-                + quote(mapping.tableName()) + " WHERE " + quote(columns.get("id")) + " > ? ORDER BY "
-                + quote(columns.get("id")) + " LIMIT ?";
+                + quoteInspectedIdentifier(columns.get("id")) + " AS source_id, "
+                + quoteInspectedIdentifier(columns.get("uuid")) + " AS source_uuid, "
+                + quoteInspectedIdentifier(columns.get("username")) + " AS source_username, "
+                + quoteInspectedIdentifier(columns.get("ip")) + " AS source_ip, "
+                + quoteInspectedIdentifier(columns.get("observed_at")) + " AS source_observed_at FROM "
+                + quoteInspectedIdentifier(mapping.tableName()) + " WHERE "
+                + quoteInspectedIdentifier(columns.get("id")) + " > ? ORDER BY "
+                + quoteInspectedIdentifier(columns.get("id")) + " LIMIT ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, lastId);
             statement.setInt(2, batchSize);
@@ -339,7 +341,7 @@ public final class LiteBansReader {
         throw new IllegalArgumentException("unsupported LiteBans removal timestamp type");
     }
 
-    private static String quote(String identifier) {
+    static String quoteInspectedIdentifier(String identifier) {
         if (identifier == null || !identifier.matches("[A-Za-z0-9_]+")) {
             throw new IllegalArgumentException("unsafe inspected SQL identifier");
         }

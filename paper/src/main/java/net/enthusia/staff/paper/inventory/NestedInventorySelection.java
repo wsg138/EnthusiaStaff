@@ -383,6 +383,8 @@ public final class NestedInventorySelection {
     }
 
     private static final class SelectionNode {
+        // Nodes belong to one method-local traversal tree and are never shared.
+        @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
         private final Map<Integer, SelectionNode> children = new LinkedHashMap<>();
         private boolean whole;
 

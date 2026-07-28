@@ -9,6 +9,9 @@ import java.util.Map;
 public final class ReplayGuard {
     private final int maximumEntries;
     private final Duration retention;
+    private final Object lock = new Object();
+    // Linked insertion order drives eviction; lock serializes every access.
+    @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
     private final Map<String, Instant> seen = new LinkedHashMap<>();
 
     public ReplayGuard(int maximumEntries, Duration retention) {
@@ -19,19 +22,21 @@ public final class ReplayGuard {
         this.retention = retention;
     }
 
-    public synchronized boolean recordIfNew(String serverId, String nonce, Instant now) {
-        evictExpired(now);
-        String key = serverId + '\u0000' + nonce;
-        if (seen.containsKey(key)) {
-            return false;
+    public boolean recordIfNew(String serverId, String nonce, Instant now) {
+        synchronized (lock) {
+            evictExpired(now);
+            String key = serverId + '\u0000' + nonce;
+            if (seen.containsKey(key)) {
+                return false;
+            }
+            seen.put(key, now.plus(retention));
+            while (seen.size() > maximumEntries) {
+                Iterator<String> iterator = seen.keySet().iterator();
+                iterator.next();
+                iterator.remove();
+            }
+            return true;
         }
-        seen.put(key, now.plus(retention));
-        while (seen.size() > maximumEntries) {
-            Iterator<String> iterator = seen.keySet().iterator();
-            iterator.next();
-            iterator.remove();
-        }
-        return true;
     }
 
     private void evictExpired(Instant now) {

@@ -35,6 +35,7 @@ public final class PersistentChannelClient implements AutoCloseable {
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean running = new AtomicBoolean();
+    private final Object lifecycleLock = new Object();
     private final Map<UUID, CompletableFuture<Boolean>> pending = new ConcurrentHashMap<>();
     private final AtomicReference<Socket> socket = new AtomicReference<>();
     private final AtomicReference<DataOutputStream> output = new AtomicReference<>();
@@ -71,13 +72,15 @@ public final class PersistentChannelClient implements AutoCloseable {
         );
     }
 
-    public synchronized void start() {
-        if (!running.compareAndSet(false, true)) {
-            return;
+    public void start() {
+        synchronized (lifecycleLock) {
+            if (!running.compareAndSet(false, true)) {
+                return;
+            }
+            connectionThread = new Thread(this::connectionLoop, "EnthusiaStaff-Channel-Client");
+            connectionThread.setDaemon(true);
+            connectionThread.start();
         }
-        connectionThread = new Thread(this::connectionLoop, "EnthusiaStaff-Channel-Client");
-        connectionThread.setDaemon(true);
-        connectionThread.start();
     }
 
     public boolean connected() {
@@ -225,11 +228,13 @@ public final class PersistentChannelClient implements AutoCloseable {
     }
 
     @Override
-    public synchronized void close() {
-        running.set(false);
-        disconnect();
-        if (connectionThread != null) {
-            connectionThread.interrupt();
+    public void close() {
+        synchronized (lifecycleLock) {
+            running.set(false);
+            disconnect();
+            if (connectionThread != null) {
+                connectionThread.interrupt();
+            }
         }
     }
 }

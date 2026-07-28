@@ -1,6 +1,7 @@
 package net.enthusia.staff.persistence.migration;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
@@ -22,5 +23,27 @@ class LiteBansReaderTest {
         );
         assertThrows(IllegalArgumentException.class, () -> LiteBansReader.parseNetworkAddress("localhost"));
         assertThrows(IllegalArgumentException.class, () -> LiteBansReader.parseNetworkAddress("999.1.1.1"));
+    }
+
+    @Test
+    void quotesOnlySingleInspectedSqlIdentifiers() {
+        assertEquals("`litebans_bans`", LiteBansReader.quoteInspectedIdentifier("litebans_bans"));
+
+        for (String unsafe : new String[]{
+                "bans` WHERE 1=1 --",
+                "bans; DROP TABLE bans",
+                "schema.bans",
+                "bans/*comment*/",
+                "bans name"
+        }) {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> LiteBansReader.quoteInspectedIdentifier(unsafe)
+            );
+        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> LiteBansReader.quoteInspectedIdentifier(null)
+        );
     }
 }

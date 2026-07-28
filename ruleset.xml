@@ -108,7 +108,42 @@
         </properties>
     </rule>
     <rule ref="category/java/multithreading.xml/NonThreadSafeSingleton"/>
-    <rule ref="category/java/multithreading.xml/UseConcurrentHashMap"/>
+    <!--
+      PMD's UseConcurrentHashMap XPath reports every Map-typed local allocation,
+      including TreeMap, EnumMap, ordered JSON payloads, and cases its own
+      documentation calls safe for single-threaded use. Keep the concurrency
+      check at the shared-state boundary instead.
+    -->
+    <rule
+        name="DocumentMutableMapFieldConcurrency"
+        language="java"
+        message="Mutable map fields require an explicit concurrency policy"
+        class="net.sourceforge.pmd.lang.rule.XPathRule">
+        <description>
+            Reports mutable JDK map fields so each field is made concurrent,
+            confined, immutable, or explicitly guarded.
+        </description>
+        <priority>2</priority>
+        <properties>
+            <property name="version" value="2.0"/>
+            <property name="xpath">
+                <value>
+<![CDATA[
+//FieldDeclaration[
+    .//VariableInitializer//AllocationExpression/ClassOrInterfaceType[
+        @Image = 'HashMap'
+        or @Image = 'LinkedHashMap'
+        or @Image = 'TreeMap'
+        or @Image = 'EnumMap'
+        or @Image = 'WeakHashMap'
+        or @Image = 'IdentityHashMap'
+    ]
+]
+]]>
+                </value>
+            </property>
+        </properties>
+    </rule>
     <rule ref="category/java/errorprone.xml/TestClassWithoutTestCases"/>
     <rule ref="category/java/errorprone.xml/AvoidCatchingNPE"/>
     <rule ref="category/java/performance.xml/AvoidArrayLoops"/>
