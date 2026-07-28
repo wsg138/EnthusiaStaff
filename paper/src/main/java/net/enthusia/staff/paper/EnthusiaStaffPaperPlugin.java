@@ -97,6 +97,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private final RuntimeHealth health = new RuntimeHealth();
     private final AtomicReference<OperationalMode> mode = new AtomicReference<>(OperationalMode.BOOTSTRAP);
     private final ConcurrentHashMap<String, String> featureIssues = new ConcurrentHashMap<>();
+    private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final Object storageLifecycleLock = new Object();
 
     private ExecutorService workers;
     private MariaDbRuntime databaseRuntime;
@@ -211,47 +213,15 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        mode.set(OperationalMode.MAINTENANCE);
-        publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
-        if (roseChatIntegration != null) {
-            try {
-                roseChatIntegration.close();
-            } catch (RuntimeException exception) {
-                getLogger().log(Level.WARNING, "RoseChat bridge cleanup failed", exception);
-            }
-        }
-        if (muteEnforcement != null) {
-            muteEnforcement.close();
-        }
-        if (inventoryCoordinator != null) {
-            inventoryCoordinator.close();
-        }
-        if (economyCoordinator != null) {
-            economyCoordinator.close();
-        }
-        if (confiscationCoordinator != null) {
-            confiscationCoordinator.close();
-        }
-        if (operationalStateTask != null) {
-            operationalStateTask.cancel();
-        }
-        if (channelClient != null) {
-            channelClient.close();
-        }
-        if (workers != null) {
-            workers.shutdown();
-            try {
-                if (!workers.awaitTermination(5, TimeUnit.SECONDS)) {
-                    workers.shutdownNow();
-                }
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                workers.shutdownNow();
-            }
-        }
-        if (databaseRuntime != null) {
-            databaseRuntime.close();
-        }
+        shuttingDown.set(true);
+        stopOperationalRuntime();
+        closeSafely("RoseChat bridge", roseChatIntegration);
+        closeSafely("mute enforcement", muteEnforcement);
+        closeSafely("inventory coordinator", inventoryCoordinator);
+        closeSafely("economy coordinator", economyCoordinator);
+        closeSafely("confiscation coordinator", confiscationCoordinator);
+        shutdownWorkers();
+        closeDatabaseRuntime();
     }
 
     public OperationalMode operationalMode() {
@@ -267,13 +237,19 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void initializeStorage() {
+        if (shuttingDown.get()) {
+            return;
+        }
         String url = environment("storage.jdbc-url-environment");
         String username = environment("storage.username-environment");
         String password = environment("storage.password-environment");
         if (url == null || username == null || password == null) {
-            setDegraded("mariadb", "Required database environment variables are missing; destructive actions are disabled");
+            degradeBootstrap(
+                    "Required database environment variables are missing; destructive actions are disabled"
+            );
             return;
         }
+        MariaDbRuntime opened = null;
         try {
             DatabaseConfig database = new DatabaseConfig(
                     url,
@@ -282,57 +258,163 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     getConfig().getInt("storage.maximum-pool-size", 8),
                     getConfig().getLong("storage.connection-timeout-millis", 5_000)
             );
-            MariaDbRuntime opened = MariaDb.initialize(database);
-            databaseRuntime = opened;
-            moderationStore = opened.moderationStore();
-            playerDirectory = opened.playerDirectory();
-            sanctionLookup = opened.sanctionLookup();
-            caseLookup = opened.caseLookup();
-            caseReviewStore = opened.caseReviewStore();
-            reportStore = opened.reportStore();
-            freezeStore = opened.freezeStore();
-            staffSessionStore = opened.staffSessionStore();
-            vanishStore = opened.vanishStore();
-            inventoryJournalStore = opened.inventoryJournalStore();
-            economyJournalStore = opened.economyJournalStore();
-            clientEvidenceStore = opened.clientEvidenceStore();
-            PunishmentDraftStore punishmentDraftStore = opened.punishmentDraftStore();
-            getServer().getOnlinePlayers().forEach(freezeManager::verify);
-            getServer().getOnlinePlayers().forEach(staffModeManager::recover);
-            vanishManager.initialize();
-            punishmentService = new PunishmentService(
-                    Clock.systemUTC(),
-                    new SecureIdentifiers(new SecureRandom()),
-                    authorizationPolicy,
-                    reasonPolicies,
-                    moderationStore,
-                    new EscalationEngine()
-            );
-            punishmentDraftWorkflow = new PunishmentDraftWorkflow(
-                    Clock.systemUTC(), Duration.ofHours(24), punishmentService, punishmentDraftStore
-            );
-            sanctionChangeService = new SanctionChangeService(
-                    authorizationPolicy, opened.sanctionMutationStore()
-            );
-            promoteAfterBootstrap();
-            try {
-                initializeChannel(opened);
-            } catch (RuntimeException exception) {
-                channelConnected.set(false);
-                getLogger().log(Level.SEVERE,
-                        "Persistent Velocity channel initialization failed; new punishment writes are disabled",
-                        exception);
+            opened = MariaDb.initialize(database);
+            synchronized (storageLifecycleLock) {
+                if (shuttingDown.get()) {
+                    closeSafely("MariaDB runtime opened during shutdown", opened);
+                    return;
+                }
+                installStorageRuntime(opened);
             }
-            operationalStateTask = getServer().getAsyncScheduler().runAtFixedRate(
-                    this,
-                    ignored -> refreshOperationalState(),
-                    5,
-                    5,
-                    TimeUnit.SECONDS
-            );
         } catch (RuntimeException exception) {
-            getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
-            setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
+            discardFailedStorageRuntime(opened);
+            if (!shuttingDown.get()) {
+                getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
+                setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
+            }
+        }
+    }
+
+    private void installStorageRuntime(MariaDbRuntime opened) {
+        databaseRuntime = opened;
+        moderationStore = opened.moderationStore();
+        playerDirectory = opened.playerDirectory();
+        sanctionLookup = opened.sanctionLookup();
+        caseLookup = opened.caseLookup();
+        caseReviewStore = opened.caseReviewStore();
+        reportStore = opened.reportStore();
+        freezeStore = opened.freezeStore();
+        staffSessionStore = opened.staffSessionStore();
+        vanishStore = opened.vanishStore();
+        inventoryJournalStore = opened.inventoryJournalStore();
+        economyJournalStore = opened.economyJournalStore();
+        clientEvidenceStore = opened.clientEvidenceStore();
+        PunishmentDraftStore punishmentDraftStore = opened.punishmentDraftStore();
+        getServer().getOnlinePlayers().forEach(freezeManager::verify);
+        getServer().getOnlinePlayers().forEach(staffModeManager::recover);
+        vanishManager.initialize();
+        punishmentService = new PunishmentService(
+                Clock.systemUTC(),
+                new SecureIdentifiers(new SecureRandom()),
+                authorizationPolicy,
+                reasonPolicies,
+                moderationStore,
+                new EscalationEngine()
+        );
+        punishmentDraftWorkflow = new PunishmentDraftWorkflow(
+                Clock.systemUTC(), Duration.ofHours(24), punishmentService, punishmentDraftStore
+        );
+        sanctionChangeService = new SanctionChangeService(
+                authorizationPolicy, opened.sanctionMutationStore()
+        );
+        promoteAfterBootstrap(opened);
+        try {
+            initializeChannel(opened);
+        } catch (RuntimeException exception) {
+            channelConnected.set(false);
+            getLogger().log(Level.SEVERE,
+                    "Persistent Velocity channel initialization failed; new punishment writes are disabled",
+                    exception);
+        }
+        operationalStateTask = getServer().getAsyncScheduler().runAtFixedRate(
+                this,
+                ignored -> refreshOperationalState(),
+                5,
+                5,
+                TimeUnit.SECONDS
+        );
+    }
+
+    private void degradeBootstrap(String reason) {
+        synchronized (storageLifecycleLock) {
+            if (!shuttingDown.get()) {
+                setDegraded("mariadb", reason);
+            }
+        }
+    }
+
+    private void discardFailedStorageRuntime(MariaDbRuntime opened) {
+        if (opened == null) {
+            return;
+        }
+        synchronized (storageLifecycleLock) {
+            if (databaseRuntime != opened) {
+                return;
+            }
+            cancelOperationalStateTask();
+            closeChannelClient();
+            closeSafely("partially initialized MariaDB runtime", opened);
+        }
+    }
+
+    private void stopOperationalRuntime() {
+        synchronized (storageLifecycleLock) {
+            mode.set(OperationalMode.MAINTENANCE);
+            publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
+            cancelOperationalStateTask();
+            closeChannelClient();
+        }
+    }
+
+    private void cancelOperationalStateTask() {
+        ScheduledTask task = operationalStateTask;
+        if (task == null) {
+            return;
+        }
+        try {
+            task.cancel();
+        } catch (RuntimeException exception) {
+            getLogger().log(Level.WARNING, "Operational-state task cleanup failed", exception);
+        }
+    }
+
+    private void closeChannelClient() {
+        PersistentChannelClient client = channelClient;
+        channelConnected.set(false);
+        closeSafely("persistent Velocity channel", client);
+    }
+
+    private void shutdownWorkers() {
+        ExecutorService executor = workers;
+        if (executor == null) {
+            return;
+        }
+        try {
+            executor.shutdown();
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    getLogger().warning("Worker tasks did not terminate within the shutdown deadline");
+                }
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        } catch (RuntimeException exception) {
+            getLogger().log(Level.WARNING, "Worker executor cleanup failed", exception);
+            try {
+                executor.shutdownNow();
+            } catch (RuntimeException forcedFailure) {
+                exception.addSuppressed(forcedFailure);
+            }
+        }
+    }
+
+    private void closeDatabaseRuntime() {
+        synchronized (storageLifecycleLock) {
+            MariaDbRuntime runtime = databaseRuntime;
+            closeSafely("MariaDB runtime", runtime);
+        }
+    }
+
+    private void closeSafely(String component, AutoCloseable resource) {
+        if (resource == null) {
+            return;
+        }
+        try {
+            resource.close();
+        } catch (Exception exception) {
+            getLogger().log(Level.WARNING, component + " cleanup failed", exception);
         }
     }
 
@@ -368,8 +450,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void promoteAfterBootstrap() {
-        OperationalStateStore states = databaseRuntime.operationalStateStore();
+    private void promoteAfterBootstrap(MariaDbRuntime runtime) {
+        OperationalStateStore states = runtime.operationalStateStore();
         OperationalStateSnapshot persisted = states.current();
         OperationalMode next = persisted.mode();
         if (next == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
