@@ -14,8 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
@@ -55,6 +57,11 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                 }
                 Instant now = clock.instant();
                 expireOverturnRequest(connection, request.caseId().value(), now);
+                SanctionChangeResult.Rejected stale = validateExpectation(connection, request, caseRow, now);
+                if (stale != null) {
+                    connection.rollback();
+                    return stale;
+                }
                 Change change = applyChange(connection, request, caseRow, now);
                 if (change.rejection() != null) {
                     connection.rollback();
@@ -97,6 +104,57 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
             case APPROVE_FULL_OVERTURN -> decideOverturn(connection, request, caseRow, now, true);
             case DENY_FULL_OVERTURN -> decideOverturn(connection, request, caseRow, now, false);
         };
+    }
+
+    private static SanctionChangeResult.Rejected validateExpectation(
+            Connection connection,
+            SanctionChangeRequest request,
+            CaseRow caseRow,
+            Instant now
+    ) throws SQLException {
+        if (request.expectation().isEmpty()) {
+            return null;
+        }
+        net.enthusia.staff.domain.sanction.SanctionChangeExpectation expected =
+                request.expectation().orElseThrow();
+        Map<UUID, Long> sanctionRevisions = new LinkedHashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT sanction_id, revision FROM sanctions WHERE case_id = ? FOR UPDATE
+                """)) {
+            statement.setString(1, request.caseId().value());
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    sanctionRevisions.put(
+                            UuidBytes.fromBytes(result.getBytes("sanction_id")),
+                            result.getLong("revision")
+                    );
+                }
+            }
+        }
+        Optional<Boolean> contribution;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT escalation_contributes FROM punishment_steps WHERE case_id = ? FOR UPDATE
+                """)) {
+            statement.setString(1, request.caseId().value());
+            try (ResultSet result = statement.executeQuery()) {
+                contribution = result.next()
+                        ? Optional.of(result.getBoolean("escalation_contributes"))
+                        : Optional.empty();
+            }
+        }
+        Optional<UUID> openRequest = Optional.ofNullable(openRequest(
+                connection, request.caseId().value(), now
+        ));
+        if (caseRow.revision() != expected.caseRevision()
+                || !sanctionRevisions.equals(expected.sanctionRevisions())
+                || !contribution.equals(expected.escalationContributes())
+                || !openRequest.equals(expected.openOverturnRequestId())) {
+            return new SanctionChangeResult.Rejected(
+                    "STALE_CASE",
+                    "The case or its sanctions changed after review; reopen it before confirming"
+            );
+        }
+        return null;
     }
 
     private static Change changeSanctions(
@@ -316,12 +374,16 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
 
     private static CaseRow lockCase(Connection connection, String caseId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT target_id, state FROM cases WHERE case_id = ? FOR UPDATE
+                SELECT target_id, state, revision FROM cases WHERE case_id = ? FOR UPDATE
                 """)) {
             statement.setString(1, caseId);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next()
-                        ? new CaseRow(UuidBytes.fromBytes(result.getBytes("target_id")), result.getString("state"))
+                        ? new CaseRow(
+                                UuidBytes.fromBytes(result.getBytes("target_id")),
+                                result.getString("state"),
+                                result.getLong("revision")
+                        )
                         : null;
             }
         }
@@ -470,7 +532,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         }
     }
 
-    private record CaseRow(UUID targetId, String state) {
+    private record CaseRow(UUID targetId, String state, long revision) {
     }
 
     private record Change(List<UUID> sanctionIds, SanctionChangeResult.Rejected rejection) {

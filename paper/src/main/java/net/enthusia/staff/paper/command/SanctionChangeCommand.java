@@ -2,7 +2,6 @@ package net.enthusia.staff.paper.command;
 
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -25,21 +24,17 @@ import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.sanction.SanctionChangeAccess;
+import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SanctionChangeCommand implements CommandExecutor, TabCompleter {
-    private static final Set<SanctionType> ALL_TYPES = Set.copyOf(EnumSet.allOf(SanctionType.class));
-    private static final List<String> CENTRAL_ACTIONS = List.of(
-            "end", "reduce", "replace-expiration", "revoke", "full-overturn",
-            "remove-escalation", "restore-escalation", "request-overturn",
-            "approve-overturn", "deny-overturn"
-    );
-
     private final JavaPlugin plugin;
     private final Supplier<OperationalMode> mode;
     private final Supplier<SanctionChangeService> service;
@@ -47,6 +42,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     private final Supplier<CaseLookup> cases;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
+    private final SanctionChangeGuiController gui;
 
     public SanctionChangeCommand(
             JavaPlugin plugin,
@@ -55,7 +51,8 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             Supplier<PlayerDirectory> players,
             Supplier<CaseLookup> cases,
             AuthorizationPolicy authorization,
-            ExecutorService workers
+            ExecutorService workers,
+            SanctionChangeGuiController gui
     ) {
         this.plugin = plugin;
         this.mode = mode;
@@ -64,17 +61,22 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         this.cases = cases;
         this.authorization = authorization;
         this.workers = workers;
+        this.gui = gui;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
-        if (actor == null || !canChangeAnything(actor)) {
+        if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)) {
             sender.sendMessage(Component.text("You do not have punishment modification authority."));
             return true;
         }
         String lowerLabel = label.toLowerCase(Locale.ROOT);
         boolean central = lowerLabel.equals("removepunishment");
+        if (arguments.length == 1 && sender instanceof Player player) {
+            gui.open(player, arguments[0], lowerLabel);
+            return true;
+        }
         int minimum = central ? 3 : 2;
         if (arguments.length < minimum) {
             sender.sendMessage(Component.text(central
@@ -82,7 +84,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
                     : "Usage: /" + label + " <player|case> <reason> [CONFIRM]"));
             return true;
         }
-        SanctionChangeAction action = central ? parseAction(arguments[1]) : aliasAction(lowerLabel);
+        SanctionChangeAction action = central
+                ? SanctionChangeAccess.parseAction(arguments[1])
+                : SanctionChangeAccess.aliasAction(lowerLabel);
         if (action == null) {
             sender.sendMessage(Component.text("Unknown sanction change action."));
             return true;
@@ -91,7 +95,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             sender.sendMessage(Component.text("You are not permitted to perform that punishment change."));
             return true;
         }
-        if (!sender.hasPermission(permissionFor(action))) {
+        if (!sender.hasPermission(SanctionChangeAccess.permissionFor(action))) {
             sender.sendMessage(Component.text("You do not have permission for that punishment change."));
             return true;
         }
@@ -146,7 +150,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             send(sender, "Moderation storage is not ready; no change was made.");
             return;
         }
-        Set<SanctionType> types = aliasTypes(label);
+        Set<SanctionType> types = SanctionChangeAccess.aliasTypes(label);
         CaseId caseId = resolveCase(target, types, directory, lookup);
         if (caseId == null) {
             send(sender, "No matching case was found for that player, UUID, or case ID.");
@@ -200,46 +204,6 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
     }
 
-    private static SanctionChangeAction aliasAction(String label) {
-        return switch (label) {
-            case "unban", "unmute" -> SanctionChangeAction.END_EARLY;
-            case "removewarning", "unwarn" -> SanctionChangeAction.REVOKE;
-            default -> null;
-        };
-    }
-
-    private static Set<SanctionType> aliasTypes(String label) {
-        return switch (label) {
-            case "unban" -> Set.of(
-                    SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
-            );
-            case "unmute" -> Set.of(SanctionType.MUTE);
-            case "removewarning", "unwarn" -> Set.of(SanctionType.WARNING);
-            default -> ALL_TYPES;
-        };
-    }
-
-    private static SanctionChangeAction parseAction(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "end", "end-early" -> SanctionChangeAction.END_EARLY;
-            case "reduce" -> SanctionChangeAction.REDUCE_DURATION;
-            case "expiration", "replace-expiration" -> SanctionChangeAction.REPLACE_EXPIRATION;
-            case "revoke" -> SanctionChangeAction.REVOKE;
-            case "overturn", "full-overturn" -> SanctionChangeAction.FULL_OVERTURN;
-            case "remove-escalation" -> SanctionChangeAction.REMOVE_ESCALATION_CONTRIBUTION;
-            case "restore-escalation" -> SanctionChangeAction.RESTORE_ESCALATION_CONTRIBUTION;
-            case "request-overturn" -> SanctionChangeAction.REQUEST_FULL_OVERTURN;
-            case "approve-overturn" -> SanctionChangeAction.APPROVE_FULL_OVERTURN;
-            case "deny-overturn" -> SanctionChangeAction.DENY_FULL_OVERTURN;
-            default -> null;
-        };
-    }
-
-    private boolean canChangeAnything(Actor actor) {
-        return Arrays.stream(SanctionChangeAction.values())
-                .anyMatch(action -> authorization.permits(actor, action.requiredModerationAction()));
-    }
-
     @Override
     public List<String> onTabComplete(
             CommandSender sender,
@@ -248,32 +212,19 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             String[] arguments
     ) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
-        if (actor == null || !canChangeAnything(actor)
+        if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)
                 || !alias.equalsIgnoreCase("removepunishment") || arguments.length != 2) {
             return List.of();
         }
         String prefix = arguments[1].toLowerCase(Locale.ROOT);
-        return CENTRAL_ACTIONS.stream()
+        return SanctionChangeAccess.CENTRAL_ACTIONS.stream()
                 .filter(value -> value.startsWith(prefix))
                 .filter(value -> {
-                    SanctionChangeAction action = parseAction(value);
+                    SanctionChangeAction action = SanctionChangeAccess.parseAction(value);
                     return action != null
                             && authorization.permits(actor, action.requiredModerationAction())
-                            && sender.hasPermission(permissionFor(action));
+                            && sender.hasPermission(SanctionChangeAccess.permissionFor(action));
                 })
                 .toList();
-    }
-
-    private static String permissionFor(SanctionChangeAction action) {
-        return switch (action) {
-            case END_EARLY -> "enthusiastaff.remove.end";
-            case REVOKE -> "enthusiastaff.remove.revoke";
-            case REDUCE_DURATION, REMOVE_ESCALATION_CONTRIBUTION -> "enthusiastaff.remove.lower";
-            case REPLACE_EXPIRATION -> "enthusiastaff.remove.custom-duration";
-            case RESTORE_ESCALATION_CONTRIBUTION -> "enthusiastaff.remove.raise";
-            case FULL_OVERTURN -> "enthusiastaff.remove.full-overturn";
-            case REQUEST_FULL_OVERTURN -> "enthusiastaff.remove.request-overturn";
-            case APPROVE_FULL_OVERTURN, DENY_FULL_OVERTURN -> "enthusiastaff.remove.approve-overturn";
-        };
     }
 }

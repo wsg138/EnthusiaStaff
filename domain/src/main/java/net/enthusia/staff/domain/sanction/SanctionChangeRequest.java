@@ -12,13 +12,15 @@ public record SanctionChangeRequest(
         Actor actor,
         SanctionChangeAction action,
         Optional<Instant> replacementExpiration,
-        String reason
+        String reason,
+        Optional<SanctionChangeExpectation> expectation
 ) {
     public SanctionChangeRequest {
         if (idempotencyKey == null || caseId == null || actor == null || action == null
-                || replacementExpiration == null || reason == null || reason.isBlank()) {
+                || replacementExpiration == null || reason == null || reason.isBlank() || expectation == null) {
             throw new IllegalArgumentException("sanction change fields must be present");
         }
+        reason = reason.trim();
         if (reason.length() > 2_000) {
             throw new IllegalArgumentException("sanction change reason is too long");
         }
@@ -27,5 +29,16 @@ public record SanctionChangeRequest(
         if (needsExpiration != replacementExpiration.isPresent()) {
             throw new IllegalArgumentException("replacement expiration presence does not match the action");
         }
+    }
+
+    public SanctionChangeRequest(
+            IdempotencyKey idempotencyKey,
+            CaseId caseId,
+            Actor actor,
+            SanctionChangeAction action,
+            Optional<Instant> replacementExpiration,
+            String reason
+    ) {
+        this(idempotencyKey, caseId, actor, action, replacementExpiration, reason, Optional.empty());
     }
 }

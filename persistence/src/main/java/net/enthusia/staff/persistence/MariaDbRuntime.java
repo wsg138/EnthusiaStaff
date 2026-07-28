@@ -7,6 +7,7 @@ import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -40,6 +41,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final NetworkIdentityStore networkIdentityStore;
     private final SanctionMutationStore sanctionMutationStore;
     private final CaseLookup caseLookup;
+    private final CaseReviewStore caseReviewStore;
     private final ReportStore reportStore;
     private final InventoryJournalStore inventoryJournalStore;
     private final EconomyJournalStore economyJournalStore;
@@ -60,6 +62,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.networkIdentityStore = new JdbcNetworkIdentityStore(dataSource, new ObjectMapper());
         this.sanctionMutationStore = new JdbcSanctionMutationStore(dataSource, new ObjectMapper(), Clock.systemUTC());
         this.caseLookup = new JdbcCaseLookup(dataSource);
+        this.caseReviewStore = new JdbcCaseReviewStore(dataSource, Clock.systemUTC());
         this.reportStore = new JdbcReportStore(dataSource, new ObjectMapper());
         this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, new ObjectMapper());
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, new ObjectMapper());
@@ -113,6 +116,10 @@ public final class MariaDbRuntime implements AutoCloseable {
 
     public CaseLookup caseLookup() {
         return caseLookup;
+    }
+
+    public CaseReviewStore caseReviewStore() {
+        return caseReviewStore;
     }
 
     public ReportStore reportStore() {

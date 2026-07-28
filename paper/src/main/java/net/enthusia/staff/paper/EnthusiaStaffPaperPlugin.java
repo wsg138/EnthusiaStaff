@@ -36,6 +36,7 @@ import net.enthusia.staff.domain.ports.PunishmentDraftStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
@@ -75,6 +76,7 @@ import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
+import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -108,6 +110,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private final ObjectMapper json = new ObjectMapper();
     private SanctionChangeService sanctionChangeService;
     private CaseLookup caseLookup;
+    private CaseReviewStore caseReviewStore;
     private ReportStore reportStore;
     private ChatContextBuffer chatContext;
     private FreezeStore freezeStore;
@@ -129,6 +132,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
     private PunishmentGuiController punishmentGui;
+    private SanctionChangeGuiController sanctionChangeGui;
 
     @Override
     public void onEnable() {
@@ -284,6 +288,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             playerDirectory = opened.playerDirectory();
             sanctionLookup = opened.sanctionLookup();
             caseLookup = opened.caseLookup();
+            caseReviewStore = opened.caseReviewStore();
             reportStore = opened.reportStore();
             freezeStore = opened.freezeStore();
             staffSessionStore = opened.staffSessionStore();
@@ -612,6 +617,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             command.setExecutor(punishment);
             command.setTabCompleter(punishment);
         }
+        sanctionChangeGui = new SanctionChangeGuiController(
+                this,
+                Clock.systemUTC(),
+                this::effectiveWriteMode,
+                () -> sanctionChangeService,
+                () -> playerDirectory,
+                () -> caseLookup,
+                () -> caseReviewStore,
+                authorizationPolicy,
+                workers
+        );
+        getServer().getPluginManager().registerEvents(sanctionChangeGui, this);
         SanctionChangeCommand changes = new SanctionChangeCommand(
                 this,
                 this::effectiveWriteMode,
@@ -619,7 +636,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 () -> playerDirectory,
                 () -> caseLookup,
                 authorizationPolicy,
-                workers
+                workers,
+                sanctionChangeGui
         );
         for (String name : java.util.List.of(
                 "removepunishment", "unban", "unmute", "removewarning", "unwarn"
