@@ -28,7 +28,7 @@ import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class PunishmentDraftIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-07-27T12:00:00Z");
     private static final UUID ACTOR = UUID.fromString("40000000-0000-0000-0000-000000000001");

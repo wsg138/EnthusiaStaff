@@ -24,13 +24,12 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class LiteBansMigrationIntegrationTest {
     private static final UUID PLAYER_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
     private static final Instant ISSUED_AT = Instant.parse("2026-07-01T00:00:00Z");
@@ -42,8 +41,7 @@ class LiteBansMigrationIntegrationTest {
             .withUsername("enthusia_test")
             .withPassword("enthusia_test_password");
 
-    @BeforeEach
-    void prepareLegacyTables() throws SQLException {
+    private void prepareLegacyTables() throws SQLException {
         try (Connection connection = sourceConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS legacy_history");
@@ -94,6 +92,7 @@ class LiteBansMigrationIntegrationTest {
     void reconcilesSourceChangesAndRerunsWithoutDuplicateCases() throws SQLException {
         DatabaseConfig config = databaseConfig();
         try (MariaDbRuntime runtime = MariaDb.initialize(config)) {
+            prepareLegacyTables();
             var state = runtime.operationalStateStore().current();
             assertTrue(runtime.operationalStateStore().transition(
                     state.revision(),
@@ -112,7 +111,7 @@ class LiteBansMigrationIntegrationTest {
             assertEquals(0, initial.reconciledRecords());
             assertEquals(1, initial.protectedIdentityRecords());
             assertEquals(0, initial.shadowSummary().orElseThrow().mismatchCount());
-            assertEquals(2, count("cases", "configuration_version = 'litebans-import-v1'"));
+            assertEquals(2, importedCaseCount());
 
             Instant removedAt = Instant.parse("2026-07-25T12:00:00Z");
             try (Connection connection = sourceConnection();
@@ -132,7 +131,7 @@ class LiteBansMigrationIntegrationTest {
             assertEquals(1, reconciled.replayedRecords());
             assertEquals(0, reconciled.shadowSummary().orElseThrow().mismatchCount());
             assertEquals("ENDED_EARLY", importedBanStatus());
-            assertEquals(1, count("sanction_events", "event_type = 'LEGACY_SYNC'"));
+            assertEquals(1, legacySyncEventCount());
 
             MigrationExecutionReport replay = runtime.liteBansMigrationService(protector).execute(
                     config, "legacy_", 100, MigrationMode.SHADOW
@@ -141,8 +140,8 @@ class LiteBansMigrationIntegrationTest {
             assertEquals(0, replay.importedRecords());
             assertEquals(0, replay.reconciledRecords());
             assertEquals(2, replay.replayedRecords());
-            assertEquals(2, count("cases", "configuration_version = 'litebans-import-v1'"));
-            assertEquals(1, count("sanction_events", "event_type = 'LEGACY_SYNC'"));
+            assertEquals(2, importedCaseCount());
+            assertEquals(1, legacySyncEventCount());
 
             try (Connection connection = sourceConnection();
                  PreparedStatement statement = connection.prepareStatement("DELETE FROM legacy_bans WHERE id = 1")) {
@@ -155,7 +154,7 @@ class LiteBansMigrationIntegrationTest {
 
             assertFalse(deletedSource.shadowSummary().orElseThrow().countsMatch());
             assertTrue(deletedSource.shadowSummary().orElseThrow().mismatchCount() > 0);
-            assertEquals(2, count("cases", "configuration_version = 'litebans-import-v1'"));
+            assertEquals(2, importedCaseCount());
         }
     }
 
@@ -206,13 +205,26 @@ class LiteBansMigrationIntegrationTest {
         }
     }
 
-    private static long count(String table, String condition) throws SQLException {
-        if (!table.matches("[a-z_]+") || !condition.matches("[A-Za-z0-9_ ='.-]+")) {
-            throw new IllegalArgumentException("unsafe integration-test SQL identifier or condition");
-        }
+    private static long importedCaseCount() throws SQLException {
         try (Connection connection = sourceConnection();
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + table + " WHERE " + condition)) {
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM cases WHERE configuration_version = 'litebans-import-v1'
+                     """)) {
+            return count(statement);
+        }
+    }
+
+    private static long legacySyncEventCount() throws SQLException {
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM sanction_events WHERE event_type = 'LEGACY_SYNC'
+                     """)) {
+            return count(statement);
+        }
+    }
+
+    private static long count(PreparedStatement statement) throws SQLException {
+        try (ResultSet result = statement.executeQuery()) {
             assertTrue(result.next());
             return result.getLong(1);
         }

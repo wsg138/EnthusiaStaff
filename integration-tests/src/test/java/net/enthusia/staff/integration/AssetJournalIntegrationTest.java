@@ -48,7 +48,7 @@ import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class AssetJournalIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-07-26T12:00:00Z");
     private static final Duration LEASE = Duration.ofMinutes(2);
@@ -532,27 +532,28 @@ class AssetJournalIntegrationTest {
     }
 
     private static String patchState(UUID operationId) throws SQLException {
-        return singleString(
-                "SELECT state FROM inventory_pending_patches WHERE operation_id = ?",
-                operationId
-        );
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT state FROM inventory_pending_patches WHERE operation_id = ?
+                     """)) {
+            return singleString(statement, operationId);
+        }
     }
 
     private static String inventoryOperationState(UUID operationId) throws SQLException {
-        return singleString(
-                "SELECT state FROM inventory_operations WHERE operation_id = ?",
-                operationId
-        );
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT state FROM inventory_operations WHERE operation_id = ?
+                     """)) {
+            return singleString(statement, operationId);
+        }
     }
 
-    private static String singleString(String sql, UUID operationId) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, uuidBytes(operationId));
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getString(1);
-            }
+    private static String singleString(PreparedStatement statement, UUID operationId) throws SQLException {
+        statement.setBytes(1, uuidBytes(operationId));
+        try (ResultSet result = statement.executeQuery()) {
+            assertTrue(result.next());
+            return result.getString(1);
         }
     }
 

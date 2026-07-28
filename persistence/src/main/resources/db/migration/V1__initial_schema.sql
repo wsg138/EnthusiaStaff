@@ -161,7 +161,9 @@ CREATE TABLE IF NOT EXISTS punishment_overturn_requests (
     decided_by BINARY(16) NULL,
     decided_at TIMESTAMP(6) NULL,
     decision_reason TEXT NULL,
-    open_case_id CHAR(16) AS (CASE WHEN state = 'OPEN' THEN case_id ELSE NULL END) STORED,
+    open_case_id CHAR(16) AS (
+        CASE WHEN state = 'OPEN' THEN RTRIM(case_id) ELSE NULL END
+    ) STORED,
     PRIMARY KEY (request_id),
     UNIQUE KEY uq_overturn_open_case (open_case_id),
     INDEX idx_overturn_state_expiration (state, expires_at),
