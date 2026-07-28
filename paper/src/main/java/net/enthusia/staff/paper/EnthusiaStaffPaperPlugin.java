@@ -17,13 +17,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.automod.AutomodListener;
@@ -113,7 +118,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         staffModeManager = new StaffModeManager(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("network.server-id", "SMP"),
+                networkServerId(),
                 () -> storageValue(PaperStorageBindings::staffSessionStore),
                 workers
         );
@@ -133,8 +138,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         inventoryCoordinator = new InventoryCoordinator(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("inventory.scope-id", getConfig().getString("network.server-id", "SMP")),
-                getConfig().getString("network.server-id", "SMP"),
+                inventoryScopeId(),
+                networkServerId(),
                 this::effectiveWriteMode,
                 () -> storageValue(PaperStorageBindings::inventoryJournalStore),
                 () -> storageValue(PaperStorageBindings::playerDirectory),
@@ -162,7 +167,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             muteEnforcement = new MuteEnforcementListener(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString("network.server-id", "SMP"),
+                    networkServerId(),
                     mode::get,
                     () -> storageValue(PaperStorageBindings::sanctionLookup),
                     () -> storageValue(PaperStorageBindings::playerDirectory),
@@ -553,7 +558,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             economyCoordinator = new EconomyCoordinator(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString("network.server-id", "SMP"),
+                    networkServerId(),
                     this::effectiveWriteMode,
                     authorizationPolicy,
                     () -> storageValue(PaperStorageBindings::economyJournalStore),
@@ -566,11 +571,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             confiscationCoordinator = new ConfiscationCoordinator(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString(
-                            "inventory.scope-id",
-                            getConfig().getString("network.server-id", "SMP")
-                    ),
-                    getConfig().getString("network.server-id", "SMP"),
+                    inventoryScopeId(),
+                    networkServerId(),
                     this::effectiveWriteMode,
                     authorizationPolicy,
                     () -> storageValue(PaperStorageBindings::inventoryJournalStore),
@@ -653,11 +655,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerCommands() {
         registerStatusCommand();
+        Supplier<PunishmentDraftWorkflow> punishmentDraftWorkflow =
+                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow);
+        Supplier<SanctionChangeService> sanctionChangeService =
+                () -> storageValue(PaperStorageBindings::sanctionChangeService);
+        Supplier<PlayerDirectory> playerDirectory =
+                () -> storageValue(PaperStorageBindings::playerDirectory);
+        Supplier<CaseLookup> caseLookup = () -> storageValue(PaperStorageBindings::caseLookup);
         PunishmentGuiController punishmentGui = new PunishmentGuiController(
                 this,
                 this::effectiveWriteMode,
-                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
+                punishmentDraftWorkflow,
+                playerDirectory,
                 authorizationPolicy,
                 reasonPolicies,
                 workers
@@ -666,8 +675,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         PunishmentCommand punishment = new PunishmentCommand(
                 this,
                 this::effectiveWriteMode,
-                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
+                punishmentDraftWorkflow,
+                playerDirectory,
                 authorizationPolicy,
                 reasonPolicies,
                 workers,
@@ -682,9 +691,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this,
                 Clock.systemUTC(),
                 this::effectiveWriteMode,
-                () -> storageValue(PaperStorageBindings::sanctionChangeService),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
-                () -> storageValue(PaperStorageBindings::caseLookup),
+                sanctionChangeService,
+                playerDirectory,
+                caseLookup,
                 () -> storageValue(PaperStorageBindings::caseReviewStore),
                 authorizationPolicy,
                 workers
@@ -693,9 +702,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         SanctionChangeCommand changes = new SanctionChangeCommand(
                 this,
                 this::effectiveWriteMode,
-                () -> storageValue(PaperStorageBindings::sanctionChangeService),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
-                () -> storageValue(PaperStorageBindings::caseLookup),
+                sanctionChangeService,
+                playerDirectory,
+                caseLookup,
                 authorizationPolicy,
                 workers,
                 sanctionChangeGui
@@ -712,9 +721,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         ReportCommand report = new ReportCommand(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("network.server-id", "SMP"),
+                networkServerId(),
                 mode::get,
-                () -> storageValue(PaperStorageBindings::playerDirectory),
+                playerDirectory,
                 () -> storageValue(PaperStorageBindings::reportStore),
                 () -> storageValue(PaperStorageBindings::sanctionLookup),
                 reasonPolicies,
@@ -750,7 +759,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this,
                 Clock.systemUTC(),
                 this::effectiveWriteMode,
-                () -> storageValue(PaperStorageBindings::playerDirectory),
+                playerDirectory,
                 () -> storageValue(PaperStorageBindings::freezeStore),
                 freezeManager,
                 workers
@@ -766,7 +775,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         InventoryCommand inventory = new InventoryCommand(
                 this,
                 Clock.systemUTC(),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
+                playerDirectory,
                 inventoryCoordinator,
                 workers
         );
@@ -778,8 +787,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         InspectCommand inspect = new InspectCommand(
                 this,
                 Clock.systemUTC(),
-                () -> storageValue(PaperStorageBindings::playerDirectory),
-                () -> storageValue(PaperStorageBindings::caseLookup),
+                playerDirectory,
+                caseLookup,
                 () -> economyCoordinator,
                 () -> confiscationCoordinator,
                 inventoryCoordinator,
@@ -797,11 +806,19 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         Objects.requireNonNull(getCommand("case"), "case command is missing")
                 .setExecutor(new CaseCommand(
                         this,
-                        () -> storageValue(PaperStorageBindings::caseLookup),
+                        caseLookup,
                         () -> confiscationCoordinator,
                         authorizationPolicy,
                         workers
                 ));
+    }
+
+    private String networkServerId() {
+        return getConfig().getString("network.server-id", "SMP");
+    }
+
+    private String inventoryScopeId() {
+        return getConfig().getString("inventory.scope-id", networkServerId());
     }
 
     private OperationalMode effectiveWriteMode() {
