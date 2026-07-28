@@ -71,16 +71,16 @@ public final class MarketIntegration {
         }
         try {
             Class<?> apiClass = Class.forName(
-                    "net.badgersmc.em.api.moderation.MarketModerationApi"
+                    "net.enthusia.market.api.moderation.MarketModerationApi"
             );
             Class<?> stallClass = Class.forName(
-                    "net.badgersmc.em.api.moderation.MarketStallRecord"
+                    "net.enthusia.market.api.moderation.MarketStallRecord"
             );
             Class<?> ownershipClass = Class.forName(
-                    "net.badgersmc.em.api.moderation.MarketOwnership"
+                    "net.enthusia.market.api.moderation.MarketOwnership"
             );
             Class<?> blacklistClass = Class.forName(
-                    "net.badgersmc.em.api.moderation.StallBlacklistState"
+                    "net.enthusia.market.api.moderation.StallBlacklistState"
             );
             Object api = services.load(apiClass);
             if (api == null) {

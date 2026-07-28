@@ -6,15 +6,16 @@ This is a review and staging manifest. Nothing listed here has been merged, depl
 
 | Repository | Remote observed | Branch | Local checkpoint | Required update |
 | --- | --- | --- | --- | --- |
-| `wsg138/EnthusiaStaff` | `wsg138/EnthusiaStaff` | `agent/complete-staff-platform` | `7453b58` | Paper and Velocity moderation runtime |
-| `wsg138/enthusia-site` | `wsg138/enthusia-site` | `agent/punishment-platform` | `c5426b9` | Private punishment/appeal pages and restricted staff actions |
+| `wsg138/EnthusiaStaff` | `wsg138/EnthusiaStaff` | `agent/complete-staff-platform` | `b226242` | Paper and Velocity moderation runtime; draft PR #1 updated |
+| `wsg138/enthusia-site` | `wsg138/enthusia-site` | `agent/punishment-platform` | `ed778df` | Private punishment/appeal pages; push blocked by HTTP 403 and preserved in a verified bundle |
 | `wsg138/EnthusiaCurrency` | `wsg138/EnthusiaCurrency` | `agent/moderation-api` | `cffce5c` | Idempotent moderation economy API |
 | `wsg138/EnthusiaCommend` | `wsg138/EnthusiaCommend` | `agent/reputation-blacklist-api` | `4cf9b9e` | Persistent reputation blacklist API |
 | `wsg138/EnthusiaAutoClicker` | `wsg138/EnthusiaAutoClicker` | `agent/client-evidence-api` | `b494f3b` | Versioned client-evidence API |
-| `BadgersMC/Enthusia-RoseChat` | `BadgersMC/Enthusia-RoseChat` | `agent/staff-bridge-api` | `a276749` | Moderation/chat evidence bridge |
-| `BadgersMC/EnthusiaMarket` | `BadgersMC/EnthusiaMarket` | `agent/moderation-api` | `224410d` | Market moderation compatibility API |
+| `Enthusia-RoseChat` (local only) | none; no verified `wsg138` repository exists | `agent/staff-bridge-api` | `a276749` | Moderation/chat evidence bridge preserved in a verified bundle |
+| `wsg138/EnthusiaMarket` | `wsg138/EnthusiaMarket` | `agent/moderation-api` | `2438f48` | Market moderation API reconciled with current main; complete branch preserved in `enthusia-market-agent-moderation-api.bundle` |
+| `wsg138/LumaGuilds` | `wsg138/LumaGuilds` | `agent/staff-market-api` | `fda863a` | Public system bank contract required by Market; complete branch preserved in `lumaguilds-agent-staff-market-api.bundle` |
 
-Staff review is open as draft PR [wsg138/EnthusiaStaff#1](https://github.com/wsg138/EnthusiaStaff/pull/1). The RoseChat and Market remotes do not match the requested `wsg138` ownership. Do not push or open PRs until the intended fork/target is confirmed. Write access to the remaining intended repositories must be available before their draft PRs can be created.
+Staff review is open as draft PR [wsg138/EnthusiaStaff#1](https://github.com/wsg138/EnthusiaStaff/pull/1). No `wsg138` RoseChat repository exists, so that branch remains local-only. Pushes to the site, Currency, Commend, and AutoClicker repositories currently fail with HTTP 403. Market and LumaGuilds publication is unavailable in the current review environment. All affected branch histories are preserved in verified bundles under the workspace `review-bundles` directory.
 
 ## Required installation order
 
@@ -60,7 +61,7 @@ See [rollback](docs/rollback.md) for the fail-closed procedure.
 
 ## Remaining manual work
 
-- Push review branches and open draft PRs when GitHub authentication and target ownership are available.
+- Publish bundle-backed review branches and open draft PRs when GitHub authentication, target ownership, and outbound approval are available.
 - Run MariaDB Testcontainers tests on a Docker-capable host.
 - Perform Paper/Velocity staging, multi-backend channel, Java/Bedrock, visual GUI, voice-chat, and failure-injection checks.
 - Record final jar hashes, PR URLs, review SHAs, installation inventory, and acceptance evidence here before release approval.
