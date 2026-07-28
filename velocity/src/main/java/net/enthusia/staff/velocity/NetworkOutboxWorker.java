@@ -90,6 +90,7 @@ final class NetworkOutboxWorker implements AutoCloseable {
         }
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are cheap scalar accessors.
     private void deliver(NetworkOutboxMessage message, Instant now) {
         store.prepareDeliveries(message.messageId(), requiredBackends);
         for (String backend : store.pendingDestinations(message.messageId())) {

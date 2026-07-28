@@ -229,6 +229,7 @@ public final class NestedInventorySelection {
                 blockMeta.setBlockState(shulker);
                 result.setItemMeta(blockMeta);
             }
+            default -> throw new IllegalStateException("Unsupported nested container kind: " + kind);
         }
         return result;
     }
@@ -285,6 +286,9 @@ public final class NestedInventorySelection {
                     }
                     children.add(slot, restoredItem.clone());
                 }
+                default -> throw new IllegalStateException(
+                        "Unsupported nested container kind: " + view.kind()
+                );
             }
             return writeContainer(containerItem, view.kind(), children);
         }

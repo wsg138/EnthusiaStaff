@@ -134,7 +134,7 @@ public final class VanishManager implements Listener {
         if (visibility.isVanished(event.getPlayer().getUniqueId())) {
             event.quitMessage(null);
         }
-        visibility.setViewerRank(event.getPlayer().getUniqueId(), null);
+        visibility.removeViewer(event.getPlayer().getUniqueId());
     }
 
     public void refreshAll() {
@@ -152,7 +152,11 @@ public final class VanishManager implements Listener {
     private void recordViewerRank(Player player) {
         boolean staff = player.hasPermission("enthusiastaff.staffmode")
                 || player.hasPermission("enthusiastaff.vanish");
-        visibility.setViewerRank(player.getUniqueId(), staff ? StaffModeManager.rank(player) : null);
+        if (staff) {
+            visibility.setViewerRank(player.getUniqueId(), StaffModeManager.rank(player));
+        } else {
+            visibility.removeViewer(player.getUniqueId());
+        }
     }
 
     private void submit(Runnable operation) {

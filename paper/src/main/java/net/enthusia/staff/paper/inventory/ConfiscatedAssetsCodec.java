@@ -19,8 +19,8 @@ public final class ConfiscatedAssetsCodec {
     private static final int MAX_ITEM_BYTES = 16 * 1024 * 1024;
 
     public EncodedAssets encode(List<ConfiscatedAssetEntry> entries) {
-        entries = List.copyOf(entries);
-        if (entries.isEmpty() || entries.size() > MAX_ENTRIES) {
+        List<ConfiscatedAssetEntry> immutableEntries = List.copyOf(entries);
+        if (immutableEntries.isEmpty() || immutableEntries.size() > MAX_ENTRIES) {
             throw new IllegalArgumentException("confiscated asset entry count is invalid");
         }
         try {
@@ -28,8 +28,8 @@ public final class ConfiscatedAssetsCodec {
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC);
                 output.writeInt(VERSION);
-                output.writeInt(entries.size());
-                for (ConfiscatedAssetEntry entry : entries) {
+                output.writeInt(immutableEntries.size());
+                for (ConfiscatedAssetEntry entry : immutableEntries) {
                     output.writeUTF(entry.path().encoded());
                     output.writeUTF(entry.fingerprint());
                     byte[] item = entry.item().serializeAsBytes();

@@ -109,6 +109,9 @@ final class LiteBansShadowComparator {
                         ipMismatched++;
                     }
                 }
+                default -> throw new IllegalStateException(
+                        "Unsupported legacy sanction type: " + legacy.type()
+                );
             }
         }
         long extraMappings = imported.keySet().stream().filter(key -> !sourceKeys.contains(key)).count();
@@ -117,7 +120,7 @@ final class LiteBansShadowComparator {
                 + loginMismatched + muteMismatched + ipMismatched + extraMappings;
         ShadowSummary summary = new ShadowSummary(
                 countsMatch,
-                checksumMismatches == 0,
+                checksumMismatches == 0, // nosemgrep: java.lang.correctness.eqeq.eqeq -- compares against literal zero.
                 activeMismatches == 0,
                 uuidMismatches == 0,
                 expirationMismatches == 0,

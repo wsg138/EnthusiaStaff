@@ -38,7 +38,7 @@ class ReasonPolicyConfigurationLoaderTest {
     @Test
     void rejectsConfigurationThatMakesPunishmentsPrivateWithoutStaffReview() throws Exception {
         String source;
-        try (InputStream input = ReasonPolicyConfigurationLoaderTest.class.getClassLoader()
+        try (InputStream input = Thread.currentThread().getContextClassLoader()
                 .getResourceAsStream("reason-policies.yml")) {
             source = new String(input.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceFirst("public-default: true", "public-default: false");
@@ -54,7 +54,7 @@ class ReasonPolicyConfigurationLoaderTest {
     }
 
     private static ReasonPolicyConfigurationLoader.LoadedPolicies loadDefaults() {
-        InputStream input = ReasonPolicyConfigurationLoaderTest.class.getClassLoader()
+        InputStream input = Thread.currentThread().getContextClassLoader()
                 .getResourceAsStream("reason-policies.yml");
         return new ReasonPolicyConfigurationLoader().load(input, "reason-policies.yml");
     }

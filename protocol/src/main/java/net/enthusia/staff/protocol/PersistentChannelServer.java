@@ -15,6 +15,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -51,7 +52,7 @@ public final class PersistentChannelServer implements AutoCloseable {
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean running = new AtomicBoolean();
-    private ServerSocket serverSocket;
+    private Optional<ServerSocket> serverSocket = Optional.empty();
 
     public PersistentChannelServer(
             String proxyId,
@@ -99,21 +100,33 @@ public final class PersistentChannelServer implements AutoCloseable {
         );
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Transfers the bound socket to the server lifecycle; close releases it.
     public synchronized void start() throws IOException {
         if (!running.compareAndSet(false, true)) {
             return;
         }
         try {
-            serverSocket = new ServerSocket();
-            serverSocket.setReuseAddress(true);
-            serverSocket.bind(bindAddress);
+            ServerSocket opened = openBoundServerSocket();
+            serverSocket = Optional.of(opened);
             Thread acceptThread = new Thread(this::acceptLoop, "EnthusiaStaff-Channel-Acceptor");
             acceptThread.setDaemon(true);
             acceptThread.start();
-        } catch (IOException exception) {
+        } catch (IOException | RuntimeException exception) {
             running.set(false);
-            closeServerSocket(serverSocket);
-            serverSocket = null;
+            serverSocket.ifPresent(PersistentChannelServer::closeServerSocket);
+            serverSocket = Optional.empty();
+            throw exception;
+        }
+    }
+
+    private ServerSocket openBoundServerSocket() throws IOException {
+        ServerSocket opened = new ServerSocket();
+        try {
+            opened.setReuseAddress(true);
+            opened.bind(bindAddress);
+            return opened;
+        } catch (IOException | RuntimeException exception) {
+            closeServerSocket(opened);
             throw exception;
         }
     }
@@ -122,11 +135,15 @@ public final class PersistentChannelServer implements AutoCloseable {
         return Set.copyOf(sessions.keySet());
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Borrows the lifecycle-owned listening socket without opening one.
     public synchronized int boundPort() {
-        if (serverSocket == null || !serverSocket.isBound()) {
+        ServerSocket current = serverSocket.orElseThrow(
+                () -> new IllegalStateException("persistent channel server is not bound")
+        );
+        if (!current.isBound()) {
             throw new IllegalStateException("persistent channel server is not bound");
         }
-        return serverSocket.getLocalPort();
+        return current.getLocalPort();
     }
 
     public CompletableFuture<DeliveryStatus> send(
@@ -152,18 +169,10 @@ public final class PersistentChannelServer implements AutoCloseable {
         return session.send(envelope, timeout);
     }
 
-    @SuppressWarnings("PMD.CloseResource") // Ownership moves to serve; rejected sockets close in finally.
     private void acceptLoop() {
         while (running.get()) {
-            Socket accepted = null;
             try {
-                accepted = serverSocket.accept();
-                accepted.setKeepAlive(true);
-                accepted.setTcpNoDelay(true);
-                accepted.setSoTimeout(120_000);
-                Socket owned = accepted;
-                connections.execute(() -> serve(owned));
-                accepted = null;
+                acceptConnection();
             } catch (java.util.concurrent.RejectedExecutionException exception) {
                 warningSink.accept("Persistent channel connection limit reached");
             } catch (SocketException exception) {
@@ -172,7 +181,25 @@ public final class PersistentChannelServer implements AutoCloseable {
                 }
             } catch (IOException exception) {
                 warningSink.accept("Persistent channel accept failed");
-            } finally {
+            }
+        }
+    }
+
+    @SuppressWarnings("PMD.CloseResource") // Ownership moves to serve; rejected sockets close in finally.
+    private void acceptConnection() throws IOException {
+        ServerSocket listening = serverSocket.orElseThrow(
+                () -> new SocketException("persistent channel server is not bound")
+        );
+        Socket accepted = listening.accept();
+        boolean transferred = false;
+        try {
+            accepted.setKeepAlive(true);
+            accepted.setTcpNoDelay(true);
+            accepted.setSoTimeout(120_000);
+            connections.execute(() -> serve(accepted));
+            transferred = true;
+        } finally {
+            if (!transferred) {
                 closeSocket(accepted);
             }
         }
@@ -250,13 +277,8 @@ public final class PersistentChannelServer implements AutoCloseable {
     @Override
     public synchronized void close() {
         running.set(false);
-        if (serverSocket != null) {
-            try {
-                serverSocket.close();
-            } catch (IOException ignored) {
-                // Shutdown remains best effort; no durable message is acknowledged here.
-            }
-        }
+        serverSocket.ifPresent(PersistentChannelServer::closeServerSocket);
+        serverSocket = Optional.empty();
         sessions.values().forEach(Session::close);
         sessions.clear();
         connections.shutdownNow();

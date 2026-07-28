@@ -147,11 +147,12 @@ public final class LiteBansMigrationService {
                         schema,
                         shadow
                 );
-            } catch (SQLException | RuntimeException exception) {
+            } catch (SQLException exception) {
                 recordRunFailure(runId, exception);
-                throw exception instanceof RuntimeException runtime
-                        ? runtime
-                        : new ModerationPersistenceException("LiteBans migration execution failed", exception);
+                throw new ModerationPersistenceException("LiteBans migration execution failed", exception);
+            } catch (RuntimeException exception) {
+                recordRunFailure(runId, exception);
+                throw exception;
             }
         } catch (RuntimeException | Error exception) {
             operationFailure = exception;

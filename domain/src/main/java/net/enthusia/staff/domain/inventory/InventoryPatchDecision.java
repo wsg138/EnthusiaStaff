@@ -10,13 +10,13 @@ public enum InventoryPatchDecision {
             String expectedChecksum,
             String replacementChecksum
     ) {
-        currentChecksum = InventoryObservation.requireChecksum(currentChecksum);
-        expectedChecksum = InventoryObservation.requireChecksum(expectedChecksum);
-        replacementChecksum = InventoryObservation.requireChecksum(replacementChecksum);
-        if (currentChecksum.equals(expectedChecksum)) {
+        String validatedCurrent = InventoryObservation.requireChecksum(currentChecksum);
+        String validatedExpected = InventoryObservation.requireChecksum(expectedChecksum);
+        String validatedReplacement = InventoryObservation.requireChecksum(replacementChecksum);
+        if (validatedCurrent.equals(validatedExpected)) {
             return APPLY_REPLACEMENT;
         }
-        if (currentChecksum.equals(replacementChecksum)) {
+        if (validatedCurrent.equals(validatedReplacement)) {
             return FINALIZE_ALREADY_APPLIED;
         }
         return QUARANTINE_CONFLICT;

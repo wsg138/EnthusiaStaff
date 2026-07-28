@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.visibility;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,10 +64,10 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
     }
 
     public void setViewerRank(UUID playerId, StaffRank rank) {
-        if (rank == null) {
-            viewers.remove(playerId);
-        } else {
-            viewers.put(playerId, rank);
-        }
+        viewers.put(playerId, Objects.requireNonNull(rank, "rank"));
+    }
+
+    public void removeViewer(UUID playerId) {
+        viewers.remove(playerId);
     }
 }

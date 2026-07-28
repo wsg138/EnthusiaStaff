@@ -108,6 +108,7 @@ final class DiscordOutboxWorker implements AutoCloseable {
         }
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are cheap scalar accessors.
     private void runOnce() {
         Instant now = clock.instant();
         Map<String, Instant> openedThisPass = new HashMap<>();

@@ -110,10 +110,9 @@ final class WebsitePunishmentProjection {
             Instant issuedAt = Instant.ofEpochSecond(bytes.getLong(), bytes.getInt());
             UUID sanctionId = new UUID(bytes.getLong(), bytes.getLong());
             return Optional.of(new Cursor(issuedAt, sanctionId));
+        } catch (WebsiteModerationException exception) {
+            throw exception;
         } catch (RuntimeException exception) {
-            if (exception instanceof WebsiteModerationException moderationException) {
-                throw moderationException;
-            }
             throw invalidCursor();
         }
     }

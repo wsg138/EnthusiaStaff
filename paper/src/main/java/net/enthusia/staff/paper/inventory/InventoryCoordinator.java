@@ -736,6 +736,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             case FINALIZE_ALREADY_APPLIED -> {
                 // A previous attempt reached Paper but crashed before the durable commit.
             }
+            default -> throw new IllegalStateException("Unsupported inventory patch decision");
         }
         InventoryImageCodec.EncodedImage appliedBytes = currentBytes;
         submit(() -> {

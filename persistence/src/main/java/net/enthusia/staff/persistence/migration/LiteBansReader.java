@@ -129,7 +129,9 @@ public final class LiteBansReader {
                             columns.containsKey("ended_at")
                                     ? optionalInstant(results.getObject("source_ended_at"))
                                     : Optional.empty(),
-                            columns.containsKey("ip") ? results.getString("source_ip") : null
+                            columns.containsKey("ip")
+                                    ? Optional.ofNullable(results.getString("source_ip"))
+                                    : Optional.empty()
                     ));
                 }
                 return rows;
@@ -144,7 +146,9 @@ public final class LiteBansReader {
         Optional<String> username = Optional.ofNullable(row.username()).filter(value -> !value.isBlank());
         LegacySanctionType type = row.ipBan() ? LegacySanctionType.IP_BAN : defaultType;
         Optional<LegacyNetworkAddress> networkAddress = row.ipBan()
-                ? Optional.of(parseNetworkAddress(row.ip()))
+                ? Optional.of(parseNetworkAddress(row.ip().orElseThrow(
+                        () -> new IllegalArgumentException("LiteBans IP ban address is missing")
+                )))
                 : Optional.empty();
         Optional<Instant> expiration = row.expiresAt() <= 0 || row.expiresAt() == Long.MAX_VALUE
                 ? Optional.empty()
@@ -353,7 +357,7 @@ public final class LiteBansReader {
             boolean active,
             boolean ipBan,
             Optional<Instant> endedAt,
-            String ip
+            Optional<String> ip
     ) {
     }
 

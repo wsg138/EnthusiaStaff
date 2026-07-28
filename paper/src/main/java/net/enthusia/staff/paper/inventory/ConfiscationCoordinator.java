@@ -1540,6 +1540,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         targetOperations.clear();
     }
 
+    @SuppressWarnings("PMD.NullAssignment") // Bukkit represents an empty inventory slot with null.
     private record ViewEntry(ItemPath path, ItemStack item) {
         private ViewEntry {
             java.util.Objects.requireNonNull(path, "path");

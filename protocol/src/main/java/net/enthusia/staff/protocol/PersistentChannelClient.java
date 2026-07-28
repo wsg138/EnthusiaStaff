@@ -18,6 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.crypto.SecretKey;
 
@@ -35,8 +36,8 @@ public final class PersistentChannelClient implements AutoCloseable {
     private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean running = new AtomicBoolean();
     private final Map<UUID, CompletableFuture<Boolean>> pending = new ConcurrentHashMap<>();
-    private volatile Socket socket;
-    private volatile DataOutputStream output;
+    private final AtomicReference<Socket> socket = new AtomicReference<>();
+    private final AtomicReference<DataOutputStream> output = new AtomicReference<>();
     private Thread connectionThread;
 
     public PersistentChannelClient(
@@ -80,7 +81,7 @@ public final class PersistentChannelClient implements AutoCloseable {
     }
 
     public boolean connected() {
-        Socket current = socket;
+        Socket current = socket.get();
         return current != null && current.isConnected() && !current.isClosed();
     }
 
@@ -91,7 +92,7 @@ public final class PersistentChannelClient implements AutoCloseable {
             String payloadJson,
             Duration timeout
     ) {
-        DataOutputStream current = output;
+        DataOutputStream current = output.get();
         if (current == null) {
             return CompletableFuture.completedFuture(false);
         }
@@ -150,8 +151,8 @@ public final class PersistentChannelClient implements AutoCloseable {
                          new DataOutputStream(new BufferedOutputStream(opened.getOutputStream()));
                  DataInputStream input =
                          new DataInputStream(new BufferedInputStream(opened.getInputStream()))) {
-                socket = opened;
-                output = openedOutput;
+                socket.set(opened);
+                output.set(openedOutput);
                 ProtocolEnvelope hello = signer.sign(new UnsignedEnvelope(
                         PROTOCOL_VERSION, UUID.randomUUID(), backendId, "HELLO", clock.millis(), nonce(), "{}"
                 ));
@@ -190,7 +191,7 @@ public final class PersistentChannelClient implements AutoCloseable {
 
     @SuppressWarnings("PMD.CloseResource") // Borrows the stream owned and closed by connectAndRead.
     private void acknowledge(UUID messageId) throws IOException {
-        DataOutputStream current = output;
+        DataOutputStream current = output.get();
         if (current == null) {
             throw new IOException("channel disconnected before acknowledgement");
         }
@@ -210,9 +211,8 @@ public final class PersistentChannelClient implements AutoCloseable {
 
     @SuppressWarnings("PMD.CloseResource") // Closes the lifecycle-owned socket below; no local stream is opened here.
     private void disconnect() {
-        output = null;
-        Socket current = socket;
-        socket = null;
+        output.set(null);
+        Socket current = socket.getAndSet(null);
         if (current != null) {
             try {
                 current.close();

@@ -10,16 +10,16 @@ public enum EconomyReconciliationDecision {
             String beforeChecksum,
             String replacementChecksum
     ) {
-        currentChecksum = EconomyPrepareRequest.requireChecksum(currentChecksum, "currentChecksum");
-        beforeChecksum = EconomyPrepareRequest.requireChecksum(beforeChecksum, "beforeChecksum");
-        replacementChecksum = EconomyPrepareRequest.requireChecksum(
+        String validatedCurrent = EconomyPrepareRequest.requireChecksum(currentChecksum, "currentChecksum");
+        String validatedBefore = EconomyPrepareRequest.requireChecksum(beforeChecksum, "beforeChecksum");
+        String validatedReplacement = EconomyPrepareRequest.requireChecksum(
                 replacementChecksum,
                 "replacementChecksum"
         );
-        if (currentChecksum.equals(beforeChecksum)) {
+        if (validatedCurrent.equals(validatedBefore)) {
             return ROLL_BACK_UNAPPLIED;
         }
-        if (currentChecksum.equals(replacementChecksum)) {
+        if (validatedCurrent.equals(validatedReplacement)) {
             return COMMIT_ALREADY_APPLIED;
         }
         return RESTORE_BEFORE_STATE;

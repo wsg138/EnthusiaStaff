@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.staff;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Optional;
 import java.util.UUID;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -16,9 +17,7 @@ public final class CombatStatusAdapter {
     }
 
     private final JavaPlugin owner;
-    private Object receiver;
-    private Method method;
-    private Class<?> parameterType;
+    private Optional<Binding> binding = Optional.empty();
     private boolean combatPluginPresent;
 
     public CombatStatusAdapter(JavaPlugin owner) {
@@ -27,9 +26,7 @@ public final class CombatStatusAdapter {
     }
 
     public void refresh() {
-        receiver = null;
-        method = null;
-        parameterType = null;
+        binding = Optional.empty();
         Plugin plugin = owner.getServer().getPluginManager().getPlugin("CombatLogX");
         combatPluginPresent = plugin != null && plugin.isEnabled();
         if (!combatPluginPresent) {
@@ -43,9 +40,7 @@ public final class CombatStatusAdapter {
             }
             Method discovered = findMethod(manager.getClass());
             if (discovered != null) {
-                receiver = manager;
-                method = discovered;
-                parameterType = discovered.getParameterTypes()[0];
+                binding = Optional.of(new Binding(manager, discovered, discovered.getParameterTypes()[0]));
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
             owner.getLogger().warning("CombatLogX is present but its combat-query API is unavailable");
@@ -56,15 +51,16 @@ public final class CombatStatusAdapter {
         if (!combatPluginPresent) {
             return Status.CLEAR;
         }
-        if (method == null || receiver == null) {
+        if (binding.isEmpty()) {
             refresh();
-            if (method == null || receiver == null) {
+            if (binding.isEmpty()) {
                 return Status.UNAVAILABLE;
             }
         }
+        Binding active = binding.orElseThrow();
         try {
-            Object argument = parameterType == UUID.class ? player.getUniqueId() : player;
-            Object result = method.invoke(receiver, argument);
+            Object argument = active.parameterType() == UUID.class ? player.getUniqueId() : player;
+            Object result = active.method().invoke(active.receiver(), argument);
             return result instanceof Boolean tagged
                     ? tagged ? Status.TAGGED : Status.CLEAR
                     : Status.UNAVAILABLE;
@@ -74,7 +70,7 @@ public final class CombatStatusAdapter {
     }
 
     public boolean availableWhenRequired() {
-        return !combatPluginPresent || method != null;
+        return !combatPluginPresent || binding.isPresent();
     }
 
     private static Method findMethod(Class<?> managerType) {
@@ -88,5 +84,8 @@ public final class CombatStatusAdapter {
             }
         }
         return null;
+    }
+
+    private record Binding(Object receiver, Method method, Class<?> parameterType) {
     }
 }

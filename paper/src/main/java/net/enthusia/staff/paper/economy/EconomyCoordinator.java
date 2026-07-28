@@ -612,6 +612,9 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "CURRENCY_QUARANTINE_REQUIRED",
                     bounded(outcome.detail())
             );
+            default -> throw new IllegalStateException(
+                    "Unsupported Currency outcome status: " + outcome.status()
+            );
         }
     }
 
@@ -1049,6 +1052,9 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 }
                 restoreBefore(player, operation, guard, current);
             }
+            default -> throw new IllegalStateException(
+                    "Unsupported economy reconciliation decision: " + decision
+            );
         }
     }
 

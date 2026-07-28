@@ -85,10 +85,9 @@ public final class ReasonPolicyConfigurationLoader {
             return new LoadedPolicies(version, policies);
         } catch (IOException exception) {
             throw new ConfigurationValidationException("Unable to read " + sourceName, exception);
+        } catch (ConfigurationValidationException exception) {
+            throw exception;
         } catch (IllegalArgumentException exception) {
-            if (exception instanceof ConfigurationValidationException validation) {
-                throw validation;
-            }
             throw new ConfigurationValidationException("Invalid punishment policy: " + exception.getMessage(), exception);
         }
     }

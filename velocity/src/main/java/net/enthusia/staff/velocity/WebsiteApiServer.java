@@ -570,6 +570,7 @@ final class WebsiteApiServer implements AutoCloseable {
         return converted;
     }
 
+    @SuppressWarnings("PMD.NullAssignment") // The public JSON contract uses explicit null for absent optional values.
     private static Map<String, Object> publicResponse(PublicPunishment punishment) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("player", punishment.player());
@@ -655,13 +656,14 @@ final class WebsiteApiServer implements AutoCloseable {
 
     private void send(HttpExchange exchange, int status, Object payload, String requestId) {
         byte[] encoded;
+        int responseStatus = status;
         try {
             encoded = json.writeValueAsBytes(payload);
         } catch (JsonProcessingException exception) {
             errors.report("Website API response " + requestId + " could not be encoded", exception);
             encoded = "{\"error\":{\"code\":\"RESPONSE_ENCODING_FAILED\",\"message\":\"The response could not be encoded\"}}"
                     .getBytes(StandardCharsets.UTF_8);
-            status = 500;
+            responseStatus = 500;
         }
         try {
             Headers headers = exchange.getResponseHeaders();
@@ -670,7 +672,7 @@ final class WebsiteApiServer implements AutoCloseable {
             headers.set("x-content-type-options", "nosniff");
             headers.set("referrer-policy", "no-referrer");
             headers.set("x-request-id", requestId);
-            exchange.sendResponseHeaders(status, encoded.length);
+            exchange.sendResponseHeaders(responseStatus, encoded.length);
             try (OutputStream output = exchange.getResponseBody()) {
                 output.write(encoded);
             }
@@ -684,6 +686,7 @@ final class WebsiteApiServer implements AutoCloseable {
     }
 
     @Override
+    @SuppressWarnings("PMD.NullAssignment") // Clearing lifecycle fields prevents reuse after shutdown.
     public synchronized void close() {
         HttpServer currentServer = server;
         ExecutorService currentExecutor = executor;

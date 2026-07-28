@@ -113,8 +113,8 @@ final class PermissionPolicyConfigurationTest {
     }
 
     private static JsonNode permissions() throws IOException {
-        try (InputStream input = PermissionPolicyConfigurationTest.class
-                .getClassLoader()
+        try (InputStream input = Thread.currentThread()
+                .getContextClassLoader()
                 .getResourceAsStream("plugin.yml")) {
             if (input == null) {
                 throw new IOException("plugin.yml is absent from the test classpath");

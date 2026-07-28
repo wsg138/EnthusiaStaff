@@ -228,6 +228,7 @@ public final class EnthusiaStaffVelocityPlugin {
         ));
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; the argument is an enum.
     private void initializeStorage() {
         try {
             VelocityConfiguration loaded = VelocityConfiguration.load(dataDirectory);
@@ -271,6 +272,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; the argument is an integer.
     private void initializeShadowMigrationSchedule(VelocityConfiguration loaded) {
         if (!loaded.liteBansShadowScheduleEnabled()) {
             logger.warn("Automatic LiteBans shadow summaries are disabled; the daily cutover gate must be satisfied manually");
@@ -285,6 +287,7 @@ public final class EnthusiaStaffVelocityPlugin {
         );
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are scalar accessors.
     private void scheduleShadowMigration() {
         MariaDbRuntime runtime = databaseRuntime;
         VelocityConfiguration loaded = configuration;
@@ -510,6 +513,7 @@ public final class EnthusiaStaffVelocityPlugin {
         return SecretKeyMaterial.hmacSha256FromBase64(encoded);
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are enums.
     private void refreshOperationalState() {
         MariaDbRuntime runtime = databaseRuntime;
         if (runtime == null) {
