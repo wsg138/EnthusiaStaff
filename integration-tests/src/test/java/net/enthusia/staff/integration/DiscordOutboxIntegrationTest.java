@@ -4,10 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connection;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 
-import java.nio.ByteBuffer;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -20,7 +21,6 @@ import net.enthusia.staff.domain.discord.DiscordChannelStatus;
 import net.enthusia.staff.domain.discord.DiscordFailureOutcome;
 import net.enthusia.staff.domain.discord.DiscordOutboxMessage;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
-import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
@@ -47,7 +47,7 @@ class DiscordOutboxIntegrationTest {
 
     @Test
     void deliveryRequiresTheLeaseOwnerAndUpdatesChannelState() throws SQLException {
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             UUID messageId = enqueue(DELIVERY_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
             DiscordOutboxMessage message = claim(store, OWNER, NOW, messageId);
@@ -68,7 +68,7 @@ class DiscordOutboxIntegrationTest {
     @Test
     void failureOpensCircuitDeadLettersAndSupportsBoundedRetry() throws SQLException {
         Instant failedAt = NOW.plusSeconds(1);
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             UUID messageId = enqueue(FAILURE_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
             claim(store, OWNER, NOW, messageId);
@@ -105,7 +105,7 @@ class DiscordOutboxIntegrationTest {
 
     @Test
     void missingDeliveryChannelRollsBackTheMessageTransition() throws SQLException {
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             UUID messageId = enqueue(MISSING_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
             claim(store, OWNER, NOW, messageId);
@@ -139,7 +139,7 @@ class DiscordOutboxIntegrationTest {
     private static UUID enqueue(String destination, Instant now) throws SQLException {
         insertChannel(destination, now);
         UUID messageId = UUID.randomUUID();
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT INTO discord_outbox(
                          message_id, idempotency_key, destination, event_type,
@@ -157,7 +157,7 @@ class DiscordOutboxIntegrationTest {
     }
 
     private static void insertChannel(String destination, Instant now) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT INTO discord_delivery_channels(destination, updated_at)
                      VALUES (?, ?)
@@ -170,7 +170,7 @@ class DiscordOutboxIntegrationTest {
     }
 
     private static void deleteChannel(String destination) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      DELETE FROM discord_delivery_channels WHERE destination = ?
                      """)) {
@@ -180,7 +180,7 @@ class DiscordOutboxIntegrationTest {
     }
 
     private static String messageState(UUID messageId) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT state FROM discord_outbox WHERE message_id = ?
                      """)) {
@@ -193,7 +193,7 @@ class DiscordOutboxIntegrationTest {
     }
 
     private static long alertCount(String destination) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) FROM staff_alerts
                      WHERE alert_type = 'DISCORD_CHANNEL_UNHEALTHY'
@@ -214,28 +214,4 @@ class DiscordOutboxIntegrationTest {
                 .orElseThrow();
     }
 
-    private static DatabaseConfig databaseConfig() {
-        return new DatabaseConfig(
-                DATABASE.getJdbcUrl().replace("jdbc:mysql:", "jdbc:mariadb:"),
-                DATABASE.getUsername(),
-                DATABASE.getPassword(),
-                4,
-                5_000
-        );
-    }
-
-    private static Connection connection() throws SQLException {
-        return DriverManager.getConnection(
-                DATABASE.getJdbcUrl().replace("jdbc:mysql:", "jdbc:mariadb:"),
-                DATABASE.getUsername(),
-                DATABASE.getPassword()
-        );
-    }
-
-    private static byte[] uuidBytes(UUID value) {
-        return ByteBuffer.allocate(16)
-                .putLong(value.getMostSignificantBits())
-                .putLong(value.getLeastSignificantBits())
-                .array();
-    }
 }

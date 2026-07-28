@@ -43,6 +43,12 @@ final class JdbcTransactionSupport {
         }
     }
 
+    static void requireOptionalSingleUpdate(int updateCount, String message) throws SQLException {
+        if (updateCount < 0 || updateCount > SINGLE_ROW) {
+            throw new SQLException(message);
+        }
+    }
+
     static void requireBatchUpdate(
             int[] updateCounts,
             int expectedCount,
@@ -53,6 +59,21 @@ final class JdbcTransactionSupport {
         }
         for (int updateCount : updateCounts) {
             if (!updatedOne(updateCount) && updateCount != Statement.SUCCESS_NO_INFO) {
+                throw new SQLException(message);
+            }
+        }
+    }
+
+    static void requireIdempotentBatchUpdate(
+            int[] updateCounts,
+            int expectedCount,
+            String message
+    ) throws SQLException {
+        if (updateCounts.length != expectedCount) {
+            throw new SQLException(message);
+        }
+        for (int updateCount : updateCounts) {
+            if (updateCount != 0 && !updatedOne(updateCount) && updateCount != Statement.SUCCESS_NO_INFO) {
                 throw new SQLException(message);
             }
         }
