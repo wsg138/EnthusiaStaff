@@ -56,12 +56,13 @@ final class JdbcOperationLeaseSupport {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO operation_leases(
                     resource_key, owner_id, fencing_token, lease_until, updated_at
-                ) VALUES (?, ?, 1, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?)
                 """)) {
             statement.setString(1, resourceKey);
             statement.setString(2, operationId.toString());
-            statement.setTimestamp(3, Timestamp.from(leaseUntil));
-            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setLong(3, INITIAL_FENCING_TOKEN);
+            statement.setTimestamp(4, Timestamp.from(leaseUntil));
+            statement.setTimestamp(5, Timestamp.from(now));
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Operation lease was not created"
