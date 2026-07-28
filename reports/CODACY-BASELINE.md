@@ -182,6 +182,44 @@ Docker API 1.32, while Docker Engine 29 requires at least API 1.44. The
 Testcontainers compatibility update and the first real MariaDB migration result
 belong to the remediation checkpoint, not this baseline.
 
+## Remediation checkpoint
+
+PR #1 was merged into `main` with merge commit
+`b5e55ed9ffd7309cacabf6b0a07af220068f3c30`. The feature history and source
+branch were retained.
+
+The clean, cache-disabled Java 21 build completed all 39 tasks. Test XML
+contained 108 tests with zero failures, errors, or skips, including all six
+MariaDB Testcontainers tests.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,033,006 | `69348CB2DBB57FF0E8308CC670E377104BCAC2004CD27BB1558A7130ED7B7B15` |
+| Velocity runtime jar | 7,322,431 | `2B18C229F4AC4BEEEF80C24B904AAD3262EE8E398DCCA9E7763B588D22A3E44A` |
+
+The checked-in PMD ruleset parses all Java source and currently returns 303
+raw findings, down from 557 partial results. Opengrep returns 19 raw findings:
+18 remain actionable or pending review, and one exact self-comparison report is
+suppressed in source because the analyzer misread
+`checksumMismatches == 0` as a comparison of the variable to itself. The two
+unencrypted-socket reports remain active.
+
+The final feature-branch cloud run reported 600 active issues, down from the
+846-issue recovery baseline. After the merge, the Codacy PMD setting was
+changed and read back successfully with `hasConfigurationFile=true` and
+`usesConfigurationFile=true`. A subsequent `main` analysis is required before
+the configured-ruleset count is authoritative.
+
+CodeRabbit attempted to review PR #1 after it left draft state, but its
+100-file limit rejected the 397-file recovery diff. It produced no code review
+findings. Future section branches must keep review diffs below that limit where
+practical.
+
+Portable validation and cleanup instructions are in `docs/development.md`.
+Exact workstation package versions, locations, and removal commands are kept
+in the ignored `.codacy/LOCAL-TOOLING.md` log so machine-specific paths do not
+enter public documentation.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and

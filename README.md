@@ -27,6 +27,7 @@ Deployable artifacts are produced as `paper/build/libs/EnthusiaStaff-Paper-<vers
 
 ## Operations and design
 
+- [Development and validation](docs/development.md)
 - [Architecture](docs/architecture.md)
 - [Database and recovery model](docs/database.md)
 - [Security and authority policy](docs/security.md)
