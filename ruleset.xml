@@ -113,6 +113,10 @@
       including TreeMap, EnumMap, ordered JSON payloads, and cases its own
       documentation calls safe for single-threaded use. Keep the concurrency
       check at the shared-state boundary instead.
+
+      This rule targets the PMD 6.55.0 AST used by Codacy and the documented
+      local analyzer. Its AllocationExpression and VariableInitializer nodes
+      must be migrated before upgrading the analyzer to PMD 7.
     -->
     <rule
         name="DocumentMutableMapFieldConcurrency"
