@@ -142,10 +142,12 @@ public final class PunishmentGuiController implements Listener {
             closeWithoutResume(viewer);
             return;
         }
-        switch (state) {
-            case PunishmentGuiState.Categories categories -> categoryClick(viewer, actor, categories, slot);
-            case PunishmentGuiState.Reasons reasons -> reasonClick(viewer, actor, reasons, slot);
-            case PunishmentGuiState.Review review -> reviewClick(viewer, actor, review, slot);
+        if (state instanceof PunishmentGuiState.Categories categories) {
+            categoryClick(viewer, actor, categories, slot);
+        } else if (state instanceof PunishmentGuiState.Reasons reasons) {
+            reasonClick(viewer, actor, reasons, slot);
+        } else if (state instanceof PunishmentGuiState.Review review) {
+            reviewClick(viewer, actor, review, slot);
         }
     }
 

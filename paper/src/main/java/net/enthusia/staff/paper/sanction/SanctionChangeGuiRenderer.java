@@ -41,10 +41,12 @@ final class SanctionChangeGuiRenderer {
         Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
         holder.attach(inventory);
         fillFooter(inventory);
-        switch (state) {
-            case SanctionChangeGuiState.Cases cases -> renderCases(inventory, cases);
-            case SanctionChangeGuiState.Actions actions -> renderActions(inventory, actions, actor, viewer);
-            case SanctionChangeGuiState.Review review -> renderReview(inventory, review);
+        if (state instanceof SanctionChangeGuiState.Cases cases) {
+            renderCases(inventory, cases);
+        } else if (state instanceof SanctionChangeGuiState.Actions actions) {
+            renderActions(inventory, actions, actor, viewer);
+        } else if (state instanceof SanctionChangeGuiState.Review review) {
+            renderReview(inventory, review);
         }
         return inventory;
     }
@@ -193,11 +195,13 @@ final class SanctionChangeGuiRenderer {
     }
 
     private static Component title(SanctionChangeGuiState state) {
-        return switch (state) {
-            case SanctionChangeGuiState.Cases ignored -> Component.text("Cases: " + state.targetLabel());
-            case SanctionChangeGuiState.Actions actions -> Component.text("Change " + actions.review().caseId());
-            case SanctionChangeGuiState.Review review -> Component.text("Confirm " + actionName(review.action()));
-        };
+        if (state instanceof SanctionChangeGuiState.Actions actions) {
+            return Component.text("Change " + actions.review().caseId());
+        }
+        if (state instanceof SanctionChangeGuiState.Review review) {
+            return Component.text("Confirm " + actionName(review.action()));
+        }
+        return Component.text("Cases: " + state.targetLabel());
     }
 
     private static Material caseMaterial(CaseReview review) {

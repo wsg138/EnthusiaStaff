@@ -44,10 +44,12 @@ final class PunishmentGuiRenderer {
         Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
         holder.attach(inventory);
         fillFooter(inventory);
-        switch (state) {
-            case PunishmentGuiState.Categories categories -> renderCategories(inventory, categories, actor);
-            case PunishmentGuiState.Reasons reasons -> renderReasons(inventory, reasons, actor);
-            case PunishmentGuiState.Review review -> renderReview(inventory, review);
+        if (state instanceof PunishmentGuiState.Categories categories) {
+            renderCategories(inventory, categories, actor);
+        } else if (state instanceof PunishmentGuiState.Reasons reasons) {
+            renderReasons(inventory, reasons, actor);
+        } else if (state instanceof PunishmentGuiState.Review review) {
+            renderReview(inventory, review);
         }
         return inventory;
     }
@@ -194,13 +196,12 @@ final class PunishmentGuiRenderer {
 
     private static Component title(PunishmentGuiState state) {
         String target = targetName(state.target());
-        return switch (state) {
-            case PunishmentGuiState.Categories ignored -> Component.text("Punish " + target + ": categories");
-            case PunishmentGuiState.Reasons reasons -> Component.text(
-                    "Punish " + target + ": " + humanize(reasons.family())
-            );
-            case PunishmentGuiState.Review ignored -> Component.text("Review punishment: " + target);
-        };
+        if (state instanceof PunishmentGuiState.Reasons reasons) {
+            return Component.text("Punish " + target + ": " + humanize(reasons.family()));
+        }
+        return state instanceof PunishmentGuiState.Review
+                ? Component.text("Review punishment: " + target)
+                : Component.text("Punish " + target + ": categories");
     }
 
     private static Material familyMaterial(String family) {

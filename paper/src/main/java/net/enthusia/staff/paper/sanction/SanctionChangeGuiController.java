@@ -113,10 +113,12 @@ public final class SanctionChangeGuiController implements Listener {
             close(viewer);
             return;
         }
-        switch (state) {
-            case SanctionChangeGuiState.Cases casesState -> caseClick(viewer, casesState, slot);
-            case SanctionChangeGuiState.Actions actions -> actionClick(viewer, actor, actions, slot);
-            case SanctionChangeGuiState.Review review -> reviewClick(viewer, actor, review, slot);
+        if (state instanceof SanctionChangeGuiState.Cases casesState) {
+            caseClick(viewer, casesState, slot);
+        } else if (state instanceof SanctionChangeGuiState.Actions actions) {
+            actionClick(viewer, actor, actions, slot);
+        } else if (state instanceof SanctionChangeGuiState.Review review) {
+            reviewClick(viewer, actor, review, slot);
         }
     }
 
