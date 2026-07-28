@@ -37,6 +37,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final Duration SNAPSHOT_RETENTION = Duration.ofDays(30);
     private static final String CONFISCATION_OPERATION_TYPE = "CONFISCATION";
     private static final String RESTORATION_OPERATION_TYPE = "RESTORE_CONFISCATED";
+    private static final String STATE_COLUMN = "state";
     private static final long NO_SNAPSHOTS = 0L;
 
     private final DataSource dataSource;
@@ -1022,7 +1023,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 return Optional.of(new RestorationOperationBinding(
                         result.getString("case_id"),
                         result.getString("operation_type"),
-                        result.getString("state")
+                        result.getString(STATE_COLUMN)
                 ));
             }
         }
@@ -1198,7 +1199,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(operationId));
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? result.getString("state") : "";
+                return result.next() ? result.getString(STATE_COLUMN) : "";
             }
         }
     }
@@ -1477,7 +1478,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(operationId));
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? result.getString("state") : "";
+                return result.next() ? result.getString(STATE_COLUMN) : "";
             }
         }
     }
@@ -1840,7 +1841,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 UuidBytes.fromBytes(result.getBytes("actor_id")),
                 Optional.ofNullable(result.getString("case_id")),
                 result.getString("operation_type"),
-                InventoryOperationState.valueOf(result.getString("state")),
+                InventoryOperationState.valueOf(result.getString(STATE_COLUMN)),
                 result.getLong("expected_revision"),
                 result.getLong("fencing_token"),
                 result.getString("expected_checksum"),
