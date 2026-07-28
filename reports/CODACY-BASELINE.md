@@ -220,6 +220,61 @@ Exact workstation package versions, locations, and removal commands are kept
 in the ignored `.codacy/LOCAL-TOOLING.md` log so machine-specific paths do not
 enter public documentation.
 
+## Plugin security checkpoint
+
+The `section/plugin` branch reached commit
+`a9636abdae9ea81d5b5a1e3230368dc8dd6e76dd` in
+[PR #2](https://github.com/wsg138/EnthusiaStaff/pull/2). Codacy reported zero
+new issues, 26 fixed issues, zero clone delta, and no potential issues. The
+branch's only active security-category results are three AES-GCM nonce-review
+findings in `NetworkIdentityProtector`; they remain open because they are not
+proven analyzer errors.
+
+The persistent channel now requires TLS 1.3 with a PKCS#12 Velocity identity,
+Paper trust store, certificate-chain validation, and certificate-host
+verification. Local Opengrep selected 604 applicable rules from the 2,267-rule
+configuration and reports neither unencrypted sockets nor weak TLS; hosted
+Codacy confirms the two prior socket findings are removed. Bidirectional
+acknowledgement, certificate-host rejection, invalid-store rejection, and
+concurrent replay claims are covered by tests.
+
+Codacy currently records 66 exact ignored findings:
+
+- 38 PostgreSQL-parser reports and 12 SQL Server policy reports against tested
+  MariaDB migrations;
+- five Oracle `RAC_*` policy reports against the project's MariaDB schema;
+- three public Maven coordinates misidentified as secrets;
+- three SSRF reports where two addresses only bind inbound listeners and the
+  sole outbound address is service-owned startup configuration protected by
+  TLS host verification;
+- three LiteBans SQL reports where every interpolated identifier passes a
+  single-identifier allowlist and all values remain parameter-bound;
+- one self-comparison report whose cited expression is not a self-comparison;
+- one test-only command-injection report where `ProcessBuilder` receives a
+  shell-free argument vector consisting of the JDK `keytool`, fixed flags, and
+  JUnit-owned temporary paths.
+
+No analyzer rule was disabled for those cases, and no first-party source path
+was excluded. Each ignore is attached to the exact current findings with a
+review reason.
+
+The configured PMD run completes without parser or execution errors and returns
+243 raw findings: 99 literal-in-condition, 75 duplicate-literal, 46 NPath, 14
+loop-allocation, and nine excessive-parameter reports. That is down from 303 at
+the prior checkpoint. The clean Java 21 build completed all 39 tasks and 111
+tests with zero failures, errors, or skips, including all six MariaDB
+Testcontainers tests.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,041,501 | `E0B9428021A9242D68FB219597F24AE385415D63EA839FE99FE989313F4AB3F9` |
+| Velocity runtime jar | 7,330,813 | `8FF219950C0D9992A12B0E9CB452653E5A01271EDEB31EAF9500AC9733094246` |
+
+CodeRabbit reviewed the initial 12-file PR diff and requested one PMD-version
+compatibility note, which was added. Its later incremental runs were
+rate-limited, so they are not represented as independent reviews of the TLS
+commits. GitHub shows no unresolved review thread.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
