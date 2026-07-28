@@ -21,12 +21,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.crypto.SecretKey;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public final class PersistentChannelClient implements AutoCloseable {
+    public record Configuration(
+            String backendId,
+            String host,
+            int port,
+            SecretKey backendKey,
+            String proxyId,
+            SecretKey proxyKey,
+            SSLContext tlsContext
+    ) {
+        public Configuration {
+            if (backendId == null || backendId.isBlank() || host == null || host.isBlank()
+                    || port < 1 || port > 65_535 || backendKey == null || proxyId == null || proxyId.isBlank()
+                    || proxyKey == null || tlsContext == null) {
+                throw new IllegalArgumentException("persistent channel client configuration is invalid");
+            }
+        }
+    }
+
     private static final int PROTOCOL_VERSION = 1;
+    private static final int CONNECT_TIMEOUT_MILLIS = 5_000;
+    private static final int HANDSHAKE_TIMEOUT_MILLIS = 10_000;
+    private static final int READ_TIMEOUT_MILLIS = 120_000;
 
     private final String backendId;
     private final InetSocketAddress remoteAddress;
+    private final SSLSocketFactory socketFactory;
     private final EnvelopeAuthenticator verifier;
     private final EnvelopeAuthenticator signer;
     private final EnvelopeCodec codec = new EnvelopeCodec();
@@ -42,32 +68,28 @@ public final class PersistentChannelClient implements AutoCloseable {
     private Thread connectionThread;
 
     public PersistentChannelClient(
-            String backendId,
-            String host,
-            int port,
-            SecretKey backendKey,
-            String proxyId,
-            SecretKey proxyKey,
+            Configuration configuration,
             Clock clock,
             ChannelMessageHandler handler,
             Consumer<String> stateSink
     ) {
-        if (backendId == null || backendId.isBlank() || host == null || host.isBlank()
-                || port < 1 || port > 65_535 || backendKey == null || proxyId == null || proxyId.isBlank()
-                || proxyKey == null || clock == null || handler == null || stateSink == null) {
+        if (configuration == null || clock == null || handler == null || stateSink == null) {
             throw new IllegalArgumentException("persistent channel client configuration is invalid");
         }
-        this.backendId = backendId;
-        this.remoteAddress = new InetSocketAddress(host, port);
+        this.backendId = configuration.backendId();
+        this.remoteAddress = new InetSocketAddress(configuration.host(), configuration.port());
+        this.socketFactory = configuration.tlsContext().getSocketFactory();
         this.clock = clock;
         this.handler = handler;
         this.stateSink = stateSink;
         this.signer = new EnvelopeAuthenticator(
-                PROTOCOL_VERSION, clock, Duration.ofMinutes(2), Duration.ofSeconds(15), Map.of(backendId, backendKey),
+                PROTOCOL_VERSION, clock, Duration.ofMinutes(2), Duration.ofSeconds(15),
+                Map.of(configuration.backendId(), configuration.backendKey()),
                 new ReplayGuard(1, Duration.ofMinutes(1))
         );
         this.verifier = new EnvelopeAuthenticator(
-                PROTOCOL_VERSION, clock, Duration.ofMinutes(2), Duration.ofSeconds(15), Map.of(proxyId, proxyKey),
+                PROTOCOL_VERSION, clock, Duration.ofMinutes(2), Duration.ofSeconds(15),
+                Map.of(configuration.proxyId(), configuration.proxyKey()),
                 new ReplayGuard(100_000, Duration.ofMinutes(3))
         );
     }
@@ -144,12 +166,15 @@ public final class PersistentChannelClient implements AutoCloseable {
     }
 
     private void connectAndRead() throws IOException {
-        Socket opened = new Socket();
+        SSLSocket opened = (SSLSocket) socketFactory.createSocket();
         try (opened) {
-            opened.connect(remoteAddress, 5_000);
+            configureTls(opened);
+            opened.connect(remoteAddress, CONNECT_TIMEOUT_MILLIS);
             opened.setKeepAlive(true);
             opened.setTcpNoDelay(true);
-            opened.setSoTimeout(120_000);
+            opened.setSoTimeout(HANDSHAKE_TIMEOUT_MILLIS);
+            opened.startHandshake();
+            opened.setSoTimeout(READ_TIMEOUT_MILLIS);
             try (DataOutputStream openedOutput =
                          new DataOutputStream(new BufferedOutputStream(opened.getOutputStream()));
                  DataInputStream input =
@@ -236,5 +261,12 @@ public final class PersistentChannelClient implements AutoCloseable {
                 connectionThread.interrupt();
             }
         }
+    }
+
+    private static void configureTls(SSLSocket socket) {
+        SSLParameters parameters = socket.getSSLParameters();
+        parameters.setProtocols(new String[]{"TLSv1.3"});
+        parameters.setEndpointIdentificationAlgorithm("HTTPS");
+        socket.setSSLParameters(parameters);
     }
 }

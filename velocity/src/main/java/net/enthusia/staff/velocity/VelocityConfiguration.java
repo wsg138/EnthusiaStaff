@@ -39,6 +39,8 @@ public record VelocityConfiguration(
         int channelPort,
         String channelProxyId,
         String channelProxySecretEnvironment,
+        Path channelTlsKeyStorePath,
+        String channelTlsKeyStorePasswordEnvironment,
         Map<String, String> backendSecretEnvironments,
         boolean networkIdentityEnabled,
         int networkIdentityHmacKeyVersion,
@@ -108,6 +110,9 @@ public record VelocityConfiguration(
                 integer(properties, "channel.port", 1, 65_535),
                 required(properties, "channel.proxy-id"),
                 required(properties, "channel.proxy-secret-environment"),
+                configuredPath(dataDirectory, properties, "channel.tls-key-store", "channel-server.p12"),
+                value(properties, "channel.tls-key-store-password-environment",
+                        "ES_CHANNEL_TLS_KEYSTORE_PASSWORD"),
                 backendSecrets(properties),
                 bool(properties, "network-identity.enabled"),
                 integer(properties, "network-identity.hmac-key-version", 1, Integer.MAX_VALUE),
@@ -237,6 +242,29 @@ public record VelocityConfiguration(
             throw new IllegalArgumentException(key + " must be configured");
         }
         return value.trim();
+    }
+
+    private static String value(Properties properties, String key, String defaultValue) {
+        String configured = properties.getProperty(key);
+        return configured == null || configured.isBlank() ? defaultValue : configured.trim();
+    }
+
+    private static Path configuredPath(
+            Path dataDirectory,
+            Properties properties,
+            String key,
+            String defaultValue
+    ) {
+        Path configured = Path.of(value(properties, key, defaultValue));
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+        Path base = dataDirectory.toAbsolutePath().normalize();
+        Path resolved = base.resolve(configured).normalize();
+        if (!resolved.startsWith(base)) {
+            throw new IllegalArgumentException(key + " must remain in the plugin data directory when relative");
+        }
+        return resolved;
     }
 
     private static int integer(Properties properties, String key, int minimum, int maximum) {

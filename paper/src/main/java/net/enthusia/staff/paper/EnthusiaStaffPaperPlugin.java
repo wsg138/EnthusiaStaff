@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.io.File;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import javax.crypto.SecretKey;
+import javax.net.ssl.SSLContext;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.domain.OperationalMode;
@@ -84,6 +87,7 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
+import net.enthusia.staff.protocol.TlsContextLoader;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -750,18 +754,28 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         String proxyId = getConfig().getString("channel.proxy-id", "VELOCITY");
         String backendEnvironment = getConfig().getString("channel.backend-secret-environment");
         String proxyEnvironment = getConfig().getString("channel.proxy-secret-environment");
-        if (backendId == null || proxyId == null || backendEnvironment == null || proxyEnvironment == null) {
+        String trustStore = getConfig().getString("channel.tls.trust-store", "channel-trust.p12");
+        String trustStorePasswordEnvironment = getConfig().getString(
+                "channel.tls.trust-store-password-environment",
+                "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD"
+        );
+        if (backendId == null || proxyId == null || backendEnvironment == null || proxyEnvironment == null
+                || trustStore == null || trustStorePasswordEnvironment == null) {
             throw new IllegalArgumentException("Persistent channel identifiers and secret environments are required");
         }
         SecretKey backendKey = secretFromEnvironment(backendEnvironment);
         SecretKey proxyKey = secretFromEnvironment(proxyEnvironment);
+        SSLContext tlsContext = clientTlsContext(trustStore, trustStorePasswordEnvironment);
         channelClient = new PersistentChannelClient(
-                backendId,
-                getConfig().getString("channel.host", "127.0.0.1"),
-                getConfig().getInt("channel.port", 28_765),
-                backendKey,
-                proxyId,
-                proxyKey,
+                new PersistentChannelClient.Configuration(
+                        backendId,
+                        getConfig().getString("channel.host", "127.0.0.1"),
+                        getConfig().getInt("channel.port", 28_765),
+                        backendKey,
+                        proxyId,
+                        proxyKey,
+                        tlsContext
+                ),
                 Clock.systemUTC(),
                 envelope -> handleNetworkMessage(runtime, backendId, envelope),
                 state -> channelConnected.set("CONNECTED".equals(state))
@@ -799,6 +813,37 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private static SecretKey secretFromEnvironment(String environment) {
         return SecretKeyMaterial.hmacSha256FromBase64(System.getenv(environment));
+    }
+
+    private SSLContext clientTlsContext(String configuredPath, String passwordEnvironment) {
+        char[] password = passwordFromEnvironment(passwordEnvironment);
+        try {
+            Path path = Path.of(configuredPath);
+            Path resolved = resolveChannelTlsPath(path);
+            return TlsContextLoader.client(resolved, password);
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    private Path resolveChannelTlsPath(Path configured) {
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+        Path dataDirectory = getDataFolder().toPath().toAbsolutePath().normalize();
+        Path resolved = dataDirectory.resolve(configured).normalize();
+        if (!resolved.startsWith(dataDirectory)) {
+            throw new IllegalArgumentException("A relative channel TLS path must remain in the plugin data directory");
+        }
+        return resolved;
+    }
+
+    private static char[] passwordFromEnvironment(String environment) {
+        String value = System.getenv(environment);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("A required channel TLS store password environment variable is missing");
+        }
+        return value.toCharArray();
     }
 
     private boolean loadReasonPolicies() {

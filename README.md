@@ -31,6 +31,7 @@ Deployable artifacts are produced as `paper/build/libs/EnthusiaStaff-Paper-<vers
 - [Architecture](docs/architecture.md)
 - [Database and recovery model](docs/database.md)
 - [Security and authority policy](docs/security.md)
+- [Persistent channel TLS](docs/channel-tls.md)
 - [Punishment workflow and durable drafts](docs/punishment-workflow.md)
 - [LiteBans migration](docs/litebans-migration.md)
 - [Shadow mode](docs/shadow-mode.md)

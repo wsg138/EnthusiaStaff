@@ -40,6 +40,10 @@ channel:
   proxy-id: VELOCITY
   backend-secret-environment: ES_CHANNEL_SMP_SECRET
   proxy-secret-environment: ES_CHANNEL_VELOCITY_SECRET
+  tls:
+    # Relative paths resolve inside the EnthusiaStaff plugin data directory.
+    trust-store: channel-trust.p12
+    trust-store-password-environment: ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD
 
 automod:
   # Exact variants are intentionally empty. Populate them privately and enable only after review.
