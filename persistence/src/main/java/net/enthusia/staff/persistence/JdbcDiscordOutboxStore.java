@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.discord.DiscordChannelStatus;
 import net.enthusia.staff.domain.discord.DiscordFailureOutcome;
@@ -24,6 +25,8 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     private static final int MAX_BATCH = 100;
     private static final int MAX_MANUAL_RETRY = 500;
     private static final int MAX_OWNER_LENGTH = 128;
+    private static final Pattern DESTINATION_PATTERN = Pattern.compile("[a-z-]{1,32}");
+    private static final Pattern ERROR_CODE_PATTERN = Pattern.compile("[A-Z0-9_]{1,64}");
 
     private final DataSource dataSource;
 
@@ -158,30 +161,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
         return JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to retry Discord channel",
-                connection -> {
-                    try (PreparedStatement channel = connection.prepareStatement("""
-                            UPDATE discord_delivery_channels
-                            SET consecutive_failures = 0, open_until = NULL, last_error_code = NULL, updated_at = ?
-                            WHERE destination = ?
-                            """);
-                         PreparedStatement messages = connection.prepareStatement("""
-                            UPDATE discord_outbox
-                            SET state = 'PENDING', attempt_count = 0, available_at = ?, lease_owner = NULL,
-                                lease_until = NULL, last_error_code = NULL
-                            WHERE destination = ? AND state = 'DEAD_LETTER'
-                            ORDER BY created_at LIMIT ?
-                            """)) {
-                        channel.setTimestamp(1, Timestamp.from(now));
-                        channel.setString(2, destination);
-                        if (!JdbcTransactionSupport.updatedOne(channel.executeUpdate())) {
-                            return 0;
-                        }
-                        messages.setTimestamp(1, Timestamp.from(now));
-                        messages.setString(2, destination);
-                        messages.setInt(3, maximumMessages);
-                        return messages.executeUpdate();
-                    }
-                }
+                connection -> JdbcDiscordRetrySupport.execute(connection, destination, now, maximumMessages)
         );
     }
 
@@ -194,10 +174,14 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
                 SELECT o.message_id, o.destination, o.event_type, o.payload_json,
                        o.attempt_count, o.created_at
                 FROM discord_outbox o
-                JOIN discord_delivery_channels c ON c.destination = o.destination
                 WHERE o.available_at <= ?
                   AND (o.state = 'PENDING' OR (o.state = 'LEASED' AND o.lease_until <= ?))
-                  AND (c.open_until IS NULL OR c.open_until <= ?)
+                  AND EXISTS (
+                      SELECT 1
+                      FROM discord_delivery_channels c
+                      WHERE c.destination = o.destination
+                        AND (c.open_until IS NULL OR c.open_until <= ?)
+                  )
                 ORDER BY o.available_at, o.created_at
                 LIMIT ? FOR UPDATE SKIP LOCKED
                 """)) {
@@ -438,7 +422,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     }
 
     private static void validateRetry(String destination, Instant now, int maximumMessages) {
-        if (destination == null || !destination.matches("[a-z-]{1,32}")) {
+        if (destination == null || !DESTINATION_PATTERN.matcher(destination).matches()) {
             throw new IllegalArgumentException("valid bounded Discord retry fields are required");
         }
         if (now == null || maximumMessages < MINIMUM_COUNT || maximumMessages > MAX_MANUAL_RETRY) {
@@ -461,7 +445,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     }
 
     private static String safeError(String errorCode) {
-        if (errorCode == null || !errorCode.matches("[A-Z0-9_]{1,64}")) {
+        if (errorCode == null || !ERROR_CODE_PATTERN.matcher(errorCode).matches()) {
             throw new IllegalArgumentException("errorCode must be a stable sanitized identifier");
         }
         return errorCode;

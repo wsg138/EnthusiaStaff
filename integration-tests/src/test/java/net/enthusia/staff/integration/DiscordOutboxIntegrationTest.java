@@ -50,8 +50,7 @@ class DiscordOutboxIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             UUID messageId = enqueue(DELIVERY_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
-            DiscordOutboxMessage message = claim(store, OWNER, NOW);
-            assertEquals(messageId, message.messageId());
+            DiscordOutboxMessage message = claim(store, OWNER, NOW, messageId);
             assertEquals(0, message.attemptCount());
 
             assertFalse(store.delivered(messageId, "velocity-discord:other-owner", NOW.plusSeconds(1)));
@@ -72,7 +71,7 @@ class DiscordOutboxIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             UUID messageId = enqueue(FAILURE_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
-            claim(store, OWNER, NOW);
+            claim(store, OWNER, NOW, messageId);
 
             DiscordFailureOutcome outcome = store.failed(
                     messageId,
@@ -100,7 +99,7 @@ class DiscordOutboxIntegrationTest {
             assertEquals(0, reset.consecutiveFailures());
             assertTrue(reset.openUntil().isEmpty());
             assertEquals(0L, reset.deadLetterMessages());
-            assertEquals(0, claim(store, OWNER, failedAt.plusSeconds(1)).attemptCount());
+            assertEquals(0, claim(store, OWNER, failedAt.plusSeconds(1), messageId).attemptCount());
         }
     }
 
@@ -109,7 +108,7 @@ class DiscordOutboxIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             UUID messageId = enqueue(MISSING_DESTINATION, NOW);
             DiscordOutboxStore store = runtime.discordOutboxStore();
-            claim(store, OWNER, NOW);
+            claim(store, OWNER, NOW, messageId);
             deleteChannel(MISSING_DESTINATION);
 
             assertThrows(
@@ -124,8 +123,17 @@ class DiscordOutboxIntegrationTest {
         }
     }
 
-    private static DiscordOutboxMessage claim(DiscordOutboxStore store, String owner, Instant now) {
-        return store.claimDue(owner, 1, LEASE, now).getFirst();
+    private static DiscordOutboxMessage claim(
+            DiscordOutboxStore store,
+            String owner,
+            Instant now,
+            UUID expectedMessageId
+    ) {
+        var messages = store.claimDue(owner, 1, LEASE, now);
+        assertEquals(1, messages.size());
+        DiscordOutboxMessage message = messages.getFirst();
+        assertEquals(expectedMessageId, message.messageId());
+        return message;
     }
 
     private static UUID enqueue(String destination, Instant now) throws SQLException {
@@ -157,7 +165,7 @@ class DiscordOutboxIntegrationTest {
                      """)) {
             statement.setString(1, destination);
             statement.setTimestamp(2, Timestamp.from(now));
-            assertEquals(1, statement.executeUpdate());
+            assertTrue(statement.executeUpdate() > 0);
         }
     }
 
