@@ -1,0 +1,39 @@
+{
+  "folders": [
+    {
+      "name": "EnthusiaStaff",
+      "path": "."
+    },
+    {
+      "name": "EnthusiaStaff reports",
+      "path": "reports"
+    },
+    {
+      "name": "enthusia-site",
+      "path": "related-repos/enthusia-site"
+    },
+    {
+      "name": "EnthusiaCurrency",
+      "path": "related-repos/EnthusiaCurrency"
+    },
+    {
+      "name": "EnthusiaCommend",
+      "path": "related-repos/EnthusiaCommend"
+    },
+    {
+      "name": "EnthusiaAutoClicker",
+      "path": "related-repos/EnthusiaAutoClicker"
+    },
+    {
+      "name": "Enthusia-RoseChat",
+      "path": "related-repos/Enthusia-RoseChat"
+    },
+    {
+      "name": "EnthusiaMarket",
+      "path": "related-repos/EnthusiaMarket"
+    }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "interactive"
+  }
+}
