@@ -18,8 +18,13 @@ import net.enthusia.staff.domain.network.NetworkOutboxMessage;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 
 public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
+    private static final int MINIMUM_COUNT = 1;
     private static final int MAX_BATCH = 100;
     private static final int MAX_DESTINATIONS = 64;
+    private static final int MAX_OWNER_LENGTH = 128;
+    private static final int MAX_SERVER_ID_LENGTH = 64;
+    private static final int MAX_CONSUMER_ID_LENGTH = 64;
+    private static final int MAX_MESSAGE_TYPE_LENGTH = 64;
 
     private final DataSource dataSource;
 
@@ -32,84 +37,35 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
 
     @Override
     public List<NetworkOutboxMessage> claimDue(String owner, int limit, Duration lease, Instant now) {
-        if (owner == null || owner.isBlank() || owner.length() > 128 || limit < 1 || limit > MAX_BATCH
-                || lease == null || lease.isNegative() || lease.isZero() || now == null) {
-            throw new IllegalArgumentException("valid bounded outbox lease fields are required");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                List<NetworkOutboxMessage> messages = new ArrayList<>();
-                try (PreparedStatement select = connection.prepareStatement("""
-                        SELECT message_id, idempotency_key, destination, message_type, protocol_version,
-                               payload_json, attempt_count, created_at
-                        FROM network_outbox
-                        WHERE available_at <= ?
-                          AND (state = 'PENDING' OR (state = 'LEASED' AND lease_until <= ?))
-                        ORDER BY available_at, created_at
-                        LIMIT ? FOR UPDATE SKIP LOCKED
-                        """)) {
-                    select.setTimestamp(1, Timestamp.from(now));
-                    select.setTimestamp(2, Timestamp.from(now));
-                    select.setInt(3, limit);
-                    try (ResultSet result = select.executeQuery()) {
-                        while (result.next()) {
-                            messages.add(read(result));
-                        }
-                    }
+        validateClaim(owner, limit, lease, now);
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to lease network outbox messages",
+                connection -> {
+                    List<NetworkOutboxMessage> messages = selectDue(connection, limit, now);
+                    leaseMessages(connection, messages, owner, lease, now);
+                    return List.copyOf(messages);
                 }
-                try (PreparedStatement update = connection.prepareStatement("""
-                        UPDATE network_outbox
-                        SET state = 'LEASED', lease_owner = ?, lease_until = ?, attempt_count = attempt_count + 1
-                        WHERE message_id = ?
-                        """)) {
-                    for (NetworkOutboxMessage message : messages) {
-                        update.setString(1, owner);
-                        update.setTimestamp(2, Timestamp.from(now.plus(lease)));
-                        update.setBytes(3, UuidBytes.toBytes(message.messageId()));
-                        update.addBatch();
-                    }
-                    update.executeBatch();
-                }
-                connection.commit();
-                return List.copyOf(messages);
-            } catch (SQLException exception) {
-                rollback(connection, exception);
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
-            }
-        } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to lease network outbox messages", exception);
-        }
+        );
     }
 
     @Override
     public void prepareDeliveries(UUID messageId, Collection<String> serverIds) {
-        if (messageId == null || serverIds == null || serverIds.isEmpty() || serverIds.size() > MAX_DESTINATIONS) {
-            throw new IllegalArgumentException("message and bounded destinations are required");
-        }
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     INSERT IGNORE INTO network_outbox_deliveries(message_id, server_id)
-                     VALUES (?, ?)
-                     """)) {
-            for (String serverId : serverIds) {
-                if (serverId == null || serverId.isBlank() || serverId.length() > 64) {
-                    throw new IllegalArgumentException("invalid backend server ID");
+        List<String> destinations = validatedDestinations(messageId, serverIds);
+        JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to prepare network deliveries",
+                connection -> {
+                    requireLeasedMessage(connection, messageId);
+                    insertDeliveries(connection, messageId, destinations);
+                    return null;
                 }
-                statement.setBytes(1, UuidBytes.toBytes(messageId));
-                statement.setString(2, serverId);
-                statement.addBatch();
-            }
-            statement.executeBatch();
-        } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to prepare network deliveries", exception);
-        }
+        );
     }
 
     @Override
     public Set<String> pendingDestinations(UUID messageId) {
+        requireMessageId(messageId);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT server_id FROM network_outbox_deliveries
@@ -131,11 +87,13 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
 
     @Override
     public void acknowledgeDelivery(UUID messageId, String serverId, Instant now) {
+        validateDelivery(messageId, serverId, now);
         updateDelivery(messageId, serverId, now);
     }
 
     @Override
     public boolean complete(UUID messageId, String owner, Instant now) {
+        validateLeaseMutation(messageId, owner, now);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      UPDATE network_outbox
@@ -157,12 +115,14 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
 
     @Override
     public void retry(UUID messageId, String owner, Instant availableAt, String errorCode) {
-        updateOutboxState(messageId, owner, "PENDING", availableAt, errorCode);
+        validateLeaseMutation(messageId, owner, availableAt);
+        retryMessage(messageId, owner, availableAt, JdbcOutboxSupport.safeError(errorCode));
     }
 
     @Override
     public void deadLetter(UUID messageId, String owner, String errorCode) {
-        updateOutboxState(messageId, owner, "DEAD_LETTER", Instant.EPOCH, errorCode);
+        validateLeaseOwner(messageId, owner);
+        deadLetterMessage(messageId, owner, JdbcOutboxSupport.safeError(errorCode));
     }
 
     @Override
@@ -173,11 +133,7 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
             String outcomeJson,
             Instant now
     ) {
-        if (consumerId == null || consumerId.isBlank() || consumerId.length() > 64 || messageId == null
-                || messageType == null || messageType.isBlank() || outcomeJson == null || outcomeJson.isBlank()
-                || now == null) {
-            throw new IllegalArgumentException("valid inbox fields are required");
-        }
+        validateInbox(consumerId, messageId, messageType, outcomeJson, now);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT IGNORE INTO network_inbox(
@@ -189,7 +145,12 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
             statement.setString(3, messageType);
             statement.setString(4, outcomeJson);
             statement.setTimestamp(5, Timestamp.from(now));
-            return statement.executeUpdate() == 1;
+            int updateCount = statement.executeUpdate();
+            JdbcTransactionSupport.requireOptionalSingleUpdate(
+                    updateCount,
+                    "Network inbox insert returned an invalid update count"
+            );
+            return JdbcTransactionSupport.updatedOne(updateCount);
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to record network inbox result", exception);
         }
@@ -201,39 +162,148 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
                      UPDATE network_outbox_deliveries
                      SET state = 'ACKNOWLEDGED', acknowledged_at = ?, last_attempt_at = ?,
                          attempt_count = attempt_count + 1
-                     WHERE message_id = ? AND server_id = ?
+                     WHERE message_id = ? AND server_id = ? AND state = 'PENDING'
                      """)) {
             statement.setTimestamp(1, Timestamp.from(now));
             statement.setTimestamp(2, Timestamp.from(now));
             statement.setBytes(3, UuidBytes.toBytes(messageId));
             statement.setString(4, serverId);
-            statement.executeUpdate();
+            JdbcTransactionSupport.requireOptionalSingleUpdate(
+                    statement.executeUpdate(),
+                    "Network delivery acknowledgement returned an invalid update count"
+            );
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to acknowledge network delivery", exception);
         }
     }
 
-    private void updateOutboxState(
+    private void retryMessage(
             UUID messageId,
             String owner,
-            String state,
             Instant availableAt,
             String errorCode
     ) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      UPDATE network_outbox
-                     SET state = ?, available_at = ?, lease_owner = NULL, lease_until = NULL, last_error_code = ?
+                     SET state = 'PENDING', available_at = ?, lease_owner = NULL, lease_until = NULL,
+                         last_error_code = ?
                      WHERE message_id = ? AND state = 'LEASED' AND lease_owner = ?
                      """)) {
-            statement.setString(1, state);
-            statement.setTimestamp(2, Timestamp.from(availableAt));
-            statement.setString(3, safeError(errorCode));
-            statement.setBytes(4, UuidBytes.toBytes(messageId));
-            statement.setString(5, owner);
-            statement.executeUpdate();
+            statement.setTimestamp(1, Timestamp.from(availableAt));
+            statement.setString(2, errorCode);
+            statement.setBytes(3, UuidBytes.toBytes(messageId));
+            statement.setString(4, owner);
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Network outbox message lost its lease before retry"
+            );
         } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to update network outbox state", exception);
+            throw new ModerationPersistenceException("Unable to retry network outbox message", exception);
+        }
+    }
+
+    private void deadLetterMessage(UUID messageId, String owner, String errorCode) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE network_outbox
+                     SET state = 'DEAD_LETTER', lease_owner = NULL, lease_until = NULL, last_error_code = ?
+                     WHERE message_id = ? AND state = 'LEASED' AND lease_owner = ?
+                     """)) {
+            statement.setString(1, errorCode);
+            statement.setBytes(2, UuidBytes.toBytes(messageId));
+            statement.setString(3, owner);
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Network outbox message lost its lease before dead-lettering"
+            );
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to dead-letter network outbox message", exception);
+        }
+    }
+
+    private static List<NetworkOutboxMessage> selectDue(
+            Connection connection,
+            int limit,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT message_id, idempotency_key, destination, message_type, protocol_version,
+                       payload_json, attempt_count, created_at
+                FROM network_outbox
+                WHERE available_at <= ?
+                  AND (state = 'PENDING' OR (state = 'LEASED' AND lease_until <= ?))
+                ORDER BY available_at, created_at
+                LIMIT ? FOR UPDATE SKIP LOCKED
+                """)) {
+            select.setInt(JdbcOutboxSupport.bindDueWindow(select, now, 2), limit);
+            try (ResultSet result = select.executeQuery()) {
+                List<NetworkOutboxMessage> messages = new ArrayList<>();
+                while (result.next()) {
+                    messages.add(read(result));
+                }
+                return messages;
+            }
+        }
+    }
+
+    private static void leaseMessages(
+            Connection connection,
+            List<NetworkOutboxMessage> messages,
+            String owner,
+            Duration lease,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE network_outbox
+                SET state = 'LEASED', lease_owner = ?, lease_until = ?, attempt_count = attempt_count + 1
+                WHERE message_id = ?
+                """)) {
+            Timestamp leaseUntil = Timestamp.from(now.plus(lease));
+            for (NetworkOutboxMessage message : messages) {
+                JdbcOutboxSupport.addLeaseBatchEntry(update, owner, leaseUntil, message.messageId());
+            }
+            JdbcTransactionSupport.requireBatchUpdate(
+                    update.executeBatch(),
+                    messages.size(),
+                    "Network outbox message disappeared while acquiring its lease"
+            );
+        }
+    }
+
+    private static void requireLeasedMessage(Connection connection, UUID messageId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT state FROM network_outbox
+                WHERE message_id = ? FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(messageId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next() || !"LEASED".equals(result.getString(1))) {
+                    throw new SQLException("Network deliveries require a leased outbox message");
+                }
+            }
+        }
+    }
+
+    private static void insertDeliveries(
+            Connection connection,
+            UUID messageId,
+            List<String> destinations
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT IGNORE INTO network_outbox_deliveries(message_id, server_id)
+                VALUES (?, ?)
+                """)) {
+            for (String serverId : destinations) {
+                statement.setBytes(1, UuidBytes.toBytes(messageId));
+                statement.setString(2, serverId);
+                statement.addBatch();
+            }
+            JdbcTransactionSupport.requireIdempotentBatchUpdate(
+                    statement.executeBatch(),
+                    destinations.size(),
+                    "Network delivery preparation returned an invalid batch result"
+            );
         }
     }
 
@@ -250,18 +320,71 @@ public final class JdbcNetworkOutboxStore implements NetworkOutboxStore {
         );
     }
 
-    private static String safeError(String errorCode) {
-        if (errorCode == null || !errorCode.matches("[A-Z0-9_]{1,64}")) {
-            throw new IllegalArgumentException("errorCode must be a stable sanitized identifier");
+    private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
+        if (!JdbcOutboxSupport.validIdentifier(owner, MAX_OWNER_LENGTH)) {
+            throw new IllegalArgumentException("valid bounded outbox lease fields are required");
         }
-        return errorCode;
+        if (limit < MINIMUM_COUNT || limit > MAX_BATCH || !JdbcOutboxSupport.positive(lease) || now == null) {
+            throw new IllegalArgumentException("valid bounded outbox lease fields are required");
+        }
     }
 
-    private static void rollback(Connection connection, SQLException original) {
-        try {
-            connection.rollback();
-        } catch (SQLException rollbackFailure) {
-            original.addSuppressed(rollbackFailure);
+    private static List<String> validatedDestinations(UUID messageId, Collection<String> serverIds) {
+        requireMessageId(messageId);
+        if (serverIds == null || serverIds.isEmpty() || serverIds.size() > MAX_DESTINATIONS) {
+            throw new IllegalArgumentException("message and bounded destinations are required");
+        }
+        Set<String> unique = new LinkedHashSet<>(serverIds);
+        for (String serverId : unique) {
+            if (!JdbcOutboxSupport.validIdentifier(serverId, MAX_SERVER_ID_LENGTH)) {
+                throw new IllegalArgumentException("invalid backend server ID");
+            }
+        }
+        return List.copyOf(unique);
+    }
+
+    private static void validateDelivery(UUID messageId, String serverId, Instant now) {
+        requireMessageId(messageId);
+        if (!JdbcOutboxSupport.validIdentifier(serverId, MAX_SERVER_ID_LENGTH) || now == null) {
+            throw new IllegalArgumentException("valid network delivery fields are required");
         }
     }
+
+    private static void validateLeaseMutation(UUID messageId, String owner, Instant timestamp) {
+        validateLeaseOwner(messageId, owner);
+        if (timestamp == null) {
+            throw new IllegalArgumentException("valid network outbox lease mutation fields are required");
+        }
+    }
+
+    private static void validateLeaseOwner(UUID messageId, String owner) {
+        requireMessageId(messageId);
+        if (!JdbcOutboxSupport.validIdentifier(owner, MAX_OWNER_LENGTH)) {
+            throw new IllegalArgumentException("valid network outbox lease mutation fields are required");
+        }
+    }
+
+    private static void validateInbox(
+            String consumerId,
+            UUID messageId,
+            String messageType,
+            String outcomeJson,
+            Instant now
+    ) {
+        requireMessageId(messageId);
+        if (!JdbcOutboxSupport.validIdentifier(consumerId, MAX_CONSUMER_ID_LENGTH)
+                || !JdbcOutboxSupport.validIdentifier(messageType, MAX_MESSAGE_TYPE_LENGTH)) {
+            throw new IllegalArgumentException("valid inbox fields are required");
+        }
+        if (outcomeJson == null || outcomeJson.isBlank() || now == null) {
+            throw new IllegalArgumentException("valid inbox fields are required");
+        }
+    }
+
+    private static void requireMessageId(UUID messageId) {
+        if (messageId == null) {
+            throw new IllegalArgumentException("messageId must be present");
+        }
+    }
+
 }

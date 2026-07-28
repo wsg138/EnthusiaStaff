@@ -26,7 +26,6 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     private static final int MAX_MANUAL_RETRY = 500;
     private static final int MAX_OWNER_LENGTH = 128;
     private static final Pattern DESTINATION_PATTERN = Pattern.compile("[a-z-]{1,32}");
-    private static final Pattern ERROR_CODE_PATTERN = Pattern.compile("[A-Z0-9_]{1,64}");
 
     private final DataSource dataSource;
 
@@ -84,7 +83,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
         FailureRequest request = new FailureRequest(
                 messageId,
                 owner,
-                safeError(errorCode),
+                JdbcOutboxSupport.safeError(errorCode),
                 availableAt,
                 now,
                 maximumAttempts,
@@ -185,11 +184,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
                 ORDER BY o.available_at, o.created_at
                 LIMIT ? FOR UPDATE SKIP LOCKED
                 """)) {
-            Timestamp timestamp = Timestamp.from(now);
-            select.setTimestamp(1, timestamp);
-            select.setTimestamp(2, timestamp);
-            select.setTimestamp(3, timestamp);
-            select.setInt(4, limit);
+            select.setInt(JdbcOutboxSupport.bindDueWindow(select, now, 3), limit);
             try (ResultSet result = select.executeQuery()) {
                 List<DiscordOutboxMessage> messages = new ArrayList<>();
                 while (result.next()) {
@@ -221,10 +216,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
                 """)) {
             Timestamp leaseUntil = Timestamp.from(now.plus(lease));
             for (DiscordOutboxMessage message : messages) {
-                update.setString(1, owner);
-                update.setTimestamp(2, leaseUntil);
-                update.setBytes(3, UuidBytes.toBytes(message.messageId()));
-                update.addBatch();
+                JdbcOutboxSupport.addLeaseBatchEntry(update, owner, leaseUntil, message.messageId());
             }
             JdbcTransactionSupport.requireBatchUpdate(
                     update.executeBatch(),
@@ -398,7 +390,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
         if (limit < MINIMUM_COUNT || limit > MAX_BATCH) {
             throw new IllegalArgumentException("valid bounded Discord outbox lease fields are required");
         }
-        if (!positive(lease) || now == null) {
+        if (!JdbcOutboxSupport.positive(lease) || now == null) {
             throw new IllegalArgumentException("valid bounded Discord outbox lease fields are required");
         }
     }
@@ -416,7 +408,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
         if (maximumAttempts < MINIMUM_COUNT || failureThreshold < MINIMUM_COUNT) {
             throw new IllegalArgumentException("valid Discord failure policy fields are required");
         }
-        if (!positive(circuitDuration)) {
+        if (!JdbcOutboxSupport.positive(circuitDuration)) {
             throw new IllegalArgumentException("valid Discord failure policy fields are required");
         }
     }
@@ -437,18 +429,7 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     }
 
     private static boolean validOwner(String owner) {
-        return owner != null && !owner.isBlank() && owner.length() <= MAX_OWNER_LENGTH;
-    }
-
-    private static boolean positive(Duration duration) {
-        return duration != null && !duration.isZero() && !duration.isNegative();
-    }
-
-    private static String safeError(String errorCode) {
-        if (errorCode == null || !ERROR_CODE_PATTERN.matcher(errorCode).matches()) {
-            throw new IllegalArgumentException("errorCode must be a stable sanitized identifier");
-        }
-        return errorCode;
+        return JdbcOutboxSupport.validIdentifier(owner, MAX_OWNER_LENGTH);
     }
 
     private record FailureRequest(
