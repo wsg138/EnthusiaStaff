@@ -99,7 +99,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ModerationStore moderationStore;
     private PlayerDirectory playerDirectory;
     private PunishmentService punishmentService;
-    private PunishmentDraftStore punishmentDraftStore;
     private PunishmentDraftWorkflow punishmentDraftWorkflow;
     private AtomicReasonPolicyRepository reasonPolicies;
     private SanctionLookup sanctionLookup;
@@ -125,14 +124,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private EconomyJournalStore economyJournalStore;
     private EconomyCoordinator economyCoordinator;
     private ConfiscationCoordinator confiscationCoordinator;
-    private CurrencyGateway currencyGateway;
     private RoseChatIntegration roseChatIntegration;
     private ClientEvidenceCollector clientEvidenceCollector;
     private ClientEvidenceStore clientEvidenceStore;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
-    private PunishmentGuiController punishmentGui;
-    private SanctionChangeGuiController sanctionChangeGui;
 
     @Override
     public void onEnable() {
@@ -296,7 +292,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             inventoryJournalStore = opened.inventoryJournalStore();
             economyJournalStore = opened.economyJournalStore();
             clientEvidenceStore = opened.clientEvidenceStore();
-            punishmentDraftStore = opened.punishmentDraftStore();
+            PunishmentDraftStore punishmentDraftStore = opened.punishmentDraftStore();
             getServer().getOnlinePlayers().forEach(freezeManager::verify);
             getServer().getOnlinePlayers().forEach(staffModeManager::recover);
             vanishManager.initialize();
@@ -501,7 +497,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     order,
                     json
             );
-            currencyGateway = discovery.gateway().orElseThrow();
+            CurrencyGateway currencyGateway = discovery.gateway().orElseThrow();
             confiscationCoordinator = new ConfiscationCoordinator(
                     this,
                     Clock.systemUTC(),
@@ -592,7 +588,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerCommands() {
         registerStatusCommand();
-        punishmentGui = new PunishmentGuiController(
+        PunishmentGuiController punishmentGui = new PunishmentGuiController(
                 this,
                 this::effectiveWriteMode,
                 () -> punishmentDraftWorkflow,
@@ -617,7 +613,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             command.setExecutor(punishment);
             command.setTabCompleter(punishment);
         }
-        sanctionChangeGui = new SanctionChangeGuiController(
+        SanctionChangeGuiController sanctionChangeGui = new SanctionChangeGuiController(
                 this,
                 Clock.systemUTC(),
                 this::effectiveWriteMode,

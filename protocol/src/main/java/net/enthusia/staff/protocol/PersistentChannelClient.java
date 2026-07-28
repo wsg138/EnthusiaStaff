@@ -84,6 +84,7 @@ public final class PersistentChannelClient implements AutoCloseable {
         return current != null && current.isConnected() && !current.isClosed();
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Borrows the stream owned and closed by connectAndRead.
     public CompletableFuture<Boolean> send(
             UUID messageId,
             String messageType,
@@ -187,6 +188,7 @@ public final class PersistentChannelClient implements AutoCloseable {
         }
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Borrows the stream owned and closed by connectAndRead.
     private void acknowledge(UUID messageId) throws IOException {
         DataOutputStream current = output;
         if (current == null) {
@@ -206,6 +208,7 @@ public final class PersistentChannelClient implements AutoCloseable {
         return java.util.HexFormat.of().formatHex(bytes);
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Closes the lifecycle-owned socket below; no local stream is opened here.
     private void disconnect() {
         output = null;
         Socket current = socket;

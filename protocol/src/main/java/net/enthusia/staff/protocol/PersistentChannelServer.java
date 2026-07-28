@@ -52,7 +52,6 @@ public final class PersistentChannelServer implements AutoCloseable {
     private final SecureRandom random = new SecureRandom();
     private final AtomicBoolean running = new AtomicBoolean();
     private ServerSocket serverSocket;
-    private Thread acceptThread;
 
     public PersistentChannelServer(
             String proxyId,
@@ -108,7 +107,7 @@ public final class PersistentChannelServer implements AutoCloseable {
             serverSocket = new ServerSocket();
             serverSocket.setReuseAddress(true);
             serverSocket.bind(bindAddress);
-            acceptThread = new Thread(this::acceptLoop, "EnthusiaStaff-Channel-Acceptor");
+            Thread acceptThread = new Thread(this::acceptLoop, "EnthusiaStaff-Channel-Acceptor");
             acceptThread.setDaemon(true);
             acceptThread.start();
         } catch (IOException exception) {
@@ -153,6 +152,7 @@ public final class PersistentChannelServer implements AutoCloseable {
         return session.send(envelope, timeout);
     }
 
+    @SuppressWarnings("PMD.CloseResource") // Ownership moves to serve; rejected sockets close in finally.
     private void acceptLoop() {
         while (running.get()) {
             Socket accepted = null;

@@ -457,7 +457,6 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         InventoryObservation before = session.observation();
-        InventoryImage beforeImage = session.image();
         InventoryImageCodec.EncodedImage replacementBytes = codec.encodeWithChecksum(replacement);
         UUID operationId = UUID.randomUUID();
         InventoryPrepareRequest request = new InventoryPrepareRequest(
@@ -738,7 +737,6 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 // A previous attempt reached Paper but crashed before the durable commit.
             }
         }
-        InventoryImage applied = current;
         InventoryImageCodec.EncodedImage appliedBytes = currentBytes;
         submit(() -> {
             try {

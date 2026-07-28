@@ -40,6 +40,7 @@ final class PermissionPolicyConfigurationTest {
     @Test
     void everyPermissionIsExplicitlyNonDefault() throws IOException {
         JsonNode permissions = permissions();
+        assertFalse(permissions.isEmpty(), "plugin.yml must declare permissions");
         permissions.properties().forEach(entry -> assertEquals(
                 "false",
                 entry.getValue().path("default").asText(),

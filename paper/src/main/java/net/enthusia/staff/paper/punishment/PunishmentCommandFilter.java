@@ -22,20 +22,20 @@ public final class PunishmentCommandFilter {
 
     public static boolean matches(String commandName, List<SanctionSpec> sanctions) {
         Set<SanctionType> required = types(commandName);
-        return required == null || sanctions.stream().anyMatch(spec -> required.contains(spec.type()));
+        return required.isEmpty() || sanctions.stream().anyMatch(spec -> required.contains(spec.type()));
     }
 
     public static boolean includes(String commandName, ReasonPolicy policy) {
         Set<SanctionType> required = types(commandName);
-        return required == null || policy.steps().stream()
+        return required.isEmpty() || policy.steps().stream()
                 .flatMap(step -> step.sanctions().stream())
                 .anyMatch(spec -> required.contains(spec.type()));
     }
 
     private static Set<SanctionType> types(String commandName) {
         if (commandName == null) {
-            return null;
+            return Set.of();
         }
-        return FILTERS.get(commandName.toLowerCase(Locale.ROOT));
+        return FILTERS.getOrDefault(commandName.toLowerCase(Locale.ROOT), Set.of());
     }
 }

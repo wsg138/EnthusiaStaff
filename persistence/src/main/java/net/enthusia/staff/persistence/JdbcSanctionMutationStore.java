@@ -62,7 +62,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                     connection.rollback();
                     return stale;
                 }
-                Change change = applyChange(connection, request, caseRow, now);
+                Change change = applyChange(connection, request, now);
                 if (change.rejection() != null) {
                     connection.rollback();
                     return change.rejection();
@@ -89,7 +89,6 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
     private Change applyChange(
             Connection connection,
             SanctionChangeRequest request,
-            CaseRow caseRow,
             Instant now
     ) throws SQLException {
         return switch (request.action()) {
@@ -101,8 +100,8 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
             case REMOVE_ESCALATION_CONTRIBUTION -> contribution(connection, request, false);
             case RESTORE_ESCALATION_CONTRIBUTION -> contribution(connection, request, true);
             case REQUEST_FULL_OVERTURN -> requestOverturn(connection, request, now);
-            case APPROVE_FULL_OVERTURN -> decideOverturn(connection, request, caseRow, now, true);
-            case DENY_FULL_OVERTURN -> decideOverturn(connection, request, caseRow, now, false);
+            case APPROVE_FULL_OVERTURN -> decideOverturn(connection, request, now, true);
+            case DENY_FULL_OVERTURN -> decideOverturn(connection, request, now, false);
         };
     }
 
@@ -312,7 +311,6 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
     private static Change decideOverturn(
             Connection connection,
             SanctionChangeRequest request,
-            CaseRow caseRow,
             Instant now,
             boolean approved
     ) throws SQLException {

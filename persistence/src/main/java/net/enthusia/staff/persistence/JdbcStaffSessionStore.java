@@ -161,7 +161,7 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
                 }
                 String expected = snapshotChecksum(connection, sessionId);
                 if (!restoredChecksum.equals(expected)) {
-                    markRecovery(connection, sessionId, now);
+                    markRecovery(connection, sessionId);
                     insertAudit(connection, session.staffId(), sessionId, "STAFF_MODE_RECOVERY_REQUIRED",
                             "Restored state checksum mismatch", now);
                     connection.commit();
@@ -206,7 +206,7 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
                     connection.rollback();
                     return;
                 }
-                markRecovery(connection, sessionId, now);
+                markRecovery(connection, sessionId);
                 insertAudit(connection, session.staffId(), sessionId, "STAFF_MODE_RECOVERY_REQUIRED", reason, now);
                 connection.commit();
             } catch (SQLException exception) {
@@ -303,7 +303,7 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         }
     }
 
-    private static void markRecovery(Connection connection, UUID sessionId, Instant now) throws SQLException {
+    private static void markRecovery(Connection connection, UUID sessionId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE staff_sessions SET state = 'RECOVERY_REQUIRED', revision = revision + 1
                 WHERE session_id = ? AND state <> 'CLOSED'
