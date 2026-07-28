@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLContext;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
@@ -26,46 +27,24 @@ class PersistentChannelTransportTest {
     private static final String PROXY_ID = "VELOCITY";
 
     @Test
-    void authenticatesEncryptedFramesAndRejectsAMismatchedHost(@TempDir Path temporaryDirectory) throws Exception {
-        SecretKey backendKey = key((byte) 11);
-        SecretKey proxyKey = key((byte) 29);
-        TlsStoreFixture.Stores stores = TlsStoreFixture.create(temporaryDirectory);
-        assertInvalidTlsStoresFailClosed(stores);
-        SSLContext serverTls = serverTls(stores);
-        SSLContext clientTls = clientTls(stores);
+    void authenticatesEncryptedFramesAndAcknowledgesBothDirections(@TempDir Path temporaryDirectory) throws Exception {
+        ChannelFixture fixture = fixture(temporaryDirectory);
         CountDownLatch connected = new CountDownLatch(1);
         CountDownLatch serverReceived = new CountDownLatch(1);
         CountDownLatch clientReceived = new CountDownLatch(1);
 
-        try (PersistentChannelServer server = new PersistentChannelServer(
-                new PersistentChannelServer.Configuration(
-                        PROXY_ID,
-                        InetAddress.getByName("127.0.0.1"),
-                        0,
-                        Map.of(BACKEND_ID, backendKey),
-                        proxyKey,
-                        serverTls,
-                        2
-                ),
-                Clock.systemUTC(),
+        try (PersistentChannelServer server = newServer(
+                fixture,
                 envelope -> {
                     serverReceived.countDown();
                     return true;
-                },
-                ignored -> { }
+                }
         )) {
             server.start();
-            try (PersistentChannelClient client = new PersistentChannelClient(
-                    new PersistentChannelClient.Configuration(
-                            BACKEND_ID,
-                            "localhost",
-                            server.boundPort(),
-                            backendKey,
-                            PROXY_ID,
-                            proxyKey,
-                            clientTls
-                    ),
-                    Clock.systemUTC(),
+            try (PersistentChannelClient client = newClient(
+                    fixture,
+                    "localhost",
+                    server.boundPort(),
                     envelope -> {
                         clientReceived.countDown();
                         return true;
@@ -87,19 +66,21 @@ class PersistentChannelTransportTest {
                 assertEquals(PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED, result);
                 assertTrue(clientReceived.await(3, TimeUnit.SECONDS));
             }
+        }
+    }
 
-            CountDownLatch hostRejected = new CountDownLatch(1);
-            try (PersistentChannelClient mismatchedHost = new PersistentChannelClient(
-                    new PersistentChannelClient.Configuration(
-                            BACKEND_ID,
-                            "127.0.0.1",
-                            server.boundPort(),
-                            backendKey,
-                            PROXY_ID,
-                            proxyKey,
-                            clientTls
-                    ),
-                    Clock.systemUTC(),
+    @Test
+    void rejectsInvalidStoresAndAMismatchedCertificateHost(@TempDir Path temporaryDirectory) throws Exception {
+        ChannelFixture fixture = fixture(temporaryDirectory);
+        assertInvalidTlsStoresFailClosed(fixture.stores());
+        CountDownLatch hostRejected = new CountDownLatch(1);
+
+        try (PersistentChannelServer server = newServer(fixture, ignored -> true)) {
+            server.start();
+            try (PersistentChannelClient mismatchedHost = newClient(
+                    fixture,
+                    "127.0.0.1",
+                    server.boundPort(),
                     ignored -> true,
                     state -> {
                         if ("CONNECTION_FAILED".equals(state)) {
@@ -112,6 +93,60 @@ class PersistentChannelTransportTest {
                 assertFalse(mismatchedHost.connected());
             }
         }
+    }
+
+    private static ChannelFixture fixture(Path temporaryDirectory) throws Exception {
+        TlsStoreFixture.Stores stores = TlsStoreFixture.create(temporaryDirectory);
+        return new ChannelFixture(
+                key((byte) 11),
+                key((byte) 29),
+                serverTls(stores),
+                clientTls(stores),
+                stores
+        );
+    }
+
+    private static PersistentChannelServer newServer(
+            ChannelFixture fixture,
+            ChannelMessageHandler handler
+    ) throws java.net.UnknownHostException {
+        return new PersistentChannelServer(
+                new PersistentChannelServer.Configuration(
+                        PROXY_ID,
+                        InetAddress.getByName("127.0.0.1"),
+                        0,
+                        Map.of(BACKEND_ID, fixture.backendKey()),
+                        fixture.proxyKey(),
+                        fixture.serverTls(),
+                        2
+                ),
+                Clock.systemUTC(),
+                handler,
+                ignored -> { }
+        );
+    }
+
+    private static PersistentChannelClient newClient(
+            ChannelFixture fixture,
+            String host,
+            int port,
+            ChannelMessageHandler handler,
+            Consumer<String> stateSink
+    ) {
+        return new PersistentChannelClient(
+                new PersistentChannelClient.Configuration(
+                        BACKEND_ID,
+                        host,
+                        port,
+                        fixture.backendKey(),
+                        PROXY_ID,
+                        fixture.proxyKey(),
+                        fixture.clientTls()
+                ),
+                Clock.systemUTC(),
+                handler,
+                stateSink
+        );
     }
 
     private static void assertInvalidTlsStoresFailClosed(TlsStoreFixture.Stores stores) {
@@ -158,5 +193,14 @@ class PersistentChannelTransportTest {
         byte[] bytes = new byte[32];
         java.util.Arrays.fill(bytes, fill);
         return SecretKeyMaterial.hmacSha256FromBase64(Base64.getEncoder().encodeToString(bytes));
+    }
+
+    private record ChannelFixture(
+            SecretKey backendKey,
+            SecretKey proxyKey,
+            SSLContext serverTls,
+            SSLContext clientTls,
+            TlsStoreFixture.Stores stores
+    ) {
     }
 }

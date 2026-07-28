@@ -365,28 +365,8 @@ public final class EnthusiaStaffVelocityPlugin {
         SecretKey proxyKey = secretFromEnvironment(loaded.channelProxySecretEnvironment());
         SSLContext tlsContext = serverTlsContext(loaded);
         try {
-            PersistentChannelServer server = new PersistentChannelServer(
-                    new PersistentChannelServer.Configuration(
-                            loaded.channelProxyId(),
-                            InetAddress.getByName(loaded.channelBindAddress()),
-                            loaded.channelPort(),
-                            backendKeys,
-                            proxyKey,
-                            tlsContext,
-                            backendKeys.size() + 2
-                    ),
-                    Clock.systemUTC(),
-                    envelope -> {
-                        outbox.recordInboxOnce(
-                                loaded.serverId(),
-                                envelope.messageId(),
-                                envelope.messageType(),
-                                "{\"outcome\":\"accepted\"}",
-                                Clock.systemUTC().instant()
-                        );
-                        return true;
-                    },
-                    warning -> logger.warn("{}", warning)
+            PersistentChannelServer server = createChannelServer(
+                    loaded, outbox, backendKeys, proxyKey, tlsContext
             );
             server.start();
             channelServer = server;
@@ -404,6 +384,38 @@ public final class EnthusiaStaffVelocityPlugin {
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("Unable to bind the persistent backend channel", exception);
         }
+    }
+
+    private PersistentChannelServer createChannelServer(
+            VelocityConfiguration loaded,
+            NetworkOutboxStore outbox,
+            Map<String, SecretKey> backendKeys,
+            SecretKey proxyKey,
+            SSLContext tlsContext
+    ) throws java.net.UnknownHostException {
+        return new PersistentChannelServer(
+                new PersistentChannelServer.Configuration(
+                        loaded.channelProxyId(),
+                        InetAddress.getByName(loaded.channelBindAddress()),
+                        loaded.channelPort(),
+                        backendKeys,
+                        proxyKey,
+                        tlsContext,
+                        backendKeys.size() + 2
+                ),
+                Clock.systemUTC(),
+                envelope -> {
+                    outbox.recordInboxOnce(
+                            loaded.serverId(),
+                            envelope.messageId(),
+                            envelope.messageType(),
+                            "{\"outcome\":\"accepted\"}",
+                            Clock.systemUTC().instant()
+                    );
+                    return true;
+                },
+                warning -> logger.warn("{}", warning)
+        );
     }
 
     private void initializeNetworkIdentity(VelocityConfiguration loaded, NetworkIdentityStore store) {

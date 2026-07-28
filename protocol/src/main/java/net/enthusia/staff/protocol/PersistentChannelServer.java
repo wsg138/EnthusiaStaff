@@ -238,32 +238,11 @@ public final class PersistentChannelServer implements AutoCloseable {
         try (socket;
              DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
              DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))) {
-            socket.startHandshake();
-            ProtocolEnvelope hello = FrameTransport.read(input, codec);
-            VerificationResult helloResult = verifier.verify(hello);
-            if (!helloResult.accepted() || !"HELLO".equals(hello.messageType())) {
+            session = authenticate(socket, input, output);
+            if (session == null) {
                 return;
             }
-            socket.setSoTimeout(READ_TIMEOUT_MILLIS);
-            session = new Session(hello.serverId(), socket, output);
-            Session previous = sessions.put(hello.serverId(), session);
-            if (previous != null) {
-                previous.close();
-            }
-            session.acknowledge(hello.messageId());
-            while (running.get() && !socket.isClosed()) {
-                ProtocolEnvelope envelope = FrameTransport.read(input, codec);
-                VerificationResult result = verifier.verify(envelope);
-                if (!result.accepted() || !envelope.serverId().equals(session.backendId)) {
-                    warningSink.accept("Rejected authenticated channel frame: " + result.status());
-                    continue;
-                }
-                if ("ACK".equals(envelope.messageType())) {
-                    session.receiveAck(envelope.payloadJson());
-                } else if (inboundHandler.handle(envelope)) {
-                    session.acknowledge(envelope.messageId());
-                }
-            }
+            readAuthenticatedFrames(socket, input, session);
         } catch (EOFException | SocketException ignored) {
             // Normal disconnect; the durable outbox keeps undelivered work pending.
         } catch (IOException | RuntimeException exception) {
@@ -273,6 +252,50 @@ public final class PersistentChannelServer implements AutoCloseable {
                 sessions.remove(session.backendId, session);
                 session.close();
             }
+        }
+    }
+
+    private Session authenticate(
+            SSLSocket socket,
+            DataInputStream input,
+            DataOutputStream output
+    ) throws IOException {
+        socket.startHandshake();
+        ProtocolEnvelope hello = FrameTransport.read(input, codec);
+        VerificationResult helloResult = verifier.verify(hello);
+        if (!helloResult.accepted() || !"HELLO".equals(hello.messageType())) {
+            return null;
+        }
+        socket.setSoTimeout(READ_TIMEOUT_MILLIS);
+        Session session = new Session(hello.serverId(), socket, output);
+        Session previous = sessions.put(hello.serverId(), session);
+        if (previous != null) {
+            previous.close();
+        }
+        session.acknowledge(hello.messageId());
+        return session;
+    }
+
+    private void readAuthenticatedFrames(
+            SSLSocket socket,
+            DataInputStream input,
+            Session session
+    ) throws IOException {
+        while (running.get() && !socket.isClosed()) {
+            handleAuthenticatedFrame(FrameTransport.read(input, codec), session);
+        }
+    }
+
+    private void handleAuthenticatedFrame(ProtocolEnvelope envelope, Session session) throws IOException {
+        VerificationResult result = verifier.verify(envelope);
+        if (!result.accepted() || !envelope.serverId().equals(session.backendId)) {
+            warningSink.accept("Rejected authenticated channel frame: " + result.status());
+            return;
+        }
+        if ("ACK".equals(envelope.messageType())) {
+            session.receiveAck(envelope.payloadJson());
+        } else if (inboundHandler.handle(envelope)) {
+            session.acknowledge(envelope.messageId());
         }
     }
 
