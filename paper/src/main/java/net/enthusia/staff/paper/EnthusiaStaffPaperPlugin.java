@@ -7,6 +7,7 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.io.File;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,6 +23,7 @@ import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PunishmentService;
+import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
@@ -30,6 +32,7 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.ports.PunishmentDraftStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
@@ -71,6 +74,7 @@ import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -93,6 +97,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ModerationStore moderationStore;
     private PlayerDirectory playerDirectory;
     private PunishmentService punishmentService;
+    private PunishmentDraftStore punishmentDraftStore;
+    private PunishmentDraftWorkflow punishmentDraftWorkflow;
     private AtomicReasonPolicyRepository reasonPolicies;
     private SanctionLookup sanctionLookup;
     private MuteEnforcementListener muteEnforcement;
@@ -122,6 +128,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ClientEvidenceStore clientEvidenceStore;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
+    private PunishmentGuiController punishmentGui;
 
     @Override
     public void onEnable() {
@@ -284,6 +291,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             inventoryJournalStore = opened.inventoryJournalStore();
             economyJournalStore = opened.economyJournalStore();
             clientEvidenceStore = opened.clientEvidenceStore();
+            punishmentDraftStore = opened.punishmentDraftStore();
             getServer().getOnlinePlayers().forEach(freezeManager::verify);
             getServer().getOnlinePlayers().forEach(staffModeManager::recover);
             vanishManager.initialize();
@@ -294,6 +302,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     reasonPolicies,
                     moderationStore,
                     new EscalationEngine()
+            );
+            punishmentDraftWorkflow = new PunishmentDraftWorkflow(
+                    Clock.systemUTC(), Duration.ofHours(24), punishmentService, punishmentDraftStore
             );
             sanctionChangeService = new SanctionChangeService(
                     authorizationPolicy, opened.sanctionMutationStore()
@@ -576,15 +587,25 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerCommands() {
         registerStatusCommand();
-        PunishmentCommand punishment = new PunishmentCommand(
+        punishmentGui = new PunishmentGuiController(
                 this,
-                Clock.systemUTC(),
                 this::effectiveWriteMode,
-                () -> punishmentService,
+                () -> punishmentDraftWorkflow,
                 () -> playerDirectory,
                 authorizationPolicy,
                 reasonPolicies,
                 workers
+        );
+        getServer().getPluginManager().registerEvents(punishmentGui, this);
+        PunishmentCommand punishment = new PunishmentCommand(
+                this,
+                this::effectiveWriteMode,
+                () -> punishmentDraftWorkflow,
+                () -> playerDirectory,
+                authorizationPolicy,
+                reasonPolicies,
+                workers,
+                punishmentGui
         );
         for (String name : java.util.List.of("punish", "ban", "mute", "warn", "kick", "ipban")) {
             PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing from plugin.yml");

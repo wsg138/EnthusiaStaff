@@ -30,27 +30,27 @@ commands:
     permission: enthusiastaff.status
   punish:
     description: Open or execute the central punishment workflow
-    usage: /punish <player> <reason-id>
+    usage: /punish <player> [reason-id] or /punish resume <player>
     permission: enthusiastaff.punish
   ban:
     description: Open a ban-filtered central punishment workflow
-    usage: /ban <player> <reason-id>
+    usage: /ban <player> [reason-id]
     permission: enthusiastaff.punish
   mute:
     description: Open a mute-filtered central punishment workflow
-    usage: /mute <player> <reason-id>
+    usage: /mute <player> [reason-id]
     permission: enthusiastaff.punish
   warn:
     description: Open a warning-filtered central punishment workflow
-    usage: /warn <player> <reason-id>
+    usage: /warn <player> [reason-id]
     permission: enthusiastaff.punish
   kick:
     description: Open a kick-filtered central punishment workflow
-    usage: /kick <player> <reason-id>
+    usage: /kick <player> [reason-id]
     permission: enthusiastaff.punish
   ipban:
     description: Open a network-ban-filtered central punishment workflow
-    usage: /ipban <player> <reason-id>
+    usage: /ipban <player> [reason-id]
     permission: enthusiastaff.punish.ip
   removepunishment:
     description: Change, revoke, or overturn a punishment while retaining audit history

@@ -19,6 +19,7 @@ import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.ports.PunishmentDraftStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
@@ -43,6 +44,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final InventoryJournalStore inventoryJournalStore;
     private final EconomyJournalStore economyJournalStore;
     private final ClientEvidenceStore clientEvidenceStore;
+    private final PunishmentDraftStore punishmentDraftStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
@@ -62,6 +64,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, new ObjectMapper());
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, new ObjectMapper());
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, new ObjectMapper());
+        this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, new ObjectMapper());
     }
 
     public ModerationStore moderationStore() {
@@ -126,6 +129,10 @@ public final class MariaDbRuntime implements AutoCloseable {
 
     public ClientEvidenceStore clientEvidenceStore() {
         return clientEvidenceStore;
+    }
+
+    public PunishmentDraftStore punishmentDraftStore() {
+        return punishmentDraftStore;
     }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {

@@ -22,7 +22,7 @@ Identity and evidence:
 Moderation:
 
 - `cases`, `case_evidence`, `sanctions`, `sanction_events`, `sanction_links`
-- `punishment_steps`, `punishment_overturn_requests`, `warnings`, `staff_notes`
+- `punishment_steps`, `punishment_drafts`, `punishment_overturn_requests`, `warnings`, `staff_notes`
 - `reports`, `report_messages`, `report_chat_snapshots`, `report_private_message_snapshots`
 
 Stateful operations:
