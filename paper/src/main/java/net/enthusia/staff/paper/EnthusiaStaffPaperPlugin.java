@@ -5,47 +5,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.io.File;
-import java.nio.file.Path;
-import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
-import javax.crypto.SecretKey;
-import javax.net.ssl.SSLContext;
-import net.enthusia.staff.common.SecureIdentifiers;
-import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.domain.OperationalMode;
-import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
-import net.enthusia.staff.domain.escalation.EscalationEngine;
+import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
-import net.enthusia.staff.domain.ports.PunishmentDraftStore;
-import net.enthusia.staff.domain.ports.SanctionLookup;
-import net.enthusia.staff.domain.ports.ReportStore;
-import net.enthusia.staff.domain.ports.CaseLookup;
-import net.enthusia.staff.domain.ports.CaseReviewStore;
-import net.enthusia.staff.domain.ports.ClientEvidenceStore;
-import net.enthusia.staff.domain.ports.EconomyJournalStore;
-import net.enthusia.staff.domain.ports.FreezeStore;
-import net.enthusia.staff.domain.ports.InventoryJournalStore;
-import net.enthusia.staff.domain.ports.StaffSessionStore;
-import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.automod.AutomodListener;
@@ -87,7 +70,6 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
-import net.enthusia.staff.protocol.TlsContextLoader;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -97,40 +79,24 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private final RuntimeHealth health = new RuntimeHealth();
     private final AtomicReference<OperationalMode> mode = new AtomicReference<>(OperationalMode.BOOTSTRAP);
     private final ConcurrentHashMap<String, String> featureIssues = new ConcurrentHashMap<>();
+    private final PaperRuntimeLifecycle<PaperStorageBindings, ScheduledTask, PersistentChannelClient> lifecycle =
+            new PaperRuntimeLifecycle<>();
 
     private ExecutorService workers;
-    private MariaDbRuntime databaseRuntime;
-    private ModerationStore moderationStore;
-    private PlayerDirectory playerDirectory;
-    private PunishmentService punishmentService;
-    private PunishmentDraftWorkflow punishmentDraftWorkflow;
     private AtomicReasonPolicyRepository reasonPolicies;
-    private SanctionLookup sanctionLookup;
     private MuteEnforcementListener muteEnforcement;
-    private ScheduledTask operationalStateTask;
-    private PersistentChannelClient channelClient;
     private final AtomicBoolean channelConnected = new AtomicBoolean();
     private final ObjectMapper json = new ObjectMapper();
-    private SanctionChangeService sanctionChangeService;
-    private CaseLookup caseLookup;
-    private CaseReviewStore caseReviewStore;
-    private ReportStore reportStore;
     private ChatContextBuffer chatContext;
-    private FreezeStore freezeStore;
     private FreezeManager freezeManager;
-    private StaffSessionStore staffSessionStore;
     private StaffModeManager staffModeManager;
-    private VanishStore vanishStore;
     private DefaultStaffVisibilityService visibilityService;
     private VanishManager vanishManager;
-    private InventoryJournalStore inventoryJournalStore;
     private InventoryCoordinator inventoryCoordinator;
-    private EconomyJournalStore economyJournalStore;
     private EconomyCoordinator economyCoordinator;
     private ConfiscationCoordinator confiscationCoordinator;
     private RoseChatIntegration roseChatIntegration;
     private ClientEvidenceCollector clientEvidenceCollector;
-    private ClientEvidenceStore clientEvidenceStore;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
 
@@ -142,13 +108,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         int threads = getConfig().getInt("workers.threads", 4);
         int queueCapacity = getConfig().getInt("workers.queue-capacity", 256);
         workers = BoundedExecutorFactory.create(threads, queueCapacity);
-        freezeManager = new FreezeManager(this, Clock.systemUTC(), () -> freezeStore, workers);
+        freezeManager = new FreezeManager(
+                this,
+                Clock.systemUTC(),
+                () -> storageValue(PaperStorageBindings::freezeStore),
+                workers
+        );
         getServer().getPluginManager().registerEvents(freezeManager, this);
         staffModeManager = new StaffModeManager(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("network.server-id", "SMP"),
-                () -> staffSessionStore,
+                networkServerId(),
+                () -> storageValue(PaperStorageBindings::staffSessionStore),
                 workers
         );
         getServer().getPluginManager().registerEvents(staffModeManager, this);
@@ -157,8 +128,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this,
                 Clock.systemUTC(),
                 visibilityService,
-                () -> vanishStore,
-                () -> staffSessionStore,
+                () -> storageValue(PaperStorageBindings::vanishStore),
+                () -> storageValue(PaperStorageBindings::staffSessionStore),
                 staffModeManager,
                 workers
         );
@@ -167,11 +138,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         inventoryCoordinator = new InventoryCoordinator(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("inventory.scope-id", getConfig().getString("network.server-id", "SMP")),
-                getConfig().getString("network.server-id", "SMP"),
+                inventoryScopeId(),
+                networkServerId(),
                 this::effectiveWriteMode,
-                () -> inventoryJournalStore,
-                () -> playerDirectory,
+                () -> storageValue(PaperStorageBindings::inventoryJournalStore),
+                () -> storageValue(PaperStorageBindings::playerDirectory),
                 workers
         );
         getServer().getPluginManager().registerEvents(inventoryCoordinator, this);
@@ -196,10 +167,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             muteEnforcement = new MuteEnforcementListener(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString("network.server-id", "SMP"),
+                    networkServerId(),
                     mode::get,
-                    () -> sanctionLookup,
-                    () -> playerDirectory,
+                    () -> storageValue(PaperStorageBindings::sanctionLookup),
+                    () -> storageValue(PaperStorageBindings::playerDirectory),
                     workers
             );
             getServer().getPluginManager().registerEvents(muteEnforcement, this);
@@ -211,47 +182,14 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        mode.set(OperationalMode.MAINTENANCE);
-        publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
-        if (roseChatIntegration != null) {
-            try {
-                roseChatIntegration.close();
-            } catch (RuntimeException exception) {
-                getLogger().log(Level.WARNING, "RoseChat bridge cleanup failed", exception);
-            }
-        }
-        if (muteEnforcement != null) {
-            muteEnforcement.close();
-        }
-        if (inventoryCoordinator != null) {
-            inventoryCoordinator.close();
-        }
-        if (economyCoordinator != null) {
-            economyCoordinator.close();
-        }
-        if (confiscationCoordinator != null) {
-            confiscationCoordinator.close();
-        }
-        if (operationalStateTask != null) {
-            operationalStateTask.cancel();
-        }
-        if (channelClient != null) {
-            channelClient.close();
-        }
-        if (workers != null) {
-            workers.shutdown();
-            try {
-                if (!workers.awaitTermination(5, TimeUnit.SECONDS)) {
-                    workers.shutdownNow();
-                }
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                workers.shutdownNow();
-            }
-        }
-        if (databaseRuntime != null) {
-            databaseRuntime.close();
-        }
+        stopOperationalRuntime();
+        closeSafely("RoseChat bridge", roseChatIntegration);
+        closeSafely("mute enforcement", muteEnforcement);
+        closeSafely("inventory coordinator", inventoryCoordinator);
+        closeSafely("economy coordinator", economyCoordinator);
+        closeSafely("confiscation coordinator", confiscationCoordinator);
+        shutdownWorkers();
+        closeDatabaseRuntime();
     }
 
     public OperationalMode operationalMode() {
@@ -259,7 +197,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     public ModerationStore moderationStore() {
-        return moderationStore;
+        return storageValue(PaperStorageBindings::moderationStore);
     }
 
     public ExecutorService workers() {
@@ -267,13 +205,20 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void initializeStorage() {
+        if (lifecycle.stopping()) {
+            return;
+        }
         String url = environment("storage.jdbc-url-environment");
         String username = environment("storage.username-environment");
         String password = environment("storage.password-environment");
         if (url == null || username == null || password == null) {
-            setDegraded("mariadb", "Required database environment variables are missing; destructive actions are disabled");
+            degradeBootstrap(
+                    "Required database environment variables are missing; destructive actions are disabled"
+            );
             return;
         }
+        MariaDbRuntime opened = null;
+        boolean published = false;
         try {
             DatabaseConfig database = new DatabaseConfig(
                     url,
@@ -282,65 +227,178 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     getConfig().getInt("storage.maximum-pool-size", 8),
                     getConfig().getLong("storage.connection-timeout-millis", 5_000)
             );
-            MariaDbRuntime opened = MariaDb.initialize(database);
-            databaseRuntime = opened;
-            moderationStore = opened.moderationStore();
-            playerDirectory = opened.playerDirectory();
-            sanctionLookup = opened.sanctionLookup();
-            caseLookup = opened.caseLookup();
-            caseReviewStore = opened.caseReviewStore();
-            reportStore = opened.reportStore();
-            freezeStore = opened.freezeStore();
-            staffSessionStore = opened.staffSessionStore();
-            vanishStore = opened.vanishStore();
-            inventoryJournalStore = opened.inventoryJournalStore();
-            economyJournalStore = opened.economyJournalStore();
-            clientEvidenceStore = opened.clientEvidenceStore();
-            PunishmentDraftStore punishmentDraftStore = opened.punishmentDraftStore();
-            getServer().getOnlinePlayers().forEach(freezeManager::verify);
-            getServer().getOnlinePlayers().forEach(staffModeManager::recover);
-            vanishManager.initialize();
-            punishmentService = new PunishmentService(
-                    Clock.systemUTC(),
-                    new SecureIdentifiers(new SecureRandom()),
+            opened = MariaDb.initialize(database);
+            PaperStorageBindings bindings = PaperStorageBindings.create(
+                    opened,
                     authorizationPolicy,
-                    reasonPolicies,
-                    moderationStore,
-                    new EscalationEngine()
+                    reasonPolicies
             );
-            punishmentDraftWorkflow = new PunishmentDraftWorkflow(
-                    Clock.systemUTC(), Duration.ofHours(24), punishmentService, punishmentDraftStore
-            );
-            sanctionChangeService = new SanctionChangeService(
-                    authorizationPolicy, opened.sanctionMutationStore()
-            );
-            promoteAfterBootstrap();
-            try {
-                initializeChannel(opened);
-            } catch (RuntimeException exception) {
-                channelConnected.set(false);
-                getLogger().log(Level.SEVERE,
-                        "Persistent Velocity channel initialization failed; new punishment writes are disabled",
-                        exception);
+            if (!lifecycle.publishStorage(bindings)) {
+                closeSafely("MariaDB runtime opened during shutdown", opened);
+                return;
             }
-            operationalStateTask = getServer().getAsyncScheduler().runAtFixedRate(
-                    this,
-                    ignored -> refreshOperationalState(),
-                    5,
-                    5,
-                    TimeUnit.SECONDS
-            );
+            published = true;
+            finishStorageInitialization(bindings);
         } catch (RuntimeException exception) {
-            getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
-            setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
+            discardFailedStorageRuntime(opened, published);
+            if (!lifecycle.stopping()) {
+                getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
+                setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
+            }
         }
     }
 
-    private void refreshOperationalState() {
-        MariaDbRuntime runtime = databaseRuntime;
-        if (runtime == null) {
+    private void finishStorageInitialization(PaperStorageBindings bindings) {
+        if (lifecycle.stopping()) {
             return;
         }
+        getServer().getOnlinePlayers().forEach(freezeManager::verify);
+        if (lifecycle.stopping()) {
+            return;
+        }
+        getServer().getOnlinePlayers().forEach(staffModeManager::recover);
+        if (lifecycle.stopping()) {
+            return;
+        }
+        vanishManager.initialize();
+        if (lifecycle.stopping()) {
+            return;
+        }
+        promoteAfterBootstrap(bindings.runtime());
+        if (lifecycle.stopping()) {
+            return;
+        }
+        try {
+            startChannelClient(bindings.runtime());
+        } catch (RuntimeException exception) {
+            channelConnected.set(false);
+            getLogger().log(Level.SEVERE,
+                    "Persistent Velocity channel initialization failed; new punishment writes are disabled",
+                    exception);
+        }
+        if (!lifecycle.stopping()) {
+            registerOperationalStateTask();
+        }
+    }
+
+    private void registerOperationalStateTask() {
+        ScheduledTask task = getServer().getAsyncScheduler().runAtFixedRate(
+                this,
+                ignored -> refreshOperationalState(),
+                5,
+                5,
+                TimeUnit.SECONDS
+        );
+        if (!lifecycle.publishTask(task)) {
+            cancelTask(task);
+        }
+    }
+
+    private void degradeBootstrap(String reason) {
+        if (!lifecycle.stopping()) {
+            setDegraded("mariadb", reason);
+        }
+    }
+
+    private void discardFailedStorageRuntime(MariaDbRuntime opened, boolean published) {
+        if (opened == null) {
+            return;
+        }
+        if (!published) {
+            closeSafely("partially initialized MariaDB runtime", opened);
+            return;
+        }
+        Optional<PaperStorageBindings> removed =
+                lifecycle.removeStorageIf(bindings -> bindings.runtime() == opened);
+        if (removed.isPresent()) {
+            cancelOperationalStateTask();
+            closeChannelClient();
+            closeSafely("partially initialized MariaDB runtime", opened);
+        }
+    }
+
+    private void stopOperationalRuntime() {
+        lifecycle.beginShutdown(() -> {
+            mode.set(OperationalMode.MAINTENANCE);
+            publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
+        });
+        cancelOperationalStateTask();
+        closeChannelClient();
+    }
+
+    private void cancelOperationalStateTask() {
+        lifecycle.removeTask().ifPresent(this::cancelTask);
+    }
+
+    private void cancelTask(ScheduledTask task) {
+        try {
+            task.cancel();
+        } catch (RuntimeException exception) {
+            getLogger().log(Level.WARNING, "Operational-state task cleanup failed", exception);
+        }
+    }
+
+    private void closeChannelClient() {
+        channelConnected.set(false);
+        lifecycle.removeChannel()
+                .ifPresent(client -> closeSafely("persistent Velocity channel", client));
+    }
+
+    private void shutdownWorkers() {
+        ExecutorService executor = workers;
+        if (executor == null) {
+            return;
+        }
+        try {
+            executor.shutdown();
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    getLogger().warning("Worker tasks did not terminate within the shutdown deadline");
+                }
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        } catch (RuntimeException exception) {
+            try {
+                executor.shutdownNow();
+            } catch (RuntimeException forcedFailure) {
+                exception.addSuppressed(forcedFailure);
+            }
+            getLogger().log(Level.WARNING, "Worker executor cleanup failed", exception);
+        }
+    }
+
+    private void closeDatabaseRuntime() {
+        Optional<PaperStorageBindings> current = lifecycle.removeStorage();
+        current.ifPresent(bindings -> closeSafely("MariaDB runtime", bindings.runtime()));
+    }
+
+    private void closeSafely(String component, AutoCloseable resource) {
+        if (resource == null) {
+            return;
+        }
+        try {
+            resource.close();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            getLogger().log(Level.WARNING, component + " cleanup was interrupted", exception);
+        } catch (Exception exception) {
+            getLogger().log(Level.WARNING, component + " cleanup failed", exception);
+        }
+    }
+
+    private <T> T storageValue(Function<PaperStorageBindings, T> selector) {
+        return lifecycle.storageValue(selector);
+    }
+
+    private void refreshOperationalState() {
+        Optional<PaperStorageBindings> current = lifecycle.storage();
+        if (current.isEmpty() || lifecycle.stopping()) {
+            return;
+        }
+        MariaDbRuntime runtime = current.orElseThrow().runtime();
         try {
             OperationalStateSnapshot state = runtime.operationalStateStore().current();
             if (state.mode() == OperationalMode.ACTIVE && !runtime.operationalStateStore().hasAuthorizedCutover()) {
@@ -368,8 +426,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void promoteAfterBootstrap() {
-        OperationalStateStore states = databaseRuntime.operationalStateStore();
+    private void promoteAfterBootstrap(MariaDbRuntime runtime) {
+        OperationalStateStore states = runtime.operationalStateStore();
         OperationalStateSnapshot persisted = states.current();
         OperationalMode next = persisted.mode();
         if (next == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
@@ -390,7 +448,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             }
             next = OperationalMode.SHADOW_MIGRATION;
         }
-        mode.set(next);
         Map<String, String> issues = switch (next) {
             case ACTIVE -> Map.of();
             case SHADOW_MIGRATION -> Map.of(
@@ -398,8 +455,15 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             case MAINTENANCE -> Map.of("maintenance", "Maintenance mode blocks sensitive state changes");
             default -> Map.of("mode", "Sensitive actions are disabled in " + next);
         };
-        publishHealth(next, issues);
-        getLogger().info("Storage verified; EnthusiaStaff entered " + next);
+        publishBootstrapMode(next, issues);
+    }
+
+    private void publishBootstrapMode(OperationalMode next, Map<String, String> issues) {
+        lifecycle.runIfRunning(() -> {
+            mode.set(next);
+            publishHealth(next, issues);
+            getLogger().info("Storage verified; EnthusiaStaff entered " + next);
+        });
     }
 
     private String environment(String configurationPath) {
@@ -408,9 +472,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void setDegraded(String component, String reason) {
-        mode.set(OperationalMode.DEGRADED);
-        publishHealth(OperationalMode.DEGRADED, Map.of(component, reason));
-        getLogger().warning(reason);
+        lifecycle.runIfRunning(() -> {
+            mode.set(OperationalMode.DEGRADED);
+            publishHealth(OperationalMode.DEGRADED, Map.of(component, reason));
+            getLogger().warning(reason);
+        });
     }
 
     private void registerStatusCommand() {
@@ -449,7 +515,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 Clock.systemUTC(),
                 matcher,
                 this::effectiveWriteMode,
-                () -> punishmentService,
+                () -> storageValue(PaperStorageBindings::punishmentService),
                 workers,
                 playerId -> {
                     MuteEnforcementListener enforcement = muteEnforcement;
@@ -492,10 +558,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             economyCoordinator = new EconomyCoordinator(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString("network.server-id", "SMP"),
+                    networkServerId(),
                     this::effectiveWriteMode,
                     authorizationPolicy,
-                    () -> economyJournalStore,
+                    () -> storageValue(PaperStorageBindings::economyJournalStore),
                     workers,
                     discovery.gateway().orElseThrow(),
                     order,
@@ -505,14 +571,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             confiscationCoordinator = new ConfiscationCoordinator(
                     this,
                     Clock.systemUTC(),
-                    getConfig().getString(
-                            "inventory.scope-id",
-                            getConfig().getString("network.server-id", "SMP")
-                    ),
-                    getConfig().getString("network.server-id", "SMP"),
+                    inventoryScopeId(),
+                    networkServerId(),
                     this::effectiveWriteMode,
                     authorizationPolicy,
-                    () -> inventoryJournalStore,
+                    () -> storageValue(PaperStorageBindings::inventoryJournalStore),
                     workers,
                     inventoryCoordinator,
                     currencyGateway
@@ -592,11 +655,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerCommands() {
         registerStatusCommand();
+        Supplier<PunishmentDraftWorkflow> punishmentDraftWorkflow =
+                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow);
+        Supplier<SanctionChangeService> sanctionChangeService =
+                () -> storageValue(PaperStorageBindings::sanctionChangeService);
+        Supplier<PlayerDirectory> playerDirectory =
+                () -> storageValue(PaperStorageBindings::playerDirectory);
+        Supplier<CaseLookup> caseLookup = () -> storageValue(PaperStorageBindings::caseLookup);
         PunishmentGuiController punishmentGui = new PunishmentGuiController(
                 this,
                 this::effectiveWriteMode,
-                () -> punishmentDraftWorkflow,
-                () -> playerDirectory,
+                punishmentDraftWorkflow,
+                playerDirectory,
                 authorizationPolicy,
                 reasonPolicies,
                 workers
@@ -605,8 +675,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         PunishmentCommand punishment = new PunishmentCommand(
                 this,
                 this::effectiveWriteMode,
-                () -> punishmentDraftWorkflow,
-                () -> playerDirectory,
+                punishmentDraftWorkflow,
+                playerDirectory,
                 authorizationPolicy,
                 reasonPolicies,
                 workers,
@@ -621,10 +691,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this,
                 Clock.systemUTC(),
                 this::effectiveWriteMode,
-                () -> sanctionChangeService,
-                () -> playerDirectory,
-                () -> caseLookup,
-                () -> caseReviewStore,
+                sanctionChangeService,
+                playerDirectory,
+                caseLookup,
+                () -> storageValue(PaperStorageBindings::caseReviewStore),
                 authorizationPolicy,
                 workers
         );
@@ -632,9 +702,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         SanctionChangeCommand changes = new SanctionChangeCommand(
                 this,
                 this::effectiveWriteMode,
-                () -> sanctionChangeService,
-                () -> playerDirectory,
-                () -> caseLookup,
+                sanctionChangeService,
+                playerDirectory,
+                caseLookup,
                 authorizationPolicy,
                 workers,
                 sanctionChangeGui
@@ -651,11 +721,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         ReportCommand report = new ReportCommand(
                 this,
                 Clock.systemUTC(),
-                getConfig().getString("network.server-id", "SMP"),
+                networkServerId(),
                 mode::get,
-                () -> playerDirectory,
-                () -> reportStore,
-                () -> sanctionLookup,
+                playerDirectory,
+                () -> storageValue(PaperStorageBindings::reportStore),
+                () -> storageValue(PaperStorageBindings::sanctionLookup),
                 reasonPolicies,
                 chatContext,
                 clientEvidenceCollector,
@@ -667,7 +737,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         ClientCommand client = new ClientCommand(
                 this,
                 clientEvidenceCollector,
-                () -> clientEvidenceStore,
+                () -> storageValue(PaperStorageBindings::clientEvidenceStore),
                 workers
         );
         PluginCommand clientCommand = Objects.requireNonNull(
@@ -676,7 +746,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         clientCommand.setExecutor(client);
         clientCommand.setTabCompleter(client);
-        ReportsCommand reports = new ReportsCommand(this, Clock.systemUTC(), () -> reportStore, workers);
+        ReportsCommand reports = new ReportsCommand(
+                this,
+                Clock.systemUTC(),
+                () -> storageValue(PaperStorageBindings::reportStore),
+                workers
+        );
         PluginCommand reportsCommand = Objects.requireNonNull(getCommand("reports"), "reports command is missing");
         reportsCommand.setExecutor(reports);
         reportsCommand.setTabCompleter(reports);
@@ -684,8 +759,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this,
                 Clock.systemUTC(),
                 this::effectiveWriteMode,
-                () -> playerDirectory,
-                () -> freezeStore,
+                playerDirectory,
+                () -> storageValue(PaperStorageBindings::freezeStore),
                 freezeManager,
                 workers
         );
@@ -700,7 +775,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         InventoryCommand inventory = new InventoryCommand(
                 this,
                 Clock.systemUTC(),
-                () -> playerDirectory,
+                playerDirectory,
                 inventoryCoordinator,
                 workers
         );
@@ -712,8 +787,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         InspectCommand inspect = new InspectCommand(
                 this,
                 Clock.systemUTC(),
-                () -> playerDirectory,
-                () -> caseLookup,
+                playerDirectory,
+                caseLookup,
                 () -> economyCoordinator,
                 () -> confiscationCoordinator,
                 inventoryCoordinator,
@@ -731,11 +806,19 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         Objects.requireNonNull(getCommand("case"), "case command is missing")
                 .setExecutor(new CaseCommand(
                         this,
-                        () -> caseLookup,
+                        caseLookup,
                         () -> confiscationCoordinator,
                         authorizationPolicy,
                         workers
                 ));
+    }
+
+    private String networkServerId() {
+        return getConfig().getString("network.server-id", "SMP");
+    }
+
+    private String inventoryScopeId() {
+        return getConfig().getString("inventory.scope-id", networkServerId());
     }
 
     private OperationalMode effectiveWriteMode() {
@@ -745,42 +828,16 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 : authoritative;
     }
 
-    private void initializeChannel(MariaDbRuntime runtime) {
-        if (!getConfig().getBoolean("channel.enabled", false)) {
-            getLogger().warning("Persistent Velocity channel is disabled; new punishment writes remain disabled");
-            return;
-        }
-        String backendId = getConfig().getString("network.server-id", "SMP");
-        String proxyId = getConfig().getString("channel.proxy-id", "VELOCITY");
-        String backendEnvironment = getConfig().getString("channel.backend-secret-environment");
-        String proxyEnvironment = getConfig().getString("channel.proxy-secret-environment");
-        String trustStore = getConfig().getString("channel.tls.trust-store", "channel-trust.p12");
-        String trustStorePasswordEnvironment = getConfig().getString(
-                "channel.tls.trust-store-password-environment",
-                "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD"
-        );
-        if (backendId == null || proxyId == null || backendEnvironment == null || proxyEnvironment == null
-                || trustStore == null || trustStorePasswordEnvironment == null) {
-            throw new IllegalArgumentException("Persistent channel identifiers and secret environments are required");
-        }
-        SecretKey backendKey = secretFromEnvironment(backendEnvironment);
-        SecretKey proxyKey = secretFromEnvironment(proxyEnvironment);
-        SSLContext tlsContext = clientTlsContext(trustStore, trustStorePasswordEnvironment);
-        channelClient = new PersistentChannelClient(
-                new PersistentChannelClient.Configuration(
-                        backendId,
-                        getConfig().getString("channel.host", "127.0.0.1"),
-                        getConfig().getInt("channel.port", 28_765),
-                        backendKey,
-                        proxyId,
-                        proxyKey,
-                        tlsContext
-                ),
-                Clock.systemUTC(),
-                envelope -> handleNetworkMessage(runtime, backendId, envelope),
-                state -> channelConnected.set("CONNECTED".equals(state))
-        );
-        channelClient.start();
+    private void startChannelClient(MariaDbRuntime runtime) {
+        PaperPersistentChannelFactory.start(
+                this,
+                (backendId, envelope) -> handleNetworkMessage(runtime, backendId, envelope),
+                state -> channelConnected.set(!lifecycle.stopping() && "CONNECTED".equals(state))
+        ).ifPresent(started -> {
+            if (!lifecycle.publishChannel(started)) {
+                closeSafely("persistent Velocity channel opened during shutdown", started);
+            }
+        });
     }
 
     private boolean handleNetworkMessage(
@@ -809,41 +866,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             }
         }
         return true;
-    }
-
-    private static SecretKey secretFromEnvironment(String environment) {
-        return SecretKeyMaterial.hmacSha256FromBase64(System.getenv(environment));
-    }
-
-    private SSLContext clientTlsContext(String configuredPath, String passwordEnvironment) {
-        char[] password = passwordFromEnvironment(passwordEnvironment);
-        try {
-            Path path = Path.of(configuredPath);
-            Path resolved = resolveChannelTlsPath(path);
-            return TlsContextLoader.client(resolved, password);
-        } finally {
-            Arrays.fill(password, '\0');
-        }
-    }
-
-    private Path resolveChannelTlsPath(Path configured) {
-        if (configured.isAbsolute()) {
-            return configured.normalize();
-        }
-        Path dataDirectory = getDataFolder().toPath().toAbsolutePath().normalize();
-        Path resolved = dataDirectory.resolve(configured).normalize();
-        if (!resolved.startsWith(dataDirectory)) {
-            throw new IllegalArgumentException("A relative channel TLS path must remain in the plugin data directory");
-        }
-        return resolved;
-    }
-
-    private static char[] passwordFromEnvironment(String environment) {
-        String value = System.getenv(environment);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("A required channel TLS store password environment variable is missing");
-        }
-        return value.toCharArray();
     }
 
     private boolean loadReasonPolicies() {
@@ -918,4 +940,5 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             return defaults;
         }
     }
+
 }
