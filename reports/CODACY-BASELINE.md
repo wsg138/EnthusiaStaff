@@ -341,15 +341,16 @@ non-AES keys, malformed IPv4/IPv6 envelopes, altered ciphertext, and equality
 token substitution. A deterministic random source verifies that every
 encryption requests a fresh nonce.
 
-At exact head `6e583fdacab9e160110715426712dbc79503cdbc`, all 39 clean
-Java 21 build tasks executed. The build passed 141 tests in 51 suites with zero
-failures, errors, or skips, including all 21 tests across seven MariaDB
-Testcontainers suites.
+At exact code, test, and checkpoint head
+`6b77ab214ebb1acf7aaf71db4bb3d86b4c55996d`, 38 clean Java 21 build tasks
+executed and the root aggregate `clean` task was up-to-date. The build passed
+141 tests in 51 suites with zero failures, errors, or skips, including all 21
+tests across seven MariaDB Testcontainers suites.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Paper runtime jar | 8,075,842 | `045C3375D952433CCD6EC4FDD58A7A05F3D41B9FE0419EF128C11AE11C67C3BE` |
-| Velocity runtime jar | 7,349,463 | `1046904B144EA10AEC2E17A589EB2ECA331097303252642B3813CF3EA17B50A2` |
+| Paper runtime jar | 8,075,842 | `5A10034FD4FD91FB60E8ED32940F439489425A2B130E8E8AC8EFAADD773C2219` |
+| Velocity runtime jar | 7,349,463 | `B26FDF6B276E7D7EB9C55383606F14D5A6943B4B870EDD747F344EDC83857C4C` |
 
 The local PR #9 checkpoint reports 232 PMD, 234 Lizard, 17 Opengrep, four CPD
 clone groups at 100 tokens, and zero Trivy findings. PMD, Lizard, and CPD
