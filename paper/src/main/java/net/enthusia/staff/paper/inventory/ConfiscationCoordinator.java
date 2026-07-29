@@ -1341,51 +1341,77 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
-            for (Map.Entry<ItemPath, String> selection : session.selections().entrySet()) {
-                ItemStack item = NestedInventorySelection.item(current, selection.getKey());
-                if (item == null || item.isEmpty()
-                        || !NestedInventorySelection.fingerprint(item).equals(selection.getValue())) {
-                    cancelBeforePatch(
-                            session,
-                            "SELECTION_FINGERPRINT_STALE",
-                            "A selected nested item changed and requires reselection"
-                    );
-                    return;
-                }
+            if (!selectionsStillValid(session, current)) {
+                return;
             }
             NestedInventorySelection.SelectionResult removal =
                     NestedInventorySelection.remove(current, session.selections().keySet());
             InventoryImageCodec.EncodedImage replacement =
                     imageCodec.encodeWithChecksum(removal.replacement());
             ConfiscatedAssetsCodec.EncodedAssets assets = assetsCodec.encode(removal.entries());
-            InventoryConfiscationCommitRequest request = new InventoryConfiscationCommitRequest(
-                    session.operationId(),
-                    session.fencingToken(),
-                    session.durable().expectedRevision(),
-                    currentBytes.checksum(),
-                    replacement.checksum(),
-                    replacement.bytes(),
-                    removal.changedRootSlots(),
-                    assets.checksum(),
-                    assets.bytes(),
-                    removal.entries().stream()
-                            .map(ConfiscatedAssetEntry::path)
-                            .map(ItemPath::encoded)
-                            .toList()
-            );
-            if (!submit(() -> preparePatch(session, request, removal.replacement()))) {
-                cancelBeforePatch(
-                        session,
-                        "COMMIT_QUEUE_FULL",
-                        "Confiscation commit queue is full"
-                );
-            }
+            InventoryConfiscationCommitRequest request =
+                    confiscationCommitRequest(session, currentBytes, replacement, assets, removal);
+            queueConfiscationPatch(session, request, removal.replacement());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscation selection validation failed", exception);
             cancelBeforePatch(
                     session,
                     "SELECTION_VALIDATION_FAILED",
                     "Confiscation selection could not be validated"
+            );
+        }
+    }
+
+    private boolean selectionsStillValid(SelectionSession session, InventoryImage current) {
+        for (Map.Entry<ItemPath, String> selection : session.selections().entrySet()) {
+            ItemStack item = NestedInventorySelection.item(current, selection.getKey());
+            if (item == null || item.isEmpty()
+                    || !NestedInventorySelection.fingerprint(item).equals(selection.getValue())) {
+                cancelBeforePatch(
+                        session,
+                        "SELECTION_FINGERPRINT_STALE",
+                        "A selected nested item changed and requires reselection"
+                );
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static InventoryConfiscationCommitRequest confiscationCommitRequest(
+            SelectionSession session,
+            InventoryImageCodec.EncodedImage current,
+            InventoryImageCodec.EncodedImage replacement,
+            ConfiscatedAssetsCodec.EncodedAssets assets,
+            NestedInventorySelection.SelectionResult removal
+    ) {
+        return new InventoryConfiscationCommitRequest(
+                session.operationId(),
+                session.fencingToken(),
+                session.durable().expectedRevision(),
+                current.checksum(),
+                replacement.checksum(),
+                replacement.bytes(),
+                removal.changedRootSlots(),
+                assets.checksum(),
+                assets.bytes(),
+                removal.entries().stream()
+                        .map(ConfiscatedAssetEntry::path)
+                        .map(ItemPath::encoded)
+                        .toList()
+        );
+    }
+
+    private void queueConfiscationPatch(
+            SelectionSession session,
+            InventoryConfiscationCommitRequest request,
+            InventoryImage replacement
+    ) {
+        if (!submit(() -> preparePatch(session, request, replacement))) {
+            cancelBeforePatch(
+                    session,
+                    "COMMIT_QUEUE_FULL",
+                    "Confiscation commit queue is full"
             );
         }
     }
@@ -1402,50 +1428,77 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         }
         InventoryPatch preparedPatch = null;
         try {
-            InventoryPreparation prepared = loaded.prepareConfiscation(request, clock.instant());
-            InventoryPatch patch = prepared.patch().orElse(null);
-            if (patch == null) {
-                cancelBeforePatch(session, "PATCH_REJECTED", prepared.detail());
-                return;
-            }
-            preparedPatch = patch;
-            session.applying();
-            InventoryPatch claimed = loaded.claimForApply(
-                    patch.patchId(),
-                    patch.operationId(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).orElse(null);
-            if (claimed == null) {
-                quarantine(session, patch, "PATCH_CLAIM_FAILED", "Prepared confiscation patch lost its lease");
-                return;
-            }
-            if (claimed.state() == InventoryOperationState.APPLIED) {
-                releaseAfterCompletion(session, "That exact confiscation was already committed.");
-                return;
-            }
-            onEntity(
-                    session.target(),
-                    () -> applyPatch(session, claimed, replacement),
-                    () -> pendingAfterTargetDeparture(session)
-            );
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Confiscation patch preparation failed", exception);
+            preparedPatch = prepareConfiscationRecord(loaded, session, request);
             if (preparedPatch == null) {
-                cancelBeforePatch(
-                        session,
-                        "PATCH_PREPARATION_FAILED",
-                        "Confiscation patch could not be prepared"
-                );
-            } else {
-                quarantine(
-                        session,
-                        preparedPatch,
-                        "PATCH_CLAIM_EXCEPTION",
-                        "Prepared confiscation patch could not be claimed safely"
-                );
+                return;
             }
+            session.applying();
+            claimConfiscationPatch(loaded, session, preparedPatch, replacement);
+        } catch (RuntimeException exception) {
+            handleConfiscationPreparationFailure(session, preparedPatch, exception);
         }
+    }
+
+    private InventoryPatch prepareConfiscationRecord(
+            InventoryJournalStore loaded,
+            SelectionSession session,
+            InventoryConfiscationCommitRequest request
+    ) {
+        InventoryPreparation prepared = loaded.prepareConfiscation(request, clock.instant());
+        InventoryPatch patch = prepared.patch().orElse(null);
+        if (patch == null) {
+            cancelBeforePatch(session, "PATCH_REJECTED", prepared.detail());
+        }
+        return patch;
+    }
+
+    private void claimConfiscationPatch(
+            InventoryJournalStore loaded,
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImage replacement
+    ) {
+        InventoryPatch claimed = loaded.claimForApply(
+                patch.patchId(),
+                patch.operationId(),
+                LEASE_DURATION,
+                clock.instant()
+        ).orElse(null);
+        if (claimed == null) {
+            quarantine(session, patch, "PATCH_CLAIM_FAILED", "Prepared confiscation patch lost its lease");
+            return;
+        }
+        if (claimed.state() == InventoryOperationState.APPLIED) {
+            releaseAfterCompletion(session, "That exact confiscation was already committed.");
+            return;
+        }
+        onEntity(
+                session.target(),
+                () -> applyPatch(session, claimed, replacement),
+                () -> pendingAfterTargetDeparture(session)
+        );
+    }
+
+    private void handleConfiscationPreparationFailure(
+            SelectionSession session,
+            InventoryPatch preparedPatch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Confiscation patch preparation failed", exception);
+        if (preparedPatch == null) {
+            cancelBeforePatch(
+                    session,
+                    "PATCH_PREPARATION_FAILED",
+                    "Confiscation patch could not be prepared"
+            );
+            return;
+        }
+        quarantine(
+                session,
+                preparedPatch,
+                "PATCH_CLAIM_EXCEPTION",
+                "Prepared confiscation patch could not be claimed safely"
+        );
     }
 
     private void applyPatch(
@@ -1456,48 +1509,75 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         try {
             InventoryImage current = imageCodec.capture(session.target());
             InventoryImageCodec.EncodedImage currentBytes = imageCodec.encodeWithChecksum(current);
-            InventoryImageCodec.EncodedImage appliedBytes;
-            switch (InventoryPatchDecision.decide(
-                    currentBytes.checksum(),
-                    patch.expectedChecksum(),
-                    patch.replacementChecksum()
-            )) {
-                case APPLY_REPLACEMENT -> {
-                    imageCodec.apply(session.target(), replacement);
-                    appliedBytes = imageCodec.encodeWithChecksum(imageCodec.capture(session.target()));
-                }
-                case FINALIZE_ALREADY_APPLIED -> appliedBytes = currentBytes;
-                case QUARANTINE_CONFLICT -> {
-                    quarantine(
-                            session,
-                            patch,
-                            "LIVE_STATE_CHANGED",
-                            "Target inventory changed after confiscation was prepared"
-                    );
-                    return;
-                }
-                default -> throw new IllegalStateException("Unhandled inventory patch decision");
-            }
-            if (!submit(() -> finalizePatch(session, patch, appliedBytes))) {
-                alertStaff(
-                        "Confiscation reached the target for " + patch.operationId()
-                                + " but finalization queue is full."
-                );
+            InventoryImageCodec.EncodedImage appliedBytes =
+                    applyConfiscationDecision(session, patch, replacement, currentBytes);
+            if (appliedBytes != null) {
+                queueConfiscationFinalization(session, patch, appliedBytes);
             }
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Confiscation inventory application failed", exception);
-            try {
-                imageCodec.apply(session.target(), session.before());
-            } catch (RuntimeException rollback) {
-                exception.addSuppressed(rollback);
+            handleConfiscationApplyFailure(session, patch, exception);
+        }
+    }
+
+    private InventoryImageCodec.EncodedImage applyConfiscationDecision(
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImage replacement,
+            InventoryImageCodec.EncodedImage current
+    ) {
+        return switch (InventoryPatchDecision.decide(
+                current.checksum(),
+                patch.expectedChecksum(),
+                patch.replacementChecksum()
+        )) {
+            case APPLY_REPLACEMENT -> {
+                imageCodec.apply(session.target(), replacement);
+                yield imageCodec.encodeWithChecksum(imageCodec.capture(session.target()));
             }
-            quarantine(
-                    session,
-                    patch,
-                    "BUKKIT_APPLY_FAILED",
-                    "Inventory application failed; exact rollback could not be durably proven"
+            case FINALIZE_ALREADY_APPLIED -> current;
+            case QUARANTINE_CONFLICT -> {
+                quarantine(
+                        session,
+                        patch,
+                        "LIVE_STATE_CHANGED",
+                        "Target inventory changed after confiscation was prepared"
+                );
+                yield null;
+            }
+            default -> throw new IllegalStateException("Unhandled inventory patch decision");
+        };
+    }
+
+    private void queueConfiscationFinalization(
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImageCodec.EncodedImage applied
+    ) {
+        if (!submit(() -> finalizePatch(session, patch, applied))) {
+            alertStaff(
+                    "Confiscation reached the target for " + patch.operationId()
+                            + " but finalization queue is full."
             );
         }
+    }
+
+    private void handleConfiscationApplyFailure(
+            SelectionSession session,
+            InventoryPatch patch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Confiscation inventory application failed", exception);
+        try {
+            imageCodec.apply(session.target(), session.before());
+        } catch (RuntimeException rollback) {
+            exception.addSuppressed(rollback);
+        }
+        quarantine(
+                session,
+                patch,
+                "BUKKIT_APPLY_FAILED",
+                "Inventory application failed; exact rollback could not be durably proven"
+        );
     }
 
     private void finalizePatch(
