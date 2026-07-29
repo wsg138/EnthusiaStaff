@@ -45,6 +45,12 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class EconomyCoordinator implements Listener, AutoCloseable {
     private static final Duration LEASE_DURATION = Duration.ofMinutes(2);
     private static final long RENEWAL_PERIOD_TICKS = 20L * 30L;
+    private static final RollbackOutcomeMessages FAILED_ROLLBACK_MESSAGES = new RollbackOutcomeMessages(
+            "ROLLBACK_RESULT_MISSING",
+            "Currency could not prove the exact compensated account state",
+            "CURRENCY_FAILED_ROLLED_BACK",
+            "Economy confiscation failed and Currency restored the before assets."
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -552,33 +558,15 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                                 + operation.caseId() + '.'
                 );
             }
-            case FAILED_ROLLED_BACK -> {
-                CurrencyAccountState restored = outcome.accountState().orElse(null);
-                if (restored == null || !matchesBeforeState(restored, before)) {
-                    quarantine(
-                            actor,
-                            target,
-                            operation,
-                            guard,
-                            outcome.accountState(),
-                            "ROLLBACK_RESULT_MISSING",
-                            "Currency could not prove the exact compensated account state"
-                    );
-                    return;
-                }
-                finishOutcome(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        verifiedRollbackUpdate(
-                                restored,
-                                "CURRENCY_FAILED_ROLLED_BACK",
-                                bounded(outcome.detail())
-                        ),
-                        "Economy confiscation failed and Currency restored the before assets."
-                );
-            }
+            case FAILED_ROLLED_BACK -> finishVerifiedRollback(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    before,
+                    outcome,
+                    FAILED_ROLLBACK_MESSAGES
+            );
             case STALE, INVALID_PLAN, LOCK_REQUIRED, PLAYER_OFFLINE -> finishRejectedProviderOutcome(
                     actor,
                     target,
@@ -610,6 +598,32 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             CurrencyAccountState before,
             CurrencyRemovalOutcome outcome
     ) {
+        String detail = bounded(outcome.detail());
+        finishVerifiedRollback(
+                actor,
+                target,
+                operation,
+                guard,
+                before,
+                outcome,
+                new RollbackOutcomeMessages(
+                        "CURRENCY_" + outcome.status().name() + "_UNVERIFIED",
+                        "Currency rejected the plan without proving that the account remained unchanged",
+                        "CURRENCY_" + outcome.status().name(),
+                        "Economy confiscation was rejected before assets changed: " + detail
+                )
+        );
+    }
+
+    private void finishVerifiedRollback(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalOutcome outcome,
+            RollbackOutcomeMessages messages
+    ) {
         CurrencyAccountState unchanged = outcome.accountState().orElse(null);
         if (unchanged == null || !matchesBeforeState(unchanged, before)) {
             quarantine(
@@ -618,8 +632,8 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     operation,
                     guard,
                     outcome.accountState(),
-                    "CURRENCY_" + outcome.status().name() + "_UNVERIFIED",
-                    "Currency rejected the plan without proving that the account remained unchanged"
+                    messages.unverifiedFailureCode(),
+                    messages.unverifiedDetail()
             );
             return;
         }
@@ -630,10 +644,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 guard,
                 verifiedRollbackUpdate(
                         unchanged,
-                        "CURRENCY_" + outcome.status().name(),
+                        messages.verifiedFailureCode(),
                         bounded(outcome.detail())
                 ),
-                "Economy confiscation was rejected before assets changed: " + bounded(outcome.detail())
+                messages.successMessage()
         );
     }
 
@@ -1362,6 +1376,14 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         leaseGuards.values().forEach(LeaseGuard::close);
         leaseGuards.clear();
         preloadedRecovery.clear();
+    }
+
+    private record RollbackOutcomeMessages(
+            String unverifiedFailureCode,
+            String unverifiedDetail,
+            String verifiedFailureCode,
+            String successMessage
+    ) {
     }
 
     private final class LeaseGuard implements AutoCloseable {
