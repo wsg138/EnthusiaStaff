@@ -87,9 +87,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
 
     public ConfiscationCoordinator(
             JavaPlugin plugin,
-            Clock clock,
-            String scopeId,
-            String serverId,
+            InventoryOperationContext context,
             Supplier<OperationalMode> mode,
             AuthorizationPolicy authorization,
             Supplier<InventoryJournalStore> store,
@@ -98,9 +96,11 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             CurrencyGateway currency
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.scopeId = requireIdentifier(scopeId, "scopeId");
-        this.serverId = requireIdentifier(serverId, "serverId");
+        InventoryOperationContext operationContext =
+                java.util.Objects.requireNonNull(context, "context");
+        this.clock = operationContext.clock();
+        this.scopeId = operationContext.scopeId();
+        this.serverId = operationContext.serverId();
         this.mode = java.util.Objects.requireNonNull(mode, "mode");
         this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.store = java.util.Objects.requireNonNull(store, "store");
@@ -1832,13 +1832,6 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
                         .forEach(player -> player.sendMessage(Component.text(body))));
-    }
-
-    private static String requireIdentifier(String value, String field) {
-        if (value == null || value.isBlank() || value.length() > 64) {
-            throw new IllegalArgumentException(field + " must contain 1-64 characters");
-        }
-        return value;
     }
 
     private boolean authorize(Player player, ModerationAction action) {

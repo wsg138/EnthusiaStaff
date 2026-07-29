@@ -56,8 +56,9 @@ import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
-import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
+import net.enthusia.staff.paper.inventory.InventoryCoordinator;
+import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
@@ -92,6 +93,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private StaffModeManager staffModeManager;
     private DefaultStaffVisibilityService visibilityService;
     private VanishManager vanishManager;
+    private InventoryOperationContext inventoryOperationContext;
     private InventoryCoordinator inventoryCoordinator;
     private EconomyCoordinator economyCoordinator;
     private ConfiscationCoordinator confiscationCoordinator;
@@ -135,11 +137,14 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         staffModeManager.setExitListener(vanishManager::staffModeExited);
         getServer().getPluginManager().registerEvents(vanishManager, this);
-        inventoryCoordinator = new InventoryCoordinator(
-                this,
+        inventoryOperationContext = new InventoryOperationContext(
                 Clock.systemUTC(),
                 inventoryScopeId(),
-                networkServerId(),
+                networkServerId()
+        );
+        inventoryCoordinator = new InventoryCoordinator(
+                this,
+                inventoryOperationContext,
                 this::effectiveWriteMode,
                 () -> storageValue(PaperStorageBindings::inventoryJournalStore),
                 () -> storageValue(PaperStorageBindings::playerDirectory),
@@ -570,9 +575,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             CurrencyGateway currencyGateway = discovery.gateway().orElseThrow();
             confiscationCoordinator = new ConfiscationCoordinator(
                     this,
-                    Clock.systemUTC(),
-                    inventoryScopeId(),
-                    networkServerId(),
+                    inventoryOperationContext,
                     this::effectiveWriteMode,
                     authorizationPolicy,
                     () -> storageValue(PaperStorageBindings::inventoryJournalStore),
