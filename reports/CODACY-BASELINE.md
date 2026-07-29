@@ -277,9 +277,11 @@ commits. GitHub shows no unresolved review thread.
 
 ## Current merged checkpoint
 
-As of 2026-07-29, PRs #1 through #9 are merged and the hosted Codacy analysis
-for `main` is pinned to
-`e6da2117fddb6b8e165f0dd41277b21bed296f90`.
+As of 2026-07-29, PRs #1 through #10 are merged and `main` is
+`3444cc154e26454baaf4eefc40390108bf2903b6`. The latest exact aggregate issue
+snapshot recorded for `main` remains pinned to
+`e6da2117fddb6b8e165f0dd41277b21bed296f90`; the PR #10 branch analysis was
+separately up to standards before merge.
 
 | PR | Coherent section | Merge commit |
 | ---: | --- | --- |
@@ -292,9 +294,10 @@ for `main` is pinned to
 | [#7](https://github.com/wsg138/EnthusiaStaff/pull/7) | Confiscated-asset restoration integrity | `2867ad30b8ee725701874fa34596502e75ba7105` |
 | [#8](https://github.com/wsg138/EnthusiaStaff/pull/8) | Economy rollback integrity | `80b2635917bcf71a187ec27ae0bf5e38b35610ef` |
 | [#9](https://github.com/wsg138/EnthusiaStaff/pull/9) | Network identity and inventory recovery integrity | `e6da2117fddb6b8e165f0dd41277b21bed296f90` |
+| [#10](https://github.com/wsg138/EnthusiaStaff/pull/10) | Paper inventory workflow maintainability | `3444cc154e26454baaf4eefc40390108bf2903b6` |
 
-The current hosted repository badge is A. Exact `main` reanalysis reports 427
-active warnings and 69 ignored findings. Three generic AES-GCM review
+The hosted repository badge remains A. The latest exact `main` snapshot reports
+427 active warnings and 69 ignored findings. Three generic AES-GCM review
 detections were added to the ignored set only after the nonce source, encryption
 path, decryption path, and deterministic tests established that no nonce-reuse
 path exists. The grade therefore does not establish that the repository is
@@ -430,6 +433,28 @@ delta remain visible; they were not hidden or dispositioned.
 The single exact-head CodeRabbit attempt was rate-limited before a review
 started. It produced no findings or review object, and GitHub reports zero
 review threads. The attempt was not retried.
+
+### PR #11 inventory patch preparation checkpoint
+
+PR #11 decomposes generic inventory patch preparation into replay, constraint,
+profile, lease, commit, operation-row, before-snapshot, and pending-patch
+stages while retaining one database transaction. Each inserted durable row
+must affect exactly one row or the transaction fails closed. Replay validation
+still compares the complete operation binding and persisted mutation fields;
+the MariaDB integration suite now explicitly rejects a changed-slot replay.
+
+At code and test head
+`3f740bb848da446d2736d19ae8334aee88932691`, focused persistence tests and all
+six `AssetJournalIntegrationTest` MariaDB Testcontainers scenarios pass. The
+full clean build and all MariaDB suites remain pending for the final PR
+checkpoint.
+
+The comparable checked-in PMD ruleset reports 204 findings, down from 210 at
+the PR #10 checkpoint. Lizard reports 201, down from 205. The generic prepare,
+insert, and replay-validation methods have no remaining PMD or Lizard result.
+The store retains two PMD and eleven Lizard results in confiscation, pending,
+quarantine, audit, and overall file-size areas. No analyzer rule, first-party
+path, or finding was suppressed or ignored. Hosted Codacy analysis is pending.
 
 ## Remediation order
 
