@@ -275,6 +275,61 @@ compatibility note, which was added. Its later incremental runs were
 rate-limited, so they are not represented as independent reviews of the TLS
 commits. GitHub shows no unresolved review thread.
 
+## Current merged checkpoint
+
+As of 2026-07-29, PRs #1 through #7 are merged and the hosted Codacy analysis
+for `main` is pinned to
+`2867ad30b8ee725701874fa34596502e75ba7105`.
+
+| PR | Coherent section | Merge commit |
+| ---: | --- | --- |
+| [#1](https://github.com/wsg138/EnthusiaStaff/pull/1) | Moderation platform and safe LiteBans cutover | `b5e55ed9ffd7309cacabf6b0a07af220068f3c30` |
+| [#2](https://github.com/wsg138/EnthusiaStaff/pull/2) | Plugin security, concurrency, and TLS transport | `25ab696137aa5f1e582951233eada60837e15998` |
+| [#3](https://github.com/wsg138/EnthusiaStaff/pull/3) | Paper startup and shutdown lifecycle | `f84e402fa70a2d5198f394ceebd0fb01c7195b6a` |
+| [#4](https://github.com/wsg138/EnthusiaStaff/pull/4) | Discord outbox transaction integrity | `237d12b8bd98c2fe06c4e1b59ff57a5830bdbad5` |
+| [#5](https://github.com/wsg138/EnthusiaStaff/pull/5) | Network outbox delivery integrity | `4a9c8aec9527b351608edf1c726f9c22dea7cd49` |
+| [#6](https://github.com/wsg138/EnthusiaStaff/pull/6) | Asset-journal transaction fencing | `358c099443dea727a50818cb57d3826cd58ea6c7` |
+| [#7](https://github.com/wsg138/EnthusiaStaff/pull/7) | Confiscated-asset restoration integrity | `2867ad30b8ee725701874fa34596502e75ba7105` |
+
+The current hosted repository badge is A, but 446 active findings remain. The
+grade therefore does not establish that the repository is clean or
+production-ready.
+
+| Module | Active findings |
+| --- | ---: |
+| persistence | 179 |
+| paper | 157 |
+| velocity | 78 |
+| domain | 15 |
+| integration-tests | 9 |
+| common | 6 |
+| integration-contracts | 2 |
+| **Total** | **446** |
+
+At the PR #7 merge commit, the clean Java 21
+`clean test check runtimeJars` checkpoint passed 127 tests in 50 suites with
+zero failures, errors, or skips. The executed Docker-backed portion comprised
+18 tests across six MariaDB Testcontainers suites, including six focused
+confiscated-restoration integrity scenarios.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,072,272 | `94ED58045F8BB316F70044BE3D0192279A6530DEE14EF66DD1767A298130C3D0` |
+| Velocity runtime jar | 7,348,337 | `3B584D9D74EF0C3F092C3CF0C6C71BD09E0C5F6A7DD7A9769BF865934DAE86D4` |
+
+The final local analyzer checkpoint reported 232 PMD findings, 235 Lizard
+findings, 17 Opengrep findings, and 11 CPD clone groups. These tool-specific
+totals overlap and must not be added to the hosted active-issue count. PR #7
+introduced zero hosted Codacy issues and solved two; its reported complexity
+and duplication deltas remain visible rather than suppressed. No analyzer rule
+or first-party source path was disabled. The current ignored-issue total remains
+66, unchanged from the PR #2 checkpoint.
+
+CodeRabbit completed its exact PR #7 review with no review submissions, inline
+comments, or unresolved threads. Earlier review details remain recorded in
+their corresponding checkpoint or pull request; absence of a comment is not a
+substitute for build and analyzer evidence.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
