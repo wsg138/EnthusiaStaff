@@ -47,6 +47,12 @@ Delivery, configuration, and operations:
 - Sanction expiration is null only for permanent sanctions and is always after issue time otherwise.
 - One network inbox row per `(consumer_id, message_id)`.
 - One active lease per resource key; every mutation records the fencing token it observed.
+- Inventory patch and operation rows retain the same operation, profile, and
+  fencing token. `PENDING`, `APPLYING`, and `QUARANTINED` states match directly;
+  an `APPLIED` patch pairs only with a `COMMITTED` operation.
+- A pending inventory patch cannot finalize before it is claimed as
+  `APPLYING`; every paired transition updates exactly one row on each side or
+  rolls back.
 - Snapshot and pending-patch revisions must advance by one and may not overwrite newer data.
 - Audit rows are append-only at the application account privilege level.
 
