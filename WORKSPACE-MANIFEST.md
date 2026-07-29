@@ -2,8 +2,8 @@
 
 Last updated: 2026-07-29 (America/Indianapolis)
 
-This manifest records review, recovery, and validation state. PRs #1 through
-#8 have been merged into `main`; PR #9 is the active root-plugin integrity
+This manifest records review, recovery, and validation state. PRs #1 through #8
+have been merged into `main`; PR #9 is the active root-plugin integrity
 checkpoint for protected network identity and inventory recovery. Nothing
 listed here has been deployed, released, or applied to production data.
 
