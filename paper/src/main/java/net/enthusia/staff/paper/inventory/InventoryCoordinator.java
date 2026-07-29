@@ -56,6 +56,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class InventoryCoordinator implements Listener, InventoryLockService, AutoCloseable {
     private static final Duration APPLY_LEASE = Duration.ofSeconds(30);
     private static final int MAX_LOGIN_APPLY_ATTEMPTS = 5;
+    private static final int MAX_PENDING_PATCHES_PER_PLAYER = 1;
+    private static final int PENDING_PATCH_LOOKAHEAD = 2;
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -154,8 +156,13 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                     serverId,
                     clock.instant()
             );
-            List<InventoryPatch> patches = loaded.pending(event.getUniqueId(), scopeId, serverId, 2);
-            if (patches.size() > 1) {
+            List<InventoryPatch> patches = loaded.pending(
+                    event.getUniqueId(),
+                    scopeId,
+                    serverId,
+                    PENDING_PATCH_LOOKAHEAD
+            );
+            if (patches.size() > MAX_PENDING_PATCHES_PER_PLAYER) {
                 loginBlocks.add(event.getUniqueId());
                 event.disallow(
                         AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
@@ -517,43 +524,74 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         try {
-            InventoryPreparation preparation = loaded.prepare(request, APPLY_LEASE, clock.instant());
-            if (preparation.patch().isEmpty()) {
-                finishLiveFailure(viewer, session, request.playerId(), preparation.detail());
-                reconcile(session);
-                return;
-            }
-            InventoryPatch patch = loaded.claimForApply(
-                    preparation.patch().orElseThrow().patchId(),
-                    request.operationId(),
-                    APPLY_LEASE,
-                    clock.instant()
-            ).orElse(null);
+            InventoryPatch patch = prepareAndClaimLivePatch(loaded, viewer, session, request);
             if (patch == null) {
-                finishLiveFailure(viewer, session, request.playerId(), "The prepared inventory lease could not be claimed.");
                 return;
             }
             if (patch.state() == InventoryOperationState.APPLIED) {
-                assetLocks.remove(request.playerId());
-                session.finishWork();
-                message(viewer, "That exact inventory edit was already committed.");
-                reconcile(session);
+                completeReplayedLiveEdit(viewer, session, request.playerId());
                 return;
             }
-            target.getScheduler().execute(
-                    plugin,
-                    () -> applyLiveOnTarget(viewer, target, session, patch, replacement),
-                    () -> {
-                        assetLocks.remove(target.getUniqueId());
-                        session.finishWork();
-                        message(viewer, "The target left; the durable patch will apply before their next interaction.");
-                    },
-                    1L
-            );
+            scheduleLiveApplication(viewer, target, session, patch, replacement);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Live inventory operation preparation failed", exception);
             finishLiveFailure(viewer, session, request.playerId(), "The inventory edit failed before target state changed.");
         }
+    }
+
+    private InventoryPatch prepareAndClaimLivePatch(
+            InventoryJournalStore loaded,
+            Player viewer,
+            LiveSession session,
+            InventoryPrepareRequest request
+    ) {
+        InventoryPreparation preparation = loaded.prepare(request, APPLY_LEASE, clock.instant());
+        if (preparation.patch().isEmpty()) {
+            finishLiveFailure(viewer, session, request.playerId(), preparation.detail());
+            reconcile(session);
+            return null;
+        }
+        InventoryPatch patch = loaded.claimForApply(
+                preparation.patch().orElseThrow().patchId(),
+                request.operationId(),
+                APPLY_LEASE,
+                clock.instant()
+        ).orElse(null);
+        if (patch == null) {
+            finishLiveFailure(
+                    viewer,
+                    session,
+                    request.playerId(),
+                    "The prepared inventory lease could not be claimed."
+            );
+        }
+        return patch;
+    }
+
+    private void completeReplayedLiveEdit(Player viewer, LiveSession session, UUID playerId) {
+        assetLocks.remove(playerId);
+        session.finishWork();
+        message(viewer, "That exact inventory edit was already committed.");
+        reconcile(session);
+    }
+
+    private void scheduleLiveApplication(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            InventoryImage replacement
+    ) {
+        target.getScheduler().execute(
+                plugin,
+                () -> applyLiveOnTarget(viewer, target, session, patch, replacement),
+                () -> {
+                    assetLocks.remove(target.getUniqueId());
+                    session.finishWork();
+                    message(viewer, "The target left; the durable patch will apply before their next interaction.");
+                },
+                1L
+        );
     }
 
     private void applyLiveOnTarget(
@@ -730,54 +768,75 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private void applyPendingOnPlayer(Player player, InventoryPatch patch, int attempt) {
         InventoryImage current = codec.capture(player);
         InventoryImageCodec.EncodedImage currentBytes = codec.encodeWithChecksum(current);
-        switch (InventoryPatchDecision.decide(
-                currentBytes.checksum(),
+        InventoryImageCodec.EncodedImage applied =
+                applyPendingDecision(player, patch, currentBytes);
+        if (applied != null) {
+            submit(() -> finalizePendingOnLogin(player, patch, attempt, applied));
+        }
+    }
+
+    private InventoryImageCodec.EncodedImage applyPendingDecision(
+            Player player,
+            InventoryPatch patch,
+            InventoryImageCodec.EncodedImage current
+    ) {
+        return switch (InventoryPatchDecision.decide(
+                current.checksum(),
                 patch.expectedChecksum(),
                 patch.replacementChecksum()
         )) {
             case APPLY_REPLACEMENT -> {
                 codec.apply(player, codec.decode(patch.replacementSnapshot()));
-                current = codec.capture(player);
-                currentBytes = codec.encodeWithChecksum(current);
+                yield codec.encodeWithChecksum(codec.capture(player));
             }
+            case FINALIZE_ALREADY_APPLIED -> current;
             case QUARANTINE_CONFLICT -> {
-                InventoryImageCodec.EncodedImage conflicting = currentBytes;
-                submit(() -> {
-                    quarantine(patch, "LOGIN_STATE_CONFLICT", "Loaded player data does not match before or replacement");
-                    loginBlocks.remove(player.getUniqueId());
-                    alertStaff("Inventory recovery was quarantined for " + player.getName() + " after a state conflict.");
-                    observeEncoded(player.getUniqueId(), conflicting);
-                });
-                return;
-            }
-            case FINALIZE_ALREADY_APPLIED -> {
-                // A previous attempt reached Paper but crashed before the durable commit.
+                queuePendingConflict(player, patch, current);
+                yield null;
             }
             default -> throw new IllegalStateException("Unsupported inventory patch decision");
-        }
-        InventoryImageCodec.EncodedImage appliedBytes = currentBytes;
+        };
+    }
+
+    private void queuePendingConflict(
+            Player player,
+            InventoryPatch patch,
+            InventoryImageCodec.EncodedImage conflicting
+    ) {
         submit(() -> {
-            try {
-                InventoryFinalizeResult result = store.get().finalizeApplied(
-                        patch.patchId(),
-                        patch.operationId(),
-                        patch.fencingToken(),
-                        appliedBytes.checksum(),
-                        appliedBytes.bytes(),
-                        clock.instant()
-                );
-                if (result.status() == InventoryFinalizeResult.Status.COMMITTED
-                        || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
-                    loginBlocks.remove(player.getUniqueId());
-                    alertStaff("A queued inventory correction was applied and verified for " + player.getName() + '.');
-                    return;
-                }
-                retryLoginApply(player, patch, attempt, result.detail());
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Login inventory patch finalization failed", exception);
-                retryLoginApply(player, patch, attempt, "Inventory recovery finalization failed.");
-            }
+            quarantine(patch, "LOGIN_STATE_CONFLICT", "Loaded player data does not match before or replacement");
+            loginBlocks.remove(player.getUniqueId());
+            alertStaff("Inventory recovery was quarantined for " + player.getName() + " after a state conflict.");
+            observeEncoded(player.getUniqueId(), conflicting);
         });
+    }
+
+    private void finalizePendingOnLogin(
+            Player player,
+            InventoryPatch patch,
+            int attempt,
+            InventoryImageCodec.EncodedImage applied
+    ) {
+        try {
+            InventoryFinalizeResult result = store.get().finalizeApplied(
+                    patch.patchId(),
+                    patch.operationId(),
+                    patch.fencingToken(),
+                    applied.checksum(),
+                    applied.bytes(),
+                    clock.instant()
+            );
+            if (result.status() == InventoryFinalizeResult.Status.COMMITTED
+                    || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
+                loginBlocks.remove(player.getUniqueId());
+                alertStaff("A queued inventory correction was applied and verified for " + player.getName() + '.');
+                return;
+            }
+            retryLoginApply(player, patch, attempt, result.detail());
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Login inventory patch finalization failed", exception);
+            retryLoginApply(player, patch, attempt, "Inventory recovery finalization failed.");
+        }
     }
 
     private void retryLoginApply(Player player, InventoryPatch patch, int attempt, String detail) {
