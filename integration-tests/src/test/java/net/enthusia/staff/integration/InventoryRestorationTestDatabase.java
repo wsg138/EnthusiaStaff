@@ -26,23 +26,7 @@ final class InventoryRestorationTestDatabase {
     }
 
     void insertCase(CaseId caseId, UUID targetId, UUID actorId) throws SQLException {
-        try (Connection connection = connection(database);
-             PreparedStatement statement = connection.prepareStatement("""
-                     INSERT INTO cases(
-                         case_id, idempotency_key, target_id, actor_id, actor_name, actor_rank,
-                         public_reason, exact_reason_id, sanction_family, internal_explanation,
-                         configuration_version, visibility, state, issued_at
-                     ) VALUES (?, ?, ?, ?, 'P2wn', 'OWNER', 'Integration test', 'integration.test',
-                         'TEST', 'Restoration integrity verification', 'integration-test-v1',
-                         'PRIVATE', 'OPEN', ?)
-                     """)) {
-            statement.setString(1, caseId.value());
-            statement.setString(2, "case:restoration-test:" + caseId.value());
-            statement.setBytes(3, uuidBytes(targetId));
-            statement.setBytes(4, uuidBytes(actorId));
-            statement.setTimestamp(5, Timestamp.from(now));
-            statement.executeUpdate();
-        }
+        MariaDbIntegrationSupport.insertCase(database, caseId.value(), targetId, actorId, now);
     }
 
     void insertOperation(

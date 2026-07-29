@@ -1,5 +1,6 @@
 package net.enthusia.staff.integration;
 
+import static net.enthusia.staff.integration.InventoryRestorationTestSupport.checksum;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connection;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertCase;
@@ -13,15 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -548,14 +546,6 @@ class AssetJournalIntegrationTest {
                 assertTrue(result.next());
                 return result.getLong(1);
             }
-        }
-    }
-
-    private static String checksum(byte[] value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
     }
 
