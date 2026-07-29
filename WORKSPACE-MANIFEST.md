@@ -3,15 +3,15 @@
 Last updated: 2026-07-29 (America/Indianapolis)
 
 This manifest records review, recovery, and validation state. PRs #1 through
-#8 have been merged into `main`; PR #9 is the active root-plugin security
-checkpoint. Nothing listed here has been deployed, released, or applied to
-production data.
+#8 have been merged into `main`; PR #9 is the active root-plugin integrity
+checkpoint for protected network identity and inventory recovery. Nothing
+listed here has been deployed, released, or applied to production data.
 
 ## Repository checkpoint
 
 | Repository | Remote URL | Default branch | Working branch | Latest local SHA | Latest pushed SHA | Pull request | Build status | Test status | Docker/Testcontainers | Codacy grade | Codacy issue count | Current blockers |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #9 code, tests, and checkpoint head `6b77ab214ebb1acf7aaf71db4bb3d86b4c55996d` plus the final evidence correction | `origin/section/plugin` includes `6b77ab214ebb1acf7aaf71db4bb3d86b4c55996d`; `origin/main` is `80b2635917bcf71a187ec27ae0bf5e38b35610ef` | [PR #9 active](https://github.com/wsg138/EnthusiaStaff/pull/9); [PRs #1–#8 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: clean Java 21 `clean test check runtimeJars`; 38 tasks executed and the root aggregate `clean` task was up-to-date | PASS: 141 tests in 51 suites, 0 failures/errors/skips | PASS: 21 tests across 7 MariaDB Testcontainers suites | A; PR #9 is up to standards with 0 new issues | 446 active and 69 ignored after exact `main` reanalysis | Production-like concurrency, crash staging, and provider integration environments remain unavailable. |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #9 code and test head `eba335b179bc43d1cd52839bc69af595ae1e456c` | `origin/section/plugin` includes `eba335b179bc43d1cd52839bc69af595ae1e456c`; `origin/main` is `80b2635917bcf71a187ec27ae0bf5e38b35610ef` | [PR #9 active draft](https://github.com/wsg138/EnthusiaStaff/pull/9); [PRs #1–#8 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; 39 actionable tasks, 38 executed and 1 up-to-date | PASS: 143 tests in 51 suites, 0 failures/errors/skips | PASS: 23 tests across 7 MariaDB Testcontainers suites | A on `main`; exact PR head is up to standards, with 9 solved and 0 new issues | 446 active and 69 ignored after exact `main` reanalysis | Exact-head CodeRabbit review is pending after the earlier retry was rate-limited; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
 | enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` (`1657a0a`) | `agent/punishment-platform` (expected; absent remotely) | No target-layout clone; sibling checkout is `1657a0a` on `deploy/market-experimental` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | N/A | UNVERIFIED | UNKNOWN | Must be cloned under `related-repos`; the sibling checkout has untracked deployment-tool state that must not be lost or committed. |
 | EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` (`9696501`) | `agent/moderation-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `9696501` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
 | EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` (`25ea8cb`) | `agent/reputation-blacklist-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `25ea8cb` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
@@ -47,10 +47,12 @@ are not treated as the requested final layout.
 
 The GitHub Wiki is enabled at
 `https://github.com/wsg138/EnthusiaStaff/wiki`. Its separate `master` branch is
-at `5cd6f80b4edc33adbc8d4d0555a110fe9030429e` and currently contains Home,
-Architecture, Development Setup, Build and Testing, and the navigation sidebar.
-Installation, configuration, operations, and feature pages will continue
-incrementally from source-controlled repository documentation.
+at `f1a6d15b9d64ac90e4d4976f70a6c7c33629d67c` and contains Home, Architecture,
+Development Setup, Build and Testing, Installation, Configuration, Commands and
+Permissions, Punishment System, LiteBans Migration, Shadow Mode and Cutover,
+Recovery and Troubleshooting, Integrations, Inventory and Confiscation Safety,
+and the navigation sidebar. Pages continue incrementally from source-controlled
+repository documentation.
 
 ## Checkpoint rules
 
