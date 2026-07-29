@@ -8,23 +8,26 @@ import java.time.Clock;
 import org.junit.jupiter.api.Test;
 
 final class InventoryOperationContextTest {
+    private static final String SCOPE_ID = "network";
+    private static final String SERVER_ID = "paper-1";
+
     @Test
     void preservesValidatedBackendIdentity() {
         Clock clock = Clock.systemUTC();
 
         InventoryOperationContext context =
-                new InventoryOperationContext(clock, "network", "paper-1");
+                new InventoryOperationContext(clock, SCOPE_ID, SERVER_ID);
 
         assertSame(clock, context.clock());
-        assertEquals("network", context.scopeId());
-        assertEquals("paper-1", context.serverId());
+        assertEquals(SCOPE_ID, context.scopeId());
+        assertEquals(SERVER_ID, context.serverId());
     }
 
     @Test
     void rejectsMissingClock() {
         assertThrows(
                 NullPointerException.class,
-                () -> new InventoryOperationContext(null, "network", "paper-1")
+                () -> new InventoryOperationContext(null, SCOPE_ID, SERVER_ID)
         );
     }
 
@@ -34,11 +37,11 @@ final class InventoryOperationContextTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new InventoryOperationContext(clock, " ", "paper-1")
+                () -> new InventoryOperationContext(clock, " ", SERVER_ID)
         );
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new InventoryOperationContext(clock, "network", "x".repeat(65))
+                () -> new InventoryOperationContext(clock, SCOPE_ID, "x".repeat(65))
         );
     }
 }
