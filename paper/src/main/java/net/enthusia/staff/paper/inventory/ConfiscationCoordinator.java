@@ -110,33 +110,23 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     public void open(Player viewer, Player target, CaseId caseId) {
-        if (viewer == null || target == null || caseId == null) {
-            throw new IllegalArgumentException("viewer, target, and caseId must be present");
-        }
-        if (!authorize(viewer, ModerationAction.APPLY_CASE_CONFISCATION)) {
-            viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+        requireAssetRequest(viewer, target, caseId);
+        if (!canStartOperation(
+                viewer,
+                target,
+                ModerationAction.APPLY_CASE_CONFISCATION,
+                "You do not have case confiscation authority.",
+                "Item confiscation is available only while moderation is ACTIVE.",
+                "Item confiscation selection requires the target on this backend."
+        )) {
             return;
         }
-        if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text(
-                    "Item confiscation is available only while moderation is ACTIVE."
-            ));
-            return;
-        }
-        if (!target.isOnline()) {
-            viewer.sendMessage(Component.text(
-                    "Item confiscation selection requires the target on this backend."
-            ));
-            return;
-        }
-        UUID operationId = UUID.randomUUID();
-        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null
-                || targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
-            viewerOperations.remove(viewer.getUniqueId(), operationId);
-            targetOperations.remove(target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(
-                    "The viewer or target already has an active confiscation selection."
-            ));
+        UUID operationId = reserveOperation(
+                viewer,
+                target,
+                "The viewer or target already has an active confiscation selection."
+        );
+        if (operationId == null) {
             return;
         }
         onEntity(
@@ -150,33 +140,23 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     public void restore(Player viewer, Player target, CaseId caseId) {
-        if (viewer == null || target == null || caseId == null) {
-            throw new IllegalArgumentException("viewer, target, and caseId must be present");
-        }
-        if (!authorize(viewer, ModerationAction.RESTORE_ASSETS)) {
-            viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
+        requireAssetRequest(viewer, target, caseId);
+        if (!canStartOperation(
+                viewer,
+                target,
+                ModerationAction.RESTORE_ASSETS,
+                "Only the Founder may restore confiscated assets.",
+                "Item restoration is available only while moderation is ACTIVE.",
+                "Confiscated-item restoration requires the target on this backend."
+        )) {
             return;
         }
-        if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text(
-                    "Item restoration is available only while moderation is ACTIVE."
-            ));
-            return;
-        }
-        if (!target.isOnline()) {
-            viewer.sendMessage(Component.text(
-                    "Confiscated-item restoration requires the target on this backend."
-            ));
-            return;
-        }
-        UUID operationId = UUID.randomUUID();
-        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null
-                || targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
-            viewerOperations.remove(viewer.getUniqueId(), operationId);
-            targetOperations.remove(target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(
-                    "The viewer or target already has an active asset operation."
-            ));
+        UUID operationId = reserveOperation(
+                viewer,
+                target,
+                "The viewer or target already has an active asset operation."
+        );
+        if (operationId == null) {
             return;
         }
         RestorationContext context = new RestorationContext(viewer, target, caseId, operationId);
@@ -189,6 +169,49 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                         "The target left before restoration could acquire its locks."
                 )
         );
+    }
+
+    private static void requireAssetRequest(Player viewer, Player target, CaseId caseId) {
+        if (viewer == null || target == null || caseId == null) {
+            throw new IllegalArgumentException("viewer, target, and caseId must be present");
+        }
+    }
+
+    private boolean canStartOperation(
+            Player viewer,
+            Player target,
+            ModerationAction action,
+            String unauthorizedMessage,
+            String inactiveMessage,
+            String offlineMessage
+    ) {
+        if (!authorize(viewer, action)) {
+            viewer.sendMessage(Component.text(unauthorizedMessage));
+            return false;
+        }
+        if (mode.get() != OperationalMode.ACTIVE) {
+            viewer.sendMessage(Component.text(inactiveMessage));
+            return false;
+        }
+        if (!target.isOnline()) {
+            viewer.sendMessage(Component.text(offlineMessage));
+            return false;
+        }
+        return true;
+    }
+
+    private UUID reserveOperation(Player viewer, Player target, String busyMessage) {
+        UUID operationId = UUID.randomUUID();
+        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null) {
+            viewer.sendMessage(Component.text(busyMessage));
+            return null;
+        }
+        if (targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
+            viewerOperations.remove(viewer.getUniqueId(), operationId);
+            viewer.sendMessage(Component.text(busyMessage));
+            return null;
+        }
+        return operationId;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -346,7 +369,13 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
-        UUID viewerOperation = viewerOperations.get(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        cancelViewerSelection(playerId);
+        handleTargetDeparture(playerId);
+    }
+
+    private void cancelViewerSelection(UUID playerId) {
+        UUID viewerOperation = viewerOperations.get(playerId);
         if (viewerOperation != null) {
             SelectionSession session = sessions.get(viewerOperation);
             if (session != null && session.selecting()) {
@@ -358,45 +387,59 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
             }
         }
-        UUID targetOperation = targetOperations.get(event.getPlayer().getUniqueId());
-        if (targetOperation != null) {
-            RestorationContext restoration = restorations.get(targetOperation);
-            if (restoration != null) {
-                if (restoration.beforePatch()) {
-                    failRestorationBeforePatch(
-                            restoration,
-                            "Target disconnected before the restoration patch was durable."
-                    );
-                } else if (restoration.patchPreparationInFlight()) {
-                    restoration.targetDeparted();
-                    if (restoration.localLocksWereAcquired()) {
-                        releaseLocalLocks(
-                                restoration.targetId(),
-                                restoration.operationId()
-                        );
-                    }
-                } else {
-                    pendingRestorationAfterTargetDeparture(restoration);
-                }
-                return;
-            }
-            SelectionSession session = sessions.get(targetOperation);
-            if (session != null && session.selecting()) {
-                cancel(
-                        session,
-                        "TARGET_DISCONNECTED",
-                        "Target disconnected during confiscation selection",
-                        true
-                );
-            } else if (session != null) {
-                session.stopTasks();
-                releaseLocalLocks(session.targetId(), session.operationId());
-                removeSession(session);
-                message(
-                        session.viewer(),
-                        "The target left; the durable confiscation patch will recover before interaction."
-                );
-            }
+    }
+
+    private void handleTargetDeparture(UUID playerId) {
+        UUID targetOperation = targetOperations.get(playerId);
+        if (targetOperation == null) {
+            return;
+        }
+        RestorationContext restoration = restorations.get(targetOperation);
+        if (restoration != null) {
+            handleRestorationTargetDeparture(restoration);
+            return;
+        }
+        SelectionSession session = sessions.get(targetOperation);
+        if (session == null) {
+            return;
+        }
+        if (session.selecting()) {
+            cancel(
+                    session,
+                    "TARGET_DISCONNECTED",
+                    "Target disconnected during confiscation selection",
+                    true
+            );
+            return;
+        }
+        session.stopTasks();
+        releaseLocalLocks(session.targetId(), session.operationId());
+        removeSession(session);
+        message(
+                session.viewer(),
+                "The target left; the durable confiscation patch will recover before interaction."
+        );
+    }
+
+    private void handleRestorationTargetDeparture(RestorationContext restoration) {
+        if (restoration.beforePatch()) {
+            failRestorationBeforePatch(
+                    restoration,
+                    "Target disconnected before the restoration patch was durable."
+            );
+            return;
+        }
+        if (restoration.patchPreparationInFlight()) {
+            restoration.targetDeparted();
+            releaseDepartedRestorationLocks(restoration);
+            return;
+        }
+        pendingRestorationAfterTargetDeparture(restoration);
+    }
+
+    private void releaseDepartedRestorationLocks(RestorationContext restoration) {
+        if (restoration.localLocksWereAcquired()) {
+            releaseLocalLocks(restoration.targetId(), restoration.operationId());
         }
     }
 
