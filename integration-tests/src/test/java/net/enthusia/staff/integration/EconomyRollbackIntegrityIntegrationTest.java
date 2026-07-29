@@ -1,11 +1,15 @@
 package net.enthusia.staff.integration;
 
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connection;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertCase;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPlayer;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -109,13 +113,12 @@ class EconomyRollbackIntegrityIntegrationTest {
             EconomyOperation operation = prepareApplying(store, caseId, targetId, actorId);
 
             assertEquals(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    finish(store, operation, unappliedRollback(), NOW.plusSeconds(4))
+            );
+            assertEquals(
                     EconomyJournalResult.Status.STALE,
-                    store.finish(
-                            operation.operationId(),
-                            operation.fencingToken(),
-                            verifiedRollback(WRONG_CHECKSUM),
-                            NOW.plusSeconds(4)
-                    ).status()
+                    finish(store, operation, verifiedRollback(WRONG_CHECKSUM), NOW.plusSeconds(5))
             );
             EconomyOperation unchanged = store.find(operation.operationId()).orElseThrow();
             assertEquals(EconomyOperationState.APPLYING, unchanged.state());
@@ -124,30 +127,47 @@ class EconomyRollbackIntegrityIntegrationTest {
             EconomyTerminalUpdate exact = verifiedRollback(BEFORE_CHECKSUM);
             assertEquals(
                     EconomyJournalResult.Status.UPDATED,
-                    store.finish(
-                            operation.operationId(),
-                            operation.fencingToken(),
-                            exact,
-                            NOW.plusSeconds(5)
-                    ).status()
+                    finish(store, operation, exact, NOW.plusSeconds(6))
             );
             assertEquals(
                     EconomyJournalResult.Status.REPLAYED,
-                    store.finish(
-                            operation.operationId(),
-                            operation.fencingToken(),
-                            exact,
-                            NOW.plusSeconds(6)
-                    ).status()
+                    finish(store, operation, exact, NOW.plusSeconds(7))
             );
             assertEquals(
                     EconomyJournalResult.Status.UPDATED,
-                    store.release(operation.operationId(), operation.fencingToken(), NOW.plusSeconds(7)).status()
+                    store.release(operation.operationId(), operation.fencingToken(), NOW.plusSeconds(8)).status()
             );
             assertEquals(
                     EconomyOperationState.UNLOCKED,
                     store.find(operation.operationId()).orElseThrow().state()
             );
+        }
+    }
+
+    @Test
+    void unappliedRollbackRejectsPartialDurablePlanEvidence() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String caseId = "01J0000000000005";
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertFixtures(caseId, targetId, actorId);
+            EconomyJournalStore store = runtime.economyJournalStore();
+            EconomyOperation operation = prepare(store, caseId, targetId, actorId);
+            savePartialBeforeEvidence(operation.operationId());
+
+            assertEquals(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    store.finish(
+                            operation.operationId(),
+                            operation.fencingToken(),
+                            unappliedRollback(),
+                            NOW.plusSeconds(2)
+                    ).status()
+            );
+            EconomyOperation unchanged = store.find(operation.operationId()).orElseThrow();
+            assertEquals(EconomyOperationState.LOCKED, unchanged.state());
+            assertTrue(unchanged.terminalOutcome().isEmpty());
         }
     }
 
@@ -232,6 +252,20 @@ class EconomyRollbackIntegrityIntegrationTest {
         );
     }
 
+    private static EconomyJournalResult.Status finish(
+            EconomyJournalStore store,
+            EconomyOperation operation,
+            EconomyTerminalUpdate update,
+            Instant now
+    ) {
+        return store.finish(
+                operation.operationId(),
+                operation.fencingToken(),
+                update,
+                now
+        ).status();
+    }
+
     private static void insertFixtures(
             String caseId,
             UUID targetId,
@@ -240,5 +274,18 @@ class EconomyRollbackIntegrityIntegrationTest {
         insertPlayer(DATABASE, targetId, "EconomyTarget", NOW);
         insertPlayer(DATABASE, actorId, "EconomyActor", NOW);
         insertCase(DATABASE, caseId, targetId, actorId, NOW);
+    }
+
+    private static void savePartialBeforeEvidence(UUID operationId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE economy_operations
+                     SET authoritative_total = ?
+                     WHERE operation_id = ?
+                     """)) {
+            statement.setLong(1, BEFORE_TOTAL);
+            statement.setBytes(2, uuidBytes(operationId));
+            assertEquals(1, statement.executeUpdate());
+        }
     }
 }

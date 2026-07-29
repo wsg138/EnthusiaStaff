@@ -289,24 +289,22 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             }
             long amount = request.requestedAmount().orElse(before.authoritativeTotal());
             if (amount <= 0L) {
-                rollBackVerified(
+                rollBackUnapplied(
                         actor,
                         target,
                         operation,
                         guard,
-                        before,
                         "NOTHING_TO_CONFISCATE",
                         "The target has no personal currency to confiscate"
                 );
                 return;
             }
             if (amount > before.authoritativeTotal()) {
-                rollBackVerified(
+                rollBackUnapplied(
                         actor,
                         target,
                         operation,
                         guard,
-                        before,
                         "AMOUNT_EXCEEDS_TOTAL",
                         "Requested amount exceeds the authoritative personal total"
                 );
@@ -380,12 +378,11 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     clock.instant()
             );
             if (!saved.successful()) {
-                rollBackVerified(
+                rollBackUnapplied(
                         actor,
                         target,
                         operation,
                         guard,
-                        before,
                         "PLAN_JOURNAL_REJECTED",
                         saved.detail()
                 );
@@ -420,19 +417,14 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             onEntity(
                     target,
                     () -> apply(actor, target, current, guard, before, plan),
-                    () -> finishOutcome(
+                    () -> rollBackVerified(
                             actor,
                             target,
                             current,
                             guard,
-                            EconomyTerminalUpdate.rolledBack(
-                                    OptionalLong.empty(),
-                                    Optional.empty(),
-                                    Optional.empty(),
-                                    "TARGET_LEFT_BEFORE_APPLY",
-                                    "The target left before the exact removal plan was applied"
-                            ),
-                            "Economy confiscation was cancelled before assets changed."
+                            before,
+                            "TARGET_LEFT_BEFORE_APPLY",
+                            "The target left before the exact removal plan was applied"
                     )
             );
         } catch (RuntimeException exception) {
@@ -579,29 +571,21 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                         target,
                         operation,
                         guard,
-                        EconomyTerminalUpdate.rolledBack(
-                                OptionalLong.of(restored.authoritativeTotal()),
-                                Optional.of(restored.checksum()),
-                                Optional.of(codec.snapshot(restored)),
+                        verifiedRollbackUpdate(
+                                restored,
                                 "CURRENCY_FAILED_ROLLED_BACK",
                                 bounded(outcome.detail())
                         ),
                         "Economy confiscation failed and Currency restored the before assets."
                 );
             }
-            case STALE, INVALID_PLAN, LOCK_REQUIRED, PLAYER_OFFLINE -> finishOutcome(
+            case STALE, INVALID_PLAN, LOCK_REQUIRED, PLAYER_OFFLINE -> finishRejectedProviderOutcome(
                     actor,
                     target,
                     operation,
                     guard,
-                    EconomyTerminalUpdate.rolledBack(
-                            OptionalLong.empty(),
-                            Optional.empty(),
-                            Optional.empty(),
-                            "CURRENCY_" + outcome.status().name(),
-                            bounded(outcome.detail())
-                    ),
-                    "Economy confiscation was rejected before assets changed: " + bounded(outcome.detail())
+                    before,
+                    outcome
             );
             case QUARANTINE_REQUIRED -> quarantine(
                     actor,
@@ -618,6 +602,41 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         }
     }
 
+    private void finishRejectedProviderOutcome(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalOutcome outcome
+    ) {
+        CurrencyAccountState unchanged = outcome.accountState().orElse(null);
+        if (unchanged == null || !matchesBeforeState(unchanged, before)) {
+            quarantine(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    outcome.accountState(),
+                    "CURRENCY_" + outcome.status().name() + "_UNVERIFIED",
+                    "Currency rejected the plan without proving that the account remained unchanged"
+            );
+            return;
+        }
+        finishOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                verifiedRollbackUpdate(
+                        unchanged,
+                        "CURRENCY_" + outcome.status().name(),
+                        bounded(outcome.detail())
+                ),
+                "Economy confiscation was rejected before assets changed: " + bounded(outcome.detail())
+        );
+    }
+
     private void rollBackVerified(
             Player actor,
             Player target,
@@ -632,13 +651,27 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 target,
                 operation,
                 guard,
-                EconomyTerminalUpdate.rolledBack(
-                        OptionalLong.of(current.authoritativeTotal()),
-                        Optional.of(current.checksum()),
-                        Optional.of(codec.snapshot(current)),
-                        failureCode,
-                        detail
-                ),
+                verifiedRollbackUpdate(current, failureCode, detail),
+                detail
+        ))) {
+            alertStaff("Economy rollback journaling queue is full for " + operation.operationId() + '.');
+        }
+    }
+
+    private void rollBackUnapplied(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            String failureCode,
+            String detail
+    ) {
+        if (!submit(() -> finishOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                unappliedRollbackUpdate(failureCode, detail),
                 detail
         ))) {
             alertStaff("Economy rollback journaling queue is full for " + operation.operationId() + '.');
@@ -661,13 +694,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 EconomyJournalResult finished = loaded.finish(
                         operation.operationId(),
                         operation.fencingToken(),
-                        EconomyTerminalUpdate.rolledBack(
-                                OptionalLong.empty(),
-                                Optional.empty(),
-                                Optional.empty(),
-                                failureCode,
-                                detail
-                        ),
+                        unappliedRollbackUpdate(failureCode, detail),
                         clock.instant()
                 );
                 if (finished.successful()) {
@@ -983,17 +1010,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             }
             return;
         }
-        if (operation.beforeChecksum().isEmpty() || operation.replacementChecksum().isEmpty()
-                || operation.beforeSnapshotJson().isEmpty()) {
-            rollBackVerified(
-                    player,
-                    player,
-                    operation,
-                    guard,
-                    current,
-                    "RECOVERY_UNAPPLIED",
-                    "Economy recovery found no saved apply plan"
-            );
+        if (handleIncompletePlanEvidence(player, operation, guard, current)) {
             return;
         }
         EconomyReconciliationDecision decision = EconomyReconciliationDecision.decide(
@@ -1056,6 +1073,39 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "Unsupported economy reconciliation decision: " + decision
             );
         }
+    }
+
+    private boolean handleIncompletePlanEvidence(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current
+    ) {
+        if (operation.state() == EconomyOperationState.LOCKED
+                && !operation.hasAnyDurablePlanEvidence()) {
+            rollBackUnapplied(
+                    player,
+                    player,
+                    operation,
+                    guard,
+                    "RECOVERY_UNAPPLIED",
+                    "Economy recovery found no saved apply plan"
+            );
+            return true;
+        }
+        if (operation.hasCompleteDurablePlanEvidence()) {
+            return false;
+        }
+        quarantine(
+                player,
+                player,
+                operation,
+                guard,
+                Optional.of(current),
+                "RECOVERY_PLAN_INCOMPLETE",
+                "Economy recovery found incomplete durable apply-plan evidence"
+        );
+        return true;
     }
 
     private void restoreBefore(
@@ -1154,6 +1204,30 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                         bounded(outcome.detail())
                 ),
                 "Economy recovery restored the exact before assets."
+        );
+    }
+
+    private EconomyTerminalUpdate verifiedRollbackUpdate(
+            CurrencyAccountState current,
+            String failureCode,
+            String detail
+    ) {
+        return EconomyTerminalUpdate.rolledBack(
+                OptionalLong.of(current.authoritativeTotal()),
+                Optional.of(current.checksum()),
+                Optional.of(codec.snapshot(current)),
+                failureCode,
+                detail
+        );
+    }
+
+    private static EconomyTerminalUpdate unappliedRollbackUpdate(String failureCode, String detail) {
+        return EconomyTerminalUpdate.rolledBack(
+                OptionalLong.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                failureCode,
+                detail
         );
     }
 

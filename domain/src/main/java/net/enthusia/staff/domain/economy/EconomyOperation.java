@@ -88,6 +88,23 @@ public record EconomyOperation(
                 && failureDetail.equals(update.failureDetail());
     }
 
+    public boolean hasAnyDurablePlanEvidence() {
+        return authoritativeTotal.isPresent()
+                || beforeChecksum.isPresent()
+                || replacementChecksum.isPresent()
+                || beforeSnapshotJson.isPresent()
+                || planJson.isPresent();
+    }
+
+    public boolean hasCompleteDurablePlanEvidence() {
+        return requestedAmount.isPresent()
+                && authoritativeTotal.isPresent()
+                && beforeChecksum.isPresent()
+                && replacementChecksum.isPresent()
+                && beforeSnapshotJson.isPresent()
+                && planJson.isPresent();
+    }
+
     private static OptionalLong nonNegative(OptionalLong value, String field) {
         Objects.requireNonNull(value, field);
         if (value.isPresent() && value.orElseThrow() < 0L) {

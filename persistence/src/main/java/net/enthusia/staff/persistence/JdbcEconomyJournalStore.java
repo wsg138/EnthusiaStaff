@@ -712,6 +712,14 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             EconomyTerminalUpdate update
     ) {
         if (update.resultTotal().isEmpty()) {
+            if (operation.state() != EconomyOperationState.LOCKED
+                    || operation.hasAnyDurablePlanEvidence()) {
+                return result(
+                        EconomyJournalResult.Status.INVALID_STATE,
+                        operation,
+                        "Evidence-free rollback is restricted to a locked operation without a saved plan"
+                );
+            }
             return null;
         }
         if (operation.authoritativeTotal().isEmpty() || operation.beforeChecksum().isEmpty()) {
