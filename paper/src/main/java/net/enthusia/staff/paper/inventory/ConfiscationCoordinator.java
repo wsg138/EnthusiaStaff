@@ -199,45 +199,100 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             return;
         }
         event.setCancelled(true);
-        SelectionSession session = sessions.get(holder.operationId());
-        if (session == null || !holder.viewerId().equals(viewer.getUniqueId())
-                || !session.selecting()) {
+        SelectionSession session = activeSelection(viewer, holder);
+        if (session == null) {
             return;
         }
         int rawSlot = event.getRawSlot();
         if (rawSlot < 0 || rawSlot >= event.getView().getTopInventory().getSize()) {
             return;
         }
-        if (rawSlot == CANCEL_SLOT) {
-            cancel(session, "VIEWER_CANCELLED", "Staff cancelled confiscation selection", true);
+        if (handleControlClick(session, holder, rawSlot)) {
             return;
         }
-        if (rawSlot == CONFIRM_SLOT) {
-            confirm(session);
+        handleContentClick(viewer, session, holder, rawSlot, event.isShiftClick());
+    }
+
+    private SelectionSession activeSelection(Player viewer, ConfiscationInventoryHolder holder) {
+        SelectionSession session = sessions.get(holder.operationId());
+        if (session == null || !holder.viewerId().equals(viewer.getUniqueId())) {
+            return null;
+        }
+        return session.selecting() ? session : null;
+    }
+
+    private boolean handleControlClick(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int rawSlot
+    ) {
+        switch (rawSlot) {
+            case CANCEL_SLOT ->
+                    cancel(session, "VIEWER_CANCELLED", "Staff cancelled confiscation selection", true);
+            case CONFIRM_SLOT -> confirm(session);
+            case BACK_SLOT -> openParent(session, holder);
+            case PREVIOUS_SLOT -> openPreviousPage(session, holder);
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void openParent(SelectionSession session, ConfiscationInventoryHolder holder) {
+        ItemPath current = holder.containerPath().orElse(null);
+        if (current == null) {
             return;
         }
-        if (rawSlot == BACK_SLOT && holder.containerPath().isPresent()) {
-            ItemPath current = holder.containerPath().orElseThrow();
-            Optional<ItemPath> parent = current.nestedSlots().isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(current.parent());
-            openView(session, parent, 0);
-            return;
-        }
-        if (rawSlot == PREVIOUS_SLOT && holder.page() > 0) {
+        Optional<ItemPath> parent = current.nestedSlots().isEmpty()
+                ? Optional.empty()
+                : Optional.of(current.parent());
+        openView(session, parent, 0);
+    }
+
+    private void openPreviousPage(SelectionSession session, ConfiscationInventoryHolder holder) {
+        if (holder.page() > 0) {
             openView(session, holder.containerPath(), holder.page() - 1);
-            return;
         }
+    }
+
+    private void handleContentClick(
+            Player viewer,
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int rawSlot,
+            boolean shiftClick
+    ) {
         List<ViewEntry> entries = viewEntries(session, holder.containerPath());
-        int index = holder.page() * CONTENT_SLOTS + rawSlot;
-        if (rawSlot == NEXT_SLOT && (holder.page() + 1) * CONTENT_SLOTS < entries.size()) {
-            openView(session, holder.containerPath(), holder.page() + 1);
+        if (rawSlot == NEXT_SLOT) {
+            openNextPage(session, holder, entries.size());
             return;
         }
+        int index = holder.page() * CONTENT_SLOTS + rawSlot;
         if (rawSlot >= CONTENT_SLOTS || index < 0 || index >= entries.size()) {
             return;
         }
         ViewEntry selected = entries.get(index);
+        handleSelectedEntry(viewer, session, holder, selected, shiftClick);
+    }
+
+    private void openNextPage(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int entryCount
+    ) {
+        if ((holder.page() + 1) * CONTENT_SLOTS < entryCount) {
+            openView(session, holder.containerPath(), holder.page() + 1);
+        }
+    }
+
+    private void handleSelectedEntry(
+            Player viewer,
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            ViewEntry selected,
+            boolean shiftClick
+    ) {
         if (selected.item() == null || selected.item().isEmpty()) {
             return;
         }
@@ -252,7 +307,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             ));
             return;
         }
-        if (NestedInventorySelection.isContainer(selected.item()) && !event.isShiftClick()) {
+        if (NestedInventorySelection.isContainer(selected.item()) && !shiftClick) {
             openView(session, Optional.of(selected.path()), 0);
             return;
         }
@@ -1016,6 +1071,25 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     ) {
         Inventory inventory = holder.getInventory();
         inventory.clear();
+        renderEntries(session, holder, entries, inventory);
+        fillControls(inventory);
+        renderNavigation(holder, entries.size(), inventory);
+        inventory.setItem(
+                CONFIRM_SLOT,
+                named(
+                        Material.LIME_CONCRETE,
+                        "Confirm " + session.selectionCount() + " selected path(s)"
+                )
+        );
+        inventory.setItem(CANCEL_SLOT, named(Material.BARRIER, "Cancel without changing assets"));
+    }
+
+    private void renderEntries(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            List<ViewEntry> entries,
+            Inventory inventory
+    ) {
         int offset = holder.page() * CONTENT_SLOTS;
         for (int guiSlot = 0; guiSlot < CONTENT_SLOTS; guiSlot++) {
             int entryIndex = offset + guiSlot;
@@ -1033,27 +1107,29 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                             : entry.item().clone()
             );
         }
+    }
+
+    private static void fillControls(Inventory inventory) {
         ItemStack filler = named(Material.GRAY_STAINED_GLASS_PANE, " ");
         for (int slot = CONTENT_SLOTS; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
+    }
+
+    private static void renderNavigation(
+            ConfiscationInventoryHolder holder,
+            int entryCount,
+            Inventory inventory
+    ) {
         if (holder.containerPath().isPresent()) {
             inventory.setItem(BACK_SLOT, named(Material.ARROW, "Back"));
         }
         if (holder.page() > 0) {
             inventory.setItem(PREVIOUS_SLOT, named(Material.ARROW, "Previous page"));
         }
-        if ((holder.page() + 1) * CONTENT_SLOTS < entries.size()) {
+        if ((holder.page() + 1) * CONTENT_SLOTS < entryCount) {
             inventory.setItem(NEXT_SLOT, named(Material.ARROW, "Next page"));
         }
-        inventory.setItem(
-                CONFIRM_SLOT,
-                named(
-                        Material.LIME_CONCRETE,
-                        "Confirm " + session.selectionCount() + " selected path(s)"
-                )
-        );
-        inventory.setItem(CANCEL_SLOT, named(Material.BARRIER, "Cancel without changing assets"));
     }
 
     private void confirm(SelectionSession session) {

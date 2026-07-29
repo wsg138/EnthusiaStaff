@@ -215,6 +215,14 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         event.setCancelled(true);
+        editClickedSlot(event, viewer, holder);
+    }
+
+    private void editClickedSlot(
+            InventoryClickEvent event,
+            Player viewer,
+            ModerationInventoryHolder holder
+    ) {
         if (!holder.viewerId().equals(viewer.getUniqueId()) || event.getRawSlot() < 0
                 || event.getRawSlot() >= event.getView().getTopInventory().getSize()) {
             return;
@@ -231,6 +239,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             viewer.sendMessage(Component.text("Shift-click selection is reserved for the confiscation workflow."));
             return;
         }
+        applyClickedEdit(event, viewer, holder, logicalSlot);
+    }
+
+    private void applyClickedEdit(
+            InventoryClickEvent event,
+            Player viewer,
+            ModerationInventoryHolder holder,
+            int logicalSlot
+    ) {
         ItemStack replacement = replacement(
                 holder.image().item(logicalSlot),
                 event.getCursor(),
@@ -882,13 +899,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (!rightClick) {
             return EditRejected.ITEM;
         }
+        return rightClickReplacement(current, template);
+    }
+
+    private static ItemStack rightClickReplacement(ItemStack current, ItemStack template) {
         if (template == null) {
-            if (!usable(current) || current.getAmount() == 1) {
-                return null;
-            }
-            ItemStack reduced = current.clone();
-            reduced.setAmount(reduced.getAmount() - 1);
-            return reduced;
+            return removeOne(current);
         }
         if (!usable(current) || !current.isSimilar(template)) {
             template.setAmount(1);
@@ -897,6 +913,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         ItemStack increased = current.clone();
         increased.setAmount(Math.min(increased.getMaxStackSize(), increased.getAmount() + 1));
         return increased;
+    }
+
+    private static ItemStack removeOne(ItemStack current) {
+        if (!usable(current) || current.getAmount() == 1) {
+            return null;
+        }
+        ItemStack reduced = current.clone();
+        reduced.setAmount(reduced.getAmount() - 1);
+        return reduced;
     }
 
     private static boolean usable(ItemStack item) {
