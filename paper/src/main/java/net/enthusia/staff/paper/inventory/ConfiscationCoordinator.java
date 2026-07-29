@@ -492,33 +492,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 return;
             }
             if (!context.reserved()) {
-                loaded.cancelRestoration(
-                        context.caseId(),
-                        context.operationId(),
-                        clock.instant()
-                );
-                releaseRestoration(
-                        context,
-                        "Restoration was cancelled while its reservation was opening."
-                );
+                cancelInterruptedReservation(loaded, context);
                 return;
             }
-            InventoryObservation observation = loaded.recordObservation(
-                    context.targetId(),
-                    scopeId,
-                    serverId,
-                    encoded.checksum(),
-                    encoded.bytes(),
-                    clock.instant()
-            );
-            onEntity(
-                    context.target(),
-                    () -> buildRestoration(context, current, observation, reservation.snapshots()),
-                    () -> failRestorationBeforePatch(
-                            context,
-                            "Target left before the restoration patch was built."
-                    )
-            );
+            continueRestorationReservation(loaded, context, current, encoded, reservation.snapshots());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscated asset reservation failed", exception);
             failRestorationBeforePatch(
@@ -526,6 +503,46 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                     "Confiscated assets could not be reserved; no assets changed."
             );
         }
+    }
+
+    private void cancelInterruptedReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context
+    ) {
+        loaded.cancelRestoration(
+                context.caseId(),
+                context.operationId(),
+                clock.instant()
+        );
+        releaseRestoration(
+                context,
+                "Restoration was cancelled while its reservation was opening."
+        );
+    }
+
+    private void continueRestorationReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryImage current,
+            InventoryImageCodec.EncodedImage encoded,
+            List<ConfiscatedAssetSnapshot> snapshots
+    ) {
+        InventoryObservation observation = loaded.recordObservation(
+                context.targetId(),
+                scopeId,
+                serverId,
+                encoded.checksum(),
+                encoded.bytes(),
+                clock.instant()
+        );
+        onEntity(
+                context.target(),
+                () -> buildRestoration(context, current, observation, snapshots),
+                () -> failRestorationBeforePatch(
+                        context,
+                        "Target left before the restoration patch was built."
+                )
+        );
     }
 
     private void buildRestoration(
@@ -544,50 +561,75 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
-            List<ConfiscatedAssetEntry> entries = new ArrayList<>();
-            for (ConfiscatedAssetSnapshot snapshot : snapshots) {
-                if (!assetsCodec.checksum(snapshot.assets()).equals(snapshot.checksum())) {
-                    throw new IllegalArgumentException(
-                            "confiscated asset snapshot checksum does not match its bytes"
-                    );
-                }
-                entries.addAll(assetsCodec.decode(snapshot.assets()));
-            }
+            List<ConfiscatedAssetEntry> entries = decodeRestorationEntries(snapshots);
             NestedInventorySelection.RestorationResult restoration =
                     NestedInventorySelection.restore(captured, entries);
             InventoryImageCodec.EncodedImage replacement =
                     imageCodec.encodeWithChecksum(restoration.replacement());
-            InventoryPrepareRequest request = new InventoryPrepareRequest(
-                    context.operationId(),
-                    new IdempotencyKey("inventory:restore:" + context.operationId()).value(),
-                    context.targetId(),
-                    scopeId,
-                    serverId,
-                    context.viewerId(),
-                    Optional.of(context.caseId().value()),
-                    "RESTORE_CONFISCATED",
-                    observation.revision(),
-                    observation.checksum(),
-                    observation.snapshot(),
-                    replacement.checksum(),
-                    replacement.bytes(),
-                    restoration.changedRootSlots(),
-                    false
-            );
-            context.preparingPatch();
-            if (!submit(() -> prepareRestorationPatch(
+            InventoryPrepareRequest request = restorationRequest(
                     context,
-                    request,
-                    restoration.replacement()
-            ))) {
-                failRestorationBeforePatch(context, "Restoration patch queue is full.");
-            }
+                    observation,
+                    replacement,
+                    restoration.changedRootSlots()
+            );
+            queueRestorationPreparation(context, request, restoration.replacement());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscated asset restoration planning failed", exception);
             failRestorationBeforePatch(
                     context,
                     "Confiscated assets cannot fit safely; no assets changed."
             );
+        }
+    }
+
+    private List<ConfiscatedAssetEntry> decodeRestorationEntries(
+            List<ConfiscatedAssetSnapshot> snapshots
+    ) {
+        List<ConfiscatedAssetEntry> entries = new ArrayList<>();
+        for (ConfiscatedAssetSnapshot snapshot : snapshots) {
+            if (!assetsCodec.checksum(snapshot.assets()).equals(snapshot.checksum())) {
+                throw new IllegalArgumentException(
+                        "confiscated asset snapshot checksum does not match its bytes"
+                );
+            }
+            entries.addAll(assetsCodec.decode(snapshot.assets()));
+        }
+        return entries;
+    }
+
+    private InventoryPrepareRequest restorationRequest(
+            RestorationContext context,
+            InventoryObservation observation,
+            InventoryImageCodec.EncodedImage replacement,
+            List<Integer> changedRootSlots
+    ) {
+        return new InventoryPrepareRequest(
+                context.operationId(),
+                new IdempotencyKey("inventory:restore:" + context.operationId()).value(),
+                context.targetId(),
+                scopeId,
+                serverId,
+                context.viewerId(),
+                Optional.of(context.caseId().value()),
+                "RESTORE_CONFISCATED",
+                observation.revision(),
+                observation.checksum(),
+                observation.snapshot(),
+                replacement.checksum(),
+                replacement.bytes(),
+                changedRootSlots,
+                false
+        );
+    }
+
+    private void queueRestorationPreparation(
+            RestorationContext context,
+            InventoryPrepareRequest request,
+            InventoryImage replacement
+    ) {
+        context.preparingPatch();
+        if (!submit(() -> prepareRestorationPatch(context, request, replacement))) {
+            failRestorationBeforePatch(context, "Restoration patch queue is full.");
         }
     }
 
@@ -603,10 +645,8 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         }
         InventoryPatch patch = null;
         try {
-            InventoryPreparation prepared = loaded.prepare(request, LEASE_DURATION, clock.instant());
-            patch = prepared.patch().orElse(null);
+            patch = prepareRestorationRecord(loaded, context, request);
             if (patch == null) {
-                failRestorationBeforePatch(context, prepared.detail());
                 return;
             }
             context.patchPrepared();
@@ -614,53 +654,83 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 pendingRestorationAfterTargetDeparture(context);
                 return;
             }
-            InventoryPatch claimed = loaded.claimForApply(
-                    patch.patchId(),
-                    patch.operationId(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).orElse(null);
-            if (claimed == null) {
-                quarantineRestoration(
-                        context,
-                        patch,
-                        "RESTORATION_CLAIM_FAILED",
-                        "Prepared restoration patch lost its lease"
-                );
-                return;
-            }
-            if (claimed.state() == InventoryOperationState.APPLIED) {
-                loaded.finalizeRestoration(
-                        context.caseId(),
-                        context.operationId(),
-                        claimed.replacementChecksum(),
-                        clock.instant()
-                );
-                releaseRestoration(context, "That exact confiscated-asset restoration was already committed.");
-                return;
-            }
-            context.applying();
-            onEntity(
-                    context.target(),
-                    () -> applyRestorationPatch(context, claimed, replacement),
-                    () -> pendingRestorationAfterTargetDeparture(context)
-            );
+            claimRestorationPatch(loaded, context, patch, replacement);
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Restoration patch preparation failed", exception);
-            if (patch == null) {
-                failRestorationBeforePatch(
-                        context,
-                        "Restoration patch could not be prepared; no assets changed."
-                );
-            } else {
-                quarantineRestoration(
-                        context,
-                        patch,
-                        "RESTORATION_PREPARE_EXCEPTION",
-                        "Prepared restoration patch could not be claimed safely"
-                );
-            }
+            handleRestorationPreparationFailure(context, patch, exception);
         }
+    }
+
+    private InventoryPatch prepareRestorationRecord(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryPrepareRequest request
+    ) {
+        InventoryPreparation prepared = loaded.prepare(request, LEASE_DURATION, clock.instant());
+        InventoryPatch patch = prepared.patch().orElse(null);
+        if (patch == null) {
+            failRestorationBeforePatch(context, prepared.detail());
+        }
+        return patch;
+    }
+
+    private void claimRestorationPatch(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryPatch patch,
+            InventoryImage replacement
+    ) {
+        InventoryPatch claimed = loaded.claimForApply(
+                patch.patchId(),
+                patch.operationId(),
+                LEASE_DURATION,
+                clock.instant()
+        ).orElse(null);
+        if (claimed == null) {
+            quarantineRestoration(
+                    context,
+                    patch,
+                    "RESTORATION_CLAIM_FAILED",
+                    "Prepared restoration patch lost its lease"
+            );
+            return;
+        }
+        if (claimed.state() == InventoryOperationState.APPLIED) {
+            loaded.finalizeRestoration(
+                    context.caseId(),
+                    context.operationId(),
+                    claimed.replacementChecksum(),
+                    clock.instant()
+            );
+            releaseRestoration(context, "That exact confiscated-asset restoration was already committed.");
+            return;
+        }
+        context.applying();
+        onEntity(
+                context.target(),
+                () -> applyRestorationPatch(context, claimed, replacement),
+                () -> pendingRestorationAfterTargetDeparture(context)
+        );
+    }
+
+    private void handleRestorationPreparationFailure(
+            RestorationContext context,
+            InventoryPatch patch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Restoration patch preparation failed", exception);
+        if (patch == null) {
+            failRestorationBeforePatch(
+                    context,
+                    "Restoration patch could not be prepared; no assets changed."
+            );
+            return;
+        }
+        quarantineRestoration(
+                context,
+                patch,
+                "RESTORATION_PREPARE_EXCEPTION",
+                "Prepared restoration patch could not be claimed safely"
+        );
     }
 
     private void applyRestorationPatch(
@@ -728,31 +798,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                     applied.bytes(),
                     clock.instant()
             );
-            if (result.status() != InventoryFinalizeResult.Status.COMMITTED
-                    && result.status() != InventoryFinalizeResult.Status.REPLAYED) {
-                message(
-                        context.viewer(),
-                        "Restoration reached an ambiguous durable state; do not repeat it."
-                );
-                alertStaff(
-                        "Restoration operation " + context.operationId()
-                                + " requires recovery: " + result.detail()
-                );
+            if (!restorationFinalized(context, result)) {
                 return;
             }
-            boolean marked = loaded.finalizeRestoration(
-                    context.caseId(),
-                    context.operationId(),
-                    applied.checksum(),
-                    clock.instant()
-            );
-            releaseRestoration(
-                    context,
-                    marked
-                            ? "Confiscated items restored and verified for case "
-                                    + context.caseId() + '.'
-                            : "Items restored and verified; the case marker will reconcile automatically."
-            );
+            completeRestorationReservation(loaded, context, applied.checksum());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Restoration finalization failed", exception);
             message(
@@ -1150,6 +1199,45 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                             : entry.item().clone()
             );
         }
+    }
+
+    private boolean restorationFinalized(
+            RestorationContext context,
+            InventoryFinalizeResult result
+    ) {
+        if (result.status() == InventoryFinalizeResult.Status.COMMITTED
+                || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
+            return true;
+        }
+        message(
+                context.viewer(),
+                "Restoration reached an ambiguous durable state; do not repeat it."
+        );
+        alertStaff(
+                "Restoration operation " + context.operationId()
+                        + " requires recovery: " + result.detail()
+        );
+        return false;
+    }
+
+    private void completeRestorationReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            String appliedChecksum
+    ) {
+        boolean marked = loaded.finalizeRestoration(
+                context.caseId(),
+                context.operationId(),
+                appliedChecksum,
+                clock.instant()
+        );
+        releaseRestoration(
+                context,
+                marked
+                        ? "Confiscated items restored and verified for case "
+                                + context.caseId() + '.'
+                        : "Items restored and verified; the case marker will reconcile automatically."
+        );
     }
 
     private static void fillControls(Inventory inventory) {
