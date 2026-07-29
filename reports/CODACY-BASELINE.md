@@ -427,6 +427,10 @@ Hosted Codacy reports implementation and report head
 issues and one fixed issue. Its aggregate complexity delta of 55 and one clone
 delta remain visible; they were not hidden or dispositioned.
 
+The single exact-head CodeRabbit attempt was rate-limited before a review
+started. It produced no findings or review object, and GitHub reports zero
+review threads. The attempt was not retried.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
