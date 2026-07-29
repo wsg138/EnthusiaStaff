@@ -962,11 +962,23 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             );
             return;
         }
+        if (!current.playerId().equals(operation.targetId())) {
+            quarantine(
+                    player,
+                    player,
+                    operation,
+                    guard,
+                    Optional.of(current),
+                    "RECOVERY_SNAPSHOT_IDENTITY_MISMATCH",
+                    "Currency recovery returned an account snapshot for another player"
+            );
+            return;
+        }
         if (operation.state() == EconomyOperationState.COMMITTED) {
             String expected = operation.resultChecksum()
                     .or(() -> operation.replacementChecksum())
                     .orElse("");
-            if (expected.equals(current.checksum())) {
+            if (expected.equals(current.checksum()) && resultTotalMatches(current, operation)) {
                 releaseProviderThenJournal(
                         player,
                         player,
@@ -988,8 +1000,9 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             return;
         }
         if (operation.state() == EconomyOperationState.ROLLED_BACK) {
-            if (operation.resultChecksum().isEmpty()
-                    || operation.resultChecksum().orElseThrow().equals(current.checksum())) {
+            if (resultTotalMatches(current, operation)
+                    && (operation.resultChecksum().isEmpty()
+                    || operation.resultChecksum().orElseThrow().equals(current.checksum()))) {
                 releaseProviderThenJournal(
                         player,
                         player,
@@ -1229,6 +1242,14 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 failureCode,
                 detail
         );
+    }
+
+    private static boolean resultTotalMatches(
+            CurrencyAccountState current,
+            EconomyOperation operation
+    ) {
+        return operation.resultTotal().isEmpty()
+                || current.authoritativeTotal() == operation.resultTotal().orElseThrow();
     }
 
     private static boolean matchesBeforeState(
