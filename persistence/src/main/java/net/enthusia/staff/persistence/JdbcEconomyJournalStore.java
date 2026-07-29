@@ -668,41 +668,73 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         }
     }
 
-    private EconomyJournalResult validateTerminalTransition(
+    private static EconomyJournalResult validateTerminalTransition(
             EconomyOperation operation,
             EconomyTerminalUpdate update
     ) {
-        if (update.outcome() == EconomyTerminalOutcome.COMMITTED) {
-            if (operation.state() != EconomyOperationState.APPLYING
-                    || operation.authoritativeTotal().isEmpty()
-                    || operation.requestedAmount().isEmpty()
-                    || operation.replacementChecksum().isEmpty()) {
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "A committed economy outcome requires an applying exact plan"
-                );
-            }
-            long expectedTotal = operation.authoritativeTotal().orElseThrow()
-                    - operation.requestedAmount().orElseThrow();
-            if (update.resultTotal().orElseThrow() != expectedTotal
-                    || !update.resultChecksum().orElseThrow()
-                    .equals(operation.replacementChecksum().orElseThrow())) {
-                return result(
-                        EconomyJournalResult.Status.STALE,
-                        operation,
-                        "Committed result does not match the exact removal plan"
-                );
-            }
+        return switch (update.outcome()) {
+            case COMMITTED -> validateCommittedTransition(operation, update);
+            case ROLLED_BACK -> validateRolledBackTransition(operation, update);
+            case QUARANTINED -> null;
+        };
+    }
+
+    private static EconomyJournalResult validateCommittedTransition(
+            EconomyOperation operation,
+            EconomyTerminalUpdate update
+    ) {
+        if (operation.state() != EconomyOperationState.APPLYING
+                || operation.authoritativeTotal().isEmpty()
+                || operation.requestedAmount().isEmpty()
+                || operation.replacementChecksum().isEmpty()) {
+            return result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "A committed economy outcome requires an applying exact plan"
+            );
         }
-        if (update.outcome() == EconomyTerminalOutcome.ROLLED_BACK
-                && update.resultTotal().isPresent()
-                && operation.authoritativeTotal().isPresent()
-                && update.resultTotal().orElseThrow() != operation.authoritativeTotal().orElseThrow()) {
+        long expectedTotal = operation.authoritativeTotal().orElseThrow()
+                - operation.requestedAmount().orElseThrow();
+        if (update.resultTotal().orElseThrow() != expectedTotal
+                || !update.resultChecksum().orElseThrow()
+                .equals(operation.replacementChecksum().orElseThrow())) {
             return result(
                     EconomyJournalResult.Status.STALE,
                     operation,
-                    "Rolled-back result does not retain the authoritative before total"
+                    "Committed result does not match the exact removal plan"
+            );
+        }
+        return null;
+    }
+
+    private static EconomyJournalResult validateRolledBackTransition(
+            EconomyOperation operation,
+            EconomyTerminalUpdate update
+    ) {
+        if (update.resultTotal().isEmpty()) {
+            if (operation.state() != EconomyOperationState.LOCKED
+                    || operation.hasAnyDurablePlanEvidence()) {
+                return result(
+                        EconomyJournalResult.Status.INVALID_STATE,
+                        operation,
+                        "Evidence-free rollback is restricted to a locked operation without a saved plan"
+                );
+            }
+            return null;
+        }
+        if (operation.authoritativeTotal().isEmpty() || operation.beforeChecksum().isEmpty()) {
+            return result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "Verified rollback evidence requires an exact saved before state"
+            );
+        }
+        if (update.resultTotal().orElseThrow() != operation.authoritativeTotal().orElseThrow()
+                || !update.resultChecksum().orElseThrow().equals(operation.beforeChecksum().orElseThrow())) {
+            return result(
+                    EconomyJournalResult.Status.STALE,
+                    operation,
+                    "Rolled-back result does not match the exact authoritative before state"
             );
         }
         return null;
