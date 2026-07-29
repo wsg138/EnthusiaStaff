@@ -2,16 +2,16 @@
 
 Last updated: 2026-07-29 (America/Indianapolis)
 
-This manifest records review, recovery, and validation state. PRs #1 through #8
-have been merged into `main`; PR #9 is the active root-plugin integrity
-checkpoint for protected network identity and inventory recovery. Nothing
-listed here has been deployed, released, or applied to production data.
+This manifest records review, recovery, and validation state. PRs #1 through #9
+have been merged into `main`; PR #10 is the active root-plugin maintainability
+checkpoint for Paper inventory and confiscation workflows. Nothing listed here
+has been deployed, released, or applied to production data.
 
 ## Repository checkpoint
 
 | Repository | Remote URL | Default branch | Working branch | Latest local SHA | Latest pushed SHA | Pull request | Build status | Test status | Docker/Testcontainers | Codacy grade | Codacy issue count | Current blockers |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #9 code and test head `eba335b179bc43d1cd52839bc69af595ae1e456c` | `origin/section/plugin` includes `eba335b179bc43d1cd52839bc69af595ae1e456c`; `origin/main` is `80b2635917bcf71a187ec27ae0bf5e38b35610ef` | [PR #9 active draft](https://github.com/wsg138/EnthusiaStaff/pull/9); [PRs #1–#8 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; 39 actionable tasks, 38 executed and 1 up-to-date | PASS: 143 tests in 51 suites, 0 failures/errors/skips | PASS: 23 tests across 7 MariaDB Testcontainers suites | A on `main`; exact PR head is up to standards, with 9 solved and 0 new issues | 446 active and 69 ignored after exact `main` reanalysis | Exact-head CodeRabbit review is pending after the earlier retry was rate-limited; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #10 code and test head `d73ddfc57b83e5c0465347b848a30248340c7996` | `origin/section/plugin` includes report head `7703991919ee2fed1a3c8659d81771d11c1cc8f6`; `origin/main` is `e6da2117fddb6b8e165f0dd41277b21bed296f90` | [PR #10 active](https://github.com/wsg138/EnthusiaStaff/pull/10); [PRs #1–#9 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; 39 actionable tasks, 38 executed and 1 up-to-date | PASS: 146 tests in 52 suites, 0 failures/errors/skips | PASS: 23 tests across 7 MariaDB Testcontainers suites | A on `main`; PR #10 report head is up to standards with 0 new and 1 fixed issue | 427 active and 69 ignored after exact `main` reanalysis | CodeRabbit produced no review because its single exact-head attempt was rate-limited; the two Paper coordinators still exceed the file-length threshold; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
 | enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` (`1657a0a`) | `agent/punishment-platform` (expected; absent remotely) | No target-layout clone; sibling checkout is `1657a0a` on `deploy/market-experimental` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | N/A | UNVERIFIED | UNKNOWN | Must be cloned under `related-repos`; the sibling checkout has untracked deployment-tool state that must not be lost or committed. |
 | EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` (`9696501`) | `agent/moderation-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `9696501` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
 | EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` (`25ea8cb`) | `agent/reputation-blacklist-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `25ea8cb` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
@@ -30,8 +30,8 @@ listed here has been deployed, released, or applied to production data.
 - Existing history action: no rebase, reset, or force-push was required
 - Merge commit: `b5e55ed9ffd7309cacabf6b0a07af220068f3c30`
 - PR #1 outcome: merged with history preserved; the source branch was retained
-- Current `main`: `80b2635917bcf71a187ec27ae0bf5e38b35610ef`
-- Completed section history: PRs #2 through #8 merged without rewriting `main`
+- Current `main`: `e6da2117fddb6b8e165f0dd41277b21bed296f90`
+- Completed section history: PRs #2 through #9 merged without rewriting `main`
 - Pre-existing goals file SHA-256 before and after checkout: `746DD1B37BBAF517F008441102A6CBF688AABEC09E8196F863509BF484277F9A`
 - Root local exclusion: `related-repos/` is present in `.git/info/exclude`
 

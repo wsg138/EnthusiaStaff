@@ -277,9 +277,9 @@ commits. GitHub shows no unresolved review thread.
 
 ## Current merged checkpoint
 
-As of 2026-07-29, PRs #1 through #8 are merged and the hosted Codacy analysis
+As of 2026-07-29, PRs #1 through #9 are merged and the hosted Codacy analysis
 for `main` is pinned to
-`80b2635917bcf71a187ec27ae0bf5e38b35610ef`.
+`e6da2117fddb6b8e165f0dd41277b21bed296f90`.
 
 | PR | Coherent section | Merge commit |
 | ---: | --- | --- |
@@ -291,8 +291,9 @@ for `main` is pinned to
 | [#6](https://github.com/wsg138/EnthusiaStaff/pull/6) | Asset-journal transaction fencing | `358c099443dea727a50818cb57d3826cd58ea6c7` |
 | [#7](https://github.com/wsg138/EnthusiaStaff/pull/7) | Confiscated-asset restoration integrity | `2867ad30b8ee725701874fa34596502e75ba7105` |
 | [#8](https://github.com/wsg138/EnthusiaStaff/pull/8) | Economy rollback integrity | `80b2635917bcf71a187ec27ae0bf5e38b35610ef` |
+| [#9](https://github.com/wsg138/EnthusiaStaff/pull/9) | Network identity and inventory recovery integrity | `e6da2117fddb6b8e165f0dd41277b21bed296f90` |
 
-The current hosted repository badge is A. Exact `main` reanalysis reports 446
+The current hosted repository badge is A. Exact `main` reanalysis reports 427
 active warnings and 69 ignored findings. Three generic AES-GCM review
 detections were added to the ignored set only after the nonce source, encryption
 path, decryption path, and deterministic tests established that no nonce-reuse
@@ -301,14 +302,14 @@ clean or production-ready.
 
 | Module | Active findings |
 | --- | ---: |
-| persistence | 182 |
+| persistence | 166 |
 | paper | 157 |
 | velocity | 78 |
 | domain | 15 |
-| integration-tests | 9 |
+| integration-tests | 6 |
 | common | 3 |
 | integration-contracts | 2 |
-| **Total** | **446** |
+| **Total** | **427** |
 
 At the PR #8 branch head, the clean Java 21
 `clean test check runtimeJars` checkpoint passed 134 tests in 51 suites with
@@ -333,7 +334,7 @@ maintainability duplication in PR #8. Both findings were fixed and covered by
 the final clean validation; the exact PR head then reported a successful
 CodeRabbit check.
 
-### PR #9 pre-merge root-plugin integrity checkpoint
+### PR #9 merged root-plugin integrity checkpoint
 
 PR #9 hardens protected network identity recovery without changing the stored
 encryption format. Recovery now rejects mismatched encryption-key versions,
@@ -380,10 +381,55 @@ visible and are not suppressed. Local 100-token CPD reports only the four
 pre-existing repository groups.
 
 CodeRabbit's initial network-identity review found no production-code defect.
-Its valid malformed-envelope test request is addressed. The retry for the
-remaining network test commits was explicitly rate-limited, and the current
-inventory commits have only a draft-skip result. An exact-head CodeRabbit
-review remains required before merge.
+Its valid malformed-envelope test request was addressed. The exact final review
+found one Markdown heading-spacing defect, which was fixed before merge. The
+follow-up review contained no finding and GitHub had no unresolved review
+thread when PR #9 merged.
+
+### PR #10 Paper inventory maintainability checkpoint
+
+PR #10 separates inventory and confiscation click decisions, paging, rendering,
+durable start and renewal, restoration planning, commit preparation, lease
+claim, apply, rollback, and finalization into bounded methods. A validated
+`InventoryOperationContext` now carries the shared clock and backend identity,
+removing the confiscation constructor's excessive-parameter finding.
+
+At exact code and test head
+`d73ddfc57b83e5c0465347b848a30248340c7996`, the clean Java 21
+`clean test check runtimeJars` run had 39 actionable tasks: 38 executed and one
+root aggregate task was up-to-date. The build passed 146 tests in 52 suites
+with zero failures, errors, or skips, including all 23 tests across seven
+MariaDB Testcontainers suites.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,087,683 | `29B9B23177A39AA887F1B08AAFD362F9C76A50E38A11EA3510EB5D466EEF0C4E` |
+| Velocity runtime jar | 7,356,772 | `3904C2BB6C932B9E83ACFCEA69E106754309A92F28F6FBD74C074ACF9E3382B7` |
+
+Both jars contain their expected plugin metadata and no provider API classes
+from `integration-contracts`.
+
+The comparable checked-in PMD ruleset reports 210 findings, down from 215 at
+the PR #9 checkpoint. Lizard reports 205, down from 228. Opengrep remains at
+17, Trivy reports zero, and CPD reports three pre-existing 100-token clone
+groups with none in the files changed by PR #10. Direct Codacy CLI execution
+with the organization-standard PMD patterns reports 465; this larger,
+non-comparable total is retained in the local logs and was not presented as a
+reduction against the checked-in-ruleset baseline.
+
+Neither coordinator has a remaining method-level PMD or Lizard result. Both
+still exceed the file-length threshold, so the oversized-class risk remains
+visible for a later responsibility-extraction checkpoint. No analyzer rule or
+first-party path was disabled, and no finding was ignored in this section.
+
+Hosted Codacy reports implementation and report head
+`7703991919ee2fed1a3c8659d81771d11c1cc8f6` is up to standards with zero new
+issues and one fixed issue. Its aggregate complexity delta of 55 and one clone
+delta remain visible; they were not hidden or dispositioned.
+
+The single exact-head CodeRabbit attempt was rate-limited before a review
+started. It produced no findings or review object, and GitHub reports zero
+review threads. The attempt was not retried.
 
 ## Remediation order
 

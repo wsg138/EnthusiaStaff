@@ -87,9 +87,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
 
     public ConfiscationCoordinator(
             JavaPlugin plugin,
-            Clock clock,
-            String scopeId,
-            String serverId,
+            InventoryOperationContext context,
             Supplier<OperationalMode> mode,
             AuthorizationPolicy authorization,
             Supplier<InventoryJournalStore> store,
@@ -98,9 +96,11 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             CurrencyGateway currency
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.scopeId = requireIdentifier(scopeId, "scopeId");
-        this.serverId = requireIdentifier(serverId, "serverId");
+        InventoryOperationContext operationContext =
+                java.util.Objects.requireNonNull(context, "context");
+        this.clock = operationContext.clock();
+        this.scopeId = operationContext.scopeId();
+        this.serverId = operationContext.serverId();
         this.mode = java.util.Objects.requireNonNull(mode, "mode");
         this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.store = java.util.Objects.requireNonNull(store, "store");
@@ -110,33 +110,23 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     public void open(Player viewer, Player target, CaseId caseId) {
-        if (viewer == null || target == null || caseId == null) {
-            throw new IllegalArgumentException("viewer, target, and caseId must be present");
-        }
-        if (!authorize(viewer, ModerationAction.APPLY_CASE_CONFISCATION)) {
-            viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+        requireAssetRequest(viewer, target, caseId);
+        if (!canStartOperation(
+                viewer,
+                target,
+                ModerationAction.APPLY_CASE_CONFISCATION,
+                "You do not have case confiscation authority.",
+                "Item confiscation is available only while moderation is ACTIVE.",
+                "Item confiscation selection requires the target on this backend."
+        )) {
             return;
         }
-        if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text(
-                    "Item confiscation is available only while moderation is ACTIVE."
-            ));
-            return;
-        }
-        if (!target.isOnline()) {
-            viewer.sendMessage(Component.text(
-                    "Item confiscation selection requires the target on this backend."
-            ));
-            return;
-        }
-        UUID operationId = UUID.randomUUID();
-        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null
-                || targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
-            viewerOperations.remove(viewer.getUniqueId(), operationId);
-            targetOperations.remove(target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(
-                    "The viewer or target already has an active confiscation selection."
-            ));
+        UUID operationId = reserveOperation(
+                viewer,
+                target,
+                "The viewer or target already has an active confiscation selection."
+        );
+        if (operationId == null) {
             return;
         }
         onEntity(
@@ -150,33 +140,23 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     public void restore(Player viewer, Player target, CaseId caseId) {
-        if (viewer == null || target == null || caseId == null) {
-            throw new IllegalArgumentException("viewer, target, and caseId must be present");
-        }
-        if (!authorize(viewer, ModerationAction.RESTORE_ASSETS)) {
-            viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
+        requireAssetRequest(viewer, target, caseId);
+        if (!canStartOperation(
+                viewer,
+                target,
+                ModerationAction.RESTORE_ASSETS,
+                "Only the Founder may restore confiscated assets.",
+                "Item restoration is available only while moderation is ACTIVE.",
+                "Confiscated-item restoration requires the target on this backend."
+        )) {
             return;
         }
-        if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text(
-                    "Item restoration is available only while moderation is ACTIVE."
-            ));
-            return;
-        }
-        if (!target.isOnline()) {
-            viewer.sendMessage(Component.text(
-                    "Confiscated-item restoration requires the target on this backend."
-            ));
-            return;
-        }
-        UUID operationId = UUID.randomUUID();
-        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null
-                || targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
-            viewerOperations.remove(viewer.getUniqueId(), operationId);
-            targetOperations.remove(target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(
-                    "The viewer or target already has an active asset operation."
-            ));
+        UUID operationId = reserveOperation(
+                viewer,
+                target,
+                "The viewer or target already has an active asset operation."
+        );
+        if (operationId == null) {
             return;
         }
         RestorationContext context = new RestorationContext(viewer, target, caseId, operationId);
@@ -191,6 +171,49 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         );
     }
 
+    private static void requireAssetRequest(Player viewer, Player target, CaseId caseId) {
+        if (viewer == null || target == null || caseId == null) {
+            throw new IllegalArgumentException("viewer, target, and caseId must be present");
+        }
+    }
+
+    private boolean canStartOperation(
+            Player viewer,
+            Player target,
+            ModerationAction action,
+            String unauthorizedMessage,
+            String inactiveMessage,
+            String offlineMessage
+    ) {
+        if (!authorize(viewer, action)) {
+            viewer.sendMessage(Component.text(unauthorizedMessage));
+            return false;
+        }
+        if (mode.get() != OperationalMode.ACTIVE) {
+            viewer.sendMessage(Component.text(inactiveMessage));
+            return false;
+        }
+        if (!target.isOnline()) {
+            viewer.sendMessage(Component.text(offlineMessage));
+            return false;
+        }
+        return true;
+    }
+
+    private UUID reserveOperation(Player viewer, Player target, String busyMessage) {
+        UUID operationId = UUID.randomUUID();
+        if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null) {
+            viewer.sendMessage(Component.text(busyMessage));
+            return null;
+        }
+        if (targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
+            viewerOperations.remove(viewer.getUniqueId(), operationId);
+            viewer.sendMessage(Component.text(busyMessage));
+            return null;
+        }
+        return operationId;
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)
@@ -199,45 +222,100 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             return;
         }
         event.setCancelled(true);
-        SelectionSession session = sessions.get(holder.operationId());
-        if (session == null || !holder.viewerId().equals(viewer.getUniqueId())
-                || !session.selecting()) {
+        SelectionSession session = activeSelection(viewer, holder);
+        if (session == null) {
             return;
         }
         int rawSlot = event.getRawSlot();
         if (rawSlot < 0 || rawSlot >= event.getView().getTopInventory().getSize()) {
             return;
         }
-        if (rawSlot == CANCEL_SLOT) {
-            cancel(session, "VIEWER_CANCELLED", "Staff cancelled confiscation selection", true);
+        if (handleControlClick(session, holder, rawSlot)) {
             return;
         }
-        if (rawSlot == CONFIRM_SLOT) {
-            confirm(session);
+        handleContentClick(viewer, session, holder, rawSlot, event.isShiftClick());
+    }
+
+    private SelectionSession activeSelection(Player viewer, ConfiscationInventoryHolder holder) {
+        SelectionSession session = sessions.get(holder.operationId());
+        if (session == null || !holder.viewerId().equals(viewer.getUniqueId())) {
+            return null;
+        }
+        return session.selecting() ? session : null;
+    }
+
+    private boolean handleControlClick(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int rawSlot
+    ) {
+        switch (rawSlot) {
+            case CANCEL_SLOT ->
+                    cancel(session, "VIEWER_CANCELLED", "Staff cancelled confiscation selection", true);
+            case CONFIRM_SLOT -> confirm(session);
+            case BACK_SLOT -> openParent(session, holder);
+            case PREVIOUS_SLOT -> openPreviousPage(session, holder);
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void openParent(SelectionSession session, ConfiscationInventoryHolder holder) {
+        ItemPath current = holder.containerPath().orElse(null);
+        if (current == null) {
             return;
         }
-        if (rawSlot == BACK_SLOT && holder.containerPath().isPresent()) {
-            ItemPath current = holder.containerPath().orElseThrow();
-            Optional<ItemPath> parent = current.nestedSlots().isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(current.parent());
-            openView(session, parent, 0);
-            return;
-        }
-        if (rawSlot == PREVIOUS_SLOT && holder.page() > 0) {
+        Optional<ItemPath> parent = current.nestedSlots().isEmpty()
+                ? Optional.empty()
+                : Optional.of(current.parent());
+        openView(session, parent, 0);
+    }
+
+    private void openPreviousPage(SelectionSession session, ConfiscationInventoryHolder holder) {
+        if (holder.page() > 0) {
             openView(session, holder.containerPath(), holder.page() - 1);
-            return;
         }
+    }
+
+    private void handleContentClick(
+            Player viewer,
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int rawSlot,
+            boolean shiftClick
+    ) {
         List<ViewEntry> entries = viewEntries(session, holder.containerPath());
-        int index = holder.page() * CONTENT_SLOTS + rawSlot;
-        if (rawSlot == NEXT_SLOT && (holder.page() + 1) * CONTENT_SLOTS < entries.size()) {
-            openView(session, holder.containerPath(), holder.page() + 1);
+        if (rawSlot == NEXT_SLOT) {
+            openNextPage(session, holder, entries.size());
             return;
         }
+        int index = holder.page() * CONTENT_SLOTS + rawSlot;
         if (rawSlot >= CONTENT_SLOTS || index < 0 || index >= entries.size()) {
             return;
         }
         ViewEntry selected = entries.get(index);
+        handleSelectedEntry(viewer, session, holder, selected, shiftClick);
+    }
+
+    private void openNextPage(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            int entryCount
+    ) {
+        if ((holder.page() + 1) * CONTENT_SLOTS < entryCount) {
+            openView(session, holder.containerPath(), holder.page() + 1);
+        }
+    }
+
+    private void handleSelectedEntry(
+            Player viewer,
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            ViewEntry selected,
+            boolean shiftClick
+    ) {
         if (selected.item() == null || selected.item().isEmpty()) {
             return;
         }
@@ -252,7 +330,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             ));
             return;
         }
-        if (NestedInventorySelection.isContainer(selected.item()) && !event.isShiftClick()) {
+        if (NestedInventorySelection.isContainer(selected.item()) && !shiftClick) {
             openView(session, Optional.of(selected.path()), 0);
             return;
         }
@@ -291,7 +369,13 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
-        UUID viewerOperation = viewerOperations.get(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        cancelViewerSelection(playerId);
+        handleTargetDeparture(playerId);
+    }
+
+    private void cancelViewerSelection(UUID playerId) {
+        UUID viewerOperation = viewerOperations.get(playerId);
         if (viewerOperation != null) {
             SelectionSession session = sessions.get(viewerOperation);
             if (session != null && session.selecting()) {
@@ -303,45 +387,59 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
             }
         }
-        UUID targetOperation = targetOperations.get(event.getPlayer().getUniqueId());
-        if (targetOperation != null) {
-            RestorationContext restoration = restorations.get(targetOperation);
-            if (restoration != null) {
-                if (restoration.beforePatch()) {
-                    failRestorationBeforePatch(
-                            restoration,
-                            "Target disconnected before the restoration patch was durable."
-                    );
-                } else if (restoration.patchPreparationInFlight()) {
-                    restoration.targetDeparted();
-                    if (restoration.localLocksWereAcquired()) {
-                        releaseLocalLocks(
-                                restoration.targetId(),
-                                restoration.operationId()
-                        );
-                    }
-                } else {
-                    pendingRestorationAfterTargetDeparture(restoration);
-                }
-                return;
-            }
-            SelectionSession session = sessions.get(targetOperation);
-            if (session != null && session.selecting()) {
-                cancel(
-                        session,
-                        "TARGET_DISCONNECTED",
-                        "Target disconnected during confiscation selection",
-                        true
-                );
-            } else if (session != null) {
-                session.stopTasks();
-                releaseLocalLocks(session.targetId(), session.operationId());
-                removeSession(session);
-                message(
-                        session.viewer(),
-                        "The target left; the durable confiscation patch will recover before interaction."
-                );
-            }
+    }
+
+    private void handleTargetDeparture(UUID playerId) {
+        UUID targetOperation = targetOperations.get(playerId);
+        if (targetOperation == null) {
+            return;
+        }
+        RestorationContext restoration = restorations.get(targetOperation);
+        if (restoration != null) {
+            handleRestorationTargetDeparture(restoration);
+            return;
+        }
+        SelectionSession session = sessions.get(targetOperation);
+        if (session == null) {
+            return;
+        }
+        if (session.selecting()) {
+            cancel(
+                    session,
+                    "TARGET_DISCONNECTED",
+                    "Target disconnected during confiscation selection",
+                    true
+            );
+            return;
+        }
+        session.stopTasks();
+        releaseLocalLocks(session.targetId(), session.operationId());
+        removeSession(session);
+        message(
+                session.viewer(),
+                "The target left; the durable confiscation patch will recover before interaction."
+        );
+    }
+
+    private void handleRestorationTargetDeparture(RestorationContext restoration) {
+        if (restoration.beforePatch()) {
+            failRestorationBeforePatch(
+                    restoration,
+                    "Target disconnected before the restoration patch was durable."
+            );
+            return;
+        }
+        if (restoration.patchPreparationInFlight()) {
+            restoration.targetDeparted();
+            releaseDepartedRestorationLocks(restoration);
+            return;
+        }
+        pendingRestorationAfterTargetDeparture(restoration);
+    }
+
+    private void releaseDepartedRestorationLocks(RestorationContext restoration) {
+        if (restoration.localLocksWereAcquired()) {
+            releaseLocalLocks(restoration.targetId(), restoration.operationId());
         }
     }
 
@@ -394,33 +492,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 return;
             }
             if (!context.reserved()) {
-                loaded.cancelRestoration(
-                        context.caseId(),
-                        context.operationId(),
-                        clock.instant()
-                );
-                releaseRestoration(
-                        context,
-                        "Restoration was cancelled while its reservation was opening."
-                );
+                cancelInterruptedReservation(loaded, context);
                 return;
             }
-            InventoryObservation observation = loaded.recordObservation(
-                    context.targetId(),
-                    scopeId,
-                    serverId,
-                    encoded.checksum(),
-                    encoded.bytes(),
-                    clock.instant()
-            );
-            onEntity(
-                    context.target(),
-                    () -> buildRestoration(context, current, observation, reservation.snapshots()),
-                    () -> failRestorationBeforePatch(
-                            context,
-                            "Target left before the restoration patch was built."
-                    )
-            );
+            continueRestorationReservation(loaded, context, current, encoded, reservation.snapshots());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscated asset reservation failed", exception);
             failRestorationBeforePatch(
@@ -428,6 +503,46 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                     "Confiscated assets could not be reserved; no assets changed."
             );
         }
+    }
+
+    private void cancelInterruptedReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context
+    ) {
+        loaded.cancelRestoration(
+                context.caseId(),
+                context.operationId(),
+                clock.instant()
+        );
+        releaseRestoration(
+                context,
+                "Restoration was cancelled while its reservation was opening."
+        );
+    }
+
+    private void continueRestorationReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryImage current,
+            InventoryImageCodec.EncodedImage encoded,
+            List<ConfiscatedAssetSnapshot> snapshots
+    ) {
+        InventoryObservation observation = loaded.recordObservation(
+                context.targetId(),
+                scopeId,
+                serverId,
+                encoded.checksum(),
+                encoded.bytes(),
+                clock.instant()
+        );
+        onEntity(
+                context.target(),
+                () -> buildRestoration(context, current, observation, snapshots),
+                () -> failRestorationBeforePatch(
+                        context,
+                        "Target left before the restoration patch was built."
+                )
+        );
     }
 
     private void buildRestoration(
@@ -446,50 +561,75 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
-            List<ConfiscatedAssetEntry> entries = new ArrayList<>();
-            for (ConfiscatedAssetSnapshot snapshot : snapshots) {
-                if (!assetsCodec.checksum(snapshot.assets()).equals(snapshot.checksum())) {
-                    throw new IllegalArgumentException(
-                            "confiscated asset snapshot checksum does not match its bytes"
-                    );
-                }
-                entries.addAll(assetsCodec.decode(snapshot.assets()));
-            }
+            List<ConfiscatedAssetEntry> entries = decodeRestorationEntries(snapshots);
             NestedInventorySelection.RestorationResult restoration =
                     NestedInventorySelection.restore(captured, entries);
             InventoryImageCodec.EncodedImage replacement =
                     imageCodec.encodeWithChecksum(restoration.replacement());
-            InventoryPrepareRequest request = new InventoryPrepareRequest(
-                    context.operationId(),
-                    new IdempotencyKey("inventory:restore:" + context.operationId()).value(),
-                    context.targetId(),
-                    scopeId,
-                    serverId,
-                    context.viewerId(),
-                    Optional.of(context.caseId().value()),
-                    "RESTORE_CONFISCATED",
-                    observation.revision(),
-                    observation.checksum(),
-                    observation.snapshot(),
-                    replacement.checksum(),
-                    replacement.bytes(),
-                    restoration.changedRootSlots(),
-                    false
-            );
-            context.preparingPatch();
-            if (!submit(() -> prepareRestorationPatch(
+            InventoryPrepareRequest request = restorationRequest(
                     context,
-                    request,
-                    restoration.replacement()
-            ))) {
-                failRestorationBeforePatch(context, "Restoration patch queue is full.");
-            }
+                    observation,
+                    replacement,
+                    restoration.changedRootSlots()
+            );
+            queueRestorationPreparation(context, request, restoration.replacement());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscated asset restoration planning failed", exception);
             failRestorationBeforePatch(
                     context,
                     "Confiscated assets cannot fit safely; no assets changed."
             );
+        }
+    }
+
+    private List<ConfiscatedAssetEntry> decodeRestorationEntries(
+            List<ConfiscatedAssetSnapshot> snapshots
+    ) {
+        List<ConfiscatedAssetEntry> entries = new ArrayList<>();
+        for (ConfiscatedAssetSnapshot snapshot : snapshots) {
+            if (!assetsCodec.checksum(snapshot.assets()).equals(snapshot.checksum())) {
+                throw new IllegalArgumentException(
+                        "confiscated asset snapshot checksum does not match its bytes"
+                );
+            }
+            entries.addAll(assetsCodec.decode(snapshot.assets()));
+        }
+        return entries;
+    }
+
+    private InventoryPrepareRequest restorationRequest(
+            RestorationContext context,
+            InventoryObservation observation,
+            InventoryImageCodec.EncodedImage replacement,
+            List<Integer> changedRootSlots
+    ) {
+        return new InventoryPrepareRequest(
+                context.operationId(),
+                new IdempotencyKey("inventory:restore:" + context.operationId()).value(),
+                context.targetId(),
+                scopeId,
+                serverId,
+                context.viewerId(),
+                Optional.of(context.caseId().value()),
+                "RESTORE_CONFISCATED",
+                observation.revision(),
+                observation.checksum(),
+                observation.snapshot(),
+                replacement.checksum(),
+                replacement.bytes(),
+                changedRootSlots,
+                false
+        );
+    }
+
+    private void queueRestorationPreparation(
+            RestorationContext context,
+            InventoryPrepareRequest request,
+            InventoryImage replacement
+    ) {
+        context.preparingPatch();
+        if (!submit(() -> prepareRestorationPatch(context, request, replacement))) {
+            failRestorationBeforePatch(context, "Restoration patch queue is full.");
         }
     }
 
@@ -505,10 +645,8 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         }
         InventoryPatch patch = null;
         try {
-            InventoryPreparation prepared = loaded.prepare(request, LEASE_DURATION, clock.instant());
-            patch = prepared.patch().orElse(null);
+            patch = prepareRestorationRecord(loaded, context, request);
             if (patch == null) {
-                failRestorationBeforePatch(context, prepared.detail());
                 return;
             }
             context.patchPrepared();
@@ -516,53 +654,83 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 pendingRestorationAfterTargetDeparture(context);
                 return;
             }
-            InventoryPatch claimed = loaded.claimForApply(
-                    patch.patchId(),
-                    patch.operationId(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).orElse(null);
-            if (claimed == null) {
-                quarantineRestoration(
-                        context,
-                        patch,
-                        "RESTORATION_CLAIM_FAILED",
-                        "Prepared restoration patch lost its lease"
-                );
-                return;
-            }
-            if (claimed.state() == InventoryOperationState.APPLIED) {
-                loaded.finalizeRestoration(
-                        context.caseId(),
-                        context.operationId(),
-                        claimed.replacementChecksum(),
-                        clock.instant()
-                );
-                releaseRestoration(context, "That exact confiscated-asset restoration was already committed.");
-                return;
-            }
-            context.applying();
-            onEntity(
-                    context.target(),
-                    () -> applyRestorationPatch(context, claimed, replacement),
-                    () -> pendingRestorationAfterTargetDeparture(context)
-            );
+            claimRestorationPatch(loaded, context, patch, replacement);
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Restoration patch preparation failed", exception);
-            if (patch == null) {
-                failRestorationBeforePatch(
-                        context,
-                        "Restoration patch could not be prepared; no assets changed."
-                );
-            } else {
-                quarantineRestoration(
-                        context,
-                        patch,
-                        "RESTORATION_PREPARE_EXCEPTION",
-                        "Prepared restoration patch could not be claimed safely"
-                );
-            }
+            handleRestorationPreparationFailure(context, patch, exception);
         }
+    }
+
+    private InventoryPatch prepareRestorationRecord(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryPrepareRequest request
+    ) {
+        InventoryPreparation prepared = loaded.prepare(request, LEASE_DURATION, clock.instant());
+        InventoryPatch patch = prepared.patch().orElse(null);
+        if (patch == null) {
+            failRestorationBeforePatch(context, prepared.detail());
+        }
+        return patch;
+    }
+
+    private void claimRestorationPatch(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            InventoryPatch patch,
+            InventoryImage replacement
+    ) {
+        InventoryPatch claimed = loaded.claimForApply(
+                patch.patchId(),
+                patch.operationId(),
+                LEASE_DURATION,
+                clock.instant()
+        ).orElse(null);
+        if (claimed == null) {
+            quarantineRestoration(
+                    context,
+                    patch,
+                    "RESTORATION_CLAIM_FAILED",
+                    "Prepared restoration patch lost its lease"
+            );
+            return;
+        }
+        if (claimed.state() == InventoryOperationState.APPLIED) {
+            loaded.finalizeRestoration(
+                    context.caseId(),
+                    context.operationId(),
+                    claimed.replacementChecksum(),
+                    clock.instant()
+            );
+            releaseRestoration(context, "That exact confiscated-asset restoration was already committed.");
+            return;
+        }
+        context.applying();
+        onEntity(
+                context.target(),
+                () -> applyRestorationPatch(context, claimed, replacement),
+                () -> pendingRestorationAfterTargetDeparture(context)
+        );
+    }
+
+    private void handleRestorationPreparationFailure(
+            RestorationContext context,
+            InventoryPatch patch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Restoration patch preparation failed", exception);
+        if (patch == null) {
+            failRestorationBeforePatch(
+                    context,
+                    "Restoration patch could not be prepared; no assets changed."
+            );
+            return;
+        }
+        quarantineRestoration(
+                context,
+                patch,
+                "RESTORATION_PREPARE_EXCEPTION",
+                "Prepared restoration patch could not be claimed safely"
+        );
     }
 
     private void applyRestorationPatch(
@@ -630,31 +798,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                     applied.bytes(),
                     clock.instant()
             );
-            if (result.status() != InventoryFinalizeResult.Status.COMMITTED
-                    && result.status() != InventoryFinalizeResult.Status.REPLAYED) {
-                message(
-                        context.viewer(),
-                        "Restoration reached an ambiguous durable state; do not repeat it."
-                );
-                alertStaff(
-                        "Restoration operation " + context.operationId()
-                                + " requires recovery: " + result.detail()
-                );
+            if (!restorationFinalized(context, result)) {
                 return;
             }
-            boolean marked = loaded.finalizeRestoration(
-                    context.caseId(),
-                    context.operationId(),
-                    applied.checksum(),
-                    clock.instant()
-            );
-            releaseRestoration(
-                    context,
-                    marked
-                            ? "Confiscated items restored and verified for case "
-                                    + context.caseId() + '.'
-                            : "Items restored and verified; the case marker will reconcile automatically."
-            );
+            completeRestorationReservation(loaded, context, applied.checksum());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Restoration finalization failed", exception);
             message(
@@ -761,19 +908,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             CaseId caseId,
             UUID operationId
     ) {
-        if (!inventories.acquireExternalAssetLock(target.getUniqueId())) {
-            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Another inventory operation owns this target."));
-            return;
-        }
-        if (!currency.acquireMovementLock(
-                target.getUniqueId(),
-                operationId,
-                LEASE_DURATION
-        )) {
-            inventories.releaseExternalAssetLock(target.getUniqueId());
-            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Currency movement lock could not be acquired."));
+        if (!acquireSelectionLocks(viewer, target, operationId)) {
             return;
         }
         target.closeInventory();
@@ -789,6 +924,32 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             viewer.sendMessage(Component.text("Confiscation snapshot failed; no assets changed."));
             return;
         }
+        queueDurableSelection(viewer, target, caseId, operationId, before, encoded);
+    }
+
+    private boolean acquireSelectionLocks(Player viewer, Player target, UUID operationId) {
+        if (!inventories.acquireExternalAssetLock(target.getUniqueId())) {
+            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
+            viewer.sendMessage(Component.text("Another inventory operation owns this target."));
+            return false;
+        }
+        if (currency.acquireMovementLock(target.getUniqueId(), operationId, LEASE_DURATION)) {
+            return true;
+        }
+        inventories.releaseExternalAssetLock(target.getUniqueId());
+        clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
+        viewer.sendMessage(Component.text("Currency movement lock could not be acquired."));
+        return false;
+    }
+
+    private void queueDurableSelection(
+            Player viewer,
+            Player target,
+            CaseId caseId,
+            UUID operationId,
+            InventoryImage before,
+            InventoryImageCodec.EncodedImage encoded
+    ) {
         InventoryConfiscationStartRequest request = new InventoryConfiscationStartRequest(
                 operationId,
                 new IdempotencyKey("inventory:confiscation:" + operationId).value(),
@@ -832,26 +993,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 failStart(viewer, target, request.operationId(), start.detail());
                 return;
             }
-            if (!viewer.isOnline() || !target.isOnline()) {
-                loaded.cancelConfiscation(
-                        durable.operationId(),
-                        durable.fencingToken(),
-                        "PARTICIPANT_LEFT_DURING_START",
-                        "Viewer or target left while the durable selection was starting",
-                        clock.instant()
-                );
-                failStart(
-                        viewer,
-                        target,
-                        request.operationId(),
-                        "Viewer or target left while confiscation was starting."
-                );
+            if (!participantsAvailable(loaded, viewer, target, durable)) {
                 return;
             }
-            SelectionSession session = new SelectionSession(viewer, target, durable, before);
-            sessions.put(durable.operationId(), session);
-            scheduleTasks(session);
-            openView(session, Optional.empty(), 0);
+            activateSelection(viewer, target, before, durable);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Durable confiscation selection start failed", exception);
             failStart(
@@ -892,46 +1037,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         if (!session.selecting()) {
             return;
         }
-        if (!submit(() -> {
-            InventoryJournalStore loaded = store.get();
-            if (loaded == null || loaded.renewConfiscation(
-                    session.operationId(),
-                    session.fencingToken(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).isEmpty()) {
-                cancel(
-                        session,
-                        "DURABLE_LEASE_LOST",
-                        "Confiscation selection lost its durable inventory lease",
-                        true
-                );
-                return;
-            }
-            onEntity(
-                    session.target(),
-                    () -> {
-                        if (!currency.renewMovementLock(
-                                session.targetId(),
-                                session.operationId(),
-                                LEASE_DURATION
-                        )) {
-                            cancel(
-                                    session,
-                                    "CURRENCY_LEASE_LOST",
-                                    "Confiscation selection lost its Currency movement lock",
-                                    true
-                            );
-                        }
-                    },
-                    () -> cancel(
-                            session,
-                            "TARGET_LEFT_DURING_RENEWAL",
-                            "Target left during confiscation lease renewal",
-                            true
-                    )
-            );
-        })) {
+        if (!submit(() -> renewDurableSelection(session))) {
             cancel(
                     session,
                     "RENEWAL_QUEUE_FULL",
@@ -1016,6 +1122,25 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     ) {
         Inventory inventory = holder.getInventory();
         inventory.clear();
+        renderEntries(session, holder, entries, inventory);
+        fillControls(inventory);
+        renderNavigation(holder, entries.size(), inventory);
+        inventory.setItem(
+                CONFIRM_SLOT,
+                named(
+                        Material.LIME_CONCRETE,
+                        "Confirm " + session.selectionCount() + " selected path(s)"
+                )
+        );
+        inventory.setItem(CANCEL_SLOT, named(Material.BARRIER, "Cancel without changing assets"));
+    }
+
+    private void renderEntries(
+            SelectionSession session,
+            ConfiscationInventoryHolder holder,
+            List<ViewEntry> entries,
+            Inventory inventory
+    ) {
         int offset = holder.page() * CONTENT_SLOTS;
         for (int guiSlot = 0; guiSlot < CONTENT_SLOTS; guiSlot++) {
             int entryIndex = offset + guiSlot;
@@ -1033,27 +1158,148 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                             : entry.item().clone()
             );
         }
+    }
+
+    private void renewDurableSelection(SelectionSession session) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null || loaded.renewConfiscation(
+                session.operationId(),
+                session.fencingToken(),
+                LEASE_DURATION,
+                clock.instant()
+        ).isEmpty()) {
+            cancel(
+                    session,
+                    "DURABLE_LEASE_LOST",
+                    "Confiscation selection lost its durable inventory lease",
+                    true
+            );
+            return;
+        }
+        onEntity(
+                session.target(),
+                () -> renewCurrencyLock(session),
+                () -> cancel(
+                        session,
+                        "TARGET_LEFT_DURING_RENEWAL",
+                        "Target left during confiscation lease renewal",
+                        true
+                )
+        );
+    }
+
+    private void renewCurrencyLock(SelectionSession session) {
+        if (!currency.renewMovementLock(
+                session.targetId(),
+                session.operationId(),
+                LEASE_DURATION
+        )) {
+            cancel(
+                    session,
+                    "CURRENCY_LEASE_LOST",
+                    "Confiscation selection lost its Currency movement lock",
+                    true
+            );
+        }
+    }
+
+    private boolean participantsAvailable(
+            InventoryJournalStore loaded,
+            Player viewer,
+            Player target,
+            InventoryConfiscationSession durable
+    ) {
+        if (viewer.isOnline() && target.isOnline()) {
+            return true;
+        }
+        loaded.cancelConfiscation(
+                durable.operationId(),
+                durable.fencingToken(),
+                "PARTICIPANT_LEFT_DURING_START",
+                "Viewer or target left while the durable selection was starting",
+                clock.instant()
+        );
+        failStart(
+                viewer,
+                target,
+                durable.operationId(),
+                "Viewer or target left while confiscation was starting."
+        );
+        return false;
+    }
+
+    private void activateSelection(
+            Player viewer,
+            Player target,
+            InventoryImage before,
+            InventoryConfiscationSession durable
+    ) {
+        SelectionSession session = new SelectionSession(viewer, target, durable, before);
+        sessions.put(durable.operationId(), session);
+        scheduleTasks(session);
+        openView(session, Optional.empty(), 0);
+    }
+
+    private boolean restorationFinalized(
+            RestorationContext context,
+            InventoryFinalizeResult result
+    ) {
+        if (result.status() == InventoryFinalizeResult.Status.COMMITTED
+                || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
+            return true;
+        }
+        message(
+                context.viewer(),
+                "Restoration reached an ambiguous durable state; do not repeat it."
+        );
+        alertStaff(
+                "Restoration operation " + context.operationId()
+                        + " requires recovery: " + result.detail()
+        );
+        return false;
+    }
+
+    private void completeRestorationReservation(
+            InventoryJournalStore loaded,
+            RestorationContext context,
+            String appliedChecksum
+    ) {
+        boolean marked = loaded.finalizeRestoration(
+                context.caseId(),
+                context.operationId(),
+                appliedChecksum,
+                clock.instant()
+        );
+        releaseRestoration(
+                context,
+                marked
+                        ? "Confiscated items restored and verified for case "
+                                + context.caseId() + '.'
+                        : "Items restored and verified; the case marker will reconcile automatically."
+        );
+    }
+
+    private static void fillControls(Inventory inventory) {
         ItemStack filler = named(Material.GRAY_STAINED_GLASS_PANE, " ");
         for (int slot = CONTENT_SLOTS; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, filler);
         }
+    }
+
+    private static void renderNavigation(
+            ConfiscationInventoryHolder holder,
+            int entryCount,
+            Inventory inventory
+    ) {
         if (holder.containerPath().isPresent()) {
             inventory.setItem(BACK_SLOT, named(Material.ARROW, "Back"));
         }
         if (holder.page() > 0) {
             inventory.setItem(PREVIOUS_SLOT, named(Material.ARROW, "Previous page"));
         }
-        if ((holder.page() + 1) * CONTENT_SLOTS < entries.size()) {
+        if ((holder.page() + 1) * CONTENT_SLOTS < entryCount) {
             inventory.setItem(NEXT_SLOT, named(Material.ARROW, "Next page"));
         }
-        inventory.setItem(
-                CONFIRM_SLOT,
-                named(
-                        Material.LIME_CONCRETE,
-                        "Confirm " + session.selectionCount() + " selected path(s)"
-                )
-        );
-        inventory.setItem(CANCEL_SLOT, named(Material.BARRIER, "Cancel without changing assets"));
     }
 
     private void confirm(SelectionSession session) {
@@ -1095,51 +1341,77 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 );
                 return;
             }
-            for (Map.Entry<ItemPath, String> selection : session.selections().entrySet()) {
-                ItemStack item = NestedInventorySelection.item(current, selection.getKey());
-                if (item == null || item.isEmpty()
-                        || !NestedInventorySelection.fingerprint(item).equals(selection.getValue())) {
-                    cancelBeforePatch(
-                            session,
-                            "SELECTION_FINGERPRINT_STALE",
-                            "A selected nested item changed and requires reselection"
-                    );
-                    return;
-                }
+            if (!selectionsStillValid(session, current)) {
+                return;
             }
             NestedInventorySelection.SelectionResult removal =
                     NestedInventorySelection.remove(current, session.selections().keySet());
             InventoryImageCodec.EncodedImage replacement =
                     imageCodec.encodeWithChecksum(removal.replacement());
             ConfiscatedAssetsCodec.EncodedAssets assets = assetsCodec.encode(removal.entries());
-            InventoryConfiscationCommitRequest request = new InventoryConfiscationCommitRequest(
-                    session.operationId(),
-                    session.fencingToken(),
-                    session.durable().expectedRevision(),
-                    currentBytes.checksum(),
-                    replacement.checksum(),
-                    replacement.bytes(),
-                    removal.changedRootSlots(),
-                    assets.checksum(),
-                    assets.bytes(),
-                    removal.entries().stream()
-                            .map(ConfiscatedAssetEntry::path)
-                            .map(ItemPath::encoded)
-                            .toList()
-            );
-            if (!submit(() -> preparePatch(session, request, removal.replacement()))) {
-                cancelBeforePatch(
-                        session,
-                        "COMMIT_QUEUE_FULL",
-                        "Confiscation commit queue is full"
-                );
-            }
+            InventoryConfiscationCommitRequest request =
+                    confiscationCommitRequest(session, currentBytes, replacement, assets, removal);
+            queueConfiscationPatch(session, request, removal.replacement());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Confiscation selection validation failed", exception);
             cancelBeforePatch(
                     session,
                     "SELECTION_VALIDATION_FAILED",
                     "Confiscation selection could not be validated"
+            );
+        }
+    }
+
+    private boolean selectionsStillValid(SelectionSession session, InventoryImage current) {
+        for (Map.Entry<ItemPath, String> selection : session.selections().entrySet()) {
+            ItemStack item = NestedInventorySelection.item(current, selection.getKey());
+            if (item == null || item.isEmpty()
+                    || !NestedInventorySelection.fingerprint(item).equals(selection.getValue())) {
+                cancelBeforePatch(
+                        session,
+                        "SELECTION_FINGERPRINT_STALE",
+                        "A selected nested item changed and requires reselection"
+                );
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static InventoryConfiscationCommitRequest confiscationCommitRequest(
+            SelectionSession session,
+            InventoryImageCodec.EncodedImage current,
+            InventoryImageCodec.EncodedImage replacement,
+            ConfiscatedAssetsCodec.EncodedAssets assets,
+            NestedInventorySelection.SelectionResult removal
+    ) {
+        return new InventoryConfiscationCommitRequest(
+                session.operationId(),
+                session.fencingToken(),
+                session.durable().expectedRevision(),
+                current.checksum(),
+                replacement.checksum(),
+                replacement.bytes(),
+                removal.changedRootSlots(),
+                assets.checksum(),
+                assets.bytes(),
+                removal.entries().stream()
+                        .map(ConfiscatedAssetEntry::path)
+                        .map(ItemPath::encoded)
+                        .toList()
+        );
+    }
+
+    private void queueConfiscationPatch(
+            SelectionSession session,
+            InventoryConfiscationCommitRequest request,
+            InventoryImage replacement
+    ) {
+        if (!submit(() -> preparePatch(session, request, replacement))) {
+            cancelBeforePatch(
+                    session,
+                    "COMMIT_QUEUE_FULL",
+                    "Confiscation commit queue is full"
             );
         }
     }
@@ -1156,50 +1428,77 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         }
         InventoryPatch preparedPatch = null;
         try {
-            InventoryPreparation prepared = loaded.prepareConfiscation(request, clock.instant());
-            InventoryPatch patch = prepared.patch().orElse(null);
-            if (patch == null) {
-                cancelBeforePatch(session, "PATCH_REJECTED", prepared.detail());
-                return;
-            }
-            preparedPatch = patch;
-            session.applying();
-            InventoryPatch claimed = loaded.claimForApply(
-                    patch.patchId(),
-                    patch.operationId(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).orElse(null);
-            if (claimed == null) {
-                quarantine(session, patch, "PATCH_CLAIM_FAILED", "Prepared confiscation patch lost its lease");
-                return;
-            }
-            if (claimed.state() == InventoryOperationState.APPLIED) {
-                releaseAfterCompletion(session, "That exact confiscation was already committed.");
-                return;
-            }
-            onEntity(
-                    session.target(),
-                    () -> applyPatch(session, claimed, replacement),
-                    () -> pendingAfterTargetDeparture(session)
-            );
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Confiscation patch preparation failed", exception);
+            preparedPatch = prepareConfiscationRecord(loaded, session, request);
             if (preparedPatch == null) {
-                cancelBeforePatch(
-                        session,
-                        "PATCH_PREPARATION_FAILED",
-                        "Confiscation patch could not be prepared"
-                );
-            } else {
-                quarantine(
-                        session,
-                        preparedPatch,
-                        "PATCH_CLAIM_EXCEPTION",
-                        "Prepared confiscation patch could not be claimed safely"
-                );
+                return;
             }
+            session.applying();
+            claimConfiscationPatch(loaded, session, preparedPatch, replacement);
+        } catch (RuntimeException exception) {
+            handleConfiscationPreparationFailure(session, preparedPatch, exception);
         }
+    }
+
+    private InventoryPatch prepareConfiscationRecord(
+            InventoryJournalStore loaded,
+            SelectionSession session,
+            InventoryConfiscationCommitRequest request
+    ) {
+        InventoryPreparation prepared = loaded.prepareConfiscation(request, clock.instant());
+        InventoryPatch patch = prepared.patch().orElse(null);
+        if (patch == null) {
+            cancelBeforePatch(session, "PATCH_REJECTED", prepared.detail());
+        }
+        return patch;
+    }
+
+    private void claimConfiscationPatch(
+            InventoryJournalStore loaded,
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImage replacement
+    ) {
+        InventoryPatch claimed = loaded.claimForApply(
+                patch.patchId(),
+                patch.operationId(),
+                LEASE_DURATION,
+                clock.instant()
+        ).orElse(null);
+        if (claimed == null) {
+            quarantine(session, patch, "PATCH_CLAIM_FAILED", "Prepared confiscation patch lost its lease");
+            return;
+        }
+        if (claimed.state() == InventoryOperationState.APPLIED) {
+            releaseAfterCompletion(session, "That exact confiscation was already committed.");
+            return;
+        }
+        onEntity(
+                session.target(),
+                () -> applyPatch(session, claimed, replacement),
+                () -> pendingAfterTargetDeparture(session)
+        );
+    }
+
+    private void handleConfiscationPreparationFailure(
+            SelectionSession session,
+            InventoryPatch preparedPatch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Confiscation patch preparation failed", exception);
+        if (preparedPatch == null) {
+            cancelBeforePatch(
+                    session,
+                    "PATCH_PREPARATION_FAILED",
+                    "Confiscation patch could not be prepared"
+            );
+            return;
+        }
+        quarantine(
+                session,
+                preparedPatch,
+                "PATCH_CLAIM_EXCEPTION",
+                "Prepared confiscation patch could not be claimed safely"
+        );
     }
 
     private void applyPatch(
@@ -1210,48 +1509,75 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         try {
             InventoryImage current = imageCodec.capture(session.target());
             InventoryImageCodec.EncodedImage currentBytes = imageCodec.encodeWithChecksum(current);
-            InventoryImageCodec.EncodedImage appliedBytes;
-            switch (InventoryPatchDecision.decide(
-                    currentBytes.checksum(),
-                    patch.expectedChecksum(),
-                    patch.replacementChecksum()
-            )) {
-                case APPLY_REPLACEMENT -> {
-                    imageCodec.apply(session.target(), replacement);
-                    appliedBytes = imageCodec.encodeWithChecksum(imageCodec.capture(session.target()));
-                }
-                case FINALIZE_ALREADY_APPLIED -> appliedBytes = currentBytes;
-                case QUARANTINE_CONFLICT -> {
-                    quarantine(
-                            session,
-                            patch,
-                            "LIVE_STATE_CHANGED",
-                            "Target inventory changed after confiscation was prepared"
-                    );
-                    return;
-                }
-                default -> throw new IllegalStateException("Unhandled inventory patch decision");
-            }
-            if (!submit(() -> finalizePatch(session, patch, appliedBytes))) {
-                alertStaff(
-                        "Confiscation reached the target for " + patch.operationId()
-                                + " but finalization queue is full."
-                );
+            InventoryImageCodec.EncodedImage appliedBytes =
+                    applyConfiscationDecision(session, patch, replacement, currentBytes);
+            if (appliedBytes != null) {
+                queueConfiscationFinalization(session, patch, appliedBytes);
             }
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Confiscation inventory application failed", exception);
-            try {
-                imageCodec.apply(session.target(), session.before());
-            } catch (RuntimeException rollback) {
-                exception.addSuppressed(rollback);
+            handleConfiscationApplyFailure(session, patch, exception);
+        }
+    }
+
+    private InventoryImageCodec.EncodedImage applyConfiscationDecision(
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImage replacement,
+            InventoryImageCodec.EncodedImage current
+    ) {
+        return switch (InventoryPatchDecision.decide(
+                current.checksum(),
+                patch.expectedChecksum(),
+                patch.replacementChecksum()
+        )) {
+            case APPLY_REPLACEMENT -> {
+                imageCodec.apply(session.target(), replacement);
+                yield imageCodec.encodeWithChecksum(imageCodec.capture(session.target()));
             }
-            quarantine(
-                    session,
-                    patch,
-                    "BUKKIT_APPLY_FAILED",
-                    "Inventory application failed; exact rollback could not be durably proven"
+            case FINALIZE_ALREADY_APPLIED -> current;
+            case QUARANTINE_CONFLICT -> {
+                quarantine(
+                        session,
+                        patch,
+                        "LIVE_STATE_CHANGED",
+                        "Target inventory changed after confiscation was prepared"
+                );
+                yield null;
+            }
+            default -> throw new IllegalStateException("Unhandled inventory patch decision");
+        };
+    }
+
+    private void queueConfiscationFinalization(
+            SelectionSession session,
+            InventoryPatch patch,
+            InventoryImageCodec.EncodedImage applied
+    ) {
+        if (!submit(() -> finalizePatch(session, patch, applied))) {
+            alertStaff(
+                    "Confiscation reached the target for " + patch.operationId()
+                            + " but finalization queue is full."
             );
         }
+    }
+
+    private void handleConfiscationApplyFailure(
+            SelectionSession session,
+            InventoryPatch patch,
+            RuntimeException exception
+    ) {
+        plugin.getLogger().log(Level.SEVERE, "Confiscation inventory application failed", exception);
+        try {
+            imageCodec.apply(session.target(), session.before());
+        } catch (RuntimeException rollback) {
+            exception.addSuppressed(rollback);
+        }
+        quarantine(
+                session,
+                patch,
+                "BUKKIT_APPLY_FAILED",
+                "Inventory application failed; exact rollback could not be durably proven"
+        );
     }
 
     private void finalizePatch(
@@ -1506,13 +1832,6 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
                         .forEach(player -> player.sendMessage(Component.text(body))));
-    }
-
-    private static String requireIdentifier(String value, String field) {
-        if (value == null || value.isBlank() || value.length() > 64) {
-            throw new IllegalArgumentException(field + " must contain 1-64 characters");
-        }
-        return value;
     }
 
     private boolean authorize(Player player, ModerationAction action) {
