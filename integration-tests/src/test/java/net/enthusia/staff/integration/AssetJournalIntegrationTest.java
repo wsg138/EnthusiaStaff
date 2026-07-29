@@ -42,6 +42,7 @@ import net.enthusia.staff.persistence.JdbcEconomyJournalStore;
 import net.enthusia.staff.persistence.JdbcInventoryJournalStore;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
+import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -51,6 +52,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class AssetJournalIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-07-26T12:00:00Z");
     private static final Duration LEASE = Duration.ofMinutes(2);
+    private static final String SCOPE_ID = "survival";
+    private static final String SERVER_ID = "paper-1";
+    private static final String COMMIT_EVENT = "INVENTORY_OPERATION_COMMITTED";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -73,8 +77,8 @@ class AssetJournalIntegrationTest {
             InventoryJournalStore store = runtime.inventoryJournalStore();
             var observation = store.recordObservation(
                     targetId,
-                    "survival",
-                    "paper-1",
+                    SCOPE_ID,
+                    SERVER_ID,
                     beforeChecksum,
                     before,
                     NOW
@@ -84,8 +88,8 @@ class AssetJournalIntegrationTest {
                     operationId,
                     "inventory:test:" + operationId,
                     targetId,
-                    "survival",
-                    "paper-1",
+                    SCOPE_ID,
+                    SERVER_ID,
                     actorId,
                     Optional.empty(),
                     "ONLINE_EDIT",
@@ -106,11 +110,26 @@ class AssetJournalIntegrationTest {
             );
 
             InventoryPatch original = prepared.patch().orElseThrow();
+            assertEquals(
+                    InventoryFinalizeResult.Status.FENCE_LOST,
+                    store.finalizeApplied(
+                            original.patchId(),
+                            operationId,
+                            original.fencingToken(),
+                            replacementChecksum,
+                            replacement,
+                            NOW.plusSeconds(3)
+                    ).status()
+            );
+            assertEquals("PENDING", patchState(operationId));
+            assertEquals("PENDING", inventoryOperationState(operationId));
+            assertEquals(0L, auditCount(operationId, COMMIT_EVENT));
+
             InventoryPatch claimed = store.claimForApply(
                     original.patchId(),
                     operationId,
                     LEASE,
-                    NOW.plusSeconds(3)
+                    NOW.plusSeconds(4)
             ).orElseThrow();
             assertEquals(InventoryOperationState.APPLYING, claimed.state());
             assertTrue(claimed.fencingToken() > original.fencingToken());
@@ -118,7 +137,7 @@ class AssetJournalIntegrationTest {
                     original.patchId(),
                     operationId,
                     LEASE,
-                    NOW.plusSeconds(4)
+                    NOW.plusSeconds(5)
             ).isEmpty());
 
             assertEquals(
@@ -129,7 +148,7 @@ class AssetJournalIntegrationTest {
                             original.fencingToken(),
                             replacementChecksum,
                             replacement,
-                            NOW.plusSeconds(5)
+                            NOW.plusSeconds(6)
                     ).status()
             );
             InventoryFinalizeResult committed = store.finalizeApplied(
@@ -138,7 +157,7 @@ class AssetJournalIntegrationTest {
                     claimed.fencingToken(),
                     replacementChecksum,
                     replacement,
-                    NOW.plusSeconds(6)
+                    NOW.plusSeconds(7)
             );
             assertEquals(InventoryFinalizeResult.Status.COMMITTED, committed.status());
             assertEquals(
@@ -147,7 +166,7 @@ class AssetJournalIntegrationTest {
                             claimed.patchId(),
                             operationId,
                             LEASE,
-                            NOW.plusSeconds(7)
+                            NOW.plusSeconds(8)
                     ).orElseThrow().state()
             );
 
@@ -157,7 +176,7 @@ class AssetJournalIntegrationTest {
                     claimed.fencingToken(),
                     "LATE_DUPLICATE",
                     "A terminal patch must not be quarantined by a late callback",
-                    NOW.plusSeconds(8)
+                    NOW.plusSeconds(9)
             );
             assertEquals(
                     InventoryFinalizeResult.Status.REPLAYED,
@@ -167,13 +186,103 @@ class AssetJournalIntegrationTest {
                             claimed.fencingToken(),
                             replacementChecksum,
                             replacement,
-                            NOW.plusSeconds(9)
+                            NOW.plusSeconds(10)
                     ).status()
             );
             assertEquals("APPLIED", patchState(operationId));
             assertEquals("COMMITTED", inventoryOperationState(operationId));
-            assertEquals(1L, auditCount(operationId, "INVENTORY_OPERATION_COMMITTED"));
+            assertEquals(1L, auditCount(operationId, COMMIT_EVENT));
             assertEquals(0L, quarantineCount(operationId, "INVENTORY"));
+        }
+    }
+
+    @Test
+    void inventoryFinalizationFailsClosedWhenPairedJournalRowsDiverge() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        byte[] before = {51, 52, 53};
+        byte[] replacement = {61, 62, 63};
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "DivergenceTarget", NOW);
+            insertPlayer(DATABASE, actorId, "DivergenceActor", NOW);
+            InventoryJournalStore store = runtime.inventoryJournalStore();
+            ClaimedInventoryOperation claimed = prepareAndClaim(
+                    store,
+                    targetId,
+                    actorId,
+                    before,
+                    replacement
+            );
+
+            setInventoryOperationState(claimed.operationId(), "COMMITTED");
+
+            assertThrows(
+                    ModerationPersistenceException.class,
+                    () -> store.finalizeApplied(
+                            claimed.patch().patchId(),
+                            claimed.operationId(),
+                            claimed.patch().fencingToken(),
+                            checksum(replacement),
+                            replacement,
+                            NOW.plusSeconds(3)
+                    )
+            );
+            assertEquals("APPLYING", patchState(claimed.operationId()));
+            assertEquals("COMMITTED", inventoryOperationState(claimed.operationId()));
+            assertEquals(checksum(before), observationChecksum(targetId, SCOPE_ID));
+            assertEquals(0L, auditCount(claimed.operationId(), COMMIT_EVENT));
+        }
+    }
+
+    @Test
+    void quarantinedInventoryPatchRemainsARecoveryLock() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        byte[] before = {71, 72, 73};
+        byte[] replacement = {81, 82, 83};
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "QuarantineTarget", NOW);
+            insertPlayer(DATABASE, actorId, "QuarantineActor", NOW);
+            InventoryJournalStore store = runtime.inventoryJournalStore();
+            var observation = store.recordObservation(
+                    targetId,
+                    SCOPE_ID,
+                    SERVER_ID,
+                    checksum(before),
+                    before,
+                    NOW
+            );
+            UUID operationId = UUID.randomUUID();
+            InventoryPatch patch = store.prepare(
+                    inventoryRequest(operationId, targetId, actorId, observation.revision(), before, replacement),
+                    LEASE,
+                    NOW.plusSeconds(1)
+            ).patch().orElseThrow();
+
+            store.quarantine(
+                    patch.patchId(),
+                    operationId,
+                    patch.fencingToken(),
+                    "MANUAL_RECOVERY_REQUIRED",
+                    "The durable patch requires operator review",
+                    NOW.plusSeconds(2)
+            );
+
+            assertEquals("QUARANTINED", patchState(operationId));
+            assertEquals("QUARANTINED", inventoryOperationState(operationId));
+            assertEquals(1L, quarantineCount(operationId, "INVENTORY"));
+            assertEquals(0L, leaseCount(targetId, SCOPE_ID));
+            assertTrue(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(3)));
+            assertNextInventoryPrepareIsLocked(
+                    store,
+                    targetId,
+                    actorId,
+                    observation.revision(),
+                    before,
+                    replacement
+            );
         }
     }
 
@@ -188,39 +297,26 @@ class AssetJournalIntegrationTest {
             insertPlayer(DATABASE, targetId, "RecoveryTarget", NOW);
             insertPlayer(DATABASE, actorId, "RecoveryActor", NOW);
             InventoryJournalStore store = runtime.inventoryJournalStore();
-            var observation = store.recordObservation(
+            ClaimedInventoryOperation claimed = prepareAndClaim(
+                    store,
                     targetId,
-                    "survival",
-                    "paper-1",
-                    checksum(before),
+                    actorId,
                     before,
-                    NOW
+                    replacement
             );
-            UUID operationId = UUID.randomUUID();
-            InventoryPreparation prepared = store.prepare(
-                    inventoryRequest(operationId, targetId, actorId, observation.revision(), before, replacement),
-                    LEASE,
-                    NOW.plusSeconds(1)
-            );
-            InventoryPatch claimed = store.claimForApply(
-                    prepared.patch().orElseThrow().patchId(),
-                    operationId,
-                    LEASE,
-                    NOW.plusSeconds(2)
-            ).orElseThrow();
 
             var alreadyObserved = store.recordObservation(
                     targetId,
-                    "survival",
-                    "paper-1",
+                    SCOPE_ID,
+                    SERVER_ID,
                     checksum(replacement),
                     replacement,
                     NOW.plusSeconds(3)
             );
             InventoryFinalizeResult recovered = store.finalizeApplied(
-                    claimed.patchId(),
-                    operationId,
-                    claimed.fencingToken(),
+                    claimed.patch().patchId(),
+                    claimed.operationId(),
+                    claimed.patch().fencingToken(),
                     checksum(replacement),
                     replacement,
                     NOW.plusSeconds(4)
@@ -228,8 +324,8 @@ class AssetJournalIntegrationTest {
 
             assertEquals(InventoryFinalizeResult.Status.REPLAYED, recovered.status());
             assertEquals(alreadyObserved.revision(), recovered.resultingRevision());
-            assertEquals("APPLIED", patchState(operationId));
-            assertEquals(1L, auditCount(operationId, "INVENTORY_OPERATION_COMMITTED"));
+            assertEquals("APPLIED", patchState(claimed.operationId()));
+            assertEquals(1L, auditCount(claimed.operationId(), COMMIT_EVENT));
         }
     }
 
@@ -253,7 +349,7 @@ class AssetJournalIntegrationTest {
                     actorId,
                     EconomyAmountMode.CUSTOM,
                     OptionalLong.of(25L),
-                    "paper-1",
+                    SERVER_ID,
                     NOW
             );
             EconomyPreparation prepared = store.prepare(request, LEASE, NOW.plusSeconds(1));
@@ -371,8 +467,8 @@ class AssetJournalIntegrationTest {
             InventoryJournalStore normalInventory = new JdbcInventoryJournalStore(dataSource, new ObjectMapper());
             var observation = normalInventory.recordObservation(
                     inventoryTarget,
-                    "survival",
-                    "paper-1",
+                    SCOPE_ID,
+                    SERVER_ID,
                     checksum(before),
                     before,
                     NOW
@@ -411,8 +507,8 @@ class AssetJournalIntegrationTest {
                     IllegalArgumentException.class,
                     () -> normalInventory.recordObservation(
                             UUID.randomUUID(),
-                            "survival",
-                            "paper-1",
+                            SCOPE_ID,
+                            SERVER_ID,
                             checksum(before),
                             replacement,
                             NOW
@@ -450,8 +546,8 @@ class AssetJournalIntegrationTest {
                 operationId,
                 "inventory:test:" + operationId,
                 targetId,
-                "survival",
-                "paper-1",
+                SCOPE_ID,
+                SERVER_ID,
                 actorId,
                 Optional.empty(),
                 "ONLINE_EDIT",
@@ -463,6 +559,63 @@ class AssetJournalIntegrationTest {
                 java.util.List.of(1),
                 false
         );
+    }
+
+    private static ClaimedInventoryOperation prepareAndClaim(
+            InventoryJournalStore store,
+            UUID targetId,
+            UUID actorId,
+            byte[] before,
+            byte[] replacement
+    ) {
+        var observation = store.recordObservation(
+                targetId,
+                SCOPE_ID,
+                SERVER_ID,
+                checksum(before),
+                before,
+                NOW
+        );
+        UUID operationId = UUID.randomUUID();
+        InventoryPreparation prepared = store.prepare(
+                inventoryRequest(operationId, targetId, actorId, observation.revision(), before, replacement),
+                LEASE,
+                NOW.plusSeconds(1)
+        );
+        InventoryPatch claimed = store.claimForApply(
+                prepared.patch().orElseThrow().patchId(),
+                operationId,
+                LEASE,
+                NOW.plusSeconds(2)
+        ).orElseThrow();
+        return new ClaimedInventoryOperation(operationId, claimed);
+    }
+
+    private static void assertNextInventoryPrepareIsLocked(
+            InventoryJournalStore store,
+            UUID targetId,
+            UUID actorId,
+            long revision,
+            byte[] before,
+            byte[] replacement
+    ) throws SQLException {
+        UUID blockedOperationId = UUID.randomUUID();
+        assertEquals(
+                InventoryPreparation.Status.LOCKED,
+                store.prepare(
+                        inventoryRequest(
+                                blockedOperationId,
+                                targetId,
+                                actorId,
+                                revision,
+                                before,
+                                replacement
+                        ),
+                        LEASE,
+                        NOW.plusSeconds(4)
+                ).status()
+        );
+        assertEquals(0L, inventoryOperationCount(blockedOperationId));
     }
 
     private static EconomyPrepareRequest economyRequest(
@@ -479,7 +632,7 @@ class AssetJournalIntegrationTest {
                 actorId,
                 EconomyAmountMode.ALL,
                 OptionalLong.empty(),
-                "paper-1",
+                SERVER_ID,
                 NOW
         );
     }
@@ -508,6 +661,60 @@ class AssetJournalIntegrationTest {
                      SELECT state FROM inventory_operations WHERE operation_id = ?
                      """)) {
             return singleString(statement, operationId);
+        }
+    }
+
+    private static void setInventoryOperationState(UUID operationId, String state) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE inventory_operations SET state = ? WHERE operation_id = ?
+                     """)) {
+            statement.setString(1, state);
+            statement.setBytes(2, uuidBytes(operationId));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static String observationChecksum(UUID playerId, String scopeId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT o.checksum
+                     FROM inventory_observations o
+                     JOIN inventory_profiles p ON p.profile_id = o.profile_id
+                     WHERE p.player_id = ? AND p.scope_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(playerId));
+            statement.setString(2, scopeId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1);
+            }
+        }
+    }
+
+    private static long inventoryOperationCount(UUID operationId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM inventory_operations WHERE operation_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(operationId));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long leaseCount(UUID playerId, String scopeId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM operation_leases WHERE resource_key = ?
+                     """)) {
+            statement.setString(1, "inventory:" + playerId + ':' + scopeId);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getLong(1);
+            }
         }
     }
 
@@ -547,6 +754,9 @@ class AssetJournalIntegrationTest {
                 return result.getLong(1);
             }
         }
+    }
+
+    private record ClaimedInventoryOperation(UUID operationId, InventoryPatch patch) {
     }
 
 }

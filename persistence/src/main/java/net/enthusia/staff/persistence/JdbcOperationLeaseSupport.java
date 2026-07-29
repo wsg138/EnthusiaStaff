@@ -10,7 +10,6 @@ import java.util.UUID;
 
 final class JdbcOperationLeaseSupport {
     static final long UNAVAILABLE = 0L;
-    private static final long INITIAL_FENCING_TOKEN = 1L;
 
     private JdbcOperationLeaseSupport() {
     }
@@ -22,6 +21,20 @@ final class JdbcOperationLeaseSupport {
             Instant leaseUntil,
             Instant now
     ) throws SQLException {
+        return acquireAfter(connection, resourceKey, operationId, 0L, leaseUntil, now);
+    }
+
+    static long acquireAfter(
+            Connection connection,
+            String resourceKey,
+            UUID operationId,
+            long previousFencingToken,
+            Instant leaseUntil,
+            Instant now
+    ) throws SQLException {
+        if (previousFencingToken < UNAVAILABLE) {
+            throw new SQLException("Previous operation fencing token cannot be negative");
+        }
         try (PreparedStatement select = connection.prepareStatement("""
                 SELECT owner_id, fencing_token, lease_until
                 FROM operation_leases
@@ -31,15 +44,20 @@ final class JdbcOperationLeaseSupport {
             select.setString(1, resourceKey);
             try (ResultSet result = select.executeQuery()) {
                 if (!result.next()) {
-                    insert(connection, resourceKey, operationId, leaseUntil, now);
-                    return INITIAL_FENCING_TOKEN;
+                    long nextFence = nextFencingToken(previousFencingToken);
+                    insert(connection, resourceKey, operationId, nextFence, leaseUntil, now);
+                    return nextFence;
                 }
                 String ownerId = operationId.toString();
                 Instant currentExpiry = result.getTimestamp("lease_until").toInstant();
                 if (currentExpiry.isAfter(now) && !result.getString("owner_id").equals(ownerId)) {
                     return UNAVAILABLE;
                 }
-                long nextFence = nextFencingToken(result.getLong("fencing_token"));
+                long currentFence = Math.max(
+                        result.getLong("fencing_token"),
+                        previousFencingToken
+                );
+                long nextFence = nextFencingToken(currentFence);
                 replace(connection, resourceKey, ownerId, nextFence, leaseUntil, now);
                 return nextFence;
             }
@@ -50,6 +68,7 @@ final class JdbcOperationLeaseSupport {
             Connection connection,
             String resourceKey,
             UUID operationId,
+            long fencingToken,
             Instant leaseUntil,
             Instant now
     ) throws SQLException {
@@ -60,7 +79,7 @@ final class JdbcOperationLeaseSupport {
                 """)) {
             statement.setString(1, resourceKey);
             statement.setString(2, operationId.toString());
-            statement.setLong(3, INITIAL_FENCING_TOKEN);
+            statement.setLong(3, fencingToken);
             statement.setTimestamp(4, Timestamp.from(leaseUntil));
             statement.setTimestamp(5, Timestamp.from(now));
             JdbcTransactionSupport.requireSingleUpdate(

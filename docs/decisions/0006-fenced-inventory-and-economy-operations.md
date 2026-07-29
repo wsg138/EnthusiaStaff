@@ -9,3 +9,9 @@ Inventory and economy mutations use per-player database leases with fencing toke
 ## Consequences
 
 Some edits are delayed instead of guessed. Stale workers cannot commit after lease loss. Recovery can distinguish safe replay, compensation, and ambiguous states without overwriting newer player data.
+
+Inventory patch and operation rows advance as a checked pair. Direct
+finalization from `PENDING`, partial row transitions, state or fence divergence,
+and fencing-token wraparound fail closed. Quarantine releases the matching
+lease but continues to block destructive work until a privileged recovery
+decision is available.

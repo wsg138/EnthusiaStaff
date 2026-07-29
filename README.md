@@ -33,6 +33,7 @@ Deployable artifacts are produced as `paper/build/libs/EnthusiaStaff-Paper-<vers
 - [Security and authority policy](docs/security.md)
 - [Persistent channel TLS](docs/channel-tls.md)
 - [Punishment workflow and durable drafts](docs/punishment-workflow.md)
+- [Inventory and confiscation safety](docs/inventory-safety.md)
 - [LiteBans migration](docs/litebans-migration.md)
 - [Shadow mode](docs/shadow-mode.md)
 - [Cutover](docs/cutover.md)
