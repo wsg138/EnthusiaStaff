@@ -1,5 +1,10 @@
 package net.enthusia.staff.integration;
 
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connection;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertCase;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPlayer;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -8,15 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
-import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -38,7 +40,6 @@ import net.enthusia.staff.domain.inventory.InventoryPreparation;
 import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
-import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.JdbcEconomyJournalStore;
 import net.enthusia.staff.persistence.JdbcInventoryJournalStore;
 import net.enthusia.staff.persistence.MariaDb;
@@ -68,9 +69,9 @@ class AssetJournalIntegrationTest {
         String beforeChecksum = checksum(before);
         String replacementChecksum = checksum(replacement);
 
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            insertPlayer(targetId, "InventoryTarget");
-            insertPlayer(actorId, "InventoryActor");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "InventoryTarget", NOW);
+            insertPlayer(DATABASE, actorId, "InventoryActor", NOW);
             InventoryJournalStore store = runtime.inventoryJournalStore();
             var observation = store.recordObservation(
                     targetId,
@@ -185,9 +186,9 @@ class AssetJournalIntegrationTest {
         byte[] before = {10, 11, 12};
         byte[] replacement = {20, 21, 22};
 
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            insertPlayer(targetId, "RecoveryTarget");
-            insertPlayer(actorId, "RecoveryActor");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "RecoveryTarget", NOW);
+            insertPlayer(DATABASE, actorId, "RecoveryActor", NOW);
             InventoryJournalStore store = runtime.inventoryJournalStore();
             var observation = store.recordObservation(
                     targetId,
@@ -240,10 +241,10 @@ class AssetJournalIntegrationTest {
         UUID actorId = UUID.randomUUID();
         String caseId = "01J0000000000001";
 
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            insertPlayer(targetId, "EconomyTarget");
-            insertPlayer(actorId, "EconomyActor");
-            insertCase(caseId, targetId, actorId);
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "EconomyTarget", NOW);
+            insertPlayer(DATABASE, actorId, "EconomyActor", NOW);
+            insertCase(DATABASE, caseId, targetId, actorId, NOW);
             EconomyJournalStore store = runtime.economyJournalStore();
             UUID operationId = UUID.randomUUID();
             EconomyPrepareRequest request = new EconomyPrepareRequest(
@@ -361,14 +362,14 @@ class AssetJournalIntegrationTest {
         byte[] before = {31, 32};
         byte[] replacement = {41, 42};
 
-        try (MariaDbRuntime migrationRuntime = MariaDb.initialize(databaseConfig())) {
+        try (MariaDbRuntime migrationRuntime = MariaDb.initialize(databaseConfig(DATABASE))) {
             assertTrue(migrationRuntime.inventoryJournalStore() != null);
         }
-        try (HikariDataSource dataSource = MariaDb.open(databaseConfig())) {
-            insertPlayer(inventoryTarget, "ErrorInventory");
-            insertPlayer(economyTarget, "ErrorEconomy");
-            insertPlayer(actorId, "ErrorActor");
-            insertCase(caseId, economyTarget, actorId);
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, inventoryTarget, "ErrorInventory", NOW);
+            insertPlayer(DATABASE, economyTarget, "ErrorEconomy", NOW);
+            insertPlayer(DATABASE, actorId, "ErrorActor", NOW);
+            insertCase(DATABASE, caseId, economyTarget, actorId, NOW);
             InventoryJournalStore normalInventory = new JdbcInventoryJournalStore(dataSource, new ObjectMapper());
             var observation = normalInventory.recordObservation(
                     inventoryTarget,
@@ -494,45 +495,8 @@ class AssetJournalIntegrationTest {
         };
     }
 
-    private static void insertPlayer(UUID playerId, String username) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     INSERT IGNORE INTO players(
-                         player_id, current_username, lowercase_username, platform,
-                         first_seen_at, last_seen_at
-                     ) VALUES (?, ?, ?, 'JAVA', ?, ?)
-                     """)) {
-            statement.setBytes(1, uuidBytes(playerId));
-            statement.setString(2, username);
-            statement.setString(3, username.toLowerCase(java.util.Locale.ROOT));
-            statement.setTimestamp(4, Timestamp.from(NOW));
-            statement.setTimestamp(5, Timestamp.from(NOW));
-            statement.executeUpdate();
-        }
-    }
-
-    private static void insertCase(String caseId, UUID targetId, UUID actorId) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     INSERT IGNORE INTO cases(
-                         case_id, idempotency_key, target_id, actor_id, actor_name, actor_rank,
-                         public_reason, exact_reason_id, sanction_family, internal_explanation,
-                         configuration_version, visibility, state, issued_at
-                     ) VALUES (?, ?, ?, ?, 'P2wn', 'OWNER', 'Integration test', 'integration.test',
-                         'TEST', 'Asset journal verification', 'integration-test-v1',
-                         'PRIVATE', 'OPEN', ?)
-                     """)) {
-            statement.setString(1, caseId);
-            statement.setString(2, "case:test:" + caseId);
-            statement.setBytes(3, uuidBytes(targetId));
-            statement.setBytes(4, uuidBytes(actorId));
-            statement.setTimestamp(5, Timestamp.from(NOW));
-            statement.executeUpdate();
-        }
-    }
-
     private static String patchState(UUID operationId) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT state FROM inventory_pending_patches WHERE operation_id = ?
                      """)) {
@@ -541,7 +505,7 @@ class AssetJournalIntegrationTest {
     }
 
     private static String inventoryOperationState(UUID operationId) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT state FROM inventory_operations WHERE operation_id = ?
                      """)) {
@@ -558,7 +522,7 @@ class AssetJournalIntegrationTest {
     }
 
     private static long auditCount(UUID operationId, String eventType) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) FROM audit_events
                      WHERE correlation_id = ? AND event_type = ?
@@ -573,7 +537,7 @@ class AssetJournalIntegrationTest {
     }
 
     private static long quarantineCount(UUID operationId, String operationType) throws SQLException {
-        try (Connection connection = connection();
+        try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) FROM recovery_quarantine
                      WHERE operation_id = ? AND operation_type = ?
@@ -595,28 +559,4 @@ class AssetJournalIntegrationTest {
         }
     }
 
-    private static byte[] uuidBytes(UUID value) {
-        return ByteBuffer.allocate(16)
-                .putLong(value.getMostSignificantBits())
-                .putLong(value.getLeastSignificantBits())
-                .array();
-    }
-
-    private static DatabaseConfig databaseConfig() {
-        return new DatabaseConfig(
-                DATABASE.getJdbcUrl().replace("jdbc:mysql:", "jdbc:mariadb:"),
-                DATABASE.getUsername(),
-                DATABASE.getPassword(),
-                4,
-                5_000
-        );
-    }
-
-    private static Connection connection() throws SQLException {
-        return DriverManager.getConnection(
-                DATABASE.getJdbcUrl().replace("jdbc:mysql:", "jdbc:mariadb:"),
-                DATABASE.getUsername(),
-                DATABASE.getPassword()
-        );
-    }
 }

@@ -562,7 +562,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             }
             case FAILED_ROLLED_BACK -> {
                 CurrencyAccountState restored = outcome.accountState().orElse(null);
-                if (restored == null || restored.authoritativeTotal() != before.authoritativeTotal()) {
+                if (restored == null || !matchesBeforeState(restored, before)) {
                     quarantine(
                             actor,
                             target,
@@ -570,7 +570,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                             guard,
                             outcome.accountState(),
                             "ROLLBACK_RESULT_MISSING",
-                            "Currency could not prove the compensated account total"
+                            "Currency could not prove the exact compensated account state"
                     );
                     return;
                 }
@@ -1129,6 +1129,18 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             return;
         }
         CurrencyAccountState restored = outcome.accountState().orElseThrow();
+        if (!matchesBeforeState(restored, operation)) {
+            quarantine(
+                    player,
+                    player,
+                    operation,
+                    guard,
+                    Optional.of(restored),
+                    "RESTORE_RESULT_MISMATCH",
+                    "Currency recovery did not restore the exact before account state"
+            );
+            return;
+        }
         finishOutcome(
                 player,
                 player,
@@ -1143,6 +1155,26 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 ),
                 "Economy recovery restored the exact before assets."
         );
+    }
+
+    private static boolean matchesBeforeState(
+            CurrencyAccountState actual,
+            CurrencyAccountState expected
+    ) {
+        return actual.playerId().equals(expected.playerId())
+                && actual.authoritativeTotal() == expected.authoritativeTotal()
+                && actual.checksum().equals(expected.checksum());
+    }
+
+    private static boolean matchesBeforeState(
+            CurrencyAccountState actual,
+            EconomyOperation operation
+    ) {
+        return actual.playerId().equals(operation.targetId())
+                && operation.authoritativeTotal().isPresent()
+                && actual.authoritativeTotal() == operation.authoritativeTotal().orElseThrow()
+                && operation.beforeChecksum().isPresent()
+                && actual.checksum().equals(operation.beforeChecksum().orElseThrow());
     }
 
     private boolean submit(Runnable operation) {

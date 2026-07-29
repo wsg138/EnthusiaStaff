@@ -36,8 +36,11 @@ public record EconomyTerminalUpdate(
         if (!completeSnapshot) {
             throw new IllegalArgumentException("result checksum and snapshot must be supplied together");
         }
+        if (resultTotal.isPresent() != resultChecksum.isPresent()) {
+            throw new IllegalArgumentException("result total and verified snapshot must be supplied together");
+        }
         if (outcome == EconomyTerminalOutcome.COMMITTED
-                && (resultTotal.isEmpty() || resultChecksum.isEmpty())) {
+                && resultTotal.isEmpty()) {
             throw new IllegalArgumentException("committed operations require a verified result snapshot");
         }
         if (outcome == EconomyTerminalOutcome.QUARANTINED && failureCode.isEmpty()) {
