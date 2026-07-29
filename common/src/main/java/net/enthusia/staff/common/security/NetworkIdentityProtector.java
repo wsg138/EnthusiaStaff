@@ -11,12 +11,14 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 public final class NetworkIdentityProtector {
+    private static final String KEY_ALGORITHM = "AES";
     private static final String CIPHER = "AES/GCM/NoPadding";
     private static final int NONCE_BYTES = 12;
     private static final int TAG_BITS = 128;
     private static final int TAG_BYTES = TAG_BITS / Byte.SIZE;
     private static final int IPV4_BYTES = 4;
     private static final int IPV6_BYTES = 16;
+    private static final int MINIMUM_KEY_VERSION = 1;
     private static final int IPV4_ENVELOPE_BYTES = NONCE_BYTES + TAG_BYTES + IPV4_BYTES;
     private static final int IPV6_ENVELOPE_BYTES = NONCE_BYTES + TAG_BYTES + IPV6_BYTES;
 
@@ -31,10 +33,11 @@ public final class NetworkIdentityProtector {
             SecretKey encryptionKey,
             SecureRandom random
     ) {
-        if (equalityTokens == null || encryptionKeyVersion < 1 || encryptionKey == null || random == null) {
+        if (equalityTokens == null || encryptionKeyVersion < MINIMUM_KEY_VERSION
+                || encryptionKey == null || random == null) {
             throw new IllegalArgumentException("network identity protector configuration is invalid");
         }
-        if (!"AES".equalsIgnoreCase(encryptionKey.getAlgorithm())) {
+        if (!KEY_ALGORITHM.equalsIgnoreCase(encryptionKey.getAlgorithm())) {
             throw new IllegalArgumentException("network identity encryption key must use AES");
         }
         this.equalityTokens = equalityTokens;
