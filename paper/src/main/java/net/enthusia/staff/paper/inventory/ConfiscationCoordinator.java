@@ -908,19 +908,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             CaseId caseId,
             UUID operationId
     ) {
-        if (!inventories.acquireExternalAssetLock(target.getUniqueId())) {
-            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Another inventory operation owns this target."));
-            return;
-        }
-        if (!currency.acquireMovementLock(
-                target.getUniqueId(),
-                operationId,
-                LEASE_DURATION
-        )) {
-            inventories.releaseExternalAssetLock(target.getUniqueId());
-            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Currency movement lock could not be acquired."));
+        if (!acquireSelectionLocks(viewer, target, operationId)) {
             return;
         }
         target.closeInventory();
@@ -936,6 +924,32 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             viewer.sendMessage(Component.text("Confiscation snapshot failed; no assets changed."));
             return;
         }
+        queueDurableSelection(viewer, target, caseId, operationId, before, encoded);
+    }
+
+    private boolean acquireSelectionLocks(Player viewer, Player target, UUID operationId) {
+        if (!inventories.acquireExternalAssetLock(target.getUniqueId())) {
+            clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
+            viewer.sendMessage(Component.text("Another inventory operation owns this target."));
+            return false;
+        }
+        if (currency.acquireMovementLock(target.getUniqueId(), operationId, LEASE_DURATION)) {
+            return true;
+        }
+        inventories.releaseExternalAssetLock(target.getUniqueId());
+        clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
+        viewer.sendMessage(Component.text("Currency movement lock could not be acquired."));
+        return false;
+    }
+
+    private void queueDurableSelection(
+            Player viewer,
+            Player target,
+            CaseId caseId,
+            UUID operationId,
+            InventoryImage before,
+            InventoryImageCodec.EncodedImage encoded
+    ) {
         InventoryConfiscationStartRequest request = new InventoryConfiscationStartRequest(
                 operationId,
                 new IdempotencyKey("inventory:confiscation:" + operationId).value(),
@@ -979,26 +993,10 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 failStart(viewer, target, request.operationId(), start.detail());
                 return;
             }
-            if (!viewer.isOnline() || !target.isOnline()) {
-                loaded.cancelConfiscation(
-                        durable.operationId(),
-                        durable.fencingToken(),
-                        "PARTICIPANT_LEFT_DURING_START",
-                        "Viewer or target left while the durable selection was starting",
-                        clock.instant()
-                );
-                failStart(
-                        viewer,
-                        target,
-                        request.operationId(),
-                        "Viewer or target left while confiscation was starting."
-                );
+            if (!participantsAvailable(loaded, viewer, target, durable)) {
                 return;
             }
-            SelectionSession session = new SelectionSession(viewer, target, durable, before);
-            sessions.put(durable.operationId(), session);
-            scheduleTasks(session);
-            openView(session, Optional.empty(), 0);
+            activateSelection(viewer, target, before, durable);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Durable confiscation selection start failed", exception);
             failStart(
@@ -1039,46 +1037,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         if (!session.selecting()) {
             return;
         }
-        if (!submit(() -> {
-            InventoryJournalStore loaded = store.get();
-            if (loaded == null || loaded.renewConfiscation(
-                    session.operationId(),
-                    session.fencingToken(),
-                    LEASE_DURATION,
-                    clock.instant()
-            ).isEmpty()) {
-                cancel(
-                        session,
-                        "DURABLE_LEASE_LOST",
-                        "Confiscation selection lost its durable inventory lease",
-                        true
-                );
-                return;
-            }
-            onEntity(
-                    session.target(),
-                    () -> {
-                        if (!currency.renewMovementLock(
-                                session.targetId(),
-                                session.operationId(),
-                                LEASE_DURATION
-                        )) {
-                            cancel(
-                                    session,
-                                    "CURRENCY_LEASE_LOST",
-                                    "Confiscation selection lost its Currency movement lock",
-                                    true
-                            );
-                        }
-                    },
-                    () -> cancel(
-                            session,
-                            "TARGET_LEFT_DURING_RENEWAL",
-                            "Target left during confiscation lease renewal",
-                            true
-                    )
-            );
-        })) {
+        if (!submit(() -> renewDurableSelection(session))) {
             cancel(
                     session,
                     "RENEWAL_QUEUE_FULL",
@@ -1199,6 +1158,86 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                             : entry.item().clone()
             );
         }
+    }
+
+    private void renewDurableSelection(SelectionSession session) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null || loaded.renewConfiscation(
+                session.operationId(),
+                session.fencingToken(),
+                LEASE_DURATION,
+                clock.instant()
+        ).isEmpty()) {
+            cancel(
+                    session,
+                    "DURABLE_LEASE_LOST",
+                    "Confiscation selection lost its durable inventory lease",
+                    true
+            );
+            return;
+        }
+        onEntity(
+                session.target(),
+                () -> renewCurrencyLock(session),
+                () -> cancel(
+                        session,
+                        "TARGET_LEFT_DURING_RENEWAL",
+                        "Target left during confiscation lease renewal",
+                        true
+                )
+        );
+    }
+
+    private void renewCurrencyLock(SelectionSession session) {
+        if (!currency.renewMovementLock(
+                session.targetId(),
+                session.operationId(),
+                LEASE_DURATION
+        )) {
+            cancel(
+                    session,
+                    "CURRENCY_LEASE_LOST",
+                    "Confiscation selection lost its Currency movement lock",
+                    true
+            );
+        }
+    }
+
+    private boolean participantsAvailable(
+            InventoryJournalStore loaded,
+            Player viewer,
+            Player target,
+            InventoryConfiscationSession durable
+    ) {
+        if (viewer.isOnline() && target.isOnline()) {
+            return true;
+        }
+        loaded.cancelConfiscation(
+                durable.operationId(),
+                durable.fencingToken(),
+                "PARTICIPANT_LEFT_DURING_START",
+                "Viewer or target left while the durable selection was starting",
+                clock.instant()
+        );
+        failStart(
+                viewer,
+                target,
+                durable.operationId(),
+                "Viewer or target left while confiscation was starting."
+        );
+        return false;
+    }
+
+    private void activateSelection(
+            Player viewer,
+            Player target,
+            InventoryImage before,
+            InventoryConfiscationSession durable
+    ) {
+        SelectionSession session = new SelectionSession(viewer, target, durable, before);
+        sessions.put(durable.operationId(), session);
+        scheduleTasks(session);
+        openView(session, Optional.empty(), 0);
     }
 
     private boolean restorationFinalized(
