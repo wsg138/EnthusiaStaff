@@ -83,6 +83,34 @@ class NetworkIdentityProtectorTest {
     }
 
     @Test
+    void recoversIpv6Identity() {
+        NetworkIdentityProtector protector = protector(new SequencedSecureRandom());
+        byte[] address = new byte[]{
+                0x20, 0x01, 0x0d, (byte) 0xb8,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 1
+        };
+
+        assertArrayEquals(address, protector.recover(protector.protect(address)));
+    }
+
+    @Test
+    void rejectsMalformedEnvelopeLengthsBeforeDecryption() {
+        NetworkIdentityProtector protector = protector(new SequencedSecureRandom());
+        ProtectedNetworkIdentity identity = protector.protect(new byte[]{10, 20, 30, 40});
+        byte[] encryptedValue = identity.encryptedValue();
+
+        ProtectedNetworkIdentity truncated =
+                copyWithEncryptedValue(identity, Arrays.copyOf(encryptedValue, encryptedValue.length - 1));
+        ProtectedNetworkIdentity oversized =
+                copyWithEncryptedValue(identity, Arrays.copyOf(encryptedValue, encryptedValue.length + 1));
+
+        assertThrows(IllegalArgumentException.class, () -> protector.recover(truncated));
+        assertThrows(IllegalArgumentException.class, () -> protector.recover(oversized));
+    }
+
+    @Test
     void rejectsNonAesEncryptionKeysDuringConfiguration() {
         byte[] keyBytes = keyBytes();
         SecretKey hmac = SecretKeyMaterial.hmacSha256FromBase64(
@@ -98,6 +126,18 @@ class NetworkIdentityProtectorTest {
                         wrongAlgorithm,
                         new SecureRandom()
                 )
+        );
+    }
+
+    private static ProtectedNetworkIdentity copyWithEncryptedValue(
+            ProtectedNetworkIdentity identity,
+            byte[] encryptedValue
+    ) {
+        return new ProtectedNetworkIdentity(
+                identity.equalityKeyVersion(),
+                identity.equalityToken(),
+                identity.encryptionKeyVersion(),
+                encryptedValue
         );
     }
 

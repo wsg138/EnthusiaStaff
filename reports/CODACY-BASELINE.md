@@ -277,9 +277,9 @@ commits. GitHub shows no unresolved review thread.
 
 ## Current merged checkpoint
 
-As of 2026-07-29, PRs #1 through #7 are merged and the hosted Codacy analysis
+As of 2026-07-29, PRs #1 through #8 are merged and the hosted Codacy analysis
 for `main` is pinned to
-`2867ad30b8ee725701874fa34596502e75ba7105`.
+`80b2635917bcf71a187ec27ae0bf5e38b35610ef`.
 
 | PR | Coherent section | Merge commit |
 | ---: | --- | --- |
@@ -290,45 +290,75 @@ for `main` is pinned to
 | [#5](https://github.com/wsg138/EnthusiaStaff/pull/5) | Network outbox delivery integrity | `4a9c8aec9527b351608edf1c726f9c22dea7cd49` |
 | [#6](https://github.com/wsg138/EnthusiaStaff/pull/6) | Asset-journal transaction fencing | `358c099443dea727a50818cb57d3826cd58ea6c7` |
 | [#7](https://github.com/wsg138/EnthusiaStaff/pull/7) | Confiscated-asset restoration integrity | `2867ad30b8ee725701874fa34596502e75ba7105` |
+| [#8](https://github.com/wsg138/EnthusiaStaff/pull/8) | Economy rollback integrity | `80b2635917bcf71a187ec27ae0bf5e38b35610ef` |
 
-The current hosted repository badge is A, but 446 active findings remain. The
-grade therefore does not establish that the repository is clean or
-production-ready.
+The current hosted repository badge is A. Exact `main` reanalysis reports 446
+active warnings and 69 ignored findings. Three generic AES-GCM review
+detections were added to the ignored set only after the nonce source, encryption
+path, decryption path, and deterministic tests established that no nonce-reuse
+path exists. The grade therefore does not establish that the repository is
+clean or production-ready.
 
 | Module | Active findings |
 | --- | ---: |
-| persistence | 179 |
+| persistence | 182 |
 | paper | 157 |
 | velocity | 78 |
 | domain | 15 |
 | integration-tests | 9 |
-| common | 6 |
+| common | 3 |
 | integration-contracts | 2 |
 | **Total** | **446** |
 
-At the PR #7 merge commit, the clean Java 21
-`clean test check runtimeJars` checkpoint passed 127 tests in 50 suites with
+At the PR #8 branch head, the clean Java 21
+`clean test check runtimeJars` checkpoint passed 134 tests in 51 suites with
 zero failures, errors, or skips. The executed Docker-backed portion comprised
-18 tests across six MariaDB Testcontainers suites, including six focused
-confiscated-restoration integrity scenarios.
+21 tests across seven MariaDB Testcontainers suites, including three focused
+economy rollback-integrity scenarios.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Paper runtime jar | 8,072,272 | `94ED58045F8BB316F70044BE3D0192279A6530DEE14EF66DD1767A298130C3D0` |
-| Velocity runtime jar | 7,348,337 | `3B584D9D74EF0C3F092C3CF0C6C71BD09E0C5F6A7DD7A9769BF865934DAE86D4` |
+| Paper runtime jar | 8,075,203 | `242210468BC5149BB48AED09C37CB814A682D388932ECE1818FFEBBC6B92709B` |
+| Velocity runtime jar | 7,348,824 | `8E909EA2C47A4CCAD02B010BE8059274E9D9B72EE0DBBFD1723675704091CE16` |
 
-The final local analyzer checkpoint reported 232 PMD findings, 235 Lizard
-findings, 17 Opengrep findings, and 11 CPD clone groups. These tool-specific
-totals overlap and must not be added to the hosted active-issue count. PR #7
-introduced zero hosted Codacy issues and solved two; its reported complexity
-and duplication deltas remain visible rather than suppressed. No analyzer rule
-or first-party source path was disabled. The current ignored-issue total remains
-66, unchanged from the PR #2 checkpoint.
+The final PR #8 local analyzer checkpoint reported 232 PMD findings, 234 Lizard
+findings, 17 Opengrep findings, and four CPD clone groups at the 100-token
+threshold. These tool-specific totals overlap and must not be added to the
+hosted active-issue count. PR #8 introduced zero hosted Codacy issues and solved
+one; its complexity and duplication deltas remain visible rather than
+suppressed. No analyzer rule or first-party source path was disabled.
 
-CodeRabbit completed its exact PR #7 review with no review submissions, inline
-comments, or unresolved threads. Earlier review details remain recorded in
-their corresponding checkpoint or pull request; absence of a comment is not a
-substitute for build and analyzer evidence.
+CodeRabbit found one critical pre-plan rollback regression and one
+maintainability duplication in PR #8. Both findings were fixed and covered by
+the final clean validation; the exact PR head then reported a successful
+CodeRabbit check.
+
+### PR #9 pre-merge security checkpoint
+
+PR #9 hardens protected network identity recovery without changing the stored
+encryption format. Recovery now rejects mismatched encryption-key versions,
+non-AES keys, malformed IPv4/IPv6 envelopes, altered ciphertext, and equality
+token substitution. A deterministic random source verifies that every
+encryption requests a fresh nonce.
+
+At exact head `6e583fdacab9e160110715426712dbc79503cdbc`, all 39 clean
+Java 21 build tasks executed. The build passed 141 tests in 51 suites with zero
+failures, errors, or skips, including all 21 tests across seven MariaDB
+Testcontainers suites.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,075,842 | `045C3375D952433CCD6EC4FDD58A7A05F3D41B9FE0419EF128C11AE11C67C3BE` |
+| Velocity runtime jar | 7,349,463 | `1046904B144EA10AEC2E17A589EB2ECA331097303252642B3813CF3EA17B50A2` |
+
+The local PR #9 checkpoint reports 232 PMD, 234 Lizard, 17 Opengrep, four CPD
+clone groups at 100 tokens, and zero Trivy findings. PMD, Lizard, and CPD
+report nothing in the changed files.
+The only changed-file Opengrep results are the three generic GCM review
+detections described above. Hosted Codacy reports zero new PR issues.
+CodeRabbit found no production-code defect. Its valid request for direct
+malformed-envelope coverage is included in the final review-test commit; the
+incremental read of that commit remains required before merge.
 
 ## Remediation order
 
