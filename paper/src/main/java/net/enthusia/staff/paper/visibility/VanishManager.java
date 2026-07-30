@@ -275,12 +275,13 @@ public final class VanishManager implements Listener {
 
     private boolean shouldList(Player target, boolean canSee) {
         UUID targetId = target.getUniqueId();
-        if (!canSee || hiddenSpectators.contains(targetId)) {
-            return false;
-        }
-        StaffRank targetRank = onlineStaffRanks.get(targetId);
-        return targetRank != null
-                && (target.getGameMode() != GameMode.SPECTATOR || spectatorTabPackets.available());
+        return SpectatorTabPolicy.shouldList(
+                onlineStaffRanks.get(targetId),
+                target.getGameMode(),
+                canSee,
+                hiddenSpectators.contains(targetId),
+                spectatorTabPackets.available()
+        );
     }
 
     private void unlistSafely(Player viewer, Player target) {
