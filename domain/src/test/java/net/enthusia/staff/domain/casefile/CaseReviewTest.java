@@ -58,7 +58,7 @@ final class CaseReviewTest {
     }
 
     @Test
-    void invalidReviewAndSanctionFieldsAreRejected() {
+    void invalidSanctionFieldsAreRejected() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> sanction(UUID.randomUUID(), SanctionStatus.ACTIVE, -1L)
@@ -75,6 +75,10 @@ final class CaseReviewTest {
                         0L
                 )
         );
+    }
+
+    @Test
+    void invalidCaseReviewFieldsAreRejected() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new CaseReview(
