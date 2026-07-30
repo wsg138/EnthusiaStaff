@@ -22,16 +22,18 @@ public sealed interface PunishmentRequestResult {
     record Approved(PunishmentApprovalRequest request, CaseId caseId, boolean replayed)
             implements PunishmentRequestResult {
         public Approved {
-            if (request == null || caseId == null) {
-                throw new IllegalArgumentException("approved punishment request fields must be present");
+            if (request == null || caseId == null
+                    || request.status() != PunishmentRequestStatus.APPROVED
+                    || !caseId.equals(request.resultingCaseId())) {
+                throw new IllegalArgumentException("approved punishment request fields must agree");
             }
         }
     }
 
     record Denied(PunishmentApprovalRequest request, boolean replayed) implements PunishmentRequestResult {
         public Denied {
-            if (request == null) {
-                throw new IllegalArgumentException("denied punishment request must be present");
+            if (request == null || request.status() != PunishmentRequestStatus.DENIED) {
+                throw new IllegalArgumentException("denied punishment request must be present and denied");
             }
         }
     }
