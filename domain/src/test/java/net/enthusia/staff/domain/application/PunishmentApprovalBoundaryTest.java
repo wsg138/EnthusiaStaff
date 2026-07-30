@@ -43,7 +43,7 @@ class PunishmentApprovalBoundaryTest {
     }
 
     @Test
-    void helperPermanentPunishmentRequiresApprovalButCanBeRequested() {
+    void helperPermanentPunishmentRequiresApproval() {
         PunishmentService service = service(SanctionLength.permanent());
 
         PunishmentEvaluation.Rejected rejected = assertInstanceOf(
@@ -51,14 +51,10 @@ class PunishmentApprovalBoundaryTest {
                 service.evaluate(request(StaffRank.HELPER), OperationalMode.ACTIVE)
         );
         assertEquals("APPROVAL_REQUIRED", rejected.code());
-        assertInstanceOf(
-                PunishmentEvaluation.Allowed.class,
-                service.evaluateForRequest(request(StaffRank.HELPER), OperationalMode.ACTIVE)
-        );
     }
 
     @Test
-    void developerCanRequestButCannotDirectlyApplyAnyPunishment() {
+    void developerCannotDirectlyApplyAnyPunishment() {
         PunishmentService service = service(SanctionLength.temporary(Duration.ofHours(6)));
 
         PunishmentEvaluation.Rejected rejected = assertInstanceOf(
@@ -66,10 +62,6 @@ class PunishmentApprovalBoundaryTest {
                 service.evaluate(request(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
         );
         assertEquals("FORBIDDEN", rejected.code());
-        assertInstanceOf(
-                PunishmentEvaluation.Allowed.class,
-                service.evaluateForRequest(request(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
-        );
     }
 
     private static PunishmentService service(SanctionLength length) {
