@@ -211,3 +211,11 @@ jobs:
         if: env.CODACY_PROJECT_TOKEN == ''
         run: |
           echo "::notice::Coverage was measured but not uploaded because CODACY_PROJECT_TOKEN is not configured."
+
+      - name: Diagnose remaining Codacy PR issue
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error \
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/${{ github.event.pull_request.number }}/issues?status=new&limit=100" \
+            | python3 -m json.tool
