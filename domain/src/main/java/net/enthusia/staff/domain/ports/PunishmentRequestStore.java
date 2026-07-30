@@ -11,7 +11,7 @@ import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.auth.Actor;
 
 public interface PunishmentRequestStore {
-    PunishmentRequestResult.Submitted submit(PunishmentApprovalRequest request);
+    PunishmentRequestResult submit(PunishmentApprovalRequest request);
 
     Optional<PunishmentApprovalRequest> find(UUID requestId);
 
