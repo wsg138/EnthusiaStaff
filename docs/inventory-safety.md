@@ -86,6 +86,25 @@ source confiscation is durably committed. Duplicate requests replay the same
 reservation or terminal result. A snapshot from another case, player, profile,
 scope, operation, or checksum is not interchangeable evidence.
 
+The selection lifecycle is fenced independently:
+
+1. Start accepts an idempotent replay only when the operation, player, scope,
+   backend, actor, case, and before checksum remain identical.
+2. The start transaction records the authoritative observation, acquires the
+   lease, and persists the operation, before snapshot, and audit together.
+3. Renewal requires the same operation, fencing token, `LOCKED` state, and
+   unexpired lease.
+4. Preparation rechecks the session fence, revision, before checksum, lease,
+   authoritative profile, and current observation before persisting the exact
+   removal patch and confiscated-asset snapshot.
+5. Cancellation is idempotent only for the matching fence and cannot roll back
+   an operation that already advanced beyond `LOCKED`.
+
+The operation update, pending patch insert, asset-snapshot insert, and audit
+must each affect the expected row. Any failure rolls back the whole
+preparation transaction; it must never leave a validated operation without its
+patch or durable confiscated assets.
+
 ## Operator response
 
 For an incomplete or quarantined inventory operation:
