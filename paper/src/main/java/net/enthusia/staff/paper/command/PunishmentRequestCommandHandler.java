@@ -12,7 +12,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.paper.punishment.PunishmentGuiRenderer;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -230,7 +230,7 @@ final class PunishmentRequestCommandHandler {
                         request.proposal().requester().displayName() + " -> "
                                 + request.proposal().targetId() + " | "
                                 + request.proposal().reasonId() + " | "
-                                + PunishmentGuiRenderer.describe(request.proposal().sanctions()) + " | expires "
+                                + describe(request.proposal().sanctions()) + " | expires "
                                 + request.expiresAt(),
                         NamedTextColor.GRAY
                 ));
@@ -248,7 +248,7 @@ final class PunishmentRequestCommandHandler {
         lines.add(Component.text("Target: " + request.proposal().targetId(), NamedTextColor.GRAY));
         lines.add(Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.GRAY));
         lines.add(Component.text(
-                "Sanctions: " + PunishmentGuiRenderer.describe(request.proposal().sanctions()),
+                "Sanctions: " + describe(request.proposal().sanctions()),
                 NamedTextColor.GOLD
         ));
         lines.add(Component.text(
@@ -258,5 +258,27 @@ final class PunishmentRequestCommandHandler {
         ));
         lines.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
         lines.forEach(sender::sendMessage);
+    }
+
+    private static String describe(List<SanctionSpec> sanctions) {
+        return sanctions.stream().map(specification -> {
+            String type = specification.type().name().toLowerCase(Locale.ROOT).replace('_', ' ');
+            return specification.length().isPermanent()
+                    ? type + " permanent"
+                    : type + ' ' + humanDuration(specification.length().duration());
+        }).reduce((left, right) -> left + ", " + right).orElse("no sanction");
+    }
+
+    private static String humanDuration(java.time.Duration duration) {
+        if (duration.toDays() > 0 && duration.minusDays(duration.toDays()).isZero()) {
+            return duration.toDays() + "d";
+        }
+        if (duration.toHours() > 0 && duration.minusHours(duration.toHours()).isZero()) {
+            return duration.toHours() + "h";
+        }
+        if (duration.toMinutes() > 0 && duration.minusMinutes(duration.toMinutes()).isZero()) {
+            return duration.toMinutes() + "m";
+        }
+        return duration.toSeconds() + "s";
     }
 }
