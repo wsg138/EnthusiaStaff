@@ -27,6 +27,7 @@ final class JdbcPunishmentRequestRepository {
             status, revision, resolved_by, resolution_note, resulting_case_id,
             created_at, updated_at, expires_at, resolved_at
             """;
+    private static final String SELECT_REQUESTS = "SELECT " + COLUMNS + " FROM punishment_requests ";
 
     private final DataSource dataSource;
     private final JdbcPunishmentRequestCodec codec;
@@ -40,7 +41,7 @@ final class JdbcPunishmentRequestRepository {
     }
 
     Optional<PunishmentApprovalRequest> find(UUID requestId) {
-        String sql = "SELECT " + COLUMNS + " FROM punishment_requests WHERE request_id = ?";
+        String sql = SELECT_REQUESTS + "WHERE request_id = ?";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(requestId));
@@ -53,7 +54,7 @@ final class JdbcPunishmentRequestRepository {
     }
 
     List<PunishmentApprovalRequest> pending(Instant now, int limit) {
-        String sql = "SELECT " + COLUMNS + " FROM punishment_requests "
+        String sql = SELECT_REQUESTS
                 + "WHERE status = 'PENDING' AND expires_at > ? ORDER BY created_at LIMIT ?";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -77,7 +78,7 @@ final class JdbcPunishmentRequestRepository {
             PunishmentMatchKey matchKey,
             boolean lock
     ) throws SQLException {
-        String sql = "SELECT " + COLUMNS + " FROM punishment_requests "
+        String sql = SELECT_REQUESTS
                 + "WHERE submission_key = ? OR open_match_key = ? "
                 + "ORDER BY CASE WHEN submission_key = ? THEN 0 ELSE 1 END LIMIT 1"
                 + (lock ? " FOR UPDATE" : "");
@@ -92,7 +93,7 @@ final class JdbcPunishmentRequestRepository {
     }
 
     PunishmentApprovalRequest lock(Connection connection, UUID requestId) throws SQLException {
-        String sql = "SELECT " + COLUMNS + " FROM punishment_requests WHERE request_id = ? FOR UPDATE";
+        String sql = SELECT_REQUESTS + "WHERE request_id = ? FOR UPDATE";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(requestId));
             try (ResultSet result = statement.executeQuery()) {
@@ -220,7 +221,7 @@ final class JdbcPunishmentRequestRepository {
 
     List<PunishmentApprovalRequest> expired(Connection connection, Instant now, int limit)
             throws SQLException {
-        String sql = "SELECT " + COLUMNS + " FROM punishment_requests "
+        String sql = SELECT_REQUESTS
                 + "WHERE status = 'PENDING' AND expires_at <= ? "
                 + "ORDER BY expires_at LIMIT ? FOR UPDATE";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
