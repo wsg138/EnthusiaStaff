@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     required_rank ENUM('HELPER', 'MOD', 'ADMIN', 'FOUNDER') NOT NULL,
     raw_ordinal INT UNSIGNED NOT NULL,
     effective_ordinal INT UNSIGNED NOT NULL,
+    selected_ordinal INT UNSIGNED NOT NULL,
     recency_bonus INT UNSIGNED NOT NULL,
     step_label VARCHAR(80) NOT NULL,
     contribution_json JSON NOT NULL,
