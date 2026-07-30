@@ -1,146 +1,149 @@
 # Staff Handbook
 
-This page defines the operating rules for every EnthusiaStaff feature. Feature
-pages explain individual commands; this page explains how staff should reason
-before using them.
+This is the general guide for being a member of the Enthusia staff team. It is
+about judgment, conduct, and handling situations well. Individual feature pages
+explain the commands.
 
-> **Deployment warning:** Until [[Implementation Status]] marks a workflow as
-> available in production, treat these procedures as training and staging
-> guidance rather than permission to replace current production tools.
+> **Current deployment:** Continue using the moderation tools and procedures
+> currently approved for the live server. The Wiki may describe EnthusiaStaff
+> features that are still being built or tested; check [[Implementation Status]]
+> before replacing an existing production workflow.
 
-## Before taking action
+## What staff are here to do
 
-Ask five questions:
+Staff should help keep the server fair, welcoming, and enjoyable without making
+normal play feel over-moderated.
 
-1. **Do I have the right player?** Verify UUID-backed identity, current name,
-   previous names, Java/Bedrock status, and server.
-2. **Do I have enough evidence?** Separate what you directly observed from
-   reports, automated indicators, assumptions, and alt confidence.
-3. **Is this my authority level?** Check [[Rank Authority]] and the exact
-   command/action permission.
-4. **Is the platform healthy?** A destructive action must not proceed when its
-   required database, network, provider, or recovery subsystem is unavailable.
-5. **Can the result be explained later?** Record a stable reason, internal
-   explanation, evidence, and case links before confirming.
+- Treat players respectfully, including during disagreements.
+- Use common sense and good judgment.
+- Be fair even when friends, guild members, or people you dislike are involved.
+- Do not use staff permissions for gameplay advantage or personal benefit.
+- Keep staff discussions, reports, and private evidence within the staff team.
+- Ask for another opinion when a situation is unclear or unusually serious.
 
-If any answer is uncertain, pause the destructive action and ask a higher rank
-or use a non-destructive tool such as spectate, client evidence, history, or
-report claiming.
+You are allowed to step away from an argument. Staff do not need to continue a
+conversation that has become hostile or unproductive.
 
-## Evidence quality
+## A simple response process
 
-Use evidence in this order:
+For most situations:
 
-1. Direct staff observation with timestamp and context.
-2. Server-captured chat, private-message, client, or transaction evidence.
-3. Reproducible logs or provider evidence with stable IDs.
-4. Corroborated player reports.
-5. Automated detection that is explicitly approved for enforcement.
-6. Weak indicators, hearsay, or similarity — useful for investigation, not
-   enough by themselves for severe action.
+1. **Understand what happened.** Read the report, watch the situation, and gather
+   enough context before acting.
+2. **Stop immediate disruption when needed.** A warning, mute, kick, freeze, or
+   staff presence may be appropriate while the situation is reviewed.
+3. **Choose the matching rule and reason.** Use the closest configured option;
+   do not stretch a reason to fit unrelated behavior.
+4. **Save useful evidence.** Screenshots, clips, report context, logs, or other
+   server evidence should make the decision understandable later.
+5. **Take the action once.** Use the normal interface and let it calculate the
+   configured punishment.
+6. **Leave a clear note.** Another staff member should be able to understand what
+   happened without asking you to reconstruct it from memory.
+7. **Escalate when necessary.** Ask a Mod, Admin, or Founder when the situation is
+   outside your normal responsibilities or the evidence is uncertain.
 
-Never turn an alt-confidence score, client brand, same-network observation, or
-single anticheat signal into certainty without the policy allowing it.
+## Talking with players
 
-## Case notes
+- Explain decisions calmly and briefly.
+- Do not argue about a punishment in public chat.
+- Direct appeals or longer disputes to the proper ticket or appeal process.
+- Do not reveal who reported a player.
+- Do not share private messages, base coordinates, staff notes, or internal
+  discussion screenshots.
+- Avoid sarcasm, insults, threats, or trying to “win” an argument.
 
-A useful internal explanation answers:
+A player disagreeing with staff is not automatically another rule violation.
+Judge their actual behavior, not whether they agree with the decision.
+
+## Evidence and notes
+
+Good evidence answers three questions:
 
 - What happened?
-- Where and when did it happen?
-- Which evidence proves it?
-- Which rule and exact reason ID apply?
-- Why is the selected punishment step appropriate?
-- Were there related cases, reports, alts, assets, or appeals?
-- Did anything fail, retry, or enter recovery?
+- When and where did it happen?
+- What proves it?
 
-Avoid insults, speculation, private jokes, or unsupported conclusions. Internal
-does not mean disposable; case notes are durable audit records.
+For ordinary chat moderation, the server’s captured context plus a screenshot is
+often enough. More serious cases may need video, logs, CoreProtect information,
+client evidence, or another staff witness.
 
-## Public versus private information
+Write factual notes. Do not include jokes, guesses presented as facts, or comments
+about the player that are unrelated to the case.
 
-Punishments and warnings are public by default unless policy and rank permit a
-private case. Public punishment information may include the player, broad
-reason, public exact reason, type, dates, state, case ID, and appeal
-availability.
+## Punishments
 
-Never publish:
+Use `/punish <player>` or the appropriate report action and follow the interface.
+The plugin is intended to choose the configured duration from the reason and the
+player’s relevant history, so staff should not need to memorize punishment
+lengths.
 
-- Reporter identity
-- Private messages
-- Coordinates or base locations
-- Raw or recoverable network identity
-- Alt evidence details
-- Internal notes
-- Confiscated contents or balances
-- Staff-only automation metadata
-- Appeal media or private account information
+Before confirming, check:
 
-See [[Privacy and Data Handling]] for handling rules.
+- the correct player is selected;
+- the reason actually matches the behavior;
+- the evidence is saved or linked;
+- the public reason is clear;
+- the result shown by the interface makes sense.
 
-## Confirmation discipline
+Do not repeatedly submit the action when a command reports an error, conflict, or
+pending approval. Ask another staff member or an administrator instead.
 
-A confirmation prompt is the final safety barrier, not a routine click.
+See [[Punishment System]] for the full workflow.
 
-Before confirming:
+## Reports and tickets
 
-- Re-read the target name and UUID.
-- Re-read the exact reason and ladder step.
-- Verify duration, sanction type, visibility, and combined effects.
-- Check whether inventory, Ender chest, economy, market, reputation, or network
-  actions are actually relevant.
-- Confirm the recommendation has not changed.
-- Confirm required dependencies are healthy.
-- Make sure you are not repeating a request that is already pending.
+When handling a player report, cheating concern, bug report, or exploit ticket:
 
-Do not confirm because a GUI “looks right” after a timeout, reconnect, reload,
-or server switch. Resume the durable draft and re-review it.
+1. Gather facts before deciding what happened.
+2. Use the available investigation tools, such as spectating, CoreProtect, logs,
+   or client information.
+3. Keep one primary staff member responsible when possible.
+4. Ask for help when the situation is uncertain or technically complex.
+5. Record the outcome so the ticket does not need to be investigated again from
+   the beginning.
 
-## Failure behavior
+See [[Reports and Evidence]] and [[Incident Playbooks]].
 
-When a command reports stale state, conflict, quarantine, read-only mode,
-missing dependency, or uncertain external result:
+## Staff tools and privacy
 
-1. Stop repeating the action.
-2. Record the case or operation ID and time.
-3. Preserve the current player and server state.
-4. Check `/estaff status` and the relevant verify output.
-5. Escalate using [[Recovery and Troubleshooting]].
+Staff mode, vanish, teleportation, inventory viewing, and inspection tools are
+for legitimate staff work only.
 
-Repeatedly clicking or re-running a destructive command can convert a
-recoverable incident into item duplication, item loss, double charging, or
-conflicting sanctions.
+Do not use them to:
 
-## Staff visibility and conduct
+- find bases, valuables, or player activity for personal benefit;
+- spy on unrelated private activity;
+- interfere with normal gameplay without a staff reason;
+- share information with friends or guild members;
+- escape combat or other normal gameplay consequences;
+- move items between staff mode and normal play.
 
-Vanish is not authorization to browse unrelated private information. Use silent
-inventory, container, message, and location tools only for a legitimate staff
-purpose tied to a report, case, active investigation, safety concern, or
-approved test.
+When visiting a private base for staff work, avoid saving or sharing its
+coordinates unless the location is directly relevant evidence.
 
-Do not use staff mode to:
+## Asking for help and handing off
 
-- Gain gameplay advantage
-- Locate valuables for personal use
-- Observe private activity without a staff reason
-- Transfer staff items into normal inventory
-- Avoid legitimate combat consequences after participating normally
-- Conceal staff misconduct
+Ask another staff member before acting when:
 
-Every sensitive action is expected to be audited.
+- the evidence is incomplete or conflicting;
+- the situation involves a friend, guild member, or personal dispute;
+- a severe punishment or permanent action may be needed;
+- a player claims a technical failure, item loss, duplication, or exploit;
+- an action appears to have applied only partially;
+- you are unsure which rule or reason applies.
 
-## Handoffs
+When handing a situation to someone else, send the report or case, the evidence,
+what you observed, what you already did, and what still needs a decision.
 
-When another staff member takes over, provide:
+## Availability and internal concerns
 
-- Case/report/operation ID
-- Target UUID and current name
-- Current server and state
-- What has been observed
-- What has already been attempted
-- Pending sanctions, locks, drafts, or recovery work
-- What must not be repeated
-- The exact next safe step
+Let the team know when you will be unavailable for a while. It is fine to continue
+playing privately; the notice simply helps the team plan coverage.
 
-A handoff is incomplete if the next staff member must guess whether an
-inventory edit, confiscation, unban, or provider action already happened.
+Raise concerns about staff conduct privately with a Mod, Admin, or Founder. This
+includes concerns involving another moderator. Staff issues should be handled
+fairly and discreetly rather than argued about in public channels.
+
+Nobody is expected to know everything immediately. Asking for a second opinion is
+better than confidently making a decision you are unsure about.
