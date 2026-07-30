@@ -28,4 +28,19 @@ final class SpectatorTabPolicy {
                 && !fullyVanished
                 && packetMaskAvailable;
     }
+
+    static boolean shouldList(
+            StaffRank rank,
+            GameMode gameMode,
+            boolean canSee,
+            boolean hiddenSpectator,
+            boolean packetMaskAvailable
+    ) {
+        if (!canSee || hiddenSpectator) {
+            return false;
+        }
+        return rank == null
+                || gameMode != GameMode.SPECTATOR
+                || packetMaskAvailable;
+    }
 }
