@@ -29,6 +29,8 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 final class PunishmentRequestInterfacePresentationTest {
+    private static final int PAGE_SIZE = 45;
+    private static final int TOTAL_REQUESTS = 47;
     private static final Instant NOW = Instant.parse("2026-07-30T20:00:00Z");
     private static final UUID TARGET_ID = UUID.fromString("54000000-0000-0000-0000-000000000001");
     private static final Actor REQUESTER = new Actor(
@@ -96,29 +98,25 @@ final class PunishmentRequestInterfacePresentationTest {
 
     @Test
     void requestQueueKeepsCreationOrderAcrossPages() {
-        List<PunishmentRequestGuiState.RequestView> views = new ArrayList<>();
-        for (int index = 0; index < 47; index++) {
-            PunishmentApprovalRequest request = request(index + 10, PunishmentRequestStatus.PENDING);
-            views.add(new PunishmentRequestGuiState.RequestView(request, "Target" + index));
-        }
+        List<PunishmentRequestGuiState.RequestView> views = requestViews();
 
-        PunishmentRequestGuiState.Queue first = PunishmentRequestGuiState.Queue.page(views, 0, 45);
-        PunishmentRequestGuiState.Queue second = PunishmentRequestGuiState.Queue.page(views, 1, 45);
+        PunishmentRequestGuiState.Queue first = PunishmentRequestGuiState.Queue.page(views, 0, PAGE_SIZE);
+        PunishmentRequestGuiState.Queue second = PunishmentRequestGuiState.Queue.page(views, 1, PAGE_SIZE);
 
-        assertEquals(45, first.requests().size());
-        assertEquals(2, second.requests().size());
+        assertEquals(PAGE_SIZE, first.requests().size());
+        assertEquals(TOTAL_REQUESTS - PAGE_SIZE, second.requests().size());
         assertEquals(views.get(0).request().requestId(), first.requests().get(0).request().requestId());
-        assertEquals(views.get(45).request().requestId(), second.requests().get(0).request().requestId());
+        assertEquals(views.get(PAGE_SIZE).request().requestId(), second.requests().get(0).request().requestId());
         assertTrue(first.hasNext());
         assertFalse(first.hasPrevious());
         assertTrue(second.hasPrevious());
         assertFalse(second.hasNext());
-        assertEquals(47, second.totalEntries());
+        assertEquals(TOTAL_REQUESTS, second.totalEntries());
     }
 
     @Test
     void emptyQueueStillProducesOneStablePage() {
-        PunishmentRequestGuiState.Queue queue = PunishmentRequestGuiState.Queue.page(List.of(), 0, 45);
+        PunishmentRequestGuiState.Queue queue = PunishmentRequestGuiState.Queue.page(List.of(), 0, PAGE_SIZE);
 
         assertTrue(queue.requests().isEmpty());
         assertEquals(0, queue.page());
@@ -128,10 +126,53 @@ final class PunishmentRequestInterfacePresentationTest {
         assertFalse(queue.hasNext());
     }
 
+    private static List<PunishmentRequestGuiState.RequestView> requestViews() {
+        List<PunishmentRequestGuiState.RequestView> views = new ArrayList<>();
+        for (int index = 0; index < TOTAL_REQUESTS; index++) {
+            PunishmentApprovalRequest request = request(index + 10, PunishmentRequestStatus.PENDING);
+            views.add(new PunishmentRequestGuiState.RequestView(request, "Target" + index));
+        }
+        return views;
+    }
+
     private static PunishmentApprovalRequest request(int sequence, PunishmentRequestStatus status) {
+        if (status == PunishmentRequestStatus.PENDING) {
+            return pendingRequest(sequence);
+        }
+        return resolvedRequest(sequence, status);
+    }
+
+    private static PunishmentApprovalRequest pendingRequest(int sequence) {
+        Instant createdAt = NOW.plusSeconds(sequence);
+        return PunishmentApprovalRequest.pending(
+                requestId(sequence),
+                submissionKey(sequence),
+                proposal(),
+                createdAt,
+                createdAt.plusSeconds(86_400)
+        );
+    }
+
+    private static PunishmentApprovalRequest resolvedRequest(int sequence, PunishmentRequestStatus status) {
+        return new PunishmentApprovalRequest(
+                requestId(sequence),
+                submissionKey(sequence),
+                proposal(),
+                NOW,
+                NOW.plusSeconds(86_400),
+                status,
+                1,
+                resolvedBy(status),
+                resolutionNote(status),
+                resultingCaseId(status),
+                NOW.plusSeconds(60)
+        );
+    }
+
+    private static PunishmentProposal proposal() {
         SanctionSpec sanction = new SanctionSpec(SanctionType.NETWORK_BAN, SanctionLength.permanent());
         PunishmentStep step = new PunishmentStep(0, "Permanent ban", List.of(sanction));
-        PunishmentProposal proposal = new PunishmentProposal(
+        return new PunishmentProposal(
                 TARGET_ID,
                 REQUESTER,
                 "chat.request-test",
@@ -144,41 +185,36 @@ final class PunishmentRequestInterfacePresentationTest {
                 new EscalationDecision(0, 0, 0, List.of(), step),
                 List.of(sanction)
         );
-        UUID requestId = new UUID(0x5400000000000000L, sequence);
-        if (status == PunishmentRequestStatus.PENDING) {
-            return PunishmentApprovalRequest.pending(
-                    requestId,
-                    new IdempotencyKey("request-interface:" + sequence),
-                    proposal,
-                    NOW.plusSeconds(sequence),
-                    NOW.plusSeconds(sequence).plusSeconds(86_400)
-            );
-        }
-        UUID resolvedBy = status == PunishmentRequestStatus.EXPIRED ? null : REVIEWER_ID;
-        CaseId caseId = status == PunishmentRequestStatus.APPROVED
-                || status == PunishmentRequestStatus.FULFILLED_EXTERNALLY
-                ? new CaseId("TESTCASE00000001")
-                : null;
-        String note = switch (status) {
+    }
+
+    private static UUID requestId(int sequence) {
+        return new UUID(0x5400000000000000L, sequence);
+    }
+
+    private static IdempotencyKey submissionKey(int sequence) {
+        return new IdempotencyKey("request-interface:" + sequence);
+    }
+
+    private static UUID resolvedBy(PunishmentRequestStatus status) {
+        return status == PunishmentRequestStatus.EXPIRED ? null : REVIEWER_ID;
+    }
+
+    private static CaseId resultingCaseId(PunishmentRequestStatus status) {
+        return switch (status) {
+            case APPROVED, FULFILLED_EXTERNALLY -> new CaseId("TESTCASE00000001");
+            case DENIED, EXPIRED -> null;
+            case PENDING -> throw new IllegalArgumentException("pending requests use the pending factory");
+        };
+    }
+
+    private static String resolutionNote(PunishmentRequestStatus status) {
+        return switch (status) {
             case APPROVED -> "Approved by test reviewer";
             case DENIED -> "Denied by test reviewer";
             case EXPIRED -> "Punishment request expired without a decision";
             case FULFILLED_EXTERNALLY -> "Fulfilled by another authoritative punishment";
-            case PENDING -> throw new IllegalStateException("pending handled above");
+            case PENDING -> throw new IllegalArgumentException("pending requests use the pending factory");
         };
-        return new PunishmentApprovalRequest(
-                requestId,
-                new IdempotencyKey("request-interface:" + sequence),
-                proposal,
-                NOW,
-                NOW.plusSeconds(86_400),
-                status,
-                1,
-                resolvedBy,
-                note,
-                caseId,
-                NOW.plusSeconds(60)
-        );
     }
 
     private static PlayerDirectory directory(Optional<PlayerIdentity> identity) {
