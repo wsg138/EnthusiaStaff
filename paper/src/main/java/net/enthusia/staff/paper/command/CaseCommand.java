@@ -20,6 +20,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CaseCommand implements CommandExecutor {
+    private static final String RESTORE_PERMISSION = "enthusiastaff.case.restoreitems";
+
     private final JavaPlugin plugin;
     private final Supplier<CaseLookup> cases;
     private final Supplier<ConfiscationCoordinator> confiscation;
@@ -47,6 +49,13 @@ public final class CaseCommand implements CommandExecutor {
             String label,
             String[] arguments
     ) {
+        if (!CommandPermissionGate.require(
+                sender,
+                RESTORE_PERMISSION,
+                "You do not have permission to restore confiscated assets."
+        )) {
+            return true;
+        }
         if (!(sender instanceof Player viewer)) {
             sender.sendMessage("Confiscated-item restoration requires an in-game staff actor.");
             return true;
