@@ -19,7 +19,7 @@ env:
 
 jobs:
   coverage:
-    name: Test and report aggregate coverage
+    name: Build, test, and report aggregate coverage
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -38,22 +38,91 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
-      - name: Generate aggregate JaCoCo report
+      - name: Build runtime jars and generate aggregate JaCoCo report
         run: |
           chmod +x gradlew
-          ./gradlew clean jacocoAggregateReport \
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
             --no-daemon \
             --no-build-cache \
             --no-configuration-cache \
             --console=plain
 
-      - name: Diagnose Codacy PR issues
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
+      - name: Inspect runtime jars
         run: |
-          curl --fail --silent --show-error \
-            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/${{ github.event.pull_request.number }}/issues?status=new&limit=100" \
-            | python3 -m json.tool
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import zipfile
+
+          modules = {
+              "Paper": (Path("paper/build/libs"), "EnthusiaStaff-Paper-"),
+              "Velocity": (Path("velocity/build/libs"), "EnthusiaStaff-Velocity-"),
+          }
+          contract_root = Path("integration-contracts/src/main/java")
+          contract_stems = {
+              source.relative_to(contract_root).with_suffix("").as_posix()
+              for source in contract_root.rglob("*.java")
+          }
+          report_lines = ["Runtime jar inspection", "======================", ""]
+          summary_lines = [
+              "## Runtime jar inspection",
+              "",
+              "| Runtime | Size | SHA-256 | Entries | Provider API leaks |",
+              "| --- | ---: | --- | ---: | ---: |",
+          ]
+
+          for runtime, (directory, prefix) in modules.items():
+              jars = sorted(
+                  path for path in directory.glob(f"{prefix}*.jar")
+                  if not path.name.endswith("-sources.jar")
+              )
+              if len(jars) != 1:
+                  raise SystemExit(
+                      f"Expected exactly one {runtime} runtime jar, found: "
+                      + ", ".join(path.name for path in jars)
+                  )
+              jar = jars[0]
+              digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+              with zipfile.ZipFile(jar) as archive:
+                  entries = set(archive.namelist())
+                  bad_entry = archive.testzip()
+              if bad_entry is not None:
+                  raise SystemExit(f"Corrupt entry in {jar}: {bad_entry}")
+
+              leaked = sorted(
+                  entry
+                  for entry in entries
+                  for stem in contract_stems
+                  if entry == f"{stem}.class" or entry.startswith(f"{stem}$")
+              )
+              if leaked:
+                  raise SystemExit(
+                      f"Provider API classes leaked into {runtime} runtime jar: "
+                      + ", ".join(leaked)
+                  )
+
+              size = jar.stat().st_size
+              report_lines.extend([
+                  f"{runtime}: {jar}",
+                  f"  size: {size} bytes",
+                  f"  sha256: {digest}",
+                  f"  entries: {len(entries)}",
+                  "  provider API leaks: 0",
+                  "",
+              ])
+              summary_lines.append(
+                  f"| {runtime} | {size:,} bytes | `{digest}` | {len(entries):,} | 0 |"
+              )
+
+          report = Path("build/reports/runtime-jars/inspection.txt")
+          report.parent.mkdir(parents=True, exist_ok=True)
+          report.write_text("\n".join(report_lines), encoding="utf-8")
+          summary = "\n".join(summary_lines) + "\n"
+          print(summary)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary_file:
+              summary_file.write(summary)
+          PY
 
       - name: Summarize coverage
         run: |
@@ -108,11 +177,17 @@ jobs:
               summary_file.write(text)
           PY
 
-      - name: Upload coverage report artifact
+      - name: Upload validation artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: aggregate-jacoco-report
-          path: build/reports/jacoco/aggregate
+          name: java-21-validation
+          path: |
+            build/reports/jacoco/aggregate
+            build/reports/runtime-jars/inspection.txt
+            paper/build/libs/EnthusiaStaff-Paper-*.jar
+            !paper/build/libs/*-sources.jar
+            velocity/build/libs/EnthusiaStaff-Velocity-*.jar
+            !velocity/build/libs/*-sources.jar
           if-no-files-found: error
           retention-days: 14
 
