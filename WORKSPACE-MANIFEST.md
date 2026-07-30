@@ -1,64 +1,75 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-07-29 (America/Indianapolis)
+Last updated: 2026-07-30 (America/Indianapolis)
 
-This manifest records review, recovery, and validation state. PRs #1 through
-#11 have been merged into `main`; PR #12 is the active root-plugin persistence
-checkpoint for confiscation journal lifecycle stages. Nothing listed here has
-been deployed, released, or applied to production data.
+This manifest records review, recovery, and validation state. Nothing listed here
+has been deployed, released, applied to production data, or used to replace
+LiteBans.
 
 ## Repository checkpoint
 
-| Repository | Remote URL | Default branch | Working branch | Latest local SHA | Latest pushed SHA | Pull request | Build status | Test status | Docker/Testcontainers | Codacy grade | Codacy issue count | Current blockers |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #12 validation head `688b2802c1756853921ea01f0c0656a9d9e9bc14` | `origin/section/plugin` includes validation head `688b2802c1756853921ea01f0c0656a9d9e9bc14`; `origin/main` is PR #11 merge `664792487e4fc1f9333957cd7f48e8a7f447c3b2` | [PR #12 active](https://github.com/wsg138/EnthusiaStaff/pull/12); [PRs #1–#11 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; 36 of 39 actionable tasks executed and 3 were up-to-date | PASS: 148 tests in 53 suites, 0 failures/errors/skips | PASS: 25 tests across 8 MariaDB Testcontainers suites | A at the last exact `main` aggregate snapshot; PR #12 is up to standards with 0 new issues, complexity delta 26, and duplication delta 0 | Last exact aggregate: 427 active and 69 ignored; PR #12 local checked-in rules: 203 PMD, 194 Lizard, 17 Opengrep, 0 Trivy, and 3 pre-existing CPD groups | The current `main` aggregate has not yet published a newer exact issue snapshot; the inventory journal remains oversized and retains pending, quarantine, and audit-helper findings; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
-| enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` (`1657a0a`) | `agent/punishment-platform` (expected; absent remotely) | No target-layout clone; sibling checkout is `1657a0a` on `deploy/market-experimental` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | N/A | UNVERIFIED | UNKNOWN | Must be cloned under `related-repos`; the sibling checkout has untracked deployment-tool state that must not be lost or committed. |
-| EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` (`9696501`) | `agent/moderation-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `9696501` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
-| EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` (`25ea8cb`) | `agent/reputation-blacklist-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `25ea8cb` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
-| EnthusiaAutoClicker | `https://github.com/wsg138/EnthusiaAutoClicker.git` | `main` (`5d7f926`) | `agent/client-evidence-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `5d7f926` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
-| Enthusia-RoseChat | Missing: `wsg138/Enthusia-RoseChat` returned HTTP 404 | UNKNOWN | `agent/staff-bridge-api` (expected) | None | None | None | BLOCKED | BLOCKED | BLOCKED | UNVERIFIED | UNKNOWN | Intended `wsg138` repository does not exist or is inaccessible. Do not invent a remote or push to an upstream owner. |
-| EnthusiaMarket | `https://github.com/wsg138/EnthusiaMarket.git` | `main` (`bc24f10`) | `agent/moderation-api` (expected; absent remotely) | No target-layout clone; sibling checkout is detached at `2c06a1a` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main. Existing sibling checkout is detached and has an upstream BadgersMC remote; no Enthusia work may be pushed there. |
+| Repository | Remote URL | Default branch | Working branch | Current checkpoint | Build and test status | Codacy status | Current blockers |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for draft PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation and focused tests validated at `4e0ebf749932587fe6ebfe418058ba2450424ec3`; current branch additionally aligns the Wiki workflow with current `main` and updates checkpoint documentation | PASS at `4e0ebf749932587fe6ebfe418058ba2450424ec3`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30583224286`, artifact `8775490979` | Zero introduced issues was reported for the validated implementation checkpoint; final branch analysis must remain at zero before merge | PR #21 still requires current-main history integration, final exact-head validation after documentation/history updates, one final review when allowance is available, no unresolved review threads, and an accurate PR description. Production-like Paper/Velocity/provider staging remains unavailable. |
+| enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` | Expected feature branch not reconstructed | No PR #21 website changes | NOT_RUN | NOT_ANALYZED | Provider/site work remains deferred until the root punishment checkpoint is complete. |
+| EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
+| EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
+| EnthusiaAutoClicker | `https://github.com/wsg138/EnthusiaAutoClicker.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
+| Enthusia-RoseChat | Intended `wsg138/Enthusia-RoseChat` remains missing or inaccessible | UNKNOWN | None | BLOCKED | BLOCKED | NOT_ANALYZED | Do not invent a remote or push to an upstream owner. |
+| EnthusiaMarket | `https://github.com/wsg138/EnthusiaMarket.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Existing detached/upstream references are read-only; provider reconstruction remains outstanding. |
 
-## Root recovery evidence
+## Merged PR #20 checkpoint
 
-- Canonical remote: `wsg138/EnthusiaStaff`
-- Remote default branch: `main`
-- Remote feature branch: `agent/complete-staff-platform`
-- `main`: `b87a13bbe6aaa62500b578c78e557e0bf1a4c705`
-- Feature branch: `c4fd4129f7a34ad011f87f146fb72c236e611b89`
-- GitHub comparison at recovery: 9 commits ahead, 0 behind `main`
-- Existing history action: no rebase, reset, or force-push was required
-- Merge commit: `b5e55ed9ffd7309cacabf6b0a07af220068f3c30`
-- PR #1 outcome: merged with history preserved; the source branch was retained
-- Current `main`: `664792487e4fc1f9333957cd7f48e8a7f447c3b2`
-- Completed section history: PRs #2 through #11 merged without rewriting `main`
-- Pre-existing goals file SHA-256 before and after checkout: `746DD1B37BBAF517F008441102A6CBF688AABEC09E8196F863509BF484277F9A`
-- Root local exclusion: `related-repos/` is present in `.git/info/exclude`
+- Pull request: #20, **Add durable punishment request workflow**.
+- Final reviewed head: `a334f46adc9beea679b4f5d6d13ee7d4c3960ef4`.
+- Squash merge on `main`: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
+- Final validation run: `30572347767`.
+- Source branch retained: `section/durable-punishment-requests`.
+- Complete Java 21 build, unit tests, MariaDB 11.8.3 Testcontainers,
+  aggregate JaCoCo, and Paper/Velocity runtime-jar inspection passed.
+- Twenty-four provider API source types were checked and no provider API class
+  leaked into either runtime jar.
+- Codacy reported zero introduced issues and no unresolved GitHub review thread
+  remained. CodeRabbit could not review the final head because its allowance was
+  exhausted.
 
-## Workspace layout status
+## Active PR #21 checkpoint
 
-The root worktree and reports are represented by `EnthusiaStaff.code-workspace`.
-Related repository paths are declared under `related-repos/`, but cloning is
-intentionally deferred until the required EnthusiaStaff Codacy cleanup
-checkpoint. Existing sibling worktrees are read-only recovery references and
-are not treated as the requested final layout.
+- Pull request: #21, **Expose durable punishment request interfaces**.
+- Branch: `section/punishment-request-interfaces`; the branch was not reset,
+  renamed, recreated, or replaced.
+- Merge base with PR #20: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
+- Validated implementation/test head: `4e0ebf749932587fe6ebfe418058ba2450424ec3`.
+- Exact-head validation run: `30583224286`; validation artifact: `8775490979`.
+- Build result: `BUILD SUCCESSFUL`; 49 actionable Gradle tasks, 40 executed and
+  9 up-to-date.
+- Runtime jars:
+  - Paper SHA-256 `107af810a1c1020105bd0a5017ccc4619b4ad87dcd2f9e76d0403dc720a2da7f`.
+  - Velocity SHA-256 `13329af707e6744eac980abf39ddf1facd1773963671986f25c4643d8815322c`.
+  - Both checked 24 provider API source types with zero leaks.
+- Aggregate JaCoCo at that checkpoint: line 32.30%, branch 26.47%, instruction
+  34.61%.
+- Implemented interface behavior includes routed draft confirmation, filtered and
+  paginated review queues, fenced claim/approve/deny actions, stale/resolved-state
+  handling, offline target presentation, revision display, self/Developer/rank
+  restrictions, and idempotent retry messaging.
+- Existing domain and MariaDB tests cover direct temporary Helper application,
+  permanent Helper requests, Developer request-only behavior, stale fences, lost
+  leases, expiry, external fulfillment, approval-time sanction start, and
+  idempotent decisions. Focused PR #21 tests cover bootstrap/constructor wiring,
+  permission consistency, presentation states, pagination, empty queues, offline
+  targets, and reviewer visibility.
+- The Wiki has not been changed for PR #21. Staff-facing Wiki updates remain
+  deferred until the interfaces are final and must distinguish automated testing
+  from staging verification.
 
-## Wiki status
+## Workspace and release rules
 
-The GitHub Wiki is enabled at
-`https://github.com/wsg138/EnthusiaStaff/wiki`. Its separate `master` branch is
-at `ea4f929710d3281aac4a8087da1e947973c2d795` and contains Home, Architecture,
-Development Setup, Build and Testing, Installation, Configuration, Commands and
-Permissions, Punishment System, LiteBans Migration, Shadow Mode and Cutover,
-Recovery and Troubleshooting, Integrations, Inventory and Confiscation Safety,
-and the navigation sidebar. Pages continue incrementally from source-controlled
-repository documentation.
-
-## Checkpoint rules
-
-- Update every SHA, PR, build, test, Docker, coverage, Codacy, and blocker field after each coherent checkpoint.
-- Keep remaining root-plugin work on `section/plugin`, merge clean checkpoints
-  into `main`, then fast-forward `section/plugin` from the new `main`.
-- A skipped Docker test is recorded as skipped, never passed.
-- A Codacy grade remains unverified until the actual branch analysis is read.
-- Keep each nested repository independent; never stage `related-repos/` in the root repository.
+- Keep remaining root-plugin work on `section/plugin` after PR #21 merges and is
+  incorporated into the latest `main`.
+- Update every SHA, PR, validation, coverage, Codacy, review, and blocker field at
+  coherent checkpoints.
+- A skipped or superseded run is never recorded as passed.
+- A merged PR is a checkpoint, not deployment authorization.
+- Keep each related repository independent and never stage `related-repos/` in
+  the root repository.
