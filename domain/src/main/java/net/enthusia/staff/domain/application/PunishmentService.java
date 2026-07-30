@@ -255,31 +255,31 @@ public final class PunishmentService {
             if (exactSteps.stream().anyMatch(step -> step.ordinal() == selectedOrdinal)) {
                 return requested;
             }
-            StaffRank requiredRank = exactSteps.stream()
-                    .map(PunishmentStep::ordinal)
-                    .min(Integer::compareTo)
-                    .map(ordinal -> ordinal > selectedOrdinal ? StaffRank.ADMIN : StaffRank.MOD)
-                    .orElse(StaffRank.MOD);
-            return request.actor().rank().atLeast(requiredRank) ? requested : null;
+            ModerationAction action = exactSteps.stream().anyMatch(step -> step.ordinal() < selectedOrdinal)
+                    ? ModerationAction.LOWER_RECOMMENDATION
+                    : ModerationAction.RAISE_RECOMMENDATION;
+            return authorization.permits(request.actor(), action) ? requested : null;
         }
 
-        return request.actor().rank() == StaffRank.FOUNDER ? requested : null;
+        boolean configuredTypes = policy.steps().stream()
+                .map(PunishmentStep::sanctions)
+                .anyMatch(configured -> sameTypeShape(configured, requested));
+        ModerationAction action = configuredTypes
+                ? ModerationAction.USE_CUSTOM_DURATION
+                : ModerationAction.USE_CUSTOM_COMBINATION;
+        return authorization.permits(request.actor(), action) ? requested : null;
     }
 
-    public Map<StaffRank, List<SanctionSpec>> allowedConfiguredOverrides(
-            Actor actor,
-            PunishmentAssessment assessment
+    private static boolean sameTypeShape(List<SanctionSpec> left, List<SanctionSpec> right) {
+        return typeCounts(left).equals(typeCounts(right));
+    }
+
+    private static Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> typeCounts(
+            List<SanctionSpec> sanctions
     ) {
-        Objects.requireNonNull(actor);
-        Objects.requireNonNull(assessment);
-        Map<StaffRank, List<SanctionSpec>> allowed = new EnumMap<>(StaffRank.class);
-        int selectedOrdinal = assessment.escalation().selectedStep().ordinal();
-        for (PunishmentStep step : assessment.policy().steps()) {
-            StaffRank required = step.ordinal() > selectedOrdinal ? StaffRank.ADMIN : StaffRank.MOD;
-            if (step.ordinal() == selectedOrdinal || actor.rank().atLeast(required)) {
-                allowed.put(required, step.sanctions());
-            }
-        }
-        return Map.copyOf(allowed);
+        Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> counts =
+                new EnumMap<>(net.enthusia.staff.domain.sanction.SanctionType.class);
+        sanctions.forEach(spec -> counts.merge(spec.type(), 1, Integer::sum));
+        return counts;
     }
 }
