@@ -7,11 +7,9 @@ on:
         description: 'Type PUBLISH to replace the live Wiki from docs/wiki/pages'
         required: true
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/wiki-publish-trigger'
+  issue_comment:
+    types:
+      - created
 
 permissions:
   contents: write
@@ -24,8 +22,13 @@ concurrency:
 jobs:
   publish:
     if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event.inputs.confirmation == 'PUBLISH')
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main' &&
+       github.event.inputs.confirmation == 'PUBLISH') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 22 &&
+       github.event.comment.body == '/publish-wiki-now' &&
+       github.event.comment.user.login == github.repository_owner)
     runs-on: ubuntu-latest
 
     steps:
