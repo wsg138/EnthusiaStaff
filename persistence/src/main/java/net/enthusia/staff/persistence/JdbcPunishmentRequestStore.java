@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 
 public final class JdbcPunishmentRequestStore implements PunishmentRequestStore {
@@ -220,8 +221,14 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (current == null) {
             return rejected("REQUEST_NOT_FOUND", "The punishment request does not exist");
         }
+        PunishmentRequestResult.Rejected authorityIssue = decisionAuthorityIssue(current, lease, approver);
+        if (authorityIssue != null) {
+            return authorityIssue;
+        }
         if (current.status() == PunishmentRequestStatus.APPROVED && current.resultingCaseId() != null) {
-            return new PunishmentRequestResult.Approved(current, current.resultingCaseId(), true);
+            return replayedBy(current, approver)
+                    ? new PunishmentRequestResult.Approved(current, current.resultingCaseId(), true)
+                    : rejected("REQUEST_NOT_PENDING", "The punishment request was resolved by another reviewer");
         }
         PunishmentRequestResult.Rejected issue = decisionStateIssue(
                 connection,
@@ -273,8 +280,14 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (current == null) {
             return rejected("REQUEST_NOT_FOUND", "The punishment request does not exist");
         }
+        PunishmentRequestResult.Rejected authorityIssue = decisionAuthorityIssue(current, lease, approver);
+        if (authorityIssue != null) {
+            return authorityIssue;
+        }
         if (current.status() == PunishmentRequestStatus.DENIED) {
-            return new PunishmentRequestResult.Denied(current, true);
+            return replayedBy(current, approver)
+                    ? new PunishmentRequestResult.Denied(current, true)
+                    : rejected("REQUEST_NOT_PENDING", "The punishment request was resolved by another reviewer");
         }
         PunishmentRequestResult.Rejected issue = decisionStateIssue(
                 connection,
@@ -335,7 +348,7 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (current.revision() != lease.request().revision()) {
             return rejected("STALE_REQUEST", "The punishment request changed after the lease was acquired");
         }
-        boolean held = lease.ownerId().equals(approver.id()) && JdbcOperationLeaseSupport.holds(
+        boolean held = JdbcOperationLeaseSupport.holds(
                 connection,
                 JdbcPunishmentRequestFulfillment.resourceKey(current.requestId()),
                 approver.id(),
@@ -346,6 +359,42 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 "STALE_LEASE",
                 "The punishment approval lease is stale or belongs to another reviewer"
         );
+    }
+
+    private static PunishmentRequestResult.Rejected decisionAuthorityIssue(
+            PunishmentApprovalRequest current,
+            PunishmentApprovalLease lease,
+            Actor approver
+    ) {
+        if (!lease.ownerId().equals(approver.id())) {
+            return rejected("LEASE_OWNER_MISMATCH", "The approval lease belongs to another staff member");
+        }
+        if (!approver.rank().canApprovePunishmentRequests()) {
+            return rejected("FORBIDDEN", "Only Mod, Admin, or Founder may decide punishment requests");
+        }
+        if (current.proposal().requester().id().equals(approver.id())) {
+            return rejected("SELF_APPROVAL_FORBIDDEN", "A requester cannot decide their own punishment request");
+        }
+        if (!meetsRequiredApprovalRank(approver.rank(), current.proposal().requiredRank())) {
+            return rejected(
+                    "APPROVER_RANK_REQUIRED",
+                    current.proposal().requiredRank() + " or higher is required to approve this reason"
+            );
+        }
+        return null;
+    }
+
+    private static boolean meetsRequiredApprovalRank(StaffRank approver, StaffRank required) {
+        return switch (required) {
+            case HELPER, MOD -> approver.canApprovePunishmentRequests();
+            case ADMIN -> approver == StaffRank.ADMIN || approver == StaffRank.FOUNDER;
+            case FOUNDER -> approver == StaffRank.FOUNDER;
+            case DEVELOPER, SYSTEM -> false;
+        };
+    }
+
+    private static boolean replayedBy(PunishmentApprovalRequest request, Actor approver) {
+        return approver.id().equals(request.resolvedBy());
     }
 
     private static PunishmentRequestResult submissionConflict(
