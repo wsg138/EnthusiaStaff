@@ -58,10 +58,7 @@ public final class PunishmentService {
         }
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
         if (expectation != null && !expectation.matches(assessment)) {
-            return new PunishmentResult.Rejected(
-                    "RECOMMENDATION_CHANGED",
-                    "The authoritative recommendation changed; review again before confirming"
-            );
+            return recommendationChanged();
         }
         return createEvaluated(request, assessment);
     }
@@ -82,12 +79,16 @@ public final class PunishmentService {
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
         if (expectedStepLabel != null
                 && !assessment.escalation().selectedStep().label().equals(expectedStepLabel)) {
-            return new PunishmentResult.Rejected(
-                    "RECOMMENDATION_CHANGED",
-                    "The authoritative recommendation changed; review again before confirming"
-            );
+            return recommendationChanged();
         }
         return createEvaluated(request, assessment);
+    }
+
+    private static PunishmentResult.Rejected recommendationChanged() {
+        return new PunishmentResult.Rejected(
+                "RECOMMENDATION_CHANGED",
+                "The authoritative recommendation changed; review again before confirming"
+        );
     }
 
     private PunishmentResult createEvaluated(
@@ -158,31 +159,62 @@ public final class PunishmentService {
             boolean enforceReasonRank
     ) {
         Objects.requireNonNull(request);
+        PunishmentEvaluation.Rejected accessIssue = accessIssue(request, mode, authority);
+        if (accessIssue != null) {
+            return accessIssue;
+        }
+        ReasonPolicyRepository.VersionedReasonPolicy resolved = policies.resolve(request.reasonId()).orElse(null);
+        if (resolved == null) {
+            return new PunishmentEvaluation.Rejected("UNKNOWN_REASON", "The configured reason does not exist");
+        }
+        PunishmentEvaluation.Rejected policyIssue = policyIssue(request, resolved.policy(), enforceReasonRank);
+        if (policyIssue != null) {
+            return policyIssue;
+        }
+        return assess(request, resolved);
+    }
+
+    private PunishmentEvaluation.Rejected accessIssue(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            ModerationAction authority
+    ) {
         if (mode != OperationalMode.ACTIVE) {
             return new PunishmentEvaluation.Rejected("MODE_BLOCKED", "New punishments are disabled in " + mode);
         }
         if (!authorization.permits(request.actor(), authority)) {
             return new PunishmentEvaluation.Rejected("FORBIDDEN", "The actor is not permitted to perform this action");
         }
-        ReasonPolicyRepository.VersionedReasonPolicy resolved = policies.resolve(request.reasonId()).orElse(null);
-        if (resolved == null) {
-            return new PunishmentEvaluation.Rejected("UNKNOWN_REASON", "The configured reason does not exist");
-        }
-        ReasonPolicy policy = resolved.policy();
-        if (request.actor().rank() == StaffRank.SYSTEM && !policy.automaticDetectionAllowed()) {
+        return null;
+    }
+
+    private static PunishmentEvaluation.Rejected policyIssue(
+            CreatePunishmentRequest request,
+            ReasonPolicy policy,
+            boolean enforceReasonRank
+    ) {
+        StaffRank actorRank = request.actor().rank();
+        if (actorRank == StaffRank.SYSTEM && !policy.automaticDetectionAllowed()) {
             return new PunishmentEvaluation.Rejected(
                     "AUTOMATION_NOT_ALLOWED",
                     "The reason is not approved for automatic enforcement"
             );
         }
-        if (enforceReasonRank && request.actor().rank() != StaffRank.SYSTEM
-                && !meetsReasonRank(request.actor().rank(), policy.requiredRank())) {
+        if (enforceReasonRank && actorRank != StaffRank.SYSTEM
+                && !meetsReasonRank(actorRank, policy.requiredRank())) {
             return new PunishmentEvaluation.Rejected(
                     "RANK_REQUIRED",
                     policy.requiredRank() + " is required for this reason"
             );
         }
+        return null;
+    }
 
+    private PunishmentEvaluation assess(
+            CreatePunishmentRequest request,
+            ReasonPolicyRepository.VersionedReasonPolicy resolved
+    ) {
+        ReasonPolicy policy = resolved.policy();
         EscalationDecision decision = escalation.decide(
                 policy,
                 store.relatedHistory(request.targetId(), policy.family()),
