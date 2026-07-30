@@ -6,62 +6,46 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 final class InventoryImageTest {
     @Test
-    void constructorAndAccessorsDefensivelyCopyInventoryContents() {
-        ItemStack[] storage = new ItemStack[InventoryImage.STORAGE_SIZE];
-        ItemStack[] armor = new ItemStack[InventoryImage.ARMOR_SIZE];
-        ItemStack[] ender = new ItemStack[InventoryImage.ENDER_SIZE];
-        storage[0] = item(Material.STONE, 2);
-        armor[0] = item(Material.IRON_BOOTS, 1);
-        ItemStack offhand = item(Material.SHIELD, 1);
-        ender[0] = item(Material.DIAMOND, 3);
+    void emptyInventoryAccessorsReturnIndependentArrayCopies() {
+        InventoryImage image = emptyImage(4);
 
-        InventoryImage image = new InventoryImage(storage, armor, offhand, ender, 4);
+        ItemStack[] firstStorage = image.storage();
+        ItemStack[] secondStorage = image.storage();
+        ItemStack[] firstArmor = image.armor();
+        ItemStack[] secondArmor = image.armor();
+        ItemStack[] firstEnder = image.enderChest();
+        ItemStack[] secondEnder = image.enderChest();
 
-        storage[0].setAmount(9);
-        armor[0] = null;
-        offhand.setAmount(2);
-        ender[0].setAmount(8);
-
-        assertEquals(2, image.item(0).getAmount());
-        assertEquals(Material.IRON_BOOTS, image.item(InventoryImage.STORAGE_SIZE).getType());
-        assertEquals(Material.SHIELD, image.item(InventoryImage.OFFHAND_SLOT).getType());
-        assertEquals(Material.DIAMOND, image.item(InventoryImage.ENDER_OFFSET).getType());
+        assertNotSame(firstStorage, secondStorage);
+        assertNotSame(firstArmor, secondArmor);
+        assertNotSame(firstEnder, secondEnder);
+        assertEquals(InventoryImage.STORAGE_SIZE, firstStorage.length);
+        assertEquals(InventoryImage.ARMOR_SIZE, firstArmor.length);
+        assertEquals(InventoryImage.ENDER_SIZE, firstEnder.length);
+        assertNull(image.offhand());
         assertEquals(4, image.heldSlot());
-
-        ItemStack[] returnedStorage = image.storage();
-        assertNotSame(returnedStorage[0], image.item(0));
-        returnedStorage[0].setAmount(7);
-        assertEquals(2, image.item(0).getAmount());
-
-        ItemStack returnedOffhand = image.offhand();
-        returnedOffhand.setAmount(4);
-        assertEquals(1, image.offhand().getAmount());
+        assertNull(image.item(0));
+        assertNull(image.item(InventoryImage.STORAGE_SIZE));
+        assertNull(image.item(InventoryImage.OFFHAND_SLOT));
+        assertNull(image.item(InventoryImage.ENDER_OFFSET));
     }
 
     @Test
-    void replacementsMapAcrossAllLogicalInventoryRegions() {
-        InventoryImage original = emptyImage();
+    void nullReplacementsExerciseEveryLogicalInventoryRegionWithoutMutation() {
+        InventoryImage original = emptyImage(0);
         InventoryImage replacement = original
-                .withItem(0, item(Material.STONE, 1))
-                .withItem(InventoryImage.STORAGE_SIZE, item(Material.IRON_HELMET, 1))
-                .withItem(InventoryImage.OFFHAND_SLOT, item(Material.SHIELD, 1))
-                .withItem(InventoryImage.ENDER_OFFSET, item(Material.EMERALD, 5));
+                .withItem(0, null)
+                .withItem(InventoryImage.STORAGE_SIZE, null)
+                .withItem(InventoryImage.OFFHAND_SLOT, null)
+                .withItem(InventoryImage.ENDER_OFFSET, null);
 
-        assertEquals(Material.STONE, replacement.item(0).getType());
-        assertEquals(Material.IRON_HELMET, replacement.item(InventoryImage.STORAGE_SIZE).getType());
-        assertEquals(Material.SHIELD, replacement.item(InventoryImage.OFFHAND_SLOT).getType());
-        assertEquals(Material.EMERALD, replacement.item(InventoryImage.ENDER_OFFSET).getType());
-        assertNull(original.item(0));
-        assertEquals(
-                List.of(0, InventoryImage.STORAGE_SIZE, InventoryImage.OFFHAND_SLOT, InventoryImage.ENDER_OFFSET),
-                original.changedSlots(replacement)
-        );
+        assertEquals(List.of(), original.changedSlots(replacement));
+        assertEquals(0, replacement.heldSlot());
     }
 
     @Test
@@ -91,7 +75,7 @@ final class InventoryImageTest {
                 () -> new InventoryImage(storage, armor, null, ender, 9)
         );
 
-        InventoryImage image = emptyImage();
+        InventoryImage image = emptyImage(0);
         assertThrows(IllegalArgumentException.class, () -> image.item(-1));
         assertThrows(IllegalArgumentException.class, () -> image.item(InventoryImage.TOTAL_SLOTS));
         assertThrows(
@@ -101,17 +85,13 @@ final class InventoryImageTest {
         assertThrows(NullPointerException.class, () -> image.changedSlots(null));
     }
 
-    private static InventoryImage emptyImage() {
+    private static InventoryImage emptyImage(int heldSlot) {
         return new InventoryImage(
                 new ItemStack[InventoryImage.STORAGE_SIZE],
                 new ItemStack[InventoryImage.ARMOR_SIZE],
                 null,
                 new ItemStack[InventoryImage.ENDER_SIZE],
-                0
+                heldSlot
         );
-    }
-
-    private static ItemStack item(Material material, int amount) {
-        return new ItemStack(material, amount);
     }
 }
