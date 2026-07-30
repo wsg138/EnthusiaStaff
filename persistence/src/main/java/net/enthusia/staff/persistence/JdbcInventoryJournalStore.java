@@ -200,76 +200,137 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 request.assetsSnapshot(),
                 "confiscated assets"
         );
-        return transaction(connection -> {
-            InventoryConfiscationSession session =
-                    lockConfiscationSession(connection, request.operationId()).orElse(null);
-            if (session == null) {
-                return rejected(
-                        InventoryPreparation.Status.PROFILE_NOT_FOUND,
-                        "Confiscation selection session was not found"
-                );
-            }
-            Optional<InventoryPatch> replay = findPatchByOperation(connection, request.operationId());
-            if (replay.isPresent()) {
-                validateConfiscationCommitReplay(replay.orElseThrow(), request);
-                return new InventoryPreparation(
-                        InventoryPreparation.Status.REPLAYED,
-                        replay,
-                        "The confiscation patch was already prepared"
-                );
-            }
-            if (!confiscationState(connection, request.operationId()).equals(LOCKED_STATE)
-                    || session.fencingToken() != request.fencingToken()
-                    || session.expectedRevision() != request.expectedRevision()
-                    || !session.beforeChecksum().equals(request.expectedChecksum())) {
-                return rejected(
-                        InventoryPreparation.Status.STALE,
-                        "Confiscation selection session changed before validation"
-                );
-            }
-            if (!ownsLease(connection, session, now)) {
-                return rejected(
-                        InventoryPreparation.Status.LOCKED,
-                        "Confiscation selection no longer owns its inventory fence"
-                );
-            }
-            Profile profile = lockProfile(
-                    connection,
-                    session.playerId(),
-                    session.scopeId()
-            ).orElseThrow();
-            InventoryObservation current = observation(connection, profile, true).orElseThrow();
-            if (profile.revision() != request.expectedRevision()
-                    || !current.checksum().equals(request.expectedChecksum())) {
-                return rejected(
-                        InventoryPreparation.Status.STALE,
-                        "Authoritative inventory changed during confiscation selection"
-                );
-            }
-            InventoryPatch patch = insertConfiscationPatch(connection, session, request, now);
-            insertAudit(
-                    connection,
-                    session.operationId(),
-                    session.actorId(),
-                    session.playerId(),
-                    Optional.of(session.caseId().value()),
-                    "INVENTORY_CONFISCATION_VALIDATED",
-                    "VALIDATED",
-                    Map.of(
-                            SCOPE_ID_FIELD, session.scopeId(),
-                            CHANGED_SLOTS_FIELD, request.changedSlots(),
-                            "selectedPaths", request.selectedPaths(),
-                            "assetsChecksum", request.assetsChecksum()
-                    ),
-                    "inventory:confiscation:validated:" + session.operationId(),
-                    now
+        return transaction(connection -> prepareConfiscation(connection, request, now));
+    }
+
+    private InventoryPreparation prepareConfiscation(
+            Connection connection,
+            InventoryConfiscationCommitRequest request,
+            Instant now
+    ) throws SQLException {
+        InventoryConfiscationSession session =
+                lockConfiscationSession(connection, request.operationId()).orElse(null);
+        if (session == null) {
+            return rejected(
+                    InventoryPreparation.Status.PROFILE_NOT_FOUND,
+                    "Confiscation selection session was not found"
             );
-            return new InventoryPreparation(
-                    InventoryPreparation.Status.PREPARED,
-                    Optional.of(patch),
-                    "Selected assets, before snapshot, and exact removal patch committed"
-            );
-        });
+        }
+        Optional<InventoryPreparation> replay = confiscationPreparationReplay(connection, request);
+        if (replay.isPresent()) {
+            return replay.orElseThrow();
+        }
+        Optional<InventoryPreparation> sessionFailure =
+                confiscationSessionFailure(connection, session, request, now);
+        if (sessionFailure.isPresent()) {
+            return sessionFailure.orElseThrow();
+        }
+        Optional<InventoryPreparation> profileFailure =
+                confiscationProfileFailure(connection, session, request);
+        if (profileFailure.isPresent()) {
+            return profileFailure.orElseThrow();
+        }
+        return commitConfiscationPreparation(connection, session, request, now);
+    }
+
+    private Optional<InventoryPreparation> confiscationPreparationReplay(
+            Connection connection,
+            InventoryConfiscationCommitRequest request
+    ) throws SQLException {
+        Optional<InventoryPatch> replay = findPatchByOperation(connection, request.operationId());
+        if (replay.isEmpty()) {
+            return Optional.empty();
+        }
+        validateConfiscationCommitReplay(replay.orElseThrow(), request);
+        return Optional.of(new InventoryPreparation(
+                InventoryPreparation.Status.REPLAYED,
+                replay,
+                "The confiscation patch was already prepared"
+        ));
+    }
+
+    private Optional<InventoryPreparation> confiscationSessionFailure(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request,
+            Instant now
+    ) throws SQLException {
+        if (!confiscationSessionMatches(connection, session, request)) {
+            return Optional.of(rejected(
+                    InventoryPreparation.Status.STALE,
+                    "Confiscation selection session changed before validation"
+            ));
+        }
+        if (!ownsLease(connection, session, now)) {
+            return Optional.of(rejected(
+                    InventoryPreparation.Status.LOCKED,
+                    "Confiscation selection no longer owns its inventory fence"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private boolean confiscationSessionMatches(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request
+    ) throws SQLException {
+        return confiscationState(connection, request.operationId()).equals(LOCKED_STATE)
+                && session.fencingToken() == request.fencingToken()
+                && session.expectedRevision() == request.expectedRevision()
+                && session.beforeChecksum().equals(request.expectedChecksum());
+    }
+
+    private Optional<InventoryPreparation> confiscationProfileFailure(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request
+    ) throws SQLException {
+        Profile profile = lockProfile(
+                connection,
+                session.playerId(),
+                session.scopeId()
+        ).orElseThrow();
+        InventoryObservation current = observation(connection, profile, true).orElseThrow();
+        if (profile.revision() == request.expectedRevision()
+                && current.checksum().equals(request.expectedChecksum())) {
+            return Optional.empty();
+        }
+        return Optional.of(rejected(
+                InventoryPreparation.Status.STALE,
+                "Authoritative inventory changed during confiscation selection"
+        ));
+    }
+
+    private InventoryPreparation commitConfiscationPreparation(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request,
+            Instant now
+    ) throws SQLException {
+        InventoryPatch patch = insertConfiscationPatch(connection, session, request, now);
+        insertAudit(
+                connection,
+                session.operationId(),
+                session.actorId(),
+                session.playerId(),
+                Optional.of(session.caseId().value()),
+                "INVENTORY_CONFISCATION_VALIDATED",
+                "VALIDATED",
+                Map.of(
+                        SCOPE_ID_FIELD, session.scopeId(),
+                        CHANGED_SLOTS_FIELD, request.changedSlots(),
+                        "selectedPaths", request.selectedPaths(),
+                        "assetsChecksum", request.assetsChecksum()
+                ),
+                "inventory:confiscation:validated:" + session.operationId(),
+                now
+        );
+        return new InventoryPreparation(
+                InventoryPreparation.Status.PREPARED,
+                Optional.of(patch),
+                "Selected assets, before snapshot, and exact removal patch committed"
+        );
     }
 
     @Override
