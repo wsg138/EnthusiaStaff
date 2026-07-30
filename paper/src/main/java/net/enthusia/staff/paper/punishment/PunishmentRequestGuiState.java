@@ -47,25 +47,33 @@ sealed interface PunishmentRequestGuiState {
         }
     }
 
-    record Review(PunishmentApprovalLease lease, String targetName) implements PunishmentRequestGuiState {
+    record Review(
+            PunishmentApprovalLease lease,
+            String targetName,
+            int returnPage
+    ) implements PunishmentRequestGuiState {
         public Review {
-            if (lease == null || targetName == null || targetName.isBlank()) {
+            if (lease == null || targetName == null || targetName.isBlank() || returnPage < 0) {
                 throw new IllegalArgumentException("punishment request review fields must be present");
             }
         }
     }
 
-    record Denial(PunishmentApprovalLease lease, String targetName) implements PunishmentRequestGuiState {
+    record Denial(
+            PunishmentApprovalLease lease,
+            String targetName,
+            int returnPage
+    ) implements PunishmentRequestGuiState {
         public Denial {
-            if (lease == null || targetName == null || targetName.isBlank()) {
+            if (lease == null || targetName == null || targetName.isBlank() || returnPage < 0) {
                 throw new IllegalArgumentException("punishment request denial fields must be present");
             }
         }
     }
 
-    record Details(RequestView view) implements PunishmentRequestGuiState {
+    record Details(RequestView view, int returnPage) implements PunishmentRequestGuiState {
         public Details {
-            if (view == null) {
+            if (view == null || returnPage < 0) {
                 throw new IllegalArgumentException("punishment request details must be present");
             }
         }
