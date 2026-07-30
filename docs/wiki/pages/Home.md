@@ -1,84 +1,68 @@
 # EnthusiaStaff
 
 EnthusiaStaff is the moderation and staff platform being built for the Enthusia
-Network. It combines network punishments, reports, staff mode, vanish, freeze,
-inventory inspection, confiscation, alt investigations, Discord delivery,
-LiteBans migration, and a punishment/appeal website into one audited platform.
+Network. The Wiki is divided into staff guides, administrator references,
+operations, and developer documentation.
 
-> **Pre-release:** EnthusiaStaff is not currently approved to replace LiteBans
-> or the existing production staff stack. A command being registered does not
-> mean its complete workflow has passed staging. Check [[Implementation Status]]
-> before using any procedure on a live server.
+> **Pre-release:** EnthusiaStaff is not currently approved to replace LiteBans or
+> the existing production staff stack. Check [[Implementation Status]] before
+> using a documented workflow as a live-server replacement.
 
-## Choose your starting point
+## Staff
 
-### Staff members
+Start here for ordinary moderation work:
 
-- [[Staff Handbook]] — policies that apply to every staff tool.
-- [[Moderator Quick Start]] — the shortest practical operating guide.
-- [[Punishment System]] — cases, punishment ladders, confirmation, and changes.
-- [[Reports and Evidence]] — claiming reports and handling evidence.
-- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — investigation sessions and visibility.
+- [[Staff Handbook]] — expectations, judgment, evidence, privacy, and conduct.
+- [[Staff Quick Start|Moderator-Quick-Start]] — common reports, punishments, and
+  staff tools in one short guide.
+- [[Helper Guide]] — expectations and routine actions for the upcoming Helper role.
+- [[Punishment System]] — using the punishment interface and correcting actions.
+- [[Reports and Evidence]] — investigating and closing player reports.
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — when and how to
+  use investigation controls.
 - [[Inventory and Confiscation Safety]] — viewing, editing, and removing assets.
-- [[Alt Investigations]] — confidence, household exceptions, and inheritance.
-- [[Incident Playbooks]] — step-by-step response to common incidents.
-- [[Privacy and Data Handling]] — what may and may not be shared.
+- [[Incident Playbooks]] — handling common incidents and urgent problems.
+- [[Privacy and Data Handling]] — information that must remain internal.
 
-### Administrators and operators
+Staff members do not need to understand database health, protocol details, UUID
+resolution internals, or permission matrices to follow the staff guides. Those
+belong in the administrator and developer sections.
 
-- [[Installation]]
-- [[Configuration]]
+## Administrators and operators
+
 - [[Commands and Permissions]]
+- [[Roles and Permissions|Rank-Authority]]
+- [[Configuration]]
+- [[Installation]]
 - [[Integrations]]
 - [[Recovery and Troubleshooting]]
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
 
-### Developers and reviewers
+## Developers and reviewers
 
-- [[Architecture]] — module boundaries, runtime ownership, and durable write flow.
-- [[Developer Code Guide]] — important files, package map, feature traces, tests,
-  concurrency rules, and a recommended review order.
+- [[Developer Guide Index]] — category links and answers to common reviewer
+  questions.
+- [[Architecture]] — module boundaries and runtime ownership.
+- [[Developer Code Guide]] — files, packages, stores, feature traces, tests, and
+  review order.
+- [[Protocol and Network Traffic]] — persistent channel, ReplayGuard,
+  acknowledgements, and outbound destinations.
+- [[Vanish Internals]] — exact events, visibility calls, packet limitations, and
+  integration gaps.
 - [[Development Setup]]
 - [[Build and Testing]]
 - [[Wiki Maintenance]]
-- [Authoritative goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
-- [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
 
-## Operating principles
+## Documentation rules
 
-1. **Use the central workflow.** Do not bypass cases, sanction policy, inventory
-   journals, provider APIs, or audit records with raw database edits.
-2. **Confirm identity and evidence.** Similar usernames, previous names, Bedrock
-   prefixes, and alt relationships are not interchangeable.
-3. **Use the least authority needed.** A permission node does not override rank
-   restrictions enforced by the application service.
-4. **Do not guess through failures.** Stale, ambiguous, partial, or conflicting
-   destructive work must stop or enter recovery quarantine.
-5. **Protect private information.** Raw network identity, reporter identity,
-   coordinates, private messages, internal notes, and confiscated contents are
-   never public evidence.
-6. **Preserve history.** Ending, revoking, reducing, or overturning a punishment
-   changes its state; it does not erase the original case or audit trail.
-7. **Keep exactly one punishment authority.** LiteBans remains authoritative
-   until shadow comparison and cutover are formally completed.
+The Wiki distinguishes intended design from verified behavior:
 
-## Platform shape
+- `ENTHUSIASTAFF-GOALS.md` defines the intended finished platform.
+- Current code and tests show what exists.
+- `reports/REQUIREMENTS-MATRIX.md` records conservative implementation and staging
+  status.
+- Wiki staff pages explain how people should use approved workflows.
 
-The finished platform has exactly two Minecraft runtime jars:
-
-- `EnthusiaStaff-Paper-<version>.jar` on every supported backend.
-- `EnthusiaStaff-Velocity-<version>.jar` on the proxy.
-
-MariaDB is the durable authority. Paper performs server-local player and staff
-interactions. Velocity performs network-wide login and mute enforcement,
-protected network-identity processing, migration coordination, and restricted
-website/API delivery.
-
-## Documentation status
-
-The Wiki has separate staff, operator, and developer/reviewer sections. It
-summarizes intended behavior from `ENTHUSIASTAFF-GOALS.md`, but availability is
-determined by current code, tests, staging evidence, and the requirements matrix.
-Pages intentionally call out missing commands, unavailable integrations, and
-unverified behavior rather than presenting the target design as complete.
+A command, class, or permission existing in source does not by itself prove that a
+feature is ready for production.
