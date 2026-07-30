@@ -447,10 +447,13 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             return false;
         }
         String state = confiscationState(connection, operationId);
+        if (session.fencingToken() != fencingToken) {
+            return false;
+        }
         if (state.equals("ROLLED_BACK")) {
             return true;
         }
-        if (!state.equals(LOCKED_STATE) || session.fencingToken() != fencingToken) {
+        if (!state.equals(LOCKED_STATE)) {
             return false;
         }
         markConfiscationCancelled(connection, session, reasonCode, detail, now);
