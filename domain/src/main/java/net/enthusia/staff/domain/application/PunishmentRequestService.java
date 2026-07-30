@@ -79,27 +79,33 @@ public final class PunishmentRequestService {
     }
 
     public PunishmentRequestResult submit(CreatePunishmentRequest request, OperationalMode mode) {
+        return submitConfirmed(request, mode, null);
+    }
+
+    public PunishmentRequestResult submitConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            PunishmentExpectation expectation
+    ) {
         Objects.requireNonNull(request);
         PunishmentEvaluation evaluation = punishments.evaluateRequestProposal(request, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
             return new PunishmentRequestResult.Rejected(rejected.code(), rejected.message());
         }
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        if (expectation != null && !expectation.matches(assessment)) {
+            return new PunishmentRequestResult.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The authoritative recommendation changed; review again before submitting"
+            );
+        }
         if (!punishments.requiresApproval(request.actor(), assessment)) {
             return new PunishmentRequestResult.Rejected(
                     "APPROVAL_NOT_REQUIRED",
                     "This configured punishment can be applied directly by the requester"
             );
         }
-        Instant now = clock.instant();
-        PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
-                Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
-                request.idempotencyKey(),
-                PunishmentProposal.from(request, assessment),
-                now,
-                now.plus(requestLifetime)
-        );
-        return requests.submit(pending);
+        return submitEvaluated(request, assessment);
     }
 
     public List<PunishmentApprovalRequest> pending(int limit) {
@@ -157,6 +163,21 @@ public final class PunishmentRequestService {
 
     public int expire() {
         return requests.expire(clock.instant());
+    }
+
+    private PunishmentRequestResult submitEvaluated(
+            CreatePunishmentRequest request,
+            PunishmentAssessment assessment
+    ) {
+        Instant now = clock.instant();
+        PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
+                Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
+                request.idempotencyKey(),
+                PunishmentProposal.from(request, assessment),
+                now,
+                now.plus(requestLifetime)
+        );
+        return requests.submit(pending);
     }
 
     private PunishmentRequestResult.Rejected leaseRejection(
