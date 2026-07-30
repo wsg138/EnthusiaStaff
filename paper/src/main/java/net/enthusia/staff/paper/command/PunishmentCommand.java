@@ -36,6 +36,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentCommand implements CommandExecutor, TabCompleter {
+    private static final int NO_ARGUMENTS = 0;
+    private static final int SINGLE_ARGUMENT_COUNT = 1;
+    private static final int SUBCOMMAND_ARGUMENT_COUNT = 2;
+    private static final int PREPARE_MINIMUM_ARGUMENT_COUNT = 2;
+    private static final String CONFIRM_SUBCOMMAND = "confirm";
+    private static final String RESUME_SUBCOMMAND = "resume";
     private static final String PERMISSION = "enthusiastaff.punish.configured";
     private static final String PRIVATE_FLAG = "--private";
 
@@ -87,15 +93,15 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             ));
             return true;
         }
-        if (args.length == 0) {
+        if (args.length == NO_ARGUMENTS) {
             usage(sender, label);
             return true;
         }
-        if ("confirm".equalsIgnoreCase(args[0])) {
+        if (CONFIRM_SUBCOMMAND.equalsIgnoreCase(args[0])) {
             confirm(sender, actor, args);
             return true;
         }
-        if ("resume".equalsIgnoreCase(args[0])) {
+        if (RESUME_SUBCOMMAND.equalsIgnoreCase(args[0])) {
             resume(sender, actor, label, args);
             return true;
         }
@@ -104,54 +110,75 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private void prepare(CommandSender sender, Actor actor, String label, String[] args) {
-        if (args.length == 1 && sender instanceof Player player) {
-            gui.open(player, args[0], label);
+        if (openTargetOnlyGui(sender, label, args)) {
             return;
         }
-        if (args.length < 2) {
+        if (args.length < PREPARE_MINIMUM_ARGUMENT_COUNT) {
             usage(sender, label);
             return;
         }
-        submit(sender, () -> {
-            PlayerIdentity target = findTarget(sender, args[0]);
-            if (target == null) {
-                return;
-            }
-            String reasonId = args[1];
-            CaseVisibility visibility = containsIgnoreCase(args, PRIVATE_FLAG)
-                    ? CaseVisibility.PRIVATE
-                    : CaseVisibility.PUBLIC;
-            String explanation = explanation(args, 2);
-            if (explanation.isBlank()) {
-                explanation = "Prepared via /" + label + " for configured reason " + reasonId;
-            }
-            PunishmentDraftWorkflow workflow = workflows.get();
-            if (workflow == null) {
-                send(sender, Component.text("Moderation storage is not ready; no draft was created.", NamedTextColor.RED));
-                return;
-            }
-            PunishmentDraftEvaluation evaluation = workflow.prepare(
-                    new PreparePunishmentDraftRequest(
-                            target.playerId(),
-                            actor,
-                            reasonId,
-                            explanation,
-                            visibility,
-                            label.toLowerCase(Locale.ROOT)
-                    ),
-                    mode.get()
-            );
-            if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
-                send(sender, Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
-                return;
-            }
-            PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
-            sendPrepared(sender, target, prepared);
-        });
+        submit(sender, () -> prepareStoredDraft(sender, actor, label, args));
+    }
+
+    private boolean openTargetOnlyGui(CommandSender sender, String label, String[] args) {
+        if (args.length != SINGLE_ARGUMENT_COUNT || !(sender instanceof Player player)) {
+            return false;
+        }
+        gui.open(player, args[0], label);
+        return true;
+    }
+
+    private void prepareStoredDraft(CommandSender sender, Actor actor, String label, String[] args) {
+        PlayerIdentity target = findTarget(sender, args[0]);
+        if (target == null) {
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            send(sender, Component.text("Moderation storage is not ready; no draft was created.", NamedTextColor.RED));
+            return;
+        }
+        PunishmentDraftEvaluation evaluation = workflow.prepare(
+                prepareRequest(target, actor, label, args),
+                mode.get()
+        );
+        if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
+            send(sender, Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
+            return;
+        }
+        sendPrepared(sender, target, (PunishmentDraftEvaluation.Prepared) evaluation);
+    }
+
+    private static PreparePunishmentDraftRequest prepareRequest(
+            PlayerIdentity target,
+            Actor actor,
+            String label,
+            String[] args
+    ) {
+        String reasonId = args[1];
+        CaseVisibility visibility = containsIgnoreCase(args, PRIVATE_FLAG)
+                ? CaseVisibility.PRIVATE
+                : CaseVisibility.PUBLIC;
+        return new PreparePunishmentDraftRequest(
+                target.playerId(),
+                actor,
+                reasonId,
+                draftExplanation(args, label, reasonId),
+                visibility,
+                label.toLowerCase(Locale.ROOT)
+        );
+    }
+
+    private static String draftExplanation(String[] args, String label, String reasonId) {
+        String explanation = explanation(args, PREPARE_MINIMUM_ARGUMENT_COUNT);
+        if (!explanation.isBlank()) {
+            return explanation;
+        }
+        return "Prepared via /" + label + " for configured reason " + reasonId;
     }
 
     private void confirm(CommandSender sender, Actor actor, String[] args) {
-        if (args.length != 2) {
+        if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
             sender.sendMessage(Component.text("Usage: /punish confirm <draft-id>", NamedTextColor.RED));
             return;
         }
@@ -159,46 +186,52 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         if (draftId == null) {
             return;
         }
-        submit(sender, () -> {
-            PunishmentDraftWorkflow workflow = workflows.get();
-            if (workflow == null) {
-                send(sender, Component.text("Moderation storage is not ready; no action was taken.", NamedTextColor.RED));
-                return;
-            }
-            PunishmentDraftConfirmation result;
-            try {
-                result = workflow.confirmRouted(draftId, actor, mode.get());
-            } catch (PunishmentDraftCleanupException cleanup) {
-                plugin.getLogger().log(
-                        Level.SEVERE,
-                        "Punishment draft cleanup failed after case commit " + cleanup.accepted().caseId(),
-                        cleanup
-                );
-                send(sender, Component.text(
-                        "Punishment applied as case " + cleanup.accepted().caseId().value()
-                                + ", but draft cleanup failed. Retrying confirmation is idempotent.",
-                        NamedTextColor.YELLOW
-                ));
-                return;
-            } catch (PunishmentRequestDraftCleanupException cleanup) {
-                plugin.getLogger().log(
-                        Level.SEVERE,
-                        "Punishment draft cleanup failed after request submission "
-                                + cleanup.submitted().request().requestId(),
-                        cleanup
-                );
-                send(sender, Component.text(
-                        "Punishment request was submitted, but draft cleanup failed. Retrying is idempotent.",
-                        NamedTextColor.YELLOW
-                ));
-                return;
-            }
-            sendConfirmation(sender, result);
-        });
+        submit(sender, () -> confirmStoredDraft(sender, actor, draftId));
+    }
+
+    private void confirmStoredDraft(CommandSender sender, Actor actor, UUID draftId) {
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            send(sender, Component.text("Moderation storage is not ready; no action was taken.", NamedTextColor.RED));
+            return;
+        }
+        try {
+            sendConfirmation(sender, workflow.confirmRouted(draftId, actor, mode.get()));
+        } catch (PunishmentDraftCleanupException cleanup) {
+            reportAppliedCleanupFailure(sender, cleanup);
+        } catch (PunishmentRequestDraftCleanupException cleanup) {
+            reportRequestedCleanupFailure(sender, cleanup);
+        }
+    }
+
+    private void reportAppliedCleanupFailure(CommandSender sender, PunishmentDraftCleanupException cleanup) {
+        plugin.getLogger().log(
+                Level.SEVERE,
+                "Punishment draft cleanup failed after case commit " + cleanup.accepted().caseId(),
+                cleanup
+        );
+        send(sender, Component.text(
+                "Punishment applied as case " + cleanup.accepted().caseId().value()
+                        + ", but draft cleanup failed. Retrying confirmation is idempotent.",
+                NamedTextColor.YELLOW
+        ));
+    }
+
+    private void reportRequestedCleanupFailure(CommandSender sender, PunishmentRequestDraftCleanupException cleanup) {
+        plugin.getLogger().log(
+                Level.SEVERE,
+                "Punishment draft cleanup failed after request submission "
+                        + cleanup.submitted().request().requestId(),
+                cleanup
+        );
+        send(sender, Component.text(
+                "Punishment request was submitted, but draft cleanup failed. Retrying is idempotent.",
+                NamedTextColor.YELLOW
+        ));
     }
 
     private void resume(CommandSender sender, Actor actor, String label, String[] args) {
-        if (args.length != 2) {
+        if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
             sender.sendMessage(Component.text("Usage: /punish resume <target>", NamedTextColor.RED));
             return;
         }
@@ -206,23 +239,25 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             gui.resume(player, args[1], label);
             return;
         }
-        submit(sender, () -> {
-            PlayerIdentity target = findTarget(sender, args[1]);
-            if (target == null) {
-                return;
-            }
-            PunishmentDraftWorkflow workflow = workflows.get();
-            if (workflow == null) {
-                send(sender, Component.text("Moderation storage is not ready; no draft was opened.", NamedTextColor.RED));
-                return;
-            }
-            PunishmentDraft draft = workflow.resume(actor.id(), target.playerId()).orElse(null);
-            if (draft == null) {
-                send(sender, Component.text("No unexpired punishment draft exists for that target.", NamedTextColor.RED));
-                return;
-            }
-            sendDraft(sender, target, draft);
-        });
+        submit(sender, () -> resumeStoredDraft(sender, actor, args[1]));
+    }
+
+    private void resumeStoredDraft(CommandSender sender, Actor actor, String targetInput) {
+        PlayerIdentity target = findTarget(sender, targetInput);
+        if (target == null) {
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            send(sender, Component.text("Moderation storage is not ready; no draft was opened.", NamedTextColor.RED));
+            return;
+        }
+        PunishmentDraft draft = workflow.resume(actor.id(), target.playerId()).orElse(null);
+        if (draft == null) {
+            send(sender, Component.text("No unexpired punishment draft exists for that target.", NamedTextColor.RED));
+            return;
+        }
+        sendDraft(sender, target, draft);
     }
 
     private PlayerIdentity findTarget(CommandSender sender, String input) {
@@ -240,21 +275,23 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private void submit(CommandSender sender, Runnable operation) {
         try {
-            workers.submit(() -> {
-                try {
-                    operation.run();
-                } catch (RuntimeException exception) {
-                    plugin.getLogger().log(Level.SEVERE, "Punishment command storage operation failed", exception);
-                    send(sender, Component.text(
-                            "Punishment storage is unavailable; no punishment or request was created.",
-                            NamedTextColor.RED
-                    ));
-                }
-            });
+            workers.submit(() -> runOperation(sender, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment worker rejected command", exception);
             sender.sendMessage(Component.text(
                     "Punishment storage is unavailable; try again shortly.",
+                    NamedTextColor.RED
+            ));
+        }
+    }
+
+    private void runOperation(CommandSender sender, Runnable operation) {
+        try {
+            operation.run();
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Punishment command storage operation failed", exception);
+            send(sender, Component.text(
+                    "Punishment storage is unavailable; no punishment or request was created.",
                     NamedTextColor.RED
             ));
         }
@@ -381,13 +418,13 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> completions = new ArrayList<>(requestCommands.complete(command.getName(), args));
-        if (args.length == 1) {
+        if (args.length == SINGLE_ARGUMENT_COUNT) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
-            if ("confirm".startsWith(prefix)) {
-                completions.add("confirm");
+            if (CONFIRM_SUBCOMMAND.startsWith(prefix)) {
+                completions.add(CONFIRM_SUBCOMMAND);
             }
-            if ("resume".startsWith(prefix)) {
-                completions.add("resume");
+            if (RESUME_SUBCOMMAND.startsWith(prefix)) {
+                completions.add(RESUME_SUBCOMMAND);
             }
             if (sender instanceof Player player) {
                 player.getServer().getOnlinePlayers().stream()
@@ -397,7 +434,9 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             }
             return completions.stream().distinct().toList();
         }
-        if (args.length == 2 && "resume".equalsIgnoreCase(args[0]) && sender instanceof Player player) {
+        if (args.length == SUBCOMMAND_ARGUMENT_COUNT
+                && RESUME_SUBCOMMAND.equalsIgnoreCase(args[0])
+                && sender instanceof Player player) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return player.getServer().getOnlinePlayers().stream()
                     .map(Player::getName)
