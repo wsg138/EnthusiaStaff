@@ -194,6 +194,25 @@ permissions:
     default: false
   enthusiastaff.owner.recovery:
     default: false
+  enthusiastaff.rank.helper:
+    default: false
+    children:
+      enthusiastaff.status: true
+      enthusiastaff.verify: true
+      enthusiastaff.punishment.read: true
+      enthusiastaff.case.read: true
+      enthusiastaff.punish: true
+      enthusiastaff.punish.configured: true
+      enthusiastaff.reports.manage: true
+      enthusiastaff.alerts: true
+      enthusiastaff.freeze: true
+      enthusiastaff.freeze.chat: true
+      enthusiastaff.staffmode: true
+      enthusiastaff.vanish: true
+      enthusiastaff.staffchat: true
+      enthusiastaff.client: true
+      enthusiastaff.inventory.view: true
+      enthusiastaff.inspect: true
   enthusiastaff.rank.developer:
     default: false
     children:
@@ -217,29 +236,14 @@ permissions:
   enthusiastaff.rank.mod:
     default: false
     children:
-      enthusiastaff.status: true
-      enthusiastaff.verify: true
-      enthusiastaff.punishment.read: true
-      enthusiastaff.case.read: true
-      enthusiastaff.punish: true
-      enthusiastaff.punish.configured: true
+      enthusiastaff.rank.helper: true
       enthusiastaff.punish.ip: true
       enthusiastaff.remove: true
       enthusiastaff.remove.lower: true
       enthusiastaff.remove.end: true
       enthusiastaff.remove.revoke: true
       enthusiastaff.remove.request-overturn: true
-      enthusiastaff.reports.manage: true
-      enthusiastaff.alerts: true
-      enthusiastaff.freeze: true
-      enthusiastaff.freeze.chat: true
-      enthusiastaff.staffmode: true
-      enthusiastaff.vanish: true
-      enthusiastaff.staffchat: true
-      enthusiastaff.client: true
-      enthusiastaff.inventory.view: true
       enthusiastaff.inventory.edit: true
-      enthusiastaff.inspect: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
   enthusiastaff.rank.admin:
