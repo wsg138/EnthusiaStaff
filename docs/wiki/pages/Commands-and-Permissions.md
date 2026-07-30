@@ -1,11 +1,14 @@
 # Commands and Permissions
 
-All declared EnthusiaStaff permission nodes default to `false`. Bukkit
-permissions control command discovery and early denial, but authoritative
-services must recheck rank and action authority before every mutation.
+This is an administrator and developer reference. Staff-facing instructions are in
+[[Staff Handbook]], [[Staff Quick Start|Moderator-Quick-Start]], and [[Helper Guide]].
 
-> **Registered does not mean production-ready.** This page records current
-> Paper command metadata and known planned commands. Check [[Implementation Status]] for completeness and staging status.
+All declared EnthusiaStaff permission nodes default to `false`. Bukkit permissions
+control command discovery and early denial, while application services recheck the
+actual action before a mutation.
+
+> **Registered does not mean production-ready.** Check [[Implementation Status]]
+> for completeness and staging status.
 
 ## Registered Paper commands
 
@@ -38,16 +41,17 @@ services must recheck rank and action authority before every mutation.
 
 ## Required but not currently registered
 
-The goals require these commands, but current Paper metadata does not register
-them:
+The goals require these commands, but current Paper metadata does not register all
+of them:
 
 - `/history`
 - `/alts`
 - `/alt`
 - `/fakebase`
 
-Do not add them to staff training as usable commands until registration,
-authorization, behavior, and staging verification are complete.
+The Helper branch registers `/alts` and `/alt` on Velocity, not Paper. Do not add a
+command to staff training until the correct runtime, behavior, and staging status
+are confirmed.
 
 ## Permission nodes
 
@@ -115,35 +119,45 @@ enthusiastaff.owner.recovery
 
 ## Rank aggregate nodes
 
-### `enthusiastaff.rank.developer`
+### `enthusiastaff.rank.helper`
 
-Includes diagnostics and non-punishment staff tools. It intentionally omits
-every punishment mutation permission. Application services must deny Developer
-even if a stale external permission grants one accidentally.
+Present on `section/helper-rank-authority`, but not yet treated as deployed.
+The branch includes status, read access, configured punishment workflow, reports,
+alerts, freeze, staff mode, vanish, staff chat, client information, inventory
+viewing, and inspection.
+
+Helper-specific policy limits are enforced outside the permission list. The branch
+blocks inventory mutation in Helper staff mode, omits advanced staff tools, and
+requires approval for permanent punishments.
 
 ### `enthusiastaff.rank.mod`
 
-Includes configured punishment authority, lowering, ending, revoking, overturn
-requests, reports, freeze, staff mode, vanish, client, inventory, inspection,
-and confiscation permissions.
+In the Helper branch, Mod inherits the Helper aggregate and adds network-ban,
+punishment-change, inventory-edit, and configured confiscation permissions.
+
+### `enthusiastaff.rank.developer`
+
+Developer is a separate technical aggregate. It includes diagnostics and
+non-punishment staff tools. Punishment mutation remains denied by application
+policy even if an external permission is accidentally granted.
 
 ### `enthusiastaff.rank.admin`
 
-Includes Mod plus reload, diagnostics, custom duration, raising, full overturn,
-overturn approval, market restriction, and reputation restriction.
+Includes Mod plus reload, diagnostics, custom-duration, raising, full-overturn,
+overturn approval, market-restriction, and reputation-restriction permissions.
 
 ### `enthusiastaff.rank.founder`
 
-Includes Admin plus custom punishment combinations, confiscated-item
-restoration, and owner recovery.
+Includes Admin plus custom punishment combinations, confiscated-item restoration,
+and owner recovery.
 
-See [[Rank Authority]] for policy limits that permissions alone cannot express.
+See [[Roles and Permissions|Rank-Authority]] for the role overview.
 
 ## Verification
 
-`/estaff verify full` is intended to inspect command ownership, namespaced
-fallbacks, conflicts, integrations, database/schema, recovery workers, config,
-secrets, runtime jars, migration state, and backends.
+`/estaff verify full` is an operator and developer diagnostic. It is not an
+ordinary staff task. It is intended to inspect command ownership, conflicts,
+integrations, storage, configuration, runtime jars, migration state, and backends.
 
-A verifier must never silently steal a command from another plugin or execute a
+A verifier must never silently take command ownership from another plugin or run a
 destructive command as a test.
