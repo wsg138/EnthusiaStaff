@@ -26,15 +26,11 @@ jobs:
           from pathlib import Path
 
           source = Path('/tmp/PunishmentService.java').read_text(encoding='utf-8')
-          old = '''        if (actor.rank() == StaffRank.DEVELOPER) {
-              return true;
-          }
-          return actor.rank() == StaffRank.HELPER && assessment.sanctions().stream()
-                  .anyMatch(spec -> spec.length().isPermanent());'''
-          new = '''        return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());'''
-          if old not in source:
-              raise SystemExit('Original approval predicate was not found')
-          restored = source.replace(old, new, 1)
+          method = source.index('    public boolean requiresApproval(')
+          predicate = source.index('        if (actor.rank()', method)
+          method_end = source.index('    }\n\n    private PunishmentEvaluation evaluate(', predicate)
+          replacement = '        return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());\n'
+          restored = source[:predicate] + replacement + source[method_end:]
           Path('domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java').write_text(
               restored,
               encoding='utf-8'
