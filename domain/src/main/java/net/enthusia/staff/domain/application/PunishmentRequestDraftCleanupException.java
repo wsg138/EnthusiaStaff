@@ -3,7 +3,7 @@ package net.enthusia.staff.domain.application;
 public final class PunishmentRequestDraftCleanupException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
-    private final PunishmentRequestResult.Submitted submitted;
+    private final transient PunishmentRequestResult.Submitted submitted;
 
     public PunishmentRequestDraftCleanupException(
             PunishmentRequestResult.Submitted submitted,
