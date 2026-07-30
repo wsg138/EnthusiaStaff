@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class PunishmentMatchKeyTest {
     private static final UUID TARGET = UUID.fromString("51000000-0000-0000-0000-000000000001");
+    private static final String ABUSE_REASON = "chat.abuse";
 
     @Test
     void sanctionOrderDoesNotChangeTheMatchKey() {
@@ -26,8 +27,8 @@ class PunishmentMatchKeyTest {
         );
 
         assertEquals(
-                PunishmentMatchKey.of(TARGET, "chat.abuse", List.of(ban, mute)),
-                PunishmentMatchKey.of(TARGET, "chat.abuse", List.of(mute, ban))
+                PunishmentMatchKey.of(TARGET, ABUSE_REASON, List.of(ban, mute)),
+                PunishmentMatchKey.of(TARGET, ABUSE_REASON, List.of(mute, ban))
         );
     }
 
@@ -42,13 +43,13 @@ class PunishmentMatchKeyTest {
                 SanctionLength.temporary(Duration.ofDays(30))
         );
 
-        PunishmentMatchKey original = PunishmentMatchKey.of(TARGET, "chat.abuse", List.of(sevenDays));
-        assertNotEquals(original, PunishmentMatchKey.of(UUID.randomUUID(), "chat.abuse", List.of(sevenDays)));
+        PunishmentMatchKey original = PunishmentMatchKey.of(TARGET, ABUSE_REASON, List.of(sevenDays));
+        assertNotEquals(original, PunishmentMatchKey.of(UUID.randomUUID(), ABUSE_REASON, List.of(sevenDays)));
         assertNotEquals(original, PunishmentMatchKey.of(TARGET, "chat.spam", List.of(sevenDays)));
-        assertNotEquals(original, PunishmentMatchKey.of(TARGET, "chat.abuse", List.of(thirtyDays)));
+        assertNotEquals(original, PunishmentMatchKey.of(TARGET, ABUSE_REASON, List.of(thirtyDays)));
         assertNotEquals(original, PunishmentMatchKey.of(
                 TARGET,
-                "chat.abuse",
+                ABUSE_REASON,
                 List.of(new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(Duration.ofDays(7))))
         ));
     }
