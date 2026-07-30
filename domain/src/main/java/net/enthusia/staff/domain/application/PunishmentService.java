@@ -133,15 +133,6 @@ public final class PunishmentService {
         return allowed;
     }
 
-    public PunishmentEvaluation evaluateForRequest(CreatePunishmentRequest request, OperationalMode mode) {
-        return evaluate(
-                request,
-                mode,
-                ModerationAction.REQUEST_POLICY_SANCTION,
-                false
-        );
-    }
-
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);
