@@ -64,9 +64,16 @@ jobs:
               source.relative_to(contract_root).with_suffix("").as_posix()
               for source in contract_root.rglob("*.java")
           }
+          if not contract_stems:
+              raise SystemExit(
+                  "No provider API Java types found under integration-contracts/src/main/java"
+              )
+
           report_lines = ["Runtime jar inspection", "======================", ""]
           summary_lines = [
               "## Runtime jar inspection",
+              "",
+              f"Provider API source types checked: **{len(contract_stems)}**",
               "",
               "| Runtime | Size | SHA-256 | Entries | Provider API leaks |",
               "| --- | ---: | --- | ---: | ---: |",
@@ -108,6 +115,7 @@ jobs:
                   f"  size: {size} bytes",
                   f"  sha256: {digest}",
                   f"  entries: {len(entries)}",
+                  f"  provider API source types checked: {len(contract_stems)}",
                   "  provider API leaks: 0",
                   "",
               ])
