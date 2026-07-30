@@ -260,13 +260,15 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
             return rejected("REQUEST_NOT_FOUND", "The punishment request does not exist");
         }
         if (current.status() == PunishmentRequestStatus.APPROVED && current.resultingCaseId() != null) {
-            return new PunishmentRequestResult.Approved(
-                    current,
-                    current.resultingCaseId(),
-                    true
-            );
+            return new PunishmentRequestResult.Approved(current, current.resultingCaseId(), true);
         }
-        PunishmentRequestResult.Rejected stateIssue = decisionStateIssue(current, lease, approver, now);
+        PunishmentRequestResult.Rejected stateIssue = decisionStateIssue(
+                connection,
+                current,
+                lease,
+                approver,
+                now
+        );
         if (stateIssue != null) {
             return stateIssue;
         }
@@ -301,13 +303,7 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 approver.id(),
                 lease.fenceToken()
         );
-        fulfillMatching(
-                connection,
-                plan,
-                accepted.caseId(),
-                now,
-                current.requestId()
-        );
+        fulfillMatching(connection, plan, accepted.caseId(), now, current.requestId());
         return new PunishmentRequestResult.Approved(approved, accepted.caseId(), accepted.replayed());
     }
 
@@ -325,7 +321,13 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (current.status() == PunishmentRequestStatus.DENIED) {
             return new PunishmentRequestResult.Denied(current, true);
         }
-        PunishmentRequestResult.Rejected stateIssue = decisionStateIssue(current, lease, approver, now);
+        PunishmentRequestResult.Rejected stateIssue = decisionStateIssue(
+                connection,
+                current,
+                lease,
+                approver,
+                now
+        );
         if (stateIssue != null) {
             return stateIssue;
         }
@@ -397,6 +399,7 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
     }
 
     private PunishmentRequestResult.Rejected decisionStateIssue(
+            Connection connection,
             PunishmentApprovalRequest current,
             PunishmentApprovalLease lease,
             Actor approver,
@@ -408,20 +411,17 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (current.revision() != lease.request().revision()) {
             return rejected("STALE_REQUEST", "The punishment request changed after the lease was acquired");
         }
-        if (!lease.ownerId().equals(approver.id()) || !JdbcOperationLeaseSupport.holds(
-                currentConnection(),
+        boolean holdsLease = lease.ownerId().equals(approver.id()) && JdbcOperationLeaseSupport.holds(
+                connection,
                 resourceKey(current.requestId()),
                 approver.id(),
                 lease.fenceToken(),
                 now
-        )) {
+        );
+        if (!holdsLease) {
             return rejected("STALE_LEASE", "The punishment approval lease is stale or belongs to another reviewer");
         }
         return null;
-    }
-
-    private Connection currentConnection() throws SQLException {
-        throw new SQLException("A transaction connection is required for lease validation");
     }
 
     private PunishmentApprovalRequest resolve(
@@ -473,19 +473,6 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 caseId,
                 now
         );
-    }
-
-    private PunishmentRequestResult.Submitted existingSubmission(
-            Connection connection,
-            PunishmentApprovalRequest request
-    ) throws SQLException {
-        PunishmentApprovalRequest existing = existingForSubmission(
-                connection,
-                request.submissionKey().value(),
-                request.proposal().matchKey().value(),
-                false
-        );
-        return existing == null ? null : new PunishmentRequestResult.Submitted(existing, true);
     }
 
     private PunishmentApprovalRequest existingForSubmission(
