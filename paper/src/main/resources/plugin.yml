@@ -136,6 +136,8 @@ permissions:
     default: false
   enthusiastaff.punish.configured:
     default: false
+  enthusiastaff.punishment.requests.review:
+    default: false
   enthusiastaff.punish.ip:
     default: false
   enthusiastaff.punish.custom-duration:
@@ -221,6 +223,8 @@ permissions:
       enthusiastaff.diagnostics: true
       enthusiastaff.punishment.read: true
       enthusiastaff.case.read: true
+      enthusiastaff.punish: true
+      enthusiastaff.punish.configured: true
       enthusiastaff.reports.manage: true
       enthusiastaff.alerts: true
       enthusiastaff.freeze: true
@@ -236,6 +240,7 @@ permissions:
     default: false
     children:
       enthusiastaff.rank.helper: true
+      enthusiastaff.punishment.requests.review: true
       enthusiastaff.punish.ip: true
       enthusiastaff.remove: true
       enthusiastaff.remove.lower: true

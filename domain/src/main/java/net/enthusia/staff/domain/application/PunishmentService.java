@@ -147,11 +147,7 @@ public final class PunishmentService {
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);
-        if (actor.rank() == StaffRank.DEVELOPER) {
-            return true;
-        }
-        return actor.rank() == StaffRank.HELPER && assessment.sanctions().stream()
-                .anyMatch(spec -> spec.length().isPermanent());
+        return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());
     }
 
     private PunishmentEvaluation evaluate(

@@ -20,6 +20,7 @@ public final class PunishmentDraftWorkflow {
     private final Duration lifetime;
     private final Supplier<UUID> identifiers;
     private final PunishmentService punishments;
+    private final PunishmentRequestService punishmentRequests;
     private final PunishmentDraftStore drafts;
 
     public PunishmentDraftWorkflow(
@@ -28,7 +29,17 @@ public final class PunishmentDraftWorkflow {
             PunishmentService punishments,
             PunishmentDraftStore drafts
     ) {
-        this(clock, lifetime, UUID::randomUUID, punishments, drafts);
+        this(clock, lifetime, UUID::randomUUID, punishments, null, drafts);
+    }
+
+    public PunishmentDraftWorkflow(
+            Clock clock,
+            Duration lifetime,
+            PunishmentService punishments,
+            PunishmentRequestService punishmentRequests,
+            PunishmentDraftStore drafts
+    ) {
+        this(clock, lifetime, UUID::randomUUID, punishments, punishmentRequests, drafts);
     }
 
     PunishmentDraftWorkflow(
@@ -38,10 +49,22 @@ public final class PunishmentDraftWorkflow {
             PunishmentService punishments,
             PunishmentDraftStore drafts
     ) {
+        this(clock, lifetime, identifiers, punishments, null, drafts);
+    }
+
+    PunishmentDraftWorkflow(
+            Clock clock,
+            Duration lifetime,
+            Supplier<UUID> identifiers,
+            PunishmentService punishments,
+            PunishmentRequestService punishmentRequests,
+            PunishmentDraftStore drafts
+    ) {
         this.clock = Objects.requireNonNull(clock);
         this.lifetime = Objects.requireNonNull(lifetime);
         this.identifiers = Objects.requireNonNull(identifiers);
         this.punishments = Objects.requireNonNull(punishments);
+        this.punishmentRequests = punishmentRequests;
         this.drafts = Objects.requireNonNull(drafts);
         if (lifetime.isZero() || lifetime.isNegative() || lifetime.compareTo(MAXIMUM_LIFETIME) > 0) {
             throw new IllegalArgumentException("draft lifetime must be positive and at most seven days");
@@ -62,7 +85,7 @@ public final class PunishmentDraftWorkflow {
                 request.internalExplanation(),
                 request.visibility()
         );
-        PunishmentEvaluation evaluation = punishments.evaluate(punishmentRequest, mode);
+        PunishmentEvaluation evaluation = punishments.evaluateRequestProposal(punishmentRequest, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
             return new PunishmentDraftEvaluation.Rejected(rejected.code(), rejected.message());
         }
@@ -96,28 +119,34 @@ public final class PunishmentDraftWorkflow {
         Objects.requireNonNull(actor);
         PunishmentDraft draft = drafts.find(draftId, actor.id(), clock.instant()).orElse(null);
         if (draft == null) {
-            return new PunishmentResult.Rejected(
-                    "DRAFT_NOT_FOUND",
-                    "The punishment draft is missing, expired, or belongs to another actor"
-            );
+            return draftNotFound();
         }
-        CreatePunishmentRequest request = punishmentRequest(
-                draft.draftId(),
-                draft.targetId(),
-                actor,
-                draft.reasonId(),
-                draft.internalExplanation(),
-                draft.visibility()
-        );
+        CreatePunishmentRequest request = requestFor(draft, actor);
         PunishmentResult result = punishments.createConfirmed(request, mode, draft.expectation());
         if (result instanceof PunishmentResult.Accepted accepted) {
-            try {
-                drafts.delete(draft.draftId(), actor.id());
-            } catch (RuntimeException exception) {
-                throw new PunishmentDraftCleanupException(accepted, exception);
-            }
+            deleteAppliedDraft(draft, actor, accepted);
         }
         return result;
+    }
+
+    public PunishmentDraftConfirmation confirmRouted(UUID draftId, Actor actor, OperationalMode mode) {
+        Objects.requireNonNull(actor);
+        PunishmentDraft draft = drafts.find(draftId, actor.id(), clock.instant()).orElse(null);
+        if (draft == null) {
+            PunishmentResult.Rejected rejected = draftNotFound();
+            return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+        }
+        CreatePunishmentRequest request = requestFor(draft, actor);
+        if (requiresRequest(actor, draft.expectation())) {
+            return submitRequest(draft, actor, request, mode);
+        }
+        PunishmentResult result = punishments.createConfirmed(request, mode, draft.expectation());
+        if (result instanceof PunishmentResult.Accepted accepted) {
+            deleteAppliedDraft(draft, actor, accepted);
+            return new PunishmentDraftConfirmation.Applied(accepted);
+        }
+        PunishmentResult.Rejected rejected = (PunishmentResult.Rejected) result;
+        return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
     }
 
     public boolean discard(UUID draftId, UUID actorId) {
@@ -126,6 +155,69 @@ public final class PunishmentDraftWorkflow {
 
     public int deleteExpired() {
         return drafts.deleteExpired(clock.instant());
+    }
+
+    private PunishmentDraftConfirmation submitRequest(
+            PunishmentDraft draft,
+            Actor actor,
+            CreatePunishmentRequest request,
+            OperationalMode mode
+    ) {
+        if (punishmentRequests == null) {
+            return new PunishmentDraftConfirmation.Rejected(
+                    "REQUEST_WORKFLOW_UNAVAILABLE",
+                    "Durable punishment request storage is not available"
+            );
+        }
+        PunishmentRequestResult result = punishmentRequests.submitConfirmed(
+                request,
+                mode,
+                draft.expectation()
+        );
+        if (result instanceof PunishmentRequestResult.Submitted submitted) {
+            try {
+                drafts.delete(draft.draftId(), actor.id());
+            } catch (RuntimeException exception) {
+                throw new PunishmentRequestDraftCleanupException(submitted, exception);
+            }
+            return new PunishmentDraftConfirmation.Requested(submitted);
+        }
+        PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
+        return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+    }
+
+    private void deleteAppliedDraft(
+            PunishmentDraft draft,
+            Actor actor,
+            PunishmentResult.Accepted accepted
+    ) {
+        try {
+            drafts.delete(draft.draftId(), actor.id());
+        } catch (RuntimeException exception) {
+            throw new PunishmentDraftCleanupException(accepted, exception);
+        }
+    }
+
+    private static boolean requiresRequest(Actor actor, PunishmentExpectation expectation) {
+        return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.sanctions());
+    }
+
+    private static PunishmentResult.Rejected draftNotFound() {
+        return new PunishmentResult.Rejected(
+                "DRAFT_NOT_FOUND",
+                "The punishment draft is missing, expired, or belongs to another actor"
+        );
+    }
+
+    private static CreatePunishmentRequest requestFor(PunishmentDraft draft, Actor actor) {
+        return punishmentRequest(
+                draft.draftId(),
+                draft.targetId(),
+                actor,
+                draft.reasonId(),
+                draft.internalExplanation(),
+                draft.visibility()
+        );
     }
 
     private static CreatePunishmentRequest punishmentRequest(

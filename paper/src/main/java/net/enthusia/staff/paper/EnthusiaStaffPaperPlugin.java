@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
@@ -37,6 +38,7 @@ import net.enthusia.staff.paper.command.EstaffCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
 import net.enthusia.staff.paper.command.PunishmentCommand;
+import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
 import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.ReportCommand;
 import net.enthusia.staff.paper.command.ReportsCommand;
@@ -63,6 +65,7 @@ import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
+import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
@@ -660,6 +663,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         registerStatusCommand();
         Supplier<PunishmentDraftWorkflow> punishmentDraftWorkflow =
                 () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow);
+        Supplier<PunishmentRequestService> punishmentRequestService =
+                () -> storageValue(PaperStorageBindings::punishmentRequestService);
         Supplier<SanctionChangeService> sanctionChangeService =
                 () -> storageValue(PaperStorageBindings::sanctionChangeService);
         Supplier<PlayerDirectory> playerDirectory =
@@ -675,15 +680,30 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 workers
         );
         getServer().getPluginManager().registerEvents(punishmentGui, this);
+        PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
+                this,
+                punishmentRequestService,
+                playerDirectory,
+                authorizationPolicy,
+                workers
+        );
+        punishmentRequestGui.register();
+        PunishmentRequestCommandHandler punishmentRequestCommands = new PunishmentRequestCommandHandler(
+                this,
+                punishmentRequestService,
+                authorizationPolicy,
+                punishmentRequestGui,
+                workers
+        );
         PunishmentCommand punishment = new PunishmentCommand(
                 this,
                 this::effectiveWriteMode,
                 punishmentDraftWorkflow,
                 playerDirectory,
                 authorizationPolicy,
-                reasonPolicies,
-                workers,
-                punishmentGui
+                punishmentGui,
+                punishmentRequestCommands,
+                workers
         );
         for (String name : java.util.List.of("punish", "ban", "mute", "warn", "kick", "ipban")) {
             PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing from plugin.yml");

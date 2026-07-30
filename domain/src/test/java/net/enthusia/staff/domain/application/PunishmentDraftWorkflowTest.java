@@ -60,21 +60,22 @@ class PunishmentDraftWorkflowTest {
     }
 
     @Test
-    void developerCannotPreparePunishmentDraft() {
+    void developerCanPrepareRequestDraftWithoutDirectPunishmentAuthority() {
         Fixture fixture = fixture();
 
-        PunishmentDraftEvaluation.Rejected rejected = assertInstanceOf(
-                PunishmentDraftEvaluation.Rejected.class,
+        PunishmentDraftEvaluation.Prepared prepared = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
                 fixture.workflow.prepare(request(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
         );
 
-        assertEquals("FORBIDDEN", rejected.code());
-        assertTrue(fixture.drafts.entries.isEmpty());
+        assertEquals(StaffRank.DEVELOPER, request(StaffRank.DEVELOPER).actor().rank());
+        assertEquals(DRAFT_ID, prepared.draft().draftId());
+        assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isPresent());
         assertTrue(fixture.moderation.plans.isEmpty());
     }
 
     @Test
-    void confirmationReauthorizesCurrentActorRankAndRetainsRejectedDraft() {
+    void directConfirmationReauthorizesCurrentActorRankAndRetainsRejectedDraft() {
         Fixture fixture = fixture();
         fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE);
 
@@ -155,7 +156,7 @@ class PunishmentDraftWorkflowTest {
         InMemoryDraftStore drafts = new InMemoryDraftStore();
         PunishmentService punishments = new PunishmentService(
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                new SecureIdentifiers(new SecureRandom(new byte[]{1, 2, 3, 4})),
+                new SecureIdentifiers(new SecureRandom()),
                 new DefaultAuthorizationPolicy(),
                 policies,
                 moderation,

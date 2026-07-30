@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.Checks;
@@ -19,6 +20,7 @@ import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 public final class PunishmentRequestService {
     private static final Duration MAXIMUM_REQUEST_LIFETIME = Duration.ofDays(30);
     private static final Duration MAXIMUM_LEASE_LIFETIME = Duration.ofMinutes(10);
+    private static final int MAXIMUM_QUERY_LIMIT = 500;
 
     private final Clock clock;
     private final Duration requestLifetime;
@@ -79,36 +81,64 @@ public final class PunishmentRequestService {
     }
 
     public PunishmentRequestResult submit(CreatePunishmentRequest request, OperationalMode mode) {
+        return submitConfirmed(request, mode, null);
+    }
+
+    public PunishmentRequestResult submitConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            PunishmentExpectation expectation
+    ) {
         Objects.requireNonNull(request);
         PunishmentEvaluation evaluation = punishments.evaluateRequestProposal(request, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
             return new PunishmentRequestResult.Rejected(rejected.code(), rejected.message());
         }
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        if (expectation != null && !expectation.matches(assessment)) {
+            return new PunishmentRequestResult.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The authoritative recommendation changed; review again before submitting"
+            );
+        }
         if (!punishments.requiresApproval(request.actor(), assessment)) {
             return new PunishmentRequestResult.Rejected(
                     "APPROVAL_NOT_REQUIRED",
                     "This configured punishment can be applied directly by the requester"
             );
         }
-        Instant now = clock.instant();
-        PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
-                Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
-                request.idempotencyKey(),
-                PunishmentProposal.from(request, assessment),
-                now,
-                now.plus(requestLifetime)
-        );
-        return requests.submit(pending);
+        return submitEvaluated(request, assessment);
     }
 
     public List<PunishmentApprovalRequest> pending(int limit) {
-        if (limit < 1 || limit > 500) {
-            throw new IllegalArgumentException("pending punishment request limit must be between 1 and 500");
-        }
+        validateQueryLimit(limit);
         Instant now = clock.instant();
         requests.expire(now);
         return requests.pending(now, limit);
+    }
+
+    public Optional<PunishmentApprovalRequest> find(UUID requestId) {
+        Objects.requireNonNull(requestId);
+        requests.expire(clock.instant());
+        return requests.find(requestId);
+    }
+
+    public List<PunishmentApprovalRequest> reviewable(Actor approver, int limit) {
+        validateQueryLimit(limit);
+        if (!hasApprovalAuthority(approver)) {
+            return List.of();
+        }
+        return pending(MAXIMUM_QUERY_LIMIT).stream()
+                .filter(request -> mayReview(approver, request))
+                .limit(limit)
+                .toList();
+    }
+
+    public boolean mayReview(Actor approver, PunishmentApprovalRequest request) {
+        return hasApprovalAuthority(approver)
+                && request != null
+                && !request.proposal().requester().id().equals(approver.id())
+                && meetsRequiredApprovalRank(approver.rank(), request.proposal().requiredRank());
     }
 
     public PunishmentRequestResult acquire(UUID requestId, Actor approver) {
@@ -159,6 +189,21 @@ public final class PunishmentRequestService {
         return requests.expire(clock.instant());
     }
 
+    private PunishmentRequestResult submitEvaluated(
+            CreatePunishmentRequest request,
+            PunishmentAssessment assessment
+    ) {
+        Instant now = clock.instant();
+        PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
+                Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
+                request.idempotencyKey(),
+                PunishmentProposal.from(request, assessment),
+                now,
+                now.plus(requestLifetime)
+        );
+        return requests.submit(pending);
+    }
+
     private PunishmentRequestResult.Rejected leaseRejection(
             PunishmentApprovalLease lease,
             Actor approver,
@@ -184,8 +229,7 @@ public final class PunishmentRequestService {
             Actor approver,
             Instant now
     ) {
-        if (!authorization.permits(approver, ModerationAction.APPROVE_POLICY_SANCTION)
-                || !approver.rank().canApprovePunishmentRequests()) {
+        if (!hasApprovalAuthority(approver)) {
             return new PunishmentRequestResult.Rejected(
                     "FORBIDDEN",
                     "Only Mod, Admin, or Founder may decide punishment requests"
@@ -219,6 +263,12 @@ public final class PunishmentRequestService {
         return null;
     }
 
+    private boolean hasApprovalAuthority(Actor approver) {
+        return approver != null
+                && authorization.permits(approver, ModerationAction.APPROVE_POLICY_SANCTION)
+                && approver.rank().canApprovePunishmentRequests();
+    }
+
     private static boolean meetsRequiredApprovalRank(StaffRank approver, StaffRank required) {
         return switch (required) {
             case HELPER, MOD -> approver.canApprovePunishmentRequests();
@@ -226,6 +276,12 @@ public final class PunishmentRequestService {
             case FOUNDER -> approver == StaffRank.FOUNDER;
             case DEVELOPER, SYSTEM -> false;
         };
+    }
+
+    private static void validateQueryLimit(int limit) {
+        if (limit < 1 || limit > MAXIMUM_QUERY_LIMIT) {
+            throw new IllegalArgumentException("punishment request limit must be between 1 and 500");
+        }
     }
 
     private static Duration validateLifetime(Duration lifetime, Duration maximum, String label) {

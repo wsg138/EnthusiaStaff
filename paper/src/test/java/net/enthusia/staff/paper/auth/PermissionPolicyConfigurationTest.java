@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
 
 final class PermissionPolicyConfigurationTest {
     private static final String INVENTORY_EDIT = "enthusiastaff.inventory.edit";
+    private static final String REQUEST_REVIEW = "enthusiastaff.punishment.requests.review";
     private static final Set<String> HIGH_RISK_PERMISSIONS = Set.of(
+            REQUEST_REVIEW,
             "enthusiastaff.punish.ip",
             "enthusiastaff.punish.custom-duration",
             "enthusiastaff.punish.custom-combination",
@@ -78,7 +80,7 @@ final class PermissionPolicyConfigurationTest {
     }
 
     @Test
-    void developerRetainsOperationalToolsButNoPunishmentMutation() throws IOException {
+    void developerCanPrepareRequestsWithoutReviewOrDirectMutationPermissions() throws IOException {
         JsonNode permissions = permissions();
         Set<String> effective = effectiveChildren(
                 permissions,
@@ -93,6 +95,8 @@ final class PermissionPolicyConfigurationTest {
                 "enthusiastaff.diagnostics",
                 "enthusiastaff.punishment.read",
                 "enthusiastaff.case.read",
+                "enthusiastaff.punish",
+                "enthusiastaff.punish.configured",
                 "enthusiastaff.reports.manage",
                 "enthusiastaff.staffmode",
                 "enthusiastaff.vanish",
@@ -101,8 +105,6 @@ final class PermissionPolicyConfigurationTest {
                 INVENTORY_EDIT,
                 "enthusiastaff.inspect"
         )));
-        assertFalse(effective.contains("enthusiastaff.punish"));
-        assertFalse(effective.contains("enthusiastaff.punish.configured"));
         HIGH_RISK_PERMISSIONS.stream()
                 .filter(permission -> !permission.equals(INVENTORY_EDIT))
                 .forEach(permission -> assertFalse(effective.contains(permission), permission));
@@ -118,6 +120,7 @@ final class PermissionPolicyConfigurationTest {
         assertTrue(mod.contains("enthusiastaff.rank.helper"));
         assertTrue(mod.containsAll(Set.of(
                 "enthusiastaff.punish.configured",
+                REQUEST_REVIEW,
                 "enthusiastaff.remove.lower",
                 "enthusiastaff.remove.end",
                 "enthusiastaff.remove.revoke",
@@ -130,6 +133,7 @@ final class PermissionPolicyConfigurationTest {
         assertFalse(mod.contains("enthusiastaff.remove.full-overturn"));
 
         assertTrue(admin.containsAll(Set.of(
+                REQUEST_REVIEW,
                 "enthusiastaff.punish.custom-duration",
                 "enthusiastaff.remove.raise",
                 "enthusiastaff.remove.custom-duration",
