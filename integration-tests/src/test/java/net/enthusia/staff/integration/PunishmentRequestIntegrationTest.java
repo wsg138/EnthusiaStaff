@@ -72,7 +72,7 @@ class PunishmentRequestIntegrationTest {
             .withPassword(DATABASE_PASSWORD);
 
     @Test
-    void pendingRequestSurvivesRestartAndDuplicateSubmissionReplays() {
+    void pendingRequestSurvivesRestartAndDuplicateSubmissionReplays() throws SQLException {
         PunishmentApprovalRequest initial = request(
                 "restart",
                 sevenDayBan(),
@@ -271,7 +271,7 @@ class PunishmentRequestIntegrationTest {
     }
 
     @Test
-    void independentExactPunishmentFulfillsOnlyMatchingPendingRequest() {
+    void independentExactPunishmentFulfillsOnlyMatchingPendingRequest() throws SQLException {
         UUID target = identifier("external-target");
         String reason = "test.external";
         PunishmentApprovalRequest matching = request(
