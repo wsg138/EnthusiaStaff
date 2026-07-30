@@ -1,0 +1,104 @@
+name: Publish Wiki
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type PUBLISH to replace the live Wiki from docs/wiki/pages'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-enthusiastaff-wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH'
+    runs-on: ubuntu-latest
+    environment: wiki-production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate Wiki source
+        run: python scripts/wiki/validate_wiki.py
+
+      - name: Clone live Wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_PUBLISH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          git clone \
+            "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" \
+            wiki-live
+
+      - name: Create pre-publish bundle and backup branch
+        id: backup
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_PUBLISH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+
+          timestamp="$(date -u +'%Y%m%d-%H%M%S')"
+          backup_branch="backup/repo-managed-${timestamp}-run-${GITHUB_RUN_ID}"
+          wiki_branch="$(
+            git -C wiki-live symbolic-ref --short refs/remotes/origin/HEAD |
+            sed 's#^origin/##'
+          )"
+
+          git -C wiki-live bundle create \
+            "${GITHUB_WORKSPACE}/wiki-before-publish.bundle" --all
+          git -C wiki-live branch "${backup_branch}" "origin/${wiki_branch}"
+          git -C wiki-live push origin "${backup_branch}"
+
+          echo "branch=${backup_branch}" >> "${GITHUB_OUTPUT}"
+          echo "wiki_branch=${wiki_branch}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload pre-publish Wiki bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: wiki-before-publish-${{ github.run_id }}
+          path: wiki-before-publish.bundle
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Replace Wiki Markdown from repository source
+        run: |
+          set -euo pipefail
+
+          find wiki-live -maxdepth 1 -type f \
+            \( -name '*.md' -o -name '*.markdown' \) -delete
+          cp docs/wiki/pages/*.md wiki-live/
+
+          git -C wiki-live config user.name "github-actions[bot]"
+          git -C wiki-live config \
+            user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git -C wiki-live add -A
+
+          if git -C wiki-live diff --cached --quiet; then
+            echo "Live Wiki already matches repository source." >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          git -C wiki-live commit \
+            -m "Publish Wiki from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+
+          git -C wiki-live push origin \
+            "HEAD:${{ steps.backup.outputs.wiki_branch }}"
+
+      - name: Write publish summary
+        run: |
+          {
+            echo "## Wiki publication"
+            echo
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Backup branch: \`${{ steps.backup.outputs.branch }}\`"
+            echo "- Backup artifact: \`wiki-before-publish-${GITHUB_RUN_ID}\`"
+            echo "- Published branch: \`${{ steps.backup.outputs.wiki_branch }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
