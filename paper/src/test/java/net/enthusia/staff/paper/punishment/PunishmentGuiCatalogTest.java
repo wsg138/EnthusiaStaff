@@ -20,15 +20,21 @@ import org.junit.jupiter.api.Test;
 
 class PunishmentGuiCatalogTest {
     private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
+    private static final String CHAT = "chat";
+    private static final String SAFETY = "safety";
+    private static final String CHAT_MOD = "chat.mod";
+    private static final String SAFETY_ADMIN = "safety.admin";
+    private static final String MUTE_COMMAND = "mute";
+    private static final String BAN_COMMAND = "ban";
 
     @Test
     void developerCanReviewRequestableReasonsWithoutDirectIssueAuthority() {
         PunishmentGuiCatalog catalog = catalog();
 
-        assertEquals(List.of("chat", "safety"), catalog.categories(actor(StaffRank.DEVELOPER), "punish"));
+        assertEquals(List.of(CHAT, SAFETY), catalog.categories(actor(StaffRank.DEVELOPER), "punish"));
         assertEquals(
-                List.of("safety.admin"),
-                catalog.reasons(actor(StaffRank.DEVELOPER), "ban", "safety").stream()
+                List.of(SAFETY_ADMIN),
+                catalog.reasons(actor(StaffRank.DEVELOPER), BAN_COMMAND, SAFETY).stream()
                         .map(ReasonPolicy::id)
                         .toList()
         );
@@ -39,22 +45,22 @@ class PunishmentGuiCatalogTest {
         PunishmentGuiCatalog catalog = catalog();
 
         assertEquals(
-                List.of("chat.mod"),
-                catalog.reasons(actor(StaffRank.HELPER), "mute", "chat").stream()
+                List.of(CHAT_MOD),
+                catalog.reasons(actor(StaffRank.HELPER), MUTE_COMMAND, CHAT).stream()
                         .map(ReasonPolicy::id)
                         .toList()
         );
-        assertTrue(catalog.reasons(actor(StaffRank.HELPER), "ban", "safety").isEmpty());
+        assertTrue(catalog.reasons(actor(StaffRank.HELPER), BAN_COMMAND, SAFETY).isEmpty());
     }
 
     @Test
     void modSeesOnlyAuthorizedReasonsAndCommandTypes() {
         PunishmentGuiCatalog catalog = catalog();
 
-        assertEquals(List.of("chat"), catalog.categories(actor(StaffRank.MOD), "mute"));
+        assertEquals(List.of(CHAT), catalog.categories(actor(StaffRank.MOD), MUTE_COMMAND));
         assertEquals(
-                List.of("chat.mod"),
-                catalog.reasons(actor(StaffRank.MOD), "mute", "chat").stream()
+                List.of(CHAT_MOD),
+                catalog.reasons(actor(StaffRank.MOD), MUTE_COMMAND, CHAT).stream()
                         .map(ReasonPolicy::id)
                         .toList()
         );
@@ -65,20 +71,20 @@ class PunishmentGuiCatalogTest {
         PunishmentGuiCatalog catalog = catalog();
 
         assertEquals(
-                List.of("safety.admin"),
-                catalog.reasons(actor(StaffRank.ADMIN), "ban", "safety").stream()
+                List.of(SAFETY_ADMIN),
+                catalog.reasons(actor(StaffRank.ADMIN), BAN_COMMAND, SAFETY).stream()
                         .map(ReasonPolicy::id)
                         .toList()
         );
-        assertTrue(catalog.reasons(actor(StaffRank.ADMIN), "mute", "safety").isEmpty());
+        assertTrue(catalog.reasons(actor(StaffRank.ADMIN), MUTE_COMMAND, SAFETY).isEmpty());
     }
 
     private static PunishmentGuiCatalog catalog() {
         return new PunishmentGuiCatalog(
                 new AtomicReasonPolicyRepository("v1", List.of(
-                        policy("chat.mod", "chat", StaffRank.MOD, SanctionType.MUTE),
-                        policy("safety.admin", "safety", StaffRank.ADMIN, SanctionType.NETWORK_BAN),
-                        policy("chat.warning", "chat", StaffRank.MOD, SanctionType.WARNING)
+                        policy(CHAT_MOD, CHAT, StaffRank.MOD, SanctionType.MUTE),
+                        policy(SAFETY_ADMIN, SAFETY, StaffRank.ADMIN, SanctionType.NETWORK_BAN),
+                        policy("chat.warning", CHAT, StaffRank.MOD, SanctionType.WARNING)
                 )),
                 new DefaultAuthorizationPolicy()
         );
