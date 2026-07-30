@@ -2,6 +2,8 @@ package net.enthusia.staff.paper.command;
 
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -30,9 +32,14 @@ public final class StaffModeCommand implements CommandExecutor {
         }
         if (manager.active(player.getUniqueId())) {
             manager.exit(player);
-        } else {
-            manager.enter(player, StaffModeManager.rank(player));
+            return true;
         }
+        StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank == null) {
+            player.sendMessage(Component.text("An explicit EnthusiaStaff rank is required before entering staff mode."));
+            return true;
+        }
+        manager.enter(player, rank);
         return true;
     }
 }

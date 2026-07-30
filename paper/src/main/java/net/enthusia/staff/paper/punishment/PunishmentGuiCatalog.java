@@ -5,6 +5,7 @@ import java.util.List;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 
@@ -36,12 +37,24 @@ final class PunishmentGuiCatalog {
     }
 
     private List<ReasonPolicy> available(Actor actor, String commandName) {
-        if (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)) {
+        boolean mayIssue = authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION);
+        boolean mayRequest = authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION);
+        if (!mayIssue && !mayRequest) {
             return List.of();
         }
         return policies.all().stream()
-                .filter(policy -> actor.rank().atLeast(policy.requiredRank()))
+                .filter(policy -> visibleAtRank(actor.rank(), policy.requiredRank(), mayRequest))
                 .filter(policy -> PunishmentCommandFilter.includes(commandName, policy))
                 .toList();
+    }
+
+    private static boolean visibleAtRank(StaffRank actorRank, StaffRank requiredRank, boolean mayRequest) {
+        if (actorRank == StaffRank.DEVELOPER) {
+            return mayRequest;
+        }
+        if (actorRank == StaffRank.HELPER && requiredRank == StaffRank.MOD) {
+            return true;
+        }
+        return actorRank.atLeast(requiredRank);
     }
 }

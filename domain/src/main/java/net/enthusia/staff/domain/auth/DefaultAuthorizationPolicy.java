@@ -8,15 +8,18 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
         }
         return switch (actor.rank()) {
             case SYSTEM -> action == ModerationAction.ISSUE_POLICY_SANCTION;
-            case DEVELOPER -> false;
+            case DEVELOPER -> action == ModerationAction.REQUEST_POLICY_SANCTION;
+            case HELPER -> action == ModerationAction.ISSUE_POLICY_SANCTION
+                    || action == ModerationAction.REQUEST_POLICY_SANCTION;
             case MOD -> switch (action) {
-                case ISSUE_POLICY_SANCTION, LOWER_RECOMMENDATION, END_SANCTION,
-                        REVOKE_SANCTION, REQUEST_FULL_OVERTURN, ACCEPT_APPEAL,
-                        APPLY_CASE_CONFISCATION -> true;
+                case ISSUE_POLICY_SANCTION, REQUEST_POLICY_SANCTION, APPROVE_POLICY_SANCTION,
+                        LOWER_RECOMMENDATION, END_SANCTION, REVOKE_SANCTION,
+                        REQUEST_FULL_OVERTURN, ACCEPT_APPEAL, APPLY_CASE_CONFISCATION -> true;
                 default -> false;
             };
             case ADMIN -> switch (action) {
-                case ISSUE_POLICY_SANCTION, LOWER_RECOMMENDATION, RAISE_RECOMMENDATION,
+                case ISSUE_POLICY_SANCTION, REQUEST_POLICY_SANCTION, APPROVE_POLICY_SANCTION,
+                        LOWER_RECOMMENDATION, RAISE_RECOMMENDATION,
                         USE_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
                         REQUEST_FULL_OVERTURN, APPROVE_OVERTURN, ACCEPT_APPEAL,
                         APPLY_CASE_CONFISCATION, MODIFY_MARKET_RESTRICTION,

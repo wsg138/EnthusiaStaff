@@ -2,6 +2,8 @@ package net.enthusia.staff.domain.auth;
 
 public enum ModerationAction {
     ISSUE_POLICY_SANCTION,
+    REQUEST_POLICY_SANCTION,
+    APPROVE_POLICY_SANCTION,
     LOWER_RECOMMENDATION,
     RAISE_RECOMMENDATION,
     USE_CUSTOM_DURATION,

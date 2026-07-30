@@ -14,9 +14,8 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class PermissionPolicyConfigurationTest {
-    private static final Set<String> MUTATION_PERMISSIONS = Set.of(
-            "enthusiastaff.punish",
-            "enthusiastaff.punish.configured",
+    private static final String INVENTORY_EDIT = "enthusiastaff.inventory.edit";
+    private static final Set<String> HIGH_RISK_PERMISSIONS = Set.of(
             "enthusiastaff.punish.ip",
             "enthusiastaff.punish.custom-duration",
             "enthusiastaff.punish.custom-combination",
@@ -29,6 +28,7 @@ final class PermissionPolicyConfigurationTest {
             "enthusiastaff.remove.request-overturn",
             "enthusiastaff.remove.full-overturn",
             "enthusiastaff.remove.approve-overturn",
+            INVENTORY_EDIT,
             "enthusiastaff.confiscate.economy",
             "enthusiastaff.confiscate.items",
             "enthusiastaff.case.restoreitems",
@@ -46,6 +46,35 @@ final class PermissionPolicyConfigurationTest {
                 entry.getValue().path("default").asText(),
                 entry.getKey()
         ));
+    }
+
+    @Test
+    void helperHasTrialToolsButNoHighRiskMutationPermissions() throws IOException {
+        JsonNode permissions = permissions();
+        Set<String> effective = effectiveChildren(
+                permissions,
+                "enthusiastaff.rank.helper",
+                new HashSet<>()
+        );
+
+        assertTrue(effective.containsAll(Set.of(
+                "enthusiastaff.punish",
+                "enthusiastaff.punish.configured",
+                "enthusiastaff.reports.manage",
+                "enthusiastaff.freeze",
+                "enthusiastaff.staffmode",
+                "enthusiastaff.vanish",
+                "enthusiastaff.staffchat",
+                "enthusiastaff.inventory.view",
+                "enthusiastaff.inspect"
+        )));
+        HIGH_RISK_PERMISSIONS.forEach(permission -> assertFalse(
+                effective.contains(permission),
+                permission
+        ));
+        assertFalse(effective.contains("enthusiastaff.reload"));
+        assertFalse(effective.contains("enthusiastaff.diagnostics"));
+        assertFalse(effective.contains("enthusiastaff.client"));
     }
 
     @Test
@@ -69,13 +98,14 @@ final class PermissionPolicyConfigurationTest {
                 "enthusiastaff.vanish",
                 "enthusiastaff.client",
                 "enthusiastaff.inventory.view",
-                "enthusiastaff.inventory.edit",
+                INVENTORY_EDIT,
                 "enthusiastaff.inspect"
         )));
-        MUTATION_PERMISSIONS.forEach(permission -> assertFalse(
-                effective.contains(permission),
-                permission
-        ));
+        assertFalse(effective.contains("enthusiastaff.punish"));
+        assertFalse(effective.contains("enthusiastaff.punish.configured"));
+        HIGH_RISK_PERMISSIONS.stream()
+                .filter(permission -> !permission.equals(INVENTORY_EDIT))
+                .forEach(permission -> assertFalse(effective.contains(permission), permission));
     }
 
     @Test
@@ -85,12 +115,14 @@ final class PermissionPolicyConfigurationTest {
         Set<String> admin = effectiveChildren(permissions, "enthusiastaff.rank.admin", new HashSet<>());
         Set<String> founder = effectiveChildren(permissions, "enthusiastaff.rank.founder", new HashSet<>());
 
+        assertTrue(mod.contains("enthusiastaff.rank.helper"));
         assertTrue(mod.containsAll(Set.of(
                 "enthusiastaff.punish.configured",
                 "enthusiastaff.remove.lower",
                 "enthusiastaff.remove.end",
                 "enthusiastaff.remove.revoke",
                 "enthusiastaff.remove.request-overturn",
+                INVENTORY_EDIT,
                 "enthusiastaff.confiscate.economy",
                 "enthusiastaff.confiscate.items"
         )));
@@ -109,7 +141,7 @@ final class PermissionPolicyConfigurationTest {
         assertFalse(admin.contains("enthusiastaff.punish.custom-combination"));
         assertFalse(admin.contains("enthusiastaff.case.restoreitems"));
 
-        assertTrue(founder.containsAll(MUTATION_PERMISSIONS));
+        assertTrue(founder.containsAll(HIGH_RISK_PERMISSIONS));
     }
 
     private static JsonNode permissions() throws IOException {

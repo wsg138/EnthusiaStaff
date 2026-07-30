@@ -21,7 +21,21 @@ public final class VanishCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only a player can toggle vanish."));
+            sender.sendMessage(Component.text("Only a player can change vanish or spectator tab visibility."));
+            return true;
+        }
+        if (arguments.length == 2 && arguments[0].equalsIgnoreCase("tab")) {
+            if (arguments[1].equalsIgnoreCase("show")) {
+                vanish.configureSpectatorTab(player, true);
+                return true;
+            }
+            if (arguments[1].equalsIgnoreCase("hide")) {
+                vanish.configureSpectatorTab(player, false);
+                return true;
+            }
+        }
+        if (arguments.length != 0) {
+            player.sendMessage(Component.text("Usage: /" + label + " | /" + label + " tab <show|hide>"));
             return true;
         }
         if (mode.get() != OperationalMode.ACTIVE) {

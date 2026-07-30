@@ -18,13 +18,26 @@ class PaperActorResolverTest {
 
         assertEquals(
                 StaffRank.DEVELOPER,
-                PaperActorResolver.rank(permissions::contains).orElseThrow()
+                PaperStaffRankResolver.resolve(permissions::contains).orElseThrow()
+        );
+    }
+
+    @Test
+    void helperIsResolvedBelowModerator() {
+        Set<String> permissions = Set.of(
+                "enthusiastaff.rank.helper",
+                "enthusiastaff.rank.mod"
+        );
+
+        assertEquals(
+                StaffRank.MOD,
+                PaperStaffRankResolver.resolve(permissions::contains).orElseThrow()
         );
     }
 
     @Test
     void unrankedPlayerDoesNotImplicitlyBecomeModerator() {
-        assertTrue(PaperActorResolver.rank(ignored -> false).isEmpty());
+        assertTrue(PaperStaffRankResolver.resolve(ignored -> false).isEmpty());
     }
 
     @Test
@@ -36,7 +49,7 @@ class PaperActorResolverTest {
 
         assertEquals(
                 StaffRank.FOUNDER,
-                PaperActorResolver.rank(permissions::contains).orElseThrow()
+                PaperStaffRankResolver.resolve(permissions::contains).orElseThrow()
         );
     }
 }

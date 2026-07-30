@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.visibility;
 
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -18,13 +19,20 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
         if (visibilityMatrix == null) {
             throw new IllegalArgumentException("visibility matrix must be present");
         }
+        Map<StaffRank, Set<StaffRank>> defaults = defaultMatrix();
         EnumMap<StaffRank, Set<StaffRank>> copy = new EnumMap<>(StaffRank.class);
         for (StaffRank viewer : new StaffRank[]{
-                StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
+                StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
         }) {
-            Set<StaffRank> visible = visibilityMatrix.get(viewer);
-            if (visible == null || visible.contains(StaffRank.SYSTEM)) {
+            Set<StaffRank> configured = visibilityMatrix.getOrDefault(viewer, defaults.get(viewer));
+            if (configured == null || configured.contains(StaffRank.SYSTEM)) {
                 throw new IllegalArgumentException("visibility matrix must define every staff viewer rank");
+            }
+            EnumSet<StaffRank> visible = configured.isEmpty()
+                    ? EnumSet.noneOf(StaffRank.class)
+                    : EnumSet.copyOf(configured);
+            if (viewer != StaffRank.HELPER) {
+                visible.add(StaffRank.HELPER);
             }
             copy.put(viewer, Set.copyOf(visible));
         }
@@ -33,10 +41,14 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
 
     public static Map<StaffRank, Set<StaffRank>> defaultMatrix() {
         return Map.of(
-                StaffRank.MOD, Set.of(StaffRank.MOD, StaffRank.DEVELOPER),
-                StaffRank.DEVELOPER, Set.of(StaffRank.MOD, StaffRank.DEVELOPER),
-                StaffRank.ADMIN, Set.of(StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN),
-                StaffRank.FOUNDER, Set.of(StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER)
+                StaffRank.HELPER, Set.of(StaffRank.HELPER),
+                StaffRank.MOD, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER),
+                StaffRank.DEVELOPER, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER),
+                StaffRank.ADMIN, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN),
+                StaffRank.FOUNDER, Set.of(
+                        StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER,
+                        StaffRank.ADMIN, StaffRank.FOUNDER
+                )
         );
     }
 
