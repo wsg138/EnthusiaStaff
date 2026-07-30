@@ -11,7 +11,6 @@ import java.util.function.Supplier;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
 
 public final class PunishmentDraftWorkflow {
@@ -200,11 +199,7 @@ public final class PunishmentDraftWorkflow {
     }
 
     private static boolean requiresRequest(Actor actor, PunishmentExpectation expectation) {
-        if (actor.rank() == StaffRank.DEVELOPER) {
-            return true;
-        }
-        return actor.rank() == StaffRank.HELPER && expectation.sanctions().stream()
-                .anyMatch(specification -> specification.length().isPermanent());
+        return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.sanctions());
     }
 
     private static PunishmentResult.Rejected draftNotFound() {
