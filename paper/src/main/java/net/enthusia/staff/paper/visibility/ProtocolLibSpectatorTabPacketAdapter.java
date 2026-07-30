@@ -21,6 +21,7 @@ final class ProtocolLibSpectatorTabPacketAdapter implements SpectatorTabPacketAd
     private final ProtocolManager protocolManager;
     private final PacketListener listener;
     private final AtomicBoolean healthy;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     private ProtocolLibSpectatorTabPacketAdapter(
             ProtocolManager protocolManager,
@@ -42,7 +43,18 @@ final class ProtocolLibSpectatorTabPacketAdapter implements SpectatorTabPacketAd
         Objects.requireNonNull(failureHandler, "failureHandler");
         ProtocolManager manager = ProtocolLibrary.getProtocolManager();
         AtomicBoolean healthy = new AtomicBoolean(true);
-        PacketListener installed = new PacketAdapter(
+        PacketListener installed = listener(plugin, masker, failureHandler, healthy);
+        manager.addPacketListener(installed);
+        return new ProtocolLibSpectatorTabPacketAdapter(manager, installed, healthy);
+    }
+
+    private static PacketListener listener(
+            JavaPlugin plugin,
+            PlayerInfoTabMasker masker,
+            Runnable failureHandler,
+            AtomicBoolean healthy
+    ) {
+        return new PacketAdapter(
                 plugin,
                 ListenerPriority.HIGHEST,
                 PacketType.Play.Server.PLAYER_INFO
@@ -53,49 +65,62 @@ final class ProtocolLibSpectatorTabPacketAdapter implements SpectatorTabPacketAd
                     return;
                 }
                 try {
-                    PacketContainer packet = event.getPacket();
-                    StructureModifier<List<PlayerInfoData>> modifier = packet.getPlayerInfoDataLists();
-                    if (modifier.size() == 0) {
-                        return;
-                    }
-                    List<PlayerInfoData> original = modifier.read(0);
-                    if (original == null || original.isEmpty()) {
-                        return;
-                    }
-                    UUID viewerId = event.getPlayer().getUniqueId();
-                    List<PlayerInfoData> rewritten = masker.rewrite(viewerId, original);
-                    if (rewritten == original) {
-                        return;
-                    }
-                    if (rewritten.isEmpty()) {
-                        event.setCancelled(true);
-                    } else {
-                        modifier.write(0, rewritten);
-                    }
+                    rewritePacket(event, masker);
                 } catch (RuntimeException exception) {
-                    if (healthy.compareAndSet(true, false)) {
-                        plugin.getLogger().log(
-                                Level.SEVERE,
-                                "ProtocolLib spectator-tab masking failed; spectator staff will be unlisted fail-closed",
-                                exception
-                        );
-                        failureHandler.run();
-                    }
+                    disableAfterFailure(plugin, failureHandler, healthy, exception);
                 }
             }
         };
-        manager.addPacketListener(installed);
-        return new ProtocolLibSpectatorTabPacketAdapter(manager, installed, healthy);
+    }
+
+    private static void rewritePacket(PacketEvent event, PlayerInfoTabMasker masker) {
+        PacketContainer packet = event.getPacket();
+        StructureModifier<List<PlayerInfoData>> modifier = packet.getPlayerInfoDataLists();
+        if (modifier.size() == 0) {
+            return;
+        }
+        List<PlayerInfoData> original = modifier.read(0);
+        if (original == null || original.isEmpty()) {
+            return;
+        }
+        UUID viewerId = event.getPlayer().getUniqueId();
+        PlayerInfoTabMasker.RewriteResult result = masker.rewriteResult(viewerId, original);
+        if (!result.changed()) {
+            return;
+        }
+        if (result.entries().isEmpty()) {
+            event.setCancelled(true);
+        } else {
+            modifier.write(0, result.entries());
+        }
+    }
+
+    private static void disableAfterFailure(
+            JavaPlugin plugin,
+            Runnable failureHandler,
+            AtomicBoolean healthy,
+            RuntimeException exception
+    ) {
+        if (!healthy.compareAndSet(true, false)) {
+            return;
+        }
+        plugin.getLogger().log(
+                Level.SEVERE,
+                "ProtocolLib spectator-tab masking failed; spectator staff will be unlisted fail-closed",
+                exception
+        );
+        failureHandler.run();
     }
 
     @Override
     public boolean available() {
-        return healthy.get();
+        return healthy.get() && !closed.get();
     }
 
     @Override
     public void close() {
-        if (healthy.getAndSet(false)) {
+        healthy.set(false);
+        if (closed.compareAndSet(false, true)) {
             protocolManager.removePacketListener(listener);
         }
     }
