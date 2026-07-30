@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -48,25 +49,27 @@ final class PunishmentRequestWiringTest {
         assertDoesNotThrow(() -> PunishmentRequestGuiController.class.getConstructor(
                 JavaPlugin.class,
                 Supplier.class,
+                Supplier.class,
                 AuthorizationPolicy.class,
                 ExecutorService.class
         ));
     }
 
     @Test
-    void pluginBootstrapRegistersTheRequestGuiAndInjectsTheHandler() throws IOException {
+    void pluginBootstrapRegistersTheRequestGuiWithThePlayerDirectory() throws IOException {
         String source = Files.readString(PLUGIN_SOURCE);
 
         assertTrue(source.contains("new PunishmentRequestGuiController("));
+        assertTrue(source.contains("punishmentRequestService,\n                playerDirectory,"));
         assertTrue(source.contains("punishmentRequestGui.register();"));
         assertTrue(source.contains("new PunishmentRequestCommandHandler("));
         assertTrue(source.contains("punishmentRequestCommands,"));
     }
 
     @Test
-    void punishmentCommandBindsTheAuthoritativePlayerDirectory() throws IOException {
+    void punishmentCommandHasNoPlayerDirectoryBindingSideEffect() throws IOException {
         String source = Files.readString(COMMAND_SOURCE);
 
-        assertTrue(source.contains("requestCommands.bindPlayerDirectory(players);"));
+        assertFalse(source.contains("requestCommands.bindPlayerDirectory(players);"));
     }
 }
