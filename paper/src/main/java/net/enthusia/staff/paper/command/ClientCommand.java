@@ -20,6 +20,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ClientCommand implements CommandExecutor, TabCompleter {
+    private static final String PERMISSION = "enthusiastaff.client";
+
     private final JavaPlugin plugin;
     private final ClientEvidenceCollector collector;
     private final Supplier<ClientEvidenceStore> evidenceStore;
@@ -44,6 +46,13 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             String label,
             String[] arguments
     ) {
+        if (!CommandPermissionGate.require(
+                sender,
+                PERMISSION,
+                "You do not have permission to inspect or save client evidence."
+        )) {
+            return true;
+        }
         if (arguments.length < 1 || arguments.length > 3) {
             usage(sender, label);
             return true;
@@ -178,6 +187,9 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             String alias,
             String[] arguments
     ) {
+        if (!CommandPermissionGate.allows(sender::hasPermission, PERMISSION)) {
+            return List.of();
+        }
         if (arguments.length == 1) {
             String prefix = arguments[0].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>();
