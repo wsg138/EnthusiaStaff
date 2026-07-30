@@ -64,7 +64,6 @@ final class PermissionPolicyConfigurationTest {
                 "enthusiastaff.staffmode",
                 "enthusiastaff.vanish",
                 "enthusiastaff.staffchat",
-                "enthusiastaff.client",
                 "enthusiastaff.inventory.view",
                 "enthusiastaff.inspect"
         )));
@@ -74,6 +73,7 @@ final class PermissionPolicyConfigurationTest {
         ));
         assertFalse(effective.contains("enthusiastaff.reload"));
         assertFalse(effective.contains("enthusiastaff.diagnostics"));
+        assertFalse(effective.contains("enthusiastaff.client"));
     }
 
     @Test
