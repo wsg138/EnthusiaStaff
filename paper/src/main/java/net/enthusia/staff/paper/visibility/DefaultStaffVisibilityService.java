@@ -18,11 +18,12 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
         if (visibilityMatrix == null) {
             throw new IllegalArgumentException("visibility matrix must be present");
         }
+        Map<StaffRank, Set<StaffRank>> defaults = defaultMatrix();
         EnumMap<StaffRank, Set<StaffRank>> copy = new EnumMap<>(StaffRank.class);
         for (StaffRank viewer : new StaffRank[]{
                 StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
         }) {
-            Set<StaffRank> visible = visibilityMatrix.get(viewer);
+            Set<StaffRank> visible = visibilityMatrix.getOrDefault(viewer, defaults.get(viewer));
             if (visible == null || visible.contains(StaffRank.SYSTEM)) {
                 throw new IllegalArgumentException("visibility matrix must define every staff viewer rank");
             }
