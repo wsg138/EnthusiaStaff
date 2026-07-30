@@ -67,32 +67,16 @@ class InventoryConfiscationLifecycleIntegrationTest {
                     operationId, session.fencingToken(), LEASE, NOW.plusSeconds(3)
             ).isPresent());
             assertFalse(store.cancelConfiscation(
-                    operationId,
-                    session.fencingToken() + 1L,
-                    CANCELLATION_REASON,
-                    CANCELLATION_DETAIL,
-                    NOW.plusSeconds(4)
+                    operationId, session.fencingToken() + 1L, CANCELLATION_REASON, CANCELLATION_DETAIL, NOW.plusSeconds(4)
             ));
             assertTrue(store.cancelConfiscation(
-                    operationId,
-                    session.fencingToken(),
-                    CANCELLATION_REASON,
-                    CANCELLATION_DETAIL,
-                    NOW.plusSeconds(5)
+                    operationId, session.fencingToken(), CANCELLATION_REASON, CANCELLATION_DETAIL, NOW.plusSeconds(5)
             ));
             assertTrue(store.cancelConfiscation(
-                    operationId,
-                    session.fencingToken(),
-                    CANCELLATION_REASON,
-                    CANCELLATION_DETAIL,
-                    NOW.plusSeconds(6)
+                    operationId, session.fencingToken(), CANCELLATION_REASON, CANCELLATION_DETAIL, NOW.plusSeconds(6)
             ));
             assertFalse(store.cancelConfiscation(
-                    operationId,
-                    session.fencingToken() + 1L,
-                    CANCELLATION_REASON,
-                    CANCELLATION_DETAIL,
-                    NOW.plusSeconds(7)
+                    operationId, session.fencingToken() + 1L, CANCELLATION_REASON, CANCELLATION_DETAIL, NOW.plusSeconds(7)
             ));
             assertTrue(store.renewConfiscation(
                     operationId, session.fencingToken(), LEASE, NOW.plusSeconds(8)
