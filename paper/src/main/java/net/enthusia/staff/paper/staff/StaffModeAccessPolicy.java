@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import net.enthusia.staff.domain.auth.StaffRank;
+import org.bukkit.GameMode;
 
 final class StaffModeAccessPolicy {
     private StaffModeAccessPolicy() {
@@ -16,6 +17,10 @@ final class StaffModeAccessPolicy {
 
     static boolean usesCreativeMode(StaffRank rank) {
         return rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER;
+    }
+
+    static GameMode requiredGameMode(StaffRank rank) {
+        return usesCreativeMode(rank) ? GameMode.CREATIVE : GameMode.SPECTATOR;
     }
 
     static boolean hasAdvancedStaffTools(StaffRank rank) {

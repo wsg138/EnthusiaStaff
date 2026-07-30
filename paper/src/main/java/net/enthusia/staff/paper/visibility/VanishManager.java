@@ -195,6 +195,7 @@ public final class VanishManager implements Listener {
         recordViewerRank(player);
         applySpectatorPolicy(player, event.getNewGameMode(), true);
         refreshTarget(player);
+        player.getScheduler().execute(plugin, () -> refreshTarget(player), null, 1L);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -260,20 +261,34 @@ public final class VanishManager implements Listener {
     }
 
     private void applyTabListing(Player viewer, Player target, boolean canSee) {
+        if (!shouldList(target, canSee)) {
+            unlistSafely(viewer, target);
+            return;
+        }
+        try {
+            viewer.listPlayer(target);
+        } catch (IllegalStateException exception) {
+            plugin.getLogger().log(Level.FINE, "Player tab listing raced with visibility removal", exception);
+            unlistSafely(viewer, target);
+        }
+    }
+
+    private boolean shouldList(Player target, boolean canSee) {
         UUID targetId = target.getUniqueId();
         if (!canSee || hiddenSpectators.contains(targetId)) {
-            viewer.unlistPlayer(target);
-            return;
+            return false;
         }
         StaffRank targetRank = onlineStaffRanks.get(targetId);
-        if (targetRank == null) {
-            return;
-        }
-        if (target.getGameMode() == GameMode.SPECTATOR && !spectatorTabPackets.available()) {
+        return targetRank != null
+                && (target.getGameMode() != GameMode.SPECTATOR || spectatorTabPackets.available());
+    }
+
+    private void unlistSafely(Player viewer, Player target) {
+        try {
             viewer.unlistPlayer(target);
-            return;
+        } catch (IllegalStateException exception) {
+            plugin.getLogger().log(Level.FINE, "Player tab removal raced with disconnect", exception);
         }
-        viewer.listPlayer(target);
     }
 
     private void applySpectatorPolicy(Player player, GameMode gameMode, boolean prompt) {

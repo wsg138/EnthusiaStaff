@@ -92,8 +92,8 @@ commands:
     usage: /staff
     permission: enthusiastaff.staffmode
   vanish:
-    description: Toggle durable rank-aware vanish
-    usage: /vanish
+    description: Toggle durable rank-aware vanish or spectator tab presentation
+    usage: /vanish | /vanish tab <show|hide>
     permission: enthusiastaff.vanish
   staffchat:
     description: Toggle the configured RoseChat staff channel

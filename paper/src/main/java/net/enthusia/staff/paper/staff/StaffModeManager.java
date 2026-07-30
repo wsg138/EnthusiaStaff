@@ -35,6 +35,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
@@ -233,6 +234,20 @@ public final class StaffModeManager implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onGameModeChange(PlayerGameModeChangeEvent event) {
+        Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
+        if (!active(playerId) || transitions.contains(playerId)) {
+            return;
+        }
+        StaffRank rank = ranks.get(playerId);
+        if (rank == null || event.getNewGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
+            event.setCancelled(true);
+            player.sendMessage(Component.text("Your staff rank cannot use that game mode while staff mode is active."));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
         if (event.getEntity() instanceof Player player && protectedMode(player.getUniqueId())) {
             event.setCancelled(true);
@@ -377,8 +392,7 @@ public final class StaffModeManager implements Listener {
         player.setInvulnerable(true);
         player.setCollidable(false);
         player.setCanPickupItems(false);
-        boolean creative = StaffModeAccessPolicy.usesCreativeMode(rank);
-        player.setGameMode(creative ? GameMode.CREATIVE : GameMode.SPECTATOR);
+        player.setGameMode(StaffModeAccessPolicy.requiredGameMode(rank));
         player.setAllowFlight(true);
         player.setFlying(true);
         List<Tool> tools = new ArrayList<>(List.of(
