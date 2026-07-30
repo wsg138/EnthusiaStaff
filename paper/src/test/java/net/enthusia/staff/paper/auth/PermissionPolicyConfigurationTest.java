@@ -14,6 +14,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class PermissionPolicyConfigurationTest {
+    private static final String INVENTORY_EDIT = "enthusiastaff.inventory.edit";
     private static final Set<String> HIGH_RISK_PERMISSIONS = Set.of(
             "enthusiastaff.punish.ip",
             "enthusiastaff.punish.custom-duration",
@@ -27,7 +28,7 @@ final class PermissionPolicyConfigurationTest {
             "enthusiastaff.remove.request-overturn",
             "enthusiastaff.remove.full-overturn",
             "enthusiastaff.remove.approve-overturn",
-            "enthusiastaff.inventory.edit",
+            INVENTORY_EDIT,
             "enthusiastaff.confiscate.economy",
             "enthusiastaff.confiscate.items",
             "enthusiastaff.case.restoreitems",
@@ -97,13 +98,13 @@ final class PermissionPolicyConfigurationTest {
                 "enthusiastaff.vanish",
                 "enthusiastaff.client",
                 "enthusiastaff.inventory.view",
-                "enthusiastaff.inventory.edit",
+                INVENTORY_EDIT,
                 "enthusiastaff.inspect"
         )));
         assertFalse(effective.contains("enthusiastaff.punish"));
         assertFalse(effective.contains("enthusiastaff.punish.configured"));
         HIGH_RISK_PERMISSIONS.stream()
-                .filter(permission -> !permission.equals("enthusiastaff.inventory.edit"))
+                .filter(permission -> !permission.equals(INVENTORY_EDIT))
                 .forEach(permission -> assertFalse(effective.contains(permission), permission));
     }
 
@@ -121,7 +122,7 @@ final class PermissionPolicyConfigurationTest {
                 "enthusiastaff.remove.end",
                 "enthusiastaff.remove.revoke",
                 "enthusiastaff.remove.request-overturn",
-                "enthusiastaff.inventory.edit",
+                INVENTORY_EDIT,
                 "enthusiastaff.confiscate.economy",
                 "enthusiastaff.confiscate.items"
         )));
