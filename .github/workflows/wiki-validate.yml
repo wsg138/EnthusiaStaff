@@ -1,0 +1,28 @@
+name: Validate Wiki
+
+on:
+  pull_request:
+    paths:
+      - "docs/wiki/**"
+      - "scripts/wiki/**"
+      - ".github/workflows/wiki-*.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/wiki/**"
+      - "scripts/wiki/**"
+      - ".github/workflows/wiki-*.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate Wiki source
+        run: python scripts/wiki/validate_wiki.py
