@@ -16,7 +16,6 @@ import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
-import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
@@ -33,6 +32,7 @@ public final class PunishmentRequestCommandHandler {
     private static final int REQUEST_ID_ARGUMENT_INDEX = 1;
     private static final int DENIAL_NOTE_START_INDEX = 2;
     private static final int DENIAL_MINIMUM_ARGUMENT_COUNT = 3;
+    private static final String NOT_READY_MESSAGE = "Punishment request storage is not ready.";
     private static final List<String> SUBCOMMANDS = List.of("requests", "review", "approve", "deny");
 
     private final JavaPlugin plugin;
@@ -56,10 +56,6 @@ public final class PunishmentRequestCommandHandler {
         this.authorization = authorization;
         this.gui = gui;
         this.workers = workers;
-    }
-
-    public void bindPlayerDirectory(Supplier<PlayerDirectory> players) {
-        gui.bindPlayerDirectory(players);
     }
 
     boolean handles(String commandName, String[] args) {
@@ -108,12 +104,18 @@ public final class PunishmentRequestCommandHandler {
             gui.openQueue(player);
             return;
         }
-        submit(sender, () -> {
-            List<RequestView> pending = services.get().reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
-                    .map(this::view)
-                    .toList();
-            onMain(() -> sendQueue(sender, pending));
-        });
+        submit(sender, () -> sendConsoleQueue(sender, actor));
+    }
+
+    private void sendConsoleQueue(CommandSender sender, Actor actor) {
+        PunishmentRequestService service = readyService(sender);
+        if (service == null) {
+            return;
+        }
+        List<RequestView> pending = service.reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
+                .map(this::view)
+                .toList();
+        onMain(() -> sendQueue(sender, pending));
     }
 
     private void review(CommandSender sender, String[] args, Actor actor) {
@@ -129,7 +131,10 @@ public final class PunishmentRequestCommandHandler {
     }
 
     private void sendConsoleReview(CommandSender sender, Actor actor, UUID requestId) {
-        PunishmentRequestService service = services.get();
+        PunishmentRequestService service = readyService(sender);
+        if (service == null) {
+            return;
+        }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
         onMain(() -> {
@@ -163,7 +168,10 @@ public final class PunishmentRequestCommandHandler {
             boolean approve,
             String denialNote
     ) {
-        PunishmentRequestService service = services.get();
+        PunishmentRequestService service = readyService(sender);
+        if (service == null) {
+            return;
+        }
         PunishmentRequestResult acquired = service.acquire(requestId, actor);
         PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
                 ? decideLeased(service, leased, actor, approve, denialNote)
@@ -181,6 +189,14 @@ public final class PunishmentRequestCommandHandler {
         return approve
                 ? service.approve(leased.lease(), actor)
                 : service.deny(leased.lease(), actor, denialNote);
+    }
+
+    private PunishmentRequestService readyService(CommandSender sender) {
+        PunishmentRequestService service = services.get();
+        if (service == null) {
+            onMain(() -> sender.sendMessage(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED)));
+        }
+        return service;
     }
 
     private void submit(CommandSender sender, Runnable operation) {
