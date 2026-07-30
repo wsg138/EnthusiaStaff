@@ -12,28 +12,32 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class CommandPermissionConfigurationTest {
+    private static final String PUNISH_PERMISSION = "enthusiastaff.punish";
+    private static final String REMOVE_PERMISSION = "enthusiastaff.remove";
+    private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
+    private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
             Map.entry("estaff", "enthusiastaff.status"),
-            Map.entry("punish", "enthusiastaff.punish"),
-            Map.entry("ban", "enthusiastaff.punish"),
-            Map.entry("mute", "enthusiastaff.punish"),
-            Map.entry("warn", "enthusiastaff.punish"),
-            Map.entry("kick", "enthusiastaff.punish"),
+            Map.entry("punish", PUNISH_PERMISSION),
+            Map.entry("ban", PUNISH_PERMISSION),
+            Map.entry("mute", PUNISH_PERMISSION),
+            Map.entry("warn", PUNISH_PERMISSION),
+            Map.entry("kick", PUNISH_PERMISSION),
             Map.entry("ipban", "enthusiastaff.punish.ip"),
-            Map.entry("removepunishment", "enthusiastaff.remove"),
-            Map.entry("unban", "enthusiastaff.remove"),
-            Map.entry("unmute", "enthusiastaff.remove"),
-            Map.entry("removewarning", "enthusiastaff.remove"),
-            Map.entry("unwarn", "enthusiastaff.remove"),
+            Map.entry("removepunishment", REMOVE_PERMISSION),
+            Map.entry("unban", REMOVE_PERMISSION),
+            Map.entry("unmute", REMOVE_PERMISSION),
+            Map.entry("removewarning", REMOVE_PERMISSION),
+            Map.entry("unwarn", REMOVE_PERMISSION),
             Map.entry("reports", "enthusiastaff.reports.manage"),
-            Map.entry("freeze", "enthusiastaff.freeze"),
-            Map.entry("unfreeze", "enthusiastaff.freeze"),
+            Map.entry("freeze", FREEZE_PERMISSION),
+            Map.entry("unfreeze", FREEZE_PERMISSION),
             Map.entry("staff", "enthusiastaff.staffmode"),
             Map.entry("vanish", "enthusiastaff.vanish"),
             Map.entry("staffchat", "enthusiastaff.staffchat"),
             Map.entry("client", "enthusiastaff.client"),
-            Map.entry("invsee", "enthusiastaff.inventory.view"),
-            Map.entry("endersee", "enthusiastaff.inventory.view"),
+            Map.entry("invsee", INVENTORY_VIEW_PERMISSION),
+            Map.entry("endersee", INVENTORY_VIEW_PERMISSION),
             Map.entry("inspect", "enthusiastaff.inspect"),
             Map.entry("case", "enthusiastaff.case.restoreitems")
     );
@@ -42,11 +46,13 @@ class CommandPermissionConfigurationTest {
     void staffOnlyCommandsRetainTheirOuterPermissionBoundary() throws IOException {
         JsonNode commands = pluginMetadata().path("commands");
 
-        EXPECTED_PERMISSIONS.forEach((command, permission) -> assertEquals(
-                permission,
-                commands.path(command).path("permission").asText(),
-                command
-        ));
+        for (Map.Entry<String, String> expected : EXPECTED_PERMISSIONS.entrySet()) {
+            assertEquals(
+                    expected.getValue(),
+                    commands.path(expected.getKey()).path("permission").asText(),
+                    expected.getKey()
+            );
+        }
     }
 
     @Test
