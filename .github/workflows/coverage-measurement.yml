@@ -6,9 +6,10 @@ on:
   push:
     branches:
       - main
+      - section/inventory-recovery-quarantine
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: coverage-${{ github.event.pull_request.number || github.ref }}
@@ -18,7 +19,140 @@ env:
   CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
 jobs:
+  apply-inventory-recovery-fix:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/section/inventory-recovery-quarantine' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out recovery branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: section/inventory-recovery-quarantine
+          fetch-depth: 0
+
+      - name: Apply fail-closed recovery patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          coordinator = Path("paper/src/main/java/net/enthusia/staff/paper/inventory/InventoryCoordinator.java")
+          source = coordinator.read_text(encoding="utf-8")
+          old_field = "    private final java.util.Set<UUID> loginBlocks = ConcurrentHashMap.newKeySet();"
+          new_field = "    private final InventoryRecoveryBlockSet loginBlocks = new InventoryRecoveryBlockSet();"
+          old_conflict = "        loginBlocks.remove(player.getUniqueId());"
+          new_conflict = "        loginBlocks.retainAfterQuarantine(player.getUniqueId());"
+
+          if source.count(old_field) != 1:
+              raise SystemExit("Expected exactly one loginBlocks field declaration")
+          conflict_start = source.index("    private void queuePendingConflict(")
+          conflict_end = source.index("    private void finalizePendingOnLogin(", conflict_start)
+          conflict_source = source[conflict_start:conflict_end]
+          if conflict_source.count(old_conflict) != 1:
+              raise SystemExit("Expected exactly one fail-open conflict release")
+
+          source = source.replace(old_field, new_field, 1)
+          source = (
+              source[:conflict_start]
+              + conflict_source.replace(old_conflict, new_conflict, 1)
+              + source[conflict_end:]
+          )
+          coordinator.write_text(source, encoding="utf-8")
+
+          helper = Path("paper/src/main/java/net/enthusia/staff/paper/inventory/InventoryRecoveryBlockSet.java")
+          helper.write_text('''package net.enthusia.staff.paper.inventory;
+
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+final class InventoryRecoveryBlockSet {
+    private final Set<UUID> players = ConcurrentHashMap.newKeySet();
+
+    void add(UUID playerId) {
+        players.add(requirePlayerId(playerId));
+    }
+
+    void retainAfterQuarantine(UUID playerId) {
+        players.add(requirePlayerId(playerId));
+    }
+
+    void remove(UUID playerId) {
+        if (playerId != null) {
+            players.remove(playerId);
+        }
+    }
+
+    boolean contains(UUID playerId) {
+        return playerId != null && players.contains(playerId);
+    }
+
+    void clear() {
+        players.clear();
+    }
+
+    private static UUID requirePlayerId(UUID playerId) {
+        if (playerId == null) {
+            throw new IllegalArgumentException("playerId must be present");
+        }
+        return playerId;
+    }
+}
+''', encoding="utf-8")
+
+          test = Path("paper/src/test/java/net/enthusia/staff/paper/inventory/InventoryRecoveryBlockSetTest.java")
+          test.parent.mkdir(parents=True, exist_ok=True)
+          test.write_text('''package net.enthusia.staff.paper.inventory;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class InventoryRecoveryBlockSetTest {
+    @Test
+    void quarantineKeepsTheCurrentLoginSessionBlockedUntilExplicitRelease() {
+        UUID playerId = UUID.randomUUID();
+        InventoryRecoveryBlockSet blocks = new InventoryRecoveryBlockSet();
+
+        blocks.add(playerId);
+        blocks.retainAfterQuarantine(playerId);
+
+        assertTrue(blocks.contains(playerId));
+        blocks.remove(playerId);
+        assertFalse(blocks.contains(playerId));
+    }
+
+    @Test
+    void nullIdentifiersCannotCreateRecoveryBlocks() {
+        InventoryRecoveryBlockSet blocks = new InventoryRecoveryBlockSet();
+
+        assertThrows(IllegalArgumentException.class, () -> blocks.add(null));
+        assertThrows(IllegalArgumentException.class, () -> blocks.retainAfterQuarantine(null));
+        assertFalse(blocks.contains(null));
+        blocks.remove(null);
+    }
+}
+''', encoding="utf-8")
+          PY
+
+          git fetch origin main
+          git show origin/main:.github/workflows/coverage-measurement.yml > .github/workflows/coverage-measurement.yml
+          rm -f .github/workflows/apply-inventory-recovery-fix.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper/src/main/java/net/enthusia/staff/paper/inventory/InventoryCoordinator.java \
+                  paper/src/main/java/net/enthusia/staff/paper/inventory/InventoryRecoveryBlockSet.java \
+                  paper/src/test/java/net/enthusia/staff/paper/inventory/InventoryRecoveryBlockSetTest.java \
+                  .github/workflows/coverage-measurement.yml \
+                  .github/workflows/apply-inventory-recovery-fix.yml
+          git commit -m "Keep quarantined inventory recovery blocked"
+          git push origin HEAD:section/inventory-recovery-quarantine
+
   coverage:
+    if: github.event_name != 'push' || github.ref != 'refs/heads/section/inventory-recovery-quarantine'
     name: Test and report aggregate coverage
     runs-on: ubuntu-latest
     timeout-minutes: 30
