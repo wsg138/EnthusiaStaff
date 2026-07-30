@@ -49,13 +49,13 @@ final class ProtocolLibSpectatorTabPacketAdapter implements SpectatorTabPacketAd
     }
 
     private static PacketListener listener(
-            JavaPlugin plugin,
+            JavaPlugin javaPlugin,
             PlayerInfoTabMasker masker,
             Runnable failureHandler,
             AtomicBoolean healthy
     ) {
         return new PacketAdapter(
-                plugin,
+                javaPlugin,
                 ListenerPriority.HIGHEST,
                 PacketType.Play.Server.PLAYER_INFO
         ) {
@@ -67,7 +67,7 @@ final class ProtocolLibSpectatorTabPacketAdapter implements SpectatorTabPacketAd
                 try {
                     rewritePacket(event, masker);
                 } catch (RuntimeException exception) {
-                    disableAfterFailure(plugin, failureHandler, healthy, exception);
+                    disableAfterFailure(javaPlugin, failureHandler, healthy, exception);
                 }
             }
         };
