@@ -37,6 +37,12 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final String CONFISCATION_OPERATION_TYPE = "CONFISCATION";
     private static final String RESTORATION_OPERATION_TYPE = "RESTORE_CONFISCATED";
     private static final String STATE_COLUMN = "state";
+    private static final String SCOPE_ID_FIELD = "scopeId";
+    private static final String OWNING_SERVER_ID_FIELD = "owningServerId";
+    private static final String CHANGED_SLOTS_FIELD = "changedSlots";
+    private static final String OWNING_SERVER_ID_COLUMN = "owning_server_id";
+    private static final String LOCKED_STATE = "LOCKED";
+    private static final int SINGLE_INSERT_ROW_COUNT = 1;
     private static final long NO_SNAPSHOTS = 0L;
 
     private final DataSource dataSource;
@@ -132,10 +138,10 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                     request.playerId(),
                     Optional.of(request.caseId().value()),
                     "INVENTORY_CONFISCATION_LOCKED",
-                    "LOCKED",
+                    LOCKED_STATE,
                     Map.of(
-                            "scopeId", request.scopeId(),
-                            "owningServerId", request.owningServerId(),
+                            SCOPE_ID_FIELD, request.scopeId(),
+                            OWNING_SERVER_ID_FIELD, request.owningServerId(),
                             "expectedRevision", revision,
                             "beforeChecksum", request.beforeChecksum()
                     ),
@@ -166,7 +172,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             InventoryConfiscationSession session =
                     lockConfiscationSession(connection, operationId).orElse(null);
             if (session == null || session.fencingToken() != fencingToken
-                    || !confiscationState(connection, operationId).equals("LOCKED")
+                    || !confiscationState(connection, operationId).equals(LOCKED_STATE)
                     || !ownsLease(connection, session, now)) {
                 return Optional.empty();
             }
@@ -212,7 +218,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                         "The confiscation patch was already prepared"
                 );
             }
-            if (!confiscationState(connection, request.operationId()).equals("LOCKED")
+            if (!confiscationState(connection, request.operationId()).equals(LOCKED_STATE)
                     || session.fencingToken() != request.fencingToken()
                     || session.expectedRevision() != request.expectedRevision()
                     || !session.beforeChecksum().equals(request.expectedChecksum())) {
@@ -250,8 +256,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                     "INVENTORY_CONFISCATION_VALIDATED",
                     "VALIDATED",
                     Map.of(
-                            "scopeId", session.scopeId(),
-                            "changedSlots", request.changedSlots(),
+                            SCOPE_ID_FIELD, session.scopeId(),
+                            CHANGED_SLOTS_FIELD, request.changedSlots(),
                             "selectedPaths", request.selectedPaths(),
                             "assetsChecksum", request.assetsChecksum()
                     ),
@@ -289,7 +295,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             if (state.equals("ROLLED_BACK")) {
                 return true;
             }
-            if (!state.equals("LOCKED") || session.fencingToken() != fencingToken) {
+            if (!state.equals(LOCKED_STATE) || session.fencingToken() != fencingToken) {
                 return false;
             }
             markConfiscationCancelled(connection, session, reasonCode, detail, now);
@@ -620,82 +626,136 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 request.replacementSnapshot(),
                 "inventory replacement"
         );
-        return transaction(connection -> {
-            Optional<InventoryPatch> replay = findReplay(connection, request);
-            if (replay.isPresent()) {
-                validateReplay(replay.orElseThrow(), request);
-                return new InventoryPreparation(
-                        InventoryPreparation.Status.REPLAYED,
-                        replay,
-                        "The inventory operation was already prepared"
-                );
-            }
-            Optional<InventoryPreparation> restorationFailure =
-                    validateRestorationReservation(connection, request, now);
-            if (restorationFailure.isPresent()) {
-                return restorationFailure.orElseThrow();
-            }
-            if (request.requireNetworkOffline() && playerOnline(connection, request.playerId())) {
-                return rejected(InventoryPreparation.Status.PLAYER_ONLINE, "The player is online network-wide");
-            }
-            Profile profile = lockProfile(connection, request.playerId(), request.scopeId()).orElse(null);
-            if (profile == null || !profile.owningServerId().equals(request.owningServerId())) {
-                return rejected(
-                        InventoryPreparation.Status.PROFILE_NOT_FOUND,
-                        "No authoritative inventory observation exists on this backend"
-                );
-            }
-            InventoryObservation current = observation(connection, profile, true).orElse(null);
-            if (current == null) {
-                return rejected(
-                        InventoryPreparation.Status.PROFILE_NOT_FOUND,
-                        "The inventory profile has no authoritative observation"
-                );
-            }
-            if (profile.revision() != request.expectedRevision()
-                    || !current.checksum().equals(request.expectedChecksum())) {
-                return rejected(InventoryPreparation.Status.STALE, "The inventory revision changed before prepare");
-            }
-            if (patchTransitions.hasBlockingPatch(connection, profile.profileId())) {
-                return rejected(
-                        InventoryPreparation.Status.LOCKED,
-                        "Another inventory patch must be applied or its quarantine resolved first"
-                );
-            }
-            long fence = JdbcOperationLeaseSupport.acquire(
-                    connection,
-                    resourceKey(request.playerId(), request.scopeId()),
-                    request.operationId(),
-                    now.plus(leaseDuration),
-                    now
+        return transaction(connection -> prepare(connection, request, leaseDuration, now));
+    }
+
+    private InventoryPreparation prepare(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Duration leaseDuration,
+            Instant now
+    ) throws SQLException {
+        Optional<InventoryPreparation> replay = replayPreparation(connection, request);
+        if (replay.isPresent()) {
+            return replay.orElseThrow();
+        }
+        Optional<InventoryPreparation> constraintFailure =
+                preparationConstraintFailure(connection, request, now);
+        if (constraintFailure.isPresent()) {
+            return constraintFailure.orElseThrow();
+        }
+        Profile profile = lockProfile(connection, request.playerId(), request.scopeId()).orElse(null);
+        return prepareAgainstProfile(connection, request, leaseDuration, now, profile);
+    }
+
+    private Optional<InventoryPreparation> replayPreparation(
+            Connection connection,
+            InventoryPrepareRequest request
+    ) throws SQLException {
+        Optional<InventoryPatch> replay = findReplay(connection, request);
+        if (replay.isEmpty()) {
+            return Optional.empty();
+        }
+        validateReplay(replay.orElseThrow(), request);
+        return Optional.of(new InventoryPreparation(
+                InventoryPreparation.Status.REPLAYED,
+                replay,
+                "The inventory operation was already prepared"
+        ));
+    }
+
+    private Optional<InventoryPreparation> preparationConstraintFailure(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Instant now
+    ) throws SQLException {
+        Optional<InventoryPreparation> restorationFailure =
+                validateRestorationReservation(connection, request, now);
+        if (restorationFailure.isPresent()) {
+            return restorationFailure;
+        }
+        if (request.requireNetworkOffline() && playerOnline(connection, request.playerId())) {
+            return Optional.of(rejected(
+                    InventoryPreparation.Status.PLAYER_ONLINE,
+                    "The player is online network-wide"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private InventoryPreparation prepareAgainstProfile(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Duration leaseDuration,
+            Instant now,
+            Profile profile
+    ) throws SQLException {
+        if (profile == null || !profile.owningServerId().equals(request.owningServerId())) {
+            return rejected(
+                    InventoryPreparation.Status.PROFILE_NOT_FOUND,
+                    "No authoritative inventory observation exists on this backend"
             );
-            if (fence == JdbcOperationLeaseSupport.UNAVAILABLE) {
-                return rejected(InventoryPreparation.Status.LOCKED, "Another inventory operation owns the lease");
-            }
-            InventoryPatch patch = insertPreparedOperation(connection, request, profile, fence, now);
-            insertAudit(
-                    connection,
-                    request.operationId(),
-                    request.actorId(),
-                    request.playerId(),
-                    request.caseId(),
-                    "INVENTORY_OPERATION_PREPARED",
-                    "PREPARED",
-                    Map.of(
-                            "operationType", request.operationType(),
-                            "scopeId", request.scopeId(),
-                            "expectedRevision", request.expectedRevision(),
-                            "changedSlots", request.changedSlots()
-                    ),
-                    "inventory:prepare:" + request.operationId(),
-                    now
+        }
+        InventoryObservation current = observation(connection, profile, true).orElse(null);
+        if (current == null) {
+            return rejected(
+                    InventoryPreparation.Status.PROFILE_NOT_FOUND,
+                    "The inventory profile has no authoritative observation"
             );
-            return new InventoryPreparation(
-                    InventoryPreparation.Status.PREPARED,
-                    Optional.of(patch),
-                    "Inventory operation, lease, and before snapshot committed"
+        }
+        if (profile.revision() != request.expectedRevision()
+                || !current.checksum().equals(request.expectedChecksum())) {
+            return rejected(InventoryPreparation.Status.STALE, "The inventory revision changed before prepare");
+        }
+        if (patchTransitions.hasBlockingPatch(connection, profile.profileId())) {
+            return rejected(
+                    InventoryPreparation.Status.LOCKED,
+                    "Another inventory patch must be applied or its quarantine resolved first"
             );
-        });
+        }
+        long fence = JdbcOperationLeaseSupport.acquire(
+                connection,
+                resourceKey(request.playerId(), request.scopeId()),
+                request.operationId(),
+                now.plus(leaseDuration),
+                now
+        );
+        if (fence == JdbcOperationLeaseSupport.UNAVAILABLE) {
+            return rejected(InventoryPreparation.Status.LOCKED, "Another inventory operation owns the lease");
+        }
+        return commitPreparedOperation(connection, request, profile, fence, now);
+    }
+
+    private InventoryPreparation commitPreparedOperation(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Profile profile,
+            long fence,
+            Instant now
+    ) throws SQLException {
+        InventoryPatch patch = insertPreparedOperation(connection, request, profile, fence, now);
+        insertAudit(
+                connection,
+                request.operationId(),
+                request.actorId(),
+                request.playerId(),
+                request.caseId(),
+                "INVENTORY_OPERATION_PREPARED",
+                "PREPARED",
+                Map.of(
+                        "operationType", request.operationType(),
+                        SCOPE_ID_FIELD, request.scopeId(),
+                        "expectedRevision", request.expectedRevision(),
+                        CHANGED_SLOTS_FIELD, request.changedSlots()
+                ),
+                "inventory:prepare:" + request.operationId(),
+                now
+        );
+        return new InventoryPreparation(
+                InventoryPreparation.Status.PREPARED,
+                Optional.of(patch),
+                "Inventory operation, lease, and before snapshot committed"
+        );
     }
 
     @Override
@@ -983,7 +1043,9 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(playerId));
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? Optional.of(result.getString("owning_server_id")) : Optional.empty();
+                return result.next()
+                        ? Optional.of(result.getString(OWNING_SERVER_ID_COLUMN))
+                        : Optional.empty();
             }
         } catch (SQLException exception) {
             throw failure("Unable to inspect the player's pending inventory owner", exception);
@@ -1281,8 +1343,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             operation.setLong(6, revision);
             operation.setLong(7, fence);
             operation.setString(8, serialize(Map.of(
-                    "scopeId", request.scopeId(),
-                    "owningServerId", request.owningServerId(),
+                    SCOPE_ID_FIELD, request.scopeId(),
+                    OWNING_SERVER_ID_FIELD, request.owningServerId(),
                     "beforeChecksum", request.beforeChecksum(),
                     "selectionState", "OPEN"
             )));
@@ -1311,7 +1373,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         UUID patchId = UUID.randomUUID();
         UUID assetSnapshotId = UUID.randomUUID();
         String patchJson = serialize(Map.of(
-                "changedSlots", request.changedSlots(),
+                CHANGED_SLOTS_FIELD, request.changedSlots(),
                 "selectedPaths", request.selectedPaths(),
                 "assetsChecksum", request.assetsChecksum()
         ));
@@ -1335,8 +1397,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             operation.setString(1, serialize(Map.of(
-                    "scopeId", session.scopeId(),
-                    "owningServerId", session.owningServerId(),
+                    SCOPE_ID_FIELD, session.scopeId(),
+                    OWNING_SERVER_ID_FIELD, session.owningServerId(),
                     "beforeChecksum", request.expectedChecksum(),
                     "replacementChecksum", request.replacementChecksum(),
                     "selectedPaths", request.selectedPaths(),
@@ -1481,7 +1543,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 UuidBytes.fromBytes(result.getBytes("profile_id")),
                 UuidBytes.fromBytes(result.getBytes("player_id")),
                 result.getString("scope_id"),
-                result.getString("owning_server_id"),
+                result.getString(OWNING_SERVER_ID_COLUMN),
                 UuidBytes.fromBytes(result.getBytes("actor_id")),
                 new net.enthusia.staff.common.CaseId(result.getString("case_id")),
                 result.getLong("expected_revision"),
@@ -1694,80 +1756,16 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         UUID snapshotId = UUID.randomUUID();
         UUID patchId = UUID.randomUUID();
         String operationJson = serialize(Map.of(
-                "scopeId", request.scopeId(),
-                "owningServerId", request.owningServerId(),
+                SCOPE_ID_FIELD, request.scopeId(),
+                OWNING_SERVER_ID_FIELD, request.owningServerId(),
                 "expectedChecksum", request.expectedChecksum(),
                 "replacementChecksum", request.replacementChecksum(),
-                "changedSlots", request.changedSlots(),
+                CHANGED_SLOTS_FIELD, request.changedSlots(),
                 "requireNetworkOffline", request.requireNetworkOffline()
         ));
-        try (PreparedStatement operation = connection.prepareStatement("""
-                INSERT INTO inventory_operations(
-                    operation_id, idempotency_key, profile_id, case_id, actor_id,
-                    operation_type, state, expected_revision, fencing_token,
-                    operation_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
-                """);
-             PreparedStatement snapshot = connection.prepareStatement("""
-                INSERT INTO inventory_snapshots(
-                    snapshot_id, operation_id, profile_id, revision, checksum,
-                    snapshot_blob, created_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """);
-             PreparedStatement patch = connection.prepareStatement("""
-                INSERT INTO inventory_pending_patches(
-                    patch_id, operation_id, profile_id, expected_revision,
-                    expected_checksum, replacement_checksum, replacement_blob,
-                    actor_id, case_id, owning_server_id, fencing_token,
-                    state, patch_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-                """)) {
-            operation.setBytes(1, UuidBytes.toBytes(request.operationId()));
-            operation.setString(2, request.idempotencyKey());
-            operation.setBytes(3, UuidBytes.toBytes(profile.profileId()));
-            if (request.caseId().isPresent()) {
-                operation.setString(4, request.caseId().orElseThrow());
-            } else {
-                operation.setNull(4, java.sql.Types.CHAR);
-            }
-            operation.setBytes(5, UuidBytes.toBytes(request.actorId()));
-            operation.setString(6, request.operationType());
-            operation.setLong(7, request.expectedRevision());
-            operation.setLong(8, fence);
-            operation.setString(9, operationJson);
-            operation.setTimestamp(10, Timestamp.from(now));
-            operation.setTimestamp(11, Timestamp.from(now));
-            operation.executeUpdate();
-
-            snapshot.setBytes(1, UuidBytes.toBytes(snapshotId));
-            snapshot.setBytes(2, UuidBytes.toBytes(request.operationId()));
-            snapshot.setBytes(3, UuidBytes.toBytes(profile.profileId()));
-            snapshot.setLong(4, request.expectedRevision());
-            snapshot.setString(5, request.expectedChecksum());
-            snapshot.setBytes(6, request.beforeSnapshot());
-            snapshot.setTimestamp(7, Timestamp.from(now));
-            snapshot.setTimestamp(8, Timestamp.from(now.plus(SNAPSHOT_RETENTION)));
-            snapshot.executeUpdate();
-
-            patch.setBytes(1, UuidBytes.toBytes(patchId));
-            patch.setBytes(2, UuidBytes.toBytes(request.operationId()));
-            patch.setBytes(3, UuidBytes.toBytes(profile.profileId()));
-            patch.setLong(4, request.expectedRevision());
-            patch.setString(5, request.expectedChecksum());
-            patch.setString(6, request.replacementChecksum());
-            patch.setBytes(7, request.replacementSnapshot());
-            patch.setBytes(8, UuidBytes.toBytes(request.actorId()));
-            if (request.caseId().isPresent()) {
-                patch.setString(9, request.caseId().orElseThrow());
-            } else {
-                patch.setNull(9, java.sql.Types.CHAR);
-            }
-            patch.setString(10, request.owningServerId());
-            patch.setLong(11, fence);
-            patch.setString(12, serialize(Map.of("changedSlots", request.changedSlots())));
-            patch.setTimestamp(13, Timestamp.from(now));
-            patch.executeUpdate();
-        }
+        insertOperationRow(connection, request, profile, fence, operationJson, now);
+        insertBeforeSnapshot(connection, request, profile, snapshotId, now);
+        insertPendingPatch(connection, request, profile, patchId, fence, now);
         return new InventoryPatch(
                 patchId,
                 request.operationId(),
@@ -1787,6 +1785,113 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 request.changedSlots(),
                 now
         );
+    }
+
+    private static void insertOperationRow(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Profile profile,
+            long fence,
+            String operationJson,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement operation = connection.prepareStatement("""
+                INSERT INTO inventory_operations(
+                    operation_id, idempotency_key, profile_id, case_id, actor_id,
+                    operation_type, state, expected_revision, fencing_token,
+                    operation_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
+                """)) {
+            operation.setBytes(1, UuidBytes.toBytes(request.operationId()));
+            operation.setString(2, request.idempotencyKey());
+            operation.setBytes(3, UuidBytes.toBytes(profile.profileId()));
+            setOptionalCaseId(operation, 4, request.caseId());
+            operation.setBytes(5, UuidBytes.toBytes(request.actorId()));
+            operation.setString(6, request.operationType());
+            operation.setLong(7, request.expectedRevision());
+            operation.setLong(8, fence);
+            operation.setString(9, operationJson);
+            operation.setTimestamp(10, Timestamp.from(now));
+            operation.setTimestamp(11, Timestamp.from(now));
+            requireSingleInsert(operation, "inventory operation");
+        }
+    }
+
+    private static void insertBeforeSnapshot(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Profile profile,
+            UUID snapshotId,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement snapshot = connection.prepareStatement("""
+                INSERT INTO inventory_snapshots(
+                    snapshot_id, operation_id, profile_id, revision, checksum,
+                    snapshot_blob, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            snapshot.setBytes(1, UuidBytes.toBytes(snapshotId));
+            snapshot.setBytes(2, UuidBytes.toBytes(request.operationId()));
+            snapshot.setBytes(3, UuidBytes.toBytes(profile.profileId()));
+            snapshot.setLong(4, request.expectedRevision());
+            snapshot.setString(5, request.expectedChecksum());
+            snapshot.setBytes(6, request.beforeSnapshot());
+            snapshot.setTimestamp(7, Timestamp.from(now));
+            snapshot.setTimestamp(8, Timestamp.from(now.plus(SNAPSHOT_RETENTION)));
+            requireSingleInsert(snapshot, "inventory before snapshot");
+        }
+    }
+
+    private void insertPendingPatch(
+            Connection connection,
+            InventoryPrepareRequest request,
+            Profile profile,
+            UUID patchId,
+            long fence,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement patch = connection.prepareStatement("""
+                INSERT INTO inventory_pending_patches(
+                    patch_id, operation_id, profile_id, expected_revision,
+                    expected_checksum, replacement_checksum, replacement_blob,
+                    actor_id, case_id, owning_server_id, fencing_token,
+                    state, patch_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                """)) {
+            patch.setBytes(1, UuidBytes.toBytes(patchId));
+            patch.setBytes(2, UuidBytes.toBytes(request.operationId()));
+            patch.setBytes(3, UuidBytes.toBytes(profile.profileId()));
+            patch.setLong(4, request.expectedRevision());
+            patch.setString(5, request.expectedChecksum());
+            patch.setString(6, request.replacementChecksum());
+            patch.setBytes(7, request.replacementSnapshot());
+            patch.setBytes(8, UuidBytes.toBytes(request.actorId()));
+            setOptionalCaseId(patch, 9, request.caseId());
+            patch.setString(10, request.owningServerId());
+            patch.setLong(11, fence);
+            patch.setString(12, serialize(Map.of(CHANGED_SLOTS_FIELD, request.changedSlots())));
+            patch.setTimestamp(13, Timestamp.from(now));
+            requireSingleInsert(patch, "inventory pending patch");
+        }
+    }
+
+    private static void setOptionalCaseId(
+            PreparedStatement statement,
+            int parameter,
+            Optional<String> caseId
+    ) throws SQLException {
+        if (caseId.isPresent()) {
+            statement.setString(parameter, caseId.orElseThrow());
+        } else {
+            statement.setNull(parameter, java.sql.Types.CHAR);
+        }
+    }
+
+    private static void requireSingleInsert(PreparedStatement statement, String record)
+            throws SQLException {
+        if (statement.executeUpdate() != SINGLE_INSERT_ROW_COUNT) {
+            throw new SQLException(record + " insert affected an unexpected row count");
+        }
     }
 
     private Optional<InventoryPatch> findReplay(Connection connection, InventoryPrepareRequest request)
@@ -1811,20 +1916,27 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
-    private void validateReplay(InventoryPatch patch, InventoryPrepareRequest request) {
-        if (!patch.operationId().equals(request.operationId())
-                || !patch.playerId().equals(request.playerId())
-                || !patch.scopeId().equals(request.scopeId())
-                || !patch.owningServerId().equals(request.owningServerId())
-                || !patch.actorId().equals(request.actorId())
-                || !patch.caseId().equals(request.caseId())
-                || !patch.operationType().equals(request.operationType())
-                || patch.expectedRevision() != request.expectedRevision()
-                || !patch.expectedChecksum().equals(request.expectedChecksum())
-                || !patch.replacementChecksum().equals(request.replacementChecksum())
-                || !patch.changedSlots().equals(request.changedSlots())) {
+    private static void validateReplay(InventoryPatch patch, InventoryPrepareRequest request) {
+        if (!sameReplayBinding(patch, request) || !sameReplayMutation(patch, request)) {
             throw new IllegalArgumentException("idempotency key is already bound to another inventory operation");
         }
+    }
+
+    private static boolean sameReplayBinding(InventoryPatch patch, InventoryPrepareRequest request) {
+        return patch.operationId().equals(request.operationId())
+                && patch.playerId().equals(request.playerId())
+                && patch.scopeId().equals(request.scopeId())
+                && patch.owningServerId().equals(request.owningServerId())
+                && patch.actorId().equals(request.actorId())
+                && patch.caseId().equals(request.caseId())
+                && patch.operationType().equals(request.operationType());
+    }
+
+    private static boolean sameReplayMutation(InventoryPatch patch, InventoryPrepareRequest request) {
+        return patch.expectedRevision() == request.expectedRevision()
+                && patch.expectedChecksum().equals(request.expectedChecksum())
+                && patch.replacementChecksum().equals(request.replacementChecksum())
+                && patch.changedSlots().equals(request.changedSlots());
     }
 
     private Profile lockOrCreateProfile(
@@ -1866,7 +1978,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                         UuidBytes.fromBytes(result.getBytes("profile_id")),
                         UuidBytes.fromBytes(result.getBytes("player_id")),
                         result.getString("scope_id"),
-                        result.getString("owning_server_id"),
+                        result.getString(OWNING_SERVER_ID_COLUMN),
                         result.getLong("current_revision")
                 )) : Optional.empty();
             }
@@ -1895,7 +2007,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 UuidBytes.fromBytes(result.getBytes("profile_id")),
                 UuidBytes.fromBytes(result.getBytes("player_id")),
                 result.getString("scope_id"),
-                result.getString("owning_server_id"),
+                result.getString(OWNING_SERVER_ID_COLUMN),
                 result.getLong("revision"),
                 result.getString("checksum"),
                 result.getBytes("snapshot_blob"),
@@ -1998,9 +2110,9 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 "COMMITTED",
                 Map.of(
                         "operationType", patch.operationType(),
-                        "scopeId", patch.scopeId(),
+                        SCOPE_ID_FIELD, patch.scopeId(),
                         "resultingRevision", resultingRevision,
-                        "changedSlots", patch.changedSlots()
+                        CHANGED_SLOTS_FIELD, patch.changedSlots()
                 ),
                 "inventory:commit:" + patch.operationId(),
                 now

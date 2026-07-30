@@ -108,6 +108,14 @@ class AssetJournalIntegrationTest {
                     InventoryPreparation.Status.REPLAYED,
                     store.prepare(request, LEASE, NOW.plusSeconds(2)).status()
             );
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> store.prepare(
+                            withChangedSlots(request, java.util.List.of(5)),
+                            LEASE,
+                            NOW.plusSeconds(3)
+                    )
+            );
 
             InventoryPatch original = prepared.patch().orElseThrow();
             assertEquals(
@@ -558,6 +566,29 @@ class AssetJournalIntegrationTest {
                 replacement,
                 java.util.List.of(1),
                 false
+        );
+    }
+
+    private static InventoryPrepareRequest withChangedSlots(
+            InventoryPrepareRequest request,
+            java.util.List<Integer> changedSlots
+    ) {
+        return new InventoryPrepareRequest(
+                request.operationId(),
+                request.idempotencyKey(),
+                request.playerId(),
+                request.scopeId(),
+                request.owningServerId(),
+                request.actorId(),
+                request.caseId(),
+                request.operationType(),
+                request.expectedRevision(),
+                request.expectedChecksum(),
+                request.beforeSnapshot(),
+                request.replacementChecksum(),
+                request.replacementSnapshot(),
+                changedSlots,
+                request.requireNetworkOffline()
         );
     }
 
