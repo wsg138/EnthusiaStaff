@@ -133,6 +133,17 @@ public final class PunishmentService {
         return allowed;
     }
 
+    PunishmentEvaluation evaluateRequestProposal(CreatePunishmentRequest request, OperationalMode mode) {
+        Objects.requireNonNull(request);
+        boolean enforceReasonRank = request.actor().rank() != StaffRank.DEVELOPER;
+        return evaluate(
+                request,
+                mode,
+                ModerationAction.REQUEST_POLICY_SANCTION,
+                enforceReasonRank
+        );
+    }
+
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);
