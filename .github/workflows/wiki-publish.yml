@@ -88,7 +88,6 @@ jobs:
 
           git -C wiki-live commit \
             -m "Publish Wiki from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-
           git -C wiki-live push origin \
             "HEAD:${{ steps.backup.outputs.wiki_branch }}"
 
