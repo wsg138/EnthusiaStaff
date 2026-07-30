@@ -34,9 +34,11 @@ LiteBans migration, and a punishment/appeal website into one audited platform.
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
 
-### Developers
+### Developers and reviewers
 
-- [[Architecture]]
+- [[Architecture]] — module boundaries, runtime ownership, and durable write flow.
+- [[Developer Code Guide]] — important files, package map, feature traces, tests,
+  concurrency rules, and a recommended review order.
 - [[Development Setup]]
 - [[Build and Testing]]
 - [[Wiki Maintenance]]
@@ -75,8 +77,8 @@ website/API delivery.
 
 ## Documentation status
 
-The Wiki is staff- and operator-facing. It summarizes intended behavior from
-`ENTHUSIASTAFF-GOALS.md`, but availability is determined by current code,
-tests, staging evidence, and the requirements matrix. Pages intentionally call
-out missing commands, unavailable integrations, and unverified behavior rather
-than presenting the target design as complete.
+The Wiki has separate staff, operator, and developer/reviewer sections. It
+summarizes intended behavior from `ENTHUSIASTAFF-GOALS.md`, but availability is
+determined by current code, tests, staging evidence, and the requirements matrix.
+Pages intentionally call out missing commands, unavailable integrations, and
+unverified behavior rather than presenting the target design as complete.
