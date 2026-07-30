@@ -100,10 +100,11 @@ The selection lifecycle is fenced independently:
 5. Cancellation is idempotent only for the matching fence and cannot roll back
    an operation that already advanced beyond `LOCKED`.
 
-The operation update, pending patch insert, asset-snapshot insert, and audit
-must each affect the expected row. Any failure rolls back the whole
-preparation transaction; it must never leave a validated operation without its
-patch or durable confiscated assets.
+The operation update, pending patch insert, and asset-snapshot insert must each
+affect exactly one row. The audit insert may affect zero only when its unique
+idempotency key already exists. Any other row count or write failure rolls back
+the whole preparation transaction; it must never leave a validated operation
+without its patch or durable confiscated assets.
 
 ## Operator response
 

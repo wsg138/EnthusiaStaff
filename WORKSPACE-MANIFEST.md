@@ -47,7 +47,7 @@ are not treated as the requested final layout.
 
 The GitHub Wiki is enabled at
 `https://github.com/wsg138/EnthusiaStaff/wiki`. Its separate `master` branch is
-at `18a1e4073cb89b2bb946578aae165276fea7fbf8` and contains Home, Architecture,
+at `ea4f929710d3281aac4a8087da1e947973c2d795` and contains Home, Architecture,
 Development Setup, Build and Testing, Installation, Configuration, Commands and
 Permissions, Punishment System, LiteBans Migration, Shadow Mode and Cutover,
 Recovery and Troubleshooting, Integrations, Inventory and Confiscation Safety,

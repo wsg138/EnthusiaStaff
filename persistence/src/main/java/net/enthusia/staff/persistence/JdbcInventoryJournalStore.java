@@ -2078,6 +2078,14 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
+    private static void requireIdempotentInsert(PreparedStatement statement, String record)
+            throws SQLException {
+        int affectedRows = statement.executeUpdate();
+        if (affectedRows < 0 || affectedRows > SINGLE_INSERT_ROW_COUNT) {
+            throw new SQLException(record + " insert affected an unexpected row count");
+        }
+    }
+
     private Optional<InventoryPatch> findReplay(Connection connection, InventoryPrepareRequest request)
             throws SQLException {
         String sql = """
@@ -2359,7 +2367,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             statement.setString(8, serialize(detail));
             statement.setString(9, idempotencyKey);
             statement.setTimestamp(10, Timestamp.from(occurredAt));
-            requireSingleInsert(statement, "inventory audit event");
+            requireIdempotentInsert(statement, "inventory audit event");
         }
     }
 
