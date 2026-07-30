@@ -683,6 +683,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
                 this,
                 punishmentRequestService,
+                playerDirectory,
                 authorizationPolicy,
                 workers
         );
