@@ -32,18 +32,27 @@ public record PunishmentApprovalRequest(
                 throw new IllegalArgumentException("pending punishment request cannot contain resolution fields");
             }
         } else {
-            if (resolvedAt == null) {
-                throw new IllegalArgumentException("resolved punishment request requires a resolution time");
+            if (revision == 0 || resolvedAt == null || resolvedAt.isBefore(createdAt)) {
+                throw new IllegalArgumentException("resolved punishment request requires a valid revision and time");
             }
             resolutionNote = Checks.nonBlank(resolutionNote, "resolutionNote", 1_000);
-            if ((status == PunishmentRequestStatus.APPROVED
-                    || status == PunishmentRequestStatus.FULFILLED_EXTERNALLY)
-                    && resultingCaseId == null) {
-                throw new IllegalArgumentException("fulfilled punishment request requires a resulting case");
-            }
-            if ((status == PunishmentRequestStatus.APPROVED || status == PunishmentRequestStatus.DENIED)
-                    && resolvedBy == null) {
-                throw new IllegalArgumentException("staff-resolved punishment request requires a resolver");
+            switch (status) {
+                case APPROVED, FULFILLED_EXTERNALLY -> {
+                    if (resolvedBy == null || resultingCaseId == null) {
+                        throw new IllegalArgumentException("fulfilled punishment request requires resolver and case");
+                    }
+                }
+                case DENIED -> {
+                    if (resolvedBy == null || resultingCaseId != null) {
+                        throw new IllegalArgumentException("denied punishment request requires resolver without case");
+                    }
+                }
+                case EXPIRED -> {
+                    if (resolvedBy != null || resultingCaseId != null) {
+                        throw new IllegalArgumentException("expired punishment request cannot contain resolver or case");
+                    }
+                }
+                case PENDING -> throw new IllegalStateException("pending state was handled separately");
             }
         }
     }
