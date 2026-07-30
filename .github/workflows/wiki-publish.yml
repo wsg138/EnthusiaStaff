@@ -7,6 +7,11 @@ on:
         description: 'Type PUBLISH to replace the live Wiki from docs/wiki/pages'
         required: true
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/wiki-publish-trigger'
 
 permissions:
   contents: write
@@ -17,7 +22,9 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event.inputs.confirmation == 'PUBLISH')
     runs-on: ubuntu-latest
     environment: wiki-production
 
@@ -88,7 +95,6 @@ jobs:
 
           git -C wiki-live commit \
             -m "Publish Wiki from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-
           git -C wiki-live push origin \
             "HEAD:${{ steps.backup.outputs.wiki_branch }}"
 
