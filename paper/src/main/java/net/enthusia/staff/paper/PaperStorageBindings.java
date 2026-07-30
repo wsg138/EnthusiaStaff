@@ -64,20 +64,25 @@ record PaperStorageBindings(
                 moderation.moderationStore(),
                 new EscalationEngine()
         );
+        PunishmentRequestService punishmentRequests = new PunishmentRequestService(
+                clock,
+                Duration.ofDays(7),
+                Duration.ofMinutes(2),
+                identifiers,
+                authorization,
+                punishment,
+                runtime.punishmentRequestStore()
+        );
         ApplicationServices services = new ApplicationServices(
                 punishment,
                 new PunishmentDraftWorkflow(
-                        clock, Duration.ofHours(24), punishment, draftStore
-                ),
-                new PunishmentRequestService(
                         clock,
-                        Duration.ofDays(7),
-                        Duration.ofMinutes(2),
-                        identifiers,
-                        authorization,
+                        Duration.ofHours(24),
                         punishment,
-                        runtime.punishmentRequestStore()
+                        punishmentRequests,
+                        draftStore
                 ),
+                punishmentRequests,
                 new SanctionChangeService(authorization, runtime.sanctionMutationStore())
         );
         return new PaperStorageBindings(runtime, moderation, assets, services);
