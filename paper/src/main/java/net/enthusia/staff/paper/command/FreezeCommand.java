@@ -20,6 +20,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FreezeCommand implements CommandExecutor {
+    private static final String PERMISSION = "enthusiastaff.freeze";
+
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<OperationalMode> mode;
@@ -48,6 +50,9 @@ public final class FreezeCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        if (!CommandPermissionGate.require(sender, PERMISSION, "You do not have permission to manage freezes.")) {
+            return true;
+        }
         if (mode.get() != OperationalMode.ACTIVE) {
             sender.sendMessage(Component.text("Freeze changes are disabled while moderation is " + mode.get() + '.'));
             return true;
