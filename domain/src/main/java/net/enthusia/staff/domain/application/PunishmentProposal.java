@@ -31,8 +31,8 @@ public record PunishmentProposal(
             throw new IllegalArgumentException("punishment proposal fields must be present");
         }
         reasonId = Checks.nonBlank(reasonId, "reasonId", 96);
-        family = Checks.nonBlank(family, "family", 96);
-        publicReason = Checks.nonBlank(publicReason, "publicReason", 500);
+        family = Checks.nonBlank(family, "family", 64);
+        publicReason = Checks.nonBlank(publicReason, "publicReason", 160);
         internalExplanation = Checks.nonBlank(internalExplanation, "internalExplanation", 4_000);
         configurationVersion = Checks.nonBlank(configurationVersion, "configurationVersion", 128);
         if (requiredRank == StaffRank.DEVELOPER || requiredRank == StaffRank.SYSTEM) {
