@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
@@ -127,12 +127,12 @@ final class PunishmentRequestInterfacePresentationTest {
     }
 
     private static List<PunishmentRequestGuiState.RequestView> requestViews() {
-        List<PunishmentRequestGuiState.RequestView> views = new ArrayList<>();
-        for (int index = 0; index < TOTAL_REQUESTS; index++) {
-            PunishmentApprovalRequest request = request(index + 10, PunishmentRequestStatus.PENDING);
-            views.add(new PunishmentRequestGuiState.RequestView(request, "Target" + index));
-        }
-        return views;
+        return IntStream.range(0, TOTAL_REQUESTS)
+                .mapToObj(index -> new PunishmentRequestGuiState.RequestView(
+                        request(index + 10, PunishmentRequestStatus.PENDING),
+                        "Target" + index
+                ))
+                .toList();
     }
 
     private static PunishmentApprovalRequest request(int sequence, PunishmentRequestStatus status) {
