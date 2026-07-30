@@ -6,7 +6,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 
 sealed interface PunishmentRequestGuiState {
     record Queue(List<PunishmentApprovalRequest> requests) implements PunishmentRequestGuiState {
-        Queue {
+        public Queue {
             if (requests == null) {
                 throw new IllegalArgumentException("punishment request queue must be present");
             }
@@ -15,7 +15,7 @@ sealed interface PunishmentRequestGuiState {
     }
 
     record Review(PunishmentApprovalLease lease) implements PunishmentRequestGuiState {
-        Review {
+        public Review {
             if (lease == null) {
                 throw new IllegalArgumentException("punishment request review lease must be present");
             }
@@ -23,7 +23,7 @@ sealed interface PunishmentRequestGuiState {
     }
 
     record Denial(PunishmentApprovalLease lease) implements PunishmentRequestGuiState {
-        Denial {
+        public Denial {
             if (lease == null) {
                 throw new IllegalArgumentException("punishment request denial lease must be present");
             }

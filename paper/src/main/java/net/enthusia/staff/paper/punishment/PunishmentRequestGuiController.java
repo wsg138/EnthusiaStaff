@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -76,7 +77,10 @@ public final class PunishmentRequestGuiController implements Listener {
             return false;
         }
         submit(player, () -> {
-            List<PunishmentApprovalRequest> requests = services.get().pending(QUEUE_CONTENT_SIZE);
+            List<PunishmentApprovalRequest> requests = reviewable(services.get().pending(500), actor)
+                    .stream()
+                    .limit(QUEUE_CONTENT_SIZE)
+                    .toList();
             onMain(() -> player.openInventory(renderQueue(requests)));
         });
         return true;
@@ -124,11 +128,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
     }
 
-    private void handleQueueClick(
-            Player player,
-            PunishmentRequestGuiState.Queue queue,
-            int slot
-    ) {
+    private void handleQueueClick(Player player, PunishmentRequestGuiState.Queue queue, int slot) {
         if (slot == CLOSE_SLOT) {
             player.closeInventory();
             return;
@@ -147,11 +147,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
     }
 
-    private void handleReviewClick(
-            Player player,
-            PunishmentRequestGuiState.Review review,
-            int slot
-    ) {
+    private void handleReviewClick(Player player, PunishmentRequestGuiState.Review review, int slot) {
         if (slot == REVIEW_CLOSE_SLOT) {
             player.closeInventory();
             return;
@@ -173,11 +169,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
     }
 
-    private void handleDenialClick(
-            Player player,
-            PunishmentRequestGuiState.Denial denial,
-            int slot
-    ) {
+    private void handleDenialClick(Player player, PunishmentRequestGuiState.Denial denial, int slot) {
         if (slot == REVIEW_CLOSE_SLOT) {
             player.closeInventory();
             return;
@@ -231,13 +223,19 @@ public final class PunishmentRequestGuiController implements Listener {
         holder.attach(inventory);
         fillFooter(inventory);
         for (int slot = 0; slot < requests.size() && slot < QUEUE_CONTENT_SIZE; slot++) {
-            PunishmentApprovalRequest request = requests.get(slot);
-            inventory.setItem(slot, requestItem(request));
+            inventory.setItem(slot, requestItem(requests.get(slot)));
+        }
+        if (requests.isEmpty()) {
+            inventory.setItem(22, item(
+                    Material.PAPER,
+                    "No reviewable requests",
+                    List.of(Component.text("No pending requests match your approval rank.", NamedTextColor.GRAY))
+            ));
         }
         inventory.setItem(REFRESH_SLOT, item(
                 Material.CLOCK,
                 "Refresh queue",
-                List.of(Component.text(requests.size() + " pending request(s)", NamedTextColor.GRAY))
+                List.of(Component.text(requests.size() + " reviewable request(s)", NamedTextColor.GRAY))
         ));
         inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
         return inventory;
@@ -253,7 +251,7 @@ public final class PunishmentRequestGuiController implements Listener {
         inventory.setItem(10, item(
                 Material.PLAYER_HEAD,
                 "Target",
-                List.of(Component.text(request.proposal().targetId().toString(), NamedTextColor.GRAY))
+                List.of(Component.text("Authoritative player record", NamedTextColor.GRAY))
         ));
         inventory.setItem(12, item(
                 Material.WRITABLE_BOOK,
@@ -269,10 +267,8 @@ public final class PunishmentRequestGuiController implements Listener {
                                 PunishmentGuiRenderer.describe(request.proposal().sanctions()),
                                 NamedTextColor.GOLD
                         ),
-                        Component.text(
-                                "Policy: " + request.proposal().configurationVersion(),
-                                NamedTextColor.DARK_GRAY
-                        )
+                        Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY),
+                        Component.text("Policy: " + request.proposal().configurationVersion(), NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(14, item(
@@ -289,9 +285,9 @@ public final class PunishmentRequestGuiController implements Listener {
                 Material.CLOCK,
                 "Lease and expiration",
                 List.of(
+                        Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
                         Component.text("Request expires: " + request.expiresAt(), NamedTextColor.GRAY),
-                        Component.text("Review lease expires: " + lease.leaseExpiresAt(), NamedTextColor.GRAY),
-                        Component.text("Fence token: " + lease.fenceToken(), NamedTextColor.DARK_GRAY)
+                        Component.text("Review lease expires: " + lease.expiresAt(), NamedTextColor.GRAY)
                 )
         ));
         inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
@@ -333,21 +329,21 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private static ItemStack requestItem(PunishmentApprovalRequest request) {
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(request.requestId().toString(), NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("Status: pending", NamedTextColor.AQUA));
         lore.add(Component.text("Requester: " + request.proposal().requester().displayName()
                 + " (" + request.proposal().requester().rank() + ')', NamedTextColor.GRAY));
-        lore.add(Component.text("Target: " + request.proposal().targetId(), NamedTextColor.GRAY));
         lore.add(Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE));
         lore.add(Component.text(
                 PunishmentGuiRenderer.describe(request.proposal().sanctions()),
                 NamedTextColor.GOLD
         ));
+        lore.add(Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY));
         lore.add(Component.text("Required: " + request.proposal().requiredRank(), NamedTextColor.GRAY));
+        lore.add(Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY));
         lore.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
         lore.add(Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY));
-        lore.add(Component.text("Click to acquire a fenced review lease", NamedTextColor.YELLOW));
-        Material material = request.proposal().requester().rank()
-                == net.enthusia.staff.domain.auth.StaffRank.HELPER
+        lore.add(Component.text("Click to claim this request for review", NamedTextColor.YELLOW));
+        Material material = request.proposal().requester().rank() == StaffRank.HELPER
                 ? Material.GOLDEN_SWORD
                 : Material.REDSTONE;
         return item(material, humanize(request.proposal().publicReason()), lore);
@@ -376,8 +372,9 @@ public final class PunishmentRequestGuiController implements Listener {
             player.sendMessage(Component.text("You do not have permission to review requests.", NamedTextColor.RED));
             return null;
         }
-        Actor actor = PaperActorResolver.actor(player);
-        if (!authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
+        Actor actor = PaperActorResolver.resolve(player).orElse(null);
+        if (actor == null
+                || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
                 || !actor.rank().canApprovePunishmentRequests()) {
             player.sendMessage(Component.text(
                     "Only Mod, Admin, or Founder may review punishment requests.",
@@ -414,27 +411,40 @@ public final class PunishmentRequestGuiController implements Listener {
         plugin.getServer().getScheduler().runTask(plugin, action);
     }
 
+    private static List<PunishmentApprovalRequest> reviewable(
+            List<PunishmentApprovalRequest> requests,
+            Actor actor
+    ) {
+        return requests.stream()
+                .filter(request -> !request.proposal().requester().id().equals(actor.id()))
+                .filter(request -> meetsRequiredApprovalRank(actor.rank(), request.proposal().requiredRank()))
+                .toList();
+    }
+
+    private static boolean meetsRequiredApprovalRank(StaffRank approver, StaffRank required) {
+        return switch (required) {
+            case HELPER, MOD -> approver.canApprovePunishmentRequests();
+            case ADMIN -> approver == StaffRank.ADMIN || approver == StaffRank.FOUNDER;
+            case FOUNDER -> approver == StaffRank.FOUNDER;
+            case DEVELOPER, SYSTEM -> false;
+        };
+    }
+
     private static void decisionMessage(Player player, PunishmentRequestResult result) {
         if (result instanceof PunishmentRequestResult.Approved approved) {
             player.sendMessage(Component.text(
                     "Punishment request approved as case " + approved.caseId().value() + '.',
                     NamedTextColor.GREEN
             ));
-        } else if (result instanceof PunishmentRequestResult.Denied denied) {
-            player.sendMessage(Component.text(
-                    "Punishment request " + denied.request().requestId() + " was denied.",
-                    NamedTextColor.YELLOW
-            ));
+        } else if (result instanceof PunishmentRequestResult.Denied) {
+            player.sendMessage(Component.text("Punishment request was denied.", NamedTextColor.YELLOW));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
             rejection(player, rejected);
         }
     }
 
     private static void rejection(Player player, PunishmentRequestResult.Rejected rejected) {
-        player.sendMessage(Component.text(
-                rejected.code() + ": " + rejected.message(),
-                NamedTextColor.RED
-        ));
+        player.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
     }
 
     private static void fillFooter(Inventory inventory) {

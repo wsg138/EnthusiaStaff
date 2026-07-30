@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,6 +13,9 @@ import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.kyori.adventure.text.Component;
@@ -20,26 +24,29 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-final class PunishmentRequestCommandHandler {
-    private static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
+public final class PunishmentRequestCommandHandler {
+    public static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final List<String> SUBCOMMANDS = List.of("requests", "review", "approve", "deny");
 
     private final JavaPlugin plugin;
     private final Supplier<PunishmentRequestService> services;
+    private final AuthorizationPolicy authorization;
     private final PunishmentRequestGuiController gui;
     private final ExecutorService workers;
 
-    PunishmentRequestCommandHandler(
+    public PunishmentRequestCommandHandler(
             JavaPlugin plugin,
             Supplier<PunishmentRequestService> services,
+            AuthorizationPolicy authorization,
             PunishmentRequestGuiController gui,
             ExecutorService workers
     ) {
-        if (plugin == null || services == null || gui == null || workers == null) {
+        if (plugin == null || services == null || authorization == null || gui == null || workers == null) {
             throw new IllegalArgumentException("punishment request command dependencies must be present");
         }
         this.plugin = plugin;
         this.services = services;
+        this.authorization = authorization;
         this.gui = gui;
         this.workers = workers;
     }
@@ -51,17 +58,13 @@ final class PunishmentRequestCommandHandler {
     }
 
     void execute(CommandSender sender, String[] args, Actor actor) {
-        String subcommand = args[0].toLowerCase(Locale.ROOT);
-        if (!sender.hasPermission(REVIEW_PERMISSION)) {
-            sender.sendMessage(Component.text(
-                    "You do not have permission to review punishment requests.",
-                    NamedTextColor.RED
-            ));
+        if (!authorizedReviewer(sender, actor)) {
             return;
         }
+        String subcommand = args[0].toLowerCase(Locale.ROOT);
         switch (subcommand) {
-            case "requests" -> queue(sender);
-            case "review" -> review(sender, args);
+            case "requests" -> queue(sender, actor);
+            case "review" -> review(sender, args, actor);
             case "approve" -> decide(sender, args, actor, true);
             case "deny" -> decide(sender, args, actor, false);
             default -> throw new IllegalStateException("Unsupported punishment request subcommand");
@@ -79,24 +82,45 @@ final class PunishmentRequestCommandHandler {
         return List.of();
     }
 
-    private void queue(CommandSender sender) {
+    private boolean authorizedReviewer(CommandSender sender, Actor actor) {
+        if (!sender.hasPermission(REVIEW_PERMISSION)
+                || actor == null
+                || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
+                || !actor.rank().canApprovePunishmentRequests()) {
+            sender.sendMessage(Component.text(
+                    "Only Mod, Admin, or Founder may review punishment requests.",
+                    NamedTextColor.RED
+            ));
+            return false;
+        }
+        return true;
+    }
+
+    private void queue(CommandSender sender, Actor actor) {
         if (sender instanceof Player player) {
             gui.openQueue(player);
             return;
         }
         submit(sender, () -> {
-            List<PunishmentApprovalRequest> pending = services.get().pending(45);
+            List<PunishmentApprovalRequest> pending = reviewable(services.get().pending(500), actor)
+                    .stream()
+                    .limit(45)
+                    .toList();
             onMain(() -> {
                 sender.sendMessage(Component.text(
-                        "Pending punishment requests: " + pending.size(),
+                        "Reviewable punishment requests: " + pending.size(),
                         NamedTextColor.GOLD
                 ));
-                pending.forEach(request -> sender.sendMessage(summary(request)));
+                if (pending.isEmpty()) {
+                    sender.sendMessage(Component.text("No punishment requests are currently available.", NamedTextColor.GRAY));
+                } else {
+                    pending.forEach(request -> sender.sendMessage(summary(request)));
+                }
             });
         });
     }
 
-    private void review(CommandSender sender, String[] args) {
+    private void review(CommandSender sender, String[] args, Actor actor) {
         UUID requestId = requestId(sender, args, 1);
         if (requestId == null) {
             return;
@@ -106,14 +130,14 @@ final class PunishmentRequestCommandHandler {
             return;
         }
         submit(sender, () -> {
-            PunishmentApprovalRequest request = services.get().pending(500).stream()
+            PunishmentApprovalRequest request = reviewable(services.get().pending(500), actor).stream()
                     .filter(value -> value.requestId().equals(requestId))
                     .findFirst()
                     .orElse(null);
             onMain(() -> {
                 if (request == null) {
                     sender.sendMessage(Component.text(
-                            "The request is not pending or does not exist.",
+                            "The request is not pending or you are not authorized to review it.",
                             NamedTextColor.RED
                     ));
                 } else {
@@ -133,12 +157,13 @@ final class PunishmentRequestCommandHandler {
             return;
         }
         submit(sender, () -> {
-            PunishmentRequestResult acquired = services.get().acquire(requestId, actor);
+            PunishmentRequestService service = services.get();
+            PunishmentRequestResult acquired = service.acquire(requestId, actor);
             PunishmentRequestResult result;
             if (acquired instanceof PunishmentRequestResult.Leased leased) {
                 result = approve
-                        ? services.get().approve(leased.lease(), actor)
-                        : services.get().deny(leased.lease(), actor, denialNote);
+                        ? service.approve(leased.lease(), actor)
+                        : service.deny(leased.lease(), actor, denialNote);
             } else {
                 result = acquired;
             }
@@ -170,6 +195,25 @@ final class PunishmentRequestCommandHandler {
 
     private void onMain(Runnable action) {
         plugin.getServer().getScheduler().runTask(plugin, action);
+    }
+
+    private static List<PunishmentApprovalRequest> reviewable(
+            List<PunishmentApprovalRequest> requests,
+            Actor actor
+    ) {
+        return requests.stream()
+                .filter(request -> !request.proposal().requester().id().equals(actor.id()))
+                .filter(request -> meetsRequiredApprovalRank(actor.rank(), request.proposal().requiredRank()))
+                .toList();
+    }
+
+    private static boolean meetsRequiredApprovalRank(StaffRank approver, StaffRank required) {
+        return switch (required) {
+            case HELPER, MOD -> approver.canApprovePunishmentRequests();
+            case ADMIN -> approver == StaffRank.ADMIN || approver == StaffRank.FOUNDER;
+            case FOUNDER -> approver == StaffRank.FOUNDER;
+            case DEVELOPER, SYSTEM -> false;
+        };
     }
 
     private static UUID requestId(CommandSender sender, String[] args, int index) {
@@ -207,28 +251,20 @@ final class PunishmentRequestCommandHandler {
     private static void sendDecision(CommandSender sender, PunishmentRequestResult result) {
         if (result instanceof PunishmentRequestResult.Approved approved) {
             sender.sendMessage(Component.text(
-                    "Approved punishment request " + approved.request().requestId()
-                            + " as case " + approved.caseId().value() + '.',
+                    "Approved punishment request as case " + approved.caseId().value() + '.',
                     NamedTextColor.GREEN
             ));
-        } else if (result instanceof PunishmentRequestResult.Denied denied) {
-            sender.sendMessage(Component.text(
-                    "Denied punishment request " + denied.request().requestId() + '.',
-                    NamedTextColor.YELLOW
-            ));
+        } else if (result instanceof PunishmentRequestResult.Denied) {
+            sender.sendMessage(Component.text("Punishment request denied.", NamedTextColor.YELLOW));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
-            sender.sendMessage(Component.text(
-                    rejected.code() + ": " + rejected.message(),
-                    NamedTextColor.RED
-            ));
+            sender.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
         }
     }
 
     private static Component summary(PunishmentApprovalRequest request) {
         return Component.text(request.requestId() + " ", NamedTextColor.AQUA)
                 .append(Component.text(
-                        request.proposal().requester().displayName() + " -> "
-                                + request.proposal().targetId() + " | "
+                        request.proposal().requester().displayName() + " -> target | "
                                 + request.proposal().reasonId() + " | "
                                 + describe(request.proposal().sanctions()) + " | expires "
                                 + request.expiresAt(),
@@ -238,14 +274,13 @@ final class PunishmentRequestCommandHandler {
 
     private static void sendDetails(CommandSender sender, PunishmentApprovalRequest request) {
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.text("Punishment request " + request.requestId(), NamedTextColor.GOLD));
+        lines.add(Component.text("Punishment request", NamedTextColor.GOLD));
         lines.add(Component.text("Status: " + request.status(), NamedTextColor.GRAY));
         lines.add(Component.text(
                 "Requester: " + request.proposal().requester().displayName()
                         + " (" + request.proposal().requester().rank() + ')',
                 NamedTextColor.GRAY
         ));
-        lines.add(Component.text("Target: " + request.proposal().targetId(), NamedTextColor.GRAY));
         lines.add(Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.GRAY));
         lines.add(Component.text(
                 "Sanctions: " + describe(request.proposal().sanctions()),
@@ -256,6 +291,7 @@ final class PunishmentRequestCommandHandler {
                         + " | revision " + request.revision(),
                 NamedTextColor.GRAY
         ));
+        lines.add(Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY));
         lines.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
         lines.forEach(sender::sendMessage);
     }
@@ -263,13 +299,17 @@ final class PunishmentRequestCommandHandler {
     private static String describe(List<SanctionSpec> sanctions) {
         return sanctions.stream().map(specification -> {
             String type = specification.type().name().toLowerCase(Locale.ROOT).replace('_', ' ');
-            return specification.length().isPermanent()
-                    ? type + " permanent"
-                    : type + ' ' + humanDuration(specification.length().duration());
+            if (specification.length().isPermanent()) {
+                return type + " permanent";
+            }
+            if (specification.length().isInstant()) {
+                return type;
+            }
+            return type + ' ' + humanDuration(specification.length().temporary().orElseThrow());
         }).reduce((left, right) -> left + ", " + right).orElse("no sanction");
     }
 
-    private static String humanDuration(java.time.Duration duration) {
+    private static String humanDuration(Duration duration) {
         if (duration.toDays() > 0 && duration.minusDays(duration.toDays()).isZero()) {
             return duration.toDays() + "d";
         }

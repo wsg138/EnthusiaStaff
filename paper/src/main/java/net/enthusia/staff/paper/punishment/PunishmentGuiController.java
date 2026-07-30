@@ -17,9 +17,10 @@ import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.application.PunishmentDraftCleanupException;
+import net.enthusia.staff.domain.application.PunishmentDraftConfirmation;
 import net.enthusia.staff.domain.application.PunishmentDraftEvaluation;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
-import net.enthusia.staff.domain.application.PunishmentResult;
+import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -406,9 +407,9 @@ public final class PunishmentGuiController implements Listener {
                     message(viewer, "Moderation storage is not ready; no action was taken.");
                     return;
                 }
-                PunishmentResult result;
+                PunishmentDraftConfirmation result;
                 try {
-                    result = workflow.confirm(state.draft().draftId(), actor, mode.get());
+                    result = workflow.confirmRouted(state.draft().draftId(), actor, mode.get());
                 } catch (PunishmentDraftCleanupException exception) {
                     plugin.getLogger().log(
                             Level.SEVERE,
@@ -418,15 +419,32 @@ public final class PunishmentGuiController implements Listener {
                     finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
                             + ", but draft cleanup failed. Reconfirming is idempotent.");
                     return;
-                }
-                if (result instanceof PunishmentResult.Accepted accepted) {
-                    finish(viewer, "Punishment committed as case " + accepted.caseId()
-                            + (accepted.replayed() ? " (idempotent replay)" : "") + '.');
+                } catch (PunishmentRequestDraftCleanupException exception) {
+                    plugin.getLogger().log(
+                            Level.SEVERE,
+                            "Punishment GUI draft cleanup failed after request submission "
+                                    + exception.submitted().request().requestId(),
+                            exception
+                    );
+                    finish(viewer, "Punishment request submitted, but draft cleanup failed. "
+                            + "Reconfirming is idempotent.");
                     return;
                 }
-                PunishmentResult.Rejected rejected = (PunishmentResult.Rejected) result;
+                if (result instanceof PunishmentDraftConfirmation.Applied applied) {
+                    finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
+                            + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
+                    return;
+                }
+                if (result instanceof PunishmentDraftConfirmation.Requested requested) {
+                    finish(viewer, "Punishment request "
+                            + (requested.submitted().replayed() ? "replayed" : "submitted")
+                            + "; expires " + requested.submitted().request().expiresAt() + '.');
+                    return;
+                }
+                PunishmentDraftConfirmation.Rejected rejected = (PunishmentDraftConfirmation.Rejected) result;
                 if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
-                    message(viewer, "The recommendation changed. A fresh review is being opened; no case was created.");
+                    message(viewer, "The recommendation changed. A fresh review is being opened; "
+                            + "no punishment or request was created.");
                     reprepare(
                             viewer,
                             actor,
@@ -483,7 +501,8 @@ public final class PunishmentGuiController implements Listener {
     private Actor authorizedActor(Player viewer) {
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
         if (actor == null || !actor.id().equals(viewer.getUniqueId())
-                || !authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                && !authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION))
                 || !viewer.hasPermission("enthusiastaff.punish.configured")) {
             viewer.sendMessage(Component.text("You do not have punishment authority."));
             return null;
