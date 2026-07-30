@@ -126,18 +126,19 @@ final class JdbcPunishmentRequestRepository {
         PunishmentProposal proposal = request.proposal();
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO punishment_requests(
-                    request_id, submission_key, match_key,
+                    request_id, submission_key, match_key, open_match_key,
                     target_id, requester_id, requester_name, requester_rank,
                     reason_id, sanction_family, public_reason, internal_explanation,
                     configuration_version, visibility, required_rank, raw_ordinal,
                     effective_ordinal, selected_ordinal, recency_bonus, step_label,
                     contribution_json, sanctions_json, status, revision,
                     created_at, updated_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             int index = 1;
             statement.setBytes(index++, UuidBytes.toBytes(request.requestId()));
             statement.setString(index++, request.submissionKey().value());
+            statement.setString(index++, proposal.matchKey().value());
             statement.setString(index++, proposal.matchKey().value());
             statement.setBytes(index++, UuidBytes.toBytes(proposal.targetId()));
             statement.setBytes(index++, UuidBytes.toBytes(proposal.requester().id()));
@@ -180,7 +181,7 @@ final class JdbcPunishmentRequestRepository {
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE punishment_requests
-                SET status = ?, revision = revision + 1,
+                SET status = ?, open_match_key = NULL, revision = revision + 1,
                     resolved_by = ?, resolution_note = ?, resulting_case_id = ?,
                     resolved_at = ?, updated_at = ?
                 WHERE request_id = ? AND status = 'PENDING' AND revision = ?
