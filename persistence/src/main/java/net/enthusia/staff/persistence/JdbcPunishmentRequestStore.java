@@ -230,16 +230,26 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                     ? new PunishmentRequestResult.Approved(current, current.resultingCaseId(), true)
                     : rejected("REQUEST_NOT_PENDING", "The punishment request was resolved by another reviewer");
         }
-        PunishmentRequestResult.Rejected issue = decisionStateIssue(
+        PunishmentRequestResult.Rejected stateIssue = decisionStateIssue(
                 connection,
                 current,
                 lease,
                 approver,
                 now
         );
-        if (issue != null) {
-            return issue;
-        }
+        return stateIssue == null
+                ? commitApproval(connection, current, lease, approver, proposedCaseId, now)
+                : stateIssue;
+    }
+
+    private PunishmentRequestResult.Approved commitApproval(
+            Connection connection,
+            PunishmentApprovalRequest current,
+            PunishmentApprovalLease lease,
+            Actor approver,
+            CaseId proposedCaseId,
+            Instant now
+    ) throws SQLException {
         PunishmentPlan plan = current.proposal().toPlan(
                 proposedCaseId,
                 approvalIdempotency(current.requestId()),
