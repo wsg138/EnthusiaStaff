@@ -66,16 +66,29 @@ public final class PunishmentRequestPresentation {
         }
         return switch (request.status()) {
             case PENDING -> "Awaiting an authorized reviewer";
-            case APPROVED -> request.resultingCaseId() == null
-                    ? "Approved"
-                    : "Approved as case " + request.resultingCaseId().value();
-            case FULFILLED_EXTERNALLY -> request.resultingCaseId() == null
-                    ? "Fulfilled by another authoritative punishment"
-                    : "Fulfilled by case " + request.resultingCaseId().value();
-            case DENIED, EXPIRED -> request.resolutionNote() == null || request.resolutionNote().isBlank()
-                    ? status(request.status())
-                    : request.resolutionNote();
+            case APPROVED -> caseResolution(request, "Approved", "Approved as case ");
+            case FULFILLED_EXTERNALLY -> caseResolution(
+                    request,
+                    "Fulfilled by another authoritative punishment",
+                    "Fulfilled by case "
+            );
+            case DENIED, EXPIRED -> noteResolution(request);
         };
+    }
+
+    private static String caseResolution(
+            PunishmentApprovalRequest request,
+            String fallback,
+            String casePrefix
+    ) {
+        return request.resultingCaseId() == null
+                ? fallback
+                : casePrefix + request.resultingCaseId().value();
+    }
+
+    private static String noteResolution(PunishmentApprovalRequest request) {
+        String note = request.resolutionNote();
+        return note == null || note.isBlank() ? status(request.status()) : note;
     }
 
     private static String sanction(SanctionSpec specification) {
