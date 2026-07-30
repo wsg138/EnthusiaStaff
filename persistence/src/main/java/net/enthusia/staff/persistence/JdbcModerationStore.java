@@ -94,7 +94,7 @@ public final class JdbcModerationStore implements ModerationStore {
                 );
                 connection.commit();
                 return accepted;
-            } catch (SQLException | JsonProcessingException exception) {
+            } catch (SQLException exception) {
                 rollback(connection, exception);
                 CaseId replay = existingCaseAfterConflict(plan.idempotencyKey().value());
                 if (replay != null) {
@@ -109,18 +109,21 @@ public final class JdbcModerationStore implements ModerationStore {
         }
     }
 
-    PunishmentResult.Accepted createPunishment(Connection connection, PunishmentPlan plan)
-            throws SQLException, JsonProcessingException {
+    PunishmentResult.Accepted createPunishment(Connection connection, PunishmentPlan plan) throws SQLException {
         CaseId replay = existingCase(connection, plan.idempotencyKey().value());
         if (replay != null) {
             return new PunishmentResult.Accepted(replay, true);
         }
         ensureTargetAndLock(connection, plan.targetId(), plan.issuedAt());
         insertCase(connection, plan);
-        insertStep(connection, plan);
-        List<UUID> sanctionIds = insertSanctions(connection, plan);
-        insertAudit(connection, plan, sanctionIds);
-        insertOutboxes(connection, plan, sanctionIds);
+        try {
+            insertStep(connection, plan);
+            List<UUID> sanctionIds = insertSanctions(connection, plan);
+            insertAudit(connection, plan, sanctionIds);
+            insertOutboxes(connection, plan, sanctionIds);
+        } catch (JsonProcessingException exception) {
+            throw new SQLException("Unable to serialize punishment transaction payload", exception);
+        }
         return new PunishmentResult.Accepted(plan.caseId(), false);
     }
 
