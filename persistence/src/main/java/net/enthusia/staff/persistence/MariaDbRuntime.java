@@ -5,7 +5,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
-import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
@@ -13,23 +12,26 @@ import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
-import net.enthusia.staff.domain.ports.StaffSessionStore;
-import net.enthusia.staff.domain.ports.VanishStore;
-import net.enthusia.staff.domain.ports.WebsiteModerationStore;
-import net.enthusia.staff.domain.ports.NetworkOutboxStore;
+import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
+import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
+import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
-import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
+import net.enthusia.staff.domain.ports.StaffSessionStore;
+import net.enthusia.staff.domain.ports.VanishStore;
+import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
+import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
 
 public final class MariaDbRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
     private final ModerationStore moderationStore;
+    private final PunishmentRequestStore punishmentRequestStore;
     private final OperationalStateStore operationalStateStore;
     private final SanctionLookup sanctionLookup;
     private final PlayerDirectory playerDirectory;
@@ -50,7 +52,10 @@ public final class MariaDbRuntime implements AutoCloseable {
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
-        this.moderationStore = new JdbcModerationStore(dataSource, new ObjectMapper());
+        ObjectMapper json = new ObjectMapper();
+        JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
+        this.moderationStore = moderation;
+        this.punishmentRequestStore = new JdbcPunishmentRequestStore(dataSource, json, moderation);
         this.operationalStateStore = new JdbcOperationalStateStore(dataSource);
         this.sanctionLookup = new JdbcSanctionLookup(dataSource);
         this.playerDirectory = new JdbcPlayerDirectory(dataSource);
@@ -59,19 +64,23 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.freezeStore = new JdbcFreezeStore(dataSource);
         this.staffSessionStore = new JdbcStaffSessionStore(dataSource);
         this.vanishStore = new JdbcVanishStore(dataSource);
-        this.networkIdentityStore = new JdbcNetworkIdentityStore(dataSource, new ObjectMapper());
-        this.sanctionMutationStore = new JdbcSanctionMutationStore(dataSource, new ObjectMapper(), Clock.systemUTC());
+        this.networkIdentityStore = new JdbcNetworkIdentityStore(dataSource, json);
+        this.sanctionMutationStore = new JdbcSanctionMutationStore(dataSource, json, Clock.systemUTC());
         this.caseLookup = new JdbcCaseLookup(dataSource);
         this.caseReviewStore = new JdbcCaseReviewStore(dataSource, Clock.systemUTC());
-        this.reportStore = new JdbcReportStore(dataSource, new ObjectMapper());
-        this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, new ObjectMapper());
-        this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, new ObjectMapper());
-        this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, new ObjectMapper());
-        this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, new ObjectMapper());
+        this.reportStore = new JdbcReportStore(dataSource, json);
+        this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, json);
+        this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
+        this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
+        this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, json);
     }
 
     public ModerationStore moderationStore() {
         return moderationStore;
+    }
+
+    public PunishmentRequestStore punishmentRequestStore() {
+        return punishmentRequestStore;
     }
 
     public OperationalStateStore operationalStateStore() {
