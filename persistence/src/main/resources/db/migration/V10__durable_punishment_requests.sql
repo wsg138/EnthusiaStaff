@@ -22,9 +22,6 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     sanctions_json JSON NOT NULL,
     status ENUM('PENDING', 'APPROVED', 'DENIED', 'EXPIRED', 'FULFILLED_EXTERNALLY') NOT NULL,
     revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    lease_owner BINARY(16) NULL,
-    lease_token BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    lease_expires_at TIMESTAMP(6) NULL,
     resolved_by BINARY(16) NULL,
     resolution_note TEXT NULL,
     resulting_case_id CHAR(16) NULL,
@@ -41,7 +38,6 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     INDEX idx_punishment_requests_pending (status, expires_at, created_at),
     INDEX idx_punishment_requests_target (target_id, created_at),
     INDEX idx_punishment_requests_requester (requester_id, created_at),
-    INDEX idx_punishment_requests_lease (status, lease_expires_at),
     CONSTRAINT fk_punishment_requests_target FOREIGN KEY (target_id) REFERENCES players(player_id),
     CONSTRAINT fk_punishment_requests_case FOREIGN KEY (resulting_case_id) REFERENCES cases(case_id),
     CONSTRAINT ck_punishment_requests_expiration CHECK (expires_at > created_at)
