@@ -121,10 +121,9 @@ final class PunishmentRequestGuiRenderer {
 
     static Inventory renderDenial(PunishmentRequestGuiState.Denial state) {
         Inventory inventory = create(state, STANDARD_SIZE, "Deny punishment request");
-        denialItem(inventory, 10, Material.PAPER, "Insufficient evidence");
-        denialItem(inventory, 12, Material.WRITABLE_BOOK, "Incorrect reason or classification");
-        denialItem(inventory, 14, Material.ANVIL, "Requested sanction is not appropriate");
-        denialItem(inventory, 16, Material.BARRIER, "Duplicate or already handled");
+        for (PunishmentRequestDenialPreset preset : PunishmentRequestDenialPreset.values()) {
+            denialItem(inventory, preset);
+        }
         inventory.setItem(CUSTOM_DENIAL_SLOT, item(
                 Material.NAME_TAG,
                 "Custom reason",
@@ -221,10 +220,10 @@ final class PunishmentRequestGuiRenderer {
         return item(statusMaterial(request.status()), humanize(request.proposal().publicReason()), lore);
     }
 
-    private static void denialItem(Inventory inventory, int slot, Material material, String reason) {
-        inventory.setItem(slot, item(
-                material,
-                reason,
+    private static void denialItem(Inventory inventory, PunishmentRequestDenialPreset preset) {
+        inventory.setItem(preset.slot(), item(
+                preset.material(),
+                preset.label(),
                 List.of(Component.text("Click to deny with this audit note", NamedTextColor.YELLOW))
         ));
     }
