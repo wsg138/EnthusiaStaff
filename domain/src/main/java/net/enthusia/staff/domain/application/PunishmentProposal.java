@@ -67,12 +67,20 @@ public record PunishmentProposal(
         return PunishmentMatchKey.of(targetId, reasonId, sanctions);
     }
 
-    public PunishmentPlan toPlan(CaseId caseId, IdempotencyKey idempotencyKey, Instant issuedAt) {
+    public PunishmentPlan toPlan(
+            CaseId caseId,
+            IdempotencyKey idempotencyKey,
+            Actor issuingActor,
+            Instant issuedAt
+    ) {
+        if (issuingActor == null) {
+            throw new IllegalArgumentException("punishment issuing actor must be present");
+        }
         return new PunishmentPlan(
                 caseId,
                 idempotencyKey,
                 targetId,
-                requester,
+                issuingActor,
                 reasonId,
                 family,
                 publicReason,
