@@ -1,0 +1,51 @@
+name: Restore punishment service behavior
+
+on:
+  push:
+    branches:
+      - section/punishment-request-interfaces
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch history
+        uses: actions/checkout@v6
+        with:
+          ref: section/punishment-request-interfaces
+          fetch-depth: 0
+
+      - name: Restore prior behavior and retain shared approval rule
+        run: |
+          git show 1888afa7df35aae27bf858e7ad6fd80b586577aa:domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java > /tmp/PunishmentService.java
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('/tmp/PunishmentService.java').read_text(encoding='utf-8')
+          old = '''        if (actor.rank() == StaffRank.DEVELOPER) {
+              return true;
+          }
+          return actor.rank() == StaffRank.HELPER && assessment.sanctions().stream()
+                  .anyMatch(spec -> spec.length().isPermanent());'''
+          new = '''        return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());'''
+          if old not in source:
+              raise SystemExit('Original approval predicate was not found')
+          restored = source.replace(old, new, 1)
+          Path('domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java').write_text(
+              restored,
+              encoding='utf-8'
+          )
+          Path('.github/workflows/restore-punishment-service.yml').unlink()
+          PY
+
+      - name: Commit restored behavior
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java .github/workflows/restore-punishment-service.yml
+          git commit -m "Restore punishment override authorization behavior"
+          git push origin HEAD:section/punishment-request-interfaces
