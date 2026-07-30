@@ -61,4 +61,54 @@ class SpectatorTabPolicyTest {
                 true
         ));
     }
+
+    @Test
+    void regularPlayersRemainListedWhenVisible() {
+        assertTrue(SpectatorTabPolicy.shouldList(
+                null,
+                GameMode.SURVIVAL,
+                true,
+                false,
+                false
+        ));
+        assertTrue(SpectatorTabPolicy.shouldList(
+                null,
+                GameMode.SPECTATOR,
+                true,
+                false,
+                false
+        ));
+    }
+
+    @Test
+    void staffSpectatorsFailClosedWhenPacketMaskingIsUnavailable() {
+        assertFalse(SpectatorTabPolicy.shouldList(
+                StaffRank.ADMIN,
+                GameMode.SPECTATOR,
+                true,
+                false,
+                false
+        ));
+        assertTrue(SpectatorTabPolicy.shouldList(
+                StaffRank.ADMIN,
+                GameMode.SPECTATOR,
+                true,
+                false,
+                true
+        ));
+        assertFalse(SpectatorTabPolicy.shouldList(
+                StaffRank.ADMIN,
+                GameMode.CREATIVE,
+                false,
+                false,
+                true
+        ));
+        assertFalse(SpectatorTabPolicy.shouldList(
+                StaffRank.ADMIN,
+                GameMode.CREATIVE,
+                true,
+                true,
+                true
+        ));
+    }
 }
