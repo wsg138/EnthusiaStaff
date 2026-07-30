@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -24,10 +23,9 @@ import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
-import net.enthusia.staff.domain.sanction.SanctionLength;
-import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
+import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -72,6 +70,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.gui = gui;
         this.requestCommands = requestCommands;
         this.workers = workers;
+        requestCommands.bindPlayerDirectory(players);
     }
 
     @Override
@@ -273,7 +272,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 NamedTextColor.GRAY
         ));
         send(sender, Component.text(
-                "Recommended: " + describe(prepared.assessment().sanctions()),
+                "Recommended: " + PunishmentRequestPresentation.sanctions(prepared.assessment().sanctions()),
                 NamedTextColor.YELLOW
         ));
         send(sender, Component.text(
@@ -285,10 +284,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 sender,
                 Component.text("Example: " + example, NamedTextColor.DARK_GRAY)
         ));
-        send(sender, Component.text(
-                "Draft expires: " + draft.expiresAt(),
-                NamedTextColor.GRAY
-        ));
+        send(sender, Component.text("Draft expires: " + draft.expiresAt(), NamedTextColor.GRAY));
         send(sender, Component.text(
                 "Review the frozen outcome, then run /punish confirm " + draft.draftId()
                         + ". Required approvals are submitted durably instead of applied directly.",
@@ -303,18 +299,14 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 NamedTextColor.GRAY
         ));
         send(sender, Component.text(
-                "Frozen recommendation: " + describe(draft.expectation().sanctions()),
+                "Frozen recommendation: " + PunishmentRequestPresentation.sanctions(draft.expectation().sanctions()),
                 NamedTextColor.YELLOW
         ));
         send(sender, Component.text(
-                "Policy version: " + draft.expectation().configurationVersion()
-                        + " | expires: " + draft.expiresAt(),
+                "Policy version: " + draft.expectation().configurationVersion() + " | expires: " + draft.expiresAt(),
                 NamedTextColor.GRAY
         ));
-        send(sender, Component.text(
-                "Confirm with /punish confirm " + draft.draftId(),
-                NamedTextColor.AQUA
-        ));
+        send(sender, Component.text("Confirm with /punish confirm " + draft.draftId(), NamedTextColor.AQUA));
     }
 
     private void sendConfirmation(CommandSender sender, PunishmentDraftConfirmation result) {
@@ -367,34 +359,6 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private static String targetName(PlayerIdentity target) {
         return target.currentUsername().orElse("offline target");
-    }
-
-    private static String describe(List<SanctionSpec> sanctions) {
-        return sanctions.stream().map(PunishmentCommand::describe)
-                .reduce((left, right) -> left + " + " + right)
-                .orElse("No sanction");
-    }
-
-    private static String describe(SanctionSpec sanction) {
-        SanctionLength length = sanction.length();
-        if (length.isInstant()) {
-            return sanction.type().name();
-        }
-        if (length.isPermanent()) {
-            return "permanent " + sanction.type().name();
-        }
-        return duration(length.temporary().orElseThrow()) + ' ' + sanction.type().name();
-    }
-
-    private static String duration(Duration duration) {
-        if (duration.toDaysPart() > 0 && duration.toHoursPart() == 0
-                && duration.toMinutesPart() == 0 && duration.toSecondsPart() == 0) {
-            return duration.toDays() + "d";
-        }
-        if (duration.toHours() > 0 && duration.toMinutesPart() == 0 && duration.toSecondsPart() == 0) {
-            return duration.toHours() + "h";
-        }
-        return duration.toString();
     }
 
     private static void usage(CommandSender sender, String label) {
