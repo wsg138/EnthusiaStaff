@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: publish-enthusiastaff-wiki
@@ -108,3 +109,23 @@ jobs:
             echo "- Backup artifact: \`wiki-before-publish-${GITHUB_RUN_ID}\`"
             echo "- Published branch: \`${{ steps.backup.outputs.wiki_branch }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Report publication result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="$(cat <<EOF
+          Wiki publication workflow **${JOB_STATUS}** for source commit \`${GITHUB_SHA}\`.
+
+          Run: ${run_url}
+          Backup branch: \`${{ steps.backup.outputs.branch || 'unavailable' }}\`
+          Published Wiki branch: \`${{ steps.backup.outputs.wiki_branch || 'unavailable' }}\`
+          EOF
+          )"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/22/comments" \
+            -f body="${body}"
