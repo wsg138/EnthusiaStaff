@@ -19,31 +19,25 @@ jobs:
           ref: section/punishment-request-interfaces
           fetch-depth: 0
 
-      - name: Apply exact bootstrap edit and remove this workflow
+      - name: Apply scoped bootstrap edit and remove this workflow
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           plugin = Path('paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java')
           text = plugin.read_text(encoding='utf-8')
-          old = '''        PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
-                  this,
-                  punishmentRequestService,
-                  authorizationPolicy,
-                  workers
-          );'''
-          new = '''        PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
-                  this,
-                  punishmentRequestService,
-                  playerDirectory,
-                  authorizationPolicy,
-                  workers
-          );'''
-          if old not in text:
-              if new not in text:
-                  raise SystemExit('Expected punishment request GUI bootstrap block was not found')
-          else:
-              plugin.write_text(text.replace(old, new, 1), encoding='utf-8')
+          marker = 'PunishmentRequestGuiController punishmentRequestGui'
+          start = text.index(marker)
+          end = text.index('        punishmentRequestGui.register();', start)
+          block = text[start:end]
+          old = '                punishmentRequestService,\n                authorizationPolicy,'
+          new = '                punishmentRequestService,\n                playerDirectory,\n                authorizationPolicy,'
+          if new not in block:
+              if old not in block:
+                  raise SystemExit('Expected punishment request GUI constructor arguments were not found')
+              block = block.replace(old, new, 1)
+              text = text[:start] + block + text[end:]
+              plugin.write_text(text, encoding='utf-8')
 
           Path('.github/workflows/apply-punishment-review-fix.yml').unlink()
           PY
