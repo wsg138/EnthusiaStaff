@@ -443,18 +443,34 @@ must affect exactly one row or the transaction fails closed. Replay validation
 still compares the complete operation binding and persisted mutation fields;
 the MariaDB integration suite now explicitly rejects a changed-slot replay.
 
-At code and test head
-`3f740bb848da446d2736d19ae8334aee88932691`, focused persistence tests and all
-six `AssetJournalIntegrationTest` MariaDB Testcontainers scenarios pass. The
-full clean build and all MariaDB suites remain pending for the final PR
-checkpoint.
+At validation head
+`ecd45b358822fb8cec847419fbd58805baca0ee2`, the clean Java 21
+`clean test check runtimeJars` run executed all 39 actionable tasks. The build
+passed 146 tests in 52 suites with zero failures, errors, or skips, including
+all 23 tests across seven MariaDB Testcontainers suites.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,088,941 | `220B419A72E9DAD32BE5F085D6B5BB3E947805EBFB00FACD066A5E39DE4170F2` |
+| Velocity runtime jar | 7,358,030 | `FD9F999F7DB9F73C1709562CEB023DEBB7507A5F54051213CA4887665C64B8CB` |
+
+Both jars contain their expected plugin metadata and no provider API classes
+from `integration-contracts`.
 
 The comparable checked-in PMD ruleset reports 204 findings, down from 210 at
-the PR #10 checkpoint. Lizard reports 201, down from 205. The generic prepare,
-insert, and replay-validation methods have no remaining PMD or Lizard result.
-The store retains two PMD and eleven Lizard results in confiscation, pending,
-quarantine, audit, and overall file-size areas. No analyzer rule, first-party
-path, or finding was suppressed or ignored. Hosted Codacy analysis is pending.
+the PR #10 checkpoint. Lizard reports 201, down from 205. Opengrep remains at
+17, Trivy reports zero, and CPD reports the same three pre-existing 100-token
+clone groups with none in the changed files. The generic prepare, insert, and
+replay-validation methods have no remaining PMD or Lizard result. The store
+retains two PMD and eleven Lizard results in confiscation, pending, quarantine,
+audit, and overall file-size areas. No analyzer rule, first-party path, or
+finding was suppressed or ignored.
+
+Hosted Codacy reports validation head
+`ecd45b358822fb8cec847419fbd58805baca0ee2` is up to standards with zero new
+issues, complexity delta 13, and duplication delta zero. CodeRabbit skipped the
+draft automatically; that skip is not an independent review. One final
+lightweight review checkpoint remains before merge.
 
 ## Remediation order
 
