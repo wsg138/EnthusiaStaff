@@ -27,35 +27,51 @@ final class PlayerInfoTabMasker {
     }
 
     List<PlayerInfoData> rewrite(UUID viewerId, List<PlayerInfoData> entries) {
+        return rewriteResult(viewerId, entries).entries();
+    }
+
+    RewriteResult rewriteResult(UUID viewerId, List<PlayerInfoData> entries) {
         Objects.requireNonNull(viewerId, "viewerId");
         Objects.requireNonNull(entries, "entries");
         List<PlayerInfoData> rewritten = new ArrayList<>(entries.size());
         boolean changed = false;
         for (PlayerInfoData entry : entries) {
-            UUID targetId = entry.getProfileId();
-            if (targetId == null) {
-                rewritten.add(entry);
-                continue;
+            EntryRewrite result = rewriteEntry(viewerId, entry);
+            changed |= result.changed();
+            if (result.entry() != null) {
+                rewritten.add(result.entry());
             }
-            if (!canSee.test(viewerId, targetId)) {
-                changed = true;
-                continue;
-            }
-            StaffRank rank = rankLookup.apply(targetId);
-            boolean listed = entry.isListed() && !hiddenFromTab.test(targetId);
-            EnumWrappers.NativeGameMode gameMode = entry.getGameMode();
-            if (SpectatorTabPolicy.masksSpectatorEntry(rank)
-                    && gameMode == EnumWrappers.NativeGameMode.SPECTATOR) {
-                gameMode = EnumWrappers.NativeGameMode.CREATIVE;
-            }
-            if (listed == entry.isListed() && gameMode == entry.getGameMode()) {
-                rewritten.add(entry);
-                continue;
-            }
-            changed = true;
-            rewritten.add(copy(entry, listed, gameMode));
         }
-        return changed ? List.copyOf(rewritten) : entries;
+        return changed
+                ? new RewriteResult(List.copyOf(rewritten), true)
+                : new RewriteResult(entries, false);
+    }
+
+    private EntryRewrite rewriteEntry(UUID viewerId, PlayerInfoData entry) {
+        UUID targetId = entry.getProfileId();
+        if (targetId == null) {
+            return EntryRewrite.unchanged(entry);
+        }
+        if (!canSee.test(viewerId, targetId)) {
+            return EntryRewrite.removed();
+        }
+        StaffRank rank = rankLookup.apply(targetId);
+        boolean listed = entry.isListed() && !hiddenFromTab.test(targetId);
+        EnumWrappers.NativeGameMode gameMode = maskedGameMode(rank, entry.getGameMode());
+        if (listed == entry.isListed() && gameMode == entry.getGameMode()) {
+            return EntryRewrite.unchanged(entry);
+        }
+        return EntryRewrite.changed(copy(entry, listed, gameMode));
+    }
+
+    private static EnumWrappers.NativeGameMode maskedGameMode(
+            StaffRank rank,
+            EnumWrappers.NativeGameMode gameMode
+    ) {
+        return SpectatorTabPolicy.masksSpectatorEntry(rank)
+                && gameMode == EnumWrappers.NativeGameMode.SPECTATOR
+                ? EnumWrappers.NativeGameMode.CREATIVE
+                : gameMode;
     }
 
     private static PlayerInfoData copy(
@@ -74,5 +90,22 @@ final class PlayerInfoTabMasker {
                 source.getListOrder(),
                 source.getRemoteChatSessionData()
         );
+    }
+
+    record RewriteResult(List<PlayerInfoData> entries, boolean changed) {
+    }
+
+    private record EntryRewrite(PlayerInfoData entry, boolean changed) {
+        private static EntryRewrite unchanged(PlayerInfoData entry) {
+            return new EntryRewrite(entry, false);
+        }
+
+        private static EntryRewrite changed(PlayerInfoData entry) {
+            return new EntryRewrite(entry, true);
+        }
+
+        private static EntryRewrite removed() {
+            return new EntryRewrite(null, true);
+        }
     }
 }
