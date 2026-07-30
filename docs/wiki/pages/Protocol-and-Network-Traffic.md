@@ -193,11 +193,13 @@ request timeout, and disables automatic mentions in the JSON body.
 
 Discord delivery begins with a durable outbox row. The worker chooses one of four
 configured webhook destinations and sends the event type plus a bounded summary of
-the sanitized JSON payload.
+the **producer-sanitized** JSON payload.
 
-Review the producer of every Discord event, not only the worker. Reporter identity,
-private messages, coordinates, raw network identity, internal secrets, and private
-appeal material must not be placed into an outbound payload.
+`DiscordOutboxWorker` does not redact `payloadJson`; it truncates the final message
+and disables automatic mentions. Every producer must remove private or unsafe data
+before enqueueing the outbox event. Reporter identity, private messages,
+coordinates, raw network identity, internal secrets, and private appeal material
+must not be placed into an outbound payload.
 
 ## What does not leave the process
 
@@ -236,7 +238,7 @@ When reviewing protocol or network changes, check:
 - duplicate delivery after restart;
 - bounded connection threads, queues, retries, and backoff;
 - no game-thread or Velocity event-thread socket/JDBC blocking;
-- payload sanitization before Discord or website exposure;
+- producer-side payload sanitization before Discord or website exposure;
 - firewall expectations and whether the channel is limited to the private network.
 
 Related tests include `PersistentChannelTransportTest`,
