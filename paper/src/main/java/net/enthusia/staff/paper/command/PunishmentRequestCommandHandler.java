@@ -12,6 +12,7 @@ import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
+import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -103,7 +104,9 @@ public final class PunishmentRequestCommandHandler {
             return;
         }
         submit(sender, () -> {
-            List<PunishmentApprovalRequest> pending = services.get().reviewable(actor, CONSOLE_QUEUE_LIMIT);
+            List<RequestView> pending = services.get().reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
+                    .map(this::view)
+                    .toList();
             onMain(() -> sendQueue(sender, pending));
         });
     }
@@ -120,15 +123,15 @@ public final class PunishmentRequestCommandHandler {
         submit(sender, () -> {
             PunishmentRequestService service = services.get();
             PunishmentApprovalRequest request = service.find(requestId).orElse(null);
-            boolean visible = request != null && service.mayReview(actor, request);
+            RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
             onMain(() -> {
-                if (!visible) {
+                if (view == null) {
                     sender.sendMessage(Component.text(
                             "The request does not exist or you are not authorized to review it.",
                             NamedTextColor.RED
                     ));
                 } else {
-                    sendDetails(sender, request);
+                    sendDetails(sender, view);
                 }
             });
         });
@@ -191,7 +194,7 @@ public final class PunishmentRequestCommandHandler {
         plugin.getServer().getScheduler().runTask(plugin, action);
     }
 
-    private void sendQueue(CommandSender sender, List<PunishmentApprovalRequest> pending) {
+    private void sendQueue(CommandSender sender, List<RequestView> pending) {
         sender.sendMessage(Component.text(
                 "Reviewable punishment requests: " + pending.size(),
                 NamedTextColor.GOLD
@@ -203,10 +206,11 @@ public final class PunishmentRequestCommandHandler {
         pending.forEach(request -> sender.sendMessage(summary(request)));
     }
 
-    private Component summary(PunishmentApprovalRequest request) {
+    private static Component summary(RequestView view) {
+        PunishmentApprovalRequest request = view.request();
         return Component.text(request.requestId() + " ", NamedTextColor.AQUA)
                 .append(Component.text(
-                        gui.targetName(request) + " | "
+                        view.targetName() + " | "
                                 + request.proposal().requester().displayName() + " | "
                                 + request.proposal().reasonId() + " | "
                                 + PunishmentRequestPresentation.sanctions(request.proposal().sanctions()) + " | expires "
@@ -215,14 +219,15 @@ public final class PunishmentRequestCommandHandler {
                 ));
     }
 
-    private void sendDetails(CommandSender sender, PunishmentApprovalRequest request) {
+    private static void sendDetails(CommandSender sender, RequestView view) {
+        PunishmentApprovalRequest request = view.request();
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text("Punishment request " + request.requestId(), NamedTextColor.GOLD));
         lines.add(Component.text(
                 "Status: " + PunishmentRequestPresentation.status(request.status()),
                 PunishmentRequestPresentation.statusColor(request.status())
         ));
-        lines.add(Component.text("Target: " + gui.targetName(request), NamedTextColor.WHITE));
+        lines.add(Component.text("Target: " + view.targetName(), NamedTextColor.WHITE));
         lines.add(Component.text(
                 "Requester: " + request.proposal().requester().displayName()
                         + " (" + request.proposal().requester().rank() + ')',
@@ -240,13 +245,17 @@ public final class PunishmentRequestCommandHandler {
         ));
         lines.add(Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY));
         lines.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
-        if (request.status() != net.enthusia.staff.domain.application.PunishmentRequestStatus.PENDING) {
+        if (request.status() != PunishmentRequestStatus.PENDING) {
             lines.add(Component.text(
                     "Resolution: " + PunishmentRequestPresentation.resolution(request),
                     PunishmentRequestPresentation.statusColor(request.status())
             ));
         }
         lines.forEach(sender::sendMessage);
+    }
+
+    private RequestView view(PunishmentApprovalRequest request) {
+        return new RequestView(request, gui.targetName(request));
     }
 
     private static UUID requestId(CommandSender sender, String[] args, int index) {
@@ -297,6 +306,14 @@ public final class PunishmentRequestCommandHandler {
             ));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
             sender.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
+        }
+    }
+
+    private record RequestView(PunishmentApprovalRequest request, String targetName) {
+        private RequestView {
+            if (request == null || targetName == null || targetName.isBlank()) {
+                throw new IllegalArgumentException("punishment request command view fields must be present");
+            }
         }
     }
 }
