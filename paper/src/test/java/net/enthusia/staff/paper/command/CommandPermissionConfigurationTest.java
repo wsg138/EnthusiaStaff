@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,14 +12,30 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class CommandPermissionConfigurationTest {
-    private static final Map<String, String> EXPECTED_PERMISSIONS = Map.of(
-            "staff", "enthusiastaff.staffmode",
-            "vanish", "enthusiastaff.vanish",
-            "freeze", "enthusiastaff.freeze",
-            "unfreeze", "enthusiastaff.freeze",
-            "invsee", "enthusiastaff.inventory.view",
-            "endersee", "enthusiastaff.inventory.view",
-            "inspect", "enthusiastaff.inspect"
+    private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
+            Map.entry("estaff", "enthusiastaff.status"),
+            Map.entry("punish", "enthusiastaff.punish"),
+            Map.entry("ban", "enthusiastaff.punish"),
+            Map.entry("mute", "enthusiastaff.punish"),
+            Map.entry("warn", "enthusiastaff.punish"),
+            Map.entry("kick", "enthusiastaff.punish"),
+            Map.entry("ipban", "enthusiastaff.punish.ip"),
+            Map.entry("removepunishment", "enthusiastaff.remove"),
+            Map.entry("unban", "enthusiastaff.remove"),
+            Map.entry("unmute", "enthusiastaff.remove"),
+            Map.entry("removewarning", "enthusiastaff.remove"),
+            Map.entry("unwarn", "enthusiastaff.remove"),
+            Map.entry("reports", "enthusiastaff.reports.manage"),
+            Map.entry("freeze", "enthusiastaff.freeze"),
+            Map.entry("unfreeze", "enthusiastaff.freeze"),
+            Map.entry("staff", "enthusiastaff.staffmode"),
+            Map.entry("vanish", "enthusiastaff.vanish"),
+            Map.entry("staffchat", "enthusiastaff.staffchat"),
+            Map.entry("client", "enthusiastaff.client"),
+            Map.entry("invsee", "enthusiastaff.inventory.view"),
+            Map.entry("endersee", "enthusiastaff.inventory.view"),
+            Map.entry("inspect", "enthusiastaff.inspect"),
+            Map.entry("case", "enthusiastaff.case.restoreitems")
     );
 
     @Test
@@ -30,6 +47,11 @@ class CommandPermissionConfigurationTest {
                 commands.path(command).path("permission").asText(),
                 command
         ));
+    }
+
+    @Test
+    void playerReportCommandRemainsIntentionallyPublic() throws IOException {
+        assertTrue(pluginMetadata().path("commands").path("report").path("permission").isMissingNode());
     }
 
     private static JsonNode pluginMetadata() throws IOException {
