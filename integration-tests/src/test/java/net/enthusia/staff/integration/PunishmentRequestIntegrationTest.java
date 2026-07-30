@@ -108,7 +108,7 @@ class PunishmentRequestIntegrationTest {
                 "punishment-request-integration:conflict-shared",
                 target,
                 "test.conflict",
-                HELPER,
+                DEVELOPER,
                 StaffRank.MOD,
                 sevenDayBan(),
                 NOW.plus(Duration.ofDays(7))
@@ -118,7 +118,7 @@ class PunishmentRequestIntegrationTest {
                 initial.submissionKey().value(),
                 target,
                 "test.conflict.changed",
-                HELPER,
+                DEVELOPER,
                 StaffRank.MOD,
                 thirtyDayBan(),
                 NOW.plus(Duration.ofDays(7))
@@ -128,7 +128,7 @@ class PunishmentRequestIntegrationTest {
                 "punishment-request-integration:conflict-other",
                 target,
                 "test.conflict",
-                HELPER,
+                DEVELOPER,
                 StaffRank.MOD,
                 sevenDayBan(),
                 NOW.plus(Duration.ofDays(7))
@@ -316,7 +316,7 @@ class PunishmentRequestIntegrationTest {
     }
 
     @Test
-    void helperDeveloperAndSelfApprovalRestrictionsUseDurableStore() {
+    void helperDeveloperAndSelfApprovalRestrictionsUseDurableStore() throws SQLException {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             ServiceFixture permanent = serviceFixture(
                     runtime,
@@ -359,6 +359,44 @@ class PunishmentRequestIntegrationTest {
             );
             assertEquals("SELF_APPROVAL_FORBIDDEN", selfApproval.code());
 
+            PunishmentRequestStore store = runtime.punishmentRequestStore();
+            PunishmentApprovalLease helperLease = acquire(store, helperSubmission.request(), HELPER, NOW);
+            PunishmentRequestResult.Rejected storedHelper = assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(
+                            helperLease,
+                            HELPER,
+                            new CaseId("A000000000000005"),
+                            NOW.plusSeconds(1)
+                    )
+            );
+            assertEquals("FORBIDDEN", storedHelper.code());
+
+            PunishmentApprovalLease developerLease = acquire(store, developerSubmission.request(), DEVELOPER, NOW);
+            PunishmentRequestResult.Rejected storedDeveloper = assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(
+                            developerLease,
+                            DEVELOPER,
+                            new CaseId("A000000000000006"),
+                            NOW.plusSeconds(1)
+                    )
+            );
+            assertEquals("FORBIDDEN", storedDeveloper.code());
+            PunishmentRequestResult.Rejected storedSelfApproval = assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(
+                            developerLease,
+                            promotedRequester,
+                            new CaseId("A000000000000007"),
+                            NOW.plusSeconds(2)
+                    )
+            );
+            assertEquals("SELF_APPROVAL_FORBIDDEN", storedSelfApproval.code());
+            assertEquals(0, countCases(new CaseId("A000000000000005")));
+            assertEquals(0, countCases(new CaseId("A000000000000006")));
+            assertEquals(0, countCases(new CaseId("A000000000000007")));
+
             ServiceFixture temporary = serviceFixture(
                     runtime,
                     "test.authority.temporary",
@@ -377,7 +415,7 @@ class PunishmentRequestIntegrationTest {
     }
 
     @Test
-    void reasonRankMinimumIsEnforcedBeforeLeaseAcquisition() {
+    void reasonRankMinimumIsEnforcedBeforeLeaseAcquisition() throws SQLException {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             ServiceFixture fixture = serviceFixture(
                     runtime,
@@ -402,6 +440,23 @@ class PunishmentRequestIntegrationTest {
                     PunishmentRequestResult.Leased.class,
                     fixture.requests().acquire(submitted.request().requestId(), ADMIN)
             );
+
+            PunishmentRequestResult.Submitted storedSubmission = assertInstanceOf(
+                    PunishmentRequestResult.Submitted.class,
+                    fixture.requests().submit(
+                            serviceRequest("admin-reason-store", DEVELOPER, "test.rank.admin"),
+                            OperationalMode.ACTIVE
+                    )
+            );
+            PunishmentRequestStore store = runtime.punishmentRequestStore();
+            PunishmentApprovalLease modLease = acquire(store, storedSubmission.request(), MOD, NOW);
+            CaseId rejectedCaseId = new CaseId("A000000000000008");
+            PunishmentRequestResult.Rejected storedRank = assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(modLease, MOD, rejectedCaseId, NOW.plusSeconds(1))
+            );
+            assertEquals("APPROVER_RANK_REQUIRED", storedRank.code());
+            assertEquals(0, countCases(rejectedCaseId));
         }
     }
 
@@ -577,7 +632,7 @@ class PunishmentRequestIntegrationTest {
                 "punishment-request-integration:" + key,
                 target,
                 reason,
-                HELPER,
+                DEVELOPER,
                 StaffRank.MOD,
                 sanctions,
                 expiresAt
