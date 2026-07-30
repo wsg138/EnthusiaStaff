@@ -74,86 +74,130 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 request.beforeSnapshot(),
                 "confiscation before"
         );
-        return transaction(connection -> {
-            Optional<InventoryConfiscationSession> replay = lockConfiscationSessionByIdentity(
-                    connection,
-                    request.operationId(),
-                    request.idempotencyKey()
-            );
-            if (replay.isPresent()) {
-                validateConfiscationReplay(replay.orElseThrow(), request);
-                return new InventoryConfiscationStart(
-                        InventoryConfiscationStart.Status.REPLAYED,
-                        replay,
-                        "The confiscation selection lock was already prepared"
-                );
-            }
-            Profile profile = lockOrCreateProfile(
-                    connection,
-                    request.playerId(),
-                    request.scopeId(),
-                    request.owningServerId()
-            );
-            if (patchTransitions.hasBlockingPatch(connection, profile.profileId())
-                    || hasOpenConfiscation(connection, profile.profileId())) {
-                return new InventoryConfiscationStart(
-                        InventoryConfiscationStart.Status.CONFLICT,
-                        Optional.empty(),
-                        "Another inventory operation must finish before confiscation"
-                );
-            }
-            Optional<InventoryObservation> existing = observation(connection, profile, true);
-            long revision = existing.filter(value -> value.checksum().equals(request.beforeChecksum()))
-                    .map(InventoryObservation::revision)
-                    .orElse(existing.isPresent() ? profile.revision() + 1L : profile.revision());
-            updateProfile(connection, profile.profileId(), request.owningServerId(), revision);
-            saveObservation(
-                    connection,
-                    profile.profileId(),
-                    revision,
-                    request.beforeChecksum(),
-                    request.beforeSnapshot(),
-                    now
-            );
-            saveRevision(connection, profile.profileId(), revision, request.beforeChecksum(), now);
-            long fence = JdbcOperationLeaseSupport.acquire(
-                    connection,
-                    resourceKey(request.playerId(), request.scopeId()),
-                    request.operationId(),
-                    now.plus(leaseDuration),
-                    now
-            );
-            if (fence == JdbcOperationLeaseSupport.UNAVAILABLE) {
-                return new InventoryConfiscationStart(
-                        InventoryConfiscationStart.Status.CONFLICT,
-                        Optional.empty(),
-                        "Another inventory operation owns the network asset lease"
-                );
-            }
-            insertConfiscationStart(connection, request, profile, revision, fence, now);
-            insertAudit(
-                    connection,
-                    request.operationId(),
-                    request.actorId(),
-                    request.playerId(),
-                    Optional.of(request.caseId().value()),
-                    "INVENTORY_CONFISCATION_LOCKED",
-                    LOCKED_STATE,
-                    Map.of(
-                            SCOPE_ID_FIELD, request.scopeId(),
-                            OWNING_SERVER_ID_FIELD, request.owningServerId(),
-                            "expectedRevision", revision,
-                            "beforeChecksum", request.beforeChecksum()
-                    ),
-                    "inventory:confiscation:locked:" + request.operationId(),
-                    now
-            );
+        return transaction(connection -> beginConfiscation(connection, request, leaseDuration, now));
+    }
+
+    private InventoryConfiscationStart beginConfiscation(
+            Connection connection,
+            InventoryConfiscationStartRequest request,
+            Duration leaseDuration,
+            Instant now
+    ) throws SQLException {
+        Optional<InventoryConfiscationStart> replay = confiscationStartReplay(connection, request);
+        if (replay.isPresent()) {
+            return replay.orElseThrow();
+        }
+        Profile profile = lockOrCreateProfile(
+                connection,
+                request.playerId(),
+                request.scopeId(),
+                request.owningServerId()
+        );
+        if (confiscationStartConflicts(connection, profile)) {
             return new InventoryConfiscationStart(
-                    InventoryConfiscationStart.Status.LOCKED,
-                    lockConfiscationSession(connection, request.operationId()),
-                    "Confiscation selection owns the durable inventory fence"
+                    InventoryConfiscationStart.Status.CONFLICT,
+                    Optional.empty(),
+                    "Another inventory operation must finish before confiscation"
             );
-        });
+        }
+        long revision = recordConfiscationObservation(connection, request, profile, now);
+        long fence = JdbcOperationLeaseSupport.acquire(
+                connection,
+                resourceKey(request.playerId(), request.scopeId()),
+                request.operationId(),
+                now.plus(leaseDuration),
+                now
+        );
+        if (fence == JdbcOperationLeaseSupport.UNAVAILABLE) {
+            return new InventoryConfiscationStart(
+                    InventoryConfiscationStart.Status.CONFLICT,
+                    Optional.empty(),
+                    "Another inventory operation owns the network asset lease"
+            );
+        }
+        return commitConfiscationStart(connection, request, profile, revision, fence, now);
+    }
+
+    private Optional<InventoryConfiscationStart> confiscationStartReplay(
+            Connection connection,
+            InventoryConfiscationStartRequest request
+    ) throws SQLException {
+        Optional<InventoryConfiscationSession> replay = lockConfiscationSessionByIdentity(
+                connection,
+                request.operationId(),
+                request.idempotencyKey()
+        );
+        if (replay.isEmpty()) {
+            return Optional.empty();
+        }
+        validateConfiscationReplay(replay.orElseThrow(), request);
+        return Optional.of(new InventoryConfiscationStart(
+                InventoryConfiscationStart.Status.REPLAYED,
+                replay,
+                "The confiscation selection lock was already prepared"
+        ));
+    }
+
+    private boolean confiscationStartConflicts(Connection connection, Profile profile)
+            throws SQLException {
+        return patchTransitions.hasBlockingPatch(connection, profile.profileId())
+                || hasOpenConfiscation(connection, profile.profileId());
+    }
+
+    private long recordConfiscationObservation(
+            Connection connection,
+            InventoryConfiscationStartRequest request,
+            Profile profile,
+            Instant now
+    ) throws SQLException {
+        Optional<InventoryObservation> existing = observation(connection, profile, true);
+        long revision = existing.filter(value -> value.checksum().equals(request.beforeChecksum()))
+                .map(InventoryObservation::revision)
+                .orElse(existing.isPresent() ? profile.revision() + 1L : profile.revision());
+        updateProfile(connection, profile.profileId(), request.owningServerId(), revision);
+        saveObservation(
+                connection,
+                profile.profileId(),
+                revision,
+                request.beforeChecksum(),
+                request.beforeSnapshot(),
+                now
+        );
+        saveRevision(connection, profile.profileId(), revision, request.beforeChecksum(), now);
+        return revision;
+    }
+
+    private InventoryConfiscationStart commitConfiscationStart(
+            Connection connection,
+            InventoryConfiscationStartRequest request,
+            Profile profile,
+            long revision,
+            long fence,
+            Instant now
+    ) throws SQLException {
+        insertConfiscationStart(connection, request, profile, revision, fence, now);
+        insertAudit(
+                connection,
+                request.operationId(),
+                request.actorId(),
+                request.playerId(),
+                Optional.of(request.caseId().value()),
+                "INVENTORY_CONFISCATION_LOCKED",
+                LOCKED_STATE,
+                Map.of(
+                        SCOPE_ID_FIELD, request.scopeId(),
+                        OWNING_SERVER_ID_FIELD, request.owningServerId(),
+                        "expectedRevision", revision,
+                        "beforeChecksum", request.beforeChecksum()
+                ),
+                "inventory:confiscation:locked:" + request.operationId(),
+                now
+        );
+        return new InventoryConfiscationStart(
+                InventoryConfiscationStart.Status.LOCKED,
+                lockConfiscationSession(connection, request.operationId()),
+                "Confiscation selection owns the durable inventory fence"
+        );
     }
 
     @Override
@@ -168,18 +212,39 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 || leaseDuration.compareTo(Duration.ofMinutes(5)) > 0 || now == null) {
             throw new IllegalArgumentException("confiscation lease identity is invalid");
         }
-        return transaction(connection -> {
-            InventoryConfiscationSession session =
-                    lockConfiscationSession(connection, operationId).orElse(null);
-            if (session == null || session.fencingToken() != fencingToken
-                    || !confiscationState(connection, operationId).equals(LOCKED_STATE)
-                    || !ownsLease(connection, session, now)) {
-                return Optional.empty();
-            }
-            Instant leaseUntil = now.plus(leaseDuration);
-            renewLease(connection, session, leaseUntil, now);
-            return lockConfiscationSession(connection, operationId);
-        });
+        return transaction(connection ->
+                renewConfiscation(connection, operationId, fencingToken, leaseDuration, now)
+        );
+    }
+
+    private Optional<InventoryConfiscationSession> renewConfiscation(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            Duration leaseDuration,
+            Instant now
+    ) throws SQLException {
+        InventoryConfiscationSession session =
+                lockConfiscationSession(connection, operationId).orElse(null);
+        if (!canRenewConfiscation(connection, session, operationId, fencingToken, now)) {
+            return Optional.empty();
+        }
+        Instant leaseUntil = now.plus(leaseDuration);
+        renewLease(connection, session, leaseUntil, now);
+        return lockConfiscationSession(connection, operationId);
+    }
+
+    private boolean canRenewConfiscation(
+            Connection connection,
+            InventoryConfiscationSession session,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        return session != null
+                && session.fencingToken() == fencingToken
+                && confiscationState(connection, operationId).equals(LOCKED_STATE)
+                && ownsLease(connection, session, now);
     }
 
     @Override
@@ -341,27 +406,55 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             String detail,
             Instant now
     ) {
-        if (operationId == null || fencingToken < 1L
-                || reasonCode == null || !reasonCode.matches("[A-Z0-9_]{1,64}")
-                || detail == null || detail.isBlank() || detail.length() > 512 || now == null) {
+        validateConfiscationCancellation(operationId, fencingToken, reasonCode, detail, now);
+        return transaction(connection ->
+                cancelConfiscation(connection, operationId, fencingToken, reasonCode, detail, now)
+        );
+    }
+
+    private static void validateConfiscationCancellation(
+            UUID operationId,
+            long fencingToken,
+            String reasonCode,
+            String detail,
+            Instant now
+    ) {
+        if (operationId == null || fencingToken < 1L || now == null
+                || !validCancellationReason(reasonCode) || !validCancellationDetail(detail)) {
             throw new IllegalArgumentException("confiscation cancellation fields are invalid");
         }
-        return transaction(connection -> {
-            InventoryConfiscationSession session =
-                    lockConfiscationSession(connection, operationId).orElse(null);
-            if (session == null) {
-                return false;
-            }
-            String state = confiscationState(connection, operationId);
-            if (state.equals("ROLLED_BACK")) {
-                return true;
-            }
-            if (!state.equals(LOCKED_STATE) || session.fencingToken() != fencingToken) {
-                return false;
-            }
-            markConfiscationCancelled(connection, session, reasonCode, detail, now);
+    }
+
+    private static boolean validCancellationReason(String reasonCode) {
+        return reasonCode != null && reasonCode.matches("[A-Z0-9_]{1,64}");
+    }
+
+    private static boolean validCancellationDetail(String detail) {
+        return detail != null && !detail.isBlank() && detail.length() <= 512;
+    }
+
+    private boolean cancelConfiscation(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            String reasonCode,
+            String detail,
+            Instant now
+    ) throws SQLException {
+        InventoryConfiscationSession session =
+                lockConfiscationSession(connection, operationId).orElse(null);
+        if (session == null) {
+            return false;
+        }
+        String state = confiscationState(connection, operationId);
+        if (state.equals("ROLLED_BACK")) {
             return true;
-        });
+        }
+        if (!state.equals(LOCKED_STATE) || session.fencingToken() != fencingToken) {
+            return false;
+        }
+        markConfiscationCancelled(connection, session, reasonCode, detail, now);
+        return true;
     }
 
     @Override
@@ -1438,24 +1531,40 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 "selectedPaths", request.selectedPaths(),
                 "assetsChecksum", request.assetsChecksum()
         ));
+        updateConfiscationOperation(connection, session, request, now);
+        insertConfiscationPendingPatch(connection, session, request, patchId, patchJson, now);
+        insertConfiscatedAssetSnapshot(connection, session, request, assetSnapshotId, now);
+        return new InventoryPatch(
+                patchId,
+                session.operationId(),
+                session.profileId(),
+                session.playerId(),
+                session.scopeId(),
+                session.owningServerId(),
+                session.actorId(),
+                Optional.of(session.caseId().value()),
+                CONFISCATION_OPERATION_TYPE,
+                InventoryOperationState.PENDING,
+                request.expectedRevision(),
+                request.fencingToken(),
+                request.expectedChecksum(),
+                request.replacementChecksum(),
+                request.replacementSnapshot(),
+                request.changedSlots(),
+                now
+        );
+    }
+
+    private void updateConfiscationOperation(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request,
+            Instant now
+    ) throws SQLException {
         try (PreparedStatement operation = connection.prepareStatement("""
                 UPDATE inventory_operations
                 SET state = 'PENDING', operation_json = ?, updated_at = ?
                 WHERE operation_id = ?
-                """);
-             PreparedStatement patch = connection.prepareStatement("""
-                INSERT INTO inventory_pending_patches(
-                    patch_id, operation_id, profile_id, expected_revision,
-                    expected_checksum, replacement_checksum, replacement_blob,
-                    actor_id, case_id, owning_server_id, fencing_token,
-                    state, patch_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-                """);
-             PreparedStatement assets = connection.prepareStatement("""
-                INSERT INTO confiscated_asset_snapshots(
-                    snapshot_id, case_id, inventory_operation_id, checksum,
-                    asset_blob, created_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """)) {
             operation.setString(1, serialize(Map.of(
                     SCOPE_ID_FIELD, session.scopeId(),
@@ -1472,7 +1581,25 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                     operation.executeUpdate(),
                     "Confiscation operation disappeared during patch validation"
             );
+        }
+    }
 
+    private void insertConfiscationPendingPatch(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request,
+            UUID patchId,
+            String patchJson,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement patch = connection.prepareStatement("""
+                INSERT INTO inventory_pending_patches(
+                    patch_id, operation_id, profile_id, expected_revision,
+                    expected_checksum, replacement_checksum, replacement_blob,
+                    actor_id, case_id, owning_server_id, fencing_token,
+                    state, patch_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                """)) {
             patch.setBytes(1, UuidBytes.toBytes(patchId));
             patch.setBytes(2, UuidBytes.toBytes(session.operationId()));
             patch.setBytes(3, UuidBytes.toBytes(session.profileId()));
@@ -1486,8 +1613,23 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             patch.setLong(11, request.fencingToken());
             patch.setString(12, patchJson);
             patch.setTimestamp(13, Timestamp.from(now));
-            patch.executeUpdate();
+            requireSingleInsert(patch, "confiscation pending patch");
+        }
+    }
 
+    private static void insertConfiscatedAssetSnapshot(
+            Connection connection,
+            InventoryConfiscationSession session,
+            InventoryConfiscationCommitRequest request,
+            UUID assetSnapshotId,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement assets = connection.prepareStatement("""
+                INSERT INTO confiscated_asset_snapshots(
+                    snapshot_id, case_id, inventory_operation_id, checksum,
+                    asset_blob, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
             assets.setBytes(1, UuidBytes.toBytes(assetSnapshotId));
             assets.setString(2, session.caseId().value());
             assets.setBytes(3, UuidBytes.toBytes(session.operationId()));
@@ -1495,27 +1637,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             assets.setBytes(5, request.assetsSnapshot());
             assets.setTimestamp(6, Timestamp.from(now));
             assets.setTimestamp(7, Timestamp.from(now.plus(SNAPSHOT_RETENTION)));
-            assets.executeUpdate();
+            requireSingleInsert(assets, "confiscated asset snapshot");
         }
-        return new InventoryPatch(
-                patchId,
-                session.operationId(),
-                session.profileId(),
-                session.playerId(),
-                session.scopeId(),
-                session.owningServerId(),
-                session.actorId(),
-                Optional.of(session.caseId().value()),
-                "CONFISCATION",
-                InventoryOperationState.PENDING,
-                request.expectedRevision(),
-                request.fencingToken(),
-                request.expectedChecksum(),
-                request.replacementChecksum(),
-                request.replacementSnapshot(),
-                request.changedSlots(),
-                now
-        );
     }
 
     private Optional<InventoryConfiscationSession> lockConfiscationSessionByIdentity(
