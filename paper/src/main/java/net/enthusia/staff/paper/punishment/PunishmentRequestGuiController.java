@@ -2,7 +2,7 @@ package net.enthusia.staff.paper.punishment;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -16,7 +16,6 @@ import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
-import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
@@ -52,9 +51,18 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private final JavaPlugin plugin;
     private final Supplier<PunishmentRequestService> services;
-    private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
+    private volatile Supplier<PlayerDirectory> players;
+
+    public PunishmentRequestGuiController(
+            JavaPlugin plugin,
+            Supplier<PunishmentRequestService> services,
+            AuthorizationPolicy authorization,
+            ExecutorService workers
+    ) {
+        this(plugin, services, () -> null, authorization, workers);
+    }
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
@@ -71,6 +79,15 @@ public final class PunishmentRequestGuiController implements Listener {
         this.players = players;
         this.authorization = authorization;
         this.workers = workers;
+    }
+
+    public void bindPlayerDirectory(Supplier<PlayerDirectory> playerDirectory) {
+        players = Objects.requireNonNull(playerDirectory, "player directory supplier");
+    }
+
+    public String targetName(PunishmentApprovalRequest request) {
+        Objects.requireNonNull(request, "punishment request");
+        return PunishmentRequestPresentation.targetName(players.get(), request.proposal().targetId());
     }
 
     public void register() {
@@ -134,9 +151,8 @@ public final class PunishmentRequestGuiController implements Listener {
                 message(player, "Punishment request storage is not ready.");
                 return;
             }
-            PlayerDirectory directory = players.get();
             List<PunishmentRequestGuiState.RequestView> views = service.reviewable(actor, MAXIMUM_REQUESTS).stream()
-                    .map(request -> view(request, directory))
+                    .map(this::view)
                     .toList();
             PunishmentRequestGuiState.Queue state = PunishmentRequestGuiState.Queue.page(
                     views,
@@ -167,16 +183,16 @@ public final class PunishmentRequestGuiController implements Listener {
                 )));
                 return;
             }
-            String targetName = PunishmentRequestPresentation.targetName(players.get(), request.proposal().targetId());
+            String resolvedTargetName = targetName(request);
             if (request.status() != PunishmentRequestStatus.PENDING) {
                 PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(
-                        new PunishmentRequestGuiState.RequestView(request, targetName),
+                        new PunishmentRequestGuiState.RequestView(request, resolvedTargetName),
                         returnPage
                 );
                 onMain(() -> player.openInventory(renderDetails(state)));
                 return;
             }
-            acquireAndOpen(player, actor, requestId, targetName, returnPage, service);
+            acquireAndOpen(player, actor, requestId, resolvedTargetName, returnPage, service);
         });
     }
 
@@ -200,10 +216,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         PunishmentApprovalRequest current = service.find(requestId).orElse(null);
         if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
-            PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(
-                    view(current, players.get()),
-                    returnPage
-            );
+            PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(view(current), returnPage);
             onMain(() -> player.openInventory(renderDetails(state)));
             return;
         }
@@ -305,17 +318,23 @@ public final class PunishmentRequestGuiController implements Listener {
     ) {
         player.closeInventory();
         submit(player, () -> {
+            PunishmentRequestService service = services.get();
             PunishmentRequestResult result = decision.get();
-            PunishmentApprovalRequest latest = result instanceof PunishmentRequestResult.Rejected
-                    ? services.get().find(lease.request().requestId()).orElse(null)
-                    : null;
+            PunishmentRequestGuiState.RequestView latestView = null;
+            if (result instanceof PunishmentRequestResult.Rejected) {
+                PunishmentApprovalRequest latest = service.find(lease.request().requestId()).orElse(null);
+                if (latest != null && latest.status() != PunishmentRequestStatus.PENDING
+                        && service.mayReview(actor, latest)) {
+                    latestView = view(latest);
+                }
+            }
+            PunishmentRequestGuiState.RequestView resolvedView = latestView;
             onMain(() -> {
                 decisionMessage(player, result);
                 if (result instanceof PunishmentRequestResult.Rejected) {
-                    if (latest != null && latest.status() != PunishmentRequestStatus.PENDING
-                            && services.get().mayReview(actor, latest)) {
+                    if (resolvedView != null) {
                         player.openInventory(renderDetails(new PunishmentRequestGuiState.Details(
-                                view(latest, players.get()),
+                                resolvedView,
                                 returnPage
                         )));
                     } else {
@@ -545,14 +564,8 @@ public final class PunishmentRequestGuiController implements Listener {
         plugin.getServer().getScheduler().runTask(plugin, action);
     }
 
-    private PunishmentRequestGuiState.RequestView view(
-            PunishmentApprovalRequest request,
-            PlayerDirectory directory
-    ) {
-        return new PunishmentRequestGuiState.RequestView(
-                request,
-                PunishmentRequestPresentation.targetName(directory, request.proposal().targetId())
-        );
+    private PunishmentRequestGuiState.RequestView view(PunishmentApprovalRequest request) {
+        return new PunishmentRequestGuiState.RequestView(request, targetName(request));
     }
 
     private static void decisionMessage(Player player, PunishmentRequestResult result) {
