@@ -4,6 +4,10 @@ EnthusiaStaff is a distributed moderation platform, not a single Bukkit command
 plugin. It separates policy and durable state from Paper, Velocity, MariaDB,
 Discord, website, and provider implementations.
 
+This page explains the system boundaries and write model. Developers who need a
+file-by-file review map, important classes, feature traces, tests, and review
+checklists should continue to [[Developer Code Guide]].
+
 ## Deployable artifacts
 
 Exactly two runtime jars:
@@ -136,3 +140,15 @@ Expected Bukkit-facing services include:
 
 These services provide stable boundaries for other plugins without exposing
 mutable internals.
+
+## Continue reviewing
+
+Use [[Developer Code Guide]] for:
+
+- the recommended source reading order;
+- important root files and composition roots;
+- package and class responsibilities;
+- punishment, report, inventory, confiscation, staff-state, alt, migration,
+  Discord, and website feature traces;
+- persistence and protocol review checklists;
+- test locations, concurrency rules, and high-risk review areas.
