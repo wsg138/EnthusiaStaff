@@ -87,7 +87,7 @@ final class JdbcPunishmentRequestFulfillment {
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE punishment_requests
-                SET status = 'FULFILLED_EXTERNALLY', open_match_key = NULL,
+                SET status = 'FULFILLED_EXTERNALLY',
                     revision = revision + 1, resolved_by = ?, resolution_note = ?,
                     resulting_case_id = ?, resolved_at = ?, updated_at = ?
                 WHERE request_id = ? AND status = 'PENDING' AND revision = ?
