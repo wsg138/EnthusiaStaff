@@ -10,6 +10,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.staff.VanishRecord;
+import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -72,8 +73,13 @@ public final class VanishManager implements Listener {
     }
 
     public void toggle(Player player) {
-        StaffRank rank = StaffModeManager.rank(player);
-        if ((rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) && !staffMode.active(player.getUniqueId())) {
+        StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank == null) {
+            visibility.removeViewer(player.getUniqueId());
+            player.sendMessage(Component.text("An explicit EnthusiaStaff rank is required before using vanish."));
+            return;
+        }
+        if (requiresStaffMode(rank) && !staffMode.active(player.getUniqueId())) {
             player.sendMessage(Component.text("Your rank requires active staff mode before vanishing."));
             return;
         }
@@ -86,10 +92,14 @@ public final class VanishManager implements Listener {
         if (player == null || !visibility.isVanished(playerId)) {
             return;
         }
-        StaffRank rank = StaffModeManager.rank(player);
-        if (rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
+        StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank != null && requiresStaffMode(rank)) {
             set(player, rank, false);
         }
+    }
+
+    private static boolean requiresStaffMode(StaffRank rank) {
+        return rank == StaffRank.HELPER || rank == StaffRank.MOD || rank == StaffRank.DEVELOPER;
     }
 
     private void set(Player player, StaffRank rank, boolean vanished) {
@@ -150,12 +160,11 @@ public final class VanishManager implements Listener {
     }
 
     private void recordViewerRank(Player player) {
-        boolean staff = player.hasPermission("enthusiastaff.staffmode")
-                || player.hasPermission("enthusiastaff.vanish");
-        if (staff) {
-            visibility.setViewerRank(player.getUniqueId(), StaffModeManager.rank(player));
-        } else {
+        StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank == null) {
             visibility.removeViewer(player.getUniqueId());
+        } else {
+            visibility.setViewerRank(player.getUniqueId(), rank);
         }
     }
 
