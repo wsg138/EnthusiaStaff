@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: publish-enthusiastaff-wiki
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -27,7 +27,6 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event.inputs.confirmation == 'PUBLISH')
     runs-on: ubuntu-latest
-    environment: wiki-production
 
     steps:
       - name: Check out repository

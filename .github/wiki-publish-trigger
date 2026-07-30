@@ -1,5 +1,6 @@
-Publish and verify the repository-managed Wiki after merging PR #17.
+Execute the authorized repository-managed Wiki publication.
 
 Requested: 2026-07-30
 Source content: docs/wiki/pages on main
 Receipt target: pull request #22
+Environment approval: satisfied by explicit owner authorization in ChatGPT
