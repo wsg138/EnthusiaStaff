@@ -210,7 +210,6 @@ permissions:
       enthusiastaff.staffmode: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
-      enthusiastaff.client: true
       enthusiastaff.inventory.view: true
       enthusiastaff.inspect: true
   enthusiastaff.rank.developer:
