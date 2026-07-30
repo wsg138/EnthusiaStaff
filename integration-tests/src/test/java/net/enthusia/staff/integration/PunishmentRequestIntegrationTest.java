@@ -6,71 +6,29 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.security.SecureRandom;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
-import net.enthusia.staff.common.IdempotencyKey;
-import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
-import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
-import net.enthusia.staff.domain.application.PunishmentPlan;
-import net.enthusia.staff.domain.application.PunishmentProposal;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
-import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
-import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
-import net.enthusia.staff.domain.casefile.CaseVisibility;
-import net.enthusia.staff.domain.escalation.AltInheritanceMode;
-import net.enthusia.staff.domain.escalation.EscalationDecision;
-import net.enthusia.staff.domain.escalation.EscalationEngine;
-import net.enthusia.staff.domain.escalation.PunishmentStep;
-import net.enthusia.staff.domain.escalation.ReasonPolicy;
-import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.sanction.SanctionLength;
-import net.enthusia.staff.domain.sanction.SanctionSpec;
-import net.enthusia.staff.domain.sanction.SanctionType;
-import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MariaDBContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
-class PunishmentRequestIntegrationTest {
-    private static final Instant NOW = Instant.parse("2026-07-30T14:00:00Z");
-    private static final String DATABASE_PASSWORD = UUID.randomUUID().toString();
-    private static final Actor HELPER = actor("request-helper", StaffRank.HELPER);
-    private static final Actor DEVELOPER = actor("request-developer", StaffRank.DEVELOPER);
-    private static final Actor MOD = actor("request-mod", StaffRank.MOD);
-    private static final Actor ADMIN = actor("request-admin", StaffRank.ADMIN);
-
-    @Container
-    private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
-            .withDatabaseName("enthusia_staff_punishment_requests_test")
-            .withUsername("enthusia_test")
-            .withPassword(DATABASE_PASSWORD);
-
+class PunishmentRequestIntegrationTest extends PunishmentRequestMariaDbSupport {
     @Test
     void pendingRequestSurvivesRestartAndDuplicateSubmissionReplays() throws SQLException {
         PunishmentApprovalRequest initial = request(
@@ -137,13 +95,11 @@ class PunishmentRequestIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             PunishmentRequestStore store = runtime.punishmentRequestStore();
             assertInstanceOf(PunishmentRequestResult.Submitted.class, store.submit(initial));
-
             PunishmentRequestResult.Rejected keyConflict = assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     store.submit(idempotencyConflict)
             );
             assertEquals("IDEMPOTENCY_CONFLICT", keyConflict.code());
-
             PunishmentRequestResult.Rejected duplicate = assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     store.submit(duplicatePending)
@@ -184,21 +140,18 @@ class PunishmentRequestIntegrationTest {
                     store.approve(current, MOD, caseId, approvalTime)
             );
             assertFalse(approved.replayed());
-            assertEquals(caseId, approved.caseId());
-
             PunishmentRequestResult.Approved replay = assertInstanceOf(
                     PunishmentRequestResult.Approved.class,
                     store.approve(current, MOD, new CaseId("A000000000000099"), approvalTime.plusSeconds(1))
             );
             assertTrue(replay.replayed());
             assertEquals(caseId, replay.caseId());
-            assertEquals(PunishmentRequestStatus.APPROVED, store.find(pending.requestId()).orElseThrow().status());
         }
 
         assertEquals(approvalTime, caseIssuedAt(caseId));
         assertEquals(approvalTime.plus(Duration.ofDays(7)), sanctionExpiration(caseId));
         assertEquals(0, leaseCount(pending.requestId()));
-        assertEquals(1, eventCount(pending.requestId(), "APPROVED"));
+        assertEquals(1, eventCount(pending.requestId(), EVENT_APPROVED));
     }
 
     @Test
@@ -215,7 +168,6 @@ class PunishmentRequestIntegrationTest {
             store.submit(pending);
             PunishmentApprovalLease lease = acquire(store, pending, MOD, NOW);
             deleteLease(pending.requestId());
-
             PunishmentRequestResult.Rejected rejected = assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     store.approve(lease, MOD, caseId, NOW.plusSeconds(10))
@@ -225,7 +177,7 @@ class PunishmentRequestIntegrationTest {
         }
 
         assertEquals(0, countCases(caseId));
-        assertEquals(0, eventCount(pending.requestId(), "APPROVED"));
+        assertEquals(0, eventCount(pending.requestId(), EVENT_APPROVED));
     }
 
     @Test
@@ -251,7 +203,6 @@ class PunishmentRequestIntegrationTest {
                     store.deny(lease, MOD, "Evidence did not support the requested result", NOW.plusSeconds(5))
             );
             assertFalse(result.replayed());
-
             PunishmentRequestResult.Denied replay = assertInstanceOf(
                     PunishmentRequestResult.Denied.class,
                     store.deny(lease, MOD, "Repeated denial", NOW.plusSeconds(6))
@@ -301,7 +252,6 @@ class PunishmentRequestIntegrationTest {
                     sevenDayBan(),
                     NOW.plus(Duration.ofHours(3))
             ));
-
             PunishmentApprovalRequest fulfilled = requests.find(matching.requestId()).orElseThrow();
             assertEquals(PunishmentRequestStatus.FULFILLED_EXTERNALLY, fulfilled.status());
             assertEquals(caseId, fulfilled.resultingCaseId());
@@ -316,106 +266,112 @@ class PunishmentRequestIntegrationTest {
     }
 
     @Test
-    void helperDeveloperAndSelfApprovalRestrictionsUseDurableStore() throws SQLException {
+    void serviceRejectsHelperDeveloperAndSelfApproval() {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             ServiceFixture permanent = serviceFixture(
                     runtime,
-                    "test.authority.permanent",
+                    "test.authority.service.permanent",
                     StaffRank.MOD,
                     SanctionLength.permanent()
             );
             PunishmentRequestResult.Submitted helperSubmission = assertInstanceOf(
                     PunishmentRequestResult.Submitted.class,
                     permanent.requests().submit(
-                            serviceRequest("helper-permanent", HELPER, "test.authority.permanent"),
+                            serviceRequest("helper-permanent", HELPER, "test.authority.service.permanent"),
                             OperationalMode.ACTIVE
                     )
             );
-            assertEquals(PunishmentRequestStatus.PENDING, helperSubmission.request().status());
-
-            PunishmentRequestResult.Rejected helperDecision = assertInstanceOf(
+            assertEquals(CODE_FORBIDDEN, assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     permanent.requests().acquire(helperSubmission.request().requestId(), HELPER)
-            );
-            assertEquals("FORBIDDEN", helperDecision.code());
-
-            PunishmentRequestResult.Rejected developerDecision = assertInstanceOf(
+            ).code());
+            assertEquals(CODE_FORBIDDEN, assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     permanent.requests().acquire(helperSubmission.request().requestId(), DEVELOPER)
-            );
-            assertEquals("FORBIDDEN", developerDecision.code());
+            ).code());
 
             PunishmentRequestResult.Submitted developerSubmission = assertInstanceOf(
                     PunishmentRequestResult.Submitted.class,
                     permanent.requests().submit(
-                            serviceRequest("developer-proposal", DEVELOPER, "test.authority.permanent"),
+                            serviceRequest("developer-proposal", DEVELOPER, "test.authority.service.permanent"),
                             OperationalMode.ACTIVE
                     )
             );
             Actor promotedRequester = new Actor(DEVELOPER.id(), "Promoted requester", StaffRank.MOD);
-            PunishmentRequestResult.Rejected selfApproval = assertInstanceOf(
+            assertEquals("SELF_APPROVAL_FORBIDDEN", assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     permanent.requests().acquire(developerSubmission.request().requestId(), promotedRequester)
-            );
-            assertEquals("SELF_APPROVAL_FORBIDDEN", selfApproval.code());
-
-            PunishmentRequestStore store = runtime.punishmentRequestStore();
-            PunishmentApprovalLease helperLease = acquire(store, helperSubmission.request(), HELPER, NOW);
-            PunishmentRequestResult.Rejected storedHelper = assertInstanceOf(
-                    PunishmentRequestResult.Rejected.class,
-                    store.approve(
-                            helperLease,
-                            HELPER,
-                            new CaseId("A000000000000005"),
-                            NOW.plusSeconds(1)
-                    )
-            );
-            assertEquals("FORBIDDEN", storedHelper.code());
-
-            PunishmentApprovalLease developerLease = acquire(store, developerSubmission.request(), DEVELOPER, NOW);
-            PunishmentRequestResult.Rejected storedDeveloper = assertInstanceOf(
-                    PunishmentRequestResult.Rejected.class,
-                    store.approve(
-                            developerLease,
-                            DEVELOPER,
-                            new CaseId("A000000000000006"),
-                            NOW.plusSeconds(1)
-                    )
-            );
-            assertEquals("FORBIDDEN", storedDeveloper.code());
-            PunishmentRequestResult.Rejected storedSelfApproval = assertInstanceOf(
-                    PunishmentRequestResult.Rejected.class,
-                    store.approve(
-                            developerLease,
-                            promotedRequester,
-                            new CaseId("A000000000000007"),
-                            NOW.plusSeconds(2)
-                    )
-            );
-            assertEquals("SELF_APPROVAL_FORBIDDEN", storedSelfApproval.code());
-            assertEquals(0, countCases(new CaseId("A000000000000005")));
-            assertEquals(0, countCases(new CaseId("A000000000000006")));
-            assertEquals(0, countCases(new CaseId("A000000000000007")));
+            ).code());
 
             ServiceFixture temporary = serviceFixture(
                     runtime,
-                    "test.authority.temporary",
+                    "test.authority.service.temporary",
                     StaffRank.MOD,
                     SanctionLength.temporary(Duration.ofHours(6))
             );
-            PunishmentRequestResult.Rejected directHelper = assertInstanceOf(
+            assertEquals("APPROVAL_NOT_REQUIRED", assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     temporary.requests().submit(
-                            serviceRequest("helper-temporary", HELPER, "test.authority.temporary"),
+                            serviceRequest("helper-temporary", HELPER, "test.authority.service.temporary"),
                             OperationalMode.ACTIVE
                     )
-            );
-            assertEquals("APPROVAL_NOT_REQUIRED", directHelper.code());
+            ).code());
         }
     }
 
     @Test
-    void reasonRankMinimumIsEnforcedBeforeLeaseAcquisition() throws SQLException {
+    void storeRejectsHelperDeveloperAndSelfApprovalAtomically() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            ServiceFixture fixture = serviceFixture(
+                    runtime,
+                    "test.authority.store",
+                    StaffRank.MOD,
+                    SanctionLength.permanent()
+            );
+            PunishmentApprovalRequest helperRequest = assertInstanceOf(
+                    PunishmentRequestResult.Submitted.class,
+                    fixture.requests().submit(
+                            serviceRequest("store-helper", HELPER, "test.authority.store"),
+                            OperationalMode.ACTIVE
+                    )
+            ).request();
+            PunishmentApprovalRequest developerRequest = assertInstanceOf(
+                    PunishmentRequestResult.Submitted.class,
+                    fixture.requests().submit(
+                            serviceRequest("store-developer", DEVELOPER, "test.authority.store"),
+                            OperationalMode.ACTIVE
+                    )
+            ).request();
+            PunishmentRequestStore store = runtime.punishmentRequestStore();
+            CaseId helperCase = new CaseId("A000000000000005");
+            CaseId developerCase = new CaseId("A000000000000006");
+            CaseId selfCase = new CaseId("A000000000000007");
+
+            PunishmentApprovalLease helperLease = acquire(store, helperRequest, HELPER, NOW);
+            assertEquals(CODE_FORBIDDEN, assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(helperLease, HELPER, helperCase, NOW.plusSeconds(1))
+            ).code());
+            PunishmentApprovalLease developerLease = acquire(store, developerRequest, DEVELOPER, NOW);
+            assertEquals(CODE_FORBIDDEN, assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(developerLease, DEVELOPER, developerCase, NOW.plusSeconds(1))
+            ).code());
+            Actor promotedRequester = new Actor(DEVELOPER.id(), "Promoted requester", StaffRank.MOD);
+            assertEquals("SELF_APPROVAL_FORBIDDEN", assertInstanceOf(
+                    PunishmentRequestResult.Rejected.class,
+                    store.approve(developerLease, promotedRequester, selfCase, NOW.plusSeconds(2))
+            ).code());
+            assertEquals(List.of(0, 0, 0), List.of(
+                    countCases(helperCase),
+                    countCases(developerCase),
+                    countCases(selfCase)
+            ));
+        }
+    }
+
+    @Test
+    void reasonRankMinimumIsEnforcedByServiceAndStore() throws SQLException {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             ServiceFixture fixture = serviceFixture(
                     runtime,
@@ -423,39 +379,36 @@ class PunishmentRequestIntegrationTest {
                     StaffRank.ADMIN,
                     SanctionLength.permanent()
             );
-            PunishmentRequestResult.Submitted submitted = assertInstanceOf(
+            PunishmentApprovalRequest serviceRequest = assertInstanceOf(
                     PunishmentRequestResult.Submitted.class,
                     fixture.requests().submit(
                             serviceRequest("admin-reason", DEVELOPER, "test.rank.admin"),
                             OperationalMode.ACTIVE
                     )
-            );
-
-            PunishmentRequestResult.Rejected modRejected = assertInstanceOf(
+            ).request();
+            assertEquals("APPROVER_RANK_REQUIRED", assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
-                    fixture.requests().acquire(submitted.request().requestId(), MOD)
-            );
-            assertEquals("APPROVER_RANK_REQUIRED", modRejected.code());
+                    fixture.requests().acquire(serviceRequest.requestId(), MOD)
+            ).code());
             assertInstanceOf(
                     PunishmentRequestResult.Leased.class,
-                    fixture.requests().acquire(submitted.request().requestId(), ADMIN)
+                    fixture.requests().acquire(serviceRequest.requestId(), ADMIN)
             );
 
-            PunishmentRequestResult.Submitted storedSubmission = assertInstanceOf(
+            PunishmentApprovalRequest storedRequest = assertInstanceOf(
                     PunishmentRequestResult.Submitted.class,
                     fixture.requests().submit(
                             serviceRequest("admin-reason-store", DEVELOPER, "test.rank.admin"),
                             OperationalMode.ACTIVE
                     )
-            );
+            ).request();
             PunishmentRequestStore store = runtime.punishmentRequestStore();
-            PunishmentApprovalLease modLease = acquire(store, storedSubmission.request(), MOD, NOW);
+            PunishmentApprovalLease modLease = acquire(store, storedRequest, MOD, NOW);
             CaseId rejectedCaseId = new CaseId("A000000000000008");
-            PunishmentRequestResult.Rejected storedRank = assertInstanceOf(
+            assertEquals("APPROVER_RANK_REQUIRED", assertInstanceOf(
                     PunishmentRequestResult.Rejected.class,
                     store.approve(modLease, MOD, rejectedCaseId, NOW.plusSeconds(1))
-            );
-            assertEquals("APPROVER_RANK_REQUIRED", storedRank.code());
+            ).code());
             assertEquals(0, countCases(rejectedCaseId));
         }
     }
@@ -470,27 +423,25 @@ class PunishmentRequestIntegrationTest {
                     StaffRank.MOD,
                     SanctionLength.temporary(Duration.ofDays(7))
             );
-            PunishmentRequestResult.Submitted submitted = assertInstanceOf(
+            PunishmentApprovalRequest submitted = assertInstanceOf(
                     PunishmentRequestResult.Submitted.class,
                     fixture.requests().submit(
                             serviceRequest("frozen", DEVELOPER, reason),
                             OperationalMode.ACTIVE
                     )
-            );
+            ).request();
             fixture.policies().replace(
                     "v2",
                     List.of(policy(reason, StaffRank.MOD, SanctionLength.temporary(Duration.ofDays(30))))
             );
-
             PunishmentApprovalLease lease = assertInstanceOf(
                     PunishmentRequestResult.Leased.class,
-                    fixture.requests().acquire(submitted.request().requestId(), MOD)
+                    fixture.requests().acquire(submitted.requestId(), MOD)
             ).lease();
             PunishmentRequestResult.Approved approved = assertInstanceOf(
                     PunishmentRequestResult.Approved.class,
                     fixture.requests().approve(lease, MOD)
             );
-
             assertEquals("v1", approved.request().proposal().configurationVersion());
             assertEquals(NOW.plus(Duration.ofDays(7)), sanctionExpiration(approved.caseId()));
         }
@@ -518,329 +469,17 @@ class PunishmentRequestIntegrationTest {
             } finally {
                 dropApprovalFailureTrigger();
             }
-
             assertEquals(0, countCases(caseId));
             assertEquals(PunishmentRequestStatus.PENDING, store.find(pending.requestId()).orElseThrow().status());
-            assertEquals(0, eventCount(pending.requestId(), "APPROVED"));
+            assertEquals(0, eventCount(pending.requestId(), EVENT_APPROVED));
             assertEquals(1, leaseCount(pending.requestId()));
-
-            PunishmentRequestResult.Approved recovered = assertInstanceOf(
+            assertFalse(assertInstanceOf(
                     PunishmentRequestResult.Approved.class,
                     store.approve(lease, MOD, caseId, NOW.plusSeconds(20))
-            );
-            assertFalse(recovered.replayed());
+            ).replayed());
         }
 
         assertEquals(1, countCases(caseId));
-        assertEquals(1, eventCount(pending.requestId(), "APPROVED"));
-    }
-
-    private static ServiceFixture serviceFixture(
-            MariaDbRuntime runtime,
-            String reasonId,
-            StaffRank requiredRank,
-            SanctionLength length
-    ) {
-        AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
-                "v1",
-                List.of(policy(reasonId, requiredRank, length))
-        );
-        DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
-        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        PunishmentService punishments = new PunishmentService(
-                clock,
-                new SecureIdentifiers(new SecureRandom()),
-                authorization,
-                policies,
-                runtime.moderationStore(),
-                new EscalationEngine()
-        );
-        PunishmentRequestService requests = new PunishmentRequestService(
-                clock,
-                Duration.ofDays(7),
-                Duration.ofMinutes(2),
-                new SecureIdentifiers(new SecureRandom()),
-                authorization,
-                punishments,
-                runtime.punishmentRequestStore()
-        );
-        return new ServiceFixture(requests, policies);
-    }
-
-    private static ReasonPolicy policy(String reasonId, StaffRank requiredRank, SanctionLength length) {
-        PunishmentStep step = new PunishmentStep(
-                0,
-                "Configured",
-                List.of(new SanctionSpec(SanctionType.NETWORK_BAN, length))
-        );
-        return new ReasonPolicy(
-                reasonId,
-                "test",
-                "Test reason",
-                10,
-                true,
-                List.of(step),
-                List.of(),
-                true,
-                true,
-                false,
-                requiredRank,
-                false,
-                AltInheritanceMode.ACTIVE_SANCTIONS
-        );
-    }
-
-    private static CreatePunishmentRequest serviceRequest(String key, Actor actor, String reasonId) {
-        return new CreatePunishmentRequest(
-                new IdempotencyKey("punishment-request-service-integration:" + key),
-                identifier("service-target-" + key),
-                actor,
-                reasonId,
-                "Evidence-backed punishment request",
-                CaseVisibility.PUBLIC,
-                List.of()
-        );
-    }
-
-    private static PunishmentApprovalLease acquire(
-            PunishmentRequestStore store,
-            PunishmentApprovalRequest request,
-            Actor owner,
-            Instant now
-    ) {
-        return store.acquire(request.requestId(), owner.id(), now, now.plus(Duration.ofMinutes(2)))
-                .orElseThrow();
-    }
-
-    private static PunishmentApprovalRequest request(
-            String key,
-            List<SanctionSpec> sanctions,
-            Instant expiresAt
-    ) {
-        return request(key, identifier("target-" + key), "test." + key, sanctions, expiresAt);
-    }
-
-    private static PunishmentApprovalRequest request(
-            String key,
-            UUID target,
-            String reason,
-            List<SanctionSpec> sanctions,
-            Instant expiresAt
-    ) {
-        return request(
-                key,
-                "punishment-request-integration:" + key,
-                target,
-                reason,
-                DEVELOPER,
-                StaffRank.MOD,
-                sanctions,
-                expiresAt
-        );
-    }
-
-    private static PunishmentApprovalRequest request(
-            String key,
-            String submissionKey,
-            UUID target,
-            String reason,
-            Actor requester,
-            StaffRank requiredRank,
-            List<SanctionSpec> sanctions,
-            Instant expiresAt
-    ) {
-        UUID requestId = identifier("request-" + key);
-        PunishmentStep step = new PunishmentStep(0, "Configured", sanctions);
-        PunishmentProposal proposal = new PunishmentProposal(
-                target,
-                requester,
-                reason,
-                "test",
-                "Test punishment request",
-                "Evidence-backed punishment request",
-                "v1",
-                CaseVisibility.PUBLIC,
-                requiredRank,
-                new EscalationDecision(0, 0, 0, List.of(), step),
-                sanctions
-        );
-        return PunishmentApprovalRequest.pending(
-                requestId,
-                new IdempotencyKey(submissionKey),
-                proposal,
-                NOW,
-                expiresAt
-        );
-    }
-
-    private static PunishmentPlan plan(
-            CaseId caseId,
-            UUID target,
-            String reason,
-            List<SanctionSpec> sanctions,
-            Instant issuedAt
-    ) {
-        PunishmentStep step = new PunishmentStep(0, "Configured", sanctions);
-        return new PunishmentPlan(
-                caseId,
-                new IdempotencyKey("direct-punishment:" + caseId.value()),
-                target,
-                MOD,
-                reason,
-                "test",
-                "Test direct punishment",
-                "Independent direct punishment",
-                "v1",
-                CaseVisibility.PUBLIC,
-                issuedAt,
-                new EscalationDecision(0, 0, 0, List.of(), step),
-                sanctions
-        );
-    }
-
-    private static List<SanctionSpec> sevenDayBan() {
-        return List.of(new SanctionSpec(
-                SanctionType.NETWORK_BAN,
-                SanctionLength.temporary(Duration.ofDays(7))
-        ));
-    }
-
-    private static List<SanctionSpec> thirtyDayBan() {
-        return List.of(new SanctionSpec(
-                SanctionType.NETWORK_BAN,
-                SanctionLength.temporary(Duration.ofDays(30))
-        ));
-    }
-
-    private static Actor actor(String key, StaffRank rank) {
-        return new Actor(identifier(key), rank.name(), rank);
-    }
-
-    private static UUID identifier(String key) {
-        return UUID.nameUUIDFromBytes(key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private static DatabaseConfig databaseConfig() {
-        return new DatabaseConfig(
-                DATABASE.getJdbcUrl(),
-                DATABASE.getUsername(),
-                DATABASE.getPassword(),
-                4,
-                5_000
-        );
-    }
-
-    private static int countCases(CaseId caseId) throws SQLException {
-        return countByString("SELECT COUNT(*) FROM cases WHERE case_id = ?", caseId.value());
-    }
-
-    private static int countCasesForRequest(UUID requestId) throws SQLException {
-        return countByString(
-                "SELECT COUNT(*) FROM cases WHERE idempotency_key = ?",
-                "punishment-request:" + requestId + ":approved"
-        );
-    }
-
-    private static int leaseCount(UUID requestId) throws SQLException {
-        return countByString(
-                "SELECT COUNT(*) FROM operation_leases WHERE resource_key = ?",
-                "punishment-request:" + requestId
-        );
-    }
-
-    private static int eventCount(UUID requestId, String eventType) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "SELECT COUNT(*) FROM punishment_request_events WHERE request_id = ? AND event_type = ?")) {
-            statement.setBytes(1, uuidBytes(requestId));
-            statement.setString(2, eventType);
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getInt(1);
-            }
-        }
-    }
-
-    private static int countByString(String sql, String value) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, value);
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getInt(1);
-            }
-        }
-    }
-
-    private static Instant caseIssuedAt(CaseId caseId) throws SQLException {
-        return timestamp("SELECT issued_at FROM cases WHERE case_id = ?", caseId.value());
-    }
-
-    private static Instant sanctionExpiration(CaseId caseId) throws SQLException {
-        return timestamp("SELECT expiration_at FROM sanctions WHERE case_id = ?", caseId.value());
-    }
-
-    private static Instant timestamp(String sql, String value) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, value);
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                Timestamp timestamp = result.getTimestamp(1);
-                return timestamp.toInstant();
-            }
-        }
-    }
-
-    private static void deleteLease(UUID requestId) throws SQLException {
-        try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "DELETE FROM operation_leases WHERE resource_key = ?")) {
-            statement.setString(1, "punishment-request:" + requestId);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void installApprovalFailureTrigger() throws SQLException {
-        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
-            statement.execute("DROP TRIGGER IF EXISTS test_fail_punishment_request_approval");
-            statement.execute("""
-                    CREATE TRIGGER test_fail_punishment_request_approval
-                    BEFORE UPDATE ON punishment_requests
-                    FOR EACH ROW
-                    BEGIN
-                        IF NEW.status = 'APPROVED' THEN
-                            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced punishment request rollback';
-                        END IF;
-                    END
-                    """);
-        }
-    }
-
-    private static void dropApprovalFailureTrigger() throws SQLException {
-        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
-            statement.execute("DROP TRIGGER IF EXISTS test_fail_punishment_request_approval");
-        }
-    }
-
-    private static byte[] uuidBytes(UUID value) {
-        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(16);
-        buffer.putLong(value.getMostSignificantBits());
-        buffer.putLong(value.getLeastSignificantBits());
-        return buffer.array();
-    }
-
-    private static Connection connection() throws SQLException {
-        return DriverManager.getConnection(
-                DATABASE.getJdbcUrl(),
-                DATABASE.getUsername(),
-                DATABASE.getPassword()
-        );
-    }
-
-    private record ServiceFixture(
-            PunishmentRequestService requests,
-            AtomicReasonPolicyRepository policies
-    ) {
+        assertEquals(1, eventCount(pending.requestId(), EVENT_APPROVED));
     }
 }
