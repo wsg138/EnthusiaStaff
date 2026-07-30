@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
@@ -31,21 +32,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class PunishmentRequestGuiController implements Listener {
     private static final int MAXIMUM_REQUESTS = 500;
     private static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
+    private static final String NOT_READY_MESSAGE = "Punishment request storage is not ready.";
 
     private final JavaPlugin plugin;
     private final Supplier<PunishmentRequestService> services;
+    private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
-    private volatile Supplier<PlayerDirectory> players;
-
-    public PunishmentRequestGuiController(
-            JavaPlugin plugin,
-            Supplier<PunishmentRequestService> services,
-            AuthorizationPolicy authorization,
-            ExecutorService workers
-    ) {
-        this(plugin, services, () -> null, authorization, workers);
-    }
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
@@ -62,10 +55,6 @@ public final class PunishmentRequestGuiController implements Listener {
         this.players = players;
         this.authorization = authorization;
         this.workers = workers;
-    }
-
-    public void bindPlayerDirectory(Supplier<PlayerDirectory> playerDirectory) {
-        players = Objects.requireNonNull(playerDirectory, "player directory supplier");
     }
 
     public String targetName(PunishmentApprovalRequest request) {
@@ -143,9 +132,8 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void loadQueue(Player player, Actor actor, int page) {
-        PunishmentRequestService service = services.get();
+        PunishmentRequestService service = readyService(player);
         if (service == null) {
-            message(player, "Punishment request storage is not ready.");
             return;
         }
         List<PunishmentRequestGuiState.RequestView> views = service.reviewable(actor, MAXIMUM_REQUESTS).stream()
@@ -164,9 +152,8 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void loadRequest(Player player, Actor actor, UUID requestId, int returnPage) {
-        PunishmentRequestService service = services.get();
+        PunishmentRequestService service = readyService(player);
         if (service == null) {
-            message(player, "Punishment request storage is not ready.");
             return;
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
@@ -241,13 +228,11 @@ public final class PunishmentRequestGuiController implements Listener {
             case PunishmentRequestGuiRenderer.REFRESH_SLOT -> openQueue(player, queue.page());
             case PunishmentRequestGuiRenderer.PREVIOUS_SLOT -> openAdjacentPage(
                     player,
-                    queue,
                     queue.page() - 1,
                     queue.hasPrevious()
             );
             case PunishmentRequestGuiRenderer.NEXT_SLOT -> openAdjacentPage(
                     player,
-                    queue,
                     queue.page() + 1,
                     queue.hasNext()
             );
@@ -263,12 +248,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
     }
 
-    private void openAdjacentPage(
-            Player player,
-            PunishmentRequestGuiState.Queue queue,
-            int page,
-            boolean available
-    ) {
+    private void openAdjacentPage(Player player, int page, boolean available) {
         if (available) {
             openQueue(player, page);
         }
@@ -300,7 +280,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 actor,
                 review.lease(),
                 review.returnPage(),
-                () -> services.get().approve(review.lease(), actor)
+                service -> service.approve(review.lease(), actor)
         );
     }
 
@@ -329,9 +309,9 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void denyWithPreset(Player player, PunishmentRequestGuiState.Denial denial, int slot) {
-        String note = denialReason(slot);
+        PunishmentRequestDenialPreset preset = PunishmentRequestDenialPreset.fromSlot(slot);
         Actor actor = authorizedActor(player);
-        if (note == null || actor == null) {
+        if (preset == null || actor == null) {
             return;
         }
         decide(
@@ -339,7 +319,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 actor,
                 denial.lease(),
                 denial.returnPage(),
-                () -> services.get().deny(denial.lease(), actor, note)
+                service -> service.deny(denial.lease(), actor, preset.auditNote())
         );
     }
 
@@ -365,7 +345,7 @@ public final class PunishmentRequestGuiController implements Listener {
             Actor actor,
             PunishmentApprovalLease lease,
             int returnPage,
-            Supplier<PunishmentRequestResult> decision
+            Function<PunishmentRequestService, PunishmentRequestResult> decision
     ) {
         player.closeInventory();
         submit(player, () -> completeDecision(player, actor, lease, returnPage, decision));
@@ -376,10 +356,13 @@ public final class PunishmentRequestGuiController implements Listener {
             Actor actor,
             PunishmentApprovalLease lease,
             int returnPage,
-            Supplier<PunishmentRequestResult> decision
+            Function<PunishmentRequestService, PunishmentRequestResult> decision
     ) {
-        PunishmentRequestService service = services.get();
-        PunishmentRequestResult result = decision.get();
+        PunishmentRequestService service = readyService(player);
+        if (service == null) {
+            return;
+        }
+        PunishmentRequestResult result = decision.apply(service);
         PunishmentRequestGuiState.RequestView resolvedView = resolvedView(service, actor, lease, result);
         onMain(() -> presentDecision(player, result, resolvedView, returnPage));
     }
@@ -436,6 +419,14 @@ public final class PunishmentRequestGuiController implements Listener {
             return null;
         }
         return actor;
+    }
+
+    private PunishmentRequestService readyService(Player player) {
+        PunishmentRequestService service = services.get();
+        if (service == null) {
+            message(player, NOT_READY_MESSAGE);
+        }
+        return service;
     }
 
     private void submit(Player player, Runnable operation) {
@@ -496,16 +487,6 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private static PunishmentRequestResult.Rejected rejected(String code, String message) {
         return new PunishmentRequestResult.Rejected(code, message);
-    }
-
-    private static String denialReason(int slot) {
-        return switch (slot) {
-            case 10 -> "Denied: insufficient evidence supports the requested punishment";
-            case 12 -> "Denied: the selected reason or classification is incorrect";
-            case 14 -> "Denied: the requested sanction is not appropriate for the evidence";
-            case 16 -> "Denied: duplicate request or the incident was already handled";
-            default -> null;
-        };
     }
 
     private record ClickContext(Player player, PunishmentRequestGuiState state, int slot) {
