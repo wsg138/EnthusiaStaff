@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,7 +15,7 @@ class StaffModeAccessPolicyTest {
         assertTrue(StaffModeAccessPolicy.blocksEnderChest(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.HELPER));
-        assertTrue(StaffModeAccessPolicy.requiredGameMode(StaffRank.HELPER) == GameMode.SPECTATOR);
+        assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.HELPER));
     }
 
     @Test
@@ -22,7 +23,7 @@ class StaffModeAccessPolicyTest {
         assertFalse(StaffRank.DEVELOPER.canApprovePunishmentRequests());
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.DEVELOPER));
-        assertTrue(StaffModeAccessPolicy.requiredGameMode(StaffRank.DEVELOPER) == GameMode.SPECTATOR);
+        assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.DEVELOPER));
     }
 
     @Test
@@ -30,8 +31,8 @@ class StaffModeAccessPolicyTest {
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.MOD));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.ADMIN));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
-        assertTrue(StaffModeAccessPolicy.requiredGameMode(StaffRank.MOD) == GameMode.SPECTATOR);
-        assertTrue(StaffModeAccessPolicy.requiredGameMode(StaffRank.ADMIN) == GameMode.CREATIVE);
-        assertTrue(StaffModeAccessPolicy.requiredGameMode(StaffRank.FOUNDER) == GameMode.CREATIVE);
+        assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.MOD));
+        assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.ADMIN));
+        assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.FOUNDER));
     }
 }
