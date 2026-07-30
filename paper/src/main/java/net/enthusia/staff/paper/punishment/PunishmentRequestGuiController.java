@@ -1,10 +1,8 @@
 package net.enthusia.staff.paper.punishment;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -14,10 +12,12 @@ import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
+import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -36,10 +36,13 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestGuiController implements Listener {
+    private static final int MAXIMUM_REQUESTS = 500;
     private static final int QUEUE_SIZE = 54;
     private static final int QUEUE_CONTENT_SIZE = 45;
     private static final int REFRESH_SLOT = 45;
+    private static final int PREVIOUS_SLOT = 46;
     private static final int CLOSE_SLOT = 49;
+    private static final int NEXT_SLOT = 52;
     private static final int APPROVE_SLOT = 21;
     private static final int DENY_SLOT = 23;
     private static final int BACK_SLOT = 18;
@@ -49,20 +52,23 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private final JavaPlugin plugin;
     private final Supplier<PunishmentRequestService> services;
+    private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
             Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
             AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
-        if (plugin == null || services == null || authorization == null || workers == null) {
+        if (plugin == null || services == null || players == null || authorization == null || workers == null) {
             throw new IllegalArgumentException("punishment request GUI dependencies must be present");
         }
         this.plugin = plugin;
         this.services = services;
+        this.players = players;
         this.authorization = authorization;
         this.workers = workers;
     }
@@ -72,18 +78,7 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     public boolean openQueue(Player player) {
-        Actor actor = authorizedActor(player);
-        if (actor == null) {
-            return false;
-        }
-        submit(player, () -> {
-            List<PunishmentApprovalRequest> requests = reviewable(services.get().pending(500), actor)
-                    .stream()
-                    .limit(QUEUE_CONTENT_SIZE)
-                    .toList();
-            onMain(() -> player.openInventory(renderQueue(requests)));
-        });
-        return true;
+        return openQueue(player, 0);
     }
 
     public boolean openReview(Player player, UUID requestId) {
@@ -94,21 +89,19 @@ public final class PunishmentRequestGuiController implements Listener {
         if (actor == null) {
             return false;
         }
-        acquireAndOpen(player, actor, requestId);
+        openRequest(player, actor, requestId, 0);
         return true;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getInventory().getHolder() instanceof PunishmentRequestGuiHolder holder)) {
+        if (!(event.getWhoClicked() instanceof Player player)
+                || !(event.getView().getTopInventory().getHolder(false) instanceof PunishmentRequestGuiHolder holder)) {
             return;
         }
         event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player player)) {
-            return;
-        }
         int slot = event.getRawSlot();
-        if (slot < 0 || slot >= event.getInventory().getSize()) {
+        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) {
             return;
         }
         PunishmentRequestGuiState state = holder.state();
@@ -118,114 +111,231 @@ public final class PunishmentRequestGuiController implements Listener {
             handleReviewClick(player, review, slot);
         } else if (state instanceof PunishmentRequestGuiState.Denial denial) {
             handleDenialClick(player, denial, slot);
+        } else if (state instanceof PunishmentRequestGuiState.Details details) {
+            handleDetailsClick(player, details, slot);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
-        if (event.getInventory().getHolder() instanceof PunishmentRequestGuiHolder) {
+        if (event.getView().getTopInventory().getHolder(false) instanceof PunishmentRequestGuiHolder) {
             event.setCancelled(true);
         }
+    }
+
+    private boolean openQueue(Player player, int page) {
+        Actor actor = authorizedActor(player);
+        if (actor == null) {
+            return false;
+        }
+        submit(player, () -> {
+            PunishmentRequestService service = services.get();
+            if (service == null) {
+                message(player, "Punishment request storage is not ready.");
+                return;
+            }
+            PlayerDirectory directory = players.get();
+            List<PunishmentRequestGuiState.RequestView> views = service.reviewable(actor, MAXIMUM_REQUESTS).stream()
+                    .map(request -> view(request, directory))
+                    .toList();
+            PunishmentRequestGuiState.Queue state = PunishmentRequestGuiState.Queue.page(
+                    views,
+                    page,
+                    QUEUE_CONTENT_SIZE
+            );
+            onMain(() -> player.openInventory(renderQueue(state)));
+        });
+        return true;
+    }
+
+    private void openRequest(Player player, Actor actor, UUID requestId, int returnPage) {
+        submit(player, () -> {
+            PunishmentRequestService service = services.get();
+            if (service == null) {
+                message(player, "Punishment request storage is not ready.");
+                return;
+            }
+            PunishmentApprovalRequest request = service.find(requestId).orElse(null);
+            if (request == null) {
+                onMain(() -> rejection(player, rejected("REQUEST_NOT_FOUND", "The punishment request does not exist")));
+                return;
+            }
+            if (!service.mayReview(actor, request)) {
+                onMain(() -> rejection(player, rejected(
+                        "FORBIDDEN",
+                        "You are not authorized to review this punishment request"
+                )));
+                return;
+            }
+            String targetName = PunishmentRequestPresentation.targetName(players.get(), request.proposal().targetId());
+            if (request.status() != PunishmentRequestStatus.PENDING) {
+                PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(
+                        new PunishmentRequestGuiState.RequestView(request, targetName),
+                        returnPage
+                );
+                onMain(() -> player.openInventory(renderDetails(state)));
+                return;
+            }
+            acquireAndOpen(player, actor, requestId, targetName, returnPage, service);
+        });
+    }
+
+    private void acquireAndOpen(
+            Player player,
+            Actor actor,
+            UUID requestId,
+            String targetName,
+            int returnPage,
+            PunishmentRequestService service
+    ) {
+        PunishmentRequestResult result = service.acquire(requestId, actor);
+        if (result instanceof PunishmentRequestResult.Leased leased) {
+            PunishmentRequestGuiState.Review state = new PunishmentRequestGuiState.Review(
+                    leased.lease(),
+                    targetName,
+                    returnPage
+            );
+            onMain(() -> player.openInventory(renderReview(state)));
+            return;
+        }
+        PunishmentApprovalRequest current = service.find(requestId).orElse(null);
+        if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
+            PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(
+                    view(current, players.get()),
+                    returnPage
+            );
+            onMain(() -> player.openInventory(renderDetails(state)));
+            return;
+        }
+        PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
+        onMain(() -> rejection(player, rejected));
     }
 
     private void handleQueueClick(Player player, PunishmentRequestGuiState.Queue queue, int slot) {
         if (slot == CLOSE_SLOT) {
             player.closeInventory();
-            return;
-        }
-        if (slot == REFRESH_SLOT) {
-            openQueue(player);
-            return;
-        }
-        if (slot >= queue.requests().size() || slot >= QUEUE_CONTENT_SIZE) {
-            return;
-        }
-        PunishmentApprovalRequest request = queue.requests().get(slot);
-        Actor actor = authorizedActor(player);
-        if (actor != null) {
-            acquireAndOpen(player, actor, request.requestId());
+        } else if (slot == REFRESH_SLOT) {
+            openQueue(player, queue.page());
+        } else if (slot == PREVIOUS_SLOT && queue.hasPrevious()) {
+            openQueue(player, queue.page() - 1);
+        } else if (slot == NEXT_SLOT && queue.hasNext()) {
+            openQueue(player, queue.page() + 1);
+        } else if (slot < queue.requests().size()) {
+            Actor actor = authorizedActor(player);
+            if (actor != null) {
+                openRequest(player, actor, queue.requests().get(slot).request().requestId(), queue.page());
+            }
         }
     }
 
     private void handleReviewClick(Player player, PunishmentRequestGuiState.Review review, int slot) {
         if (slot == REVIEW_CLOSE_SLOT) {
             player.closeInventory();
-            return;
-        }
-        if (slot == BACK_SLOT) {
-            openQueue(player);
-            return;
-        }
-        if (slot == DENY_SLOT) {
-            player.openInventory(renderDenial(review.lease()));
-            return;
-        }
-        if (slot != APPROVE_SLOT) {
-            return;
-        }
-        Actor actor = authorizedActor(player);
-        if (actor != null) {
-            decide(player, () -> services.get().approve(review.lease(), actor));
+        } else if (slot == BACK_SLOT) {
+            openQueue(player, review.returnPage());
+        } else if (slot == DENY_SLOT) {
+            player.openInventory(renderDenial(new PunishmentRequestGuiState.Denial(
+                    review.lease(),
+                    review.targetName(),
+                    review.returnPage()
+            )));
+        } else if (slot == APPROVE_SLOT) {
+            Actor actor = authorizedActor(player);
+            if (actor != null) {
+                decide(
+                        player,
+                        actor,
+                        review.lease(),
+                        review.returnPage(),
+                        () -> services.get().approve(review.lease(), actor)
+                );
+            }
         }
     }
 
     private void handleDenialClick(Player player, PunishmentRequestGuiState.Denial denial, int slot) {
         if (slot == REVIEW_CLOSE_SLOT) {
             player.closeInventory();
-            return;
-        }
-        if (slot == BACK_SLOT) {
-            player.openInventory(renderReview(denial.lease()));
-            return;
-        }
-        if (slot == CUSTOM_DENIAL_SLOT) {
+        } else if (slot == BACK_SLOT) {
+            player.openInventory(renderReview(new PunishmentRequestGuiState.Review(
+                    denial.lease(),
+                    denial.targetName(),
+                    denial.returnPage()
+            )));
+        } else if (slot == CUSTOM_DENIAL_SLOT) {
             player.closeInventory();
             String command = "/punish deny " + denial.lease().request().requestId() + " ";
             player.sendMessage(Component.text("Custom denial reason required. ", NamedTextColor.YELLOW)
                     .append(Component.text("Click to prepare the command", NamedTextColor.AQUA)
                             .clickEvent(ClickEvent.suggestCommand(command))));
-            return;
-        }
-        String note = denialReason(slot);
-        if (note == null) {
-            return;
-        }
-        Actor actor = authorizedActor(player);
-        if (actor != null) {
-            decide(player, () -> services.get().deny(denial.lease(), actor, note));
-        }
-    }
-
-    private void acquireAndOpen(Player player, Actor actor, UUID requestId) {
-        submit(player, () -> {
-            PunishmentRequestResult result = services.get().acquire(requestId, actor);
-            if (result instanceof PunishmentRequestResult.Leased leased) {
-                onMain(() -> player.openInventory(renderReview(leased.lease())));
-            } else {
-                PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
-                onMain(() -> rejection(player, rejected));
+        } else {
+            String note = denialReason(slot);
+            Actor actor = authorizedActor(player);
+            if (note != null && actor != null) {
+                decide(
+                        player,
+                        actor,
+                        denial.lease(),
+                        denial.returnPage(),
+                        () -> services.get().deny(denial.lease(), actor, note)
+                );
             }
-        });
+        }
     }
 
-    private void decide(Player player, Supplier<PunishmentRequestResult> decision) {
+    private void handleDetailsClick(Player player, PunishmentRequestGuiState.Details details, int slot) {
+        if (slot == REVIEW_CLOSE_SLOT) {
+            player.closeInventory();
+        } else if (slot == BACK_SLOT) {
+            openQueue(player, details.returnPage());
+        } else if (slot == REFRESH_SLOT) {
+            Actor actor = authorizedActor(player);
+            if (actor != null) {
+                openRequest(player, actor, details.view().request().requestId(), details.returnPage());
+            }
+        }
+    }
+
+    private void decide(
+            Player player,
+            Actor actor,
+            PunishmentApprovalLease lease,
+            int returnPage,
+            Supplier<PunishmentRequestResult> decision
+    ) {
         player.closeInventory();
         submit(player, () -> {
             PunishmentRequestResult result = decision.get();
-            onMain(() -> decisionMessage(player, result));
+            PunishmentApprovalRequest latest = result instanceof PunishmentRequestResult.Rejected
+                    ? services.get().find(lease.request().requestId()).orElse(null)
+                    : null;
+            onMain(() -> {
+                decisionMessage(player, result);
+                if (result instanceof PunishmentRequestResult.Rejected) {
+                    if (latest != null && latest.status() != PunishmentRequestStatus.PENDING
+                            && services.get().mayReview(actor, latest)) {
+                        player.openInventory(renderDetails(new PunishmentRequestGuiState.Details(
+                                view(latest, players.get()),
+                                returnPage
+                        )));
+                    } else {
+                        openQueue(player, returnPage);
+                    }
+                }
+            });
         });
     }
 
-    private Inventory renderQueue(List<PunishmentApprovalRequest> requests) {
-        PunishmentRequestGuiState.Queue state = new PunishmentRequestGuiState.Queue(requests);
+    private Inventory renderQueue(PunishmentRequestGuiState.Queue state) {
+        String title = "Punishment requests " + (state.page() + 1) + '/' + state.totalPages();
         PunishmentRequestGuiHolder holder = new PunishmentRequestGuiHolder(state);
-        Inventory inventory = Bukkit.createInventory(holder, QUEUE_SIZE, Component.text("Punishment requests"));
+        Inventory inventory = Bukkit.createInventory(holder, QUEUE_SIZE, Component.text(title));
         holder.attach(inventory);
         fillFooter(inventory);
-        for (int slot = 0; slot < requests.size() && slot < QUEUE_CONTENT_SIZE; slot++) {
-            inventory.setItem(slot, requestItem(requests.get(slot)));
+        for (int slot = 0; slot < state.requests().size(); slot++) {
+            inventory.setItem(slot, requestItem(state.requests().get(slot), "pending", NamedTextColor.AQUA));
         }
-        if (requests.isEmpty()) {
+        if (state.requests().isEmpty()) {
             inventory.setItem(22, item(
                     Material.PAPER,
                     "No reviewable requests",
@@ -235,59 +345,36 @@ public final class PunishmentRequestGuiController implements Listener {
         inventory.setItem(REFRESH_SLOT, item(
                 Material.CLOCK,
                 "Refresh queue",
-                List.of(Component.text(requests.size() + " reviewable request(s)", NamedTextColor.GRAY))
+                List.of(Component.text(state.totalEntries() + " reviewable request(s)", NamedTextColor.GRAY))
         ));
+        if (state.hasPrevious()) {
+            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, "Previous page", List.of()));
+        }
+        if (state.hasNext()) {
+            inventory.setItem(NEXT_SLOT, item(Material.ARROW, "Next page", List.of()));
+        }
         inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
         return inventory;
     }
 
-    private Inventory renderReview(PunishmentApprovalLease lease) {
-        PunishmentApprovalRequest request = lease.request();
-        PunishmentRequestGuiState.Review state = new PunishmentRequestGuiState.Review(lease);
+    private Inventory renderReview(PunishmentRequestGuiState.Review state) {
+        PunishmentApprovalRequest request = state.lease().request();
         PunishmentRequestGuiHolder holder = new PunishmentRequestGuiHolder(state);
-        Inventory inventory = Bukkit.createInventory(holder, 27, Component.text("Review punishment request"));
+        Inventory inventory = Bukkit.createInventory(holder, 27, Component.text("Claimed punishment request"));
         holder.attach(inventory);
-        inventory.setItem(4, requestItem(request));
-        inventory.setItem(10, item(
-                Material.PLAYER_HEAD,
-                "Target",
-                List.of(Component.text("Authoritative player record", NamedTextColor.GRAY))
+        inventory.setItem(4, requestItem(
+                new PunishmentRequestGuiState.RequestView(request, state.targetName()),
+                "claimed by you",
+                NamedTextColor.AQUA
         ));
-        inventory.setItem(12, item(
-                Material.WRITABLE_BOOK,
-                "Frozen proposal",
-                List.of(
-                        Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE),
-                        Component.text(
-                                "Step " + request.proposal().escalation().selectedStep().ordinal()
-                                        + ": " + request.proposal().escalation().selectedStep().label(),
-                                NamedTextColor.GRAY
-                        ),
-                        Component.text(
-                                PunishmentGuiRenderer.describe(request.proposal().sanctions()),
-                                NamedTextColor.GOLD
-                        ),
-                        Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY),
-                        Component.text("Policy: " + request.proposal().configurationVersion(), NamedTextColor.DARK_GRAY)
-                )
-        ));
-        inventory.setItem(14, item(
-                Material.NAME_TAG,
-                "Requester",
-                List.of(
-                        Component.text(request.proposal().requester().displayName(), NamedTextColor.WHITE),
-                        Component.text("Rank: " + request.proposal().requester().rank(), NamedTextColor.GRAY),
-                        Component.text("Minimum approval: " + request.proposal().requiredRank(), NamedTextColor.GRAY),
-                        Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY)
-                )
-        ));
+        addRequestDetails(inventory, request, state.targetName());
         inventory.setItem(16, item(
                 Material.CLOCK,
-                "Lease and expiration",
+                "Claim and expiration",
                 List.of(
                         Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
                         Component.text("Request expires: " + request.expiresAt(), NamedTextColor.GRAY),
-                        Component.text("Review lease expires: " + lease.expiresAt(), NamedTextColor.GRAY)
+                        Component.text("Your review claim expires: " + state.lease().expiresAt(), NamedTextColor.GRAY)
                 )
         ));
         inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
@@ -296,7 +383,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 "Approve request",
                 List.of(
                         Component.text("Creates the frozen punishment atomically", NamedTextColor.GREEN),
-                        Component.text("Current lease and revision are rechecked", NamedTextColor.GRAY)
+                        Component.text("The current claim and revision are rechecked", NamedTextColor.GRAY)
                 )
         ));
         inventory.setItem(DENY_SLOT, item(
@@ -308,8 +395,34 @@ public final class PunishmentRequestGuiController implements Listener {
         return inventory;
     }
 
-    private Inventory renderDenial(PunishmentApprovalLease lease) {
-        PunishmentRequestGuiState.Denial state = new PunishmentRequestGuiState.Denial(lease);
+    private Inventory renderDetails(PunishmentRequestGuiState.Details state) {
+        PunishmentApprovalRequest request = state.view().request();
+        PunishmentRequestGuiHolder holder = new PunishmentRequestGuiHolder(state);
+        Inventory inventory = Bukkit.createInventory(holder, 27, Component.text("Punishment request details"));
+        holder.attach(inventory);
+        inventory.setItem(4, requestItem(
+                state.view(),
+                PunishmentRequestPresentation.status(request.status()),
+                PunishmentRequestPresentation.statusColor(request.status())
+        ));
+        addRequestDetails(inventory, request, state.view().targetName());
+        inventory.setItem(16, item(
+                statusMaterial(request.status()),
+                "Resolution",
+                List.of(
+                        Component.text(PunishmentRequestPresentation.resolution(request),
+                                PunishmentRequestPresentation.statusColor(request.status())),
+                        Component.text("Resolved: " + displayTime(request.resolvedAt()), NamedTextColor.GRAY),
+                        Component.text("Current revision: " + request.revision(), NamedTextColor.DARK_GRAY)
+                )
+        ));
+        inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
+        inventory.setItem(REFRESH_SLOT, item(Material.CLOCK, "Refresh details", List.of()));
+        inventory.setItem(REVIEW_CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
+        return inventory;
+    }
+
+    private Inventory renderDenial(PunishmentRequestGuiState.Denial state) {
         PunishmentRequestGuiHolder holder = new PunishmentRequestGuiHolder(state);
         Inventory inventory = Bukkit.createInventory(holder, 27, Component.text("Deny punishment request"));
         holder.attach(inventory);
@@ -322,49 +435,69 @@ public final class PunishmentRequestGuiController implements Listener {
                 "Custom reason",
                 List.of(Component.text("Prepare a /punish deny command", NamedTextColor.YELLOW))
         ));
-        inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to review", List.of()));
+        inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to claimed review", List.of()));
         inventory.setItem(REVIEW_CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
         return inventory;
     }
 
-    private static ItemStack requestItem(PunishmentApprovalRequest request) {
-        List<Component> lore = new ArrayList<>();
-        lore.add(Component.text("Status: pending", NamedTextColor.AQUA));
-        lore.add(Component.text("Requester: " + request.proposal().requester().displayName()
-                + " (" + request.proposal().requester().rank() + ')', NamedTextColor.GRAY));
-        lore.add(Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE));
-        lore.add(Component.text(
-                PunishmentGuiRenderer.describe(request.proposal().sanctions()),
-                NamedTextColor.GOLD
+    private static void addRequestDetails(Inventory inventory, PunishmentApprovalRequest request, String targetName) {
+        inventory.setItem(10, item(
+                Material.PLAYER_HEAD,
+                "Target",
+                List.of(Component.text(targetName, NamedTextColor.WHITE))
         ));
-        lore.add(Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY));
-        lore.add(Component.text("Required: " + request.proposal().requiredRank(), NamedTextColor.GRAY));
-        lore.add(Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY));
-        lore.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
-        lore.add(Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY));
-        lore.add(Component.text("Click to claim this request for review", NamedTextColor.YELLOW));
-        Material material = request.proposal().requester().rank() == StaffRank.HELPER
-                ? Material.GOLDEN_SWORD
-                : Material.REDSTONE;
-        return item(material, humanize(request.proposal().publicReason()), lore);
+        inventory.setItem(12, item(
+                Material.WRITABLE_BOOK,
+                "Frozen proposal",
+                List.of(
+                        Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE),
+                        Component.text(
+                                "Step " + request.proposal().escalation().selectedStep().ordinal()
+                                        + ": " + request.proposal().escalation().selectedStep().label(),
+                                NamedTextColor.GRAY
+                        ),
+                        Component.text(
+                                PunishmentRequestPresentation.sanctions(request.proposal().sanctions()),
+                                NamedTextColor.GOLD
+                        ),
+                        Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY),
+                        Component.text("Policy: " + request.proposal().configurationVersion(), NamedTextColor.DARK_GRAY)
+                )
+        ));
+        inventory.setItem(14, item(
+                Material.NAME_TAG,
+                "Requester and authority",
+                List.of(
+                        Component.text(request.proposal().requester().displayName(), NamedTextColor.WHITE),
+                        Component.text("Requester rank: " + request.proposal().requester().rank(), NamedTextColor.GRAY),
+                        Component.text("Minimum approval: " + request.proposal().requiredRank(), NamedTextColor.GRAY),
+                        Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
+                        Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY),
+                        Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY)
+                )
+        ));
     }
 
-    private static void denialItem(Inventory inventory, int slot, Material material, String reason) {
-        inventory.setItem(slot, item(
-                material,
-                reason,
-                List.of(Component.text("Click to deny with this audit note", NamedTextColor.YELLOW))
-        ));
-    }
-
-    private static String denialReason(int slot) {
-        return switch (slot) {
-            case 10 -> "Denied: insufficient evidence supports the requested punishment";
-            case 12 -> "Denied: the selected reason or classification is incorrect";
-            case 14 -> "Denied: the requested sanction is not appropriate for the evidence";
-            case 16 -> "Denied: duplicate request or the incident was already handled";
-            default -> null;
-        };
+    private static ItemStack requestItem(
+            PunishmentRequestGuiState.RequestView view,
+            String status,
+            NamedTextColor statusColor
+    ) {
+        PunishmentApprovalRequest request = view.request();
+        List<Component> lore = List.of(
+                Component.text("Status: " + status, statusColor),
+                Component.text("Target: " + view.targetName(), NamedTextColor.WHITE),
+                Component.text("Requester: " + request.proposal().requester().displayName()
+                        + " (" + request.proposal().requester().rank() + ')', NamedTextColor.GRAY),
+                Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE),
+                Component.text(PunishmentRequestPresentation.sanctions(request.proposal().sanctions()), NamedTextColor.GOLD),
+                Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY),
+                Component.text("Required: " + request.proposal().requiredRank(), NamedTextColor.GRAY),
+                Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
+                Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY),
+                Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY)
+        );
+        return item(statusMaterial(request.status()), humanize(request.proposal().publicReason()), lore);
     }
 
     private Actor authorizedActor(Player player) {
@@ -392,10 +525,7 @@ public final class PunishmentRequestGuiController implements Listener {
                     operation.run();
                 } catch (RuntimeException exception) {
                     plugin.getLogger().log(Level.SEVERE, "Punishment request GUI operation failed", exception);
-                    onMain(() -> player.sendMessage(Component.text(
-                            "Punishment request storage is unavailable; no action was taken.",
-                            NamedTextColor.RED
-                    )));
+                    message(player, "Punishment request storage is unavailable; no action was taken.");
                 }
             });
         } catch (RejectedExecutionException exception) {
@@ -407,37 +537,38 @@ public final class PunishmentRequestGuiController implements Listener {
         }
     }
 
+    private void message(Player player, String text) {
+        onMain(() -> player.sendMessage(Component.text(text, NamedTextColor.RED)));
+    }
+
     private void onMain(Runnable action) {
         plugin.getServer().getScheduler().runTask(plugin, action);
     }
 
-    private static List<PunishmentApprovalRequest> reviewable(
-            List<PunishmentApprovalRequest> requests,
-            Actor actor
+    private PunishmentRequestGuiState.RequestView view(
+            PunishmentApprovalRequest request,
+            PlayerDirectory directory
     ) {
-        return requests.stream()
-                .filter(request -> !request.proposal().requester().id().equals(actor.id()))
-                .filter(request -> meetsRequiredApprovalRank(actor.rank(), request.proposal().requiredRank()))
-                .toList();
-    }
-
-    private static boolean meetsRequiredApprovalRank(StaffRank approver, StaffRank required) {
-        return switch (required) {
-            case HELPER, MOD -> approver.canApprovePunishmentRequests();
-            case ADMIN -> approver == StaffRank.ADMIN || approver == StaffRank.FOUNDER;
-            case FOUNDER -> approver == StaffRank.FOUNDER;
-            case DEVELOPER, SYSTEM -> false;
-        };
+        return new PunishmentRequestGuiState.RequestView(
+                request,
+                PunishmentRequestPresentation.targetName(directory, request.proposal().targetId())
+        );
     }
 
     private static void decisionMessage(Player player, PunishmentRequestResult result) {
         if (result instanceof PunishmentRequestResult.Approved approved) {
             player.sendMessage(Component.text(
-                    "Punishment request approved as case " + approved.caseId().value() + '.',
+                    "Punishment request approved as case " + approved.caseId().value()
+                            + (approved.replayed() ? " (idempotent replay)." : "."),
                     NamedTextColor.GREEN
             ));
-        } else if (result instanceof PunishmentRequestResult.Denied) {
-            player.sendMessage(Component.text("Punishment request was denied.", NamedTextColor.YELLOW));
+        } else if (result instanceof PunishmentRequestResult.Denied denied) {
+            player.sendMessage(Component.text(
+                    denied.replayed()
+                            ? "Punishment request denial replayed safely."
+                            : "Punishment request was denied.",
+                    NamedTextColor.YELLOW
+            ));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
             rejection(player, rejected);
         }
@@ -445,6 +576,28 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private static void rejection(Player player, PunishmentRequestResult.Rejected rejected) {
         player.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
+    }
+
+    private static PunishmentRequestResult.Rejected rejected(String code, String message) {
+        return new PunishmentRequestResult.Rejected(code, message);
+    }
+
+    private static void denialItem(Inventory inventory, int slot, Material material, String reason) {
+        inventory.setItem(slot, item(
+                material,
+                reason,
+                List.of(Component.text("Click to deny with this audit note", NamedTextColor.YELLOW))
+        ));
+    }
+
+    private static String denialReason(int slot) {
+        return switch (slot) {
+            case 10 -> "Denied: insufficient evidence supports the requested punishment";
+            case 12 -> "Denied: the selected reason or classification is incorrect";
+            case 14 -> "Denied: the requested sanction is not appropriate for the evidence";
+            case 16 -> "Denied: duplicate request or the incident was already handled";
+            default -> null;
+        };
     }
 
     private static void fillFooter(Inventory inventory) {
@@ -463,31 +616,34 @@ public final class PunishmentRequestGuiController implements Listener {
         return stack;
     }
 
+    private static Material statusMaterial(PunishmentRequestStatus status) {
+        return switch (status) {
+            case PENDING -> Material.WRITABLE_BOOK;
+            case APPROVED -> Material.LIME_CONCRETE;
+            case DENIED -> Material.YELLOW_CONCRETE;
+            case EXPIRED -> Material.CLOCK;
+            case FULFILLED_EXTERNALLY -> Material.EMERALD;
+        };
+    }
+
+    private static String displayTime(java.time.Instant time) {
+        return time == null ? "not resolved" : time.toString();
+    }
+
     private static String humanize(String value) {
         String normalized = value == null || value.isBlank() ? "Punishment request" : value;
         String[] words = normalized.replace('.', ' ').replace('-', ' ').split(" +");
         StringBuilder result = new StringBuilder();
         for (String word : words) {
+            if (word.isBlank()) {
+                continue;
+            }
             if (!result.isEmpty()) {
                 result.append(' ');
             }
             result.append(word.substring(0, 1).toUpperCase(Locale.ROOT));
             result.append(word.substring(1));
         }
-        return result.toString();
-    }
-
-    static String remaining(Instant expiresAt, Instant now) {
-        Duration duration = Duration.between(now, expiresAt);
-        if (duration.isNegative() || duration.isZero()) {
-            return "expired";
-        }
-        if (duration.toDays() > 0) {
-            return duration.toDays() + "d " + duration.toHoursPart() + "h";
-        }
-        if (duration.toHours() > 0) {
-            return duration.toHours() + "h " + duration.toMinutesPart() + "m";
-        }
-        return Math.max(1, duration.toMinutes()) + "m";
+        return result.isEmpty() ? "Punishment request" : result.toString();
     }
 }
