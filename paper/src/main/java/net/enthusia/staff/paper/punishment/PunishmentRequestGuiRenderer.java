@@ -262,7 +262,7 @@ final class PunishmentRequestGuiRenderer {
     private static String humanize(String value) {
         String normalized = value == null || value.isBlank() ? "Punishment request" : value;
         String[] words = normalized.replace('.', ' ').replace('-', ' ').split(" +");
-        StringBuilder result = new StringBuilder();
+        StringBuilder result = new StringBuilder(normalized.length());
         for (String word : words) {
             appendWord(result, word);
         }
@@ -276,7 +276,7 @@ final class PunishmentRequestGuiRenderer {
         if (!result.isEmpty()) {
             result.append(' ');
         }
-        result.append(word.substring(0, 1).toUpperCase(Locale.ROOT));
-        result.append(word.substring(1));
+        result.append(word.substring(0, 1).toUpperCase(Locale.ROOT))
+                .append(word.substring(1));
     }
 }
