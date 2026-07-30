@@ -10,7 +10,7 @@ LiteBans.
 
 | Repository | Remote URL | Default branch | Working branch | Current checkpoint | Build and test status | Codacy status | Current blockers |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for draft PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation and focused tests validated at `4e0ebf749932587fe6ebfe418058ba2450424ec3`; current branch additionally matches the sole current-`main` workflow delta and updates checkpoint documentation | PASS at `4e0ebf749932587fe6ebfe418058ba2450424ec3`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30583224286`, artifact `8775490979` | Zero introduced issues was reported for the validated implementation checkpoint; final branch analysis must remain at zero before merge | PR #21 still requires final exact-head validation after documentation updates, one final review when allowance is available, no unresolved review threads, and an accurate PR description. GitHub reports the PR mergeable; merging through the PR will preserve the 16 current-`main` Wiki-history commits. Production-like Paper/Velocity/provider staging remains unavailable. |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for draft PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation, refactoring, and focused tests validated at `19f6139677c42f46463cd3cf1242c1a58b6757af`; the branch matches the sole current-`main` workflow delta and includes current checkpoint documentation | PASS at `19f6139677c42f46463cd3cf1242c1a58b6757af`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30586107206`, artifact `8776580587` | Codacy reports zero introduced issues on `19f6139677c42f46463cd3cf1242c1a58b6757af`; coverage variation and diff coverage remain within the configured gate | PR #21 still requires final validation of the documentation-only checkpoint, one final review when allowance is available, no unresolved review threads, an accurate PR description, and explicit merge authorization. GitHub reports the PR mergeable; merging through the PR will preserve the 16 current-`main` Wiki-history commits. Production-like Paper/Velocity/provider staging remains unavailable. |
 | enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` | Expected feature branch not reconstructed | No PR #21 website changes | NOT_RUN | NOT_ANALYZED | Provider/site work remains deferred until the root punishment checkpoint is complete. |
 | EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
 | EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
@@ -39,20 +39,22 @@ LiteBans.
 - Branch: `section/punishment-request-interfaces`; the branch was not reset,
   renamed, recreated, or replaced.
 - Merge base with PR #20: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Validated implementation/test head: `4e0ebf749932587fe6ebfe418058ba2450424ec3`.
-- Exact-head validation run: `30583224286`; validation artifact: `8775490979`.
+- Validated implementation/test head: `19f6139677c42f46463cd3cf1242c1a58b6757af`.
+- Exact-head validation run: `30586107206`; validation artifact: `8776580587`.
 - Build result: `BUILD SUCCESSFUL`; 49 actionable Gradle tasks, 40 executed and
   9 up-to-date.
 - Runtime jars:
-  - Paper SHA-256 `107af810a1c1020105bd0a5017ccc4619b4ad87dcd2f9e76d0403dc720a2da7f`.
-  - Velocity SHA-256 `13329af707e6744eac980abf39ddf1facd1773963671986f25c4643d8815322c`.
+  - Paper SHA-256 `7aa8e9c76f4431dda1463fff174197558b413c42c459d70e7d7337db3606f9cc`.
+  - Velocity SHA-256 `2973608add1dc9458f7735791449c6058ec9b9f75568b6b00838a193ded56178`.
   - Both checked 24 provider API source types with zero leaks.
-- Aggregate JaCoCo at that checkpoint: line 32.30%, branch 26.47%, instruction
-  34.61%.
+- Aggregate JaCoCo at that checkpoint: line 32.24%, branch 26.47%, instruction
+  34.56%.
+- Codacy reports zero introduced issues, 12.87% diff coverage, and a -0.75%
+  overall coverage variation against the PR merge base.
 - Implemented interface behavior includes routed draft confirmation, filtered and
   paginated review queues, fenced claim/approve/deny actions, stale/resolved-state
   handling, offline target presentation, revision display, self/Developer/rank
-  restrictions, and idempotent retry messaging.
+  restrictions, idempotent retry messaging, and separated GUI rendering.
 - Existing domain and MariaDB tests cover direct temporary Helper application,
   permanent Helper requests, Developer request-only behavior, stale fences, lost
   leases, expiry, external fulfillment, approval-time sanction start, and
