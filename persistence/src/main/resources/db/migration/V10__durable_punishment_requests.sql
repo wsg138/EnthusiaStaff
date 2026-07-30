@@ -1,0 +1,69 @@
+CREATE TABLE IF NOT EXISTS punishment_requests (
+    request_id BINARY(16) NOT NULL,
+    submission_key VARCHAR(128) NOT NULL,
+    match_key CHAR(64) NOT NULL,
+    open_match_key CHAR(64) NULL,
+    target_id BINARY(16) NOT NULL,
+    requester_id BINARY(16) NOT NULL,
+    requester_name VARCHAR(64) NOT NULL,
+    requester_rank ENUM('HELPER', 'DEVELOPER') NOT NULL,
+    reason_id VARCHAR(96) NOT NULL,
+    sanction_family VARCHAR(64) NOT NULL,
+    public_reason VARCHAR(160) NOT NULL,
+    internal_explanation TEXT NOT NULL,
+    configuration_version VARCHAR(128) NOT NULL,
+    visibility ENUM('PUBLIC', 'PRIVATE') NOT NULL,
+    required_rank ENUM('HELPER', 'MOD', 'ADMIN', 'FOUNDER') NOT NULL,
+    raw_ordinal INT NOT NULL,
+    effective_ordinal INT NOT NULL,
+    selected_ordinal INT NOT NULL,
+    recency_bonus INT NOT NULL,
+    step_label VARCHAR(80) NOT NULL,
+    contribution_json JSON NOT NULL,
+    sanctions_json JSON NOT NULL,
+    status ENUM('PENDING', 'APPROVED', 'DENIED', 'EXPIRED', 'FULFILLED_EXTERNALLY') NOT NULL,
+    revision BIGINT NOT NULL DEFAULT 0,
+    resolved_by BINARY(16) NULL,
+    resolution_note TEXT NULL,
+    resulting_case_id CHAR(16) NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
+    expires_at TIMESTAMP(6) NOT NULL,
+    resolved_at TIMESTAMP(6) NULL,
+    PRIMARY KEY (request_id),
+    UNIQUE KEY uq_punishment_requests_submission (submission_key),
+    UNIQUE KEY uq_punishment_requests_open_match (open_match_key),
+    INDEX idx_punishment_requests_pending (status, expires_at, created_at),
+    INDEX idx_punishment_requests_target (target_id, created_at),
+    INDEX idx_punishment_requests_requester (requester_id, created_at),
+    CONSTRAINT fk_punishment_requests_target FOREIGN KEY (target_id) REFERENCES players(player_id),
+    CONSTRAINT fk_punishment_requests_case FOREIGN KEY (resulting_case_id) REFERENCES cases(case_id),
+    CONSTRAINT ck_punishment_requests_expiration CHECK (expires_at > created_at),
+    CONSTRAINT ck_punishment_requests_ordinals CHECK (
+        raw_ordinal >= 0
+        AND effective_ordinal >= 0
+        AND selected_ordinal >= 0
+        AND recency_bonus >= 0
+    ),
+    CONSTRAINT ck_punishment_requests_revision CHECK (revision >= 0),
+    CONSTRAINT ck_punishment_requests_open_match CHECK (
+        (status = 'PENDING' AND open_match_key = match_key)
+        OR (status <> 'PENDING' AND open_match_key IS NULL)
+    )
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS punishment_request_events (
+    event_id BINARY(16) NOT NULL,
+    request_id BINARY(16) NOT NULL,
+    event_type ENUM('SUBMITTED', 'LEASE_ACQUIRED', 'APPROVED', 'DENIED', 'EXPIRED', 'FULFILLED_EXTERNALLY') NOT NULL,
+    actor_id BINARY(16) NULL,
+    fence_token BIGINT NULL,
+    resulting_case_id CHAR(16) NULL,
+    note TEXT NOT NULL,
+    occurred_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (event_id),
+    INDEX idx_punishment_request_events_request (request_id, occurred_at),
+    CONSTRAINT fk_punishment_request_events_request FOREIGN KEY (request_id) REFERENCES punishment_requests(request_id),
+    CONSTRAINT fk_punishment_request_events_case FOREIGN KEY (resulting_case_id) REFERENCES cases(case_id),
+    CONSTRAINT ck_punishment_request_events_fence CHECK (fence_token IS NULL OR fence_token > 0)
+) ENGINE=InnoDB;

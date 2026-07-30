@@ -1,0 +1,8 @@
+---
+engines:
+  SQLint:
+    exclude_paths:
+      - "persistence/src/main/resources/db/migration/**"
+  tsqllint:
+    exclude_paths:
+      - "persistence/src/main/resources/db/migration/**"
