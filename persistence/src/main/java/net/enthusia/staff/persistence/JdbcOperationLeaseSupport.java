@@ -64,6 +64,52 @@ final class JdbcOperationLeaseSupport {
         }
     }
 
+    static boolean holds(
+            Connection connection,
+            String resourceKey,
+            UUID ownerId,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        if (fencingToken <= UNAVAILABLE) {
+            return false;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT owner_id, fencing_token, lease_until
+                FROM operation_leases
+                WHERE resource_key = ?
+                FOR UPDATE
+                """)) {
+            statement.setString(1, resourceKey);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next()
+                        && result.getString("owner_id").equals(ownerId.toString())
+                        && result.getLong("fencing_token") == fencingToken
+                        && result.getTimestamp("lease_until").toInstant().isAfter(now);
+            }
+        }
+    }
+
+    static void release(
+            Connection connection,
+            String resourceKey,
+            UUID ownerId,
+            long fencingToken
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM operation_leases
+                WHERE resource_key = ? AND owner_id = ? AND fencing_token = ?
+                """)) {
+            statement.setString(1, resourceKey);
+            statement.setString(2, ownerId.toString());
+            statement.setLong(3, fencingToken);
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Operation lease was not released by its current fenced owner"
+            );
+        }
+    }
+
     private static void insert(
             Connection connection,
             String resourceKey,
