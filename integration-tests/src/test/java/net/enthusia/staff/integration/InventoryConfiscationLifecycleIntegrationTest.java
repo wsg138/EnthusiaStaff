@@ -73,8 +73,11 @@ class InventoryConfiscationLifecycleIntegrationTest {
             assertTrue(store.cancelConfiscation(
                     operationId, session.fencingToken(), "VIEW_CLOSED", "viewer closed", NOW.plusSeconds(6)
             ));
+            assertFalse(store.cancelConfiscation(
+                    operationId, session.fencingToken() + 1L, "VIEW_CLOSED", "viewer closed", NOW.plusSeconds(7)
+            ));
             assertTrue(store.renewConfiscation(
-                    operationId, session.fencingToken(), LEASE, NOW.plusSeconds(7)
+                    operationId, session.fencingToken(), LEASE, NOW.plusSeconds(8)
             ).isEmpty());
         }
     }
