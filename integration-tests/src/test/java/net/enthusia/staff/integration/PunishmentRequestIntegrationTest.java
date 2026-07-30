@@ -168,8 +168,8 @@ class PunishmentRequestIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             PunishmentRequestStore store = runtime.punishmentRequestStore();
             store.submit(pending);
-            PunishmentApprovalLease first = acquire(store, pending, MOD, NOW);
-            PunishmentApprovalLease current = acquire(store, pending, MOD, NOW.plusSeconds(1));
+            PunishmentApprovalLease first = acquire(store, pending, MOD, approvalTime.minusSeconds(2));
+            PunishmentApprovalLease current = acquire(store, pending, MOD, approvalTime.minusSeconds(1));
             assertTrue(current.fenceToken() > first.fenceToken());
 
             PunishmentRequestResult.Rejected stale = assertInstanceOf(
