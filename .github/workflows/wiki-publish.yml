@@ -7,29 +7,19 @@ on:
         description: 'Type PUBLISH to replace the live Wiki from docs/wiki/pages'
         required: true
         type: string
-  issue_comment:
-    types:
-      - created
 
 permissions:
   contents: write
-  issues: write
 
 concurrency:
   group: publish-enthusiastaff-wiki
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish:
-    if: >-
-      (github.event_name == 'workflow_dispatch' &&
-       github.ref == 'refs/heads/main' &&
-       github.event.inputs.confirmation == 'PUBLISH') ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.number == 22 &&
-       github.event.comment.body == '/publish-wiki-now' &&
-       github.event.comment.user.login == github.repository_owner)
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH'
     runs-on: ubuntu-latest
+    environment: wiki-production
 
     steps:
       - name: Check out repository
@@ -111,23 +101,3 @@ jobs:
             echo "- Backup artifact: \`wiki-before-publish-${GITHUB_RUN_ID}\`"
             echo "- Published branch: \`${{ steps.backup.outputs.wiki_branch }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Report publication result
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          set -euo pipefail
-          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          body="$(cat <<EOF
-          Wiki publication workflow **${JOB_STATUS}** for source commit \`${GITHUB_SHA}\`.
-
-          Run: ${run_url}
-          Backup branch: \`${{ steps.backup.outputs.branch || 'unavailable' }}\`
-          Published Wiki branch: \`${{ steps.backup.outputs.wiki_branch || 'unavailable' }}\`
-          EOF
-          )"
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/22/comments" \
-            -f body="${body}"
