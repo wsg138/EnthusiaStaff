@@ -489,16 +489,16 @@ renewal, fenced and idempotent cancellation, exact preparation replay, and
 changed-slot conflict rejection.
 
 At validation head
-`c818c131d492473d9be6f18937fd18286de3b382`, the clean Java 21
-`clean test check runtimeJars` run had 39 actionable tasks: 38 executed and one
-root aggregate task was up-to-date. The build passed 148 tests in 53 suites
+`688b2802c1756853921ea01f0c0656a9d9e9bc14`, the clean Java 21
+`clean test check runtimeJars` run had 39 actionable tasks: 36 executed and
+three tasks were up-to-date. The build passed 148 tests in 53 suites
 with zero failures, errors, or skips, including all 25 tests across eight
 MariaDB Testcontainers suites.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Paper runtime jar | 8,090,200 | `E1A25F90ACBCE0EB744A4944327A618029D3F40D390BC0E09699907A50682A41` |
-| Velocity runtime jar | 7,359,289 | `A723363FF3F6A0CDD06D523153D582F45664234782B6B2426953597CE1D39317` |
+| Paper runtime jar | 8,090,329 | `73C7FF8DA0071C42C68ACEBF69E6D3B4A1A82C9A634A9333F12CF20C35E417DA` |
+| Velocity runtime jar | 7,359,418 | `2DE3272250DE305ACEA0FC165658C959AD3CD470FEF5A65E10A0A1DEBFF71E95` |
 
 Both jars contain their expected plugin metadata and no provider API classes
 from `integration-contracts`.
