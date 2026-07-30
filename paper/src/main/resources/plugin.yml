@@ -223,6 +223,8 @@ permissions:
       enthusiastaff.diagnostics: true
       enthusiastaff.punishment.read: true
       enthusiastaff.case.read: true
+      enthusiastaff.punish: true
+      enthusiastaff.punish.configured: true
       enthusiastaff.reports.manage: true
       enthusiastaff.alerts: true
       enthusiastaff.freeze: true
