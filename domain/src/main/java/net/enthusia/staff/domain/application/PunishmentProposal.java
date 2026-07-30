@@ -67,6 +67,10 @@ public record PunishmentProposal(
         return PunishmentMatchKey.of(targetId, reasonId, sanctions);
     }
 
+    public PunishmentPlan toPlan(CaseId caseId, IdempotencyKey idempotencyKey, Instant issuedAt) {
+        return toPlan(caseId, idempotencyKey, requester, issuedAt);
+    }
+
     public PunishmentPlan toPlan(
             CaseId caseId,
             IdempotencyKey idempotencyKey,
