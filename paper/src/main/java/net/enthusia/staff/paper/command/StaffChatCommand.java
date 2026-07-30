@@ -9,6 +9,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 public final class StaffChatCommand implements CommandExecutor {
+    private static final String PERMISSION = "enthusiastaff.staffchat";
+
     private final Supplier<RoseChatIntegration> integration;
 
     public StaffChatCommand(Supplier<RoseChatIntegration> integration) {
@@ -22,6 +24,9 @@ public final class StaffChatCommand implements CommandExecutor {
             String label,
             String[] arguments
     ) {
+        if (!CommandPermissionGate.require(sender, PERMISSION, "You do not have permission to use staff chat.")) {
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage("RoseChat channel state belongs to an online player.");
             return true;

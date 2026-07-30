@@ -12,6 +12,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 public final class StaffModeCommand implements CommandExecutor {
+    private static final String PERMISSION = "enthusiastaff.staffmode";
+
     private final Supplier<OperationalMode> mode;
     private final StaffModeManager manager;
 
@@ -22,6 +24,13 @@ public final class StaffModeCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        if (!CommandPermissionGate.require(
+                sender,
+                PERMISSION,
+                "You do not have permission to use staff mode."
+        )) {
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only a player can enter staff mode."));
             return true;

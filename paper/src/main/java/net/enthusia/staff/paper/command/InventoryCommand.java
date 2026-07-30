@@ -23,6 +23,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class InventoryCommand implements CommandExecutor, TabCompleter {
+    private static final String PERMISSION = "enthusiastaff.inventory.view";
     private static final Duration SUGGESTION_TTL = Duration.ofSeconds(30);
     private static final int MAX_PREFIX_CACHE = 2_048;
 
@@ -49,8 +50,11 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        if (!CommandPermissionGate.require(sender, PERMISSION, "You do not have permission to inspect inventories.")) {
+            return true;
+        }
         if (!(sender instanceof Player viewer)) {
-            sender.sendMessage("This inventory editor requires an in-game staff viewer.");
+            sender.sendMessage("This inventory viewer requires an in-game staff viewer.");
             return true;
         }
         if (arguments.length != 1) {
@@ -89,7 +93,7 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             String alias,
             String[] arguments
     ) {
-        if (arguments.length != 1) {
+        if (!CommandPermissionGate.allows(sender::hasPermission, PERMISSION) || arguments.length != 1) {
             return List.of();
         }
         String prefix = arguments[0].toLowerCase(Locale.ROOT);

@@ -10,6 +10,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 public final class VanishCommand implements CommandExecutor {
+    private static final String PERMISSION = "enthusiastaff.vanish";
+
     private final Supplier<OperationalMode> mode;
     private final VanishManager vanish;
 
@@ -20,6 +22,13 @@ public final class VanishCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        if (!CommandPermissionGate.require(
+                sender,
+                PERMISSION,
+                "You do not have permission to change vanish or spectator tab visibility."
+        )) {
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only a player can change vanish or spectator tab visibility."));
             return true;

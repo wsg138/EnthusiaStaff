@@ -8,6 +8,10 @@ import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
 
 public final class EstaffCommand implements CommandExecutor {
+    private static final String STATUS_PERMISSION = "enthusiastaff.status";
+    private static final String VERIFY_PERMISSION = "enthusiastaff.verify";
+    private static final String RELOAD_PERMISSION = "enthusiastaff.reload";
+
     private final RuntimeHealth health;
 
     public EstaffCommand(RuntimeHealth health) {
@@ -22,7 +26,21 @@ public final class EstaffCommand implements CommandExecutor {
             @NotNull String[] args
     ) {
         String operation = args.length == 0 ? "status" : args[0].toLowerCase(java.util.Locale.ROOT);
-        if (!operation.equals("status") && !operation.equals("verify")) {
+        String permission = permissionFor(operation);
+        if (permission == null) {
+            if (CommandPermissionGate.require(
+                    sender,
+                    STATUS_PERMISSION,
+                    "You do not have permission to view EnthusiaStaff status."
+            )) {
+                sender.sendMessage("Usage: /" + label + " <status|verify|reload>");
+            }
+            return true;
+        }
+        if (!CommandPermissionGate.require(sender, permission, denialMessage(operation))) {
+            return true;
+        }
+        if (operation.equals("reload")) {
             sender.sendMessage("EnthusiaStaff reload is unavailable until the modular configuration validator is active.");
             return true;
         }
@@ -36,5 +54,22 @@ public final class EstaffCommand implements CommandExecutor {
             }
         }
         return true;
+    }
+
+    private static String permissionFor(String operation) {
+        return switch (operation) {
+            case "status" -> STATUS_PERMISSION;
+            case "verify" -> VERIFY_PERMISSION;
+            case "reload" -> RELOAD_PERMISSION;
+            default -> null;
+        };
+    }
+
+    private static String denialMessage(String operation) {
+        return switch (operation) {
+            case "verify" -> "You do not have permission to verify EnthusiaStaff runtime state.";
+            case "reload" -> "You do not have permission to reload EnthusiaStaff configuration.";
+            default -> "You do not have permission to view EnthusiaStaff status.";
+        };
     }
 }
