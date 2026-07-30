@@ -1,176 +1,149 @@
 # Inventory and Confiscation Safety
 
-Inventory edits, Ender chest edits, item confiscation, economy confiscation, and
-restoration are destructive workflows. They must use durable snapshots,
-revisions, leases, fencing tokens, exact verification, audit, and recovery.
+Inventory viewing, editing, confiscation, and restoration can cause item loss or
+duplication when used incorrectly. This page explains what staff should do. The
+technical transaction and recovery design is covered in [[Developer Code Guide]].
 
-> **Current status:** Domain and MariaDB recovery paths have significant
-> automated coverage, but multi-backend Paper staging, concurrent viewer
-> behavior, provider integration, and privileged quarantine recovery remain
-> incomplete. Do not treat these tools as production-ready solely because the
-> commands open.
+> **Current status:** Important database safety paths have automated tests, but
+> live multi-server behavior, concurrent viewers, provider integration, and
+> recovery still require staging. Do not assume a command is production-ready
+> only because it opens.
 
-## Choose the correct workflow
+## Choose the correct tool
 
-| Need | Correct tool |
+| Need | Correct approach |
 | --- | --- |
-| View inventory | `/invsee <player|uuid>` |
-| View Ender chest | `/endersee <player|uuid>` |
-| Ordinary authorized edit | Inventory/Ender editor with edit permission |
-| Remove case-linked evidence or illicit assets | Confiscation workflow |
-| Remove currency | Economy confiscation through Currency API |
-| Return confiscated items | `/case restoreitems <case-id>` |
-| Recover ambiguous operation | Owner recovery/quarantine workflow |
+| Check a player inventory | `/invsee <player>` |
+| Check an Ender chest | `/endersee <player>` |
+| Make an ordinary authorized correction | Use the inventory editor with edit permission |
+| Remove prohibited items or case evidence | Use the case-linked confiscation workflow |
+| Remove currency | Use the economy confiscation workflow |
+| Return confiscated items | Use the approved case restoration workflow |
+| Fix an uncertain or failed operation | Stop and contact an Admin or Founder |
 
-Do not delete evidence through ordinary inventory editing and call it
-confiscation. Confiscation requires a case-bound before snapshot and dupe-safe
-restoration record.
+Viewing an inventory does not give permission to edit it.
 
-## Before viewing or editing
+## Before opening an inventory
 
-Confirm:
+Make sure:
 
-- Target UUID and current name
-- Online/offline state network-wide
-- Owning backend and inventory scope
-- Whether the profile is HUB or SMP
-- Whether another staff viewer is active
-- Whether a pending patch, lock, lease, confiscation, or recovery record exists
-- Whether you have view or edit authority
-- Whether the action is tied to a legitimate staff purpose
+- there is a legitimate report, case, or staff reason;
+- you are looking at the correct player;
+- another staff member is not already handling the same inventory;
+- you know whether you only need to view or actually need to change something;
+- the player is not being moved between servers or logging in and out repeatedly.
 
-Viewing does not imply editing permission.
+Do not browse inventories out of curiosity or use staff information for normal
+gameplay.
 
-## Safe mutation sequence
+## Helper limits
 
-A safe inventory mutation follows this order:
+The upcoming Helper role is intended to allow inventory and Ender chest viewing
+for investigations, but not inventory mutation in Helper staff mode.
 
-1. Capture authoritative revision, checksum, and before snapshot.
-2. Acquire the per-player and per-scope lease inside a database transaction.
-3. Persist operation, snapshot, prepared patch, audit, and fencing token.
-4. Re-read the live inventory.
-5. Reject stale or conflicting state.
-6. Apply the exact replacement on the owning Paper thread.
-7. Capture and verify the resulting checksum.
-8. Commit the durable profile revision and terminal operation state.
-9. Release the matching lease.
+Helpers should ask a Mod or above when an item needs to be removed, restored, or
+otherwise changed. Do not try to work around the limit by moving items through
+another container or command.
 
-A stale worker cannot finalize under an old fence. An expired lease permits
-recovery to take ownership; it does not prove whether the live mutation
-occurred.
+## Viewing and ordinary editing
 
-## Online editing
+Use ordinary editing only for a clear authorized correction. Examples may include
+fixing a staff-caused mistake or completing an approved support action.
 
-The online player's inventory is authoritative. Multiple viewers must remain
-coordinated and receive live updates. Closing a viewer stops observation; it
-must not write a stale full clone back over newer changes.
+Before changing anything:
 
-If the target disconnects after durable preparation, leave the patch for login
-recovery. Do not open a second edit and do not “fix” the inventory from a
-screenshot.
+1. Tell the staff team what you are changing and why.
+2. Take a screenshot or save the relevant before state when practical.
+3. Change only the intended slots or items.
+4. Recheck the inventory after the edit.
+5. Leave a note in the related report or case.
 
-## Offline editing
+Do not close and reopen the editor repeatedly when changes are not appearing. Stop
+and ask for help because another edit or recovery process may already be active.
 
-Direct offline editing is safe only when all of these are proven:
+## Online and offline players
 
-- Player is offline across the network
-- Correct owning backend and scope are known
-- Exclusive lease is acquired
-- Player data is not being saved
-- Durable revision is current
-- Before snapshot is saved
-- Atomic replacement and reread verification are available
+An online player can change their inventory while staff are viewing it. Avoid
+making broad edits while the player is actively moving items, changing servers,
+or using containers.
 
-Otherwise use a queued patch that applies before player interaction on login.
+Offline editing has additional risks because player data may be saved or loaded by
+a server at the same time. Use only the supported workflow. Do not manually edit
+player files or reconstruct an inventory from a screenshot.
 
-## Nested containers
+If a player disconnects during an edit or confiscation, stop and let the approved
+recovery process handle it.
 
-Shulkers and bundles require exact nested paths and item fingerprints. If the
-container changed after selection, the selection is stale and must be rebuilt.
+## Shulkers, bundles, and nested items
 
-Normal click and shift-click behavior in confiscation must follow the configured
-selection rules. Never infer that visually similar stacks are the same asset.
+Items inside shulkers and bundles can change after staff select them. Reopen and
+recheck the container before confirming a removal.
+
+Do not assume two visually identical stacks are the same selected item. Use the
+workflow’s exact selection and preview.
 
 ## Item confiscation
 
-Confiscation binds together:
+Use confiscation when items are evidence, prohibited assets, duplicated items, or
+must be removed as part of a case.
 
-- Case
-- Target
-- Actor
-- Backend and scope
-- Operation and patch
-- Selected nested paths and fingerprints
-- Before snapshot
-- Confiscated asset snapshot
-- Audit and restoration eligibility
+Do not manually delete the items through ordinary inventory editing and call that
+confiscation. The proper workflow is intended to:
 
-Delete items only after the durable confiscated snapshot commits.
+- link the removal to a case;
+- save what was removed;
+- record who removed it and why;
+- prevent the same removal from happening twice;
+- allow an authorized restoration later when appropriate.
 
-Expected lifecycle:
-
-```text
-PREPARED -> LOCKED -> SNAPSHOT_SAVED -> VALIDATED -> COMMITTED -> UNLOCKED
-```
-
-Startup recovery must finish, roll back, or quarantine incomplete work.
+Before confirming, check the selected items and quantity carefully. Afterward,
+confirm that the player no longer has the items and that the case shows the
+confiscation.
 
 ## Economy confiscation
 
-Economy removal must use the EnthusiaCurrency moderation API, not raw database
-writes. The plan may include bank, physical currency, inventory, Ender chest,
-shulkers, and bundles according to configuration.
+Currency removal must use the EnthusiaCurrency moderation workflow. Do not run raw
+database updates or make a second manual withdrawal when the result is uncertain.
 
-Safe flow:
+Confirm:
 
-1. Calculate exact total.
-2. Reject over-removal.
-3. Build exact removal plan.
-4. Acquire all movement and provider locks.
-5. Save complete before snapshot.
-6. Apply through provider API.
-7. Verify exact final total.
-8. Commit audit.
-9. Roll back or quarantine uncertainty.
+- the amount and reason;
+- which forms of currency are included;
+- the case that authorizes the action;
+- the final amount shown after the operation.
 
-Do not “balance” an uncertain result with a second manual withdrawal.
+If the balance does not match the expected result, stop and escalate. Do not try to
+“balance it out” with another withdrawal or deposit.
 
 ## Restoration
 
-```text
-/case restoreitems <case-id>
-```
+Restoration returns items that were saved by a previous case-linked confiscation.
+The current permission design reserves this for Founder/owner recovery.
 
-Restoration must be idempotent and bound to the original case, operation,
-snapshot, player, scope, and expected inventory revision. A repeated request
-must replay the same result, not grant another copy.
+Restoration must use the original case. Never duplicate the saved items manually
+or return items from memory.
 
-Founder authority is required by the current permission aggregate.
+## When to stop immediately
 
-## Recovery states
+Stop the action and contact an Admin or Founder when:
 
-| Patch state | Operation state | Meaning |
-| --- | --- | --- |
-| `PENDING` | `PENDING` | Durable replacement exists but is not claimed. |
-| `APPLYING` | `APPLYING` | Current fenced worker may be applying or verifying. |
-| `APPLIED` | `COMMITTED` | Replacement and durable revision verified. |
-| `QUARANTINED` | `QUARANTINED` | Evidence is stale, conflicting, incomplete, or unsafe. |
+- the wrong player or inventory may be open;
+- an item moved or changed after selection;
+- the player disconnected or switched servers;
+- another viewer or operation appears to be active;
+- the command reports a conflict, pending operation, or recovery state;
+- items or currency appear to have been removed twice;
+- the final inventory or balance cannot be confirmed;
+- you are unsure whether repeating the command is safe.
 
-Quarantine blocks more destructive work for the affected player and scope.
-Never clear it by deleting rows, changing state fields, or releasing an unknown
-lease manually.
+Record the report or case, the time, what you selected, what the player had before,
+and what you can see now. Do not delete database rows, edit recovery state, or
+release locks manually.
 
-## Incident checklist
+## Related pages
 
-When work is incomplete:
-
-1. Stop all repeated edits, confiscations, withdrawals, and restorations.
-2. Record case, operation, patch, profile, scope, backend, and actor.
-3. Record both state values and fencing tokens.
-4. Preserve before/replacement checksums and snapshots.
-5. Check current lease owner and expiry.
-6. Compare live state only through approved recovery.
-7. Replay only an idempotent documented stage.
-8. Quarantine ambiguity.
-
-See [[Recovery and Troubleshooting]].
+- [[Staff Handbook]]
+- [[Helper Guide]]
+- [[Staff Quick Start|Moderator-Quick-Start]]
+- [[Incident Playbooks]]
+- [[Recovery and Troubleshooting]]

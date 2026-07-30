@@ -1,88 +1,117 @@
 # Punishment System
 
-EnthusiaStaff routes commands, GUIs, automation, website actions, and provider
-requests through one case and punishment policy. The goal is that every
-sanction has one durable explanation, evidence chain, authority check, audit
-history, and recovery path.
+This page explains how staff should use the punishment interface. Technical case,
+database, and escalation internals are covered in [[Developer Code Guide]].
 
-> **Current status:** The case model, policy engine, sanction mutations, and
-> durable drafts exist in part and have automated coverage, but the complete
-> GUI, `/history`, full overturn lifecycle, provider integrations, and staging
-> verification remain incomplete. See [[Implementation Status]].
+> **Current status:** Parts of the punishment workflow are implemented and tested,
+but the complete GUI, history view, approval flow, integrations, and live staging
+remain incomplete. Use the moderation system currently approved for production.
 
-## Terms
+## Main command
 
-- **Case** — the durable record containing the target, actor, reason, evidence,
-  policy version, visibility, linked reports, sanctions, related actions,
-  appeal state, and audit history.
-- **Sanction** — an enforceable result such as warning, kick, mute, voice mute,
-  network ban, IP/network ban, report restriction, or asset restriction.
-- **Reason ID** — the stable configured identifier for the exact violation.
-- **Family** — related reasons that contribute to escalation.
-- **Ladder** — configured sequence of punishment steps.
-- **Draft** — the actor-bound review state saved before final confirmation.
-- **Revoke** — end or invalidate a sanction while preserving the case history.
-- **Overturn** — determine that the punishment should no longer count as valid
-  punishment history, while retaining the audit record.
+Use:
 
-## Standard workflow
+```text
+/punish <player>
+```
 
-`/punish <player>` opens the central workflow. `/ban`, `/mute`, `/warn`,
-`/kick`, and `/ipban` open the same policy filtered to compatible sanctions.
+The direct commands `/warn`, `/mute`, `/kick`, `/ban`, and `/ipban` open filtered
+versions of the same central workflow. They should not bypass the normal reason,
+evidence, history, confirmation, or audit process.
 
-1. **Resolve identity.** Confirm current name, UUID, previous names, platform,
-   and relevant alt context.
-2. **Choose category.** Select the broad rule area.
-3. **Choose exact reason.** Match evidence to the configured examples and stable
-   reason ID.
-4. **Review history.** Read exact and related-family history, active sanctions,
-   decayed history, recent reoffenses, and current ladder step.
-5. **Review actions.** Confirm sanctions, durations, visibility, and only the
-   relevant asset/network actions.
-6. **Write internal explanation.** State what occurred and what evidence proves
-   it.
-7. **Confirm once.** The service re-resolves the draft, actor, target, policy,
-   and recommendation before committing.
+## Standard staff workflow
 
-The durable commit should include the case, sanctions, sanction events, audit,
-alerts, and network/Discord outbox work. Success must not be reported before the
-authoritative transaction commits.
+1. Make sure you are acting on the correct player.
+2. Choose the broad rule category.
+3. Choose the exact reason that best matches what happened.
+4. Read the examples and the result shown by the interface.
+5. Add a clear internal note.
+6. Attach or reference the useful evidence.
+7. Check the public reason for clarity and privacy.
+8. Confirm once.
 
-## Escalation
+The interface is intended to calculate the configured result from the selected
+reason and the player’s relevant punishment history. Staff should not need to
+memorize duration ladders or manually count old punishments.
 
-Each exact reason belongs to a family and ladder. The target design includes:
+## Choosing the right action
 
-- Related less-serious offense: normally adds one step
-- Related equal-severity offense: normally adds one step
-- Related more-serious offense: normally adds two steps
-- Reoffense within 30 days after a prior punishment ends: normally adds one step
-- Configured decay may reduce contribution from minor or warning history
-- Serious history normally does not decay
-- History remains visible even when it no longer contributes
+### Warning
 
-Do not manually “count punishments” from visible case totals. The policy engine
-must use the stored reason family, severity, policy version, state, decay,
-recency, and overturn status.
+Use for minor or first-time behavior where a clear reminder is likely to solve the
+problem.
 
-## Review colors
+### Mute
 
-The intended reason review uses:
+Use for continued or serious chat-related behavior, including repeated spam,
+toxicity, slurs, sexually inappropriate comments, or ignoring earlier warnings.
 
-- Green — contributing history
-- Aqua — decayed history
-- Gold — recommended step
-- Gray — future ladder steps
-- Red — permanent step
-- Purple — authorized override
-- Dark red — extreme or zero-tolerance reason
+### Kick
 
-Colors help explain policy; they are not authority by themselves.
+Use to stop immediate disruption, get a player’s attention, require a reconnect,
+or remove an inappropriate skin or username until it is changed. A kick is not a
+replacement for the proper punishment if the behavior continues.
 
-## Durable drafts
+### Ban or network action
 
-A selected punishment is saved as a MariaDB draft bound to the actor and target.
-The default lifetime is 24 hours. A draft is expected to survive closing the
-GUI, logout, server switch, restart, and crash.
+Use only when the selected reason and evidence justify removing the player from
+the server or network. Severe, permanent, IP/network, or unusual actions should
+receive the level of review required by the deployed policy.
+
+## Helper approval
+
+The Helper role is being implemented on `section/helper-rank-authority`.
+
+Helpers should use the same `/punish` interface for ordinary moderation. The
+current branch requires approval when a Helper’s calculated punishment includes a
+permanent sanction.
+
+When approval is required:
+
+1. Finish the evidence and internal note.
+2. Submit the request through the normal interface.
+3. Tell a Mod or above what needs review.
+4. Wait for the decision.
+5. Do not use another command to avoid approval.
+
+Helpers should also escalate complicated, severe, or uncertain cases even when the
+interface would technically allow an immediate action.
+
+## Evidence and internal notes
+
+A useful note states:
+
+- what the player did;
+- when and where it happened;
+- which evidence supports the action;
+- any important context another staff member should know.
+
+Do not write insults, jokes, guesses presented as facts, or unrelated comments
+about the player.
+
+For chat cases, preserve the captured context or a screenshot. Serious cheating,
+exploits, theft, duplication, or economy cases may require video, logs,
+CoreProtect, inventory information, or another staff witness.
+
+## Public and private information
+
+The player may see the public reason and ordinary punishment details. They should
+not receive:
+
+- reporter identity;
+- private messages;
+- base coordinates;
+- internal staff notes;
+- alt or network-identity evidence;
+- private appeal material;
+- confiscated inventory or balance details.
+
+See [[Privacy and Data Handling]].
+
+## Saved drafts
+
+The intended interface saves an unfinished punishment draft so it can be resumed
+after closing the GUI, disconnecting, switching servers, or restarting.
 
 Resume with:
 
@@ -90,79 +119,50 @@ Resume with:
 /punish resume <player>
 ```
 
-On resume and confirmation, the service must recalculate. If identity, policy,
-history, rank, recommendation, or required integration changed, the old review
-must be rejected as stale.
+Always review the draft again. Do not assume an old recommendation is still valid
+if new history, evidence, configuration, or staff decisions have changed.
 
-## Combined sanctions
+## Correcting or ending a punishment
 
-Combined sanctions begin together and expire independently. For example, a
-30-day mute combined with a 7-day ban leaves 23 days of mute when the player
-returns, assuming no other change.
-
-Changing one sanction must not silently change an unrelated sanction in the
-same case.
-
-## Public and private visibility
-
-Punishments and warnings are public by default. Authorized staff may make an
-eligible case private. Internal explanations, reporter identity, private
-messages, coordinates, alt evidence, network identity, confiscated assets, and
-sensitive automation remain private regardless of the public case state.
-
-## Direct commands
-
-These still use the central case system:
-
-```text
-/ban <player> [reason-id]
-/mute <player> [reason-id]
-/warn <player> [reason-id]
-/kick <player> [reason-id]
-/ipban <player> [reason-id]
-```
-
-They are not legacy shortcuts and must not bypass the configured reason,
-history, authority, confirmation, or audit flow.
-
-## Ending, reducing, revoking, and overturning
-
-Use:
+Use the normal punishment-change commands rather than deleting records or editing
+the database:
 
 ```text
 /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]
 /unban <player|case> <reason> [CONFIRM]
 /unmute <player|case> <reason> [CONFIRM]
 /removewarning <player|case> <reason> [CONFIRM]
-/unwarn <player|case> <reason> [CONFIRM]
 ```
 
-Every change should:
+Select the exact case when a player has multiple punishments. Explain whether the
+change is correcting a mistake, ending a sanction early, responding to new
+evidence, or following an approved appeal.
 
-- Resolve the exact case and sanction
-- Reauthorize the actor
-- Preserve history
-- Append audit
-- Handle combined sanctions correctly
-- Be idempotent across retry and restart
-- Leave unrelated sanctions unchanged
+Changing a punishment should preserve the original case and audit history. A full
+overturn means the punishment should no longer count as valid history and may
+require a separate approval.
 
-A Mod requests a full overturn with a written explanation. The punishment
-remains unchanged until an authorized approver decides it. Developer cannot
-request or decide an overturn.
+## When to stop and ask for help
 
-## When to stop
+Do not confirm or repeat the action when:
 
-Do not confirm or repeat the operation when:
+- you may have selected the wrong player or reason;
+- the evidence is incomplete or conflicting;
+- the interface says the recommendation changed;
+- the draft is stale or another request is already pending;
+- approval is required;
+- an error suggests the action may have applied only partially;
+- the player disconnects during a sensitive asset-related action;
+- you are unsure whether repeating the command is safe.
 
-- The target resolution is ambiguous
-- The recommendation changed after review
-- The draft is stale
-- MariaDB is unavailable
-- Velocity is unavailable for a network sanction
-- The service is not in an allowed operational mode
-- A duplicate or conflicting request already exists
-- The external provider result is uncertain
-- The command is owned by another plugin unexpectedly
+Record the report or case, save the error message, and contact another staff
+member or an administrator.
 
-Record the case/draft/operation ID and use [[Recovery and Troubleshooting]].
+## Related pages
+
+- [[Staff Handbook]]
+- [[Staff Quick Start|Moderator-Quick-Start]]
+- [[Helper Guide]]
+- [[Reports and Evidence]]
+- [[Privacy and Data Handling]]
+- [[Incident Playbooks]]

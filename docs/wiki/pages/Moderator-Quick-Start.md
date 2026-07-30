@@ -1,106 +1,116 @@
-# Moderator Quick Start
+# Staff Quick Start
 
-This is the practical reference for ordinary moderation work. It does not grant
-authority beyond [[Rank Authority]] or change the current deployment status.
+This page is the practical reference for ordinary staff work. Read [[Staff Handbook]]
+for conduct and judgment, and [[Helper Guide]] if you are joining as a Helper.
 
-## Start of shift
-
-1. Check `/estaff status`.
-2. Review unread alerts and active recovery warnings.
-3. Confirm which moderation system is authoritative.
-4. Enter `/staff` only when beginning staff work.
-5. Use `/vanish` when the investigation requires hidden presence.
-6. Use `/staffchat` for coordination that should not appear in public chat.
-
-Do not begin destructive work if the runtime is in `READ_ONLY_FAILURE`, the
-required database is unavailable, or the relevant integration is disabled.
+> Some EnthusiaStaff workflows are still in development. Continue using the
+> currently approved live-server procedure until [[Implementation Status]] says a
+> replacement is ready.
 
 ## Handling a report
 
-1. Open `/reports`.
-2. Claim the report before acting.
-3. Read the stated reason, description, location, time, chat context, client
-   stamp, related reports, and relevant history.
-4. Spectate before teleporting when practical.
-5. Freeze only when movement or evidence destruction must be stopped.
-6. Use `/punish <player>` from the report flow when the violation is proven.
-7. Close the report as violation or no violation with a clear internal note.
+1. Open `/reports`, then use `/reports view <report-id>` to read the current
+   details and revision.
+2. Claim it with `/reports claim <report-id> <revision> <note>`.
+3. Read the captured chat or location context and investigate before deciding what
+   happened.
+4. Save the useful evidence.
+5. Use `/punish <player>` only when the violation is reasonably clear.
+6. Reopen the report if needed to obtain its latest revision.
+7. Close it with `/reports close <report-id> <revision> <note> CONFIRM`.
 
-Reporter identity remains staff-only. The target is not entitled to the
-reporter’s name, private messages, or coordinates.
+The exact uppercase `CONFIRM` is required to save close, no-violation, and
+awaiting-review actions. Without it, the command is review-only. See
+[[Reports and Evidence]] for the detailed report syntax.
+
+Do not reveal the reporter’s identity, private messages, or coordinates to the
+reported player.
+
+## Choosing an action
+
+### Warning
+
+Use for minor behavior that should stop after a clear reminder, such as light
+spam, minor chat misconduct, or a first-time low-level issue.
+
+### Mute
+
+Use for continued or serious chat disruption, including repeated spam, excessive
+toxicity, slurs, sexually inappropriate comments, or ignoring earlier warnings.
+Save a screenshot or the relevant chat context.
+
+### Kick
+
+Use to stop immediate disruption, get a player’s attention, require a reconnect,
+or remove an inappropriate skin or username until it is changed. A kick is not a
+replacement for the proper punishment when the behavior continues.
+
+### Freeze
+
+Use during an active investigation when the player must be kept in place or
+prevented from changing evidence. A freeze is temporary and should have a staff
+member actively handling it.
+
+### Escalation
+
+Ask another staff member when the evidence is unclear, the incident is unusually
+serious, a permanent action may be needed, or the interface asks for approval.
+Do not work around an approval requirement with another command.
 
 ## Applying a punishment
 
 1. Run `/punish <player>`.
-2. Verify the resolved identity.
-3. Choose the broad category.
-4. Choose the exact reason whose examples match the evidence.
-5. Review related-family history, decay, current recommendation, and ladder.
-6. Add a factual internal explanation and link the report/evidence.
-7. Change public visibility only when policy allows it.
-8. Confirm once.
+2. Select the category and the reason that best match the evidence.
+3. Read the result shown by the interface.
+4. Add a clear internal note and attach or reference the evidence.
+5. Confirm once.
 
-Mods may use configured steps, lower a recommendation where permitted, end or
-revoke sanctions while preserving history, and request a full overturn. Mods
-may not raise above the recommendation, invent arbitrary sanction
-combinations, or directly fully overturn.
+The interface is intended to calculate the configured result from the reason and
+relevant history. Staff should not need to memorize punishment durations.
 
-## Ending or correcting a punishment
+See [[Punishment System]] for more detail.
 
-Use the central sanction-change workflow:
+## Staff mode and vanish
 
-- `/unban <player|case> <reason> [CONFIRM]`
-- `/unmute <player|case> <reason> [CONFIRM]`
-- `/removewarning <player|case> <reason> [CONFIRM]`
-- `/removepunishment <player|case> <action> ...`
+- Use `/staff` when beginning active staff work that needs staff tools.
+- Use `/vanish` when hidden observation is actually needed.
+- Leave staff mode when the investigation is finished.
+- Never use vanish or staff tools to gain gameplay information for yourself or
+  other players.
 
-Always target the exact case or sanction when multiple active sanctions exist.
-“Wrong player,” “wrong reason,” and “new evidence” are not interchangeable
-reasons. A full overturn means the punishment should not contribute as valid
-history and requires the configured approval path.
+See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
 
-## Freezing a player
+## Inventory and inspection tools
 
-Use `/freeze <player> <reason>` when immediate restriction is necessary for an
-active investigation.
+Use `/invsee`, `/endersee`, `/inspect`, and related tools only for a report, case,
+or legitimate investigation.
 
-After freezing:
+Viewing an inventory does not mean you should edit it. Use the case-linked
+confiscation workflow when evidence or prohibited assets must be removed. Do not
+manually delete items as a shortcut.
 
-1. Tell staff what is being investigated.
-2. Preserve evidence before asking the player to change anything.
-3. Do not leave the freeze running without an owner.
-4. If the player disconnects, follow the configured reconnect window.
-5. Release with `/unfreeze <player> <reason> CONFIRM` when the reason ends.
+See [[Inventory and Confiscation Safety]].
 
-Freeze is not a punishment substitute. It is a temporary investigation control.
+## When something goes wrong
 
-## Viewing inventories
+Stop and ask for help when:
 
-- `/invsee <player|uuid>`
-- `/endersee <player|uuid>`
+- a command reports an error, conflict, pending approval, or recovery state;
+- the action appears to have happened only partially;
+- the wrong player, reason, or item may have been selected;
+- an inventory or balance does not match what was expected;
+- a player disconnects during a sensitive action;
+- you are unsure whether repeating the command is safe.
 
-Viewing and editing are different permissions. Before editing, confirm the
-target, backend, inventory scope, current revision, and whether another viewer
-or recovery operation is active.
+Do not repeatedly click or rerun a destructive action. Record what happened and
+send it to an Admin or Founder with the relevant report or case.
 
-Use case-linked confiscation for punishment evidence or asset removal. Do not
-simulate confiscation by manually deleting items through ordinary inventory
-editing.
+## Useful pages
 
-## Common stop conditions
-
-Stop and escalate when you see:
-
-- Stale revision or stale draft
-- Conflicting operation
-- Quarantined inventory/economy work
-- Missing MariaDB or Velocity authority
-- Unknown command owner
-- Integration unavailable
-- Target identity ambiguity
-- Unexpected server switch
-- Confirmation repeated after timeout
-- Punishment recommendation changed
-- Any sign that the action partially applied
-
-See [[Incident Playbooks]] and [[Recovery and Troubleshooting]].
+- [[Staff Handbook]]
+- [[Helper Guide]]
+- [[Punishment System]]
+- [[Reports and Evidence]]
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
+- [[Incident Playbooks]]
+- [[Privacy and Data Handling]]
