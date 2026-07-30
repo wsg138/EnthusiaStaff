@@ -1,4 +1,5 @@
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/d31dcbf6fd97454798cfdf8622acb891)](https://app.codacy.com/gh/wsg138/EnthusiaStaff/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/d31dcbf6fd97454798cfdf8622acb891)](https://app.codacy.com/gh/wsg138/EnthusiaStaff/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 
 # EnthusiaStaff
 
