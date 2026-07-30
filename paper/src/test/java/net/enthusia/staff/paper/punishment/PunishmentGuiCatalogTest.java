@@ -22,10 +22,29 @@ class PunishmentGuiCatalogTest {
     private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
 
     @Test
-    void developerCatalogIsEmptyDespiteReadOnlyStaffAccess() {
+    void developerCanReviewRequestableReasonsWithoutDirectIssueAuthority() {
         PunishmentGuiCatalog catalog = catalog();
 
-        assertTrue(catalog.categories(actor(StaffRank.DEVELOPER), "punish").isEmpty());
+        assertEquals(List.of("chat", "safety"), catalog.categories(actor(StaffRank.DEVELOPER), "punish"));
+        assertEquals(
+                List.of("safety.admin"),
+                catalog.reasons(actor(StaffRank.DEVELOPER), "ban", "safety").stream()
+                        .map(ReasonPolicy::id)
+                        .toList()
+        );
+    }
+
+    @Test
+    void helperSeesModeratorReasonsButNotAdministrativeReasons() {
+        PunishmentGuiCatalog catalog = catalog();
+
+        assertEquals(
+                List.of("chat.mod"),
+                catalog.reasons(actor(StaffRank.HELPER), "mute", "chat").stream()
+                        .map(ReasonPolicy::id)
+                        .toList()
+        );
+        assertTrue(catalog.reasons(actor(StaffRank.HELPER), "ban", "safety").isEmpty());
     }
 
     @Test
