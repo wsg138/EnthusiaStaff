@@ -20,7 +20,7 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
         }
         EnumMap<StaffRank, Set<StaffRank>> copy = new EnumMap<>(StaffRank.class);
         for (StaffRank viewer : new StaffRank[]{
-                StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
+                StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
         }) {
             Set<StaffRank> visible = visibilityMatrix.get(viewer);
             if (visible == null || visible.contains(StaffRank.SYSTEM)) {
@@ -33,10 +33,14 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
 
     public static Map<StaffRank, Set<StaffRank>> defaultMatrix() {
         return Map.of(
-                StaffRank.MOD, Set.of(StaffRank.MOD, StaffRank.DEVELOPER),
-                StaffRank.DEVELOPER, Set.of(StaffRank.MOD, StaffRank.DEVELOPER),
-                StaffRank.ADMIN, Set.of(StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN),
-                StaffRank.FOUNDER, Set.of(StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER)
+                StaffRank.HELPER, Set.of(StaffRank.HELPER),
+                StaffRank.MOD, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER),
+                StaffRank.DEVELOPER, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER),
+                StaffRank.ADMIN, Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN),
+                StaffRank.FOUNDER, Set.of(
+                        StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER,
+                        StaffRank.ADMIN, StaffRank.FOUNDER
+                )
         );
     }
 
