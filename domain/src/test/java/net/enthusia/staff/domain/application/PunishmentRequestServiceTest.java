@@ -100,16 +100,17 @@ class PunishmentRequestServiceTest {
     }
 
     @Test
-    void requesterCannotDecideTheirOwnRequest() {
+    void requesterCannotDecideTheirOwnRequestAfterPromotion() {
         Fixture fixture = fixture(StaffRank.MOD, SanctionLength.permanent());
         PunishmentRequestResult.Submitted submitted = submit(fixture, HELPER);
+        Actor promotedRequester = new Actor(HELPER.id(), HELPER.displayName(), StaffRank.MOD);
 
         PunishmentRequestResult.Rejected rejected = assertInstanceOf(
                 PunishmentRequestResult.Rejected.class,
-                fixture.service().acquire(submitted.request().requestId(), HELPER)
+                fixture.service().acquire(submitted.request().requestId(), promotedRequester)
         );
 
-        assertEquals("FORBIDDEN", rejected.code());
+        assertEquals("SELF_APPROVAL_FORBIDDEN", rejected.code());
     }
 
     @Test
@@ -176,7 +177,7 @@ class PunishmentRequestServiceTest {
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
         PunishmentService punishments = new PunishmentService(
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                new SecureIdentifiers(new SecureRandom(new byte[]{1, 2, 3, 4})),
+                new SecureIdentifiers(new SecureRandom()),
                 authorization,
                 new AtomicReasonPolicyRepository("v1", List.of(policy)),
                 new NoOpModerationStore(),
@@ -188,7 +189,7 @@ class PunishmentRequestServiceTest {
                 Duration.ofDays(7),
                 Duration.ofMinutes(2),
                 () -> REQUEST_ID,
-                new SecureIdentifiers(new SecureRandom(new byte[]{5, 6, 7, 8})),
+                new SecureIdentifiers(new SecureRandom()),
                 authorization,
                 punishments,
                 requests
