@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -38,7 +39,7 @@ final class PunishmentRequestWiringTest {
     }
 
     @Test
-    void requestInterfacesRetainBootstrapCompatibleConstructors() {
+    void requestInterfacesRequireExplicitPlayerDirectoryWiring() {
         assertDoesNotThrow(() -> PunishmentRequestCommandHandler.class.getConstructor(
                 JavaPlugin.class,
                 Supplier.class,
@@ -49,6 +50,12 @@ final class PunishmentRequestWiringTest {
         assertDoesNotThrow(() -> PunishmentRequestGuiController.class.getConstructor(
                 JavaPlugin.class,
                 Supplier.class,
+                Supplier.class,
+                AuthorizationPolicy.class,
+                ExecutorService.class
+        ));
+        assertThrows(NoSuchMethodException.class, () -> PunishmentRequestGuiController.class.getConstructor(
+                JavaPlugin.class,
                 Supplier.class,
                 AuthorizationPolicy.class,
                 ExecutorService.class
