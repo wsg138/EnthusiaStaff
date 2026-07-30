@@ -3,15 +3,15 @@
 Last updated: 2026-07-29 (America/Indianapolis)
 
 This manifest records review, recovery, and validation state. PRs #1 through
-#10 have been merged into `main`; PR #11 is the active root-plugin persistence
-checkpoint for inventory patch preparation. Nothing listed here has been
-deployed, released, or applied to production data.
+#11 have been merged into `main`; PR #12 is the active root-plugin persistence
+checkpoint for confiscation journal lifecycle stages. Nothing listed here has
+been deployed, released, or applied to production data.
 
 ## Repository checkpoint
 
 | Repository | Remote URL | Default branch | Working branch | Latest local SHA | Latest pushed SHA | Pull request | Build status | Test status | Docker/Testcontainers | Codacy grade | Codacy issue count | Current blockers |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #11 validation head `ecd45b358822fb8cec847419fbd58805baca0ee2` | `origin/section/plugin` includes validation head `ecd45b358822fb8cec847419fbd58805baca0ee2`; `origin/main` is PR #10 merge `3444cc154e26454baaf4eefc40390108bf2903b6` | [PR #11 active](https://github.com/wsg138/EnthusiaStaff/pull/11); [PRs #1–#10 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; all 39 actionable tasks executed | PASS: 146 tests in 52 suites, 0 failures/errors/skips | PASS: 23 tests across 7 MariaDB Testcontainers suites | A at the last exact `main` aggregate snapshot; PR #11 is up to standards with 0 new issues, complexity delta 13, and duplication delta 0 | Last exact aggregate: 427 active and 69 ignored; PR #11 local checked-in rules: 204 PMD, 201 Lizard, 17 Opengrep, 0 Trivy, and 3 pre-existing CPD groups | The current `main` aggregate has not yet published a newer exact issue snapshot; the inventory journal remains oversized and retains confiscation complexity; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` | `section/plugin`, based on current `main` | PR #12 validation head `688b2802c1756853921ea01f0c0656a9d9e9bc14` | `origin/section/plugin` includes validation head `688b2802c1756853921ea01f0c0656a9d9e9bc14`; `origin/main` is PR #11 merge `664792487e4fc1f9333957cd7f48e8a7f447c3b2` | [PR #12 active](https://github.com/wsg138/EnthusiaStaff/pull/12); [PRs #1–#11 merged](https://github.com/wsg138/EnthusiaStaff/pulls?q=is%3Apr+is%3Amerged) | PASS: exact-head clean Java 21 `clean test check runtimeJars`; 36 of 39 actionable tasks executed and 3 were up-to-date | PASS: 148 tests in 53 suites, 0 failures/errors/skips | PASS: 25 tests across 8 MariaDB Testcontainers suites | A at the last exact `main` aggregate snapshot; PR #12 is up to standards with 0 new issues, complexity delta 26, and duplication delta 0 | Last exact aggregate: 427 active and 69 ignored; PR #12 local checked-in rules: 203 PMD, 194 Lizard, 17 Opengrep, 0 Trivy, and 3 pre-existing CPD groups | The current `main` aggregate has not yet published a newer exact issue snapshot; the inventory journal remains oversized and retains pending, quarantine, and audit-helper findings; production-like concurrency, crash staging, and provider integration environments remain unavailable. |
 | enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` (`1657a0a`) | `agent/punishment-platform` (expected; absent remotely) | No target-layout clone; sibling checkout is `1657a0a` on `deploy/market-experimental` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | N/A | UNVERIFIED | UNKNOWN | Must be cloned under `related-repos`; the sibling checkout has untracked deployment-tool state that must not be lost or committed. |
 | EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` (`9696501`) | `agent/moderation-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `9696501` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
 | EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` (`25ea8cb`) | `agent/reputation-blacklist-api` (expected; absent remotely) | No target-layout clone; sibling checkout is `25ea8cb` on `main` | No feature-branch SHA | None | NOT_RUN | NOT_RUN | NOT_RUN | UNVERIFIED | UNKNOWN | Provider branch must be reconstructed from current main and EnthusiaStaff contracts after root cleanup. |
@@ -30,8 +30,8 @@ deployed, released, or applied to production data.
 - Existing history action: no rebase, reset, or force-push was required
 - Merge commit: `b5e55ed9ffd7309cacabf6b0a07af220068f3c30`
 - PR #1 outcome: merged with history preserved; the source branch was retained
-- Current `main`: `3444cc154e26454baaf4eefc40390108bf2903b6`
-- Completed section history: PRs #2 through #10 merged without rewriting `main`
+- Current `main`: `664792487e4fc1f9333957cd7f48e8a7f447c3b2`
+- Completed section history: PRs #2 through #11 merged without rewriting `main`
 - Pre-existing goals file SHA-256 before and after checkout: `746DD1B37BBAF517F008441102A6CBF688AABEC09E8196F863509BF484277F9A`
 - Root local exclusion: `related-repos/` is present in `.git/info/exclude`
 
@@ -47,7 +47,7 @@ are not treated as the requested final layout.
 
 The GitHub Wiki is enabled at
 `https://github.com/wsg138/EnthusiaStaff/wiki`. Its separate `master` branch is
-at `7966dd457b1e46ee5f864e8d77b931d308049208` and contains Home, Architecture,
+at `ea4f929710d3281aac4a8087da1e947973c2d795` and contains Home, Architecture,
 Development Setup, Build and Testing, Installation, Configuration, Commands and
 Permissions, Punishment System, LiteBans Migration, Shadow Mode and Cutover,
 Recovery and Troubleshooting, Integrations, Inventory and Confiscation Safety,

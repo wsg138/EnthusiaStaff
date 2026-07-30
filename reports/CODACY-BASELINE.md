@@ -277,8 +277,8 @@ commits. GitHub shows no unresolved review thread.
 
 ## Current merged checkpoint
 
-As of 2026-07-29, PRs #1 through #10 are merged and `main` is
-`3444cc154e26454baaf4eefc40390108bf2903b6`. The latest exact aggregate issue
+As of 2026-07-29, PRs #1 through #11 are merged and `main` is
+`664792487e4fc1f9333957cd7f48e8a7f447c3b2`. The latest exact aggregate issue
 snapshot recorded for `main` remains pinned to
 `e6da2117fddb6b8e165f0dd41277b21bed296f90`; the PR #10 branch analysis was
 separately up to standards before merge.
@@ -295,6 +295,7 @@ separately up to standards before merge.
 | [#8](https://github.com/wsg138/EnthusiaStaff/pull/8) | Economy rollback integrity | `80b2635917bcf71a187ec27ae0bf5e38b35610ef` |
 | [#9](https://github.com/wsg138/EnthusiaStaff/pull/9) | Network identity and inventory recovery integrity | `e6da2117fddb6b8e165f0dd41277b21bed296f90` |
 | [#10](https://github.com/wsg138/EnthusiaStaff/pull/10) | Paper inventory workflow maintainability | `3444cc154e26454baaf4eefc40390108bf2903b6` |
+| [#11](https://github.com/wsg138/EnthusiaStaff/pull/11) | Inventory patch preparation persistence | `664792487e4fc1f9333957cd7f48e8a7f447c3b2` |
 
 The hosted repository badge remains A. The latest exact `main` snapshot reports
 427 active warnings and 69 ignored findings. Three generic AES-GCM review
@@ -469,8 +470,52 @@ finding was suppressed or ignored.
 Hosted Codacy reports validation head
 `ecd45b358822fb8cec847419fbd58805baca0ee2` is up to standards with zero new
 issues, complexity delta 13, and duplication delta zero. CodeRabbit skipped the
-draft automatically; that skip is not an independent review. One final
-lightweight review checkpoint remains before merge.
+draft automatically. Its single ready-for-review attempt was then rate-limited
+before a review started, produced no finding or review object, and was not
+retried. PR #11 merged as
+`664792487e4fc1f9333957cd7f48e8a7f447c3b2`.
+
+### PR #12 confiscation journal lifecycle checkpoint
+
+PR #12 separates durable confiscation start, replay, renewal, preparation,
+cancellation, operation update, pending-patch insert, and confiscated-asset
+snapshot insert into bounded transaction stages. Renewal and cancellation
+retain exact operation/fence/state/lease checks. Preparation rechecks the
+selection session and authoritative observation, and every changed or inserted
+durable row must affect the expected row or the transaction fails closed.
+
+Two new MariaDB scenarios exercise start replay, wrong-fence rejection, valid
+renewal, fenced and idempotent cancellation, exact preparation replay, and
+changed-slot conflict rejection.
+
+At validation head
+`688b2802c1756853921ea01f0c0656a9d9e9bc14`, the clean Java 21
+`clean test check runtimeJars` run had 39 actionable tasks: 36 executed and
+three tasks were up-to-date. The build passed 148 tests in 53 suites
+with zero failures, errors, or skips, including all 25 tests across eight
+MariaDB Testcontainers suites.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,090,329 | `73C7FF8DA0071C42C68ACEBF69E6D3B4A1A82C9A634A9333F12CF20C35E417DA` |
+| Velocity runtime jar | 7,359,418 | `2DE3272250DE305ACEA0FC165658C959AD3CD470FEF5A65E10A0A1DEBFF71E95` |
+
+Both jars contain their expected plugin metadata and no provider API classes
+from `integration-contracts`.
+
+The comparable checked-in PMD ruleset reports 203 findings, down from 204 at
+the PR #11 checkpoint. Lizard 1.23.0 reports 194, down from 201. Opengrep
+remains at 17, Trivy reports zero, and CPD reports the same three pre-existing
+100-token clone groups with none in the changed files. The store's remaining
+local results are the pending and quarantine method complexities, the audit
+helper parameter count, and the overall file-size result. No analyzer rule,
+first-party path, or finding was suppressed or ignored.
+
+Hosted Codacy reports validation head
+`c818c131d492473d9be6f18937fd18286de3b382` is up to standards with zero new
+issues, complexity delta 26, and duplication delta zero. The complexity metric
+remains visible; it was not suppressed or dispositioned. CodeRabbit skipped the
+draft automatically; one lightweight ready-for-review checkpoint remains.
 
 ## Remediation order
 
