@@ -29,6 +29,14 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Diagnose Codacy PR issues
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error \
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/${{ github.event.pull_request.number }}/issues?status=new&limit=100" \
+            | python3 -m json.tool
+
       - name: Set up Java 21
         uses: actions/setup-java@v5
         with:
