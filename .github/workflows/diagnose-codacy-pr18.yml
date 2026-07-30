@@ -1,0 +1,22 @@
+name: Diagnose PR 18 Codacy findings
+
+on:
+  push:
+    branches:
+      - section/command-authorization-hardening
+    paths:
+      - .github/workflows/diagnose-codacy-pr18.yml
+
+permissions:
+  contents: read
+
+jobs:
+  findings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Print exact new Codacy findings
+        run: |
+          curl --fail --silent --show-error \
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/18/issues?status=new&limit=100" \
+            | python3 -m json.tool
