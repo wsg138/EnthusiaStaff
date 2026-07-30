@@ -24,23 +24,48 @@ Use:
 
 ```text
 /reports
+/reports view <report-id>
+```
+
+The queue and detail output show the report UUID and current revision. State
+changes must use that exact revision so an older staff view cannot overwrite a
+newer decision.
+
+Claim a report with:
+
+```text
+/reports claim <report-id> <revision> <note>
 ```
 
 Claim a report before beginning a normal investigation so two staff members do not
 unknowingly repeat the same work. Another staff member may still step in when
 something urgent is happening.
 
+Close a handled report with:
+
+```text
+/reports close <report-id> <revision> <note> CONFIRM
+```
+
+The exact uppercase `CONFIRM` is required for close, no-violation, and
+awaiting-review state changes. Without it, the command displays a review-only
+message and does not save the change. Claiming is the exception and does not
+require `CONFIRM`.
+
 ## A practical report workflow
 
 1. Read the report and the available context.
-2. Claim it when you are taking responsibility.
+2. Claim it with the report ID, current revision, and a short note.
 3. Watch the player or inspect the relevant area before confronting them.
 4. Compare the report with server evidence, logs, chat, CoreProtect, screenshots,
    or clips.
 5. Freeze only when the player could interfere with the investigation or remove
    evidence.
 6. Use `/punish <player>` when a violation is reasonably proven.
-7. Close the report with a short factual outcome.
+7. Close the report with the latest revision, a factual note, and `CONFIRM`.
+
+If another staff action changes the report revision, reopen the details and review
+the updated state rather than retrying with the stale revision.
 
 ## What evidence is useful
 
