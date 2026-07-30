@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.player.PlayerIdentity;
@@ -31,8 +32,7 @@ public final class PunishmentRequestPresentation {
         }
         return sanctions.stream()
                 .map(PunishmentRequestPresentation::sanction)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("no sanction");
+                .collect(Collectors.joining(", "));
     }
 
     public static String status(PunishmentRequestStatus status) {
