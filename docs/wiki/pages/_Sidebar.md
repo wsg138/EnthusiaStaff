@@ -26,9 +26,10 @@
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
 
-## Development
+## Development and review
 
 - [[Architecture]]
+- [[Developer Code Guide]]
 - [[Development Setup]]
 - [[Build and Testing]]
 - [[Wiki Maintenance]]
