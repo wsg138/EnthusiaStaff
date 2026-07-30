@@ -1504,7 +1504,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             )));
             operation.setTimestamp(9, Timestamp.from(now));
             operation.setTimestamp(10, Timestamp.from(now));
-            operation.executeUpdate();
+            requireSingleInsert(operation, "confiscation operation");
 
             snapshot.setBytes(1, UuidBytes.toBytes(snapshotId));
             snapshot.setBytes(2, UuidBytes.toBytes(request.operationId()));
@@ -1514,7 +1514,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             snapshot.setBytes(6, request.beforeSnapshot());
             snapshot.setTimestamp(7, Timestamp.from(now));
             snapshot.setTimestamp(8, Timestamp.from(now.plus(SNAPSHOT_RETENTION)));
-            snapshot.executeUpdate();
+            requireSingleInsert(snapshot, "confiscation before snapshot");
         }
     }
 
@@ -2359,7 +2359,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             statement.setString(8, serialize(detail));
             statement.setString(9, idempotencyKey);
             statement.setTimestamp(10, Timestamp.from(occurredAt));
-            statement.executeUpdate();
+            requireSingleInsert(statement, "inventory audit event");
         }
     }
 
