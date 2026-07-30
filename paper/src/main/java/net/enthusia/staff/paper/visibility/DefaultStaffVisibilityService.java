@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.visibility;
 
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -23,9 +24,15 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
         for (StaffRank viewer : new StaffRank[]{
                 StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER, StaffRank.ADMIN, StaffRank.FOUNDER
         }) {
-            Set<StaffRank> visible = visibilityMatrix.getOrDefault(viewer, defaults.get(viewer));
-            if (visible == null || visible.contains(StaffRank.SYSTEM)) {
+            Set<StaffRank> configured = visibilityMatrix.getOrDefault(viewer, defaults.get(viewer));
+            if (configured == null || configured.contains(StaffRank.SYSTEM)) {
                 throw new IllegalArgumentException("visibility matrix must define every staff viewer rank");
+            }
+            EnumSet<StaffRank> visible = configured.isEmpty()
+                    ? EnumSet.noneOf(StaffRank.class)
+                    : EnumSet.copyOf(configured);
+            if (viewer != StaffRank.HELPER) {
+                visible.add(StaffRank.HELPER);
             }
             copy.put(viewer, Set.copyOf(visible));
         }
