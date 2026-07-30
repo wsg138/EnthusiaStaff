@@ -28,6 +28,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class PunishmentRequestCommandHandler {
     public static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final int CONSOLE_QUEUE_LIMIT = 45;
+    private static final int NO_ARGUMENTS = 0;
+    private static final int SINGLE_ARGUMENT_COUNT = 1;
+    private static final int REQUEST_ID_ARGUMENT_INDEX = 1;
+    private static final int DENIAL_NOTE_START_INDEX = 2;
+    private static final int DENIAL_MINIMUM_ARGUMENT_COUNT = 3;
     private static final List<String> SUBCOMMANDS = List.of("requests", "review", "approve", "deny");
 
     private final JavaPlugin plugin;
@@ -59,7 +64,7 @@ public final class PunishmentRequestCommandHandler {
 
     boolean handles(String commandName, String[] args) {
         return "punish".equalsIgnoreCase(commandName)
-                && args.length > 0
+                && args.length > NO_ARGUMENTS
                 && SUBCOMMANDS.contains(args[0].toLowerCase(Locale.ROOT));
     }
 
@@ -77,7 +82,7 @@ public final class PunishmentRequestCommandHandler {
     }
 
     List<String> complete(String commandName, String[] args) {
-        if (!"punish".equalsIgnoreCase(commandName) || args.length != 1) {
+        if (!"punish".equalsIgnoreCase(commandName) || args.length != SINGLE_ARGUMENT_COUNT) {
             return List.of();
         }
         String prefix = args[0].toLowerCase(Locale.ROOT);
@@ -112,7 +117,7 @@ public final class PunishmentRequestCommandHandler {
     }
 
     private void review(CommandSender sender, String[] args, Actor actor) {
-        UUID requestId = requestId(sender, args, 1);
+        UUID requestId = requestId(sender, args, REQUEST_ID_ARGUMENT_INDEX);
         if (requestId == null) {
             return;
         }
@@ -120,25 +125,27 @@ public final class PunishmentRequestCommandHandler {
             gui.openReview(player, requestId);
             return;
         }
-        submit(sender, () -> {
-            PunishmentRequestService service = services.get();
-            PunishmentApprovalRequest request = service.find(requestId).orElse(null);
-            RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
-            onMain(() -> {
-                if (view == null) {
-                    sender.sendMessage(Component.text(
-                            "The request does not exist or you are not authorized to review it.",
-                            NamedTextColor.RED
-                    ));
-                } else {
-                    sendDetails(sender, view);
-                }
-            });
+        submit(sender, () -> sendConsoleReview(sender, actor, requestId));
+    }
+
+    private void sendConsoleReview(CommandSender sender, Actor actor, UUID requestId) {
+        PunishmentRequestService service = services.get();
+        PunishmentApprovalRequest request = service.find(requestId).orElse(null);
+        RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
+        onMain(() -> {
+            if (view == null) {
+                sender.sendMessage(Component.text(
+                        "The request does not exist or you are not authorized to review it.",
+                        NamedTextColor.RED
+                ));
+            } else {
+                sendDetails(sender, view);
+            }
         });
     }
 
     private void decide(CommandSender sender, String[] args, Actor actor, boolean approve) {
-        UUID requestId = requestId(sender, args, 1);
+        UUID requestId = requestId(sender, args, REQUEST_ID_ARGUMENT_INDEX);
         if (requestId == null) {
             return;
         }
@@ -146,14 +153,22 @@ public final class PunishmentRequestCommandHandler {
         if (!approve && denialNote == null) {
             return;
         }
-        submit(sender, () -> {
-            PunishmentRequestService service = services.get();
-            PunishmentRequestResult acquired = service.acquire(requestId, actor);
-            PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
-                    ? decideLeased(service, leased, actor, approve, denialNote)
-                    : acquired;
-            onMain(() -> sendDecision(sender, result));
-        });
+        submit(sender, () -> decideStored(sender, actor, requestId, approve, denialNote));
+    }
+
+    private void decideStored(
+            CommandSender sender,
+            Actor actor,
+            UUID requestId,
+            boolean approve,
+            String denialNote
+    ) {
+        PunishmentRequestService service = services.get();
+        PunishmentRequestResult acquired = service.acquire(requestId, actor);
+        PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
+                ? decideLeased(service, leased, actor, approve, denialNote)
+                : acquired;
+        onMain(() -> sendDecision(sender, result));
     }
 
     private static PunishmentRequestResult decideLeased(
@@ -170,17 +185,7 @@ public final class PunishmentRequestCommandHandler {
 
     private void submit(CommandSender sender, Runnable operation) {
         try {
-            workers.submit(() -> {
-                try {
-                    operation.run();
-                } catch (RuntimeException exception) {
-                    plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
-                    onMain(() -> sender.sendMessage(Component.text(
-                            "Punishment request storage is unavailable; no decision was made.",
-                            NamedTextColor.RED
-                    )));
-                }
-            });
+            workers.submit(() -> runOperation(sender, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment request worker rejected command", exception);
             sender.sendMessage(Component.text(
@@ -190,11 +195,23 @@ public final class PunishmentRequestCommandHandler {
         }
     }
 
+    private void runOperation(CommandSender sender, Runnable operation) {
+        try {
+            operation.run();
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
+            onMain(() -> sender.sendMessage(Component.text(
+                    "Punishment request storage is unavailable; no decision was made.",
+                    NamedTextColor.RED
+            )));
+        }
+    }
+
     private void onMain(Runnable action) {
         plugin.getServer().getScheduler().runTask(plugin, action);
     }
 
-    private void sendQueue(CommandSender sender, List<RequestView> pending) {
+    private static void sendQueue(CommandSender sender, List<RequestView> pending) {
         sender.sendMessage(Component.text(
                 "Reviewable punishment requests: " + pending.size(),
                 NamedTextColor.GOLD
@@ -221,6 +238,18 @@ public final class PunishmentRequestCommandHandler {
 
     private static void sendDetails(CommandSender sender, RequestView view) {
         PunishmentApprovalRequest request = view.request();
+        List<Component> lines = requestDetailLines(view);
+        if (request.status() != PunishmentRequestStatus.PENDING) {
+            lines.add(Component.text(
+                    "Resolution: " + PunishmentRequestPresentation.resolution(request),
+                    PunishmentRequestPresentation.statusColor(request.status())
+            ));
+        }
+        lines.forEach(sender::sendMessage);
+    }
+
+    private static List<Component> requestDetailLines(RequestView view) {
+        PunishmentApprovalRequest request = view.request();
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text("Punishment request " + request.requestId(), NamedTextColor.GOLD));
         lines.add(Component.text(
@@ -245,13 +274,7 @@ public final class PunishmentRequestCommandHandler {
         ));
         lines.add(Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY));
         lines.add(Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY));
-        if (request.status() != PunishmentRequestStatus.PENDING) {
-            lines.add(Component.text(
-                    "Resolution: " + PunishmentRequestPresentation.resolution(request),
-                    PunishmentRequestPresentation.statusColor(request.status())
-            ));
-        }
-        lines.forEach(sender::sendMessage);
+        return lines;
     }
 
     private RequestView view(PunishmentApprovalRequest request) {
@@ -275,14 +298,17 @@ public final class PunishmentRequestCommandHandler {
     }
 
     private static String denialNote(CommandSender sender, String[] args) {
-        if (args.length < 3) {
+        if (args.length < DENIAL_MINIMUM_ARGUMENT_COUNT) {
             sender.sendMessage(Component.text(
                     "Usage: /punish deny <request-id> <reason>",
                     NamedTextColor.RED
             ));
             return null;
         }
-        String note = String.join(" ", Arrays.copyOfRange(args, 2, args.length)).trim();
+        String note = String.join(
+                " ",
+                Arrays.copyOfRange(args, DENIAL_NOTE_START_INDEX, args.length)
+        ).trim();
         if (note.isBlank()) {
             sender.sendMessage(Component.text("A denial reason is required.", NamedTextColor.RED));
             return null;
