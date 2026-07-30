@@ -76,7 +76,6 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.gui = gui;
         this.requestCommands = requestCommands;
         this.workers = workers;
-        requestCommands.bindPlayerDirectory(players);
     }
 
     @Override
