@@ -110,11 +110,11 @@ jobs:
 
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
-        run: |
-          bash <(curl -Ls https://coverage.codacy.com/get.sh) report \
-            -l Java \
-            -r build/reports/jacoco/aggregate/jacoco.xml \
-            --commit-uuid "$(git rev-parse HEAD)"
+        uses: codacy/codacy-coverage-reporter-action@v1.3.0
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: build/reports/jacoco/aggregate/jacoco.xml
+          language: Java
 
       - name: Note missing Codacy secret
         if: env.CODACY_PROJECT_TOKEN == ''
