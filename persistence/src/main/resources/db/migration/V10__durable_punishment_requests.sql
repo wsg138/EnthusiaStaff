@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     request_id BINARY(16) NOT NULL,
     submission_key VARCHAR(128) NOT NULL,
     match_key CHAR(64) NOT NULL,
+    open_match_key CHAR(64) NULL,
     target_id BINARY(16) NOT NULL,
     requester_id BINARY(16) NOT NULL,
     requester_name VARCHAR(64) NOT NULL,
@@ -29,9 +30,6 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     updated_at TIMESTAMP(6) NOT NULL,
     expires_at TIMESTAMP(6) NOT NULL,
     resolved_at TIMESTAMP(6) NULL,
-    open_match_key CHAR(64) AS (
-        CASE WHEN status = 'PENDING' THEN match_key ELSE NULL END
-    ) STORED,
     PRIMARY KEY (request_id),
     UNIQUE KEY uq_punishment_requests_submission (submission_key),
     UNIQUE KEY uq_punishment_requests_open_match (open_match_key),
@@ -40,7 +38,11 @@ CREATE TABLE IF NOT EXISTS punishment_requests (
     INDEX idx_punishment_requests_requester (requester_id, created_at),
     CONSTRAINT fk_punishment_requests_target FOREIGN KEY (target_id) REFERENCES players(player_id),
     CONSTRAINT fk_punishment_requests_case FOREIGN KEY (resulting_case_id) REFERENCES cases(case_id),
-    CONSTRAINT ck_punishment_requests_expiration CHECK (expires_at > created_at)
+    CONSTRAINT ck_punishment_requests_expiration CHECK (expires_at > created_at),
+    CONSTRAINT ck_punishment_requests_open_match CHECK (
+        (status = 'PENDING' AND open_match_key = match_key)
+        OR (status <> 'PENDING' AND open_match_key IS NULL)
+    )
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS punishment_request_events (
