@@ -37,6 +37,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class InspectCommand implements CommandExecutor, TabCompleter {
+    private static final String INSPECT_PERMISSION = "enthusiastaff.inspect";
+    private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
+
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<PlayerDirectory> directory;
@@ -77,6 +80,13 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
+        if (!CommandPermissionGate.require(
+                sender,
+                INSPECT_PERMISSION,
+                "You do not have permission to inspect players."
+        )) {
+            return true;
+        }
         if (!(sender instanceof Player viewer)) {
             sender.sendMessage("The player inspector requires an in-game staff viewer.");
             return true;
@@ -88,6 +98,13 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         if (arguments.length == 2
                 && (arguments[0].equalsIgnoreCase("inventory")
                 || arguments[0].equalsIgnoreCase("ender"))) {
+            if (!CommandPermissionGate.require(
+                    viewer,
+                    INVENTORY_VIEW_PERMISSION,
+                    "You do not have permission to inspect inventories."
+            )) {
+                return true;
+            }
             submitOrMessage(
                     viewer,
                     () -> openInventory(viewer, arguments[1], arguments[0].equalsIgnoreCase("ender"))
@@ -390,8 +407,15 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             String alias,
             String[] arguments
     ) {
+        if (!CommandPermissionGate.allows(sender::hasPermission, INSPECT_PERMISSION)) {
+            return List.of();
+        }
         if (arguments.length == 1) {
-            List<String> actions = new ArrayList<>(List.of("inventory", "ender"));
+            List<String> actions = new ArrayList<>();
+            if (CommandPermissionGate.allows(sender::hasPermission, INVENTORY_VIEW_PERMISSION)) {
+                actions.add("inventory");
+                actions.add("ender");
+            }
             if (canApplyCaseConfiscation(sender)) {
                 if (sender.hasPermission("enthusiastaff.confiscate.items")) {
                     actions.add("items");
@@ -427,7 +451,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
 
     private boolean visibleTargetSubcommand(CommandSender sender, String input) {
         if (input.equalsIgnoreCase("inventory") || input.equalsIgnoreCase("ender")) {
-            return true;
+            return CommandPermissionGate.allows(sender::hasPermission, INVENTORY_VIEW_PERMISSION);
         }
         if (!canApplyCaseConfiscation(sender)) {
             return false;
