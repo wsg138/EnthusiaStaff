@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -113,12 +114,55 @@ public final class PunishmentService {
     }
 
     public PunishmentEvaluation evaluate(CreatePunishmentRequest request, OperationalMode mode) {
+        PunishmentEvaluation evaluation = evaluate(
+                request,
+                mode,
+                ModerationAction.ISSUE_POLICY_SANCTION,
+                true
+        );
+        if (!(evaluation instanceof PunishmentEvaluation.Allowed allowed)) {
+            return evaluation;
+        }
+        if (requiresApproval(request.actor(), allowed.assessment())) {
+            return new PunishmentEvaluation.Rejected(
+                    "APPROVAL_REQUIRED",
+                    "This punishment must be approved by a moderator or higher before it can be applied"
+            );
+        }
+        return allowed;
+    }
+
+    public PunishmentEvaluation evaluateForRequest(CreatePunishmentRequest request, OperationalMode mode) {
+        return evaluate(
+                request,
+                mode,
+                ModerationAction.REQUEST_POLICY_SANCTION,
+                false
+        );
+    }
+
+    public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
+        Objects.requireNonNull(actor);
+        Objects.requireNonNull(assessment);
+        if (actor.rank() == StaffRank.DEVELOPER) {
+            return true;
+        }
+        return actor.rank() == StaffRank.HELPER && assessment.sanctions().stream()
+                .anyMatch(spec -> spec.length().isPermanent());
+    }
+
+    private PunishmentEvaluation evaluate(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            ModerationAction authority,
+            boolean enforceReasonRank
+    ) {
         Objects.requireNonNull(request);
         if (mode != OperationalMode.ACTIVE) {
             return new PunishmentEvaluation.Rejected("MODE_BLOCKED", "New punishments are disabled in " + mode);
         }
-        if (!authorization.permits(request.actor(), ModerationAction.ISSUE_POLICY_SANCTION)) {
-            return new PunishmentEvaluation.Rejected("FORBIDDEN", "The actor is not permitted to issue sanctions");
+        if (!authorization.permits(request.actor(), authority)) {
+            return new PunishmentEvaluation.Rejected("FORBIDDEN", "The actor is not permitted to perform this action");
         }
         ReasonPolicyRepository.VersionedReasonPolicy resolved = policies.resolve(request.reasonId()).orElse(null);
         if (resolved == null) {
@@ -131,7 +175,8 @@ public final class PunishmentService {
                     "The reason is not approved for automatic enforcement"
             );
         }
-        if (request.actor().rank() != StaffRank.SYSTEM && !request.actor().rank().atLeast(policy.requiredRank())) {
+        if (enforceReasonRank && request.actor().rank() != StaffRank.SYSTEM
+                && !meetsReasonRank(request.actor().rank(), policy.requiredRank())) {
             return new PunishmentEvaluation.Rejected(
                     "RANK_REQUIRED",
                     policy.requiredRank() + " is required for this reason"
@@ -153,6 +198,13 @@ public final class PunishmentService {
         return new PunishmentEvaluation.Allowed(new PunishmentAssessment(
                 resolved.version(), policy, decision, sanctions
         ));
+    }
+
+    private static boolean meetsReasonRank(StaffRank actorRank, StaffRank requiredRank) {
+        if (actorRank == StaffRank.HELPER && requiredRank == StaffRank.MOD) {
+            return true;
+        }
+        return actorRank.atLeast(requiredRank);
     }
 
     private List<SanctionSpec> selectedSanctions(
