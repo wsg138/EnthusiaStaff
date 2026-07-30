@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     base
     jacoco
@@ -46,6 +49,38 @@ subprojects {
 
     extensions.configure<JacocoPluginExtension> {
         toolVersion = "0.8.13"
+    }
+}
+
+val productionProjects = subprojects.filterNot { it.name == "integration-tests" }
+
+/**
+ * Combines unit-test and Testcontainers execution data without publishing it to
+ * any external coverage service. The XML output is suitable for a later Codacy
+ * upload only after the measured baseline has been reviewed.
+ */
+tasks.register<JacocoReport>("jacocoAggregateReport") {
+    group = "verification"
+    description = "Generates one repository-wide JaCoCo XML and HTML report."
+
+    dependsOn(subprojects.map { "${it.path}:test" })
+
+    val mainSourceSets = productionProjects.map { project ->
+        project.extensions.getByType<SourceSetContainer>().named("main").get()
+    }
+
+    executionData.setFrom(
+        files(subprojects.map { it.layout.buildDirectory.file("jacoco/test.exec") })
+    )
+    sourceDirectories.setFrom(files(mainSourceSets.map { it.allSource.srcDirs }))
+    classDirectories.setFrom(files(mainSourceSets.map { it.output.classesDirs }))
+
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/aggregate/jacoco.xml"))
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/aggregate/html"))
+        csv.required.set(false)
     }
 }
 
