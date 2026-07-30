@@ -48,7 +48,7 @@ class CommandPermissionGateTest {
 
     private static CommandSender sender(boolean allowed, AtomicInteger messages) {
         return (CommandSender) Proxy.newProxyInstance(
-                CommandSender.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{CommandSender.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
                     case "hasPermission" -> allowed;
