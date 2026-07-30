@@ -9,12 +9,19 @@ for conduct and judgment, and [[Helper Guide]] if you are joining as a Helper.
 
 ## Handling a report
 
-1. Open `/reports` and claim the report when the tool is available.
-2. Read the report and any captured chat or location context.
-3. Watch the player or investigate before deciding what happened.
+1. Open `/reports`, then use `/reports view <report-id>` to read the current
+   details and revision.
+2. Claim it with `/reports claim <report-id> <revision> <note>`.
+3. Read the captured chat or location context and investigate before deciding what
+   happened.
 4. Save the useful evidence.
 5. Use `/punish <player>` only when the violation is reasonably clear.
-6. Close the report with a short factual note.
+6. Reopen the report if needed to obtain its latest revision.
+7. Close it with `/reports close <report-id> <revision> <note> CONFIRM`.
+
+The exact uppercase `CONFIRM` is required to save close, no-violation, and
+awaiting-review actions. Without it, the command is review-only. See
+[[Reports and Evidence]] for the detailed report syntax.
 
 Do not reveal the reporter’s identity, private messages, or coordinates to the
 reported player.
