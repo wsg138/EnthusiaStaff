@@ -10,7 +10,7 @@ LiteBans.
 
 | Repository | Remote URL | Default branch | Working branch | Current checkpoint | Build and test status | Codacy status | Current blockers |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for draft PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation, refactoring, and focused tests validated at `19f6139677c42f46463cd3cf1242c1a58b6757af`; the branch matches the sole current-`main` workflow delta and includes current checkpoint documentation | PASS at `19f6139677c42f46463cd3cf1242c1a58b6757af`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30586107206`, artifact `8776580587` | Codacy reports zero introduced issues on `19f6139677c42f46463cd3cf1242c1a58b6757af`; coverage variation and diff coverage remain within the configured gate | PR #21 still requires final validation of the documentation-only checkpoint, one final review when allowance is available, no unresolved review threads, an accurate PR description, and explicit merge authorization. GitHub reports the PR mergeable; merging through the PR will preserve the 16 current-`main` Wiki-history commits. Production-like Paper/Velocity/provider staging remains unavailable. |
+| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation, review fixes, and focused tests validated at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; checkpoint documentation is current | PASS at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30588491828`, artifact `8777480221` | Codacy reports zero introduced issues on `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; 12.95% diff coverage and -0.78% coverage variation remain within the configured gate | Explicit merge authorization is still required. The prior full CodeRabbit review's actionable findings are addressed and both review threads are resolved; its incremental rereview was rate-limited. The current PR head must retain green exact-head checks. Production-like Paper/Velocity/provider staging remains unavailable. |
 | enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` | Expected feature branch not reconstructed | No PR #21 website changes | NOT_RUN | NOT_ANALYZED | Provider/site work remains deferred until the root punishment checkpoint is complete. |
 | EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
 | EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
@@ -39,28 +39,35 @@ LiteBans.
 - Branch: `section/punishment-request-interfaces`; the branch was not reset,
   renamed, recreated, or replaced.
 - Merge base with PR #20: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Validated implementation/test head: `19f6139677c42f46463cd3cf1242c1a58b6757af`.
-- Exact-head validation run: `30586107206`; validation artifact: `8776580587`.
+- Validated implementation/test head: `ec7b3077cd1c229ac3ef15eb0a3b616175612582`.
+- Exact implementation validation run: `30588491828`; validation artifact:
+  `8777480221`.
 - Build result: `BUILD SUCCESSFUL`; 49 actionable Gradle tasks, 40 executed and
   9 up-to-date.
 - Runtime jars:
-  - Paper SHA-256 `7aa8e9c76f4431dda1463fff174197558b413c42c459d70e7d7337db3606f9cc`.
-  - Velocity SHA-256 `2973608add1dc9458f7735791449c6058ec9b9f75568b6b00838a193ded56178`.
+  - Paper SHA-256 `9c0c19589be72189f11a8ed6892ff9e3a87a79fb4e8604b8f8f3f991347f3293`.
+  - Velocity SHA-256 `6e855b0d8a202fedb8951cfe9fb5593e06322413630343755be1e8cf77b0f575`.
   - Both checked 24 provider API source types with zero leaks.
-- Aggregate JaCoCo at that checkpoint: line 32.24%, branch 26.47%, instruction
-  34.56%.
-- Codacy reports zero introduced issues, 12.87% diff coverage, and a -0.75%
+- Aggregate JaCoCo at that checkpoint: line 32.21%, branch 26.41%, instruction
+  34.52%.
+- Codacy reports zero introduced issues, 12.95% diff coverage, and a -0.78%
   overall coverage variation against the PR merge base.
+- The full CodeRabbit review identified two major findings and two maintenance
+  findings. Shared approval rules, storage-readiness guards, explicit player
+  directory wiring, and centralized denial presets address them; both inline
+  review threads are resolved. A later incremental rereview was rate-limited.
 - Implemented interface behavior includes routed draft confirmation, filtered and
   paginated review queues, fenced claim/approve/deny actions, stale/resolved-state
   handling, offline target presentation, revision display, self/Developer/rank
-  restrictions, idempotent retry messaging, and separated GUI rendering.
+  restrictions, idempotent retry messaging, separated GUI rendering, and clear
+  pre-bootstrap storage responses.
 - Existing domain and MariaDB tests cover direct temporary Helper application,
   permanent Helper requests, Developer request-only behavior, stale fences, lost
   leases, expiry, external fulfillment, approval-time sanction start, and
-  idempotent decisions. Focused PR #21 tests cover bootstrap/constructor wiring,
-  permission consistency, presentation states, pagination, empty queues, offline
-  targets, and reviewer visibility.
+  idempotent decisions. Focused PR #21 tests additionally cover the shared
+  approval predicate, explicit bootstrap wiring, permission consistency,
+  presentation states, pagination, empty queues, offline targets, and reviewer
+  visibility.
 - The Wiki has not been changed for PR #21. Staff-facing Wiki updates remain
   deferred until the interfaces are final and must distinguish automated testing
   from staging verification.
@@ -73,5 +80,7 @@ LiteBans.
   coherent checkpoints.
 - A skipped or superseded run is never recorded as passed.
 - A merged PR is a checkpoint, not deployment authorization.
+- Only merge a current head whose required checks are green; any later source
+  change invalidates prior exact-head evidence until validation runs again.
 - Keep each related repository independent and never stage `related-repos/` in
   the root repository.
