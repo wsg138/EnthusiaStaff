@@ -309,9 +309,10 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = currentRank(player);
+        boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (StaffModeAccessPolicy.blocksAllInventoryMutation(rank)
                 || isStaffTool(event.getOldCursor())
-                || event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST
+                || (ender && StaffModeAccessPolicy.blocksEnderChest(rank))
                 || transitions.contains(player.getUniqueId())) {
             event.setCancelled(true);
         }
