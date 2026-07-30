@@ -35,10 +35,20 @@ public record PunishmentProposal(
         publicReason = Checks.nonBlank(publicReason, "publicReason", 160);
         internalExplanation = Checks.nonBlank(internalExplanation, "internalExplanation", 4_000);
         configurationVersion = Checks.nonBlank(configurationVersion, "configurationVersion", 128);
+        if (requester.rank() != StaffRank.HELPER && requester.rank() != StaffRank.DEVELOPER) {
+            throw new IllegalArgumentException("only Helper or Developer may submit punishment proposals");
+        }
         if (requiredRank == StaffRank.DEVELOPER || requiredRank == StaffRank.SYSTEM) {
             throw new IllegalArgumentException("punishment proposal requires a moderation approval rank");
         }
         sanctions = List.copyOf(sanctions);
+        if (!escalation.selectedStep().sanctions().equals(sanctions)) {
+            throw new IllegalArgumentException("punishment proposal sanctions must match its frozen escalation step");
+        }
+        if (requester.rank() == StaffRank.HELPER
+                && sanctions.stream().noneMatch(specification -> specification.length().isPermanent())) {
+            throw new IllegalArgumentException("Helper punishment proposals must include a permanent sanction");
+        }
     }
 
     public static PunishmentProposal from(
