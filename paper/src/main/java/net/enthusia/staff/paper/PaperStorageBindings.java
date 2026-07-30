@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -52,10 +53,12 @@ record PaperStorageBindings(
                 runtime.inventoryJournalStore(),
                 runtime.economyJournalStore()
         );
+        Clock clock = Clock.systemUTC();
+        SecureIdentifiers identifiers = new SecureIdentifiers(new SecureRandom());
         PunishmentDraftStore draftStore = runtime.punishmentDraftStore();
         PunishmentService punishment = new PunishmentService(
-                Clock.systemUTC(),
-                new SecureIdentifiers(new SecureRandom()),
+                clock,
+                identifiers,
                 authorization,
                 reasonPolicies,
                 moderation.moderationStore(),
@@ -64,7 +67,16 @@ record PaperStorageBindings(
         ApplicationServices services = new ApplicationServices(
                 punishment,
                 new PunishmentDraftWorkflow(
-                        Clock.systemUTC(), Duration.ofHours(24), punishment, draftStore
+                        clock, Duration.ofHours(24), punishment, draftStore
+                ),
+                new PunishmentRequestService(
+                        clock,
+                        Duration.ofDays(7),
+                        Duration.ofMinutes(2),
+                        identifiers,
+                        authorization,
+                        punishment,
+                        runtime.punishmentRequestStore()
                 ),
                 new SanctionChangeService(authorization, runtime.sanctionMutationStore())
         );
@@ -127,6 +139,10 @@ record PaperStorageBindings(
         return services.punishmentDraftWorkflow();
     }
 
+    PunishmentRequestService punishmentRequestService() {
+        return services.punishmentRequestService();
+    }
+
     SanctionChangeService sanctionChangeService() {
         return services.sanctionChangeService();
     }
@@ -154,6 +170,7 @@ record PaperStorageBindings(
     record ApplicationServices(
             PunishmentService punishmentService,
             PunishmentDraftWorkflow punishmentDraftWorkflow,
+            PunishmentRequestService punishmentRequestService,
             SanctionChangeService sanctionChangeService
     ) {
     }
