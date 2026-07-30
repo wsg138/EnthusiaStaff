@@ -84,19 +84,16 @@ public final class JdbcModerationStore implements ModerationStore {
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             connection.setAutoCommit(false);
             try {
-                CaseId replay = existingCase(connection, plan.idempotencyKey().value());
-                if (replay != null) {
-                    connection.rollback();
-                    return new PunishmentResult.Accepted(replay, true);
-                }
-                ensureTargetAndLock(connection, plan.targetId(), plan.issuedAt());
-                insertCase(connection, plan);
-                insertStep(connection, plan);
-                List<UUID> sanctionIds = insertSanctions(connection, plan);
-                insertAudit(connection, plan, sanctionIds);
-                insertOutboxes(connection, plan, sanctionIds);
+                PunishmentResult.Accepted accepted = createPunishment(connection, plan);
+                JdbcPunishmentRequestStore.fulfillMatching(
+                        connection,
+                        plan,
+                        accepted.caseId(),
+                        plan.issuedAt(),
+                        null
+                );
                 connection.commit();
-                return new PunishmentResult.Accepted(plan.caseId(), false);
+                return accepted;
             } catch (SQLException | JsonProcessingException exception) {
                 rollback(connection, exception);
                 CaseId replay = existingCaseAfterConflict(plan.idempotencyKey().value());
@@ -110,6 +107,21 @@ public final class JdbcModerationStore implements ModerationStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open punishment transaction", exception);
         }
+    }
+
+    PunishmentResult.Accepted createPunishment(Connection connection, PunishmentPlan plan)
+            throws SQLException, JsonProcessingException {
+        CaseId replay = existingCase(connection, plan.idempotencyKey().value());
+        if (replay != null) {
+            return new PunishmentResult.Accepted(replay, true);
+        }
+        ensureTargetAndLock(connection, plan.targetId(), plan.issuedAt());
+        insertCase(connection, plan);
+        insertStep(connection, plan);
+        List<UUID> sanctionIds = insertSanctions(connection, plan);
+        insertAudit(connection, plan, sanctionIds);
+        insertOutboxes(connection, plan, sanctionIds);
+        return new PunishmentResult.Accepted(plan.caseId(), false);
     }
 
     private static void ensureTargetAndLock(Connection connection, UUID targetId, Instant now) throws SQLException {
@@ -210,7 +222,9 @@ public final class JdbcModerationStore implements ModerationStore {
                 } else if (spec.length().isInstant()) {
                     sanction.setTimestamp(8, Timestamp.from(plan.issuedAt()));
                 } else {
-                    sanction.setTimestamp(8, Timestamp.from(spec.length().expirationFrom(plan.issuedAt()).orElseThrow()));
+                    sanction.setTimestamp(8, Timestamp.from(
+                            spec.length().expirationFrom(plan.issuedAt()).orElseThrow()
+                    ));
                 }
                 sanction.addBatch();
 
