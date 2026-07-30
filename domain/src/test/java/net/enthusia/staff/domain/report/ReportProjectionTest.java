@@ -62,7 +62,7 @@ final class ReportProjectionTest {
     }
 
     @Test
-    void invalidProjectionFieldsAreRejected() {
+    void invalidReportSummaryAndDetailsAreRejected() {
         ReportSummary summary = summary();
         assertThrows(
                 IllegalArgumentException.class,
@@ -92,6 +92,11 @@ final class ReportProjectionTest {
                         List.of()
                 )
         );
+    }
+
+    @Test
+    void invalidStateChangeFieldsAreRejected() {
+        ReportSummary summary = summary();
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ReportStateChangeRequest(
