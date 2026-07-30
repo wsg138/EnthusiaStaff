@@ -108,6 +108,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Diagnose current Codacy PR issues
+        if: github.event_name == 'pull_request'
+        env:
+          CODACY_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          number = os.environ["CODACY_PR_NUMBER"]
+          url = (
+              "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/"
+              f"repositories/EnthusiaStaff/pull-requests/{number}/issues"
+          )
+          with urllib.request.urlopen(url, timeout=30) as response:
+              payload = json.load(response)
+
+          for issue in payload.get("data", []):
+              details = issue.get("commitIssue", {})
+              pattern = details.get("patternInfo", {})
+              print(json.dumps({
+                  "id": pattern.get("id"),
+                  "title": pattern.get("title"),
+                  "category": pattern.get("category"),
+                  "severity": pattern.get("severityLevel") or pattern.get("level"),
+                  "file": details.get("filePath"),
+                  "line": details.get("lineNumber"),
+                  "message": details.get("message"),
+              }, sort_keys=True))
+          PY
+
       - name: Upload coverage to Codacy
         if: env.CODACY_PROJECT_TOKEN != ''
         uses: codacy/codacy-coverage-reporter-action@v1.3.0
