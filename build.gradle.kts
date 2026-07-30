@@ -55,9 +55,8 @@ subprojects {
 val productionProjects = subprojects.filterNot { it.name == "integration-tests" }
 
 /**
- * Combines unit-test and Testcontainers execution data without publishing it to
- * any external coverage service. The XML output is suitable for a later Codacy
- * upload only after the measured baseline has been reviewed.
+ * Combines unit-test and Testcontainers execution data into repository-wide
+ * XML and HTML reports for CI artifacts and external coverage reporting.
  */
 tasks.register<JacocoReport>("jacocoAggregateReport") {
     group = "verification"
