@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
+import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
@@ -32,6 +33,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
     private final ModerationStore moderationStore;
     private final PunishmentRequestStore punishmentRequestStore;
+    private final PunishmentRequestAlertStore punishmentRequestAlertStore;
     private final OperationalStateStore operationalStateStore;
     private final SanctionLookup sanctionLookup;
     private final PlayerDirectory playerDirectory;
@@ -56,6 +58,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
         this.moderationStore = moderation;
         this.punishmentRequestStore = new JdbcPunishmentRequestStore(dataSource, json, moderation);
+        this.punishmentRequestAlertStore = new JdbcPunishmentRequestAlertStore(dataSource);
         this.operationalStateStore = new JdbcOperationalStateStore(dataSource);
         this.sanctionLookup = new JdbcSanctionLookup(dataSource);
         this.playerDirectory = new JdbcPlayerDirectory(dataSource);
@@ -75,81 +78,26 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, json);
     }
 
-    public ModerationStore moderationStore() {
-        return moderationStore;
-    }
-
-    public PunishmentRequestStore punishmentRequestStore() {
-        return punishmentRequestStore;
-    }
-
-    public OperationalStateStore operationalStateStore() {
-        return operationalStateStore;
-    }
-
-    public SanctionLookup sanctionLookup() {
-        return sanctionLookup;
-    }
-
-    public PlayerDirectory playerDirectory() {
-        return playerDirectory;
-    }
-
-    public NetworkOutboxStore networkOutboxStore() {
-        return networkOutboxStore;
-    }
-
-    public DiscordOutboxStore discordOutboxStore() {
-        return discordOutboxStore;
-    }
-
-    public FreezeStore freezeStore() {
-        return freezeStore;
-    }
-
-    public StaffSessionStore staffSessionStore() {
-        return staffSessionStore;
-    }
-
-    public VanishStore vanishStore() {
-        return vanishStore;
-    }
-
-    public NetworkIdentityStore networkIdentityStore() {
-        return networkIdentityStore;
-    }
-
-    public SanctionMutationStore sanctionMutationStore() {
-        return sanctionMutationStore;
-    }
-
-    public CaseLookup caseLookup() {
-        return caseLookup;
-    }
-
-    public CaseReviewStore caseReviewStore() {
-        return caseReviewStore;
-    }
-
-    public ReportStore reportStore() {
-        return reportStore;
-    }
-
-    public InventoryJournalStore inventoryJournalStore() {
-        return inventoryJournalStore;
-    }
-
-    public EconomyJournalStore economyJournalStore() {
-        return economyJournalStore;
-    }
-
-    public ClientEvidenceStore clientEvidenceStore() {
-        return clientEvidenceStore;
-    }
-
-    public PunishmentDraftStore punishmentDraftStore() {
-        return punishmentDraftStore;
-    }
+    public ModerationStore moderationStore() { return moderationStore; }
+    public PunishmentRequestStore punishmentRequestStore() { return punishmentRequestStore; }
+    public PunishmentRequestAlertStore punishmentRequestAlertStore() { return punishmentRequestAlertStore; }
+    public OperationalStateStore operationalStateStore() { return operationalStateStore; }
+    public SanctionLookup sanctionLookup() { return sanctionLookup; }
+    public PlayerDirectory playerDirectory() { return playerDirectory; }
+    public NetworkOutboxStore networkOutboxStore() { return networkOutboxStore; }
+    public DiscordOutboxStore discordOutboxStore() { return discordOutboxStore; }
+    public FreezeStore freezeStore() { return freezeStore; }
+    public StaffSessionStore staffSessionStore() { return staffSessionStore; }
+    public VanishStore vanishStore() { return vanishStore; }
+    public NetworkIdentityStore networkIdentityStore() { return networkIdentityStore; }
+    public SanctionMutationStore sanctionMutationStore() { return sanctionMutationStore; }
+    public CaseLookup caseLookup() { return caseLookup; }
+    public CaseReviewStore caseReviewStore() { return caseReviewStore; }
+    public ReportStore reportStore() { return reportStore; }
+    public InventoryJournalStore inventoryJournalStore() { return inventoryJournalStore; }
+    public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
+    public ClientEvidenceStore clientEvidenceStore() { return clientEvidenceStore; }
+    public PunishmentDraftStore punishmentDraftStore() { return punishmentDraftStore; }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {
         return new JdbcWebsiteModerationStore(dataSource, codeProtector, new ObjectMapper());
@@ -160,9 +108,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     public LiteBansMigrationService liteBansMigrationService(NetworkIdentityProtector protector) {
-        if (protector == null) {
-            throw new IllegalArgumentException("network identity protector must be present");
-        }
+        if (protector == null) throw new IllegalArgumentException("network identity protector must be present");
         return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC(), protector);
     }
 
@@ -171,7 +117,5 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     @Override
-    public void close() {
-        dataSource.close();
-    }
+    public void close() { dataSource.close(); }
 }

@@ -8,79 +8,57 @@ LiteBans.
 
 ## Repository checkpoint
 
-| Repository | Remote URL | Default branch | Working branch | Current checkpoint | Build and test status | Codacy status | Current blockers |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation, review fixes, and focused tests validated at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; checkpoint documentation is current | PASS at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30588491828`, artifact `8777480221` | Codacy reports zero introduced issues on `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; 12.95% diff coverage and -0.78% coverage variation remain within the configured gate | Explicit merge authorization is still required. The prior full CodeRabbit review's actionable findings are addressed and both review threads are resolved; its incremental rereview was rate-limited. The current PR head must retain green exact-head checks. Production-like Paper/Velocity/provider staging remains unavailable. |
-| enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` | Expected feature branch not reconstructed | No PR #21 website changes | NOT_RUN | NOT_ANALYZED | Provider/site work remains deferred until the root punishment checkpoint is complete. |
-| EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| EnthusiaAutoClicker | `https://github.com/wsg138/EnthusiaAutoClicker.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| Enthusia-RoseChat | Intended `wsg138/Enthusia-RoseChat` remains missing or inaccessible | UNKNOWN | None | BLOCKED | BLOCKED | NOT_ANALYZED | Do not invent a remote or push to an upstream owner. |
-| EnthusiaMarket | `https://github.com/wsg138/EnthusiaMarket.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Existing detached/upstream references are read-only; provider reconstruction remains outstanding. |
+| Repository | Default branch | Working branch | Current checkpoint | Validation state | Current blockers |
+| --- | --- | --- | --- | --- | --- |
+| EnthusiaStaff | `main` at merged PR #21 commit `90cfb0eb809b2895d105193b7bddf33fd6f95aa0` | `section/punishment-request-notifications-recovery` for draft PR #27 | Checkpoint A validated at `ccbd7806452c4dc5084fd03d76a496da324e6a87`; Checkpoint B1 adds hardened alert contracts, deterministic keys, Flyway V11, JDBC store primitives, and MariaDB integration coverage | Checkpoint A Coverage run `30599247739` succeeded. B1 exact-head validation is required before B1 can be recorded as tested. | PR #27 must remain draft and unmerged. B2 lifecycle transaction wiring, workers, Paper delivery, and Discord production remain outstanding. |
+| EnthusiaStaff-Staging | Separate repository; not inspected or modified in this checkpoint | Unchanged | OUT OF SCOPE | NOT_RUN | Owned by the separate staging workflow/chat. |
 
-## Merged PR #20 checkpoint
-
-- Pull request: #20, **Add durable punishment request workflow**.
-- Final reviewed head: `a334f46adc9beea679b4f5d6d13ee7d4c3960ef4`.
-- Squash merge on `main`: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Final validation run: `30572347767`.
-- Source branch retained: `section/durable-punishment-requests`.
-- Complete Java 21 build, unit tests, MariaDB 11.8.3 Testcontainers,
-  aggregate JaCoCo, and Paper/Velocity runtime-jar inspection passed.
-- Twenty-four provider API source types were checked and no provider API class
-  leaked into either runtime jar.
-- Codacy reported zero introduced issues and no unresolved GitHub review thread
-  remained. CodeRabbit could not review the final head because its allowance was
-  exhausted.
-
-## Active PR #21 checkpoint
+## Merged PR #21 checkpoint
 
 - Pull request: #21, **Expose durable punishment request interfaces**.
-- Branch: `section/punishment-request-interfaces`; the branch was not reset,
-  renamed, recreated, or replaced.
-- Merge base with PR #20: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Validated implementation/test head: `ec7b3077cd1c229ac3ef15eb0a3b616175612582`.
-- Exact implementation validation run: `30588491828`; validation artifact:
-  `8777480221`.
-- Build result: `BUILD SUCCESSFUL`; 49 actionable Gradle tasks, 40 executed and
-  9 up-to-date.
-- Runtime jars:
-  - Paper SHA-256 `9c0c19589be72189f11a8ed6892ff9e3a87a79fb4e8604b8f8f3f991347f3293`.
-  - Velocity SHA-256 `6e855b0d8a202fedb8951cfe9fb5593e06322413630343755be1e8cf77b0f575`.
-  - Both checked 24 provider API source types with zero leaks.
-- Aggregate JaCoCo at that checkpoint: line 32.21%, branch 26.41%, instruction
-  34.52%.
-- Codacy reports zero introduced issues, 12.95% diff coverage, and a -0.78%
-  overall coverage variation against the PR merge base.
-- The full CodeRabbit review identified two major findings and two maintenance
-  findings. Shared approval rules, storage-readiness guards, explicit player
-  directory wiring, and centralized denial presets address them; both inline
-  review threads are resolved. A later incremental rereview was rate-limited.
-- Implemented interface behavior includes routed draft confirmation, filtered and
-  paginated review queues, fenced claim/approve/deny actions, stale/resolved-state
-  handling, offline target presentation, revision display, self/Developer/rank
-  restrictions, idempotent retry messaging, separated GUI rendering, and clear
-  pre-bootstrap storage responses.
-- Existing domain and MariaDB tests cover direct temporary Helper application,
-  permanent Helper requests, Developer request-only behavior, stale fences, lost
-  leases, expiry, external fulfillment, approval-time sanction start, and
-  idempotent decisions. Focused PR #21 tests additionally cover the shared
-  approval predicate, explicit bootstrap wiring, permission consistency,
-  presentation states, pagination, empty queues, offline targets, and reviewer
-  visibility.
-- The Wiki has not been changed for PR #21. Staff-facing Wiki updates remain
-  deferred until the interfaces are final and must distinguish automated testing
-  from staging verification.
+- Final head: `da531a4022d79935ed157c97c3260c42631d23f1`.
+- Merge commit on `main`: `90cfb0eb809b2895d105193b7bddf33fd6f95aa0`.
+- No deployment or staging claim is implied by the merge.
 
-## Workspace and release rules
+## Draft PR #27 checkpoint
 
-- Keep remaining root-plugin work on `section/plugin` after PR #21 merges and is
-  incorporated into the latest `main`.
-- Update every SHA, PR, validation, coverage, Codacy, review, and blocker field at
-  coherent checkpoints.
-- A skipped or superseded run is never recorded as passed.
-- A merged PR is a checkpoint, not deployment authorization.
-- Only merge a current head whose required checks are green; any later source
-  change invalidates prior exact-head evidence until validation runs again.
-- Keep each related repository independent and never stage `related-repos/` in
-  the root repository.
+- Pull request: #27, **Add durable punishment request notifications and recovery**.
+- Branch: `section/punishment-request-notifications-recovery`.
+- Base: `90cfb0eb809b2895d105193b7bddf33fd6f95aa0`.
+- Checkpoint A head: `ccbd7806452c4dc5084fd03d76a496da324e6a87`.
+- Checkpoint A validation: Coverage run `30599247739`, success; Java 21 build,
+  MariaDB Testcontainers, Paper/Velocity runtime inspection, 24 provider source
+  checks per runtime jar, and zero provider API leakage; artifact `8781297271`.
+- B1 commit sequence:
+  - `db18a837f6f0b0f408904d6c8c964e19b72d62b7`: alert contract invariants,
+    existing case visibility, deterministic SHA-256 intent keys, and domain tests.
+  - `5acc8df89f7293cbb710e31938e3589f427951db`: Flyway V11 and durable JDBC
+    alert-store primitives.
+  - The final B1 test/documentation commit is recorded after it is pushed.
+- B1 deliberately does not wire request submission, claim, approval, denial,
+  external fulfillment, bounded expiration transitions, Paper listeners,
+  schedulers, Bukkit delivery, or Discord network delivery.
+
+## Current staff_alerts schema checkpoint
+
+Before V11, `staff_alerts` contained:
+
+- `alert_id`, `recipient_id`, `minimum_rank`, `alert_type`, `payload_json`,
+  `created_at`, and `read_at`;
+- unread indexes by direct recipient and minimum rank.
+
+Flyway V11 evolves that table with deterministic intent identity, request and
+lifecycle metadata, direct-or-audience targeting, visibility and schema version,
+independent delivery state, durable leases, retry/dead-letter state, delivery and
+retention timestamps, and indexes for direct/audience due work, lease recovery,
+request lookup, retention, and unique intent keys. `read_at` remains distinct from
+`delivered_at`; insertion sets neither field.
+
+## Isolation and release rules
+
+- Do not modify `wsg138/EnthusiaStaff-Staging` or staging PR #2.
+- Do not dispatch staging workflows or access `Lincoln-PI-4`.
+- Do not modify Pi services/files, GitHub staging environments, or secrets.
+- Do not access production databases or production Discord credentials.
+- Keep PR #27 draft and do not merge it without explicit authorization.
+- A pushed commit is not a validated checkpoint until exact-head required checks pass.
