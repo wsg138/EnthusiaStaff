@@ -27,6 +27,10 @@ public final class JdbcModerationStore implements ModerationStore {
 
     private final DataSource dataSource;
     private final ObjectMapper json;
+    private final JdbcPunishmentRequestRepository punishmentRequests;
+    private final JdbcPunishmentRequestEvents punishmentRequestEvents;
+    private final JdbcPunishmentRequestAlertWriter punishmentRequestAlerts;
+    private final JdbcPunishmentRequestNotifications punishmentRequestNotifications;
 
     public JdbcModerationStore(DataSource dataSource, ObjectMapper json) {
         if (dataSource == null || json == null) {
@@ -34,6 +38,16 @@ public final class JdbcModerationStore implements ModerationStore {
         }
         this.dataSource = dataSource;
         this.json = json;
+        this.punishmentRequests = new JdbcPunishmentRequestRepository(
+                dataSource,
+                new JdbcPunishmentRequestCodec(json)
+        );
+        this.punishmentRequestEvents = new JdbcPunishmentRequestEvents(json);
+        this.punishmentRequestAlerts = new JdbcPunishmentRequestAlertWriter();
+        this.punishmentRequestNotifications = new JdbcPunishmentRequestNotifications(
+                json,
+                punishmentRequestAlerts
+        );
     }
 
     @Override
@@ -85,12 +99,16 @@ public final class JdbcModerationStore implements ModerationStore {
             connection.setAutoCommit(false);
             try {
                 PunishmentResult.Accepted accepted = createPunishment(connection, plan);
-                JdbcPunishmentRequestStore.fulfillMatching(
+                JdbcPunishmentRequestFulfillment.apply(
                         connection,
                         plan,
                         accepted.caseId(),
                         plan.issuedAt(),
-                        null
+                        null,
+                        punishmentRequests,
+                        punishmentRequestEvents,
+                        punishmentRequestNotifications,
+                        punishmentRequestAlerts
                 );
                 connection.commit();
                 return accepted;
