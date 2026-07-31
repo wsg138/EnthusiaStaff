@@ -12,6 +12,7 @@ public record PunishmentRequestAlertIntent(
         UUID requestId,
         long requestRevision,
         PunishmentRequestLifecycleEventType eventType,
+        PunishmentRequestAlertOccurrence occurrence,
         PunishmentRequestAlertAudience audience,
         UUID recipientId,
         UUID excludedRecipientId,
@@ -25,6 +26,7 @@ public record PunishmentRequestAlertIntent(
         Objects.requireNonNull(alertId, "alertId");
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(eventType, "eventType");
+        Objects.requireNonNull(occurrence, "occurrence");
         Objects.requireNonNull(audience, "audience");
         Objects.requireNonNull(visibility, "visibility");
         Objects.requireNonNull(createdAt, "createdAt");
@@ -37,6 +39,10 @@ public record PunishmentRequestAlertIntent(
         }
         if (!expiresAt.isAfter(createdAt)) {
             throw new IllegalArgumentException("alert intent expiry must be after creation");
+        }
+        if (eventType == PunishmentRequestLifecycleEventType.REQUEST_CLAIMED
+                && occurrence.actorId() == null) {
+            throw new IllegalArgumentException("claim alerts require the immutable claiming reviewer identifier");
         }
         switch (audience) {
             case DIRECT_RECIPIENT -> {
@@ -59,5 +65,39 @@ public record PunishmentRequestAlertIntent(
             }
             default -> throw new IllegalStateException("unsupported alert audience: " + audience);
         }
+    }
+
+    /** Compatibility constructor for deterministic, non-repeatable revision events. */
+    public PunishmentRequestAlertIntent(
+            UUID alertId,
+            String intentKey,
+            UUID requestId,
+            long requestRevision,
+            PunishmentRequestLifecycleEventType eventType,
+            PunishmentRequestAlertAudience audience,
+            UUID recipientId,
+            UUID excludedRecipientId,
+            StaffRank minimumRank,
+            CaseVisibility visibility,
+            int schemaVersion,
+            Instant createdAt,
+            Instant expiresAt
+    ) {
+        this(
+                alertId,
+                intentKey,
+                requestId,
+                requestRevision,
+                eventType,
+                PunishmentRequestAlertOccurrence.forRevision(requestRevision),
+                audience,
+                recipientId,
+                excludedRecipientId,
+                minimumRank,
+                visibility,
+                schemaVersion,
+                createdAt,
+                expiresAt
+        );
     }
 }

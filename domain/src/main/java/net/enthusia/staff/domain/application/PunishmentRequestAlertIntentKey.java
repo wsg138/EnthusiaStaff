@@ -4,9 +4,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Locale;
 
 public final class PunishmentRequestAlertIntentKey {
-    private static final String PREFIX = "pra:v1:";
+    private static final String PREFIX = "pra:v2:";
 
     private PunishmentRequestAlertIntentKey() {
     }
@@ -17,9 +18,11 @@ public final class PunishmentRequestAlertIntentKey {
         }
         String canonical = String.join("|",
                 Integer.toString(intent.schemaVersion()),
-                intent.requestId().toString().toLowerCase(java.util.Locale.ROOT),
+                intent.requestId().toString().toLowerCase(Locale.ROOT),
                 Long.toString(intent.requestRevision()),
                 intent.eventType().name(),
+                intent.occurrence().key(),
+                value(intent.occurrence().actorId()),
                 intent.audience().name(),
                 value(intent.recipientId()),
                 value(intent.excludedRecipientId()),
@@ -36,6 +39,6 @@ public final class PunishmentRequestAlertIntentKey {
     }
 
     private static String value(Object value) {
-        return value == null ? "-" : value.toString().toLowerCase(java.util.Locale.ROOT);
+        return value == null ? "-" : value.toString().toLowerCase(Locale.ROOT);
     }
 }

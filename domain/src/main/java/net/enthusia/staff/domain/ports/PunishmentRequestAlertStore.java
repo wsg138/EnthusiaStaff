@@ -43,6 +43,29 @@ public interface PunishmentRequestAlertStore {
             int maximumAttempts
     );
 
+    /** Cancels a currently valid lease after a final eligibility/presentation recheck. */
+    boolean cancel(
+            PunishmentRequestAlertDeliveryId deliveryId,
+            String owner,
+            String reason,
+            Instant now
+    );
+
+    /** Explicit operational recovery for unresolved dead-letter work. */
+    boolean requeueDeadLetter(
+            PunishmentRequestAlertDeliveryId deliveryId,
+            Instant availableAt,
+            String reason,
+            Instant now
+    );
+
+    /** Explicitly resolves dead-letter work that an operator has decided not to retry. */
+    boolean resolveDeadLetter(
+            PunishmentRequestAlertDeliveryId deliveryId,
+            String reason,
+            Instant now
+    );
+
     boolean closeIntent(UUID alertId, String reason, Instant now);
 
     int expireIntents(Instant now, int limit);
