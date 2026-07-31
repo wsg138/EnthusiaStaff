@@ -44,8 +44,8 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
 
     @BeforeEach
     void clearState() throws Exception {
-        try (MariaDbRuntime ignored = runtime()) {
-            // Flyway migration and runtime construction are part of this checkpoint.
+        try (MariaDbRuntime runtime = runtime()) {
+            assertTrue(runtime.punishmentRequestAlertStore() != null);
         }
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM staff_alert_deliveries");
