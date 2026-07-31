@@ -7,6 +7,7 @@ import java.util.UUID;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertBacklog;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertClaim;
+import net.enthusia.staff.domain.application.PunishmentRequestAlertDeliveryId;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertIntent;
 import net.enthusia.staff.domain.auth.StaffRank;
 
@@ -14,7 +15,12 @@ public interface PunishmentRequestAlertStore {
     boolean insert(PunishmentRequestAlertIntent intent);
 
     List<PunishmentRequestAlertClaim> claimDirect(
-            UUID recipientId, String owner, int limit, Duration lease, Instant now);
+            UUID recipientId,
+            String owner,
+            int limit,
+            Duration lease,
+            Instant now
+    );
 
     List<PunishmentRequestAlertClaim> claimAudience(
             PunishmentRequestAlertAudience audience,
@@ -23,21 +29,27 @@ public interface PunishmentRequestAlertStore {
             String owner,
             int limit,
             Duration lease,
-            Instant now);
+            Instant now
+    );
 
-    boolean delivered(UUID alertId, String owner, Instant now);
+    boolean delivered(PunishmentRequestAlertDeliveryId deliveryId, String owner, Instant now);
 
     boolean failed(
-            UUID alertId,
+            PunishmentRequestAlertDeliveryId deliveryId,
             String owner,
             String errorCode,
             Instant availableAt,
             Instant now,
-            int maximumAttempts);
+            int maximumAttempts
+    );
 
-    int reclaimExpired(Instant now, int limit);
+    boolean closeIntent(UUID alertId, String reason, Instant now);
+
+    int expireIntents(Instant now, int limit);
+
+    int reclaimExpiredDeliveries(Instant now, int limit);
 
     PunishmentRequestAlertBacklog backlog(Instant now);
 
-    int deleteDeliveredBefore(Instant cutoff, int limit);
+    int deleteTerminalIntentsBefore(Instant cutoff, int limit);
 }

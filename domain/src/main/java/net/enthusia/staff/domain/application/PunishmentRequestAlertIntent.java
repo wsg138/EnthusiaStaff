@@ -18,7 +18,8 @@ public record PunishmentRequestAlertIntent(
         StaffRank minimumRank,
         CaseVisibility visibility,
         int schemaVersion,
-        Instant createdAt
+        Instant createdAt,
+        Instant expiresAt
 ) {
     public PunishmentRequestAlertIntent {
         Objects.requireNonNull(alertId, "alertId");
@@ -27,11 +28,15 @@ public record PunishmentRequestAlertIntent(
         Objects.requireNonNull(audience, "audience");
         Objects.requireNonNull(visibility, "visibility");
         Objects.requireNonNull(createdAt, "createdAt");
+        Objects.requireNonNull(expiresAt, "expiresAt");
         if (intentKey == null || intentKey.isBlank() || intentKey.length() > 160) {
             throw new IllegalArgumentException("alert intent key must be present and at most 160 characters");
         }
         if (requestRevision < 0 || schemaVersion < 1) {
             throw new IllegalArgumentException("alert revision and schema version must be valid");
+        }
+        if (!expiresAt.isAfter(createdAt)) {
+            throw new IllegalArgumentException("alert intent expiry must be after creation");
         }
         switch (audience) {
             case DIRECT_RECIPIENT -> {
