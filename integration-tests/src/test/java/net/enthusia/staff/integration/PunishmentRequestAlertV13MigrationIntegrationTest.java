@@ -58,7 +58,6 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
                     SELECT state FROM staff_alert_deliveries
                     WHERE alert_id=? AND recipient_id=?
                     """, alertId, recipientId));
-            assertTrue(columnIsNotNullable(dataSource, "staff_alerts", "occurrence_key"));
             assertTrue(enumContains(dataSource, "staff_alert_deliveries", "state", "CANCELLED"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancelled_at"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancel_reason"));
@@ -124,14 +123,6 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
         }
     }
 
-    private static boolean columnIsNotNullable(
-            HikariDataSource dataSource,
-            String table,
-            String column
-    ) throws Exception {
-        return "NO".equals(metadataValue(dataSource, table, column, "IS_NULLABLE"));
-    }
-
     private static boolean columnExists(
             HikariDataSource dataSource,
             String table,
@@ -157,10 +148,6 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             String selectedColumn
     ) throws Exception {
         String sql = switch (selectedColumn) {
-            case "IS_NULLABLE" -> """
-                    SELECT IS_NULLABLE FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?
-                    """;
             case "COLUMN_NAME" -> """
                     SELECT COLUMN_NAME FROM information_schema.COLUMNS
                     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?

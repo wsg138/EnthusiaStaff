@@ -7,10 +7,10 @@ SET occurrence_key = COALESCE(
         CONCAT('legacy-request-revision:', request_revision),
         CONCAT('legacy-alert-id:', LOWER(HEX(alert_id)))
     )
-WHERE occurrence_key IS NULL;
+WHERE occurrence_key IS NULL
+  AND request_id IS NOT NULL;
 
 ALTER TABLE staff_alerts
-    MODIFY COLUMN occurrence_key VARCHAR(160) NOT NULL,
     ADD INDEX idx_staff_alerts_event_occurrence (
         request_id, lifecycle_event, occurrence_key, audience, alert_id
     );
