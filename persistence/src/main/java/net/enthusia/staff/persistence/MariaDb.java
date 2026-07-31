@@ -11,7 +11,12 @@ public final class MariaDb {
     }
 
     public static HikariDataSource open(DatabaseConfig database) {
+        return new HikariDataSource(hikariConfig(database));
+    }
+
+    static HikariConfig hikariConfig(DatabaseConfig database) {
         HikariConfig config = new HikariConfig();
+        config.setDriverClassName("org.mariadb.jdbc.Driver");
         config.setJdbcUrl(database.jdbcUrl());
         config.setUsername(database.username());
         config.setPassword(database.password());
@@ -22,7 +27,7 @@ public final class MariaDb {
         config.setPoolName("EnthusiaStaff-MariaDB");
         config.setAutoCommit(true);
         config.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
-        return new HikariDataSource(config);
+        return config;
     }
 
     public static MigrateResult migrate(DataSource dataSource) {
