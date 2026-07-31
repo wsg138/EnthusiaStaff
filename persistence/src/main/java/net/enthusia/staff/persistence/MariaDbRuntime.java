@@ -58,7 +58,9 @@ public final class MariaDbRuntime implements AutoCloseable {
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
         this.moderationStore = moderation;
         this.punishmentRequestStore = new JdbcPunishmentRequestStore(dataSource, json, moderation);
-        this.punishmentRequestAlertStore = new JdbcPunishmentRequestAlertStore(dataSource);
+        this.punishmentRequestAlertStore = new RetryingPunishmentRequestAlertStore(
+                new JdbcPunishmentRequestAlertStore(dataSource)
+        );
         this.operationalStateStore = new JdbcOperationalStateStore(dataSource);
         this.sanctionLookup = new JdbcSanctionLookup(dataSource);
         this.playerDirectory = new JdbcPlayerDirectory(dataSource);
