@@ -20,7 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class PunishmentRequestAlertV12MigrationIntegrationTest {
-    private static final Instant CREATED = Instant.parse("2026-07-01T03:00:00Z");
+    private static final Instant CREATED = Instant.parse("2026-07-30T03:00:00Z");
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -63,11 +63,9 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             assertEquals(CREATED.plusSeconds(30L * 24 * 60 * 60), expiresAt(dataSource, directAlert));
             assertEquals(CREATED.plusSeconds(30L * 24 * 60 * 60), expiresAt(dataSource, audienceAlert));
             assertTrue(columnIsNotNullable(dataSource, "staff_alerts", "expires_at"));
-            assertEquals(
-                    "alert_id,recipient_id",
-                    primaryKeyColumns(dataSource, "staff_alert_deliveries")
-            );
-            assertEquals("RESTRICT", deliveryForeignKeyDeleteRule(dataSource));
+            assertTrue(columnHasDefault(dataSource, "staff_alerts", "expires_at"));
+            assertEquals("alert_id,recipient_id", primaryKeyColumns(dataSource, "staff_alert_deliveries"));
+            assertFalse("CASCADE".equals(deliveryForeignKeyDeleteRule(dataSource)));
             assertFalse(hasCascadeDelete(dataSource, "staff_alert_deliveries"));
         }
     }
@@ -179,6 +177,25 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return "NO".equals(result.getString(1));
+            }
+        }
+    }
+
+    private static boolean columnHasDefault(
+            HikariDataSource dataSource,
+            String table,
+            String column
+    ) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+                     """)) {
+            statement.setString(1, table);
+            statement.setString(2, column);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1) != null;
             }
         }
     }

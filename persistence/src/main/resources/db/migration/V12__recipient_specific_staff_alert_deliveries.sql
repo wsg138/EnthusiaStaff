@@ -14,7 +14,8 @@ SET expires_at = created_at + INTERVAL 30 DAY
 WHERE expires_at IS NULL;
 
 ALTER TABLE staff_alerts
-    MODIFY COLUMN expires_at TIMESTAMP(6) NOT NULL;
+    MODIFY COLUMN expires_at TIMESTAMP(6) NOT NULL
+        DEFAULT (CURRENT_TIMESTAMP(6) + INTERVAL 30 DAY);
 
 CREATE TABLE IF NOT EXISTS staff_alert_deliveries (
     alert_id BINARY(16) NOT NULL,

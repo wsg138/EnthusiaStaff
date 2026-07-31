@@ -126,7 +126,6 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 dataSource,
                 "Unable to complete punishment request alert delivery",
                 connection -> {
-                    int updated;
                     try (PreparedStatement statement = connection.prepareStatement("""
                             UPDATE staff_alert_deliveries
                             SET state = 'DELIVERED', delivered_at = ?, lease_owner = NULL,
@@ -139,21 +138,11 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                         bindDeliveryId(statement, 3, deliveryId);
                         statement.setString(5, owner);
                         statement.setTimestamp(6, Timestamp.from(now));
-                        updated = statement.executeUpdate();
+                        if (statement.executeUpdate() != 1) {
+                            return false;
+                        }
                     }
-                    if (updated != 1) {
-                        return false;
-                    }
-                    try (PreparedStatement intent = connection.prepareStatement("""
-                            UPDATE staff_alerts
-                            SET intent_state = 'CLOSED', closed_at = ?, close_reason = 'DIRECT_DELIVERED'
-                            WHERE alert_id = ? AND audience = 'DIRECT_RECIPIENT'
-                              AND intent_state = 'ACTIVE'
-                            """)) {
-                        intent.setTimestamp(1, Timestamp.from(now));
-                        intent.setBytes(2, UuidBytes.toBytes(deliveryId.alertId()));
-                        intent.executeUpdate();
-                    }
+                    closeDeliveredDirectIntent(connection, deliveryId.alertId(), now);
                     return true;
                 }
         );
@@ -199,7 +188,6 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         if (alertId == null || now == null) {
             throw new IllegalArgumentException("valid alert intent closure fields are required");
         }
-        String normalizedReason = safeReason(reason);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      UPDATE staff_alerts
@@ -207,7 +195,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                      WHERE alert_id = ? AND intent_state = 'ACTIVE'
                      """)) {
             statement.setTimestamp(1, Timestamp.from(now));
-            statement.setString(2, normalizedReason);
+            statement.setString(2, safeReason(reason));
             statement.setBytes(3, UuidBytes.toBytes(alertId));
             return statement.executeUpdate() == 1;
         } catch (SQLException exception) {
@@ -328,15 +316,24 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             StoredIntent byKey = findStoredIntent(connection, "intent_key = ?", intent.intentKey());
             StoredIntent byId = findStoredIntent(connection, "alert_id = ?", intent.alertId());
             if (byKey == null) {
-                throw duplicateConflict("duplicate alert identifier does not match the deterministic intent key", exception);
+                throw duplicateConflict(
+                        "duplicate alert identifier does not match the deterministic intent key",
+                        exception
+                );
             }
             if (byId != null && !byId.alertId().equals(byKey.alertId())) {
-                throw duplicateConflict("alert identifier and deterministic intent key resolve to different rows", exception);
+                throw duplicateConflict(
+                        "alert identifier and deterministic intent key resolve to different rows",
+                        exception
+                );
             }
             if (!byKey.matches(intent)) {
-                throw duplicateConflict("deterministic intent key conflicts with different immutable fields", exception);
+                throw duplicateConflict(
+                        "deterministic intent key conflicts with different immutable fields",
+                        exception
+                );
             }
-            ensureDirectDelivery(connection, byKey.withStoredIdentity(intent));
+            ensureDirectDelivery(connection, byKey.asIntent());
             return false;
         }
     }
@@ -377,18 +374,32 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         if (intent.audience() != PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
             return;
         }
+        insertDeliveryIfAbsent(
+                connection,
+                intent.alertId(),
+                intent.recipientId(),
+                intent.createdAt()
+        );
+    }
+
+    private static void insertDeliveryIfAbsent(
+            Connection connection,
+            UUID alertId,
+            UUID recipientId,
+            Instant availableAt
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO staff_alert_deliveries(
                     alert_id, recipient_id, state, attempt_count, available_at, created_at, updated_at)
                 VALUES (?, ?, 'PENDING', 0, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id)
                 """)) {
-            statement.setBytes(1, UuidBytes.toBytes(intent.alertId()));
-            statement.setBytes(2, UuidBytes.toBytes(intent.recipientId()));
-            Timestamp created = Timestamp.from(intent.createdAt());
-            statement.setTimestamp(3, created);
-            statement.setTimestamp(4, created);
-            statement.setTimestamp(5, created);
+            Timestamp timestamp = Timestamp.from(availableAt);
+            statement.setBytes(1, UuidBytes.toBytes(alertId));
+            statement.setBytes(2, UuidBytes.toBytes(recipientId));
+            statement.setTimestamp(3, timestamp);
+            statement.setTimestamp(4, timestamp);
+            statement.setTimestamp(5, timestamp);
             statement.executeUpdate();
         }
     }
@@ -402,7 +413,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO staff_alert_deliveries(
                     alert_id, recipient_id, state, attempt_count, available_at, created_at, updated_at)
-                SELECT i.alert_id, i.recipient_id, 'PENDING', 0, ?, ?, ?
+                SELECT i.alert_id, i.recipient_id, 'PENDING', 0, i.created_at, i.created_at, ?
                 FROM staff_alerts i
                 WHERE i.audience = 'DIRECT_RECIPIENT'
                   AND i.recipient_id = ?
@@ -416,13 +427,10 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 LIMIT ?
                 ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id)
                 """)) {
-            Timestamp timestamp = Timestamp.from(now);
-            statement.setTimestamp(1, timestamp);
-            statement.setTimestamp(2, timestamp);
-            statement.setTimestamp(3, timestamp);
-            statement.setBytes(4, UuidBytes.toBytes(recipientId));
-            statement.setTimestamp(5, timestamp);
-            statement.setInt(6, limit);
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(recipientId));
+            statement.setTimestamp(3, Timestamp.from(now));
+            statement.setInt(4, limit);
             statement.executeUpdate();
         }
     }
@@ -435,13 +443,13 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             int limit,
             Instant now
     ) throws SQLException {
-        String eligibility = audience == PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS
-                ? "AND i.excluded_recipient_id <> ? AND " + reviewerRankClause(recipientRank)
+        String recipientEligibility = audience == PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS
+                ? "AND i.excluded_recipient_id <> ? AND " + reviewerRankClause(recipientRank, "i")
                 : "";
         String sql = """
                 INSERT INTO staff_alert_deliveries(
                     alert_id, recipient_id, state, attempt_count, available_at, created_at, updated_at)
-                SELECT i.alert_id, ?, 'PENDING', 0, ?, ?, ?
+                SELECT i.alert_id, ?, 'PENDING', 0, i.created_at, i.created_at, ?
                 FROM staff_alerts i
                 WHERE i.audience = ?
                   AND i.intent_state = 'ACTIVE'
@@ -454,16 +462,13 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 ORDER BY i.created_at, i.alert_id
                 LIMIT ?
                 ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id)
-                """.formatted(eligibility);
+                """.formatted(recipientEligibility);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            Timestamp timestamp = Timestamp.from(now);
             int index = 1;
             statement.setBytes(index++, UuidBytes.toBytes(recipientId));
-            statement.setTimestamp(index++, timestamp);
-            statement.setTimestamp(index++, timestamp);
-            statement.setTimestamp(index++, timestamp);
+            statement.setTimestamp(index++, Timestamp.from(now));
             statement.setString(index++, audience.name());
-            statement.setTimestamp(index++, timestamp);
+            statement.setTimestamp(index++, Timestamp.from(now));
             if (audience == PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS) {
                 statement.setBytes(index++, UuidBytes.toBytes(recipientId));
             }
@@ -483,109 +488,192 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             Duration lease,
             Instant now
     ) throws SQLException {
-        String eligibility = switch (audience) {
-            case DIRECT_RECIPIENT -> "AND i.recipient_id = d.recipient_id";
-            case ELIGIBLE_REVIEWERS -> "AND i.excluded_recipient_id <> d.recipient_id AND "
-                    + reviewerRankClause(recipientRank);
-            case OPERATIONAL_ADMINISTRATORS -> "";
-        };
+        List<DeliveryCandidate> candidates = selectDueDeliveries(
+                connection,
+                audience,
+                recipientId,
+                recipientRank,
+                limit,
+                now
+        );
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        Instant leaseUntil = now.plus(lease);
+        leaseDeliveries(
+                connection,
+                audience,
+                recipientRank,
+                candidates,
+                owner,
+                now,
+                leaseUntil
+        );
+        return loadClaims(connection, candidates, leaseUntil);
+    }
+
+    private static List<DeliveryCandidate> selectDueDeliveries(
+            Connection connection,
+            PunishmentRequestAlertAudience audience,
+            UUID recipientId,
+            StaffRank recipientRank,
+            int limit,
+            Instant now
+    ) throws SQLException {
+        String eligibility = audienceEligibility(audience, recipientRank, "i", "d");
         String sql = """
-                SELECT d.alert_id delivery_alert_id, d.recipient_id delivery_recipient_id,
-                       d.attempt_count delivery_attempt_count,
-                       i.intent_key, i.request_id, i.request_revision, i.lifecycle_event,
-                       i.audience, i.recipient_id, i.excluded_recipient_id, i.minimum_rank,
-                       i.visibility, i.schema_version, i.created_at, i.expires_at
+                SELECT d.alert_id, d.recipient_id, d.attempt_count
                 FROM staff_alert_deliveries d
-                JOIN staff_alerts i ON i.alert_id = d.alert_id
                 WHERE d.recipient_id = ?
-                  AND i.audience = ?
-                  AND i.intent_state = 'ACTIVE'
-                  AND i.expires_at > ?
                   AND (
                       (d.state = 'PENDING' AND d.available_at <= ?)
                       OR (d.state = 'LEASED' AND d.lease_until <= ?)
                   )
-                  %s
-                ORDER BY d.available_at, i.created_at, d.alert_id
+                  AND EXISTS (
+                      SELECT 1 FROM staff_alerts i
+                      WHERE i.alert_id = d.alert_id
+                        AND i.audience = ?
+                        AND i.intent_state = 'ACTIVE'
+                        AND i.expires_at > ?
+                        %s
+                  )
+                ORDER BY d.available_at, d.created_at, d.alert_id
                 LIMIT ? FOR UPDATE SKIP LOCKED
                 """.formatted(eligibility);
-        Instant leaseUntil = now.plus(lease);
-        List<PunishmentRequestAlertClaim> claims = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             Timestamp timestamp = Timestamp.from(now);
             statement.setBytes(1, UuidBytes.toBytes(recipientId));
-            statement.setString(2, audience.name());
+            statement.setTimestamp(2, timestamp);
             statement.setTimestamp(3, timestamp);
-            statement.setTimestamp(4, timestamp);
+            statement.setString(4, audience.name());
             statement.setTimestamp(5, timestamp);
             statement.setInt(6, limit);
             try (ResultSet result = statement.executeQuery()) {
+                List<DeliveryCandidate> candidates = new ArrayList<>();
                 while (result.next()) {
-                    claims.add(readClaim(result, leaseUntil));
+                    candidates.add(new DeliveryCandidate(
+                            new PunishmentRequestAlertDeliveryId(
+                                    UuidBytes.fromBytes(result.getBytes("alert_id")),
+                                    UuidBytes.fromBytes(result.getBytes("recipient_id"))
+                            ),
+                            result.getInt("attempt_count")
+                    ));
                 }
+                return candidates;
             }
         }
-        lease(connection, claims, owner, now, leaseUntil);
-        return List.copyOf(claims);
     }
 
-    private static PunishmentRequestAlertClaim readClaim(ResultSet result, Instant leaseUntil)
+    private static void leaseDeliveries(
+            Connection connection,
+            PunishmentRequestAlertAudience audience,
+            StaffRank recipientRank,
+            List<DeliveryCandidate> candidates,
+            String owner,
+            Instant now,
+            Instant leaseUntil
+    ) throws SQLException {
+        String eligibility = audienceEligibility(audience, recipientRank, "i", "d");
+        String sql = """
+                UPDATE staff_alert_deliveries d
+                SET d.state = 'LEASED', d.lease_owner = ?, d.lease_until = ?,
+                    d.attempt_count = d.attempt_count + 1, d.updated_at = ?
+                WHERE d.alert_id = ? AND d.recipient_id = ?
+                  AND (
+                      d.state = 'PENDING'
+                      OR (d.state = 'LEASED' AND d.lease_until <= ?)
+                  )
+                  AND EXISTS (
+                      SELECT 1 FROM staff_alerts i
+                      WHERE i.alert_id = d.alert_id
+                        AND i.audience = ?
+                        AND i.intent_state = 'ACTIVE'
+                        AND i.expires_at > ?
+                        %s
+                  )
+                """.formatted(eligibility);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (DeliveryCandidate candidate : candidates) {
+                statement.setString(1, owner);
+                statement.setTimestamp(2, Timestamp.from(leaseUntil));
+                statement.setTimestamp(3, Timestamp.from(now));
+                bindDeliveryId(statement, 4, candidate.deliveryId());
+                statement.setTimestamp(6, Timestamp.from(now));
+                statement.setString(7, audience.name());
+                statement.setTimestamp(8, Timestamp.from(now));
+                statement.addBatch();
+            }
+            JdbcTransactionSupport.requireBatchUpdate(
+                    statement.executeBatch(),
+                    candidates.size(),
+                    "punishment request alert delivery lost eligibility while acquiring its lease"
+            );
+        }
+    }
+
+    private static List<PunishmentRequestAlertClaim> loadClaims(
+            Connection connection,
+            List<DeliveryCandidate> candidates,
+            Instant leaseUntil
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT intent_key, request_id, request_revision, lifecycle_event, audience,
+                       recipient_id, excluded_recipient_id, minimum_rank, visibility,
+                       schema_version, created_at, expires_at
+                FROM staff_alerts WHERE alert_id = ?
+                """)) {
+            List<PunishmentRequestAlertClaim> claims = new ArrayList<>();
+            for (DeliveryCandidate candidate : candidates) {
+                statement.setBytes(1, UuidBytes.toBytes(candidate.deliveryId().alertId()));
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) {
+                        throw new SQLException("punishment request alert intent disappeared after leasing");
+                    }
+                    claims.add(new PunishmentRequestAlertClaim(
+                            candidate.deliveryId(),
+                            readIntent(result, candidate.deliveryId().alertId()),
+                            candidate.attemptCount() + 1,
+                            leaseUntil
+                    ));
+                }
+            }
+            return List.copyOf(claims);
+        }
+    }
+
+    private static PunishmentRequestAlertIntent readIntent(ResultSet result, UUID alertId)
             throws SQLException {
-        UUID alertId = UuidBytes.fromBytes(result.getBytes("delivery_alert_id"));
-        UUID deliveryRecipient = UuidBytes.fromBytes(result.getBytes("delivery_recipient_id"));
-        byte[] directRecipient = result.getBytes("recipient_id");
-        byte[] excludedRecipient = result.getBytes("excluded_recipient_id");
-        String rank = result.getString("minimum_rank");
-        PunishmentRequestAlertIntent intent = new PunishmentRequestAlertIntent(
+        return new PunishmentRequestAlertIntent(
                 alertId,
                 result.getString("intent_key"),
                 UuidBytes.fromBytes(result.getBytes("request_id")),
                 result.getLong("request_revision"),
                 PunishmentRequestLifecycleEventType.valueOf(result.getString("lifecycle_event")),
                 PunishmentRequestAlertAudience.valueOf(result.getString("audience")),
-                directRecipient == null ? null : UuidBytes.fromBytes(directRecipient),
-                excludedRecipient == null ? null : UuidBytes.fromBytes(excludedRecipient),
-                rank == null ? null : StaffRank.valueOf(rank),
+                uuid(result, "recipient_id"),
+                uuid(result, "excluded_recipient_id"),
+                rank(result.getString("minimum_rank")),
                 CaseVisibility.valueOf(result.getString("visibility")),
                 result.getInt("schema_version"),
                 result.getTimestamp("created_at").toInstant(),
                 result.getTimestamp("expires_at").toInstant()
         );
-        return new PunishmentRequestAlertClaim(
-                new PunishmentRequestAlertDeliveryId(alertId, deliveryRecipient),
-                intent,
-                result.getInt("delivery_attempt_count") + 1,
-                leaseUntil
-        );
     }
 
-    private static void lease(
+    private static void closeDeliveredDirectIntent(
             Connection connection,
-            List<PunishmentRequestAlertClaim> claims,
-            String owner,
-            Instant now,
-            Instant leaseUntil
+            UUID alertId,
+            Instant now
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE staff_alert_deliveries
-                SET state = 'LEASED', lease_owner = ?, lease_until = ?,
-                    attempt_count = attempt_count + 1, updated_at = ?
-                WHERE alert_id = ? AND recipient_id = ?
-                  AND (state = 'PENDING' OR (state = 'LEASED' AND lease_until <= ?))
+                UPDATE staff_alerts
+                SET intent_state = 'CLOSED', closed_at = ?, close_reason = 'DIRECT_DELIVERED'
+                WHERE alert_id = ? AND audience = 'DIRECT_RECIPIENT'
+                  AND intent_state = 'ACTIVE'
                 """)) {
-            for (PunishmentRequestAlertClaim claim : claims) {
-                statement.setString(1, owner);
-                statement.setTimestamp(2, Timestamp.from(leaseUntil));
-                statement.setTimestamp(3, Timestamp.from(now));
-                bindDeliveryId(statement, 4, claim.deliveryId());
-                statement.setTimestamp(6, Timestamp.from(now));
-                statement.addBatch();
-            }
-            JdbcTransactionSupport.requireBatchUpdate(
-                    statement.executeBatch(),
-                    claims.size(),
-                    "punishment request alert delivery disappeared while acquiring its lease"
-            );
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(alertId));
+            statement.executeUpdate();
         }
     }
 
@@ -604,10 +692,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 statement.setString(1, Objects.toString(value));
             }
             try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return null;
-                }
-                return StoredIntent.read(result);
+                return result.next() ? StoredIntent.read(result) : null;
             }
         }
     }
@@ -642,7 +727,8 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         }
     }
 
-    private static void deleteDeliveries(Connection connection, List<UUID> alertIds) throws SQLException {
+    private static void deleteDeliveries(Connection connection, List<UUID> alertIds)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM staff_alert_deliveries WHERE alert_id = ?")) {
             for (UUID alertId : alertIds) {
@@ -653,7 +739,8 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         }
     }
 
-    private static void deleteIntents(Connection connection, List<UUID> alertIds) throws SQLException {
+    private static void deleteIntents(Connection connection, List<UUID> alertIds)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM staff_alerts WHERE alert_id = ?")) {
             for (UUID alertId : alertIds) {
@@ -680,11 +767,26 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         };
     }
 
-    private static String reviewerRankClause(StaffRank rank) {
+    private static String audienceEligibility(
+            PunishmentRequestAlertAudience audience,
+            StaffRank rank,
+            String intentAlias,
+            String deliveryAlias
+    ) {
+        return switch (audience) {
+            case DIRECT_RECIPIENT -> "AND " + intentAlias + ".recipient_id = "
+                    + deliveryAlias + ".recipient_id";
+            case ELIGIBLE_REVIEWERS -> "AND " + intentAlias + ".excluded_recipient_id <> "
+                    + deliveryAlias + ".recipient_id AND " + reviewerRankClause(rank, intentAlias);
+            case OPERATIONAL_ADMINISTRATORS -> "";
+        };
+    }
+
+    private static String reviewerRankClause(StaffRank rank, String alias) {
         return switch (rank) {
-            case MOD -> "i.minimum_rank IN ('HELPER', 'MOD')";
-            case ADMIN -> "i.minimum_rank IN ('HELPER', 'MOD', 'ADMIN')";
-            case FOUNDER -> "i.minimum_rank IN ('HELPER', 'MOD', 'ADMIN', 'FOUNDER')";
+            case MOD -> alias + ".minimum_rank IN ('HELPER', 'MOD')";
+            case ADMIN -> alias + ".minimum_rank IN ('HELPER', 'MOD', 'ADMIN')";
+            case FOUNDER -> alias + ".minimum_rank IN ('HELPER', 'MOD', 'ADMIN', 'FOUNDER')";
             default -> "FALSE";
         };
     }
@@ -707,7 +809,8 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         statement.setBytes(firstIndex + 1, UuidBytes.toBytes(deliveryId.recipientId()));
     }
 
-    private static void setUuid(PreparedStatement statement, int index, UUID value) throws SQLException {
+    private static void setUuid(PreparedStatement statement, int index, UUID value)
+            throws SQLException {
         if (value == null) {
             statement.setNull(index, Types.BINARY);
         } else {
@@ -715,12 +818,22 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         }
     }
 
-    private static void setRank(PreparedStatement statement, int index, StaffRank value) throws SQLException {
+    private static void setRank(PreparedStatement statement, int index, StaffRank value)
+            throws SQLException {
         if (value == null) {
             statement.setNull(index, Types.VARCHAR);
         } else {
             statement.setString(index, value.name());
         }
+    }
+
+    private static UUID uuid(ResultSet result, String column) throws SQLException {
+        byte[] value = result.getBytes(column);
+        return value == null ? null : UuidBytes.fromBytes(value);
+    }
+
+    private static StaffRank rank(String value) {
+        return value == null ? null : StaffRank.valueOf(value);
     }
 
     private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
@@ -767,21 +880,18 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         return normalized;
     }
 
-    private static Instant instant(ResultSet result, String column) throws SQLException {
-        Timestamp value = result.getTimestamp(column);
-        return value == null ? null : value.toInstant();
-    }
-
-    private static UUID uuid(ResultSet result, String column) throws SQLException {
-        byte[] value = result.getBytes(column);
-        return value == null ? null : UuidBytes.fromBytes(value);
-    }
-
     private static boolean sameInstant(Instant first, Instant second) {
         if (first == null || second == null) {
             return first == second;
         }
-        return first.truncatedTo(ChronoUnit.MICROS).equals(second.truncatedTo(ChronoUnit.MICROS));
+        return first.truncatedTo(ChronoUnit.MICROS)
+                .equals(second.truncatedTo(ChronoUnit.MICROS));
+    }
+
+    private record DeliveryCandidate(
+            PunishmentRequestAlertDeliveryId deliveryId,
+            int attemptCount
+    ) {
     }
 
     private record StoredIntent(
@@ -814,8 +924,8 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                     result.getString("minimum_rank"),
                     result.getString("visibility"),
                     version == null ? null : ((Number) version).intValue(),
-                    instant(result, "created_at"),
-                    instant(result, "expires_at")
+                    result.getTimestamp("created_at").toInstant(),
+                    result.getTimestamp("expires_at").toInstant()
             );
         }
 
@@ -835,19 +945,19 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                     && sameInstant(expiresAt, intent.expiresAt());
         }
 
-        private PunishmentRequestAlertIntent withStoredIdentity(PunishmentRequestAlertIntent source) {
+        private PunishmentRequestAlertIntent asIntent() {
             return new PunishmentRequestAlertIntent(
                     alertId,
                     intentKey,
-                    source.requestId(),
-                    source.requestRevision(),
-                    source.eventType(),
-                    source.audience(),
-                    source.recipientId(),
-                    source.excludedRecipientId(),
-                    source.minimumRank(),
-                    source.visibility(),
-                    source.schemaVersion(),
+                    requestId,
+                    requestRevision,
+                    PunishmentRequestLifecycleEventType.valueOf(lifecycleEvent),
+                    PunishmentRequestAlertAudience.valueOf(audience),
+                    recipientId,
+                    excludedRecipientId,
+                    rank(minimumRank),
+                    CaseVisibility.valueOf(visibility),
+                    schemaVersion,
                     createdAt,
                     expiresAt
             );
