@@ -10,7 +10,7 @@ LiteBans.
 
 | Repository | Default branch | Working branch | Current checkpoint | Validation state | Current blockers |
 | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `main` at merged PR #21 commit `90cfb0eb809b2895d105193b7bddf33fd6f95aa0` | `section/punishment-request-notifications-recovery` for draft PR #27 | Checkpoint B1 validated at `5e06fa952e4ed741569a3b12d8482e5a5e3b28b1`; Checkpoint B1.1 corrects shared-audience consumption with recipient-specific delivery rows and precise duplicate verification | B1 Coverage run `30600138458` succeeded. B1.1 exact-head validation is required before B1.1 is recorded as tested. | PR #27 must remain draft and unmerged. B2 lifecycle transaction wiring, workers, Paper delivery, and Discord production remain outstanding. |
+| EnthusiaStaff | `main` at merged PR #21 commit `90cfb0eb809b2895d105193b7bddf33fd6f95aa0` | `section/punishment-request-notifications-recovery` for draft PR #27 | Checkpoint B1.1 implementation and tests validated at `d2af2f84d63b0dba3b26e229b171c7e8a5cbee19`; shared-audience consumption is replaced by recipient-specific delivery state and immutable-intent replay verification | PASS: Coverage run `30602610807`; Java 21 clean build, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime inspection, 24 provider source checks per runtime jar, zero provider API leakage; artifact `8782483629` | PR #27 must remain draft and unmerged. B2 lifecycle transaction wiring, workers, Paper delivery, and Discord production remain outstanding. |
 | EnthusiaStaff-Staging | Separate repository; not inspected or modified in this checkpoint | Unchanged | OUT OF SCOPE | NOT_RUN | Owned by the separate staging workflow/chat. |
 
 ## Merged PR #21 checkpoint
@@ -28,19 +28,50 @@ LiteBans.
 - Checkpoint A head: `ccbd7806452c4dc5084fd03d76a496da324e6a87`.
 - Checkpoint A validation: Coverage run `30599247739`, success; artifact `8781297271`.
 - Checkpoint B1 head: `5e06fa952e4ed741569a3b12d8482e5a5e3b28b1`.
-- Checkpoint B1 validation: Coverage run `30600138458`, success; Java 21 build,
-  MariaDB Testcontainers, Paper/Velocity runtime inspection, 24 provider source
-  checks per runtime jar, zero provider API leakage; artifact `8781596037`.
-- B1.1 commit sequence begins with:
+- Checkpoint B1 validation: Coverage run `30600138458`, success; artifact `8781596037`.
+- Checkpoint B1.1 validated implementation/test head:
+  `d2af2f84d63b0dba3b26e229b171c7e8a5cbee19`.
+- B1.1 commit sequence:
   - `f415def0c0546e8fa389e10f2ea27eb518d2baef`: recipient-specific delivery
     identity, claim/backlog contracts, explicit intent expiry, and domain tests.
   - `9aef770759f7a31ab8be8fd170b347f44deafa94`: forward-only Flyway V12 and
     recipient-specific JDBC delivery persistence.
-  - The test/documentation head and its exact validation evidence are recorded
-    after the final B1.1 commit and required checks complete.
+  - `d02c882dc69f60ec6ca9b6780e879d7053bcd72f`: concurrency, migration,
+    idempotency, lifecycle, retention, and restart Testcontainers coverage plus
+    checkpoint documentation.
+  - `df7e717e131b7a7f6b25b15310c8018792d6180d`: test-compilation correction.
+  - `43a08760b77463fd66684fb273c508b1f2ea24a9`: preserve the legacy 30-day
+    alert-expiry default and prevent different recipients from contending on the
+    shared intent row during delivery leasing.
+  - `d2af2f84d63b0dba3b26e229b171c7e8a5cbee19`: correct the bounded terminal
+    cleanup expectation after the complete cleanup set was verified.
 - B1.1 deliberately does not wire request submission, claim, approval, denial,
   external fulfillment, bounded request expiration transitions, Paper listeners,
   schedulers, Bukkit delivery, or Discord network delivery.
+
+## B1.1 validation evidence
+
+Exact implementation/test head: `d2af2f84d63b0dba3b26e229b171c7e8a5cbee19`.
+
+- Workflow: Coverage run `30602610807`, success.
+- Runtime: Temurin Java `21.0.11+10`.
+- Command: clean multi-module `build`, `jacocoAggregateReport`, and `runtimeJars`
+  with the build cache and configuration cache disabled.
+- Gradle result: `BUILD SUCCESSFUL`; 49 actionable tasks, 40 executed and 9
+  up-to-date.
+- MariaDB 11.8.3 Testcontainers executed, including the V11-to-V12 upgrade path.
+- Aggregate JaCoCo: lines `33.52%`, branches `27.47%`, instructions `35.86%`.
+- Exactly one Paper runtime jar and one Velocity runtime jar were found and passed
+  ZIP integrity inspection.
+- Twenty-four provider API source types were checked against each runtime jar;
+  provider API leakage was zero for both.
+- Paper SHA-256:
+  `74626027bb8ab5a5bc9df6c516d59a4a38b1d9b601c04aa32428edb5de5ff4c4`.
+- Velocity SHA-256:
+  `44b08c509a1e1d6dc08bd3311118e6ac1d05126d1ae8a130b62186df00d5b662`.
+- Validation artifact: `8782483629`; artifact digest:
+  `sha256:98b1c456fcc8034a95795dbf7d9ad1d638942472d4cb1ed6ec93cb0b3a88a9f2`.
+- Codacy coverage upload and final notification succeeded.
 
 ## Audience-consumption correction
 
@@ -70,8 +101,9 @@ B1.1 separates the two concerns:
 V12 is forward-only and does not edit or renumber V11. It:
 
 - adds `intent_state`, `closed_at`, and `close_reason` to `staff_alerts`;
-- backfills null legacy `expires_at` values to `created_at + 30 days` and makes
-  `expires_at` non-null;
+- backfills null legacy `expires_at` values to `created_at + 30 days`;
+- makes `expires_at` non-null while retaining a 30-day default for legacy
+  producers that do not yet supply explicit lifecycle expiry;
 - adds intent eligibility and retention indexes;
 - creates `staff_alert_deliveries` with composite primary key `(alert_id,
   recipient_id)`;
@@ -83,9 +115,9 @@ V12 is forward-only and does not edit or renumber V11. It:
   received it.
 
 The legacy V11 `staff_alerts.state` and lease columns remain for compatibility but
-are no longer the authoritative state for B1.1 delivery. `intent_state` controls
-whether an intent accepts new recipients; `staff_alert_deliveries.state` controls
-one recipient's delivery.
+are no longer authoritative for B1.1 delivery. `intent_state` controls whether an
+intent accepts new recipients; `staff_alert_deliveries.state` controls one
+recipient's delivery.
 
 ## Intent and delivery lifecycle
 
@@ -103,15 +135,31 @@ one recipient's delivery.
   delivery rows before the non-cascading parent row.
 - Delivery remains at-least-once. No exactly-once claim is made.
 
+## Recipient claim and lease semantics
+
+- Direct delivery rows are guaranteed transactionally with intent insertion.
+- Audience delivery rows are inserted lazily for the current recipient only after
+  requester exclusion and current rank eligibility are checked.
+- Due selection locks only `staff_alert_deliveries` rows with `FOR UPDATE SKIP
+  LOCKED`; the shared immutable intent is checked through an eligibility
+  subquery, so different recipients can independently lease the same audience
+  intent while two servers cannot lease the same `(alert_id, recipient_id)` row.
+- Lease acquisition rechecks active/unexpired intent state, audience, requester
+  exclusion, and minimum rank before changing the recipient row.
+- Delivery and failure mutations require the explicit delivery identity, matching
+  owner, `LEASED` state, and an unexpired lease.
+- Attempts, retries, dead letters, reclaim, delivery, and restart persistence are
+  per recipient.
+
 ## Precise idempotent insertion
 
-Immutable intent insertion now uses a normal `INSERT`. MariaDB duplicate-key error
+Immutable intent insertion uses a normal `INSERT`. MariaDB duplicate-key error
 1062 is treated as a possible replay only after loading the stored row and
 verifying all canonical immutable fields. An identical deterministic-key replay
 returns the existing intent; a duplicate alert ID, mismatched canonical field, or
 unrelated SQL failure remains a persistence error. `INSERT ... ON DUPLICATE KEY`
 is limited to recipient delivery materialization, where the only unique identity
-is `(alert_id, recipient_id)` and all other constraint failures still propagate.
+is `(alert_id, recipient_id)` and other constraint failures still propagate.
 
 ## Isolation and release rules
 
