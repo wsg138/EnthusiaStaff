@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,9 +43,10 @@ class PunishmentRequestAlertCanonicalReplayIntegrationTest {
 
     @BeforeEach
     void clearAlertState() throws SQLException {
-        try (MariaDbRuntime ignored = runtime();
+        try (MariaDbRuntime runtime = runtime();
              Connection connection = connection();
              Statement statement = connection.createStatement()) {
+            assertNotNull(runtime.punishmentRequestAlertStore());
             statement.executeUpdate("DELETE FROM staff_alert_deliveries");
             statement.executeUpdate("DELETE FROM staff_alerts");
         }
