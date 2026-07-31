@@ -25,3 +25,6 @@ ALTER TABLE staff_alerts
 UPDATE staff_alerts
 SET available_at = created_at
 WHERE available_at IS NULL;
+
+ALTER TABLE staff_alerts
+    MODIFY COLUMN available_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);

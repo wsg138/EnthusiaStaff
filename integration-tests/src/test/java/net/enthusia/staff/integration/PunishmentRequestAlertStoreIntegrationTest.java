@@ -72,6 +72,8 @@ class PunishmentRequestAlertStoreIntegrationTest {
             assertEquals(1, claimed.size());
             assertEquals(first.alertId(), claimed.getFirst().alertId());
             assertFalse(store.delivered(first.alertId(), "paper:b", NOW.plusSeconds(3)));
+            assertFalse(store.failed(first.alertId(), "paper:a", "TOO_LATE",
+                    NOW.plus(LEASE).plusSeconds(4), NOW.plus(LEASE).plusSeconds(3), 3));
         }
         try (MariaDbRuntime restarted = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             PunishmentRequestAlertStore store = restarted.punishmentRequestAlertStore();
@@ -79,6 +81,8 @@ class PunishmentRequestAlertStoreIntegrationTest {
             var reclaimed = store.claimDirect(recipient, "paper:b", 10, LEASE, NOW.plus(LEASE).plusSeconds(4));
             assertEquals(2, reclaimed.size());
             assertFalse(store.delivered(first.alertId(), "paper:a", NOW.plus(LEASE).plusSeconds(5)));
+            assertFalse(store.failed(first.alertId(), "paper:a", "STALE_OWNER",
+                    NOW.plus(LEASE).plusSeconds(7), NOW.plus(LEASE).plusSeconds(6), 3));
             assertTrue(store.delivered(first.alertId(), "paper:b", NOW.plus(LEASE).plusSeconds(5)));
         }
     }
@@ -101,11 +105,13 @@ class PunishmentRequestAlertStoreIntegrationTest {
             var adminClaim = store.claimAudience(PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
                     UUID.randomUUID(), StaffRank.ADMIN, "paper:admin", 10, LEASE, NOW);
             assertEquals(1, adminClaim.size());
-            assertTrue(store.failed(reviewer.alertId(), "paper:admin", "TRANSIENT", NOW.plusSeconds(5), 2));
+            assertTrue(store.failed(reviewer.alertId(), "paper:admin", "TRANSIENT",
+                    NOW.plusSeconds(5), NOW.plusSeconds(1), 2));
             var retry = store.claimAudience(PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
                     UUID.randomUUID(), StaffRank.FOUNDER, "paper:founder", 10, LEASE, NOW.plusSeconds(6));
             assertEquals(1, retry.size());
-            assertTrue(store.failed(reviewer.alertId(), "paper:founder", "PERMANENT", NOW.plusSeconds(7), 2));
+            assertTrue(store.failed(reviewer.alertId(), "paper:founder", "PERMANENT",
+                    NOW.plusSeconds(7), NOW.plusSeconds(6), 2));
             assertEquals(1, store.backlog(NOW.plusSeconds(8)).deadLetter());
 
             assertTrue(store.claimAudience(PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS,

@@ -27,7 +27,13 @@ public interface PunishmentRequestAlertStore {
 
     boolean delivered(UUID alertId, String owner, Instant now);
 
-    boolean failed(UUID alertId, String owner, String errorCode, Instant availableAt, int maximumAttempts);
+    boolean failed(
+            UUID alertId,
+            String owner,
+            String errorCode,
+            Instant availableAt,
+            Instant now,
+            int maximumAttempts);
 
     int reclaimExpired(Instant now, int limit);
 

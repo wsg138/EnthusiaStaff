@@ -126,25 +126,46 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
     @Override
     public boolean delivered(UUID alertId, String owner, Instant now) {
         validateMutation(alertId, owner, now);
-        return mutateLease(alertId, owner, """
-                UPDATE staff_alerts SET state = 'DELIVERED', delivered_at = ?, lease_owner = NULL,
-                    lease_until = NULL, last_error_code = NULL
-                WHERE alert_id = ? AND state = 'LEASED' AND lease_owner = ? AND lease_until > ?
-                """, now, null, 0);
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE staff_alerts SET state = 'DELIVERED', delivered_at = ?, lease_owner = NULL,
+                         lease_until = NULL, last_error_code = NULL
+                     WHERE alert_id = ? AND state = 'LEASED' AND lease_owner = ? AND lease_until > ?
+                     """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(alertId));
+            statement.setString(3, owner);
+            statement.setTimestamp(4, Timestamp.from(now));
+            return statement.executeUpdate() == 1;
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to deliver punishment request alert", exception);
+        }
     }
 
     @Override
     public boolean failed(UUID alertId, String owner, String errorCode,
-                          Instant availableAt, int maximumAttempts) {
-        if (availableAt == null || maximumAttempts < 1)
+                          Instant availableAt, Instant now, int maximumAttempts) {
+        validateMutation(alertId, owner, now);
+        if (availableAt == null || availableAt.isBefore(now) || maximumAttempts < 1) {
             throw new IllegalArgumentException("valid alert failure policy is required");
-        validateMutation(alertId, owner, availableAt);
-        return mutateLease(alertId, owner, """
-                UPDATE staff_alerts
-                SET state = CASE WHEN attempt_count >= ? THEN 'DEAD_LETTER' ELSE 'PENDING' END,
-                    available_at = ?, lease_owner = NULL, lease_until = NULL, last_error_code = ?
-                WHERE alert_id = ? AND state = 'LEASED' AND lease_owner = ?
-                """, availableAt, safeError(errorCode), maximumAttempts);
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE staff_alerts
+                     SET state = CASE WHEN attempt_count >= ? THEN 'DEAD_LETTER' ELSE 'PENDING' END,
+                         available_at = ?, lease_owner = NULL, lease_until = NULL, last_error_code = ?
+                     WHERE alert_id = ? AND state = 'LEASED' AND lease_owner = ? AND lease_until > ?
+                     """)) {
+            statement.setInt(1, maximumAttempts);
+            statement.setTimestamp(2, Timestamp.from(availableAt));
+            statement.setString(3, safeError(errorCode));
+            statement.setBytes(4, UuidBytes.toBytes(alertId));
+            statement.setString(5, owner);
+            statement.setTimestamp(6, Timestamp.from(now));
+            return statement.executeUpdate() == 1;
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to fail punishment request alert", exception);
+        }
     }
 
     @Override
@@ -231,28 +252,6 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 statement.addBatch();
             }
             statement.executeBatch();
-        }
-    }
-
-    private boolean mutateLease(UUID alertId, String owner, String sql,
-                                Instant time, String error, int maximumAttempts) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (maximumAttempts == 0) {
-                statement.setTimestamp(1, Timestamp.from(time));
-                statement.setBytes(2, UuidBytes.toBytes(alertId));
-                statement.setString(3, owner);
-                statement.setTimestamp(4, Timestamp.from(time));
-            } else {
-                statement.setInt(1, maximumAttempts);
-                statement.setTimestamp(2, Timestamp.from(time));
-                statement.setString(3, error);
-                statement.setBytes(4, UuidBytes.toBytes(alertId));
-                statement.setString(5, owner);
-            }
-            return statement.executeUpdate() == 1;
-        } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to mutate punishment request alert lease", exception);
         }
     }
 
