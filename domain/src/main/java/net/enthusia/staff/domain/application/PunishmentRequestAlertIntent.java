@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.casefile.CaseVisibility;
 
 public record PunishmentRequestAlertIntent(
         UUID alertId,
@@ -15,6 +16,7 @@ public record PunishmentRequestAlertIntent(
         UUID recipientId,
         UUID excludedRecipientId,
         StaffRank minimumRank,
+        CaseVisibility visibility,
         int schemaVersion,
         Instant createdAt
 ) {
@@ -23,6 +25,7 @@ public record PunishmentRequestAlertIntent(
         Objects.requireNonNull(requestId, "requestId");
         Objects.requireNonNull(eventType, "eventType");
         Objects.requireNonNull(audience, "audience");
+        Objects.requireNonNull(visibility, "visibility");
         Objects.requireNonNull(createdAt, "createdAt");
         if (intentKey == null || intentKey.isBlank() || intentKey.length() > 160) {
             throw new IllegalArgumentException("alert intent key must be present and at most 160 characters");
@@ -30,14 +33,26 @@ public record PunishmentRequestAlertIntent(
         if (requestRevision < 0 || schemaVersion < 1) {
             throw new IllegalArgumentException("alert revision and schema version must be valid");
         }
-        if (audience == PunishmentRequestAlertAudience.DIRECT_RECIPIENT && recipientId == null) {
-            throw new IllegalArgumentException("direct alert requires a recipient");
-        }
-        if (audience != PunishmentRequestAlertAudience.DIRECT_RECIPIENT && recipientId != null) {
-            throw new IllegalArgumentException("audience alert cannot contain a direct recipient");
-        }
-        if (audience == PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS && minimumRank == null) {
-            throw new IllegalArgumentException("reviewer alert requires a minimum rank");
+        switch (audience) {
+            case DIRECT_RECIPIENT -> {
+                if (recipientId == null || minimumRank != null || excludedRecipientId != null) {
+                    throw new IllegalArgumentException("direct alert requires only a direct recipient");
+                }
+            }
+            case ELIGIBLE_REVIEWERS -> {
+                if (recipientId != null || minimumRank == null || excludedRecipientId == null) {
+                    throw new IllegalArgumentException("reviewer alert requires minimum rank and excluded requester");
+                }
+                if (minimumRank == StaffRank.DEVELOPER || minimumRank == StaffRank.SYSTEM) {
+                    throw new IllegalArgumentException("reviewer alert requires a moderation rank");
+                }
+            }
+            case OPERATIONAL_ADMINISTRATORS -> {
+                if (recipientId != null || minimumRank != null || excludedRecipientId != null) {
+                    throw new IllegalArgumentException("operational alert cannot contain recipient filters");
+                }
+            }
+            default -> throw new IllegalStateException("unsupported alert audience: " + audience);
         }
     }
 }
