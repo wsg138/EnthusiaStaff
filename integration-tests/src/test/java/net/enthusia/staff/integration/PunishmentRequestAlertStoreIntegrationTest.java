@@ -294,8 +294,9 @@ class PunishmentRequestAlertStoreIntegrationTest {
             assertTrue(store.closeIntent(retained.alertId(), "REQUEST_RESOLVED", NOW.minusSeconds(30)));
 
             assertEquals(2, store.deleteTerminalIntentsBefore(NOW, 2));
-            assertEquals(1, store.deleteTerminalIntentsBefore(NOW, 2));
+            assertEquals(2, store.deleteTerminalIntentsBefore(NOW, 2));
             assertEquals(0, store.deleteTerminalIntentsBefore(NOW, 2));
+            assertEquals(0, intentCount(expired.alertId()));
             assertEquals(0, intentCount(first.alertId()) + intentCount(second.alertId()) + intentCount(third.alertId()));
             assertEquals(1, intentCount(retained.alertId()));
             assertEquals("DEAD_LETTER", deliveryState(retained.alertId(), deadRecipient));
