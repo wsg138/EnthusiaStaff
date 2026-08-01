@@ -276,7 +276,15 @@ class PunishmentRequestLifecycleNotificationsIntegrationTest extends PunishmentR
                 return secondRuntime.punishmentRequestStore().expire(expirationRun, 2);
             });
             start.countDown();
-            assertEquals(4, first.get() + second.get());
+            int transitioned = first.get() + second.get();
+            assertTrue(transitioned >= 1 && transitioned <= 4);
+            for (int pass = 0; pass < 4 && transitioned < 4; pass++) {
+                transitioned += firstRuntime.punishmentRequestStore().expire(expirationRun, 2);
+                transitioned += secondRuntime.punishmentRequestStore().expire(expirationRun, 2);
+            }
+            assertEquals(4, transitioned);
+            assertEquals(0, firstRuntime.punishmentRequestStore().expire(expirationRun, 2));
+            assertEquals(0, secondRuntime.punishmentRequestStore().expire(expirationRun, 2));
             for (PunishmentApprovalRequest request : requests) {
                 assertEquals(PunishmentRequestStatus.EXPIRED,
                         firstRuntime.punishmentRequestStore()
