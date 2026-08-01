@@ -10,7 +10,6 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,10 +41,12 @@ public final class JdbcReportStore implements ReportStore {
 
     private final DataSource dataSource;
     private final ObjectMapper json;
+    private final JdbcReportQueryStore queries;
 
     public JdbcReportStore(DataSource dataSource, ObjectMapper json) {
         this.dataSource = dataSource;
         this.json = json;
+        this.queries = new JdbcReportQueryStore(dataSource);
     }
 
     @Override
@@ -104,77 +105,12 @@ public final class JdbcReportStore implements ReportStore {
 
     @Override
     public List<ReportSummary> list(ReportQueue queue, UUID actorId, int limit) {
-        if (queue == null || actorId == null || limit < 1 || limit > 100) {
-            throw new IllegalArgumentException("valid report queue, actor, and bounded limit are required");
-        }
-        String condition = switch (queue) {
-            case OPEN -> "r.state = 'OPEN'";
-            case CLAIMED_BY_ME -> "r.state = 'CLAIMED' AND r.assigned_to = ?";
-            case ALL_CLAIMED -> "r.state = 'CLAIMED'";
-            case AWAITING_REVIEW -> "r.state = 'AWAITING_REVIEW'";
-            case RECENTLY_CLOSED -> "r.state IN ('CLOSED', 'NO_VIOLATION') "
-                    + "AND r.updated_at >= CURRENT_TIMESTAMP(6) - INTERVAL 7 DAY";
-        };
-        String sql = """
-                SELECT r.report_id, r.reporter_id, r.target_id, r.reason_id, r.state,
-                       r.assigned_to, r.server_id, r.created_at, r.updated_at, r.revision
-                FROM reports r WHERE %s
-                ORDER BY r.updated_at DESC LIMIT ?
-                """.formatted(condition);
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            int index = 1;
-            if (queue == ReportQueue.CLAIMED_BY_ME) {
-                statement.setBytes(index++, UuidBytes.toBytes(actorId));
-            }
-            statement.setInt(index, limit);
-            try (ResultSet result = statement.executeQuery()) {
-                List<ReportSummary> reports = new ArrayList<>();
-                while (result.next()) {
-                    reports.add(readSummary(result));
-                }
-                return List.copyOf(reports);
-            }
-        } catch (SQLException | IllegalArgumentException exception) {
-            throw new ModerationPersistenceException("Unable to list staff reports", exception);
-        }
+        return queries.list(queue, actorId, limit);
     }
 
     @Override
     public Optional<ReportDetails> details(UUID reportId) {
-        if (reportId == null) {
-            throw new IllegalArgumentException("reportId must be present");
-        }
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement report = connection.prepareStatement("""
-                     SELECT r.report_id, r.reporter_id, r.target_id, r.reason_id, r.state,
-                            r.assigned_to, r.server_id, r.created_at, r.updated_at, r.revision,
-                            r.description, r.world_id, r.reporter_coordinates, r.target_coordinates
-                     FROM reports r WHERE r.report_id = ?
-                     """)) {
-            report.setBytes(1, UuidBytes.toBytes(reportId));
-            try (ResultSet result = report.executeQuery()) {
-                if (!result.next()) {
-                    return Optional.empty();
-                }
-                ReportSummary summary = readSummary(result);
-                List<String> publicChat = chatSnapshots(connection, reportId);
-                List<String> privateMessages = privateMessageSnapshots(connection, reportId);
-                List<String> clientEvidence = clientEvidenceSnapshots(connection, reportId);
-                return Optional.of(new ReportDetails(
-                        summary,
-                        result.getString("description"),
-                        Optional.ofNullable(result.getString("world_id")),
-                        Optional.ofNullable(result.getString("reporter_coordinates")),
-                        Optional.ofNullable(result.getString("target_coordinates")),
-                        publicChat,
-                        privateMessages,
-                        clientEvidence
-                ));
-            }
-        } catch (SQLException | IllegalArgumentException exception) {
-            throw new ModerationPersistenceException("Unable to read report details", exception);
-        }
+        return queries.details(reportId);
     }
 
     @Override
@@ -231,53 +167,6 @@ public final class JdbcReportStore implements ReportStore {
         }
     }
 
-    private static ReportSummary readSummary(ResultSet result) throws SQLException {
-        byte[] assigned = result.getBytes("assigned_to");
-        return new ReportSummary(
-                UuidBytes.fromBytes(result.getBytes("report_id")),
-                UuidBytes.fromBytes(result.getBytes("reporter_id")),
-                UuidBytes.fromBytes(result.getBytes("target_id")),
-                result.getString("reason_id"),
-                ReportState.valueOf(result.getString("state")),
-                assigned == null ? Optional.empty() : Optional.of(UuidBytes.fromBytes(assigned)),
-                result.getString("server_id"),
-                result.getTimestamp("created_at").toInstant(),
-                result.getTimestamp("updated_at").toInstant(),
-                result.getLong("revision")
-        );
-    }
-
-    private static List<String> chatSnapshots(Connection connection, UUID reportId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT messages_json FROM report_chat_snapshots
-                WHERE report_id = ? AND expires_at > CURRENT_TIMESTAMP(6)
-                ORDER BY captured_at
-                """)) {
-            return readSnapshots(statement, reportId);
-        }
-    }
-
-    private static List<String> privateMessageSnapshots(Connection connection, UUID reportId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT messages_json FROM report_private_message_snapshots
-                WHERE report_id = ? AND expires_at > CURRENT_TIMESTAMP(6)
-                ORDER BY captured_at
-                """)) {
-            return readSnapshots(statement, reportId);
-        }
-    }
-
-    private static List<String> readSnapshots(PreparedStatement statement, UUID reportId) throws SQLException {
-        statement.setBytes(1, UuidBytes.toBytes(reportId));
-        try (ResultSet result = statement.executeQuery()) {
-            List<String> snapshots = new ArrayList<>();
-            while (result.next()) {
-                snapshots.add(result.getString(1));
-            }
-            return List.copyOf(snapshots);
-        }
-    }
-
     private void insertChatContextSnapshot(
             Connection connection,
             UUID reportId,
@@ -320,27 +209,6 @@ public final class JdbcReportStore implements ReportStore {
         statement.setTimestamp(4, Timestamp.from(capturedAt.plus(CONTEXT_RETENTION)));
         statement.setString(5, json.writeValueAsString(messages));
         statement.executeUpdate();
-    }
-
-    private static List<String> clientEvidenceSnapshots(Connection connection, UUID reportId)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT evidence.evidence_json
-                FROM report_client_evidence_snapshots report_evidence
-                JOIN client_evidence_snapshots evidence
-                  ON evidence.snapshot_id = report_evidence.snapshot_id
-                WHERE report_evidence.report_id = ?
-                ORDER BY report_evidence.captured_at
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(reportId));
-            try (ResultSet result = statement.executeQuery()) {
-                List<String> snapshots = new ArrayList<>();
-                while (result.next()) {
-                    snapshots.add(result.getString(1));
-                }
-                return List.copyOf(snapshots);
-            }
-        }
     }
 
     private static LockedReport lockReport(Connection connection, UUID reportId) throws SQLException {
