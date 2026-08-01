@@ -66,7 +66,8 @@ class PunishmentRequestAlertRendererTest {
 
         assertNotNull(event);
         assertEquals(ClickEvent.Action.RUN_COMMAND, event.action());
-        assertEquals("/punish review " + request.requestId(), event.value());
+        ClickEvent.Payload.Text payload = (ClickEvent.Payload.Text) event.payload();
+        assertEquals("/punish review " + request.requestId(), payload.value());
         assertTrue(plain(message).contains(PunishmentRequestAlertTestFixtures.TARGET_ID.toString()));
     }
 
