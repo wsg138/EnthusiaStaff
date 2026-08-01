@@ -2,6 +2,8 @@
 
 Captured: 2026-07-27 (America/Indianapolis)
 
+Last updated: 2026-08-01 (America/Indianapolis)
+
 This report records the state of `agent/complete-staff-platform` at pushed commit
 `c4fd4129f7a34ad011f87f146fb72c236e611b89` before the current remediation.
 It is a baseline, not a claim that the branch is clean.
@@ -516,6 +518,62 @@ Hosted Codacy reports validation head
 issues, complexity delta 26, and duplication delta zero. The complexity metric
 remains visible; it was not suppressed or dispositioned. CodeRabbit skipped the
 draft automatically; one lightweight ready-for-review checkpoint remains.
+
+### PR #30 website moderation persistence checkpoint
+
+Draft PR #30 decomposes the website moderation persistence boundary into
+separate public-registry, punishment-code, appeal, audit, and projection
+collaborators. The public `WebsiteModerationStore` contract is unchanged.
+Punishment-code and appeal mutations retain one MariaDB transaction and now use
+the shared transaction helper for rollback on both SQL and runtime failures.
+
+Regression coverage demonstrates two failures that existed before this
+checkpoint and are now fixed:
+
+- a punishment-code batch could commit an earlier code creation when a later
+  corrupt code caused a runtime integrity exception;
+- concurrent or conflicting appeal preparation could surface a raw duplicate-key
+  persistence exception instead of the documented idempotency conflict.
+
+At exact PR head `103f654bccb82f31eff65176b5f325769f726424`, the clean Java
+21 `clean test check runtimeJars jacocoAggregateReport` gate passed. Test XML
+records 344 tests with zero failures, including 50 tests across 12 MariaDB
+11.8.3 Testcontainers suites. The website-specific MariaDB coverage comprises
+14 tests across public-registry, punishment-code, and appeal behavior.
+
+| Artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,206 | `97A10170E0D733D7112603F5FD22B26B5D44B8997BB26E307544EE8169720937` |
+| Velocity runtime jar | 7,440,725 | `43C20F76C237228351D03ADAFC066B8D799EA8AEA9E046DCE5C443291DE44148` |
+
+Hosted Codacy reports the exact head is up to standards with zero introduced
+issues, 24 fixed issues, 88.62% diff coverage, and a +2.83 percentage-point
+coverage variation. It also reports complexity delta +134 and duplication
+delta +38. These structural deltas remain visible and were not ignored. The
+comparable local analyzers report zero PMD, Lizard, Opengrep, Trivy, or
+100-token CPD finding in a changed file. Lower-threshold CPD identifies small
+JDBC error factories and MariaDB test-fixture setup; these were not converted
+into cross-responsibility abstractions merely to reduce the metric.
+
+The repository-wide local analyzer snapshot at this checkpoint is 214 PMD
+findings, 396 Lizard findings, 18 Opengrep findings, zero Trivy findings, and
+six 100-token CPD clone groups. These are repository totals, not new PR
+findings. No rule, first-party path, or finding was suppressed or ignored.
+
+The exact PR head also passed the guarded Pi staging workflow. A trusted Java
+21 build produced the Paper runtime, verified its checksum, ZIP integrity,
+plugin main class, and zero provider-API leaks, then loaded it on Paper 1.21.11.
+Two disposable boot/shutdown cycles each reached `SHADOW_MIGRATION`, passed
+`/plugins`, `/version EnthusiaStaff`, `/estaff status`, and `/estaff verify`,
+and shut down with exit code zero. The sanitized evidence reports two completed
+server starts, two storage-ready cycles, and zero critical startup/runtime
+failure patterns. This is a useful standalone Paper/runtime gate; it is not a
+claim that multi-server, Bedrock, provider-plugin, Discord, or production-data
+acceptance has been completed.
+
+CodeRabbit was intentionally not polled repeatedly. Its draft check did not
+produce an independent review finding; one lightweight ready-for-review
+checkpoint remains before merge.
 
 ## Remediation order
 
