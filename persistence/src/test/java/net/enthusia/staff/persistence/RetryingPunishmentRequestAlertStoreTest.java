@@ -161,7 +161,7 @@ class RetryingPunishmentRequestAlertStoreTest {
             AtomicReference<List<PunishmentRequestAlertClaim>> primary
     ) {
         return (PunishmentRequestAlertStore) Proxy.newProxyInstance(
-                PunishmentRequestAlertStore.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{PunishmentRequestAlertStore.class},
                 (proxy, method, arguments) -> {
                     if (method.getName().equals("claimAudience")) {
