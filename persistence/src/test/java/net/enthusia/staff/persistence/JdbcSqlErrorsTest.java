@@ -33,6 +33,15 @@ class JdbcSqlErrorsTest {
     }
 
     @Test
+    void logicallyEqualExceptionsRemainDistinctDuringIdentityTraversal() {
+        EqualSQLException root = new EqualSQLException("root", "HY000", 0);
+        EqualSQLException duplicate = new EqualSQLException("duplicate", "23000", 1062);
+        root.next = duplicate;
+
+        assertTrue(JdbcSqlErrors.isDuplicateKey(root));
+    }
+
+    @Test
     void detectsDeadlockInBatchNextExceptionChain() {
         BatchUpdateException batch = new BatchUpdateException("batch", "HY000", 0, new int[0]);
         batch.setNextException(new SQLException("deadlock", "40001", 1213));
@@ -66,7 +75,7 @@ class JdbcSqlErrorsTest {
         assertFalse(JdbcSqlErrors.isDeadlock(root));
     }
 
-    private static final class LoopingSQLException extends SQLException {
+    private static class LoopingSQLException extends SQLException {
         private static final long serialVersionUID = 1L;
         private SQLException next;
 
@@ -77,6 +86,24 @@ class JdbcSqlErrorsTest {
         @Override
         public SQLException getNextException() {
             return next;
+        }
+    }
+
+    private static final class EqualSQLException extends LoopingSQLException {
+        private static final long serialVersionUID = 1L;
+
+        private EqualSQLException(String reason, String state, int code) {
+            super(reason, state, code);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof EqualSQLException;
+        }
+
+        @Override
+        public int hashCode() {
+            return EqualSQLException.class.hashCode();
         }
     }
 }
