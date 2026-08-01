@@ -779,34 +779,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
             loadVisibilityMatrix() {
-        Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
-                defaults = DefaultStaffVisibilityService.defaultMatrix();
-        Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
-                configured = new java.util.EnumMap<>(net.enthusia.staff.domain.auth.StaffRank.class);
         try {
-            for (net.enthusia.staff.domain.auth.StaffRank viewer : new net.enthusia.staff.domain.auth.StaffRank[]{
-                    net.enthusia.staff.domain.auth.StaffRank.MOD,
-                    net.enthusia.staff.domain.auth.StaffRank.DEVELOPER,
-                    net.enthusia.staff.domain.auth.StaffRank.ADMIN,
-                    net.enthusia.staff.domain.auth.StaffRank.FOUNDER
-            }) {
-                java.util.Set<net.enthusia.staff.domain.auth.StaffRank> targets =
-                        new java.util.LinkedHashSet<>();
-                for (String value : getConfig().getStringList("visibility.matrix." + viewer.name())) {
-                    net.enthusia.staff.domain.auth.StaffRank target =
-                            net.enthusia.staff.domain.auth.StaffRank.valueOf(value.toUpperCase(java.util.Locale.ROOT));
-                    if (target == net.enthusia.staff.domain.auth.StaffRank.SYSTEM) {
-                        throw new IllegalArgumentException("SYSTEM is not a visible staff rank");
-                    }
-                    targets.add(target);
-                }
-                configured.put(viewer, targets.isEmpty() ? defaults.get(viewer) : java.util.Set.copyOf(targets));
-            }
-            return Map.copyOf(configured);
+            return new VisibilityMatrixLoader().load(getConfig()::getStringList);
         } catch (IllegalArgumentException exception) {
             featureIssues.put("visibility", "Configured rank visibility matrix is invalid; safe defaults are active");
             getLogger().log(Level.SEVERE, "Vanish visibility matrix validation failed", exception);
-            return defaults;
+            return DefaultStaffVisibilityService.defaultMatrix();
         }
     }
 
