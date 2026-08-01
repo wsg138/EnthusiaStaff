@@ -751,6 +751,47 @@ build and Wiki validation passed, and exact-SHA Pi run `30702688979` passed in
 10 minutes 46 seconds. No second automated review was requested. PR #32 merged
 as `7555d1504666ad52178005b29b94525b54e088b6`.
 
+### PR #33 Paper bootstrap composition checkpoint
+
+Draft PR #33 continues from merged PR #32 without overlapping draft PR #27.
+Implementation head `3736933e35fd69b707b4f56f6fd455cfb34983e2`
+extracts command/GUI registration, runtime-manager construction, optional
+integration discovery, database environment resolution, reason-policy loading,
+network inbox handling, visibility-matrix parsing, and resource cleanup from
+the Paper entrypoint. The entrypoint fell from roughly 950 to 488 non-comment
+lines. Its former file-length, command method-length, duplicate-literal,
+loop-allocation, executor-resource, logging-guard, and branch-complexity
+findings are absent locally.
+
+The network handler now validates a sanction target and performs its idempotent
+mute-cache invalidation before recording the durable inbox receipt. A malformed
+payload therefore cannot be persisted as successfully applied. Focused tests
+cover valid ordering, malformed targets, unrelated events, visibility defaults
+and validation, and environment-name-only database configuration.
+
+The exact implementation head passed the uncached Java 21
+`clean test check runtimeJars jacocoAggregateReport` gate with all 40 tasks
+executed. Test XML records 387 tests with zero failures, errors, or skips,
+including 59 tests across all 13 MariaDB 11.8.3 Testcontainers suites. The
+Paper jar is 8,433,814 bytes with SHA-256
+`31C4AF4BF6AE14D7C1213D205E434A0A65E36B6E21ED7DDFB4C8E8C754B83D0B`;
+the Velocity jar is 7,606,354 bytes with SHA-256
+`0E34698B07AAA6AD277ACC3FCD783DBD1E8C04DB2841FA69AAE30E9EE7B2B2D1`.
+Exact-SHA Pi staging run `30704298214` passed both independently built
+Paper boot/storage/command/shutdown cycles in 10 minutes 17 seconds.
+
+Hosted Codacy reports zero new and eight fixed issues on the draft. The main
+baseline at `7555d15` is 283 issues: 188 complexity, 83 error-prone, and 12
+performance findings; one is High and 282 are Warnings. Both hosted coverage
+checks pass, although the CLI had not yet exposed a numeric PR coverage value.
+The hosted duplication delta is +6 across small extracted wiring/test blocks;
+PMD CPD reports no 100-token clone in Paper source, so this is retained for
+review rather than mechanically abstracted. PMD 7 and threshold-matched Lizard
+report no result in a changed file, Opengrep reports 16 repository results and
+none in the changed files, and Trivy reports zero vulnerabilities or secrets.
+No issue, rule, or first-party path was suppressed. CodeRabbit skipped the
+draft as intended; one ready-state review remains before merge.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
