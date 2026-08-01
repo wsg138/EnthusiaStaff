@@ -58,26 +58,33 @@ class PluginMetadataIntegrityTest {
     void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
         JsonNode metadata = pluginMetadata();
         JsonNode permissions = metadata.path("permissions");
+        Set<String> missingPermissions = new HashSet<>();
 
         metadata.path("commands").properties().forEach(entry -> {
             JsonNode permission = entry.getValue().path("permission");
-            if (!permission.isMissingNode()) {
-                assertTrue(permissions.has(permission.asText()), entry.getKey() + " -> " + permission.asText());
+            if (!permission.isMissingNode() && !permissions.has(permission.asText())) {
+                missingPermissions.add(entry.getKey() + " -> " + permission.asText());
             }
         });
+
+        assertTrue(missingPermissions.isEmpty(), "Undeclared command permissions: " + missingPermissions);
     }
 
     @Test
     void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
         JsonNode permissions = pluginMetadata().path("permissions");
+        Set<String> missingChildren = new HashSet<>();
 
         permissions.properties().forEach(parent -> parent.getValue()
                 .path("children")
                 .properties()
-                .forEach(child -> assertTrue(
-                        permissions.has(child.getKey()),
-                        parent.getKey() + " -> " + child.getKey()
-                )));
+                .forEach(child -> {
+                    if (!permissions.has(child.getKey())) {
+                        missingChildren.add(parent.getKey() + " -> " + child.getKey());
+                    }
+                }));
+
+        assertTrue(missingChildren.isEmpty(), "Undeclared child permissions: " + missingChildren);
     }
 
     @Test
