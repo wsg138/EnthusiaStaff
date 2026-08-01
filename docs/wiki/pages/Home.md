@@ -1,85 +1,70 @@
 # EnthusiaStaff
 
 EnthusiaStaff is the distributed moderation and staff platform being built for
-the Enthusia Network. The Wiki is divided into staff guides, administrator
-references, operations and developer documentation.
+the Enthusia Network.
 
-> **Pre-release:** EnthusiaStaff is not currently approved to replace LiteBans or
-> the existing production staff stack. Check [[Implementation Status]] before
-> using a documented workflow as a live-server replacement.
+> **Pre-release:** EnthusiaStaff is not approved to replace LiteBans or the
+> existing production staff stack.
 
-## Current development direction
+## Project status
 
-The project has advanced substantially beyond early scaffolding. The current
-repository contains tested Java 21 packaging, MariaDB-backed moderation state,
-authenticated Paper–Velocity communication, durable punishment requests, report
-persistence, a restricted website bridge, improved vanish recovery and detailed
-LiteBans shadow-comparison evidence. Major production gates still remain.
+Start with these two pages:
 
-Use [[Development Blueprint]] for the visual road from the current checkpoint to
-full acceptance, the 168-hour shadow period, cutover rehearsal and production
-authority.
+- [[Feature Completion Status|Implementation-Status]] — every major feature has a
+  completion mark or estimated percentage, plus what is working and what remains.
+- [[Remaining Development Map|Development-Blueprint]] — unfinished work grouped
+  into moderation, staff safety, investigations, integrations and migration.
 
-## Staff
+The repository has substantial tested foundations, including Java 21 packaging,
+MariaDB persistence, authenticated Paper–Velocity communication, punishment
+requests, report persistence, vanish recovery and LiteBans comparison tooling.
+Many user-facing workflows, providers and live-runtime acceptance groups remain
+incomplete.
 
-Start here for ordinary moderation work:
+## Staff documentation
 
 - [[Staff Handbook]] — expectations, judgment, evidence, privacy and conduct.
-- [[Staff Quick Start|Moderator-Quick-Start]] — common reports, punishments and
-  staff tools in one short guide.
-- [[Helper Guide]] — expectations and routine actions for the upcoming Helper role.
-- [[Punishment System]] — using the punishment interface and correcting actions.
-- [[Reports and Evidence]] — investigating and closing player reports.
-- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — when and how to
-  use investigation controls.
+- [[Staff Quick Start|Moderator-Quick-Start]] — common moderation workflows.
+- [[Helper Guide]] — Helper responsibilities and restrictions.
+- [[Punishment System]] — punishments, requests and corrections.
+- [[Reports and Evidence]] — report investigation and evidence handling.
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — investigation controls.
 - [[Inventory and Confiscation Safety]] — viewing, editing and removing assets.
-- [[Incident Playbooks]] — handling common incidents and urgent problems.
+- [[Alt Investigations]] — relationship evidence and exceptions.
+- [[Incident Playbooks]] — urgent and unusual incidents.
 - [[Privacy and Data Handling]] — information that must remain internal.
 
-Staff members do not need to understand database health, protocol details, UUID
-resolution internals or permission matrices to follow the staff guides. Those
-belong in the administrator and developer sections.
+## Administration and operations
 
-## Administrators and operators
-
-- [[Implementation Status]]
-- [[Development Blueprint]]
 - [[Commands and Permissions]]
 - [[Roles and Permissions|Rank-Authority]]
 - [[Configuration]]
-- [[Installation]]
 - [[Integrations]]
+- [[Installation]]
 - [[Recovery and Troubleshooting]]
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
 
-## Developers and reviewers
+## Development
 
-- [[Development Blueprint]] — milestones, workstreams, release gates and the
-  immediate execution order.
-- [[Developer Guide Index]] — category links and answers to common reviewer
-  questions.
-- [[Architecture]] — module boundaries and runtime ownership.
-- [[Developer Code Guide]] — files, packages, stores, feature traces, tests and
-  review order.
-- [[Protocol and Network Traffic]] — persistent channel, ReplayGuard,
-  acknowledgements and outbound destinations.
-- [[Vanish Internals]] — exact events, visibility calls, packet limitations and
-  integration gaps.
-- [[Development Setup]]
-- [[Build and Testing]]
-- [[Wiki Maintenance]]
+- [[Developer Guide Index]] — choose the correct technical document by task.
+- [[Architecture]] — modules, dependency direction and runtime ownership.
+- [[Developer Code Guide]] — files, services, stores, feature traces and tests.
+- [[Protocol and Network Traffic]] — Paper–Velocity transport and outbound traffic.
+- [[Vanish Internals]] — events, packets, visibility decisions and known gaps.
+- [[Development Setup]] — local prerequisites and setup.
+- [[Build and Testing]] — validation commands and evidence requirements.
+- [[Wiki Maintenance]] — documentation editing and publication.
 
-## Documentation rules
+## Documentation ownership
 
-The Wiki distinguishes intended design from verified behavior:
+- `ENTHUSIASTAFF-GOALS.md` defines intended finished behavior.
+- `reports/REQUIREMENTS-MATRIX.md` records exact implementation evidence and blockers.
+- [[Feature Completion Status|Implementation-Status]] converts that evidence into
+  readable planning estimates.
+- [[Remaining Development Map|Development-Blueprint]] groups only the unfinished work.
+- [[Developer Code Guide]] owns detailed code paths and file responsibilities.
+- [[Build and Testing]] owns validation procedures.
 
-- `ENTHUSIASTAFF-GOALS.md` defines the intended finished platform.
-- Current code and exact-SHA tests show what exists.
-- `reports/REQUIREMENTS-MATRIX.md` records conservative implementation and staging status.
-- `docs/development-blueprint.md` orders the remaining work and release gates.
-- Wiki staff pages explain how people should use approved workflows.
-
-A command, class or permission existing in source does not by itself prove that a
-feature is ready for production. A green pull request proves only the tested
-scope at its exact reviewed head.
+Keeping each subject on one primary page prevents the developer documentation
+from repeating the same roadmap, test and source-map information in several places.
