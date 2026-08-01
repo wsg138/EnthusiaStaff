@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -45,8 +46,8 @@ class PunishmentRequestAlertFallbackIntegrationTest {
 
     @BeforeEach
     void clearAlertState() throws Exception {
-        try (MariaDbRuntime ignored = runtime()) {
-            // Initializes and migrates the database.
+        try (MariaDbRuntime initialized = runtime()) {
+            assertNotNull(initialized.punishmentRequestAlertStore());
         }
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM staff_alert_deliveries");
