@@ -754,16 +754,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             command.setTabCompleter(changes);
         }
         ReportCommand report = new ReportCommand(
-                this,
-                Clock.systemUTC(),
-                networkServerId(),
-                mode::get,
-                playerDirectory,
-                () -> storageValue(PaperStorageBindings::reportStore),
-                () -> storageValue(PaperStorageBindings::sanctionLookup),
-                reasonPolicies,
-                chatContext,
-                clientEvidenceCollector,
+                new ReportCommand.Dependencies(
+                        this,
+                        Clock.systemUTC(),
+                        networkServerId(),
+                        mode::get,
+                        playerDirectory,
+                        () -> storageValue(PaperStorageBindings::reportStore),
+                        () -> storageValue(PaperStorageBindings::sanctionLookup),
+                        reasonPolicies,
+                        chatContext,
+                        clientEvidenceCollector
+                ),
                 workers
         );
         PluginCommand reportCommand = Objects.requireNonNull(getCommand("report"), "report command is missing");
