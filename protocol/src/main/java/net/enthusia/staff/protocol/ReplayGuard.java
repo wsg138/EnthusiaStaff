@@ -12,7 +12,7 @@ public final class ReplayGuard {
     private final Object lock = new Object();
     // Linked insertion order drives eviction; lock serializes every access.
     @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
-    private final Map<String, Instant> seen = new LinkedHashMap<>();
+    private final Map<ReplayKey, Instant> seen = new LinkedHashMap<>();
 
     public ReplayGuard(int maximumEntries, Duration retention) {
         if (maximumEntries < 1 || retention == null || retention.isNegative() || retention.isZero()) {
@@ -25,13 +25,13 @@ public final class ReplayGuard {
     public boolean recordIfNew(String serverId, String nonce, Instant now) {
         synchronized (lock) {
             evictExpired(now);
-            String key = serverId + '\u0000' + nonce;
+            ReplayKey key = new ReplayKey(serverId, nonce);
             if (seen.containsKey(key)) {
                 return false;
             }
             seen.put(key, now.plus(retention));
             while (seen.size() > maximumEntries) {
-                Iterator<String> iterator = seen.keySet().iterator();
+                Iterator<ReplayKey> iterator = seen.keySet().iterator();
                 iterator.next();
                 iterator.remove();
             }
@@ -40,12 +40,15 @@ public final class ReplayGuard {
     }
 
     private void evictExpired(Instant now) {
-        Iterator<Map.Entry<String, Instant>> iterator = seen.entrySet().iterator();
+        Iterator<Map.Entry<ReplayKey, Instant>> iterator = seen.entrySet().iterator();
         while (iterator.hasNext()) {
             if (iterator.next().getValue().isAfter(now)) {
                 continue;
             }
             iterator.remove();
         }
+    }
+
+    private record ReplayKey(String serverId, String nonce) {
     }
 }
