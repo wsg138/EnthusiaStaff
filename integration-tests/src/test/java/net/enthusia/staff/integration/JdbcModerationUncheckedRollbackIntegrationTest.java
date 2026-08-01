@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -32,8 +33,8 @@ class JdbcModerationUncheckedRollbackIntegrationTest extends PunishmentRequestMa
                 sevenDayBan(),
                 NOW
         );
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig())) {
-            // Run migrations before exercising a store with a deliberately failing serializer.
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            assertNotNull(runtime.moderationStore());
         }
 
         ObjectMapper failingJson = new ObjectMapper() {
