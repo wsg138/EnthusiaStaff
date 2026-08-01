@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 
 class PaperRuntimeLifecycleTest {
     private static final String STORAGE = "storage";
+    private static final String TASK = "task";
+    private static final String CHANNEL = "channel";
 
     @Test
     void emptyLifecycleHasNoHandlesOrStorageProjection() {
@@ -36,14 +38,14 @@ class PaperRuntimeLifecycleTest {
         PaperRuntimeLifecycle<String, String, String> lifecycle = new PaperRuntimeLifecycle<>();
 
         assertTrue(lifecycle.publishStorage(STORAGE));
-        assertTrue(lifecycle.publishTask("task"));
-        assertTrue(lifecycle.publishChannel("channel"));
+        assertTrue(lifecycle.publishTask(TASK));
+        assertTrue(lifecycle.publishChannel(CHANNEL));
         assertFalse(lifecycle.publishStorage("replacement"));
         assertFalse(lifecycle.publishTask("replacement"));
         assertFalse(lifecycle.publishChannel("replacement"));
         assertEquals("STORAGE", lifecycle.storageValue(String::toUpperCase));
-        assertEquals("task", lifecycle.removeTask().orElseThrow());
-        assertEquals("channel", lifecycle.removeChannel().orElseThrow());
+        assertEquals(TASK, lifecycle.removeTask().orElseThrow());
+        assertEquals(CHANNEL, lifecycle.removeChannel().orElseThrow());
         assertTrue(lifecycle.removeTask().isEmpty());
         assertTrue(lifecycle.removeChannel().isEmpty());
         assertTrue(lifecycle.removeStorageIf("other"::equals).isEmpty());
@@ -84,8 +86,8 @@ class PaperRuntimeLifecycleTest {
     void shutdownTransitionSeesStoppingStateAndCanDrainPublishedHandles() {
         PaperRuntimeLifecycle<String, String, String> lifecycle = new PaperRuntimeLifecycle<>();
         assertTrue(lifecycle.publishStorage(STORAGE));
-        assertTrue(lifecycle.publishTask("task"));
-        assertTrue(lifecycle.publishChannel("channel"));
+        assertTrue(lifecycle.publishTask(TASK));
+        assertTrue(lifecycle.publishChannel(CHANNEL));
 
         lifecycle.beginShutdown(() -> {
             assertTrue(lifecycle.stopping());
@@ -93,8 +95,8 @@ class PaperRuntimeLifecycleTest {
             assertFalse(lifecycle.publishTask("late-task"));
             assertFalse(lifecycle.publishChannel("late-channel"));
             assertEquals(STORAGE, lifecycle.removeStorage().orElseThrow());
-            assertEquals("task", lifecycle.removeTask().orElseThrow());
-            assertEquals("channel", lifecycle.removeChannel().orElseThrow());
+            assertEquals(TASK, lifecycle.removeTask().orElseThrow());
+            assertEquals(CHANNEL, lifecycle.removeChannel().orElseThrow());
         });
 
         assertTrue(lifecycle.storage().isEmpty());
@@ -111,8 +113,8 @@ class PaperRuntimeLifecycleTest {
         assertTrue(lifecycle.stopping());
         assertTrue(transitioned.get());
         assertFalse(lifecycle.publishStorage(STORAGE));
-        assertFalse(lifecycle.publishTask("task"));
-        assertFalse(lifecycle.publishChannel("channel"));
+        assertFalse(lifecycle.publishTask(TASK));
+        assertFalse(lifecycle.publishChannel(CHANNEL));
         assertFalse(lifecycle.runIfRunning(() -> lateAction.set(true)));
         assertFalse(lateAction.get());
     }
