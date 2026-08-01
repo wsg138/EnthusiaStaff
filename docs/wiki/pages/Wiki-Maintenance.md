@@ -22,9 +22,9 @@ Keep each kind of information in one primary location:
 | Main navigation and task routing | `Home.md` and `_Sidebar.md` |
 | Overall percentages and group directory | `Implementation-Status.md` |
 | Core feature descriptions/files | `Core-Platform-and-Infrastructure.md` |
-| Moderation feature descriptions/files | `Moderation-Punishments-and-Reports.md` |
-| Staff-tool feature descriptions/files | `Staff-Tools-Investigations-and-Player-State-Safety.md` |
-| Integration/release descriptions/files | `Integrations-Migration-and-Release-Readiness.md` |
+| Moderation feature descriptions/files | `Moderation,-Punishments,-and-Reports.md` |
+| Staff-tool feature descriptions/files | `Staff-Tools,-Investigations,-and-Player-State-Safety.md` |
+| Integration/release descriptions/files | `Integrations,-Migration,-and-Release-Readiness.md` |
 | Cross-group development order | `Development-Blueprint.md` |
 | Complete source map and feature traces | `Developer-Code-Guide.md` |
 | Staff procedures | Focused staff guide for the task |
