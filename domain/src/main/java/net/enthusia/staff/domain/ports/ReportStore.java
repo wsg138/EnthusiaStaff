@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -21,5 +22,5 @@ public interface ReportStore {
 
     ReportStateChangeResult changeState(ReportStateChangeRequest request);
 
-    int purgeExpiredEvidence(Instant now, int batchLimit);
+    ReportEvidencePurgeResult purgeExpiredEvidence(Instant now, int batchLimit);
 }

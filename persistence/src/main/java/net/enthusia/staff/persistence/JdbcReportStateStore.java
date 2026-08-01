@@ -304,14 +304,14 @@ final class JdbcReportStateStore {
             throws SQLException {
         return UuidBytes.fromBytes(result.getBytes("report_id")).equals(request.reportId())
                 && UuidBytes.fromBytes(result.getBytes("actor_id")).equals(request.actorId())
-                && result.getString("event_type").equals(request.action().name())
-                && result.getString("note").equals(request.note().trim());
+                && request.action().name().equals(result.getString("event_type"))
+                && request.note().trim().equals(result.getString("note"));
     }
 
     private ReportStateChangeResult existingStateChangeAfterConflict(ReportStateChangeRequest request) {
         try (Connection connection = dataSource.getConnection()) {
             return existingStateChange(connection, request, false);
-        } catch (SQLException | IllegalArgumentException exception) {
+        } catch (SQLException | RuntimeException exception) {
             return null;
         }
     }

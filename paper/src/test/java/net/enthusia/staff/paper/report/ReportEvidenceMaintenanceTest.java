@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -28,7 +29,9 @@ final class ReportEvidenceMaintenanceTest {
     @Test
     void retriesBacklogAfterOneMinuteThenReturnsToHourlyCadence() {
         MutableClock clock = new MutableClock(NOW);
-        CountingReportStore store = new CountingReportStore();
+        CountingReportStore store = new CountingReportStore(
+                new ReportEvidencePurgeResult(500, 0, 0)
+        );
         Logger logger = Logger.getAnonymousLogger();
         logger.setLevel(Level.OFF);
         ReportEvidenceMaintenance maintenance = new ReportEvidenceMaintenance(clock, () -> store, logger);
@@ -50,8 +53,33 @@ final class ReportEvidenceMaintenanceTest {
         assertEquals(3, store.purgeCalls);
     }
 
+    @Test
+    void combinedUnsaturatedCategoriesKeepTheHourlyCadence() {
+        MutableClock clock = new MutableClock(NOW);
+        CountingReportStore store = new CountingReportStore(
+                new ReportEvidencePurgeResult(200, 200, 200)
+        );
+        Logger logger = Logger.getAnonymousLogger();
+        logger.setLevel(Level.OFF);
+        ReportEvidenceMaintenance maintenance = new ReportEvidenceMaintenance(clock, () -> store, logger);
+
+        maintenance.run();
+        clock.advance(Duration.ofMinutes(1));
+        maintenance.run();
+        assertEquals(1, store.purgeCalls);
+
+        clock.advance(Duration.ofMinutes(59));
+        maintenance.run();
+        assertEquals(2, store.purgeCalls);
+    }
+
     private static final class CountingReportStore implements ReportStore {
+        private final ReportEvidencePurgeResult firstResult;
         private int purgeCalls;
+
+        private CountingReportStore(ReportEvidencePurgeResult firstResult) {
+            this.firstResult = firstResult;
+        }
 
         @Override
         public ReportSubmissionResult submit(CreateReportRequest request) {
@@ -74,9 +102,11 @@ final class ReportEvidenceMaintenanceTest {
         }
 
         @Override
-        public int purgeExpiredEvidence(Instant now, int batchLimit) {
+        public ReportEvidencePurgeResult purgeExpiredEvidence(Instant now, int batchLimit) {
             purgeCalls++;
-            return purgeCalls == 1 ? batchLimit : 0;
+            return purgeCalls == 1
+                    ? firstResult
+                    : new ReportEvidencePurgeResult(0, 0, 0);
         }
     }
 

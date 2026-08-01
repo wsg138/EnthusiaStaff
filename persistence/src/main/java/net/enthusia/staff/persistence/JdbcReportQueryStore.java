@@ -40,6 +40,7 @@ final class JdbcReportQueryStore {
             JOIN client_evidence_snapshots evidence
               ON evidence.snapshot_id = report_evidence.snapshot_id
             WHERE report_evidence.report_id = ?
+              AND report_evidence.captured_at > CURRENT_TIMESTAMP(6) - INTERVAL 7 DAY
             ORDER BY report_evidence.captured_at
             """;
 

@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.ReportStore;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 
 public final class ReportEvidenceMaintenance implements Runnable {
     private static final Duration NORMAL_INTERVAL = Duration.ofHours(1);
@@ -37,10 +38,10 @@ public final class ReportEvidenceMaintenance implements Runnable {
             return;
         }
         try {
-            int purged = reportStore().purgeExpiredEvidence(now, BATCH_LIMIT);
-            nextRun.set(now.plus(purged >= BATCH_LIMIT ? BACKLOG_INTERVAL : NORMAL_INTERVAL));
-            if (purged > 0 && logger.isLoggable(Level.INFO)) {
-                logger.info("Purged " + purged + " expired report evidence records");
+            ReportEvidencePurgeResult result = reportStore().purgeExpiredEvidence(now, BATCH_LIMIT);
+            nextRun.set(now.plus(result.hasBacklogAt(BATCH_LIMIT) ? BACKLOG_INTERVAL : NORMAL_INTERVAL));
+            if (result.total() > 0 && logger.isLoggable(Level.INFO)) {
+                logger.info("Purged " + result.total() + " expired report evidence records");
             }
         } catch (RuntimeException exception) {
             nextRun.set(now.plus(FAILURE_INTERVAL));

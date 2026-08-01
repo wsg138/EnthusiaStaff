@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -311,7 +312,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void runOperationalTasks() {
         refreshOperationalState();
-        reportEvidenceMaintenance.run();
+        if (workers == null || workers.isShutdown()) {
+            return;
+        }
+        try {
+            workers.execute(reportEvidenceMaintenance);
+        } catch (RejectedExecutionException exception) {
+            getLogger().log(
+                    Level.FINE,
+                    "Report evidence maintenance was rejected; the next operational tick will retry",
+                    exception
+            );
+        }
     }
 
     private void degradeBootstrap(String reason) {

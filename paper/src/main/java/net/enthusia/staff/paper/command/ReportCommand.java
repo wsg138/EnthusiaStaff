@@ -96,18 +96,18 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     private SubmissionContext captureSubmission(
             Player reporter,
-            String targetName,
+            String targetReference,
             String reasonId,
             String description
     ) {
-        Player onlineTarget = dependencies.plugin().getServer().getPlayerExact(targetName);
+        Player onlineTarget = onlineTarget(targetReference);
         Optional<ClientEvidenceSnapshot> targetClientEvidence = onlineTarget == null
                 ? Optional.empty()
                 : Optional.of(dependencies.clientEvidence().capture(onlineTarget));
         Instant now = dependencies.clock().instant();
         return new SubmissionContext(
                 reporter.getUniqueId(),
-                targetName,
+                targetReference,
                 reasonId,
                 description,
                 reporter.getWorld().getKey().asString(),
@@ -117,6 +117,14 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
                 dependencies.chat().snapshot(now),
                 targetClientEvidence
         );
+    }
+
+    private Player onlineTarget(String targetReference) {
+        try {
+            return dependencies.plugin().getServer().getPlayer(UUID.fromString(targetReference));
+        } catch (IllegalArgumentException ignored) {
+            return dependencies.plugin().getServer().getPlayerExact(targetReference);
+        }
     }
 
     private void submitReport(CommandSender sender, SubmissionContext submission) {

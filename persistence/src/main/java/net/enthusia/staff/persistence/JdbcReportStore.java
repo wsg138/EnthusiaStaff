@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -49,7 +50,7 @@ public final class JdbcReportStore implements ReportStore {
     }
 
     @Override
-    public int purgeExpiredEvidence(Instant now, int batchLimit) {
+    public ReportEvidencePurgeResult purgeExpiredEvidence(Instant now, int batchLimit) {
         return evidenceMaintenance.purgeExpired(now, batchLimit);
     }
 }

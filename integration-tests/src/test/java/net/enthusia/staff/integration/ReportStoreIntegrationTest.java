@@ -40,6 +40,7 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
@@ -257,15 +258,16 @@ class ReportStoreIntegrationTest {
             assertEquals(1L, reportPrivateMessageEvidenceCount(reportId));
             assertEquals(1L, reportClientEvidenceCount(reportId));
             assertEquals(1L, clientEvidenceCount(targetId));
+            assertTrue(store.details(reportId).orElseThrow().clientEvidenceSnapshots().isEmpty());
 
-            int purged = store.purgeExpiredEvidence(NOW, 100);
+            ReportEvidencePurgeResult purged = store.purgeExpiredEvidence(NOW, 100);
 
-            assertEquals(3, purged);
+            assertEquals(new ReportEvidencePurgeResult(1, 1, 1), purged);
             assertEquals(0L, reportChatEvidenceCount(reportId));
             assertEquals(0L, reportPrivateMessageEvidenceCount(reportId));
             assertEquals(0L, reportClientEvidenceCount(reportId));
             assertEquals(0L, clientEvidenceCount(targetId));
-            assertEquals(0, store.purgeExpiredEvidence(NOW, 100));
+            assertEquals(new ReportEvidencePurgeResult(0, 0, 0), store.purgeExpiredEvidence(NOW, 100));
         }
     }
 

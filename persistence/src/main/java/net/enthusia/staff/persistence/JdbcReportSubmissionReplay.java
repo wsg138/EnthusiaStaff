@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -81,8 +82,8 @@ final class JdbcReportSubmissionReplay {
         content.put("reporterCoordinates", request.reporterCoordinates().orElse(null));
         content.put("targetCoordinates", request.targetCoordinates().orElse(null));
         content.put("createdAt", request.createdAt().toString());
-        content.put("publicChatContext", request.publicChatContext());
-        content.put("privateMessageContext", request.privateMessageContext());
+        content.put("publicChatContext", publicChatFingerprint(request.publicChatContext()));
+        content.put("privateMessageContext", privateMessageFingerprint(request.privateMessageContext()));
         content.put("targetClientEvidence", request.targetClientEvidence()
                 .map(ClientEvidencePersistence::toJson)
                 .orElse(null));
@@ -93,7 +94,7 @@ final class JdbcReportSubmissionReplay {
             throws SQLException, JsonProcessingException {
         boolean sameIdentity = uuid(result, "actor_id").equals(request.reporterId())
                 && uuid(result, "target_id").equals(request.targetId())
-                && result.getString("reason_id").equals(request.reasonId());
+                && request.reasonId().equals(result.getString("reason_id"));
         if (!sameIdentity) {
             return false;
         }
@@ -110,6 +111,34 @@ final class JdbcReportSubmissionReplay {
         return UuidBytes.fromBytes(result.getBytes(column));
     }
 
+    private static List<PublicChatFingerprint> publicChatFingerprint(
+            List<CreateReportRequest.ChatContextMessage> messages
+    ) {
+        return messages.stream()
+                .map(message -> new PublicChatFingerprint(
+                        message.senderId().toString(),
+                        message.senderName(),
+                        message.body(),
+                        message.sentAt().toString()
+                ))
+                .toList();
+    }
+
+    private static List<PrivateMessageFingerprint> privateMessageFingerprint(
+            List<CreateReportRequest.PrivateMessageContextMessage> messages
+    ) {
+        return messages.stream()
+                .map(message -> new PrivateMessageFingerprint(
+                        message.senderId().toString(),
+                        message.senderName(),
+                        message.recipientId().toString(),
+                        message.recipientName(),
+                        message.body(),
+                        message.sentAt().toString()
+                ))
+                .toList();
+    }
+
     private static String sha256(String content) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -118,5 +147,23 @@ final class JdbcReportSubmissionReplay {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
+    }
+
+    private record PublicChatFingerprint(
+            String senderId,
+            String senderName,
+            String body,
+            String sentAt
+    ) {
+    }
+
+    private record PrivateMessageFingerprint(
+            String senderId,
+            String senderName,
+            String recipientId,
+            String recipientName,
+            String body,
+            String sentAt
+    ) {
     }
 }

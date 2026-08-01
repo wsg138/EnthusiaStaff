@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 
 final class JdbcReportEvidenceMaintenance {
     private static final Duration CLIENT_EVIDENCE_RETENTION = Duration.ofDays(7);
@@ -28,7 +29,7 @@ final class JdbcReportEvidenceMaintenance {
         this.dataSource = dataSource;
     }
 
-    int purgeExpired(Instant now, int batchLimit) {
+    ReportEvidencePurgeResult purgeExpired(Instant now, int batchLimit) {
         validateRequest(now, batchLimit);
         return JdbcTransactionSupport.execute(
                 dataSource,
@@ -37,7 +38,7 @@ final class JdbcReportEvidenceMaintenance {
         );
     }
 
-    private static int purgeInTransaction(
+    private static ReportEvidencePurgeResult purgeInTransaction(
             Connection connection,
             Instant now,
             int batchLimit
@@ -45,7 +46,7 @@ final class JdbcReportEvidenceMaintenance {
         int publicChat = purgePublicChat(connection, now, batchLimit);
         int privateMessages = purgePrivateMessages(connection, now, batchLimit);
         int clientEvidence = purgeClientEvidence(connection, now, batchLimit);
-        return publicChat + privateMessages + clientEvidence;
+        return new ReportEvidencePurgeResult(publicChat, privateMessages, clientEvidence);
     }
 
     private static int purgePublicChat(
