@@ -1,10 +1,11 @@
 name: Codacy Diagnostics
 
 on:
+  workflow_dispatch:
+  pull_request:
   push:
     branches:
       - agent/expand-test-coverage
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,6 +32,12 @@ jobs:
           set -euo pipefail
           mkdir -p build/reports/codacy
 
+          tested_sha="${GITHUB_SHA}"
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            tested_sha="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "tested_sha=${tested_sha}" >> "${GITHUB_ENV}"
+
           # Codacy's analysis can finish shortly after the GitHub push. Retry only
           # not-found/incomplete responses; never print the project token.
           for attempt in {1..18}; do
@@ -39,7 +46,7 @@ jobs:
                 --output build/reports/codacy/commit.json.tmp \
                 --write-out '%{http_code}' \
                 --header "project-token: ${CODACY_PROJECT_TOKEN}" \
-                "https://api.codacy.com/2.0/commit/${GITHUB_SHA}"
+                "https://api.codacy.com/2.0/commit/${tested_sha}"
             } || true)"
 
             if [[ "${status}" == "200" ]]; then
@@ -67,7 +74,7 @@ jobs:
           lines = [
               "# Codacy commit diagnostics",
               "",
-              f"- Commit: `{os.environ['GITHUB_SHA']}`",
+              f"- Commit: `{os.environ['tested_sha']}`",
               f"- Top-level keys: `{', '.join(sorted(payload))}`",
               "",
               "The complete JSON response is attached in the workflow artifact.",
@@ -82,7 +89,7 @@ jobs:
       - name: Upload Codacy diagnostics
         uses: actions/upload-artifact@v7
         with:
-          name: codacy-diagnostics-${{ github.sha }}
+          name: codacy-diagnostics-${{ env.tested_sha }}
           path: build/reports/codacy
           if-no-files-found: error
           retention-days: 3
