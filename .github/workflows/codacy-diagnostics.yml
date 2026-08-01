@@ -1,0 +1,88 @@
+name: Codacy Diagnostics
+
+on:
+  push:
+    branches:
+      - agent/expand-test-coverage
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export Codacy commit diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+    steps:
+      - name: Require Codacy project token
+        run: |
+          if [[ -z "${CODACY_PROJECT_TOKEN}" ]]; then
+            echo "::error::CODACY_PROJECT_TOKEN is not configured."
+            exit 1
+          fi
+
+      - name: Export analyzed commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports/codacy
+
+          # Codacy's analysis can finish shortly after the GitHub push. Retry only
+          # not-found/incomplete responses; never print the project token.
+          for attempt in {1..18}; do
+            status="$({
+              curl --silent --show-error \
+                --output build/reports/codacy/commit.json.tmp \
+                --write-out '%{http_code}' \
+                --header "project-token: ${CODACY_PROJECT_TOKEN}" \
+                "https://api.codacy.com/2.0/commit/${GITHUB_SHA}"
+            } || true)"
+
+            if [[ "${status}" == "200" ]]; then
+              mv build/reports/codacy/commit.json.tmp build/reports/codacy/commit.json
+              break
+            fi
+
+            rm -f build/reports/codacy/commit.json.tmp
+            if [[ "${attempt}" == "18" ]]; then
+              echo "::error::Codacy commit diagnostics were unavailable after ${attempt} attempts (HTTP ${status})."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          source = Path("build/reports/codacy/commit.json")
+          payload = json.loads(source.read_text(encoding="utf-8"))
+          summary = Path("build/reports/codacy/summary.md")
+
+          lines = [
+              "# Codacy commit diagnostics",
+              "",
+              f"- Commit: `{os.environ['GITHUB_SHA']}`",
+              f"- Top-level keys: `{', '.join(sorted(payload))}`",
+              "",
+              "The complete JSON response is attached in the workflow artifact.",
+          ]
+          text = "\n".join(lines) + "\n"
+          summary.write_text(text, encoding="utf-8")
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write(text)
+          PY
+
+      - name: Upload Codacy diagnostics
+        uses: actions/upload-artifact@v7
+        with:
+          name: codacy-diagnostics-${{ github.sha }}
+          path: build/reports/codacy
+          if-no-files-found: error
+          retention-days: 3
