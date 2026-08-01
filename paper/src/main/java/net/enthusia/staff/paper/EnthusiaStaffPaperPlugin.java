@@ -32,6 +32,8 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
+import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
+import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.automod.AutomodListener;
@@ -77,7 +79,6 @@ import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
 import org.bukkit.command.PluginCommand;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -108,6 +109,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
     private PaperStorageBootstrapCoordinator<PreparedStorage> storageBootstrap;
+    private PunishmentRequestAlertLifecycle punishmentRequestAlerts;
 
     @Override
     public void onEnable() {
@@ -374,6 +376,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (lifecycle.stopping()) {
             return;
         }
+        startPunishmentRequestAlerts(prepared.bindings());
+        if (lifecycle.stopping()) {
+            return;
+        }
         publishBootstrapMode(prepared.bootstrapMode().mode(), prepared.bootstrapMode().issues());
     }
 
@@ -398,6 +404,54 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         } catch (RuntimeException exception) {
             getLogger().log(Level.SEVERE, "Operational-state task registration failed", exception);
             setDegraded("operational-state", "Operational state polling could not be scheduled");
+        }
+    }
+
+    private void startPunishmentRequestAlerts(PaperStorageBindings bindings) {
+        PunishmentRequestAlertWorkerSettings settings = PunishmentRequestAlertWorkerSettings.safeDefaults(
+                getConfig().getBoolean("punishment-request-alerts.enabled", false)
+        );
+        if (!settings.enabled()) {
+            featureIssues.put(
+                    "punishment-request-alerts",
+                    "Durable punishment-request alerts are disabled by configuration"
+            );
+            return;
+        }
+        if (lifecycle.stopping()) {
+            return;
+        }
+        PunishmentRequestAlertLifecycle candidate = new PunishmentRequestAlertLifecycle(
+                this,
+                Clock.systemUTC(),
+                "paper:" + networkServerId() + ":" + UUID.randomUUID(),
+                settings,
+                bindings.punishmentRequestAlertStore(),
+                bindings.punishmentRequestStore(),
+                bindings.playerDirectory(),
+                workers,
+                lifecycle::stopping
+        );
+        try {
+            if (!candidate.start()) {
+                candidate.close();
+                featureIssues.put(
+                        "punishment-request-alerts",
+                        "Durable punishment-request alerts could not be started"
+                );
+                return;
+            }
+            punishmentRequestAlerts = candidate;
+            featureIssues.remove("punishment-request-alerts");
+        } catch (RuntimeException exception) {
+            candidate.close();
+            featureIssues.put(
+                    "punishment-request-alerts",
+                    "Durable punishment-request alert startup failed; moderation remains available"
+            );
+            getLogger().log(Level.SEVERE,
+                    "Punishment-request alert subsystem startup failed",
+                    exception);
         }
     }
 
@@ -427,6 +481,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (removed.isEmpty()) {
             return;
         }
+        closePunishmentRequestAlerts();
         cancelOperationalStateTask();
         closeChannelClient();
         closeSafely("partially published MariaDB runtime", prepared.bindings().runtime());
@@ -461,8 +516,15 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             mode.set(OperationalMode.MAINTENANCE);
             publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
         });
+        closePunishmentRequestAlerts();
         cancelOperationalStateTask();
         closeChannelClient();
+    }
+
+    private void closePunishmentRequestAlerts() {
+        PunishmentRequestAlertLifecycle current = punishmentRequestAlerts;
+        punishmentRequestAlerts = null;
+        closeSafely("punishment-request alert lifecycle", current);
     }
 
     private void cancelOperationalStateTask() {
