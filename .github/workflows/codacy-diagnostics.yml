@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   export:
@@ -16,6 +17,7 @@ jobs:
     timeout-minutes: 10
     env:
       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out branch
@@ -90,7 +92,7 @@ jobs:
                       delta.append({"filePath": path, **item})
 
           root.joinpath("new-issues.json").write_text(json.dumps(delta, indent=2, sort_keys=True) + "\n")
-          lines = ["# Remaining Codacy findings", "", f"Count: **{len(delta)}**", ""]
+          lines = ["<!-- codacy-temporary-diagnostics -->", "# Remaining Codacy findings", "", f"Count: **{len(delta)}**", ""]
           lines.extend(
               f"- `{item['filePath']}:{item.get('startLine', '?')}` "
               f"`{item.get('patternId', '?')}` ({item.get('level', '?')}) — {item.get('message', '')}"
@@ -102,6 +104,9 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
               summary.write(text)
           PY
+
+      - name: Publish exact findings to PR 29
+        run: gh api repos/wsg138/EnthusiaStaff/issues/29/comments --field body="$(cat build/reports/codacy/summary.md)"
 
       - name: Upload diagnostics
         uses: actions/upload-artifact@v7
