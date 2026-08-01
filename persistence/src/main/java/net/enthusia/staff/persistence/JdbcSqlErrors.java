@@ -20,6 +20,9 @@ final class JdbcSqlErrors {
     }
 
     static boolean isDeadlock(Throwable failure) {
+        // Retry only MariaDB's transaction-victim deadlock signal. Lock-wait timeout 1205/HY000
+        // is intentionally surfaced: unlike SQLState 40001, it is not a portable transaction
+        // rollback signal, and blindly retrying it can amplify sustained lock contention.
         return containsSqlError(failure, MARIA_DB_DEADLOCK, TRANSACTION_ROLLBACK);
     }
 
