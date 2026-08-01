@@ -29,7 +29,10 @@ class StorageBootstrapBytecodeBoundaryTest {
         assertTrue(method.contains("MariaDb.initialize"), method);
         for (String forbidden : List.of(
                 "getServer",
+                "getOnlinePlayers",
+                "recoverOnlinePlayers",
                 "org/bukkit",
+                "org/bukkit/entity/Player",
                 "captureStartupPlayer",
                 "attachPunishmentRequestAlerts",
                 "publishBootstrapPromotion"
