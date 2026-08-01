@@ -5,7 +5,7 @@ import java.util.List;
 public final class PaperConfigurationValidationException extends IllegalArgumentException {
     private static final long serialVersionUID = 1L;
 
-    private final List<String> errors;
+    private final transient List<String> errors;
 
     public PaperConfigurationValidationException(List<String> errors) {
         super(summary(errors));
