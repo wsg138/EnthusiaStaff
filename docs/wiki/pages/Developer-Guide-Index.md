@@ -7,8 +7,8 @@ content of those documents.
 
 | I need to... | Open |
 | --- | --- |
-| See how complete every feature is | [[Feature Completion Status|Implementation-Status]] |
-| See what development remains and in what order | [[Remaining Development Map|Development-Blueprint]] |
+| See how complete every feature is | [Feature Completion Status](Implementation-Status) |
+| See what development remains and in what order | [Remaining Development Map](Development-Blueprint) |
 | Find the files and services for a feature | [[Developer Code Guide]] |
 | Understand module boundaries and dependency direction | [[Architecture]] |
 | Set up a development environment | [[Development Setup]] |
@@ -21,10 +21,10 @@ content of those documents.
 
 ### Planning and status
 
-- [[Feature Completion Status|Implementation-Status]] — feature-by-feature marks,
-  estimated percentages and remaining work.
-- [[Remaining Development Map|Development-Blueprint]] — unfinished work grouped
-  into moderation, staff safety, investigations, integrations and migration.
+- [[Feature Completion Status|Implementation-Status]] — four expandable groups
+  with detailed subfeature percentages and remaining-work notes.
+- [[Remaining Development Map|Development-Blueprint]] — the canonical unfinished
+  work map, organized into the same four expandable groups.
 
 ### Code and architecture
 
@@ -66,8 +66,8 @@ same file list or workflow into this index.
   define the finished behavior.
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
   records exact evidence and blockers.
-- [Development blueprint](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/development-blueprint.md)
-  groups the remaining implementation work.
+- [Remaining development map](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/wiki/pages/Development-Blueprint.md)
+  is the canonical repository-managed roadmap source.
 
 When a repeated question needs a detailed answer, put that answer in the most
 focused technical page and link it here once.
