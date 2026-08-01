@@ -76,6 +76,30 @@ logic.
 - Migration/shadow/cutover coordination
 - Restricted website/API bridge
 
+### Restricted website bridge
+
+The Velocity website bridge is an inbound, loopback-only HTTP boundary for a
+trusted local site service or reverse proxy. It must never be exposed directly
+to an untrusted network. Requests require the configured bearer and HMAC
+authentication, a bounded timestamp window, and nonce replay protection.
+
+The implementation separates responsibilities so transport failures cannot
+silently become moderation decisions:
+
+- `WebsiteApiRuntime` owns the listener and bounded executor lifecycle;
+- `WebsiteApiServer` enforces loopback clients, body limits, authentication,
+  hardened response headers, and stable error envelopes;
+- `WebsiteApiRequestDecoder` rejects unknown fields, unsupported query keys,
+  malformed identifiers, and invalid content types;
+- `WebsiteApiRouter` maps the small versioned route surface to domain ports;
+- `WebsiteAppealEndpoint` authorizes the reviewer and coordinates durable
+  prepare, sanction mutation, and terminal appeal state.
+
+An authority-mode rejection leaves a prepared appeal replayable instead of
+recording a false terminal result. Other rejected mutations record a durable
+rejection before returning a conflict. Public responses continue to come from
+sanitized MariaDB projections rather than mutable runtime objects.
+
 ### MariaDB
 
 Authoritative cases, sanctions, identities, drafts, reports, staff sessions,

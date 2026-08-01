@@ -104,6 +104,22 @@ Automated tests cannot prove:
 Record staging evidence with commit, jar hashes, configuration version,
 environment versions, steps, results, and logs.
 
+### Exact-SHA Pi gate
+
+The repository's `Pi Staging` workflow is a merge-candidate gate, not a general
+production-readiness claim. For an eligible pull request it dispatches the
+trusted staging harness with the exact PR head SHA and waits for that exact
+request's verdict.
+
+The current harness independently builds with Java 21, inspects the Paper
+runtime jar and provider-API packaging, loads the plugin on Paper, exercises
+two boot/storage/command/shutdown cycles, and scans the sanitized evidence for
+critical failures. A passing result applies only to the recorded SHA; push a
+new head and the gate must run again.
+
+This gate does not replace Velocity, multi-backend, provider-plugin, Bedrock,
+live Discord, production-data, load, or crash-window acceptance testing.
+
 ## Wiki validation
 
 ```bash

@@ -593,6 +593,83 @@ Lizard and Opengrep runs likewise report no changed-file findings, Trivy
 reports zero findings, and the five repository-wide 100-token CPD groups do
 not include a changed file. No analyzer finding was ignored or suppressed.
 
+Exact PR head `4457888e341a99822235e54e4dc68a805c226a55` subsequently
+passed the hosted build and merged as PR #30 in
+`477b8c509dba7e437968ffa5a3faef0f2f9c0aad`. Hosted Codacy reported
+the head up to standards with zero introduced issues, 24 fixed issues, 88.31%
+diff coverage across 667 coverable lines, +2.863 percentage-point coverage
+variation, complexity delta +147, and duplication delta +42. The one
+non-gating potential Lizard signal was a 56-line test method; it was split at
+the start of the next plugin checkpoint rather than ignored.
+
+The exact head also passed trusted Pi staging run `30695268906`. Its Java 21
+build produced an 8,239,663-byte Paper runtime with SHA-256
+`4757DB24955D942F7B3DC10626BE5D9118F0DAC9D0452DEF180245C84DF21A3E`.
+Paper 1.21.11 build 132 completed two boot/storage/command/shutdown cycles in
+`SHADOW_MIGRATION`, with zero provider API leaks, zero critical failure
+patterns, and exit code zero in both cycles. CodeRabbit's earlier findings
+were addressed; its final status was rate-limited and is not represented as a
+fresh approval.
+
+### PR #31 restricted website API boundary checkpoint
+
+Draft PR #31 decomposes the restricted Velocity website bridge without
+changing its route contract. `WebsiteApiServer` is now a transport boundary,
+while configuration validation, listener/executor ownership, request decoding,
+route dispatch, response projection, and durable appeal mutation live in
+focused collaborators. The server constructor was reduced from 14 parameters
+to five dependencies. Loopback binding and client checks, bearer/HMAC
+authentication, nonce replay protection, bounded bodies and queues, strict
+input fields, stable error envelopes, and hardened response headers remain
+explicit.
+
+Regression tests cover authenticated loopback transport, unsigned rejection,
+clean close/restart, failed-bind cleanup and retry, pre-authentication body
+limits, route/query/body/content-type rejection, authorized appeal acceptance,
+authority-mode replayability, terminal mutation rejection, and durable
+preparation rejection. The final Java 21
+`clean test check runtimeJars jacocoAggregateReport` run executed all 40 tasks
+with caches disabled and passed 365 tests with zero failures, errors, or skips.
+That includes all 52 tests across the 12 MariaDB 11.8.3 Testcontainers suites.
+
+| Artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,769 | `EC6C7441DC330C4337D41CB54E4D523FC11A49EEDFCDF79D162105CA86BE1BF4` |
+| Velocity runtime jar | 7,452,204 | `D67A6C62A2F96F5EBC1674830946980BD2AAE641CABD5E0116343ECAB17DF8C3` |
+
+Hosted Codacy initially reported exactly two new Opengrep findings. One
+mistook the inbound `HttpServer` loopback bind for an outbound SSRF request.
+The other mistook a test-only ephemeral loopback port reservation, which sends
+no application data, for an unencrypted application transport. Both cited
+constructs are analyzer mismatches. They have narrow inline `nosemgrep`
+annotations on only the cited lines with the reason beside each annotation;
+no rule or first-party path is disabled. The Codacy CLI could read both exact
+findings, but its issue-state mutation endpoint returned `404`, so the
+source-scoped dispositions keep the evidence reviewable in version control.
+
+At exact head `6e8a4212ed17f3da135d5d844f3771614950313f`, hosted
+Codacy is up to standards with zero new and 22 fixed issues, 78.59% diff
+coverage across 383 coverable lines, a +1.514 percentage-point coverage
+variation, complexity delta +79, and duplication delta +10. The structural
+deltas remain visible. Local analyzers report 200 PMD findings, 395 Lizard
+findings, 18 Opengrep results (16 active and two source-suppressed), zero Trivy
+findings, and six 100-token CPD clone groups. None of the active results is
+introduced on a PR #31 changed line. The unrelated `migrationMode == null`
+Opengrep result in the
+touched Velocity composition root is the already reviewed self-comparison
+false positive recorded in the ignored baseline.
+
+The same exact head passed trusted Pi wrapper run `30697060008`. The independent
+Java 21 build produced an 8,239,663-byte Paper runtime with SHA-256
+`F356B67FE7F8503A83839FF5B00941359DA7AB60219E22B201D50755E051DDC2`.
+Paper 1.21.11 build 132 completed two `SHADOW_MIGRATION`
+boot/storage/command/shutdown cycles, checked 24 provider API source types with
+zero leaks, found zero critical startup/runtime patterns, and exited with code
+zero both times. Repository-managed Wiki Architecture and Build/Testing pages
+now describe the bridge and this exact-SHA gate; all 29 Wiki pages validate.
+CodeRabbit skipped the draft automatically, so one lightweight ready-state pass
+remains and no approval is claimed here.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
