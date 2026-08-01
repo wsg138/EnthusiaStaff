@@ -7,17 +7,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
 
 jobs:
   export:
-    name: Export remaining Codacy findings
+    name: Persist remaining Codacy findings
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out branch
@@ -31,8 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${CODACY_PROJECT_TOKEN}"
-          mkdir -p build/reports/codacy
-          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/codacy/changed-java-files.txt
+          git diff --name-only origin/main...HEAD -- '*.java' > changed-java-files.txt
 
           python3 - <<'PY'
           import collections
@@ -44,8 +41,7 @@ jobs:
           import urllib.request
           from pathlib import Path
 
-          root = Path("build/reports/codacy")
-          paths = [line for line in root.joinpath("changed-java-files.txt").read_text().splitlines() if line]
+          paths = [line for line in Path("changed-java-files.txt").read_text().splitlines() if line]
           token = os.environ["CODACY_PROJECT_TOKEN"]
 
           def normalize(payload):
@@ -91,27 +87,21 @@ jobs:
                   else:
                       delta.append({"filePath": path, **item})
 
-          root.joinpath("new-issues.json").write_text(json.dumps(delta, indent=2, sort_keys=True) + "\n")
-          lines = ["<!-- codacy-temporary-diagnostics -->", "# Remaining Codacy findings", "", f"Count: **{len(delta)}**", ""]
+          lines = ["# Remaining Codacy findings", "", f"Count: **{len(delta)}**", ""]
           lines.extend(
               f"- `{item['filePath']}:{item.get('startLine', '?')}` "
               f"`{item.get('patternId', '?')}` ({item.get('level', '?')}) — {item.get('message', '')}"
               for item in delta
           )
-          text = "\n".join(lines) + "\n"
-          root.joinpath("summary.md").write_text(text)
-          print(text)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write(text)
+          Path("CODACY-REMAINING.md").write_text("\n".join(lines) + "\n")
           PY
 
-      - name: Publish exact findings to PR 29
-        run: gh api repos/wsg138/EnthusiaStaff/issues/29/comments --field body="$(cat build/reports/codacy/summary.md)"
-
-      - name: Upload diagnostics
-        uses: actions/upload-artifact@v7
-        with:
-          name: codacy-remaining-findings
-          path: build/reports/codacy
-          if-no-files-found: error
-          retention-days: 3
+      - name: Commit diagnostic report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CODACY-REMAINING.md
+          git commit -m "Record remaining Codacy findings"
+          git push origin HEAD:agent/expand-test-coverage
