@@ -1,24 +1,39 @@
 # Developer Guide Index
 
 Use this page as the starting point for code review and development. It links to
-the source map, focused technical explanations, tests, and operational boundaries.
+the roadmap, source map, focused technical explanations, tests and operational
+boundaries.
 
 ## Common questions
 
+- **What should be built next?** See [[Development Blueprint]].
+- **What is actually proven right now?** See [[Implementation Status]].
 - **What does the protocol do?** See [[Protocol and Network Traffic]].
 - **What does ReplayGuard protect against?** See
   [[ReplayGuard|Protocol-and-Network-Traffic#replayguard]].
 - **Where does outbound traffic go?** See
   [[Outbound traffic map|Protocol-and-Network-Traffic#outbound-traffic-map]].
 - **How does vanish actually hide a player?** See [[Vanish Internals]].
-- **Which packets does vanish cancel?** It currently does not contain direct packet
-  interception; see [[Packets and Paper visibility|Vanish-Internals#packets-and-paper-visibility]].
+- **Which packets does vanish cancel?** See
+  [[Packets and Paper visibility|Vanish-Internals#packets-and-paper-visibility]]
+  and the current gaps on that page.
 - **Where should I begin reviewing the repository?** See
   [[Recommended review order|Developer-Code-Guide#recommended-review-order]].
 
+## Roadmap and status
+
+- [[Development Blueprint]] — visual road to production, milestone gates,
+  workstreams and immediate execution order.
+- [[Road to production|Development-Blueprint#road-to-production]]
+- [[Workstream map|Development-Blueprint#workstream-map]]
+- [[Immediate execution order|Development-Blueprint#immediate-execution-order]]
+- [[Feature definition of done|Development-Blueprint#feature-definition-of-done]]
+- [[Implementation Status]] — exact checkpoint, proven areas, command surfaces,
+  blockers and production gates.
+
 ## Architecture and repository map
 
-- [[Architecture]] — dependency direction, runtime ownership, and durable write flow.
+- [[Architecture]] — dependency direction, runtime ownership and durable write flow.
 - [[Developer Code Guide]] — practical source map and feature traces.
 - [[Recommended review order|Developer-Code-Guide#recommended-review-order]]
 - [[Repository map|Developer-Code-Guide#repository-map]]
@@ -72,7 +87,7 @@ the source map, focused technical explanations, tests, and operational boundarie
 - [[LiteBans migration and cutover|Developer-Code-Guide#litebans-migration-and-cutover]]
 - [[Website bridge|Developer-Code-Guide#website-bridge]]
 
-## Build, tests, and review
+## Build, tests and review
 
 - [[Development Setup]]
 - [[Build and Testing]]
@@ -80,13 +95,13 @@ the source map, focused technical explanations, tests, and operational boundarie
 - [[Threading and concurrency rules|Developer-Code-Guide#threading-and-concurrency-rules]]
 - [[High-risk review areas|Developer-Code-Guide#high-risk-review-areas]]
 - [[Review completion checklist|Developer-Code-Guide#review-completion-checklist]]
-- [[Implementation Status]]
 
 ## Documentation maintenance
 
 - [[Wiki Maintenance]]
 - [Authoritative goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
+- [Repository development blueprint](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/development-blueprint.md)
 
 When a repeated reviewer question appears, add the answer to a focused technical
 page and link it here rather than making reviewers search the repository again.
