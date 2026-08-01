@@ -1,6 +1,7 @@
 package net.enthusia.staff.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,11 +19,13 @@ public final class JdbcReportStore implements ReportStore {
     private final JdbcReportSubmissionStore submissions;
     private final JdbcReportQueryStore queries;
     private final JdbcReportStateStore states;
+    private final JdbcReportEvidenceMaintenance evidenceMaintenance;
 
     public JdbcReportStore(DataSource dataSource, ObjectMapper json) {
         this.submissions = new JdbcReportSubmissionStore(dataSource, json);
         this.queries = new JdbcReportQueryStore(dataSource);
         this.states = new JdbcReportStateStore(dataSource, json);
+        this.evidenceMaintenance = new JdbcReportEvidenceMaintenance(dataSource);
     }
 
     @Override
@@ -43,5 +46,10 @@ public final class JdbcReportStore implements ReportStore {
     @Override
     public ReportStateChangeResult changeState(ReportStateChangeRequest request) {
         return states.changeState(request);
+    }
+
+    @Override
+    public int purgeExpiredEvidence(Instant now, int batchLimit) {
+        return evidenceMaintenance.purgeExpired(now, batchLimit);
     }
 }

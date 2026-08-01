@@ -57,6 +57,7 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -104,6 +105,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ClientEvidenceCollector clientEvidenceCollector;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
+    private ReportEvidenceMaintenance reportEvidenceMaintenance;
 
     @Override
     public void onEnable() {
@@ -113,6 +115,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         int threads = getConfig().getInt("workers.threads", 4);
         int queueCapacity = getConfig().getInt("workers.queue-capacity", 256);
         workers = BoundedExecutorFactory.create(threads, queueCapacity);
+        reportEvidenceMaintenance = new ReportEvidenceMaintenance(
+                Clock.systemUTC(),
+                () -> storageValue(PaperStorageBindings::reportStore),
+                getLogger()
+        );
         freezeManager = new FreezeManager(
                 this,
                 Clock.systemUTC(),
@@ -292,7 +299,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void registerOperationalStateTask() {
         ScheduledTask task = getServer().getAsyncScheduler().runAtFixedRate(
                 this,
-                ignored -> refreshOperationalState(),
+                ignored -> runOperationalTasks(),
                 5,
                 5,
                 TimeUnit.SECONDS
@@ -300,6 +307,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (!lifecycle.publishTask(task)) {
             cancelTask(task);
         }
+    }
+
+    private void runOperationalTasks() {
+        refreshOperationalState();
+        reportEvidenceMaintenance.run();
     }
 
     private void degradeBootstrap(String reason) {

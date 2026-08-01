@@ -1,5 +1,6 @@
 package net.enthusia.staff.domain.ports;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,4 +20,6 @@ public interface ReportStore {
     Optional<ReportDetails> details(UUID reportId);
 
     ReportStateChangeResult changeState(ReportStateChangeRequest request);
+
+    int purgeExpiredEvidence(Instant now, int batchLimit);
 }

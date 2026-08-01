@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -22,7 +23,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import net.enthusia.staff.common.IdempotencyKey;
+import net.enthusia.staff.domain.evidence.ClientEvidenceSnapshot;
+import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.ReportStore;
+import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
@@ -224,6 +228,39 @@ class ReportStoreIntegrationTest {
         }
     }
 
+    @Test
+    void expiredEvidenceIsPhysicallyPurgedInBoundedBatches() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            Instant expiredAt = NOW.minus(Duration.ofDays(9));
+            UUID reportId = accepted(store.submit(requestWithEvidence(
+                    reporterId,
+                    targetId,
+                    "report:retention",
+                    expiredAt,
+                    "retention"
+            ))).reportId();
+
+            assertEquals(1L, reportEvidenceCount("report_chat_snapshots", reportId));
+            assertEquals(1L, reportEvidenceCount("report_private_message_snapshots", reportId));
+            assertEquals(1L, reportEvidenceCount("report_client_evidence_snapshots", reportId));
+            assertEquals(1L, clientEvidenceCount(targetId));
+
+            int purged = store.purgeExpiredEvidence(NOW, 100);
+
+            assertEquals(3, purged);
+            assertEquals(0L, reportEvidenceCount("report_chat_snapshots", reportId));
+            assertEquals(0L, reportEvidenceCount("report_private_message_snapshots", reportId));
+            assertEquals(0L, reportEvidenceCount("report_client_evidence_snapshots", reportId));
+            assertEquals(0L, clientEvidenceCount(targetId));
+            assertEquals(0, store.purgeExpiredEvidence(NOW, 100));
+        }
+    }
+
     private static void seedPlayers(UUID reporterId, UUID targetId) throws SQLException {
         insertPlayer(DATABASE, reporterId, "Reporter" + reporterId.toString().substring(0, 6), NOW);
         insertPlayer(DATABASE, targetId, "Target" + targetId.toString().substring(0, 8), NOW);
@@ -261,6 +298,53 @@ class ReportStoreIntegrationTest {
                         "Private evidence " + evidenceLabel,
                         createdAt
                 )),
+                Optional.empty()
+        );
+    }
+
+    private static CreateReportRequest requestWithEvidence(
+            UUID reporterId,
+            UUID targetId,
+            String idempotencyKey,
+            Instant createdAt,
+            String evidenceLabel
+    ) {
+        CreateReportRequest base = request(reporterId, targetId, idempotencyKey, createdAt, evidenceLabel);
+        return new CreateReportRequest(
+                base.idempotencyKey(),
+                base.reporterId(),
+                base.targetId(),
+                base.reasonId(),
+                base.description(),
+                base.serverId(),
+                base.worldId(),
+                base.reporterCoordinates(),
+                base.targetCoordinates(),
+                base.createdAt(),
+                base.publicChatContext(),
+                base.privateMessageContext(),
+                Optional.of(clientEvidence(targetId, createdAt))
+        );
+    }
+
+    private static ClientEvidenceSnapshot clientEvidence(UUID targetId, Instant capturedAt) {
+        return new ClientEvidenceSnapshot(
+                targetId,
+                capturedAt,
+                PlayerPlatform.JAVA,
+                Optional.of(774),
+                Optional.of("1.21.11"),
+                Optional.of("vanilla"),
+                IntegrationAvailability.AVAILABLE,
+                Optional.of("5.10.0"),
+                IntegrationAvailability.AVAILABLE,
+                false,
+                Optional.empty(),
+                Optional.empty(),
+                IntegrationAvailability.NOT_INSTALLED,
+                IntegrationAvailability.NOT_INSTALLED,
+                Optional.empty(),
+                IntegrationAvailability.NOT_INSTALLED,
                 Optional.empty()
         );
     }
@@ -385,6 +469,14 @@ class ReportStoreIntegrationTest {
 
     private static long reportEventCount(UUID reportId) throws SQLException {
         return uuidCount("SELECT COUNT(*) FROM report_events WHERE report_id = ?", reportId);
+    }
+
+    private static long reportEvidenceCount(String table, UUID reportId) throws SQLException {
+        return uuidCount("SELECT COUNT(*) FROM " + table + " WHERE report_id = ?", reportId);
+    }
+
+    private static long clientEvidenceCount(UUID playerId) throws SQLException {
+        return uuidCount("SELECT COUNT(*) FROM client_evidence_snapshots WHERE player_id = ?", playerId);
     }
 
     private static long uuidCount(String sql, UUID value) throws SQLException {
