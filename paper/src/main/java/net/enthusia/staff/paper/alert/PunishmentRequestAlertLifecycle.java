@@ -29,6 +29,7 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
     private final PunishmentRequestStore requests;
     private final PunishmentRequestAlertStore alerts;
     private final PunishmentRequestAlertWorker worker;
+    private final Executor asynchronous;
     private final BooleanSupplier pluginStopping;
     private final AtomicBoolean active = new AtomicBoolean();
     private final AtomicBoolean stopping = new AtomicBoolean();
@@ -81,6 +82,7 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
         this.settings = settings;
         this.alerts = alerts;
         this.requests = requests;
+        this.asynchronous = asynchronous;
         this.pluginStopping = pluginStopping;
         PunishmentRequestAlertPresenter presenter = new PunishmentRequestAlertPresenter() {
             @Override
@@ -263,17 +265,33 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
     private void scheduleMaintenance(String name, Duration interval, MaintenanceOperation operation) {
         MaintenanceState state = new MaintenanceState(name);
         addTask(runtime.scheduleAsynchronousRepeating(
-                () -> runMaintenance(state, operation),
+                () -> submitMaintenance(state, operation),
                 interval,
                 interval
         ));
     }
 
-    private void runMaintenance(MaintenanceState state, MaintenanceOperation operation) {
+    private void submitMaintenance(MaintenanceState state, MaintenanceOperation operation) {
         if (isStopping() || !state.running.compareAndSet(false, true)) {
             return;
         }
         try {
+            asynchronous.execute(() -> runMaintenance(state, operation));
+        } catch (RuntimeException exception) {
+            state.running.set(false);
+            if (!isStopping()) {
+                runtime.logger().log(Level.FINE,
+                        "Punishment request alert maintenance submission was rejected: " + state.name,
+                        exception);
+            }
+        }
+    }
+
+    private void runMaintenance(MaintenanceState state, MaintenanceOperation operation) {
+        try {
+            if (isStopping()) {
+                return;
+            }
             operation.run();
         } catch (RuntimeException exception) {
             long now = System.nanoTime();

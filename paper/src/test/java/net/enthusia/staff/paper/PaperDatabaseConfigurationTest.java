@@ -23,7 +23,7 @@ final class PaperDatabaseConfigurationTest {
         configuration.set("storage.connection-timeout-millis", 7_500L);
         Map<String, String> environment = completeEnvironment();
 
-        DatabaseConfig database = new PaperDatabaseConfiguration(configuration, environment::get)
+        DatabaseConfig database = new PaperDatabaseConfiguration(PaperDatabaseConfiguration.snapshot(configuration), environment::get)
                 .load()
                 .orElseThrow();
 
@@ -42,7 +42,7 @@ final class PaperDatabaseConfigurationTest {
                 USER_ENVIRONMENT, USERNAME
         );
 
-        assertTrue(new PaperDatabaseConfiguration(configuration, environment::get).load().isEmpty());
+        assertTrue(new PaperDatabaseConfiguration(PaperDatabaseConfiguration.snapshot(configuration), environment::get).load().isEmpty());
     }
 
     @Test
@@ -54,14 +54,14 @@ final class PaperDatabaseConfigurationTest {
                 AUTH_ENVIRONMENT, "   "
         );
 
-        assertTrue(new PaperDatabaseConfiguration(configuration, environment::get).load().isEmpty());
+        assertTrue(new PaperDatabaseConfiguration(PaperDatabaseConfiguration.snapshot(configuration), environment::get).load().isEmpty());
     }
 
     @Test
     void appliesSafePoolDefaultsWhenSettingsAreAbsent() {
         YamlConfiguration configuration = configuredEnvironmentNames();
 
-        DatabaseConfig database = new PaperDatabaseConfiguration(configuration, completeEnvironment()::get)
+        DatabaseConfig database = new PaperDatabaseConfiguration(PaperDatabaseConfiguration.snapshot(configuration), completeEnvironment()::get)
                 .load()
                 .orElseThrow();
 

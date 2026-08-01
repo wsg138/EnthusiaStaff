@@ -16,6 +16,9 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -103,12 +106,20 @@ class PunishmentRequestAlertLifecycleTest {
     }
 
     @Test
-    void maintenanceUsesConfiguredBatchesSuppressesOverlapAndRecoversAfterFailure() throws Exception {
+    void maintenanceSchedulerOnlyTriggersBoundedWorkerExecutionAndSuppressesOverlap() throws Exception {
         Harness harness = new Harness();
         harness.lifecycle.start();
 
         for (Runnable action : harness.runtime.asynchronousRepeating) {
             action.run();
+        }
+
+        assertEquals(0, harness.requests.expirationCalls,
+                "Paper scheduler callbacks must not execute JDBC work directly");
+        assertEquals(0, harness.alerts.intentCalls);
+        assertEquals(4, harness.asynchronous.size());
+        for (int index = 0; index < 4; index++) {
+            harness.asynchronous.runNext();
         }
 
         assertEquals(harness.settings.requestExpirationBatch(), harness.requests.lastExpirationBatch);
@@ -117,11 +128,13 @@ class PunishmentRequestAlertLifecycleTest {
         assertEquals(harness.settings.retentionBatch(), harness.alerts.lastRetentionBatch);
 
         harness.requests.blockExpiration = true;
-        Thread first = new Thread(harness.runtime.asynchronousRepeating.get(0));
+        harness.runtime.asynchronousRepeating.get(0).run();
+        Thread first = new Thread(harness.asynchronous::runNext);
         first.start();
         assertTrue(harness.requests.expirationEntered.await(2, TimeUnit.SECONDS));
         int beforeOverlap = harness.requests.expirationCalls;
         harness.runtime.asynchronousRepeating.get(0).run();
+        assertEquals(0, harness.asynchronous.size());
         assertEquals(beforeOverlap, harness.requests.expirationCalls);
         harness.requests.expirationRelease.countDown();
         first.join(2_000);
@@ -129,8 +142,55 @@ class PunishmentRequestAlertLifecycleTest {
         harness.alerts.throwIntentExpirationOnce = true;
         int beforeFailure = harness.alerts.intentCalls;
         harness.runtime.asynchronousRepeating.get(1).run();
+        harness.asynchronous.runNext();
         harness.runtime.asynchronousRepeating.get(1).run();
+        harness.asynchronous.runNext();
         assertEquals(beforeFailure + 2, harness.alerts.intentCalls);
+    }
+
+    @Test
+    void rejectedMaintenanceSubmissionReleasesOverlapGuardForNextTick() {
+        Harness harness = new Harness();
+        harness.lifecycle.start();
+        Runnable maintenance = harness.runtime.asynchronousRepeating.getFirst();
+
+        harness.asynchronous.reject = true;
+        maintenance.run();
+        harness.asynchronous.reject = false;
+        maintenance.run();
+
+        assertEquals(1, harness.asynchronous.size());
+        harness.asynchronous.runNext();
+        assertEquals(1, harness.requests.expirationCalls);
+    }
+
+    @Test
+    void submittedMaintenanceParticipatesInExecutorShutdown() throws Exception {
+        FakeRuntime runtime = new FakeRuntime();
+        RecordingAlertStore alerts = new RecordingAlertStore();
+        RecordingRequestStore requests = new RecordingRequestStore();
+        requests.blockExpiration = true;
+        ExecutorService workers = Executors.newSingleThreadExecutor();
+        PunishmentRequestAlertLifecycle lifecycle = new PunishmentRequestAlertLifecycle(
+                runtime,
+                Clock.fixed(PunishmentRequestAlertTestFixtures.NOW, ZoneOffset.UTC),
+                "shutdown-owner",
+                PunishmentRequestAlertWorkerSettings.safeDefaults(true),
+                alerts,
+                requests,
+                new EmptyPlayerDirectory(),
+                workers,
+                () -> false
+        );
+        lifecycle.start();
+
+        runtime.asynchronousRepeating.getFirst().run();
+        assertTrue(requests.expirationEntered.await(2, TimeUnit.SECONDS));
+        lifecycle.close();
+        workers.shutdown();
+        assertFalse(workers.awaitTermination(50, TimeUnit.MILLISECONDS));
+        requests.expirationRelease.countDown();
+        assertTrue(workers.awaitTermination(2, TimeUnit.SECONDS));
     }
 
     @Test
@@ -198,22 +258,30 @@ class PunishmentRequestAlertLifecycleTest {
 
     private static final class QueueExecutor implements Executor {
         private final Queue<Runnable> queue = new ArrayDeque<>();
+        private boolean reject;
 
         @Override
-        public void execute(Runnable command) {
+        public synchronized void execute(Runnable command) {
+            if (reject) {
+                throw new RejectedExecutionException("simulated full worker queue");
+            }
             queue.add(command);
         }
 
-        int size() {
+        synchronized int size() {
             return queue.size();
         }
 
-        boolean isEmpty() {
+        synchronized boolean isEmpty() {
             return queue.isEmpty();
         }
 
         void runNext() {
-            queue.remove().run();
+            Runnable operation;
+            synchronized (this) {
+                operation = queue.remove();
+            }
+            operation.run();
         }
     }
 

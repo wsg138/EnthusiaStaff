@@ -257,6 +257,12 @@ public final class PunishmentRequestAlertWorker {
             ClaimBudget budget
     ) {
         Instant now = clock.instant();
+        alerts.reconcileRecipientAuthorization(
+                recipient.playerId(),
+                recipient.rank(),
+                now,
+                settings.totalClaimLimit()
+        );
         List<PunishmentRequestAlertClaim> claimed = new ArrayList<>();
         claimDirect(recipient, budget, now, claimed);
         StaffRank rank = recipient.rank();

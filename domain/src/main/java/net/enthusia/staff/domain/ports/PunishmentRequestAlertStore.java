@@ -32,6 +32,19 @@ public interface PunishmentRequestAlertStore {
             Instant now
     );
 
+    /**
+     * Cancels a bounded number of pending audience deliveries that the recipient is no longer
+     * authorized to receive. Direct-recipient deliveries and active fenced leases are unaffected.
+     */
+    default int reconcileRecipientAuthorization(
+            UUID recipientId,
+            StaffRank currentRank,
+            Instant now,
+            int limit
+    ) {
+        return 0;
+    }
+
     boolean delivered(PunishmentRequestAlertDeliveryId deliveryId, String owner, Instant now);
 
     boolean failed(

@@ -60,6 +60,29 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
         return startWithoutPrevious(desired, Outcome.ENABLED, "Durable punishment-request alerts enabled");
     }
 
+    public synchronized PreparedChange prepare(PunishmentRequestAlertWorkerSettings candidate) {
+        Objects.requireNonNull(candidate, "candidate");
+        if (closed || shuttingDown.get()) {
+            return new PreparedChange(
+                    this, candidate, desired, current, storage, null,
+                    new IllegalStateException("alert controller is shutting down")
+            );
+        }
+        PunishmentRequestAlertManagedLifecycle prepared = null;
+        RuntimeException failure = null;
+        boolean requiresLifecycle = candidate.enabled()
+                && storage != null
+                && (current == null || !current.active() || !candidate.equals(desired));
+        if (requiresLifecycle) {
+            try {
+                prepared = factory.create(owner, candidate, storage);
+            } catch (RuntimeException exception) {
+                failure = exception;
+            }
+        }
+        return new PreparedChange(this, candidate, desired, current, storage, prepared, failure);
+    }
+
     public synchronized ApplyResult apply(PunishmentRequestAlertWorkerSettings candidate) {
         Objects.requireNonNull(candidate, "candidate");
         if (closed || shuttingDown.get()) {
@@ -121,6 +144,27 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
         return current != null && current.active() && !closed && !shuttingDown.get();
     }
 
+    public synchronized boolean shuttingDown() {
+        return closed || shuttingDown.get();
+    }
+
+    public synchronized ApplyResult forceUnavailable(
+            PunishmentRequestAlertWorkerSettings desiredSettings,
+            String issue
+    ) {
+        Objects.requireNonNull(desiredSettings, "desiredSettings");
+        if (closed || shuttingDown.get()) {
+            return ApplyResult.shuttingDown(status);
+        }
+        closeCurrent();
+        desired = desiredSettings;
+        return update(ApplyResult.failed(
+                Outcome.UNAVAILABLE,
+                setStatus(Status.unavailable(issue)),
+                issue
+        ));
+    }
+
     @Override
     public void close() {
         if (!shuttingDown.compareAndSet(false, true)) {
@@ -135,6 +179,111 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
             storage = null;
             setStatus(Status.closed());
             publish(status);
+        }
+    }
+
+    private synchronized ApplyResult commitPrepared(PreparedChange preparedChange) {
+        if (preparedChange.controller != this) {
+            throw new IllegalArgumentException("prepared alert change belongs to another controller");
+        }
+        if (closed || shuttingDown.get()) {
+            closeQuietly(preparedChange.takeLifecycle());
+            return ApplyResult.shuttingDown(status);
+        }
+        if (preparedChange.failure != null) {
+            return update(ApplyResult.failed(
+                    Outcome.RESTORED,
+                    setStatus(current != null && current.active()
+                            ? Status.restored("Candidate construction failed; previous alert worker remains active")
+                            : status),
+                    "Alert-worker candidate construction failed before runtime mutation",
+                    preparedChange.failure
+            ));
+        }
+        if (!Objects.equals(desired, preparedChange.previousSettings)
+                || current != preparedChange.previousLifecycle
+                || storage != preparedChange.preparedStorage) {
+            closeQuietly(preparedChange.takeLifecycle());
+            return update(ApplyResult.failed(
+                    Outcome.RESTORED,
+                    setStatus(current != null && current.active()
+                            ? Status.restored("Alert runtime changed before prepared commit")
+                            : status),
+                    "Prepared alert change was discarded because runtime state changed"
+            ));
+        }
+
+        PunishmentRequestAlertManagedLifecycle candidate = preparedChange.takeLifecycle();
+        if (candidate == null) {
+            return apply(preparedChange.candidateSettings);
+        }
+        if (current == null) {
+            return startPreparedWithoutPrevious(preparedChange.candidateSettings, candidate);
+        }
+        return replacePrepared(preparedChange.candidateSettings, candidate);
+    }
+
+    private ApplyResult replacePrepared(
+            PunishmentRequestAlertWorkerSettings candidateSettings,
+            PunishmentRequestAlertManagedLifecycle candidate
+    ) {
+        PunishmentRequestAlertWorkerSettings previousSettings = desired;
+        PunishmentRequestAlertManagedLifecycle previous = current;
+        current = null;
+        desired = candidateSettings;
+        closeQuietly(previous);
+        if (closed || shuttingDown.get()) {
+            closeQuietly(candidate);
+            return update(ApplyResult.shuttingDown(setStatus(Status.closed())));
+        }
+        try {
+            if (!candidate.start()) {
+                throw new IllegalStateException("prepared replacement alert lifecycle did not start");
+            }
+            if (shuttingDown.get()) {
+                closeQuietly(candidate);
+                return update(ApplyResult.shuttingDown(setStatus(Status.closed())));
+            }
+            current = candidate;
+            desired = candidateSettings;
+            return update(ApplyResult.changed(
+                    Outcome.REPLACED,
+                    setStatus(Status.active()),
+                    "Punishment-request alert worker settings replaced"
+            ));
+        } catch (RuntimeException replacementFailure) {
+            closeQuietly(candidate);
+            return restore(previousSettings, replacementFailure);
+        }
+    }
+
+    private ApplyResult startPreparedWithoutPrevious(
+            PunishmentRequestAlertWorkerSettings settings,
+            PunishmentRequestAlertManagedLifecycle candidate
+    ) {
+        try {
+            if (!candidate.start()) {
+                throw new IllegalStateException("prepared alert lifecycle did not start");
+            }
+            if (closed || shuttingDown.get()) {
+                closeQuietly(candidate);
+                return update(ApplyResult.shuttingDown(setStatus(Status.closed())));
+            }
+            current = candidate;
+            desired = settings;
+            return update(ApplyResult.changed(
+                    Outcome.ENABLED, setStatus(Status.active()),
+                    "Durable punishment-request alerts enabled"));
+        } catch (RuntimeException exception) {
+            closeQuietly(candidate);
+            current = null;
+            desired = settings;
+            return update(ApplyResult.failed(
+                    Outcome.UNAVAILABLE,
+                    setStatus(Status.unavailable("Alert worker startup failed")),
+                    "Punishment-request alerts could not be started",
+                    exception
+            ));
         }
     }
 
@@ -271,6 +420,60 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
 
     private void publish(Status next) {
         statusSink.accept(next);
+    }
+
+    public static final class PreparedChange implements AutoCloseable {
+        private final PunishmentRequestAlertController controller;
+        private final PunishmentRequestAlertWorkerSettings candidateSettings;
+        private final PunishmentRequestAlertWorkerSettings previousSettings;
+        private final PunishmentRequestAlertManagedLifecycle previousLifecycle;
+        private final Storage preparedStorage;
+        private final RuntimeException failure;
+        private final AtomicBoolean completed = new AtomicBoolean();
+        private PunishmentRequestAlertManagedLifecycle lifecycle;
+
+        private PreparedChange(
+                PunishmentRequestAlertController controller,
+                PunishmentRequestAlertWorkerSettings candidateSettings,
+                PunishmentRequestAlertWorkerSettings previousSettings,
+                PunishmentRequestAlertManagedLifecycle previousLifecycle,
+                Storage preparedStorage,
+                PunishmentRequestAlertManagedLifecycle lifecycle,
+                RuntimeException failure
+        ) {
+            this.controller = controller;
+            this.candidateSettings = candidateSettings;
+            this.previousSettings = previousSettings;
+            this.previousLifecycle = previousLifecycle;
+            this.preparedStorage = preparedStorage;
+            this.lifecycle = lifecycle;
+            this.failure = failure;
+        }
+
+        public RuntimeException preparationFailure() {
+            return failure;
+        }
+
+        public ApplyResult commit() {
+            if (!completed.compareAndSet(false, true)) {
+                throw new IllegalStateException("prepared alert change was already completed");
+            }
+            return controller.commitPrepared(this);
+        }
+
+        @Override
+        public void close() {
+            if (!completed.compareAndSet(false, true)) {
+                return;
+            }
+            closeQuietly(takeLifecycle());
+        }
+
+        private PunishmentRequestAlertManagedLifecycle takeLifecycle() {
+            PunishmentRequestAlertManagedLifecycle value = lifecycle;
+            lifecycle = null;
+            return value;
+        }
     }
 
     @FunctionalInterface

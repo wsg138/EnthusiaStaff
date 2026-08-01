@@ -164,6 +164,77 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
         }
     }
 
+
+    @Test
+    void explicitAuthorizationReconciliationCancelsOnlyPendingAudienceRowsWithoutMaterializing() throws Exception {
+        UUID recipient = UUID.randomUUID();
+        try (MariaDbRuntime runtime = runtime()) {
+            PunishmentRequestAlertStore store = runtime.punishmentRequestAlertStore();
+
+            PunishmentRequestAlertIntent reviewerPending = reviewer(UUID.randomUUID(), 20, NOW);
+            store.insert(reviewerPending);
+            PunishmentRequestAlertClaim reviewerClaim = only(store.claimAudience(
+                    PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                    recipient, StaffRank.MOD, "paper:reviewer-pending", 10, LEASE, NOW));
+            assertTrue(store.failed(reviewerClaim.deliveryId(), "paper:reviewer-pending", "TRANSIENT",
+                    NOW.plusSeconds(1), NOW, 3));
+
+            PunishmentRequestAlertIntent operationalPending = operational(21, NOW);
+            store.insert(operationalPending);
+            PunishmentRequestAlertClaim operationalClaim = only(store.claimAudience(
+                    PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS,
+                    recipient, StaffRank.ADMIN, "paper:operational-pending", 10, LEASE, NOW));
+            assertTrue(store.failed(operationalClaim.deliveryId(), "paper:operational-pending", "TRANSIENT",
+                    NOW.plusSeconds(1), NOW, 3));
+
+            PunishmentRequestAlertIntent reviewerLeased = reviewer(UUID.randomUUID(), 22, NOW);
+            store.insert(reviewerLeased);
+            PunishmentRequestAlertClaim leased = only(store.claimAudience(
+                    PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                    recipient, StaffRank.MOD, "paper:reviewer-leased", 10, LEASE, NOW));
+
+            PunishmentRequestAlertIntent direct = direct(recipient, 23, NOW, NOW.plusSeconds(600));
+            store.insert(direct);
+            PunishmentRequestAlertIntent neverMaterialized = reviewer(UUID.randomUUID(), 24, NOW);
+            store.insert(neverMaterialized);
+
+            assertEquals(2, store.reconcileRecipientAuthorization(
+                    recipient, null, NOW.plusSeconds(2), 10));
+
+            assertEquals("CANCELLED", deliveryState(reviewerPending.alertId(), recipient));
+            assertEquals("CANCELLED", deliveryState(operationalPending.alertId(), recipient));
+            assertEquals("LEASED", deliveryState(reviewerLeased.alertId(), recipient));
+            assertEquals("PENDING", deliveryState(direct.alertId(), recipient));
+            assertEquals(0, deliveryCount(neverMaterialized.alertId(), recipient));
+            assertTrue(store.cancel(leased.deliveryId(), "paper:reviewer-leased",
+                    "TEST_CLEANUP", NOW.plusSeconds(2)));
+        }
+    }
+
+    @Test
+    void explicitAuthorizationReconciliationIsBounded() throws Exception {
+        UUID recipient = UUID.randomUUID();
+        try (MariaDbRuntime runtime = runtime()) {
+            PunishmentRequestAlertStore store = runtime.punishmentRequestAlertStore();
+            for (int index = 0; index < 3; index++) {
+                PunishmentRequestAlertIntent intent = reviewer(UUID.randomUUID(), 30 + index,
+                        NOW.plusSeconds(index));
+                store.insert(intent);
+                PunishmentRequestAlertClaim claim = only(store.claimAudience(
+                        PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                        recipient, StaffRank.MOD, "paper:bounded-" + index, 10, LEASE,
+                        NOW.plusSeconds(index)));
+                assertTrue(store.failed(claim.deliveryId(), "paper:bounded-" + index, "TRANSIENT",
+                        NOW.plusSeconds(10), NOW.plusSeconds(index), 3));
+            }
+
+            assertEquals(1, store.reconcileRecipientAuthorization(
+                    recipient, StaffRank.HELPER, NOW.plusSeconds(20), 1));
+            assertEquals(1, deliveryStateCount(recipient, "CANCELLED"));
+            assertEquals(2, deliveryStateCount(recipient, "PENDING"));
+        }
+    }
+
     @Test
     void cancelledWorkDoesNotBlockCleanupButDeadLettersRequireExplicitResolution() throws Exception {
         try (MariaDbRuntime runtime = runtime()) {
@@ -276,6 +347,18 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
         return finalizeIntent(draft, PunishmentRequestAlertIntentKey.forIntent(draft));
     }
 
+
+    private static PunishmentRequestAlertIntent operational(long revision, Instant createdAt) {
+        PunishmentRequestAlertIntent draft = new PunishmentRequestAlertIntent(
+                UUID.randomUUID(), "pending", UUID.randomUUID(), revision,
+                PunishmentRequestLifecycleEventType.REQUEST_SUBMITTED,
+                PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS,
+                null, null, null, CaseVisibility.PRIVATE, 2,
+                createdAt, createdAt.plus(Duration.ofDays(7))
+        );
+        return finalizeIntent(draft, PunishmentRequestAlertIntentKey.forIntent(draft));
+    }
+
     private static PunishmentRequestAlertIntent finalizeIntent(
             PunishmentRequestAlertIntent source,
             String key
@@ -322,6 +405,33 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return result.getString(1);
+            }
+        }
+    }
+
+
+    private static int deliveryCount(UUID alertId, UUID recipientId) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM staff_alert_deliveries WHERE alert_id=? AND recipient_id=?")) { // nosemgrep
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(recipientId));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getInt(1);
+            }
+        }
+    }
+
+    private static int deliveryStateCount(UUID recipientId, String state) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM staff_alert_deliveries WHERE recipient_id=? AND state=?")) { // nosemgrep
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(recipientId));
+            statement.setString(2, state);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getInt(1);
             }
         }
     }

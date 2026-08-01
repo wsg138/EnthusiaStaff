@@ -93,6 +93,16 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
     }
 
     @Override
+    public int reconcileRecipientAuthorization(
+            UUID recipientId,
+            StaffRank currentRank,
+            Instant now,
+            int limit
+    ) {
+        return delegate.reconcileRecipientAuthorization(recipientId, currentRank, now, limit);
+    }
+
+    @Override
     public boolean delivered(PunishmentRequestAlertDeliveryId deliveryId, String owner, Instant now) {
         return delegate.delivered(deliveryId, owner, now);
     }

@@ -145,6 +145,8 @@ class PunishmentRequestAlertWorkerTest {
 
             harness.runComplete();
 
+            assertEquals(1, harness.alerts.reconciliationCalls, rank.name());
+            assertEquals(rank, harness.alerts.lastReconciliationRank, rank.name());
             assertEquals(0, harness.alerts.reviewerClaimCalls, rank.name());
             assertEquals(0, harness.presenter.presented, rank.name());
         }
@@ -504,6 +506,8 @@ class PunishmentRequestAlertWorkerTest {
         private int reviewerLimit;
         private int operationalLimit;
         private int reviewerClaimCalls;
+        private int reconciliationCalls;
+        private StaffRank lastReconciliationRank;
         private int delivered;
         private int failed;
         private int cancelled;
@@ -551,6 +555,19 @@ class PunishmentRequestAlertWorkerTest {
             }
             operationalLimit = limit;
             return operationalClaims;
+        }
+
+        @Override
+        public int reconcileRecipientAuthorization(
+                UUID recipientId,
+                StaffRank currentRank,
+                Instant now,
+                int limit
+        ) {
+            requireAsync();
+            reconciliationCalls++;
+            lastReconciliationRank = currentRank;
+            return 0;
         }
 
         @Override

@@ -19,6 +19,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
@@ -26,6 +27,7 @@ import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
+import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.config.PaperConfigurationLoader;
 import net.enthusia.staff.paper.config.PaperConfigurationSnapshot;
@@ -41,6 +43,7 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
@@ -68,6 +71,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperConfigurationSnapshot configurationSnapshot;
     private PunishmentRequestAlertController alertController;
     private ConfigurationReloadCoordinator reloadCoordinator;
+    private PaperDatabaseConfiguration.Settings databaseSettings;
+    private StorageBootstrapCoordinator<StorageBootstrapContext> storageBootstrap;
 
     @Override
     public void onEnable() {
@@ -81,6 +86,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        databaseSettings = PaperDatabaseConfiguration.snapshot(getConfig());
         saveResource("reason-policies.yml", false);
         boolean policiesReady = loadReasonPolicies();
         RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
@@ -129,13 +135,21 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(muteEnforcement, this);
             muteEnforcement.start();
             integrations.initializeRoseChat();
-            workers.execute(this::initializeStorage);
+            startStorageBootstrap();
         }
     }
 
     @Override
     public void onDisable() {
-        stopOperationalRuntime();
+        new PaperShutdownCoordinator(
+                this::stopOperationalRuntime,
+                this::closeNonDatabaseResources,
+                this::shutdownWorkers,
+                this::closeDatabaseRuntime
+        ).shutdown();
+    }
+
+    private void closeNonDatabaseResources() {
         if (integrations != null) {
             integrations.closeChatBridge();
         }
@@ -144,8 +158,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (integrations != null) {
             integrations.closeEconomyResources();
         }
-        shutdownWorkers();
-        closeDatabaseRuntime();
     }
 
     public OperationalMode operationalMode() {
@@ -240,54 +252,205 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         refreshHealth(mode.get());
     }
 
-    private void initializeStorage() {
-        if (lifecycle.stopping()) {
-            return;
+    private void startStorageBootstrap() {
+        storageBootstrap = new StorageBootstrapCoordinator<>(
+                this::submitWorker,
+                this::scheduleGlobal,
+                this::scheduleBootstrapCleanupRetry,
+                new StorageBootstrapCoordinator.StoragePhase<>() {
+                    @Override
+                    public StorageBootstrapContext openAndPublish() {
+                        return openStoragePhase();
+                    }
+
+                    @Override
+                    public boolean isPublished(StorageBootstrapContext context) {
+                        return lifecycle.storage()
+                                .filter(current -> current == context.bindings())
+                                .isPresent();
+                    }
+
+                    @Override
+                    public void removeAndClose(StorageBootstrapContext context) {
+                        lifecycle.removeStorageIf(current -> current == context.bindings())
+                                .ifPresent(bindings -> resources.close("MariaDB runtime", bindings.runtime()));
+                    }
+
+                    @Override
+                    public void failed(RuntimeException failure) {
+                        if (!lifecycle.stopping()) {
+                            setDegraded("mariadb",
+                                    "Connection, schema, or startup recovery failed; see the sanitized console error");
+                        }
+                    }
+                },
+                new StorageBootstrapCoordinator.BukkitRecovery<>() {
+                    @Override
+                    public List<UUID> onlinePlayerIds() {
+                        return getServer().getOnlinePlayers().stream()
+                                .map(Player::getUniqueId)
+                                .toList();
+                    }
+
+                    @Override
+                    public void capturePlayer(
+                            UUID playerId,
+                            java.util.function.Consumer<StorageBootstrapCoordinator.PlayerSnapshot> captured,
+                            Runnable retired
+                    ) {
+                        captureStartupPlayer(playerId, captured, retired);
+                    }
+
+                    @Override
+                    public void verifyFreeze(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
+                        runtimeComponents.freeze().verify(snapshot.playerId(), snapshot.playerName());
+                    }
+
+                    @Override
+                    public void recoverStaffMode(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
+                        runtimeComponents.staffMode().recover(snapshot.playerId(), snapshot.rank());
+                    }
+
+                    @Override
+                    public void initializeVanish() {
+                        runtimeComponents.vanish().initialize();
+                    }
+
+                    @Override
+                    public void attachAlerts(StorageBootstrapContext context) {
+                        attachPunishmentRequestAlerts(context.bindings());
+                    }
+
+                    @Override
+                    public void detachAlerts() {
+                        if (alertController != null) {
+                            alertController.detachStorage();
+                        }
+                    }
+
+                    @Override
+                    public void publishOperationalState(StorageBootstrapContext context) {
+                        publishBootstrapPromotion(context.promotion());
+                    }
+                },
+                new StorageBootstrapCoordinator.FollowUp<>() {
+                    @Override
+                    public void run(StorageBootstrapContext context) {
+                        finishStorageFollowUp(context.bindings());
+                    }
+
+                    @Override
+                    public void failed(RuntimeException failure) {
+                        setDegraded("bootstrap-follow-up",
+                                "Storage is available but asynchronous runtime startup did not complete");
+                    }
+                },
+                lifecycle::stopping,
+                getLogger()
+        );
+        if (!storageBootstrap.start()) {
+            setDegraded("workers", "Storage bootstrap could not be submitted to the bounded worker executor");
         }
-        Optional<DatabaseConfig> database = new PaperDatabaseConfiguration(getConfig(), System::getenv).load();
+    }
+
+    private StorageBootstrapContext openStoragePhase() {
+        if (lifecycle.stopping()) {
+            return null;
+        }
+        Optional<DatabaseConfig> database = new PaperDatabaseConfiguration(
+                databaseSettings, System::getenv).load();
         if (database.isEmpty()) {
             degradeBootstrap(
-                    "Required database environment variables are missing; destructive actions are disabled"
-            );
-            return;
+                    "Required database environment variables are missing; destructive actions are disabled");
+            return null;
         }
         MariaDbRuntime opened = null;
         boolean published = false;
         try {
             opened = MariaDb.initialize(database.orElseThrow());
             PaperStorageBindings bindings = PaperStorageBindings.create(
-                    opened,
-                    authorizationPolicy,
-                    reasonPolicies
-            );
-            if (!lifecycle.publishStorage(bindings)) {
+                    opened, authorizationPolicy, reasonPolicies);
+            BootstrapPromotion promotion = resolveBootstrapPromotion(opened);
+            if (lifecycle.stopping() || !lifecycle.publishStorage(bindings)) {
                 resources.close("MariaDB runtime opened during shutdown", opened);
-                return;
+                return null;
             }
             published = true;
-            finishStorageInitialization(bindings);
+            return new StorageBootstrapContext(bindings, promotion);
         } catch (RuntimeException exception) {
-            discardFailedStorageRuntime(opened, published);
-            if (!lifecycle.stopping()) {
-                getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
-                setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
+            if (opened != null && !published) {
+                resources.close("partially initialized MariaDB runtime", opened);
             }
+            throw exception;
         }
     }
 
-    private void finishStorageInitialization(PaperStorageBindings bindings) {
-        if (!runtimeComponents.recoverOnlinePlayers(
-                getServer().getOnlinePlayers(),
-                () -> !lifecycle.stopping()
-        )) {
+    private void captureStartupPlayer(
+            UUID playerId,
+            java.util.function.Consumer<StorageBootstrapCoordinator.PlayerSnapshot> captured,
+            Runnable retired
+    ) {
+        Player located = getServer().getPlayer(playerId);
+        if (located == null || !located.isOnline()) {
+            retired.run();
             return;
         }
-        schedulePunishmentRequestAlertStorageAttachment(bindings);
+        boolean scheduled = located.getScheduler().execute(
+                this,
+                () -> {
+                    Player current = getServer().getPlayer(playerId);
+                    if (current == null || !current.isOnline()) {
+                        retired.run();
+                        return;
+                    }
+                    StaffRank rank = PaperStaffRankResolver.resolve(current::hasPermission).orElse(null);
+                    captured.accept(new StorageBootstrapCoordinator.PlayerSnapshot(
+                            playerId, current.getName(), rank));
+                },
+                retired,
+                1L
+        );
+        if (!scheduled) {
+            retired.run();
+        }
+    }
+
+    private void attachPunishmentRequestAlerts(PaperStorageBindings bindings) {
+        if (alertController == null || lifecycle.stopping()) {
+            throw new IllegalStateException("alert controller is unavailable during storage publication");
+        }
+        PunishmentRequestAlertController.ApplyResult result = alertController.attachStorage(
+                new PunishmentRequestAlertController.Storage(
+                        bindings.punishmentRequestAlertStore(),
+                        bindings.punishmentRequestStore(),
+                        bindings.playerDirectory()
+                )
+        );
+        if (result.outcome() == PunishmentRequestAlertController.Outcome.UNAVAILABLE
+                || result.outcome() == PunishmentRequestAlertController.Outcome.SHUTTING_DOWN) {
+            RuntimeException failure = result.failure() == null
+                    ? new IllegalStateException(result.message())
+                    : result.failure();
+            throw failure;
+        }
+    }
+
+    private void publishBootstrapPromotion(BootstrapPromotion promotion) {
         if (lifecycle.stopping()) {
             return;
         }
-        promoteAfterBootstrap(bindings.runtime());
-        if (lifecycle.stopping()) {
+        if (promotion.mode().isPresent()) {
+            OperationalMode next = promotion.mode().orElseThrow();
+            publishBootstrapMode(next, promotion.issues());
+        } else if (!promotion.issues().isEmpty()) {
+            Map.Entry<String, String> issue = promotion.issues().entrySet().iterator().next();
+            setDegraded(issue.getKey(), issue.getValue());
+        }
+    }
+
+    private void finishStorageFollowUp(PaperStorageBindings bindings) {
+        if (lifecycle.stopping()
+                || lifecycle.storage().filter(current -> current == bindings).isEmpty()) {
             return;
         }
         try {
@@ -303,38 +466,46 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void schedulePunishmentRequestAlertStorageAttachment(PaperStorageBindings bindings) {
-        if (alertController == null || lifecycle.stopping()) {
-            return;
+    private boolean submitWorker(Runnable operation) {
+        if (workers == null || workers.isShutdown()) {
+            return false;
         }
         try {
-            getServer().getGlobalRegionScheduler().execute(this, () -> {
-                if (lifecycle.stopping()
-                        || lifecycle.storage().filter(current -> current == bindings).isEmpty()) {
-                    return;
-                }
-                PunishmentRequestAlertController.ApplyResult result = alertController.attachStorage(
-                        new PunishmentRequestAlertController.Storage(
-                                bindings.punishmentRequestAlertStore(),
-                                bindings.punishmentRequestStore(),
-                                bindings.playerDirectory()
-                        )
-                );
-                if (result.failure() != null) {
-                    getLogger().log(
-                            Level.SEVERE,
-                            "Punishment-request alert subsystem startup failed",
-                            result.failure()
-                    );
-                }
-            });
+            workers.execute(operation);
+            return true;
+        } catch (RejectedExecutionException exception) {
+            return false;
+        }
+    }
+
+    private boolean scheduleGlobal(Runnable operation) {
+        if (lifecycle.stopping()) {
+            return false;
+        }
+        try {
+            getServer().getGlobalRegionScheduler().execute(this, operation);
+            return true;
         } catch (RuntimeException exception) {
-            featureIssues.put(
-                    "punishment-request-alerts",
-                    "Alert startup could not be scheduled on the global region thread"
+            getLogger().log(Level.WARNING, "Global bootstrap scheduling failed", exception);
+            return false;
+        }
+    }
+
+    private boolean scheduleBootstrapCleanupRetry(Runnable operation) {
+        if (lifecycle.stopping()) {
+            return false;
+        }
+        try {
+            getServer().getAsyncScheduler().runDelayed(
+                    this,
+                    ignored -> operation.run(),
+                    50,
+                    TimeUnit.MILLISECONDS
             );
-            refreshHealth(mode.get());
-            getLogger().log(Level.SEVERE, "Punishment-request alert startup scheduling failed", exception);
+            return true;
+        } catch (RuntimeException exception) {
+            getLogger().log(Level.WARNING, "Bootstrap cleanup retry scheduling failed", exception);
+            return false;
         }
     }
 
@@ -370,26 +541,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void degradeBootstrap(String reason) {
         if (!lifecycle.stopping()) {
             setDegraded("mariadb", reason);
-        }
-    }
-
-    private void discardFailedStorageRuntime(MariaDbRuntime opened, boolean published) {
-        if (opened == null) {
-            return;
-        }
-        if (!published) {
-            resources.close("partially initialized MariaDB runtime", opened);
-            return;
-        }
-        Optional<PaperStorageBindings> removed =
-                lifecycle.removeStorageIf(bindings -> bindings.runtime() == opened);
-        if (removed.isPresent()) {
-            if (alertController != null) {
-                alertController.detachStorage();
-            }
-            cancelOperationalStateTask();
-            closeChannelClient();
-            resources.close("partially initialized MariaDB runtime", opened);
         }
     }
 
@@ -509,23 +660,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         setDegraded("operational-state", "Operational state refresh failed; enforcement is disabled");
     }
 
-    private void promoteAfterBootstrap(MariaDbRuntime runtime) {
+    private BootstrapPromotion resolveBootstrapPromotion(MariaDbRuntime runtime) {
         OperationalStateStore states = runtime.operationalStateStore();
         OperationalStateSnapshot persisted = states.current();
-        Optional<OperationalMode> next = promotionMode(states, persisted);
-        next.ifPresent(value -> publishBootstrapMode(value, bootstrapIssues(value)));
-    }
-
-    private Optional<OperationalMode> promotionMode(
-            OperationalStateStore states,
-            OperationalStateSnapshot persisted
-    ) {
         if (persisted.mode() == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
-            setDegraded("cutover", "Persistent ACTIVE state has no authorized cutover record; enforcement is blocked");
-            return Optional.empty();
+            return new BootstrapPromotion(Optional.empty(), Map.of(
+                    "cutover",
+                    "Persistent ACTIVE state has no authorized cutover record; enforcement is blocked"
+            ));
         }
         if (persisted.mode() != OperationalMode.BOOTSTRAP) {
-            return Optional.of(persisted.mode());
+            OperationalMode next = persisted.mode();
+            return new BootstrapPromotion(Optional.of(next), bootstrapIssues(next));
         }
         boolean transitioned = states.transition(
                 persisted.revision(),
@@ -535,10 +681,15 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 Clock.systemUTC().instant()
         );
         if (!transitioned) {
-            setDegraded("operational-state", "Concurrent bootstrap transition detected; retry after state review");
-            return Optional.empty();
+            return new BootstrapPromotion(Optional.empty(), Map.of(
+                    "operational-state",
+                    "Concurrent bootstrap transition detected; retry after state review"
+            ));
         }
-        return Optional.of(OperationalMode.SHADOW_MIGRATION);
+        return new BootstrapPromotion(
+                Optional.of(OperationalMode.SHADOW_MIGRATION),
+                bootstrapIssues(OperationalMode.SHADOW_MIGRATION)
+        );
     }
 
     private Map<String, String> bootstrapIssues(OperationalMode next) {
@@ -698,6 +849,22 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         loaded.ifPresent(policy -> reasonPolicies = policy);
         return loaded.isPresent();
+    }
+
+    private record StorageBootstrapContext(
+            PaperStorageBindings bindings,
+            BootstrapPromotion promotion
+    ) {
+    }
+
+    private record BootstrapPromotion(
+            Optional<OperationalMode> mode,
+            Map<String, String> issues
+    ) {
+        private BootstrapPromotion {
+            mode = mode == null ? Optional.empty() : mode;
+            issues = issues == null ? Map.of() : Map.copyOf(issues);
+        }
     }
 
 }

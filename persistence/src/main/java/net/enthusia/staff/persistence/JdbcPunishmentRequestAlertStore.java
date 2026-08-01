@@ -109,6 +109,25 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
     }
 
     @Override
+    public int reconcileRecipientAuthorization(
+            UUID recipientId,
+            StaffRank currentRank,
+            Instant now,
+            int limit
+    ) {
+        if (recipientId == null) {
+            throw new IllegalArgumentException("alert authorization recipient must be present");
+        }
+        validateLimit(limit, now);
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to reconcile punishment request alert recipient authorization",
+                connection -> reconcileRecipientAuthorization(
+                        connection, recipientId, currentRank, now, limit)
+        );
+    }
+
+    @Override
     public boolean delivered(PunishmentRequestAlertDeliveryId deliveryId, String owner, Instant now) {
         validateMutation(deliveryId, owner, now);
         return JdbcTransactionSupport.execute(
@@ -491,6 +510,55 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             statement.setBytes(4, UuidBytes.toBytes(recipientId));
             statement.setInt(5, limit);
             statement.executeUpdate();
+        }
+    }
+
+    private static int reconcileRecipientAuthorization(
+            Connection connection,
+            UUID recipientId,
+            StaffRank currentRank,
+            Instant now,
+            int limit
+    ) throws SQLException {
+        int reviewerLevel = currentRank == null ? 0 : reviewerLevel(currentRank);
+        boolean operational = currentRank == StaffRank.ADMIN || currentRank == StaffRank.FOUNDER;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_alert_deliveries d
+                JOIN (
+                    SELECT bounded.alert_id, bounded.recipient_id
+                    FROM (
+                        SELECT candidate.alert_id, candidate.recipient_id
+                        FROM staff_alert_deliveries candidate
+                        JOIN staff_alerts intent ON intent.alert_id = candidate.alert_id
+                        WHERE candidate.recipient_id = ?
+                          AND candidate.state = 'PENDING'
+                          AND (
+                              (intent.audience = 'ELIGIBLE_REVIEWERS' AND (
+                                  intent.excluded_recipient_id = candidate.recipient_id
+                                  OR CASE intent.minimum_rank
+                                      WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
+                                      WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END > ?
+                              ))
+                              OR (intent.audience = 'OPERATIONAL_ADMINISTRATORS' AND ? = 0)
+                          )
+                        ORDER BY candidate.available_at, candidate.created_at, candidate.alert_id
+                        LIMIT ?
+                    ) bounded
+                ) unauthorized
+                  ON unauthorized.alert_id = d.alert_id
+                 AND unauthorized.recipient_id = d.recipient_id
+                SET d.state = 'CANCELLED', d.cancelled_at = ?,
+                    d.cancel_reason = 'RECIPIENT_INELIGIBLE', d.updated_at = ?,
+                    d.lease_owner = NULL, d.lease_until = NULL
+                WHERE d.state = 'PENDING'
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(recipientId));
+            statement.setInt(2, reviewerLevel);
+            statement.setInt(3, operational ? 1 : 0);
+            statement.setInt(4, limit);
+            statement.setTimestamp(5, Timestamp.from(now));
+            statement.setTimestamp(6, Timestamp.from(now));
+            return statement.executeUpdate();
         }
     }
 
