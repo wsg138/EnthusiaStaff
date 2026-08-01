@@ -155,6 +155,7 @@ jobs:
 
       - name: Wait for staging verdict
         if: steps.trust.outputs.eligible == 'true'
+        id: verdict
         shell: bash
         env:
           STAGING_RUN_ID: ${{ steps.locate.outputs.run_id }}
@@ -182,9 +183,12 @@ jobs:
           done
 
           if [[ "$status" != 'completed' ]]; then
-            echo "::error::Staging run did not complete before this check timed out: $STAGING_RUN_URL"
-            exit 1
+            status='timed_out'
+            conclusion='timed_out'
           fi
+
+          printf 'status=%s\n' "$status" >> "$GITHUB_OUTPUT"
+          printf 'conclusion=%s\n' "$conclusion" >> "$GITHUB_OUTPUT"
 
           {
             echo '## Pi staging verdict'
@@ -194,13 +198,116 @@ jobs:
             echo "- Tested source SHA: \`$SOURCE_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "$conclusion" != 'success' ]]; then
-            jobs="$(curl --fail --silent --show-error \
+      - name: Collect failed staging reason, logs, and evidence
+        if: steps.trust.outputs.eligible == 'true' && steps.verdict.outputs.conclusion != 'success'
+        shell: bash
+        env:
+          STAGING_RUN_ID: ${{ steps.locate.outputs.run_id }}
+          STAGING_RUN_URL: ${{ steps.locate.outputs.run_url }}
+          STAGING_CONCLUSION: ${{ steps.verdict.outputs.conclusion }}
+        run: |
+          set -Eeuo pipefail
+          diagnostics="$RUNNER_TEMP/pi-staging-failure"
+          mkdir -p "$diagnostics/job-logs" "$diagnostics/evidence"
+
+          jobs_url="https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100"
+          artifacts_url="https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/artifacts?per_page=100"
+
+          curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header "Authorization: Bearer $STAGING_TOKEN" \
+            "$jobs_url" > "$diagnostics/jobs.json"
+
+          curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header "Authorization: Bearer $STAGING_TOKEN" \
+            "$artifacts_url" > "$diagnostics/artifacts.json"
+
+          {
+            echo '# Pi staging failure diagnostics'
+            echo
+            echo "- Source SHA: \`$SOURCE_SHA\`"
+            echo "- Staging run: $STAGING_RUN_URL"
+            echo "- Conclusion: \`$STAGING_CONCLUSION\`"
+            echo
+            echo '## Failed jobs and steps'
+            echo
+            jq -r '
+              .jobs[]
+              | select((.conclusion // .status) != "success")
+              | "### " + .name + "\n\n- Job result: `" + (.conclusion // .status) + "`\n" +
+                ((.steps // [])
+                  | map(select((.conclusion // .status) != "success")
+                    | "- Step " + (.number | tostring) + ": **" + .name + "** — `" + (.conclusion // .status) + "`")
+                  | join("\n")) + "\n"
+            ' "$diagnostics/jobs.json"
+          } > "$diagnostics/failure-summary.md"
+
+          while IFS=$'\t' read -r job_id job_name; do
+            [[ -n "$job_id" ]] || continue
+            safe_name="$(tr -cs 'A-Za-z0-9._-' '_' <<< "$job_name" | sed 's/_$//')"
+            curl --fail --silent --show-error --location \
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               --header "Authorization: Bearer $STAGING_TOKEN" \
-              "https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100")"
-            jq -r '.jobs[] | "::error::Staging job \(.name): \(.conclusion // .status)"' <<< "$jobs"
-            echo "::error::Pi staging failed: $STAGING_RUN_URL"
-            exit 1
+              "https://api.github.com/repos/$STAGING_REPOSITORY/actions/jobs/$job_id/logs" \
+              --output "$diagnostics/job-logs/${job_id}-${safe_name}.log" || true
+          done < <(
+            jq -r '.jobs[] | select((.conclusion // .status) != "success") | [.id, .name] | @tsv' \
+              "$diagnostics/jobs.json"
+          )
+
+          while IFS=$'\t' read -r artifact_id artifact_name; do
+            [[ -n "$artifact_id" ]] || continue
+            archive="$diagnostics/evidence/${artifact_name}.zip"
+            curl --fail --silent --show-error --location \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --header "Authorization: Bearer $STAGING_TOKEN" \
+              "https://api.github.com/repos/$STAGING_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              --output "$archive"
+            mkdir -p "$diagnostics/evidence/${artifact_name}"
+            unzip -q "$archive" -d "$diagnostics/evidence/${artifact_name}"
+          done < <(
+            jq -r '.artifacts[] | select(.name | startswith("enthusiastaff-pi-evidence-")) | [.id, .name] | @tsv' \
+              "$diagnostics/artifacts.json"
+          )
+
+          cat "$diagnostics/failure-summary.md"
+          cat "$diagnostics/failure-summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload failed staging diagnostics
+        if: steps.trust.outputs.eligible == 'true' && steps.verdict.outputs.conclusion != 'success'
+        id: failure_artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pi-staging-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pi-staging-failure/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish final staging check result
+        if: steps.trust.outputs.eligible == 'true'
+        shell: bash
+        env:
+          STAGING_CONCLUSION: ${{ steps.verdict.outputs.conclusion }}
+          STAGING_RUN_URL: ${{ steps.locate.outputs.run_url }}
+          DIAGNOSTIC_URL: ${{ steps.failure_artifact.outputs.artifact-url }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$STAGING_CONCLUSION" == 'success' ]]; then
+            echo 'Pi staging passed.'
+            exit 0
           fi
+
+          if [[ -n "$DIAGNOSTIC_URL" ]]; then
+            echo "::error::Pi staging failed. Repair data: $DIAGNOSTIC_URL"
+            {
+              echo
+              echo "- Failure diagnostics: $DIAGNOSTIC_URL"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "::error::Staging run: $STAGING_RUN_URL"
+          exit 1
