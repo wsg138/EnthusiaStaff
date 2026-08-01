@@ -6,20 +6,20 @@ This manifest records repository, validation and blocker state for development
 coordination. Nothing listed here authorizes a production deployment, release,
 LiteBans replacement or production-data change.
 
-## Root repository checkpoint
+## Root repository state and validated checkpoint
 
 | Field | Current value |
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` | `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9` |
-| Latest merged checkpoint | PR #36 — **Decompose LiteBans shadow comparison** |
-| Validated implementation head | `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
-| Clean Java validation | 40/40 tasks; 99 suites / 398 tests; no failures, errors or skips |
-| MariaDB validation | 15 MariaDB 11.8.3 Testcontainers suites / 68 tests |
-| Runtime artifacts | Paper SHA-256 `83D457FCA65839B6E674CC937F37E63782620D023E9B202F89ED3A88CF4D5060`; Velocity SHA-256 `FA17E9F891286250FEC21AD19CD425540C15CC163D58D65DF5E177856AEBDBD9` |
-| Hosted quality result | Zero new Codacy findings, three fixed, 92.59% diff coverage, +0.103 coverage variation, no clone increase |
-| Exact-SHA Pi staging | PASS — run `30709333535` |
+| Current merged repository state | `main` at `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`, the PR #36 merge commit |
+| Latest fully validated implementation revision | PR #36 head `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| Evidence boundary | Every build, test, Codacy, artifact and Pi result in this section attaches to `3afeffc926571170e8df18c7d096ca7f4d89ec1b`; the later merge commit is not separately claimed as tested |
+| Clean Java validation | 40/40 tasks; 99 suites / 398 tests; no failures, errors or skips at `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| MariaDB validation | 15 MariaDB 11.8.3 Testcontainers suites / 68 tests at `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| Runtime artifacts | From `3afeffc926571170e8df18c7d096ca7f4d89ec1b`: Paper SHA-256 `83D457FCA65839B6E674CC937F37E63782620D023E9B202F89ED3A88CF4D5060`; Velocity SHA-256 `FA17E9F891286250FEC21AD19CD425540C15CC163D58D65DF5E177856AEBDBD9` |
+| Hosted quality result | At `3afeffc926571170e8df18c7d096ca7f4d89ec1b`: zero new Codacy findings, three fixed, 92.59% diff coverage, +0.103 coverage variation, no clone increase |
+| Exact-SHA Pi staging | PASS — run `30709333535`, tested revision `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
 | Production authority | **NOT READY**; LiteBans and the existing staff stack remain authoritative |
 
 PR #36 preserved and tested every LiteBans shadow dimension across import,
@@ -77,6 +77,11 @@ Each related project remains an independent Git repository. Histories must not b
 flattened into EnthusiaStaff, and provider-owned API classes must not leak into the
 Paper or Velocity runtime jars.
 
+A cross-repository release candidate must use a release manifest containing one
+authenticated revision per repository, with matching artifact hashes,
+configuration checksums, environment versions and acceptance evidence. There is
+no single global commit that can identify independent provider and website state.
+
 ## Current development route
 
 The detailed path is maintained in:
@@ -97,14 +102,14 @@ Immediate order:
 6. Stage staff mode, freeze, vanish, inventory and confiscation under real ownership and failure conditions.
 7. Reconstruct providers and complete the private website.
 8. Finish LiteBans recovery, seven-day shadow evidence, activation, emergency freeze and rollback.
-9. Run one complete acceptance candidate, then the mandatory 168-hour shadow period and final cutover rehearsal.
+9. Run one complete release-manifest acceptance candidate, then the mandatory 168-hour shadow period and final cutover rehearsal.
 
 ## Checkpoint update rules
 
-At every coherent checkpoint record:
+At every coherent repository checkpoint record:
 
 - repository and branch;
-- base, implementation and final reviewed SHAs;
+- base, implementation and final reviewed revisions;
 - PR URL and state;
 - exact validation commands;
 - task, suite, total-test and MariaDB counts;
@@ -112,18 +117,22 @@ At every coherent checkpoint record:
 - provider API source-type/leak inspection;
 - hosted Codacy baseline, new/fixed issues, duplication and diff coverage;
 - Wiki validation page count;
-- exact staging run and tested SHA;
+- exact staging run and tested revision;
 - review findings and unresolved threads;
 - blockers and unavailable acceptance groups.
 
-A skipped, cancelled, superseded or different-SHA run is never recorded as passed.
-A merged PR is a development checkpoint, not deployment authorization.
+For a cross-repository release candidate, additionally record one authenticated
+revision per repository in the release manifest and test those revisions together.
+
+A skipped, cancelled, superseded or different-revision run is never recorded as
+passed. A merged PR is a development checkpoint, not deployment authorization.
 
 ## Release boundaries
 
-- Keep LiteBans authoritative until full acceptance, the exact 168-hour shadow
-  window, final reconciliation, cutover rehearsal and Founder authorization pass.
-- Never combine evidence from different commits into one release candidate.
+- Keep LiteBans authoritative until full release-manifest acceptance, the exact
+  168-hour shadow window, final reconciliation, cutover rehearsal and Founder
+  authorization pass.
+- Never combine evidence from undeclared revisions into one release candidate.
 - Keep production credentials, private jars, databases, logs, evidence and
   runtime folders out of Git.
 - Keep destructive operations configuration-gated and recovery-visible.
