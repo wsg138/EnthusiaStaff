@@ -1,0 +1,59 @@
+name: Validate deterministic alert-controller shutdown race
+
+on:
+  push:
+    branches:
+      - automation/pr27-controller-race-fix
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr27-controller-race-fix
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply race-test and quality cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 scripts/fix-controller-shutdown-race.py
+          git rm .github/workflows/pr27-controller-race-fix.yml
+          git rm scripts/fix-controller-shutdown-race.py
+          git rm --ignore-unmatch scripts/.controller-race-trigger
+          git diff --check
+          git add -A
+          git commit --no-verify -m 'Make alert-controller shutdown race test deterministic'
+          git push --force origin HEAD:refs/heads/automation/pr27-controller-race-validated
+      - name: Build exact fixed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain 2>&1 | tee /tmp/build.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if test "$STATUS" -ne 0; then
+            mkdir -p .race-analysis
+            printf 'phase=build-failed\nsource=%s\n' "$(git rev-parse HEAD)" > .race-analysis/state.txt
+            tail -n 1400 /tmp/build.log > .race-analysis/build-failure.txt
+            git add .race-analysis
+            git commit --no-verify -m 'Record controller-race build failure'
+            git push --force origin HEAD:refs/heads/automation/pr27-controller-race-validated
+          fi
+          exit "$STATUS"
