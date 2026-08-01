@@ -10,7 +10,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -77,7 +76,7 @@ class PunishmentRequestLifecycleNotificationsIntegrationTest extends PunishmentR
                     firstClaimAt.plus(Duration.ofMinutes(3))
             ).orElseThrow();
             assertEquals(first.fenceToken(), retry.fenceToken());
-            assertEquals(first.leaseExpiresAt(), retry.leaseExpiresAt());
+            assertEquals(first.expiresAt(), retry.expiresAt());
             assertTrue(store.acquire(
                     request.requestId(),
                     ADMIN.id(),
@@ -88,7 +87,7 @@ class PunishmentRequestLifecycleNotificationsIntegrationTest extends PunishmentR
             assertEquals(2, alertCount(request.requestId(), "REQUEST_CLAIMED", null));
             assertEquals(1, discordCount(request.requestId(), "PUNISHMENT_REQUEST_CLAIMED"));
 
-            Instant laterClaimAt = first.leaseExpiresAt().plusSeconds(1);
+            Instant laterClaimAt = first.expiresAt().plusSeconds(1);
             PunishmentApprovalLease later = store.acquire(
                     request.requestId(),
                     ADMIN.id(),
@@ -236,7 +235,7 @@ class PunishmentRequestLifecycleNotificationsIntegrationTest extends PunishmentR
                     .noneMatch(value -> requests.stream()
                             .anyMatch(request -> request.requestId().equals(value.requestId()))));
             assertEquals(2, store.expire(expirationRun, 2));
-            assertEquals(1, requests.stream()
+            assertEquals(1L, requests.stream()
                     .filter(request -> store.find(request.requestId()).orElseThrow().status()
                             == PunishmentRequestStatus.PENDING)
                     .count());
@@ -390,6 +389,7 @@ class PunishmentRequestLifecycleNotificationsIntegrationTest extends PunishmentR
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) FROM staff_alerts
                      WHERE request_id=? AND lifecycle_event='REQUEST_CLAIMED'
+                       AND audience='DIRECT_RECIPIENT'
                        AND lifecycle_actor_id=?
                        AND occurrence_key=?
                      """)) {
