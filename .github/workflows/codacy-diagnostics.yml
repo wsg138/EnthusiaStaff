@@ -12,76 +12,65 @@ permissions:
 
 jobs:
   export:
-    name: Export Codacy commit diagnostics
+    name: Export Codacy PR diagnostics
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
-      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      CODACY_API_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
     steps:
-      - name: Require Codacy project token
+      - name: Require Codacy token
         run: |
-          if [[ -z "${CODACY_PROJECT_TOKEN}" ]]; then
+          if [[ -z "${CODACY_API_TOKEN}" ]]; then
             echo "::error::CODACY_PROJECT_TOKEN is not configured."
             exit 1
           fi
 
-      - name: Export analyzed commit
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install Codacy Cloud CLI
+        run: npm install --global @codacy/codacy-cloud-cli
+
+      - name: Export pull-request analysis
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/reports/codacy
 
-          tested_sha="${GITHUB_SHA}"
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            tested_sha="${{ github.event.pull_request.head.sha }}"
+          pr_number="${{ github.event.pull_request.number }}"
+          if [[ -z "${pr_number}" ]]; then
+            pr_number="29"
           fi
-          export tested_sha
-          echo "tested_sha=${tested_sha}" >> "${GITHUB_ENV}"
+          echo "pr_number=${pr_number}" >> "${GITHUB_ENV}"
 
-          # Codacy's analysis can finish shortly after the GitHub push. Retry only
-          # not-found/incomplete responses; never print the project token.
-          for attempt in {1..18}; do
-            status="$({
-              curl --silent --show-error \
-                --output build/reports/codacy/commit.json.tmp \
-                --write-out '%{http_code}' \
-                --header "project-token: ${CODACY_PROJECT_TOKEN}" \
-                "https://api.codacy.com/2.0/commit/${tested_sha}"
-            } || true)"
-
-            if [[ "${status}" == "200" ]]; then
-              mv build/reports/codacy/commit.json.tmp build/reports/codacy/commit.json
-              break
-            fi
-
-            rm -f build/reports/codacy/commit.json.tmp
-            if [[ "${attempt}" == "18" ]]; then
-              echo "::error::Codacy commit diagnostics were unavailable after ${attempt} attempts (HTTP ${status})."
-              exit 1
-            fi
-            sleep 10
-          done
+          codacy pull-request gh wsg138 EnthusiaStaff "${pr_number}" \
+            --output json > build/reports/codacy/pull-request.json
+          codacy pull-request gh wsg138 EnthusiaStaff "${pr_number}" \
+            --diff --output json > build/reports/codacy/diff.json
 
           python3 - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          source = Path("build/reports/codacy/commit.json")
-          payload = json.loads(source.read_text(encoding="utf-8"))
-          summary = Path("build/reports/codacy/summary.md")
+          root = Path("build/reports/codacy")
+          pr_payload = json.loads((root / "pull-request.json").read_text(encoding="utf-8"))
+          diff_payload = json.loads((root / "diff.json").read_text(encoding="utf-8"))
 
           lines = [
-              "# Codacy commit diagnostics",
+              "# Codacy PR diagnostics",
               "",
-              f"- Commit: `{os.environ['tested_sha']}`",
-              f"- Top-level keys: `{', '.join(sorted(payload))}`",
+              f"- Pull request: **#{os.environ.get('pr_number', '29')}**",
+              f"- Summary keys: `{', '.join(sorted(pr_payload)) if isinstance(pr_payload, dict) else type(pr_payload).__name__}`",
+              f"- Diff keys: `{', '.join(sorted(diff_payload)) if isinstance(diff_payload, dict) else type(diff_payload).__name__}`",
               "",
-              "The complete JSON response is attached in the workflow artifact.",
+              "The complete machine-readable outputs are attached in the workflow artifact.",
           ]
           text = "\n".join(lines) + "\n"
-          summary.write_text(text, encoding="utf-8")
+          (root / "summary.md").write_text(text, encoding="utf-8")
           print(text)
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
               handle.write(text)
@@ -90,7 +79,7 @@ jobs:
       - name: Upload Codacy diagnostics
         uses: actions/upload-artifact@v7
         with:
-          name: codacy-diagnostics-${{ env.tested_sha }}
+          name: codacy-pr-${{ env.pr_number }}-diagnostics
           path: build/reports/codacy
           if-no-files-found: error
           retention-days: 3
