@@ -63,6 +63,9 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                     connection -> submit(connection, request)
             );
         } catch (ModerationPersistenceException exception) {
+            if (!JdbcSqlErrors.isDuplicateKey(exception)) {
+                throw exception;
+            }
             PunishmentApprovalRequest existing = repository.replayAfterConflict(request);
             if (existing == null) {
                 throw exception;
