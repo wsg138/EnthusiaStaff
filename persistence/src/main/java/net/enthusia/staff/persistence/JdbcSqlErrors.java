@@ -41,29 +41,33 @@ final class JdbcSqlErrors {
             if (current instanceof SQLException sqlException) {
                 SQLException linked = sqlException;
                 while (linked != null) {
-                    if (linked != sqlException && !visited.add(linked)) {
+                    if (!sameInstance(linked, sqlException) && !visited.add(linked)) {
                         break;
                     }
                     if (linked.getErrorCode() == errorCode && sqlState.equals(linked.getSQLState())) {
                         return true;
                     }
                     Throwable cause = linked.getCause();
-                    if (cause != null && cause != linked && !visited.contains(cause)) {
+                    if (cause != null && !sameInstance(cause, linked) && !visited.contains(cause)) {
                         pending.addLast(cause);
                     }
                     SQLException next = linked.getNextException();
-                    if (next == linked) {
+                    if (sameInstance(next, linked)) {
                         break;
                     }
                     linked = next;
                 }
             } else {
                 Throwable cause = current.getCause();
-                if (cause != null && cause != current && !visited.contains(cause)) {
+                if (cause != null && !sameInstance(cause, current) && !visited.contains(cause)) {
                     pending.addLast(cause);
                 }
             }
         }
         return false;
+    }
+
+    private static boolean sameInstance(Throwable first, Throwable second) {
+        return first == second; // NOPMD - Throwable graph cycle detection requires identity, not equals().
     }
 }
