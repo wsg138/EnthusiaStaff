@@ -1,155 +1,124 @@
 # EnthusiaStaff remaining development blueprint
 
-This document groups the unfinished EnthusiaStaff work by feature section. It is
-not a feature-status report, test guide or deployment procedure.
+This document groups unfinished work into four development sections. It does not
+repeat feature percentages, code paths, validation commands or operator cutover
+steps.
 
-- `docs/wiki/pages/Implementation-Status.md` contains the readable feature
-  completion marks and estimated percentages.
-- `reports/REQUIREMENTS-MATRIX.md` contains exact evidence, files, tests and blockers.
-- `docs/wiki/pages/Build-and-Testing.md` contains validation procedures.
-- `docs/wiki/pages/LiteBans-Migration.md` and
-  `docs/wiki/pages/Shadow-Mode-and-Cutover.md` contain migration operations.
+- Feature percentages: `docs/wiki/pages/Implementation-Status.md`
+- Exact evidence and blockers: `reports/REQUIREMENTS-MATRIX.md`
+- Code ownership: `docs/wiki/pages/Developer-Code-Guide.md`
+- Validation: `docs/wiki/pages/Build-and-Testing.md`
+- Migration operations: LiteBans migration and shadow/cutover Wiki pages
 
-## Remaining development map
+## Four development groups
 
-```mermaid
-mindmap
-  root((Remaining development))
-    Moderation
-      History and case timeline
-      Precise sanction changes
-      Overturn and appeal decisions
-      Request notifications
-      Complete escalation rules
-    Staff safety
-      Staff mode recovery
-      Freeze edge cases
-      Vanish integration coverage
-      Inventory concurrency
-      Item and economy restoration
-    Investigations
-      Report GUI and privacy review
-      RoseChat evidence bridge
-      Client evidence and automod
-      Alt confidence and exceptions
-      Cheat testers and fake systems
-    Integrations
-      Currency provider
-      Commend provider
-      AutoClicker provider
-      RoseChat provider
-      Market provider
-      Discord delivery
-      Private website
-    Migration and proof
-      Cutover coordination
-      Real-data migration rehearsal
-      Multi-server staging
-      Java Bedrock and Folia staging
-      Load and process-kill testing
-      168-hour shadow evidence
-```
+1. **Core platform and infrastructure**
+2. **Moderation, punishments and reports**
+3. **Staff tools, investigations and player-state safety**
+4. **Integrations, migration and release readiness**
 
-## 1. Moderation completion
+<details>
+<summary><strong>1. Core platform and infrastructure</strong></summary>
 
-- Reconcile PR #27 against current `main` without losing or duplicating work.
-- Add `/history` with permission-safe case and sanction timelines.
-- Complete exact reduction, ending, revocation, removal and overturn behavior.
-- Connect appeal decisions to the central audited sanction-change path.
-- Deliver durable request lifecycle notifications to requesters and approvers.
-- Finish escalation families, decay, recency, aliases, removed IDs and frozen
-  policy versions.
-- Apply complete operational-mode and dependency gates to moderation mutations.
+- Finish remaining coordinator and JDBC responsibility splits.
+- Complete safe degraded startup, partial-startup cleanup and bounded shutdown.
+- Add production-volume, process-kill and multi-server MariaDB testing.
+- Stage real Paper–Velocity certificates, rotation, multiple backends,
+  no-player transport, backpressure and long outages.
+- Complete all operational modes and dependency-specific feature gates.
+- Build the modular configuration tree and complete atomic reload.
+- Finish previous-name, Bedrock alias, fuzzy lookup and in-memory completion.
+- Complete operator-readable health, recovery and degraded-feature diagnostics.
+- Add meaningful coverage enforcement, mutation tests, load tests and broader
+  runtime acceptance.
 
-**Completion condition:** retry, restart, duplicate delivery, stale state and
-multi-server contention cannot change an unrelated sanction or report false
-success.
+**Done when:** every platform responsibility has one owner, every runtime mode has
+explicit behavior and interruption cannot corrupt durable state.
 
-## 2. Staff-state and asset safety
+</details>
 
-- Complete staff-mode checksums, revisions, crash resume and cross-server restore.
+<details>
+<summary><strong>2. Moderation, punishments and reports</strong></summary>
+
+- Reconcile PR #27 without losing or duplicating request lifecycle behavior.
+- Add `/history` and complete case/sanction/audit timelines.
+- Prove combined sanctions and exact reduction, ending, revocation and removal.
+- Add durable overturn requests and appeal-linked decisions.
+- Complete request lifecycle notifications for online and offline staff.
+- Finish escalation families, decay, recency, aliases and policy compatibility.
+- Complete punishment GUI/configuration for Java and Bedrock.
+- Build the reports queue/detail GUI and complete cooldown/merge behavior.
+- Implement supported RoseChat public/private-message evidence capture.
+- Complete evidence privacy, retention, strict pre-broadcast automod and client
+  evidence providers.
+
+**Done when:** every moderation change is authority-safe, audited, idempotent,
+restart-safe and cannot alter an unrelated sanction or report.
+
+</details>
+
+<details>
+<summary><strong>3. Staff tools, investigations and player-state safety</strong></summary>
+
+- Complete staff-mode snapshot, exact restore, rank enforcement and crash resume.
 - Complete freeze restrictions, staff-only communication, reconnect and expiry.
-- Finish vanish coverage across tab, entities, commands, chat, voice, effects,
-  containers, completions and public APIs.
-- Complete inventory/Ender concurrent viewers, dirty slots, nested containers,
-  offline atomic replacement and queued patches.
-- Finish item-confiscation selection, movement protection, recovery and restore.
-- Reconstruct Currency integration and finish economy removal/restoration.
-- Prove behavior with Java, Bedrock/Geyser and Folia runtime tests.
+- Finish vanish tab, entity, command, chat, voice, effect, container and public-API
+  hiding with real Java/Bedrock/Folia tests.
+- Complete online/offline inventory editing, concurrent viewers, nested containers,
+  queued patches, recovery and quarantine.
+- Complete item and economy confiscation/restoration without duplicate or loss.
+- Finish alt confidence aging, exceptions, inheritance, encryption, GUI and alerts.
+- Finish the player inspector, staff hotbar and tools menu.
+- Implement safe journaled cheat testers, fake entity and virtual fake base.
+- Add `/fakebase`.
 
-**Completion condition:** no crash, disconnect, stale viewer or server switch can
-leak staff state, overwrite newer player data, lose an asset or create a duplicate.
+**Done when:** crashes, disconnects, stale viewers and server switches cannot leak
+staff state, overwrite newer player data, lose assets or expose private evidence.
 
-## 3. Investigations and evidence
+</details>
 
-- Build the reports queue/detail GUI and modular report configuration.
-- Complete RoseChat private-message evidence capture and privacy boundaries.
-- Finish staff-facing evidence review and retention controls.
-- Reconstruct AutoClicker evidence and strict pre-broadcast automod integration.
-- Complete alt confidence aging, maintenance suppression, exceptions,
-  inheritance, GUI and unread alerts.
-- Finish staff tools, safe cheat testers, fake entity and virtual fake base.
-- Add `/fakebase` and verify fake systems for Java and Bedrock.
+<details>
+<summary><strong>4. Integrations, migration and release readiness</strong></summary>
 
-**Completion condition:** staff can investigate reports, clients, alts and test
-results without leaking private data or changing real player/world state.
-
-## 4. External integrations
-
-- Rebuild the EnthusiaCurrency moderation API.
-- Rebuild Commend blacklist enforcement for every write path.
-- Rebuild AutoClicker versioned evidence lookup.
-- Obtain or define the supported RoseChat moderation/staff bridge.
-- Rebuild Market moderation without bypassing its transaction model.
-- Complete Discord event routing, sanitization, circuit/status and recovery.
-- Build the private punishment/appeal site with authentication, CSRF protection,
-  rate limits, restricted roles and safe media.
-- Test provider classloaders and degraded behavior at declared repository revisions.
-
-**Completion condition:** every provider works at its declared revision, and a
-missing provider disables only the dependent actions with a clear explanation.
-
-## 5. Migration and complete proof
-
+- Complete Discord routing, sanitization, circuit status and manual recovery.
+- Build the private punishment/appeal website with authentication, CSRF, rate
+  limits, role controls and safe media.
+- Reconstruct Currency, Commend, AutoClicker, RoseChat and Market providers.
+- Stage provider classloaders and independent degraded behavior.
 - Complete PR #37 cutover coordination, writer fencing and emergency freeze.
-- Prove migration dry run, rerun, interruption, resume, replay, reconciliation,
-  source deletion, orphan mappings and rollback.
-- Test real LiteBans schema variants and production-like private data volume.
-- Run full Paper–Velocity multi-backend staging with no-player transport.
-- Run Java, Bedrock/Geyser, Folia, provider, load, saturation and process-kill tests.
-- Create one release manifest declaring every repository revision, artifact hash,
-  configuration checksum and acceptance result.
-- Run seven valid daily comparisons spanning at least 168 hours.
-- Resolve every mismatch and rehearse rollback before changing authority.
+- Prove migration interruption, resume, reconciliation, rollback and real-data
+  rehearsal.
+- Run full Velocity/HUB/SMP, Java, Bedrock/Geyser and Folia acceptance.
+- Run load, saturation and process-kill tests.
+- Produce one cross-repository release manifest with exact revisions and hashes.
+- Complete seven daily comparisons spanning at least 168 hours.
+- Rehearse rollback before any production authority change.
 
-**Completion condition:** one coherent release manifest passes all applicable
-acceptance groups and the shadow record contains no unexplained mismatch.
+**Done when:** one reproducible release manifest passes every applicable acceptance
+group and the complete shadow record contains no unexplained mismatch.
+
+</details>
 
 ## Current development order
 
 1. Finish PR #37 and reconcile PR #27.
-2. Complete moderation history, decisions and notifications.
-3. Complete staff-state and asset-safety recovery.
-4. Complete investigations and evidence workflows.
+2. Complete core mode, configuration and recovery gaps needed by other features.
+3. Complete moderation history, decisions, reports and notifications.
+4. Complete staff-state, inventory, asset and investigation safety.
 5. Reconstruct providers, Discord and the private website.
-6. Run migration, topology, platform and failure acceptance.
+6. Run migration, topology, platform, load and failure acceptance.
 7. Complete the 168-hour shadow evidence and rollback rehearsal.
 
 Correctness, security and data-integrity defects may interrupt this order.
 
 ## Documentation ownership
 
-Keep each type of information in one primary location:
-
 | Information | Primary source |
 | --- | --- |
 | Finished behavior | `ENTHUSIASTAFF-GOALS.md` |
-| Exact implementation evidence | `reports/REQUIREMENTS-MATRIX.md` |
+| Exact evidence and blockers | `reports/REQUIREMENTS-MATRIX.md` |
 | Feature percentages | `docs/wiki/pages/Implementation-Status.md` |
-| Remaining implementation sections | This document and `docs/wiki/pages/Development-Blueprint.md` |
+| Remaining development groups | This document |
 | Code paths and ownership | `docs/wiki/pages/Developer-Code-Guide.md` |
 | Validation procedure | `docs/wiki/pages/Build-and-Testing.md` |
 | Migration operations | LiteBans migration and shadow/cutover Wiki pages |
-
-Do not copy commit totals, full test procedures, source maps or operator steps
-into this blueprint.
