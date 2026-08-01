@@ -42,28 +42,40 @@ final class JdbcReportEvidenceMaintenance {
             Instant now,
             int batchLimit
     ) throws SQLException {
-        int publicChat = purgeExpiringTable(connection, PUBLIC_CHAT_PURGE_SQL, now, batchLimit);
-        int privateMessages = purgeExpiringTable(
-                connection,
-                PRIVATE_MESSAGE_PURGE_SQL,
-                now,
-                batchLimit
-        );
+        int publicChat = purgePublicChat(connection, now, batchLimit);
+        int privateMessages = purgePrivateMessages(connection, now, batchLimit);
         int clientEvidence = purgeClientEvidence(connection, now, batchLimit);
         return publicChat + privateMessages + clientEvidence;
     }
 
-    private static int purgeExpiringTable(
+    private static int purgePublicChat(
             Connection connection,
-            String sql,
             Instant now,
             int batchLimit
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setTimestamp(1, Timestamp.from(now));
-            statement.setInt(2, batchLimit);
-            return statement.executeUpdate();
+        try (PreparedStatement statement = connection.prepareStatement(PUBLIC_CHAT_PURGE_SQL)) {
+            return executeExpiringPurge(statement, now, batchLimit);
         }
+    }
+
+    private static int purgePrivateMessages(
+            Connection connection,
+            Instant now,
+            int batchLimit
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(PRIVATE_MESSAGE_PURGE_SQL)) {
+            return executeExpiringPurge(statement, now, batchLimit);
+        }
+    }
+
+    private static int executeExpiringPurge(
+            PreparedStatement statement,
+            Instant now,
+            int batchLimit
+    ) throws SQLException {
+        statement.setTimestamp(1, Timestamp.from(now));
+        statement.setInt(2, batchLimit);
+        return statement.executeUpdate();
     }
 
     private static int purgeClientEvidence(

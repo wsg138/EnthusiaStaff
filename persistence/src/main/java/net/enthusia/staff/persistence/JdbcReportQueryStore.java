@@ -82,9 +82,9 @@ final class JdbcReportQueryStore {
                     header.worldId(),
                     header.reporterCoordinates(),
                     header.targetCoordinates(),
-                    snapshots(connection, PUBLIC_CHAT_SQL, reportId),
-                    snapshots(connection, PRIVATE_MESSAGES_SQL, reportId),
-                    snapshots(connection, CLIENT_EVIDENCE_SQL, reportId)
+                    publicChatSnapshots(connection, reportId),
+                    privateMessageSnapshots(connection, reportId),
+                    clientEvidenceSnapshots(connection, reportId)
             ));
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to read report details", exception);
@@ -169,16 +169,32 @@ final class JdbcReportQueryStore {
         );
     }
 
-    private static List<String> snapshots(Connection connection, String sql, UUID reportId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, UuidBytes.toBytes(reportId));
-            try (ResultSet result = statement.executeQuery()) {
-                List<String> snapshots = new ArrayList<>();
-                while (result.next()) {
-                    snapshots.add(result.getString(1));
-                }
-                return List.copyOf(snapshots);
+    private static List<String> publicChatSnapshots(Connection connection, UUID reportId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(PUBLIC_CHAT_SQL)) {
+            return readSnapshots(statement, reportId);
+        }
+    }
+
+    private static List<String> privateMessageSnapshots(Connection connection, UUID reportId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(PRIVATE_MESSAGES_SQL)) {
+            return readSnapshots(statement, reportId);
+        }
+    }
+
+    private static List<String> clientEvidenceSnapshots(Connection connection, UUID reportId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(CLIENT_EVIDENCE_SQL)) {
+            return readSnapshots(statement, reportId);
+        }
+    }
+
+    private static List<String> readSnapshots(PreparedStatement statement, UUID reportId) throws SQLException {
+        statement.setBytes(1, UuidBytes.toBytes(reportId));
+        try (ResultSet result = statement.executeQuery()) {
+            List<String> snapshots = new ArrayList<>();
+            while (result.next()) {
+                snapshots.add(result.getString(1));
             }
+            return List.copyOf(snapshots);
         }
     }
 
