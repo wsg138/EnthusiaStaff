@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -8,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +19,6 @@ class CommandPermissionConfigurationTest {
     private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
-            Map.entry("estaff", "enthusiastaff.status"),
             Map.entry("punish", PUNISH_PERMISSION),
             Map.entry("ban", PUNISH_PERMISSION),
             Map.entry("mute", PUNISH_PERMISSION),
@@ -52,6 +53,22 @@ class CommandPermissionConfigurationTest {
                     commands.path(expected.getKey()).path("permission").asText(),
                     expected.getKey()
             );
+        }
+    }
+
+    @Test
+    void estaffDelegatesPermissionChecksToItsSubcommands() throws IOException {
+        JsonNode metadata = pluginMetadata();
+        assertTrue(metadata.path("commands").path("estaff").path("permission").isMissingNode());
+
+        JsonNode permissions = metadata.path("permissions");
+        for (String permission : List.of(
+                "enthusiastaff.status",
+                "enthusiastaff.verify",
+                "enthusiastaff.reload"
+        )) {
+            assertTrue(permissions.has(permission), permission);
+            assertFalse(permissions.path(permission).path("default").asBoolean(), permission);
         }
     }
 
