@@ -66,7 +66,10 @@ jobs:
           git push --force origin HEAD:refs/heads/$TARGET_BRANCH
 
           set +e
-          python3 scripts/resolve-pr27-integration.py > /tmp/resolution.log 2>&1
+          {
+            python3 scripts/resolve-pr27-integration.py
+            python3 scripts/harden-pr27-integration.py
+          } > /tmp/resolution.log 2>&1
           RESOLUTION_STATUS=$?
           set -e
           if test "$RESOLUTION_STATUS" -ne 0; then
@@ -83,6 +86,7 @@ jobs:
           git rm -r --ignore-unmatch .merge-analysis
           git rm --ignore-unmatch .github/workflows/pr27-integration-driver.yml
           git rm --ignore-unmatch scripts/resolve-pr27-integration.py
+          git rm --ignore-unmatch scripts/harden-pr27-integration.py
           if grep -R -n -E '^(<<<<<<< |>>>>>>> )' -- . ':!.git'; then
             echo "Unresolved Git conflict markers remain" >&2
             exit 1
