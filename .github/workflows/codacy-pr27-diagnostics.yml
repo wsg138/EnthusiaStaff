@@ -1,0 +1,202 @@
+name: Temporary PR 27 Codacy Diagnostics
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export exact PR 27 Codacy issue delta
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      TARGET_BRANCH: section/punishment-request-notifications-recovery
+
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Require Codacy project token
+        shell: bash
+        run: |
+          if [[ -z "${CODACY_PROJECT_TOKEN}" ]]; then
+            echo "::error::CODACY_PROJECT_TOKEN is not configured."
+            exit 1
+          fi
+
+      - name: Export sanitized exact issue delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports/codacy-pr27
+          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/codacy-pr27/changed-java-files.txt
+
+          python3 - <<'PY'
+          import collections
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          root = Path("build/reports/codacy-pr27")
+          paths = [
+              line.strip()
+              for line in (root / "changed-java-files.txt").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if not paths:
+              raise SystemExit("No changed Java files found")
+
+          token = os.environ["CODACY_PROJECT_TOKEN"]
+          branch = os.environ["TARGET_BRANCH"]
+
+          def normalize(payload):
+              if isinstance(payload, list):
+                  values = payload
+              elif isinstance(payload, dict):
+                  values = next(
+                      (
+                          payload[key]
+                          for key in ("issues", "data", "results", "items")
+                          if isinstance(payload.get(key), list)
+                      ),
+                      [],
+                  )
+              else:
+                  values = []
+              return [item for item in values if isinstance(item, dict)]
+
+          def fetch(path, branch_name):
+              encoded = urllib.parse.quote(path, safe="")
+              query = urllib.parse.urlencode({"branch": branch_name})
+              url = f"https://api.codacy.com/2.0/project/file/issues/{encoded}?{query}"
+              request = urllib.request.Request(
+                  url,
+                  headers={"Accept": "application/json", "project-token": token},
+              )
+              for attempt in range(1, 7):
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          return normalize(json.loads(response.read().decode("utf-8")))
+                  except urllib.error.HTTPError as error:
+                      if error.code == 404:
+                          return []
+                      if error.code not in {429, 500, 502, 503, 504} or attempt == 6:
+                          body = error.read().decode("utf-8", errors="replace")
+                          raise RuntimeError(
+                              f"Codacy request failed for {path} on {branch_name}: HTTP {error.code}: {body[:300]}"
+                          ) from error
+                  except urllib.error.URLError as error:
+                      if attempt == 6:
+                          raise RuntimeError(
+                              f"Codacy request failed for {path} on {branch_name}: {error}"
+                          ) from error
+                  time.sleep(attempt * 2)
+              raise AssertionError("unreachable")
+
+          def signature(item):
+              return (
+                  item.get("patternId"),
+                  item.get("message"),
+                  item.get("level"),
+                  item.get("tool"),
+                  item.get("toolId"),
+              )
+
+          delta = []
+          for index, path in enumerate(paths, 1):
+              current = fetch(path, branch)
+              baseline = fetch(path, "main")
+              remaining = collections.Counter(signature(item) for item in baseline)
+              for item in sorted(current, key=lambda value: (value.get("startLine") or 0, value.get("endLine") or 0)):
+                  key = signature(item)
+                  if remaining[key] > 0:
+                      remaining[key] -= 1
+                  else:
+                      sanitized = {
+                          "filePath": path,
+                          "patternId": item.get("patternId"),
+                          "patternName": item.get("patternName") or item.get("title") or item.get("name"),
+                          "level": item.get("level"),
+                          "tool": item.get("tool") or item.get("toolName"),
+                          "toolId": item.get("toolId"),
+                          "startLine": item.get("startLine"),
+                          "endLine": item.get("endLine"),
+                          "message": item.get("message"),
+                          "issueId": item.get("issueId") or item.get("id") or item.get("uuid") or item.get("fingerprint"),
+                          "category": item.get("category"),
+                          "rawKeys": sorted(item.keys()),
+                      }
+                      for key_name in ("patternInfo", "toolInfo", "location", "commitInfo"):
+                          value = item.get(key_name)
+                          if isinstance(value, dict):
+                              sanitized[key_name] = value
+                      delta.append(sanitized)
+              print(f"queried {index}/{len(paths)}: {path}")
+
+          (root / "sanitized-new-issues.json").write_text(
+              json.dumps(delta, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          levels = collections.Counter(item.get("level") or "unknown" for item in delta)
+          patterns = collections.Counter(
+              (
+                  item.get("tool") or item.get("toolId") or "unknown-tool",
+                  item.get("patternId") or "unknown-pattern",
+                  item.get("patternName") or "unknown-name",
+                  item.get("level") or "unknown-level",
+              )
+              for item in delta
+          )
+          areas = collections.Counter(
+              (
+                  item["filePath"].split("/", 1)[0],
+                  "test" if "/src/test/" in item["filePath"] or item["filePath"].startswith("integration-tests/") else "production",
+                  item.get("level") or "unknown-level",
+              )
+              for item in delta
+          )
+
+          print("\n=== CODACY PR 27 SANITIZED SUMMARY ===")
+          print(f"head={os.environ.get('GITHUB_SHA')}")
+          print(f"changed_java_files={len(paths)}")
+          print(f"new_issues={len(delta)}")
+          print("levels=" + json.dumps(dict(sorted(levels.items())), sort_keys=True))
+
+          print("\n=== ERROR/HIGH CANDIDATES ===")
+          high = [item for item in delta if str(item.get("level", "")).lower() in {"error", "high", "critical"}]
+          print(json.dumps(high, indent=2, sort_keys=True))
+
+          print("\n=== PATTERN GROUPS ===")
+          for (tool, pattern_id, pattern_name, level), count in sorted(patterns.items()):
+              print(json.dumps({
+                  "tool": tool,
+                  "patternId": pattern_id,
+                  "patternName": pattern_name,
+                  "level": level,
+                  "count": count,
+              }, sort_keys=True))
+
+          print("\n=== SOURCE AREA GROUPS ===")
+          for (area, kind, level), count in sorted(areas.items()):
+              print(json.dumps({"area": area, "codeKind": kind, "level": level, "count": count}, sort_keys=True))
+          PY
+
+      - name: Upload sanitized diagnostics
+        uses: actions/upload-artifact@v7
+        with:
+          name: codacy-pr27-sanitized-${{ github.sha }}
+          path: build/reports/codacy-pr27
+          if-no-files-found: error
+          retention-days: 3
