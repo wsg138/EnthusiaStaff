@@ -33,6 +33,7 @@ final class WebsiteApiRouterTest {
     private static final String GET = "GET";
     private static final String POST = "POST";
     private static final String PLAYER_NAME = "ExamplePlayer";
+    private static final String ACCOUNT_ID_JSON_PREFIX = "{\"accountId\":\"";
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
     private static final UUID PUNISHMENT_ID =
             UUID.fromString("65c17015-160d-4e15-a589-495898782ba2");
@@ -95,14 +96,14 @@ final class WebsiteApiRouterTest {
                 POST,
                 URI.create("/v1/website/punishment-codes/claim"),
                 headers,
-                bytes("{\"accountId\":\"" + ACCOUNT_ID
+                bytes(ACCOUNT_ID_JSON_PREFIX + ACCOUNT_ID
                         + "\",\"username\":\"" + PLAYER_NAME + "\",\"punishmentCode\":\"CODE-1\"}")
         ));
         Map<?, ?> revalidation = assertInstanceOf(Map.class, router.route(
                 POST,
                 URI.create("/v1/website/punishment-codes/revalidate"),
                 headers,
-                bytes("{\"accountId\":\"" + ACCOUNT_ID + "\",\"punishmentId\":\""
+                bytes(ACCOUNT_ID_JSON_PREFIX + ACCOUNT_ID + "\",\"punishmentId\":\""
                         + PUNISHMENT_ID + "\",\"codeGeneration\":2}")
         ));
 
@@ -143,7 +144,7 @@ final class WebsiteApiRouterTest {
                         POST,
                         URI.create("/v1/website/punishment-codes/revalidate"),
                         jsonHeaders(),
-                        bytes("{\"accountId\":\"" + ACCOUNT_ID + "\",\"punishmentId\":\""
+                        bytes(ACCOUNT_ID_JSON_PREFIX + ACCOUNT_ID + "\",\"punishmentId\":\""
                                 + PUNISHMENT_ID + "\",\"codeGeneration\":2.9}")
                 )
         );
@@ -153,7 +154,7 @@ final class WebsiteApiRouterTest {
                         POST,
                         URI.create("/v1/website/punishment-codes/claim"),
                         jsonHeaders(),
-                        bytes("{\"accountId\":\"" + ACCOUNT_ID
+                        bytes(ACCOUNT_ID_JSON_PREFIX + ACCOUNT_ID
                                 + "\",\"username\":\"" + PLAYER_NAME + "\","
                                 + "\"punishmentCode\":\"CODE-1\",\"extra\":true}")
                 )
