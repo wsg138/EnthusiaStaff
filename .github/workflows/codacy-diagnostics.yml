@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
           curl --fail --location --silent --show-error \
             --output pmd.zip \
-            "https://repo1.maven.org/maven2/net/sourceforge/pmd/pmd-dist/7.26.0/pmd-dist-7.26.0-bin.zip"
+            "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.26.0/pmd-dist-7.26.0-bin.zip"
           unzip -q pmd.zip
 
       - name: Analyze changed Java files
