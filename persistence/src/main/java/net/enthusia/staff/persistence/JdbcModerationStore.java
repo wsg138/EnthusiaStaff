@@ -114,9 +114,11 @@ public final class JdbcModerationStore implements ModerationStore {
                 return accepted;
             } catch (SQLException exception) {
                 rollback(connection, exception);
-                CaseId replay = existingCaseAfterConflict(plan.idempotencyKey().value());
-                if (replay != null) {
-                    return new PunishmentResult.Accepted(replay, true);
+                if (JdbcSqlErrors.isDuplicateKey(exception)) {
+                    CaseId replay = existingCaseAfterConflict(plan.idempotencyKey().value());
+                    if (replay != null) {
+                        return new PunishmentResult.Accepted(replay, true);
+                    }
                 }
                 throw new ModerationPersistenceException("Punishment transaction failed", exception);
             } finally {
