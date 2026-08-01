@@ -1,4 +1,4 @@
-name: Finalize PR27 quality
+name: Finalize PR27 quality and cleanup branches
 
 on:
   push:
@@ -41,3 +41,31 @@ jobs:
           git add -A
           git commit --no-verify -m 'Resolve PR27 security analysis findings precisely'
           git push origin HEAD:refs/heads/section/punishment-request-notifications-recovery
+
+          stale_branches=(
+            automation/pr27-codacy-attention
+            automation/pr27-codacy-auth-check
+            automation/pr27-codacy-auth-result
+            automation/pr27-codacy-cleanup
+            automation/pr27-codacy-current
+            automation/pr27-codacy-current-result
+            automation/pr27-codacy-export
+            automation/pr27-codacy-export-result
+            automation/pr27-codacy-summary
+            automation/pr27-codacy-warning-groups
+            automation/pr27-controller-race-fix
+            automation/pr27-controller-race-validated
+            automation/pr27-current-main-candidate
+            automation/pr27-folia-fix
+            automation/pr27-high-fixes
+            automation/pr27-main-integration
+            automation/pr27-main-integration-v2
+            automation/pr27-main-integration-v3
+            automation/pr27-reload-folia
+            automation/pr27-reload-folia-validated
+          )
+          for branch in "${stale_branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
