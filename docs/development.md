@@ -11,7 +11,7 @@ operator procedures.
 | What must the finished platform do? | `ENTHUSIASTAFF-GOALS.md` |
 | What is implemented and what evidence exists? | `reports/REQUIREMENTS-MATRIX.md` |
 | How complete is each feature? | `docs/wiki/pages/Implementation-Status.md` |
-| What feature section should be developed next? | `docs/development-blueprint.md` |
+| What feature section should be developed next? | `docs/wiki/pages/Development-Blueprint.md` |
 | Which files and services own a feature? | `docs/wiki/pages/Developer-Code-Guide.md` |
 | How is a change validated? | `docs/wiki/pages/Build-and-Testing.md` |
 | What is the current cross-repository checkpoint? | `WORKSPACE-MANIFEST.md` |
@@ -44,7 +44,7 @@ required.
 ## Development loop
 
 1. Read the relevant goal and requirements-matrix row.
-2. Check `docs/development-blueprint.md` for the owning unfinished section.
+2. Check `docs/wiki/pages/Development-Blueprint.md` for the owning unfinished section.
 3. Locate the feature trace in the Developer Code Guide.
 4. Identify affected domain behavior, durable stores, runtime adapters,
    configuration, recovery rules and documentation.
@@ -113,7 +113,7 @@ Update only the pages that own the changed information:
 - exact evidence: `reports/REQUIREMENTS-MATRIX.md`;
 - cross-repository checkpoint: `WORKSPACE-MANIFEST.md`;
 - percentages: `docs/wiki/pages/Implementation-Status.md`;
-- remaining feature sections: the development blueprint;
+- remaining feature sections: `docs/wiki/pages/Development-Blueprint.md`;
 - code paths: the Developer Code Guide;
 - validation procedure: Build and Testing; and
 - staff/operator behavior: the affected focused Wiki guide.
