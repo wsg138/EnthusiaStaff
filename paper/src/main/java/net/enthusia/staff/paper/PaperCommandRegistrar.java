@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
+import net.enthusia.staff.paper.command.EstaffCommand;
 import net.enthusia.staff.paper.command.FreezeCommand;
 import net.enthusia.staff.paper.command.InspectCommand;
 import net.enthusia.staff.paper.command.InventoryCommand;
@@ -58,6 +59,14 @@ final class PaperCommandRegistrar {
 
     PaperCommandRegistrar(Dependencies dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
+    }
+
+    static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
+        PluginCommand command = Objects.requireNonNull(
+                plugin.getCommand("estaff"),
+                "estaff command is missing from plugin.yml"
+        );
+        command.setExecutor(new EstaffCommand(health));
     }
 
     void register() {
