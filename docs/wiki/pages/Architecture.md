@@ -84,9 +84,11 @@ The composition boundary is split into focused collaborators:
 - `PaperResourceCloser` applies one interruption-safe cleanup policy.
 
 MariaDB work remains on the bounded worker pool. Bukkit player mutations must
-run on the owning entity scheduler or another supported Paper scheduler. Full
-Folia ownership verification for staff recovery and visibility fan-out remains
-tracked work and is not implied by the standalone boot test.
+run on the owning entity scheduler or another supported Paper scheduler. Vanish
+startup and visibility fan-out now use session-fenced entity scheduling, including
+reconnect and packet-adapter failure paths. Freeze and staff-session recovery are
+still tracked separately, and full Folia verification is not implied by the
+standalone boot test.
 
 ### Velocity
 

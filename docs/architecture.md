@@ -81,8 +81,10 @@ The Paper entrypoint owns startup ordering rather than every adapter's wiring.
 Database environment resolution, reason-policy loading, network inbox handling,
 and resource cleanup are separate bounded collaborators. Storage initialization
 remains on the bounded worker pool. Player and visibility operations must return
-to the owning entity or supported Paper scheduler; live Folia ownership remains
-an explicit staging and remediation requirement.
+to the owning entity or supported Paper scheduler. Vanish startup recovery and
+visibility fan-out use session-fenced entity scheduling so stale reconnect work
+cannot mutate a retired player handle. Freeze and staff-session recovery remain
+tracked ownership work, and all of these paths still require live Folia staging.
 
 ### Velocity
 
