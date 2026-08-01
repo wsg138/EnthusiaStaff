@@ -1,211 +1,108 @@
-# Implementation Status
+# Feature Completion Status
 
-This page separates the finished platform design from what is currently proven.
-Use [[Development Blueprint]] for the ordered path from this checkpoint to
-production authority.
+This page answers one question: **how complete is each major EnthusiaStaff feature?**
+
+Use [[Remaining Development Map|Development-Blueprint]] for the grouped map of
+unfinished work. Use `reports/REQUIREMENTS-MATRIX.md` for exact files, tests,
+blockers and evidence.
 
 > **Overall verdict: NOT READY for production authority.** LiteBans and the
-> existing production staff stack remain authoritative until the complete
-> migration, full acceptance suite, mandatory 168-hour shadow period, cutover
-> rehearsal and final authorization gate pass.
+> existing production staff stack remain authoritative.
 
-## Snapshot basis
+## How to read the percentages
 
-- Current `main`: `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`
-- Latest merged checkpoint: PR #36, LiteBans shadow-comparison decomposition
-- Validated PR #36 head: `3afeffc926571170e8df18c7d096ca7f4d89ec1b`
-- Clean Java 21 result: 40/40 tasks, 99 suites / 398 tests
-- MariaDB 11.8.3 Testcontainers: 15 suites / 68 tests
-- Hosted Codacy: zero new findings, three fixed, 92.59% diff coverage and no clone increase
-- Exact-SHA Pi boot/restart staging: run `30709333535`
-- Active draft PR #37: LiteBans cutover coordination; only its focused first checkpoint is currently claimed
-- Separate draft PR #27: punishment-request notifications, staff mode and freeze; 95 commits requiring careful reconciliation
-- Pre-migration Wiki backup: `ea4f929710d3281aac4a8087da1e947973c2d795`
+The percentages are rounded planning estimates based on the current code,
+automated tests, staging evidence and remaining requirements. They are not
+calculated automatically and should not be treated as a release score.
 
-Statuses follow `reports/REQUIREMENTS-MATRIX.md` conservatively. A passing branch
-checkpoint proves only its tested scope. It does not establish provider,
-multi-server, Bedrock, Folia, load, process-kill, complete migration, shadow or
-production acceptance.
+| Mark | Meaning |
+| --- | --- |
+| ✅ **Complete** | The feature's intended repository scope is implemented and tested. |
+| 🟢 **80–99%** | Core behavior is present; focused integration or staging work remains. |
+| 🟡 **50–79%** | Useful foundations exist, but important behavior is unfinished. |
+| 🟠 **20–49%** | Early or partial implementation; substantial work remains. |
+| 🔴 **0–19%** | Not started, only represented by contracts, or externally blocked. |
 
-## Major progress since the previous Wiki snapshot
+A feature can be highly complete without being approved for production. Production
+approval also requires the combined provider, topology, migration, security,
+load, recovery and operational gates.
 
-The repository is more than 199 commits beyond the old implementation snapshot.
-Major changes include:
+## Platform foundation
 
-- Paper startup and shutdown composition split into focused runtime, command,
-  integration, configuration, network and cleanup collaborators.
-- Durable punishment request submission, review, approval, denial, confirmation,
-  queue, permission and offline-target presentation paths.
-- MariaDB website projections, punishment codes, appeals, report state,
-  submission replay, query separation and evidence maintenance.
-- Signed restricted website API routing and appeal failure contracts on Velocity.
-- Report persistence concurrency, semantic conflict, rollback, privacy filtering,
-  physical retention and replay scenarios.
-- Vanish audience coordination, reconnect fencing, fail-closed behavior and
-  entity-owner scheduling improvements.
-- Protocol authentication, replay, envelope and validation-before-receipt tests.
-- Deterministic LiteBans schema aliases/blockers and detailed shadow comparison
-  across counts, checksums, active state, UUIDs, expirations and enforcement decisions.
-- Exact-SHA Pi staging and expanded coverage/Codacy workflows.
+| Feature | Status | What is already present | What still needs to be done |
+| --- | ---: | --- | --- |
+| Two Java 21 runtime jars and dependency packaging | ✅ **Complete** | Paper and Velocity runtime jars build and are inspected; provider API leak checks pass. | Repeat packaging checks for release candidates and verify real provider classloaders. |
+| Clean architecture and module ownership | 🟡 **75%** | Domain, persistence, protocol, Paper, Velocity and integration contracts are separated; several large startup and persistence responsibilities were split. | Finish remaining coordinator/JDBC decomposition and reconcile long-lived branches without restoring duplicate ownership. |
+| MariaDB schema and durable persistence | 🟢 **90%** | Migrations, prepared statements, stores, transactions, leases, journals, inboxes and outboxes have broad MariaDB tests. | Add production-volume, process-kill and multi-server contention testing; finish resource/index review. |
+| Paper–Velocity authenticated network channel | 🟢 **85%** | Persistent authenticated transport, replay protection, acknowledgements, retries and durable outbox behavior are tested. | Prove real multi-backend operation, certificate rotation, backpressure and no-player transport. |
+| Operational modes and degraded behavior | 🟠 **45%** | Operational-state types and several fail-closed command paths exist. | Complete all six modes, transition rules, dependency-specific feature gates, emergency freeze and runtime verification. |
+| Modular configuration and atomic reload | 🟠 **35%** | Reason-policy loading, validation and atomic policy replacement exist. | Build the required file tree, GUI configuration, aliases, complete cross-file validation, restart-required reporting and full state-preserving reload. |
+| Identity, previous names, Bedrock aliases and offline lookup | 🟡 **50%** | UUID-first lookup, directory persistence and basic offline target presentation exist. | Add complete historical-name and `*` alias lookup, bounded fuzzy matching, ranking, cache refresh and no-SQL-per-keystroke completion. |
 
-This is substantial progress, but several remaining areas are among the highest
-risk in the project.
+## Moderation and punishment features
 
-## Tested checkpoints
+| Feature | Status | What is already present | What still needs to be done |
+| --- | ---: | --- | --- |
+| Case and sanction core | 🟡 **70%** | Durable cases, sanctions, visibility, public projections, expiration and several sanction types exist. | Complete combined-sanction behavior, visibility mutation authorization, full history integration and provider/site validation. |
+| Punishment GUI, durable drafts and approval requests | 🟢 **80%** | Category/reason/review flows, durable drafts, Helper permanent requests, Developer request-only behavior, queues and decisions are tested. | Reconcile PR #27, finish lifecycle notifications, modular GUI config, reconnect/restart behavior and Bedrock/multi-server staging. |
+| Escalation ladders, families, decay and policy versions | 🟡 **55%** | Stable policy IDs, recommendation logic, frozen recommendations and loader tests exist. | Finish the authoritative escalation formula, decay/recency, aliases, removed IDs, finite ladders and combined recommendations. |
+| Rank authority and approval boundaries | 🟢 **80%** | Helper, Mod, Developer, Admin and Founder boundaries are enforced in central services for current in-game flows. | Complete website/provider enforcement, offline alerts, notification delivery and production-like multi-server verification. |
+| History, reduction, ending, revocation and overturns | 🟠 **40%** | Sanction mutation services and removal commands have focused tests. | Add `/history`, precise reduction/end/revoke/remove behavior, overturn requests, appeal-linked decisions, complete notifications and end-to-end staging. |
+| Reports, evidence, queues and privacy | 🟡 **65%** | Submission, replay, conflict handling, queues, state transitions, chat context, privacy filtering and retention are persisted and tested. | Build the report GUI/config, RoseChat private-message bridge, Discord rendering, staff privacy review and real multi-server staging. |
+| Client evidence and strict automod | 🟠 **35%** | Evidence models, integration contracts and strict variant matching exist. | Rebuild the AutoClicker and RoseChat adapters, prove pre-broadcast cancellation, bounded evidence, reload, audit/Discord creation and false-positive resistance. |
 
-| Area | Current proof | Remaining production work |
-| --- | --- | --- |
-| Exactly two Java 21 runtime jars | Clean build, aggregate coverage, jar inspection and standalone Paper loading | Real provider classloader compatibility and full Velocity/runtime topology |
-| MariaDB authority and persistence | Migrations plus broad unit and Testcontainers coverage | Production volume, process-kill recovery and multi-server contention |
-| Paper–Velocity protocol and network outbox | Authentication, replay, acknowledgement, reconnect, duplicate and validation-order tests | Multi-backend staging, production certificates, rotation, backpressure and no-player runtime behavior |
-| Durable Discord outbox | Lease, retry, fencing and integration scenarios | Complete event routing, circuit/status controls, sanitization and live webhooks |
-| Punishment request interfaces | Durable workflow, authority boundaries, queue/review presentation, offline targets and MariaDB tests | PR #27 reconciliation, reload/configuration, notifications, restart, website controls, Bedrock and multi-server staging |
-| Provider API packaging | Runtime jars inspected for provider API leaks | Real provider plugins and cross-plugin runtime staging |
-| LiteBans shadow comparison | Persisted comparisons and exact import/reconcile/replay/source-deletion lifecycle | PR #37 cutover coordination, realistic data, seven-day shadow, activation and rollback rehearsal |
+## Staff, investigation and asset-safety features
 
-## Validated root bridge, not complete website
+| Feature | Status | What is already present | What still needs to be done |
+| --- | ---: | --- | --- |
+| Online/offline inventory and Ender editing | 🟡 **50%** | Inventory images, operation journals, revisions, leases and queued-patch foundations exist. | Complete concurrent viewers, dirty-slot synchronization, nested containers, offline atomic replacement, ownership/save races and recovery staging. |
+| Item confiscation and restoration | 🟡 **55%** | Case-linked snapshots, lifecycle states, journals and idempotent restoration foundations exist. | Finish nested selection, movement bypass protection, stale selection handling, crash recovery, quarantine resolution and live Paper testing. |
+| Economy confiscation and restoration | 🟠 **45%** | Economy plans, journals, codecs and rollback-integrity tests exist. | Reconstruct the Currency API, exact provider snapshots, replay/conflict handling, custom removal order and provider staging. |
+| Staff mode | 🟡 **50%** | Rank access policy, persistent session storage and snapshot/restore foundations exist. | Reconcile PR #27, complete checksums/revisions, crash resume, cross-server location restore, CombatLogX handling and item-leak prevention. |
+| Vanish and spectator masking | 🟡 **60%** | Rank-aware audience coordination, reconnect fencing, fail-closed behavior, entity-owner scheduling and packet/Paper layers exist. | Cover every command/integration exposure, sounds/effects/containers/voice, full spectator presentation, Java/Bedrock/Folia staging and performance verification. |
+| Freeze | 🟡 **50%** | Freeze commands, persistence and several restrictions exist; PR #27 contains additional lifecycle work. | Reconcile PR #27 and complete every interaction restriction, staff-only chat, backend-switch prevention, reconnect/offline expiry and restart staging. |
+| Staff tools, cheat testers and fake systems | 🟠 **30%** | Some staff hotbar, inspection and test foundations exist. | Finish the full hotbar lifecycle, safe tester journals/restoration, fake entity behavior, virtual fake base and `/fakebase`, including Bedrock testing. |
+| Alt detection, confidence and sanction inheritance | 🟠 **40%** | `/alts` and `/alt` are registered; relationship, evidence and identity-token foundations exist. | Complete confidence aging, maintenance suppression, exceptions, inheritance, aliases, GUI, unread alerts, encryption/key rotation and real-data staging. |
 
-The Velocity website bridge has tested signed loopback transport, request
-validation, strict routing, lifecycle, overload input, public projections,
-punishment codes and appeal contracts. The actual private site still requires
-its own authenticated sessions, CSRF protection, rate limits, media controls,
-restricted roles, tests and unpublished staging build.
+## Integrations, migration and release readiness
 
-## Partial and still requiring substantial work
+| Feature | Status | What is already present | What still needs to be done |
+| --- | ---: | --- | --- |
+| Discord delivery and alerts | 🟠 **45%** | Durable outbox, leasing, retry and fencing foundations exist. | Route all required events, finish sanitization, circuit/status controls, manual recovery and live webhook verification. |
+| Punishment and appeal website | 🟠 **35%** | Signed restricted Velocity transport, public projections, punishment codes and appeal contracts exist. | Build the private site with authenticated sessions, CSRF, rate limits, restricted roles, safe media and integration/staging tests. |
+| Related plugin APIs and adapters | 🟠 **25%** | EnthusiaStaff contracts exist for Currency, Commend, AutoClicker, RoseChat and Market. | Reconstruct provider implementations, enforce every write path, document degraded behavior and run cross-plugin classloader/runtime staging. |
+| LiteBans migration, shadow comparison and cutover | 🟡 **55%** | Schema inspection, import/reconcile/replay/source-deletion paths and persisted comparison dimensions are tested. | Complete PR #37, interruption/resume/rollback, writer fencing, realistic data rehearsal, seven daily summaries over 168 hours and final cutover recovery. |
+| Verification, staging and operational readiness | 🟡 **50%** | Clean builds, broad tests, coverage reporting, Codacy, Wiki validation and standalone Pi staging exist. | Add full Paper/Velocity topology, providers, Java/Bedrock/Folia, load, process-kill, upgrade/recovery and release-manifest acceptance. |
 
-- Clean architecture and responsibility decomposition
-- Safe failure, idempotency, fencing, recovery and quarantine
-- Operational-mode transitions and dependency-specific degradation
-- Modular versioned configuration and complete atomic reload
-- Identity, historical names, aliases, Bedrock identity and bounded completion
-- Complete case/sanction visibility and combined-sanction behavior
-- Escalation families, decay, aliases, removed IDs and frozen policy versions
-- Punishment history, precise changes, overturn and appeal-linked decisions
-- Request notifications, configuration replacement, offline/restart and multi-server behavior
-- Reports GUI, RoseChat evidence, Discord rendering and staff privacy review
-- Client evidence and strict pre-broadcast automod
-- Inventory and Ender editing under concurrency and offline ownership
-- Item and economy confiscation/restoration under failure
-- Staff mode, vanish, freeze and staff tools
-- Alt confidence, exceptions, inheritance, GUI, alerts and key rotation
-- Provider APIs and optional integration degradation
-- LiteBans cutover evidence, recovery, emergency freeze and rollback
-- Coverage enforcement, mutation tests, load tests and full operational documentation
+## Current command gaps
 
-## Blocked or externally constrained
-
-- Complete RoseChat moderation/staff bridge: the required provider repository/API is unavailable.
-- Polar automatic enforcement: no supported violation event contract is available.
-- Full acceptance: provider branches, private site, multi-backend topology, Folia,
-  Bedrock clients, secrets, production-like data and load/failure environments are incomplete.
-- Mandatory 168-hour shadow period: real LiteBans data and the required private
-  observation environment have not yet been supplied.
-
-## Current command surfaces
-
-### Paper commands registered in `plugin.yml`
-
-```text
-/estaff
-/punish
-/ban
-/mute
-/warn
-/kick
-/ipban
-/removepunishment
-/unban
-/unmute
-/removewarning
-/unwarn
-/report
-/reports
-/freeze
-/unfreeze
-/staff
-/vanish
-/staffchat
-/client
-/invsee
-/endersee
-/inspect
-/case
-```
-
-Registration proves only that Bukkit can route a command. It does not prove the
-complete workflow is staged or production-safe.
-
-### Velocity commands registered at startup
-
-```text
-/estaff
-/alts
-/alt
-```
-
-`/alts` and `/alt` are no longer absent from the proxy command surface. The
-underlying alt system remains partial: confidence lifecycle, evidence aging,
-maintenance suppression, household/approved exceptions, key rotation, GUI,
-alerts and complete staging are unfinished.
-
-### Required command gaps
+The following required top-level commands are not yet registered:
 
 ```text
 /history
 /fakebase
 ```
 
-Additional recovery, status, namespaced fallback and command-conflict controls
-remain incomplete even where a top-level command already exists.
+`/alts` and `/alt` are registered on Velocity, but their underlying feature is
+still only about 40% complete.
 
-## Immediate development gates
+## External blockers
 
-The maintained path is [[Development Blueprint]]. The current queue begins with:
+- The supported RoseChat provider repository/API is unavailable.
+- Polar does not expose the required supported violation-event contract for
+  automatic enforcement.
+- Full provider branches, the private site, production-like data, Bedrock/Folia
+  clients and the complete multi-server failure environment are unavailable.
+- The required real-data 168-hour LiteBans shadow observation has not run.
 
-1. Complete PR #37 implementation, full gates and review.
-2. Rebase and reconcile PR #27 without losing or duplicating its 95-commit work.
-3. Establish the next clean `main` checkpoint.
-4. Complete history and appeal-linked decisions.
-5. Connect request lifecycle notifications to durable delivery.
-6. Finish modular configuration and operational-mode transitions.
-7. Complete report UI/privacy and the real RoseChat evidence bridge.
-8. Stage staff mode, freeze, vanish, inventory and confiscation safety.
-9. Reconstruct providers and complete the private website.
-10. Finish migration recovery, full shadow, emergency freeze and rollback.
+## Updating the estimates
 
-## Production gates
+When implementation changes:
 
-Do not replace LiteBans or remove old plugins until one coherent release
-candidate records all applicable evidence:
-
-1. Java 21 clean build and complete tests
-2. Exactly two inspected runtime jars and provider classloader safety
-3. Paper–Velocity transport in the real multi-backend topology
-4. Network ban/mute, voice mute, chat and server-switch enforcement
-5. Restart, reload, reconnect, process-kill and partial-dependency recovery
-6. Safe online/offline inventory behavior and concurrent viewers
-7. No item/economy duplication, deletion or ambiguous silent success
-8. Staff-state, vanish and freeze crash recovery
-9. Complete report privacy and evidence capture
-10. Alt confidence, inheritance, household exceptions and unread alerts
-11. Discord retry, circuit breaker, sanitization, status and manual recovery
-12. Complete command ownership, fallbacks and conflict verification
-13. Website authentication, appeals, privacy, media and role controls
-14. Provider and optional-integration compatibility
-15. Java, Bedrock/Geyser, Folia, multi-server, load and failure staging
-16. LiteBans count, checksum, identity, active-state, expiration and decision parity
-17. Seven valid daily summaries spanning the exact 168-hour non-enforcing shadow period
-18. Documented cutover, emergency freeze, rollback and post-cutover reconciliation
-19. Codacy, CI, coverage, security and documentation requirements
-20. Exact commit, jar hashes, configuration checksums, environment versions, logs and approval record
-
-## Updating this page
-
-When a feature or checkpoint changes:
-
-1. Update its requirements-matrix evidence.
-2. Update `WORKSPACE-MANIFEST.md` when the root checkpoint moves.
-3. Update [[Development Blueprint]] and affected procedures.
-4. Change status only to the highest level actually proven.
-5. Record unavailable environments and remaining limitations.
-6. Run `python scripts/wiki/validate_wiki.py` before publication.
+1. Update `reports/REQUIREMENTS-MATRIX.md` with exact evidence first.
+2. Adjust the percentage only when a meaningful requirement group is added,
+   completed, invalidated or staged.
+3. Update [[Remaining Development Map|Development-Blueprint]] when the unfinished
+   section list changes.
+4. Keep test procedures in [[Build and Testing]] and code ownership in
+   [[Developer Code Guide]] rather than repeating them here.
