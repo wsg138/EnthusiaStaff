@@ -34,8 +34,9 @@ public final class EnvelopeAuthenticator {
             ReplayGuard replayGuard
     ) {
         if (protocolVersion < 1 || clock == null || permittedAge == null || permittedClockSkew == null
+                || permittedAge.isZero() || permittedAge.isNegative() || permittedClockSkew.isNegative()
                 || serverKeys == null || serverKeys.isEmpty() || replayGuard == null) {
-            throw new IllegalArgumentException("authenticator configuration must be present");
+            throw new IllegalArgumentException("authenticator configuration must be present and time bounds must be safe");
         }
         this.protocolVersion = protocolVersion;
         this.clock = clock;
