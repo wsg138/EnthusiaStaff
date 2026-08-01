@@ -1,7 +1,8 @@
 package net.enthusia.staff.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.reflect.Proxy;
 import java.time.Duration;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 class RetryingPunishmentRequestAlertStoreTest {
     private static final UUID RECIPIENT = UUID.fromString("72000000-0000-0000-0000-000000000001");
+    private static final UUID OTHER_RECIPIENT = UUID.fromString("72000000-0000-0000-0000-000000000002");
     private static final Instant NOW = Instant.parse("2026-08-01T20:00:00Z");
 
     @Test
@@ -33,12 +35,58 @@ class RetryingPunishmentRequestAlertStoreTest {
                 }
         );
 
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW);
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(1));
-        claim(store, PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS, NOW.plusSeconds(1));
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(5));
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW);
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, OTHER_RECIPIENT, NOW.plusSeconds(1));
+        claim(store, PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS, RECIPIENT, NOW.plusSeconds(1));
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, OTHER_RECIPIENT, NOW.plusSeconds(5));
 
         assertEquals(3, fallbacks.get());
+    }
+
+    @Test
+    void classifiedContentionFallbackCanAdvanceAnIndependentRecipient() {
+        AtomicReference<UUID> fallbackRecipient = new AtomicReference<>();
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate(new AtomicReference<>(List.of())),
+                Duration.ofSeconds(1),
+                (audience, recipientId, rank, owner, limit, lease, now) -> {
+                    fallbackRecipient.set(recipientId);
+                    return Collections.singletonList(null);
+                }
+        );
+
+        List<PunishmentRequestAlertClaim> claims = claim(
+                store,
+                PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                OTHER_RECIPIENT,
+                NOW
+        );
+
+        assertEquals(1, claims.size());
+        assertEquals(OTHER_RECIPIENT, fallbackRecipient.get());
+    }
+
+    @Test
+    void nonEmptyPrimaryResultNeverStartsFallback() {
+        AtomicReference<List<PunishmentRequestAlertClaim>> primary =
+                new AtomicReference<>(Collections.singletonList(null));
+        AtomicInteger fallbacks = new AtomicInteger();
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate(primary),
+                Duration.ofMinutes(1),
+                (audience, recipientId, rank, owner, limit, lease, now) -> {
+                    fallbacks.incrementAndGet();
+                    return List.of();
+                }
+        );
+
+        assertEquals(1, claim(
+                store,
+                PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                RECIPIENT,
+                NOW
+        ).size());
+        assertEquals(0, fallbacks.get());
     }
 
     @Test
@@ -54,23 +102,51 @@ class RetryingPunishmentRequestAlertStoreTest {
                 }
         );
 
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW);
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW);
         primary.set(Collections.singletonList(null));
-        assertEquals(1, claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(1)).size());
+        assertEquals(1, claim(
+                store,
+                PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                RECIPIENT,
+                NOW.plusSeconds(1)
+        ).size());
         primary.set(List.of());
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(2));
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW.plusSeconds(2));
 
         assertEquals(2, fallbacks.get());
+    }
+
+    @Test
+    void fallbackPersistenceFailureIsPropagatedWithoutReclassification() {
+        ModerationPersistenceException failure = new ModerationPersistenceException("fallback failed");
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate(new AtomicReference<>(List.of())),
+                Duration.ofSeconds(1),
+                (audience, recipientId, rank, owner, limit, lease, now) -> { throw failure; }
+        );
+
+        ModerationPersistenceException thrown = assertThrows(
+                ModerationPersistenceException.class,
+                () -> claim(
+                        store,
+                        PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                        RECIPIENT,
+                        NOW
+                )
+        );
+
+        assertSame(failure, thrown);
     }
 
     private static List<PunishmentRequestAlertClaim> claim(
             RetryingPunishmentRequestAlertStore store,
             PunishmentRequestAlertAudience audience,
+            UUID recipient,
             Instant now
     ) {
         return store.claimAudience(
                 audience,
-                RECIPIENT,
+                recipient,
                 audience == PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS
                         ? StaffRank.ADMIN : StaffRank.MOD,
                 "worker",
@@ -104,5 +180,4 @@ class RetryingPunishmentRequestAlertStoreTest {
                 }
         );
     }
-
 }
