@@ -20,6 +20,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PunishmentRequestAlertV13MigrationIntegrationTest {
     private static final Instant CREATED = Instant.parse("2026-07-31T17:00:00Z");
+    private static final Instant AVAILABLE = CREATED.plusSeconds(15);
+    private static final Instant UPDATED = CREATED.plusSeconds(45);
+    private static final String DEAD_LETTER_ERROR = "PERMANENT_PRESENTATION_FAILURE";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -28,53 +31,62 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             .withPassword("enthusia_test_password");
 
     @Test
-    void upgradesV12RowsWithStableOccurrenceAndCancellationSchema() throws Exception {
-        UUID alertId = UUID.randomUUID();
-        UUID requestId = UUID.randomUUID();
-        UUID recipientId = UUID.randomUUID();
+    void upgradesV12RowsWithoutChangingExistingTerminalDeliveryMetadata() throws Exception {
+        UUID pendingAlertId = UUID.randomUUID();
+        UUID pendingRequestId = UUID.randomUUID();
+        UUID pendingRecipientId = UUID.randomUUID();
         UUID deadLetterAlertId = UUID.randomUUID();
         UUID deadLetterRecipientId = UUID.randomUUID();
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
-            Flyway.configure()
-                    .dataSource(dataSource)
-                    .locations("classpath:db/migration")
-                    .target("12")
-                    .validateMigrationNaming(true)
-                    .cleanDisabled(true)
-                    .load()
-                    .migrate();
+            migrate(dataSource, "12");
 
-            insertV12Direct(dataSource, alertId, requestId, recipientId, "PENDING");
+            insertV12Direct(
+                    dataSource,
+                    pendingAlertId,
+                    pendingRequestId,
+                    pendingRecipientId,
+                    new DeliveryMetadata("PENDING", 0, null, CREATED, CREATED, CREATED)
+            );
+            DeliveryMetadata deadLetterBefore = new DeliveryMetadata(
+                    "DEAD_LETTER",
+                    4,
+                    DEAD_LETTER_ERROR,
+                    AVAILABLE,
+                    CREATED,
+                    UPDATED
+            );
             insertV12Direct(
                     dataSource,
                     deadLetterAlertId,
                     UUID.randomUUID(),
                     deadLetterRecipientId,
-                    "DEAD_LETTER"
+                    deadLetterBefore
             );
 
-            Flyway.configure()
-                    .dataSource(dataSource)
-                    .locations("classpath:db/migration")
-                    .validateMigrationNaming(true)
-                    .cleanDisabled(true)
-                    .load()
-                    .migrate();
+            migrate(dataSource, null);
 
             assertEquals("legacy-request-revision:7", stringValue(
-                    dataSource, "SELECT occurrence_key FROM staff_alerts WHERE alert_id=?", alertId));
-            assertEquals("PENDING", stringValue(dataSource, """
-                    SELECT state FROM staff_alert_deliveries
-                    WHERE alert_id=? AND recipient_id=?
-                    """, alertId, recipientId));
-            assertEquals("DEAD_LETTER", stringValue(dataSource, """
-                    SELECT state FROM staff_alert_deliveries
-                    WHERE alert_id=? AND recipient_id=?
-                    """, deadLetterAlertId, deadLetterRecipientId));
+                    dataSource, "SELECT occurrence_key FROM staff_alerts WHERE alert_id=?", pendingAlertId));
+            assertEquals("PENDING", deliveryMetadata(
+                    dataSource, pendingAlertId, pendingRecipientId).state());
+            assertEquals(deadLetterBefore, deliveryMetadata(
+                    dataSource, deadLetterAlertId, deadLetterRecipientId));
             assertTrue(enumContains(dataSource, "staff_alert_deliveries", "state", "CANCELLED"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancelled_at"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancel_reason"));
         }
+    }
+
+    private static void migrate(HikariDataSource dataSource, String target) {
+        org.flywaydb.core.api.configuration.FluentConfiguration configuration = Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .validateMigrationNaming(true)
+                .cleanDisabled(true);
+        if (target != null) {
+            configuration.target(target);
+        }
+        configuration.load().migrate();
     }
 
     private static void insertV12Direct(
@@ -82,7 +94,7 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             UUID alertId,
             UUID requestId,
             UUID recipientId,
-            String deliveryState
+            DeliveryMetadata metadata
     ) throws Exception {
         try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement statement = connection.prepareStatement("""
@@ -107,17 +119,46 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             }
             try (PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO staff_alert_deliveries(
-                        alert_id, recipient_id, state, attempt_count,
-                        available_at, created_at, updated_at)
-                    VALUES (?, ?, ?, 0, ?, ?, ?)
+                        alert_id, recipient_id, state, attempt_count, available_at,
+                        lease_owner, lease_until, last_error_code, delivered_at,
+                        created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)
                     """)) {
                 statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
                 statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(recipientId));
-                statement.setString(3, deliveryState);
-                statement.setTimestamp(4, Timestamp.from(CREATED));
-                statement.setTimestamp(5, Timestamp.from(CREATED));
-                statement.setTimestamp(6, Timestamp.from(CREATED));
+                statement.setString(3, metadata.state());
+                statement.setInt(4, metadata.attemptCount());
+                statement.setTimestamp(5, Timestamp.from(metadata.availableAt()));
+                statement.setString(6, metadata.lastErrorCode());
+                statement.setTimestamp(7, Timestamp.from(metadata.createdAt()));
+                statement.setTimestamp(8, Timestamp.from(metadata.updatedAt()));
                 assertEquals(1, statement.executeUpdate());
+            }
+        }
+    }
+
+    private static DeliveryMetadata deliveryMetadata(
+            HikariDataSource dataSource,
+            UUID alertId,
+            UUID recipientId
+    ) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT state, attempt_count, last_error_code, available_at, created_at, updated_at
+                     FROM staff_alert_deliveries WHERE alert_id=? AND recipient_id=?
+                     """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(recipientId));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next(), "delivery row must survive the V13 migration");
+                return new DeliveryMetadata(
+                        result.getString("state"),
+                        result.getInt("attempt_count"),
+                        result.getString("last_error_code"),
+                        result.getTimestamp("available_at").toInstant(),
+                        result.getTimestamp("created_at").toInstant(),
+                        result.getTimestamp("updated_at").toInstant()
+                );
             }
         }
     }
@@ -182,5 +223,15 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
                 return result.next() ? result.getString(1) : null;
             }
         }
+    }
+
+    private record DeliveryMetadata(
+            String state,
+            int attemptCount,
+            String lastErrorCode,
+            Instant availableAt,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
     }
 }
