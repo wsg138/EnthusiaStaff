@@ -16,6 +16,10 @@ workers:
   threads: 4
   queue-capacity: 256
 
+punishment-request-alerts:
+  # Checkpoint two only exposes the enable gate. Full validation and reload arrive later.
+  enabled: false
+
 network:
   # Use a stable identifier such as HUB or SMP on each backend.
   server-id: SMP
