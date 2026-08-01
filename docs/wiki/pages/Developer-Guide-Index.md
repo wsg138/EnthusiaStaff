@@ -1,15 +1,16 @@
 # Developer Guide Index
 
-Use this page to find the correct developer document without repeating the
-content of those documents.
+Use this page to move from a feature question to the correct planning page,
+source map, validation guide or focused technical explanation.
 
 ## Start by task
 
-- **See how complete every feature is:**
-  [[Feature Completion Status|Implementation-Status]]
-- **See what development remains and in what order:**
+- **Understand what a feature does, its percentage, important files and remaining work:**
+  choose one of the four [[Feature Completion Status|Implementation-Status]] hubs.
+- **See what development should happen next:**
   [[Remaining Development Map|Development-Blueprint]]
-- **Find the files and services for a feature:** [[Developer Code Guide]]
+- **Find the complete repository map and end-to-end feature traces:**
+  [[Developer Code Guide]]
 - **Understand module boundaries and dependency direction:** [[Architecture]]
 - **Set up a development environment:** [[Development Setup]]
 - **Build, test and validate a change:** [[Build and Testing]]
@@ -18,57 +19,82 @@ content of those documents.
 - **Review vanish events, packets and visibility gaps:** [[Vanish Internals]]
 - **Update or publish documentation:** [[Wiki Maintenance]]
 
+## Feature-to-code navigation
+
+Choose the feature group first. Each page explains the feature in plain language,
+then links directly to its commands, managers, domain services, JDBC stores,
+integration boundaries and related Wiki pages.
+
+| Feature group | Use it for |
+| --- | --- |
+| [[Core Platform and Infrastructure]] | Builds, modules, Paper/Velocity lifecycle, MariaDB, protocol, safe-write controls, modes, configuration, identity and CI. |
+| [[Moderation, Punishments, and Reports]] | Cases, sanctions, punishment GUI/drafts, requests, escalation, history, appeals, reports, evidence and automod. |
+| [[Staff Tools, Investigations, and Player-State Safety]] | Staff mode, vanish, freeze, inventory, confiscation, economy, alts, inspector, testers and fake systems. |
+| [[Integrations, Migration, and Release Readiness]] | Discord, website, providers, LiteBans migration, shadow/cutover, platform acceptance and release evidence. |
+
+After finding the important files on the group page, continue to
+[[Developer Code Guide]] for the complete request path and review checklist.
+
 ## Core developer documents
 
 ### Planning and status
 
-- [[Feature Completion Status|Implementation-Status]] — four expandable groups
-  with detailed subfeature percentages and remaining-work notes.
-- [[Remaining Development Map|Development-Blueprint]] — the canonical unfinished
-  work map, organized into the same four expandable groups.
+- [[Feature Completion Status|Implementation-Status]] — the four-group directory.
+- The four feature-group pages — detailed categories, percentages, descriptions,
+  source links and remaining work.
+- [[Remaining Development Map|Development-Blueprint]] — cross-group execution order.
+- [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
+  — exact evidence, files, tests and blockers.
 
 ### Code and architecture
 
-- [[Architecture]] — module boundaries, dependency direction and runtime ownership.
-- [[Developer Code Guide]] — repository map, important files, composition roots,
-  persistence stores, feature traces, tests and high-risk review areas.
-- [[Protocol and Network Traffic]] — connection topology, authentication,
-  replay protection, acknowledgements and outbound destinations.
-- [[Vanish Internals]] — vanish-specific events, packet behavior, visibility
-  decisions, threading and known gaps.
+- [[Architecture]] — system shape, dependency direction and runtime ownership.
+- [[Developer Code Guide]] — repository map, composition roots, stores, feature
+  traces, threading rules, tests and high-risk review areas.
+- [[Protocol and Network Traffic]] — persistent channel, authentication,
+  replay protection, acknowledgements and outbound traffic.
+- [[Vanish Internals]] — events, Paper/packet visibility layers, scheduling and gaps.
 
 ### Working on the repository
 
-- [[Development Setup]] — required tools and local setup.
+- [[Development Setup]] — prerequisites and local setup.
 - [[Build and Testing]] — focused tests, full validation, MariaDB, runtime jars,
   coverage, Codacy and staging evidence.
 - [[Wiki Maintenance]] — documentation ownership, validation and publication.
 
-## Feature traces
+## Recommended review path
 
-The [[Developer Code Guide]] contains the maintained source traces for:
+1. Read the exact requirement in
+   [ENTHUSIASTAFF-GOALS.md](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md).
+2. Open the matching feature-group page for purpose, status and important files.
+3. Read the exact row in the
+   [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md).
+4. Follow the end-to-end trace in [[Developer Code Guide]].
+5. Inspect the domain policy, persistence adapter, platform adapter and tests.
+6. Identify the real staging requirement that mocks cannot prove.
+7. Update the matrix and group page when the exact reviewed revision changes status.
 
-- punishment creation, requests and sanction changes;
-- reports and evidence;
-- inventory inspection and editing;
-- item and economy confiscation;
-- staff mode, vanish and freeze;
-- alts and network identity;
-- Paper–Velocity and Discord delivery;
-- LiteBans migration and cutover; and
-- the website bridge.
+## Common source entry points
 
-Link directly to the relevant trace when reviewing a feature. Do not copy the
-same file list or workflow into this index.
+- [Paper plugin entrypoint](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
+- [Velocity plugin entrypoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
+- [Paper command package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/command)
+- [Domain application services](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/application)
+- [Persistence stores](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
+- [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
+- [Integration tests](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-tests/src/test/java)
 
-## Authoritative repository sources
+## Documentation rule
 
-- [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
-  define the finished behavior.
-- [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
-  records exact evidence and blockers.
-- [Remaining development map](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/wiki/pages/Development-Blueprint.md)
-  is the canonical repository-managed roadmap source.
+Keep one primary owner for each type of information:
 
-When a repeated question needs a detailed answer, put that answer in the most
-focused technical page and link it here once.
+- finished behavior: goals;
+- exact proof: requirements matrix;
+- readable percentage and file entry points: feature-group pages;
+- cross-group order: Remaining Development Map;
+- full source traces: Developer Code Guide;
+- validation commands: Build and Testing;
+- staff/operator behavior: focused procedure pages.
+
+When a repeated question needs more detail, add it to the most focused owning page
+and link to that page rather than copying the same answer into several indexes.
