@@ -12,7 +12,7 @@ LiteBans replacement or production-data change.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current merged repository state | `main` at `398aba781355827dcb2dd080dde509b1c585f5a8`, the PR #38 merge commit |
+| Current merged repository state | `main` at `22319db3b7244153864f431191929ef275c239c5`, the PR #40 Wiki information-architecture merge commit |
 | Latest fully validated implementation revision | PR #36 head `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
 | Evidence boundary | Every build, test, Codacy, artifact and Pi result in this section attaches to `3afeffc926571170e8df18c7d096ca7f4d89ec1b`; later documentation merge commits are not separately claimed as runtime-tested |
 | Clean Java validation | 40/40 tasks; 99 suites / 398 tests; no failures, errors or skips at `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
@@ -49,13 +49,19 @@ checks, Wiki validation, exact-head staging and review are finished.
 
 | Field | Current value |
 | --- | --- |
-| State | Open review candidate; merge requires green exact-head CI, current hosted analysis and completed review |
+| State | Open and unmerged; final human merge-review candidate after the post-manifest exact-head Coverage run and truthful hosted-review disposition |
 | Branch | `section/punishment-request-notifications-recovery` |
-| Base | Includes `main` at `398aba781355827dcb2dd080dde509b1c585f5a8` |
-| Reconciliation | Preserves the current Paper composition root, persistence boundaries, Folia scheduling model and PR #38 documentation; no unresolved Java or migration conflict remains |
-| Implemented scope | Durable recipient-specific alert persistence and migrations; Paper polling, reconnect delivery and maintenance; modular validated YAML; atomic reason-policy reload; alert enable/disable/replacement/rollback; health reporting; Folia-safe startup, recipient presentation and reload dispatch |
-| Quality scope | Production SQL selection is closed over compile-time statements; test-only fixed-query helpers are precisely annotated; the Oracle-only RAC rule is excluded only for the reviewed MariaDB V11-V13 migrations |
-| Deployment boundary | This PR does not enable production alerts, replace LiteBans, send live Discord notifications or authorize production deployment |
+| Included main | `22319db3b7244153864f431191929ef275c239c5` through normal two-parent merge commit `088a7f111dbb8590bf117423b31821b22cf1082d` |
+| Validated implementation head | `65844e554b570a21d8759ce32dbc592be625ed4b`; 189 commits ahead and 0 behind included `main` when validated |
+| Exact validation | Coverage run `30721449376`, job `91425842011`, Java `21.0.11+10`, exact clean build/Jacoco/runtime-JAR command succeeded; 41/41 tasks, 104 suites / 435 tests, including 19 MariaDB 11.8.3 Testcontainers suites / 86 tests |
+| Runtime artifact | Artifact `8825026309`, digest `sha256:194defb3f01f049cae20d3381241d72535f1e837ebd7d0790b60de4e6c30b70c` |
+| Runtime JARs | Paper: 5,646,928 bytes, SHA-256 `D33AD4508E428607A35E0E98A413A2E838DB6D2D437A9736F39570034382D2A7`; Velocity: 1,948,708 bytes, SHA-256 `DA613FB11D1E7B7CBF0D09B41D0240B8A36007267F518957EFD2B880B09AF652` |
+| Packaging inspection | Exactly one Paper and one Velocity runtime JAR; both ZIP-valid; MariaDB driver class/service metadata packaged; 44 provider API source types and 0 runtime provider API leaks |
+| Coverage | Aggregate line 93.16%, branch 79.88%, instruction 92.86%; XML uploaded to Codacy successfully |
+| Required correction evidence | Behavioral staff activation failure tests, checked/unchecked rollback and suppressed rollback tests, deterministic concurrent duplicate replay, complete SQLException-chain tests, V13 DEAD_LETTER preservation, NULL-deny reviewer persistence test, and per-recipient fallback contention/progress tests all passed |
+| Review state | Six previously major CodeRabbit threads are resolved; a fresh review must be requested for the final remote head, or the exact quota-limited state reported |
+| Evidence boundary | The validation above predates this manifest-only commit. A new exact-head Coverage run is mandatory and supersedes it for final merge-review evidence |
+| Deployment boundary | This PR does not enable production alerts, replace LiteBans, send live Discord notifications, deploy a runtime JAR or authorize production deployment |
 
 PR #27 is reconciled as an engineering merge candidate. Exact-head build, runtime
 artifact, coverage, hosted-quality and review evidence belongs to the pull request
