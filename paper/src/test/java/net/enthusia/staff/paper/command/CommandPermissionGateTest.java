@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
@@ -22,10 +23,32 @@ class CommandPermissionGateTest {
     }
 
     @Test
-    void missingOrBlankPermissionFailsClosed() {
-        assertFalse(CommandPermissionGate.allows(ignored -> true, null));
-        assertFalse(CommandPermissionGate.allows(ignored -> true, ""));
-        assertFalse(CommandPermissionGate.allows(ignored -> true, "   "));
+    void missingOrBlankPermissionFailsClosedWithoutCallingThePermissionProvider() {
+        AtomicInteger checks = new AtomicInteger();
+
+        assertFalse(CommandPermissionGate.allows(permission -> {
+            checks.incrementAndGet();
+            return true;
+        }, null));
+        assertFalse(CommandPermissionGate.allows(permission -> {
+            checks.incrementAndGet();
+            return true;
+        }, ""));
+        assertFalse(CommandPermissionGate.allows(permission -> {
+            checks.incrementAndGet();
+            return true;
+        }, "   "));
+        assertEquals(0, checks.get());
+    }
+
+    @Test
+    void nullPermissionProviderIsRejected() {
+        assertThrows(NullPointerException.class, () -> CommandPermissionGate.allows(null, STAFF_MODE));
+    }
+
+    @Test
+    void requireRejectsANullSender() {
+        assertThrows(NullPointerException.class, () -> CommandPermissionGate.require(null, STAFF_MODE, "Denied"));
     }
 
     @Test

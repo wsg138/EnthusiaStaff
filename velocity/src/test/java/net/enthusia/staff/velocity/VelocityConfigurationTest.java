@@ -1,5 +1,6 @@
 package net.enthusia.staff.velocity;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -10,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -18,6 +20,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class VelocityConfigurationTest {
+    private static final String TEST_VALUE = VelocityConfigurationTest.class.getName();
+    private static final String TLS_KEY_STORE = "channel.tls-key-store";
+
     @Test
     void bundledDefaultsLoadAndResolveInsideDataDirectory(@TempDir Path directory) throws IOException {
         VelocityConfiguration configuration = VelocityConfiguration.load(directory);
@@ -48,14 +53,18 @@ final class VelocityConfigurationTest {
         assertEquals(24, configuration.liteBansShadowIntervalHours());
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> configuration.backendSecretEnvironments().put("OTHER", "SECRET")
+                () -> configuration.backendSecretEnvironments().put("OTHER", TEST_VALUE)
+        );
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> configuration.discordWebhookEnvironments().put("other", TEST_VALUE)
         );
     }
 
     @Test
     void optionalValuesUseSafeDefaults(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
-        properties.remove("channel.tls-key-store");
+        properties.remove(TLS_KEY_STORE);
         properties.remove("channel.tls-key-store-password-environment");
         properties.remove("litebans.shadow-schedule-enabled");
         properties.remove("litebans.shadow-interval-hours");
@@ -79,7 +88,7 @@ final class VelocityConfigurationTest {
     void absoluteKeyStorePathIsAcceptedAndNormalized(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
         Path configured = directory.resolve("nested/../absolute.p12").toAbsolutePath();
-        properties.setProperty("channel.tls-key-store", configured.toString());
+        properties.setProperty(TLS_KEY_STORE, configured.toString());
         store(directory, properties);
 
         assertEquals(
@@ -89,13 +98,94 @@ final class VelocityConfigurationTest {
     }
 
     @Test
+    void nestedRelativeKeyStorePathRemainsInsideTheDataDirectory(@TempDir Path directory) throws IOException {
+        Properties properties = copiedDefaults(directory);
+        properties.setProperty(TLS_KEY_STORE, "tls/../tls/channel.p12");
+        store(directory, properties);
+
+        assertEquals(
+                directory.resolve("tls/channel.p12").toAbsolutePath().normalize(),
+                VelocityConfiguration.load(directory).channelTlsKeyStorePath()
+        );
+    }
+
+    @Test
+    void booleanValuesAreCaseInsensitiveButStrict(@TempDir Path directory) throws IOException {
+        Properties properties = copiedDefaults(directory);
+        properties.setProperty("enforcement.fail-closed-while-active", "TrUe");
+        properties.setProperty("website-api.enabled", "FaLsE");
+        store(directory, properties);
+
+        VelocityConfiguration configuration = VelocityConfiguration.load(directory);
+        assertTrue(configuration.failClosedWhileActive());
+        assertFalse(configuration.websiteApiEnabled());
+
+        assertRejected(directory, properties, candidate ->
+                candidate.setProperty("website-api.enabled", "yes"));
+    }
+
+    @Test
+    void everyBoundedIntegerAcceptsItsLimitsAndRejectsAdjacentValues(@TempDir Path directory) throws IOException {
+        Properties baseline = copiedDefaults(directory);
+        List<Bound> bounds = List.of(
+                new Bound("storage.maximum-pool-size", 1, 64),
+                new Bound("storage.connection-timeout-millis", 250, 60_000),
+                new Bound("website-api.port", 1, 65_535),
+                new Bound("website-api.code-key-version", 1, Integer.MAX_VALUE),
+                new Bound("website-api.timestamp-skew-seconds", 30, 900),
+                new Bound("website-api.maximum-body-bytes", 1_024, 1_048_576),
+                new Bound("website-api.worker-threads", 1, 16),
+                new Bound("website-api.queue-capacity", 8, 2_048),
+                new Bound("channel.port", 1, 65_535),
+                new Bound("network-identity.hmac-key-version", 1, Integer.MAX_VALUE),
+                new Bound("network-identity.encryption-key-version", 1, Integer.MAX_VALUE),
+                new Bound("discord.maximum-attempts", 1, 100),
+                new Bound("discord.failure-threshold", 1, 100),
+                new Bound("discord.circuit-open-seconds", 10, 86_400),
+                new Bound("discord.request-timeout-millis", 500, 15_000),
+                new Bound("litebans.maximum-pool-size", 1, 8),
+                new Bound("litebans.connection-timeout-millis", 250, 60_000),
+                new Bound("litebans.batch-size", 1, 5_000),
+                new Bound("litebans.shadow-interval-hours", 1, 24)
+        );
+
+        for (Bound bound : bounds) {
+            assertAccepted(directory, baseline, properties ->
+                    properties.setProperty(bound.key(), Integer.toString(bound.minimum())));
+            assertAccepted(directory, baseline, properties ->
+                    properties.setProperty(bound.key(), Integer.toString(bound.maximum())));
+            assertRejected(directory, baseline, properties ->
+                    properties.setProperty(bound.key(), Integer.toString(bound.minimum() - 1)));
+            String aboveMaximum = Long.toString((long) bound.maximum() + 1L);
+            assertRejected(directory, baseline, properties ->
+                    properties.setProperty(bound.key(), aboveMaximum));
+        }
+    }
+
+    @Test
+    void backendServerIdsEnforceTheDocumentedCharacterAndLengthBoundary(@TempDir Path directory)
+            throws IOException {
+        Properties baseline = copiedDefaults(directory);
+        String maximumId = "A".repeat(64);
+
+        assertAccepted(directory, baseline, properties ->
+                properties.setProperty("channel.backend." + maximumId + ".secret-environment", TEST_VALUE));
+        assertRejected(directory, baseline, properties ->
+                properties.setProperty("channel.backend..secret-environment", TEST_VALUE));
+        assertRejected(directory, baseline, properties ->
+                properties.setProperty("channel.backend." + "A".repeat(65) + ".secret-environment", TEST_VALUE));
+        assertRejected(directory, baseline, properties ->
+                properties.setProperty("channel.backend.path/escape.secret-environment", TEST_VALUE));
+    }
+
+    @Test
     void malformedOrUnsafePropertiesAreRejected(@TempDir Path directory) throws IOException {
         Properties baseline = copiedDefaults(directory);
 
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend.bad.id.secret-environment", "SECRET"));
+                properties.setProperty("channel.backend.bad.id.secret-environment", TEST_VALUE));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.tls-key-store", "../outside.p12"));
+                properties.setProperty(TLS_KEY_STORE, "../outside.p12"));
         assertRejected(directory, baseline, properties ->
                 properties.setProperty("enforcement.fail-closed-while-active", "sometimes"));
         assertRejected(directory, baseline, properties ->
@@ -115,6 +205,19 @@ final class VelocityConfigurationTest {
         return properties;
     }
 
+    private static void assertAccepted(
+            Path directory,
+            Properties baseline,
+            Consumer<Properties> mutation
+    ) throws IOException {
+        Properties candidate = new Properties();
+        candidate.putAll(baseline);
+        mutation.accept(candidate);
+        store(directory, candidate);
+
+        assertDoesNotThrow(() -> VelocityConfiguration.load(directory));
+    }
+
     private static void assertRejected(
             Path directory,
             Properties baseline,
@@ -132,5 +235,8 @@ final class VelocityConfigurationTest {
         try (OutputStream output = Files.newOutputStream(directory.resolve("config.properties"))) {
             properties.store(output, "test configuration");
         }
+    }
+
+    private record Bound(String key, int minimum, int maximum) {
     }
 }
