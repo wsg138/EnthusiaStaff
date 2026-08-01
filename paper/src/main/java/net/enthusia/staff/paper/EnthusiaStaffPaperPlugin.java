@@ -25,47 +25,49 @@ import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationStore;
-import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
+import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
-import net.enthusia.staff.paper.command.EstaffCommand;
+import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
+import net.enthusia.staff.paper.command.EstaffCommand;
+import net.enthusia.staff.paper.command.FreezeCommand;
+import net.enthusia.staff.paper.command.InspectCommand;
+import net.enthusia.staff.paper.command.InventoryCommand;
 import net.enthusia.staff.paper.command.PunishmentCommand;
 import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
-import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.ReportCommand;
 import net.enthusia.staff.paper.command.ReportsCommand;
-import net.enthusia.staff.paper.command.FreezeCommand;
-import net.enthusia.staff.paper.command.InventoryCommand;
-import net.enthusia.staff.paper.command.InspectCommand;
+import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
-import net.enthusia.staff.paper.client.ClientEvidenceCollector;
-import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
 import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
-import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.integration.MarketIntegration;
+import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
-import net.enthusia.staff.paper.integration.RoseChatIntegration;
-import net.enthusia.staff.paper.integration.MarketIntegration;
-import net.enthusia.staff.paper.integration.ReputationIntegration;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
+import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
@@ -75,6 +77,7 @@ import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -104,6 +107,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ClientEvidenceCollector clientEvidenceCollector;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
+    private PaperStorageBootstrapCoordinator<PreparedStorage> storageBootstrap;
 
     @Override
     public void onEnable() {
@@ -184,7 +188,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(muteEnforcement, this);
             muteEnforcement.start();
             initializeRoseChatIntegration();
-            workers.execute(this::initializeStorage);
+            startStorageBootstrap();
         }
     }
 
@@ -212,59 +216,157 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         return workers;
     }
 
-    private void initializeStorage() {
-        if (lifecycle.stopping()) {
-            return;
-        }
-        String url = environment("storage.jdbc-url-environment");
-        String username = environment("storage.username-environment");
-        String password = environment("storage.password-environment");
-        if (url == null || username == null || password == null) {
+    private void startStorageBootstrap() {
+        DatabaseConfig database = databaseConfiguration();
+        if (database == null) {
             degradeBootstrap(
                     "Required database environment variables are missing; destructive actions are disabled"
             );
             return;
         }
-        MariaDbRuntime opened = null;
-        boolean published = false;
+        PaperPersistentChannelFactory.Settings channel = channelSettings();
+        StorageBootstrapConfiguration configuration = new StorageBootstrapConfiguration(database, channel);
+        PaperStorageBootstrapCoordinator<PreparedStorage> coordinator =
+                new PaperStorageBootstrapCoordinator<>(
+                        lifecycle::stopping,
+                        workers::execute,
+                        task -> getServer().getGlobalRegionScheduler().execute(this, task),
+                        () -> openStorage(configuration),
+                        prepared -> lifecycle.publishStorage(prepared.bindings()),
+                        this::completeBukkitStorageInitialization,
+                        this::finishStorageInitializationAsynchronously,
+                        this::discardPublishedStorage,
+                        this::closeUnpublishedStorage,
+                        this::handleStorageBootstrapFailure
+                );
+        storageBootstrap = coordinator;
+        coordinator.start();
+    }
+
+    private DatabaseConfig databaseConfiguration() {
+        String url = environment("storage.jdbc-url-environment");
+        String username = environment("storage.username-environment");
+        String password = environment("storage.password-environment");
+        if (url == null || username == null || password == null) {
+            return null;
+        }
+        return new DatabaseConfig(
+                url,
+                username,
+                password,
+                getConfig().getInt("storage.maximum-pool-size", 8),
+                getConfig().getLong("storage.connection-timeout-millis", 5_000)
+        );
+    }
+
+    private PaperPersistentChannelFactory.Settings channelSettings() {
         try {
-            DatabaseConfig database = new DatabaseConfig(
-                    url,
-                    username,
-                    password,
-                    getConfig().getInt("storage.maximum-pool-size", 8),
-                    getConfig().getLong("storage.connection-timeout-millis", 5_000)
+            PaperPersistentChannelFactory.Settings settings = PaperPersistentChannelFactory.snapshot(this);
+            if (!settings.enabled()) {
+                getLogger().warning(
+                        "Persistent Velocity channel is disabled; new punishment writes remain disabled"
+                );
+            }
+            return settings;
+        } catch (RuntimeException exception) {
+            featureIssues.put("channel", "Persistent Velocity channel configuration is invalid");
+            getLogger().log(Level.SEVERE,
+                    "Persistent Velocity channel configuration is invalid; new punishment writes are disabled",
+                    exception);
+            return new PaperPersistentChannelFactory.Settings(
+                    false,
+                    null,
+                    null,
+                    0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    getDataFolder().toPath().toAbsolutePath().normalize()
             );
-            opened = MariaDb.initialize(database);
+        }
+    }
+
+    private PreparedStorage openStorage(StorageBootstrapConfiguration configuration) {
+        MariaDbRuntime opened = null;
+        try {
+            opened = MariaDb.initialize(configuration.database());
             PaperStorageBindings bindings = PaperStorageBindings.create(
                     opened,
                     authorizationPolicy,
                     reasonPolicies
             );
-            if (!lifecycle.publishStorage(bindings)) {
-                closeSafely("MariaDB runtime opened during shutdown", opened);
-                return;
-            }
-            published = true;
-            finishStorageInitialization(bindings);
+            BootstrapModeSnapshot bootstrapMode = resolveBootstrapMode(opened);
+            return new PreparedStorage(bindings, bootstrapMode, configuration.channel());
         } catch (RuntimeException exception) {
-            discardFailedStorageRuntime(opened, published);
-            if (!lifecycle.stopping()) {
-                getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
-                setDegraded("mariadb", "Connection or schema validation failed; see the sanitized console error");
-            }
+            closeSafely("partially initialized MariaDB runtime", opened);
+            throw exception;
         }
     }
 
-    private void finishStorageInitialization(PaperStorageBindings bindings) {
+    private BootstrapModeSnapshot resolveBootstrapMode(MariaDbRuntime runtime) {
+        OperationalStateStore states = runtime.operationalStateStore();
+        OperationalStateSnapshot persisted = states.current();
+        OperationalMode next = persisted.mode();
+        if (next == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
+            return new BootstrapModeSnapshot(
+                    OperationalMode.DEGRADED,
+                    Map.of("cutover", "Persistent ACTIVE state has no authorized cutover record; enforcement is blocked")
+            );
+        }
+        if (next == OperationalMode.BOOTSTRAP) {
+            boolean transitioned = states.transition(
+                    persisted.revision(),
+                    OperationalMode.SHADOW_MIGRATION,
+                    null,
+                    "Schema initialized; LiteBans remains authoritative during shadow migration",
+                    Clock.systemUTC().instant()
+            );
+            if (!transitioned) {
+                return new BootstrapModeSnapshot(
+                        OperationalMode.DEGRADED,
+                        Map.of(
+                                "operational-state",
+                                "Concurrent bootstrap transition detected; retry after state review"
+                        )
+                );
+            }
+            next = OperationalMode.SHADOW_MIGRATION;
+        }
+        Map<String, String> issues = switch (next) {
+            case ACTIVE -> Map.of();
+            case SHADOW_MIGRATION -> Map.of(
+                    "authority", "LiteBans remains authoritative; EnthusiaStaff enforcement is disabled");
+            case MAINTENANCE -> Map.of("maintenance", "Maintenance mode blocks sensitive state changes");
+            default -> Map.of("mode", "Sensitive actions are disabled in " + next);
+        };
+        return new BootstrapModeSnapshot(next, issues);
+    }
+
+    private void completeBukkitStorageInitialization(PreparedStorage prepared) {
         if (lifecycle.stopping()) {
             return;
         }
-        getServer().getOnlinePlayers().forEach(freezeManager::verify);
-        if (lifecycle.stopping()) {
-            return;
+        List<PlayerBootstrapSnapshot> online = getServer().getOnlinePlayers().stream()
+                .map(player -> new PlayerBootstrapSnapshot(
+                        player.getUniqueId(),
+                        player.getName(),
+                        PaperStaffRankResolver.resolve(player::hasPermission).orElse(null)
+                ))
+                .toList();
+        for (PlayerBootstrapSnapshot player : online) {
+            if (lifecycle.stopping()) {
+                return;
+            }
+            freezeManager.verify(player.playerId(), player.playerName());
         }
-        getServer().getOnlinePlayers().forEach(staffModeManager::recover);
+        for (PlayerBootstrapSnapshot player : online) {
+            if (lifecycle.stopping()) {
+                return;
+            }
+            staffModeManager.recover(player.playerId(), player.rank());
+        }
         if (lifecycle.stopping()) {
             return;
         }
@@ -272,20 +374,30 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (lifecycle.stopping()) {
             return;
         }
-        promoteAfterBootstrap(bindings.runtime());
+        publishBootstrapMode(prepared.bootstrapMode().mode(), prepared.bootstrapMode().issues());
+    }
+
+    private void finishStorageInitializationAsynchronously(PreparedStorage prepared) {
         if (lifecycle.stopping()) {
             return;
         }
         try {
-            startChannelClient(bindings.runtime());
+            startChannelClient(prepared.bindings().runtime(), prepared.channel());
         } catch (RuntimeException exception) {
             channelConnected.set(false);
+            featureIssues.put("channel", "Persistent Velocity connection is unavailable");
             getLogger().log(Level.SEVERE,
                     "Persistent Velocity channel initialization failed; new punishment writes are disabled",
                     exception);
         }
-        if (!lifecycle.stopping()) {
+        if (lifecycle.stopping()) {
+            return;
+        }
+        try {
             registerOperationalStateTask();
+        } catch (RuntimeException exception) {
+            getLogger().log(Level.SEVERE, "Operational-state task registration failed", exception);
+            setDegraded("operational-state", "Operational state polling could not be scheduled");
         }
     }
 
@@ -308,20 +420,39 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void discardFailedStorageRuntime(MariaDbRuntime opened, boolean published) {
-        if (opened == null) {
+    private void discardPublishedStorage(PreparedStorage prepared) {
+        Optional<PaperStorageBindings> removed = lifecycle.removeStorageIf(
+                bindings -> bindings == prepared.bindings()
+        );
+        if (removed.isEmpty()) {
             return;
         }
-        if (!published) {
-            closeSafely("partially initialized MariaDB runtime", opened);
+        cancelOperationalStateTask();
+        closeChannelClient();
+        closeSafely("partially published MariaDB runtime", prepared.bindings().runtime());
+    }
+
+    private void closeUnpublishedStorage(PreparedStorage prepared) {
+        closeSafely("MariaDB runtime opened during shutdown", prepared.bindings().runtime());
+    }
+
+    private void handleStorageBootstrapFailure(RuntimeException exception) {
+        if (lifecycle.stopping()) {
             return;
         }
-        Optional<PaperStorageBindings> removed =
-                lifecycle.removeStorageIf(bindings -> bindings.runtime() == opened);
-        if (removed.isPresent()) {
-            cancelOperationalStateTask();
-            closeChannelClient();
-            closeSafely("partially initialized MariaDB runtime", opened);
+        getLogger().log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
+        try {
+            getServer().getGlobalRegionScheduler().execute(this, () -> {
+                if (!lifecycle.stopping()) {
+                    setDegraded(
+                            "mariadb",
+                            "Connection, schema, or Bukkit bootstrap validation failed; see the sanitized console error"
+                    );
+                }
+            });
+        } catch (RuntimeException schedulingFailure) {
+            exception.addSuppressed(schedulingFailure);
+            getLogger().log(Level.SEVERE, "Could not schedule degraded bootstrap publication", schedulingFailure);
         }
     }
 
@@ -432,38 +563,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             }
             getLogger().log(Level.SEVERE, "Operational state refresh failed", exception);
         }
-    }
-
-    private void promoteAfterBootstrap(MariaDbRuntime runtime) {
-        OperationalStateStore states = runtime.operationalStateStore();
-        OperationalStateSnapshot persisted = states.current();
-        OperationalMode next = persisted.mode();
-        if (next == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
-            setDegraded("cutover", "Persistent ACTIVE state has no authorized cutover record; enforcement is blocked");
-            return;
-        }
-        if (next == OperationalMode.BOOTSTRAP) {
-            boolean transitioned = states.transition(
-                    persisted.revision(),
-                    OperationalMode.SHADOW_MIGRATION,
-                    null,
-                    "Schema initialized; LiteBans remains authoritative during shadow migration",
-                    Clock.systemUTC().instant()
-            );
-            if (!transitioned) {
-                setDegraded("operational-state", "Concurrent bootstrap transition detected; retry after state review");
-                return;
-            }
-            next = OperationalMode.SHADOW_MIGRATION;
-        }
-        Map<String, String> issues = switch (next) {
-            case ACTIVE -> Map.of();
-            case SHADOW_MIGRATION -> Map.of(
-                    "authority", "LiteBans remains authoritative; EnthusiaStaff enforcement is disabled");
-            case MAINTENANCE -> Map.of("maintenance", "Maintenance mode blocks sensitive state changes");
-            default -> Map.of("mode", "Sensitive actions are disabled in " + next);
-        };
-        publishBootstrapMode(next, issues);
     }
 
     private void publishBootstrapMode(OperationalMode next, Map<String, String> issues) {
@@ -851,9 +950,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 : authoritative;
     }
 
-    private void startChannelClient(MariaDbRuntime runtime) {
+    private void startChannelClient(
+            MariaDbRuntime runtime,
+            PaperPersistentChannelFactory.Settings settings
+    ) {
         PaperPersistentChannelFactory.start(
-                this,
+                settings,
                 (backendId, envelope) -> handleNetworkMessage(runtime, backendId, envelope),
                 state -> channelConnected.set(!lifecycle.stopping() && "CONNECTED".equals(state))
         ).ifPresent(started -> {
@@ -964,4 +1066,25 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
+    private record StorageBootstrapConfiguration(
+            DatabaseConfig database,
+            PaperPersistentChannelFactory.Settings channel
+    ) {
+    }
+
+    private record BootstrapModeSnapshot(OperationalMode mode, Map<String, String> issues) {
+        private BootstrapModeSnapshot {
+            issues = Map.copyOf(issues);
+        }
+    }
+
+    private record PreparedStorage(
+            PaperStorageBindings bindings,
+            BootstrapModeSnapshot bootstrapMode,
+            PaperPersistentChannelFactory.Settings channel
+    ) {
+    }
+
+    private record PlayerBootstrapSnapshot(UUID playerId, String playerName, StaffRank rank) {
+    }
 }
