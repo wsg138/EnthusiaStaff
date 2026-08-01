@@ -1,70 +1,93 @@
 # Wiki Maintenance
 
-The main repository is the source for the live Wiki.
+The main repository is the source for the live GitHub Wiki. Do not make the live
+Wiki the only copy of a change.
 
-## Files
+## Repository locations
 
-Publishable pages:
+| Location | Purpose |
+| --- | --- |
+| `docs/wiki/pages/*.md` | Publishable Wiki pages |
+| `docs/wiki/legacy/ea4f929/` | Preserved pre-migration pages |
+| `scripts/wiki/validate_wiki.py` | Internal-link/page validation |
+| `.github/workflows/wiki-validate.yml` | Pull-request and main validation |
+| `.github/workflows/wiki-publish.yml` | Protected manual publication from `main` |
 
-```text
-docs/wiki/pages/*.md
-```
+## Information architecture
 
-Preserved pre-migration pages:
+Keep each kind of information in one primary location:
 
-```text
-docs/wiki/legacy/ea4f929/
-```
+| Information | Primary owner |
+| --- | --- |
+| Main navigation and task routing | `Home.md` and `_Sidebar.md` |
+| Overall percentages and group directory | `Implementation-Status.md` |
+| Core feature descriptions/files | `Core-Platform-and-Infrastructure.md` |
+| Moderation feature descriptions/files | `Moderation-Punishments-and-Reports.md` |
+| Staff-tool feature descriptions/files | `Staff-Tools-Investigations-and-Player-State-Safety.md` |
+| Integration/release descriptions/files | `Integrations-Migration-and-Release-Readiness.md` |
+| Cross-group development order | `Development-Blueprint.md` |
+| Complete source map and feature traces | `Developer-Code-Guide.md` |
+| Staff procedures | Focused staff guide for the task |
+| Administrator references | Commands, ranks, configuration and integrations pages |
+| Operational procedures | Installation, recovery, migration and cutover pages |
+| Validation commands/evidence | `Build-and-Testing.md` |
+| Exact implementation proof/blockers | `reports/REQUIREMENTS-MATRIX.md` |
 
-Validator:
+Do not copy the same percentage table, command list, source-file map or release
+procedure into multiple pages. Link to the owning page.
 
-```text
-scripts/wiki/validate_wiki.py
-```
+## Navigation rules
 
-Workflows:
-
-```text
-.github/workflows/wiki-validate.yml
-.github/workflows/wiki-publish.yml
-```
+- `Home.md` should answer “where do I start?” by role and task.
+- `_Sidebar.md` should remain compact and expose the four feature hubs directly.
+- Every focused staff/admin page should link to its matching feature hub.
+- Every feature hub should link to important source files, related procedures and
+  the requirements matrix.
+- New pages must be reachable from Home, the sidebar or an owning index.
+- Preserve stable filenames when possible so old Wiki links continue to work.
+- Use headings that describe the question answered by the section.
 
 ## Editing process
 
-1. Update code, configuration, and status sources first.
-2. Edit the relevant page in `docs/wiki/pages`.
-3. Preserve stable filenames when possible.
-4. Update `_Sidebar.md` if a page is added or renamed.
-5. Update `Implementation-Status.md` when availability changes.
-6. Run `python scripts/wiki/validate_wiki.py`.
-7. Open a pull request.
-8. Review technical accuracy, staff clarity, privacy, and links.
-9. Merge the approved pull request.
-10. Manually run **Publish Wiki** from `main`.
+1. Update code, configuration and exact status sources first.
+2. Update the relevant `reports/REQUIREMENTS-MATRIX.md` row.
+3. Edit only the Wiki page that owns the changed information.
+4. Update the matching feature hub when purpose, percentage, files or remaining
+   work changed.
+5. Update `Implementation-Status.md` only when the group summary changed.
+6. Update `_Sidebar.md` and Home when a page is added, removed or renamed.
+7. Run `python scripts/wiki/validate_wiki.py`.
+8. Open a pull request and inspect every changed link/path.
+9. Review technical accuracy, staff clarity, privacy, duplication and navigation.
+10. Merge the approved pull request.
+11. Publish the reviewed Wiki source from `main`.
+
+## Writing style
+
+- Start with what the page is for and who should use it.
+- Put a short navigation section near the top.
+- Separate live/staff procedure from intended or incomplete behavior.
+- Explain a feature in plain language before listing implementation files.
+- For destructive actions, include explicit stop/escalation conditions.
+- Keep private information and secrets out of examples.
+- Do not claim tests/staging passed without exact evidence.
+- Prefer direct source-file links on feature hubs; use the Developer Code Guide for
+  complete end-to-end traces.
 
 ## One-time GitHub setup
 
-Complete these steps after the repository-managed Wiki pull request is merged.
+### Workflow permission
 
-### 1. Allow the workflow to write
-
-Open the repository and go to:
+Repository settings:
 
 ```text
 Settings -> Actions -> General -> Workflow permissions
 ```
 
-Select **Read and write permissions** and save. Repository or organization policy
-may prevent this setting from being changed; in that case an owner must allow the
-required write permission.
+The publisher needs write permission. Repository/organization policy may require
+an owner to allow it.
 
-### 2. Create the protected publication environment
-
-Go to:
-
-```text
-Settings -> Environments -> New environment
-```
+### Protected environment
 
 Create an environment named exactly:
 
@@ -75,136 +98,127 @@ wiki-production
 Recommended protection:
 
 - allow deployments only from `main`;
-- add a required reviewer when another trusted maintainer is available;
-- prevent self-review if publication should always require a second person.
+- require a trusted reviewer when available;
+- prevent self-review when publication should require a second person.
 
-The publication job references this environment and cannot start until its
-protection rules pass.
+### Wiki token fallback
 
-### 3. Configure a Wiki token only if needed
-
-The workflow first tries the job's built-in `GITHUB_TOKEN`. Run one publication
-with no custom secret. If cloning succeeds but creating the backup branch or
-pushing the Wiki returns `403`, add a secret named exactly:
+The permanent publisher first tries the job's `GITHUB_TOKEN`. If the Wiki push is
+rejected, configure an environment secret named:
 
 ```text
 WIKI_PUBLISH_TOKEN
 ```
 
-Store it preferably as an environment secret inside `wiki-production`:
+Use the narrowest token that can write the repository's `.wiki.git` remote. Never
+place the token in source, issues, Wiki pages or logs. Set an expiration and rotate
+or remove it when no longer required.
 
-```text
-Settings -> Environments -> wiki-production -> Environment secrets
-```
+### Keep the Wiki enabled
 
-Because this repository is public, a short-lived personal access token (classic)
-with only the `public_repo` scope is the reliable fallback for HTTPS Git pushes.
-The token owner must retain write access to `wsg138/EnthusiaStaff`. Do not place
-the token in a workflow file, commit, issue, Wiki page, or log. Set an expiration
-and rotate or delete it when it is no longer needed.
-
-A fine-grained token may also work when restricted to `EnthusiaStaff` with
-repository **Contents: Read and write**, but use the classic `public_repo`
-fallback if GitHub does not authorize the associated `.wiki.git` repository.
-
-### 4. Keep the GitHub Wiki enabled
-
-The repository Wiki must exist and remain enabled. The publication target is:
+Publication target:
 
 ```text
 https://github.com/wsg138/EnthusiaStaff.wiki.git
 ```
 
-The visible page is:
+Visible Wiki:
 
 ```text
 https://github.com/wsg138/EnthusiaStaff/wiki
 ```
 
-Do not manually delete the Wiki repository before publishing.
-
-## Publishing the new pages
+## Publishing
 
 After the source pull request is merged:
 
-1. Open the repository's **Actions** tab.
+1. Open **Actions**.
 2. Select **Publish Wiki**.
-3. Choose **Run workflow**.
-4. Select branch `main`.
-5. Enter `PUBLISH` exactly in the confirmation field.
-6. Start the run.
-7. Approve the `wiki-production` deployment if the environment requires review.
-8. Confirm that validation, cloning, backup, artifact upload, commit, and push all
-   complete successfully.
-9. Open the visible Wiki and confirm the new Home page and sidebar appear.
+3. Choose **Run workflow** on `main`.
+4. Enter `PUBLISH` exactly.
+5. Approve `wiki-production` when required.
+6. Confirm validation, clone, backup branch, artifact upload, commit and push.
+7. Open the live Wiki and verify Home, sidebar, feature hubs and changed pages.
 
-The old pages remain visible until this workflow completes. Merging the source
-pull request alone does not change the separate GitHub Wiki repository.
+Merging the source repository alone does not update the separate Wiki repository.
 
-## Publishing safety
+## Publication safety
 
-Publishing is manual. The workflow:
+The protected publisher:
 
-1. Validates source pages.
-2. Clones the live Wiki.
-3. Creates a full Git bundle.
-4. Pushes a timestamped backup branch.
-5. Uploads the pre-publish bundle as a workflow artifact.
-6. Replaces only root Markdown pages.
-7. Commits the exact source commit to Wiki history.
-8. Pushes the detected Wiki default branch.
+1. validates repository-managed pages;
+2. clones the live Wiki;
+3. creates a full Git bundle;
+4. pushes a timestamped backup branch;
+5. uploads the pre-publish bundle as an artifact;
+6. replaces root Markdown pages from reviewed source;
+7. records the source revision in Wiki history;
+8. pushes the detected Wiki default branch.
 
-The live Wiki is not modified if validation, cloning, bundle creation, or backup
-branch creation fails.
+The live Wiki should remain unchanged when validation, clone or backup creation
+fails.
 
-## Confirming a successful publication
+## Confirming publication
 
-The workflow summary records:
+The workflow summary should record:
 
-- the main-repository source commit;
-- the timestamped Wiki backup branch;
-- the backup artifact name;
-- the Wiki branch that received the publication.
+- source revision;
+- backup branch;
+- backup artifact;
+- published Wiki branch.
 
-The visible Wiki should show:
+Verify:
 
-- the new repository-managed `Home.md`;
-- the staff handbook section;
-- the operator/reference pages;
-- the developer and reviewer section, including [[Developer Code Guide]];
-- the new `_Sidebar.md` navigation.
-
-If GitHub still shows an old page, hard-refresh the browser and verify that the
-workflow pushed the actual Wiki default branch reported in the summary.
+- Home displays the role/task navigation;
+- sidebar includes all four feature hubs;
+- Feature Completion Status links to each hub;
+- internal Wiki links open the expected page;
+- direct source links point to current files/directories;
+- stale pages were replaced rather than duplicated.
 
 ## Restore
 
-Preferred restore from the automatically created backup branch:
+Preferred restore uses the automatically created backup branch:
 
 ```bash
 git clone https://github.com/wsg138/EnthusiaStaff.wiki.git
 cd EnthusiaStaff.wiki
-git reset --hard origin/backup/repo-managed-<timestamp>
-git push --force-with-lease origin HEAD:master
+git reset --hard origin/backup/<exact-branch-from-workflow>
+git push --force-with-lease origin HEAD:<reported-default-branch>
 ```
 
-Use the exact branch and default-branch names shown in the publication workflow
-summary. Do not assume the live Wiki branch is always `master` if GitHub reports a
-different branch.
-
-The original pre-migration state is also preserved at
-`ea4f929710d3281aac4a8087da1e947973c2d795` and under
+Use the exact branch names from the workflow summary. The original pre-migration
+state is also preserved at `ea4f929710d3281aac4a8087da1e947973c2d795` and under
 `docs/wiki/legacy/ea4f929/`.
 
 ## Review checklist
 
+### Navigation and ownership
+
+- Home routes by role and task.
+- Sidebar is compact and complete.
+- Every new page is reachable.
+- Feature hubs link to source files and focused procedures.
+- The same table/description is not copied across several pages.
+
+### Accuracy
+
 - Staff instructions match actual command usage.
-- Rank limits match service policy.
-- Planned behavior is not described as available.
+- Rank limits match central policy and `plugin.yml`.
+- Planned behavior is not described as deployed.
+- Percentages agree with the requirements matrix.
+- Developer file paths still match the source tree.
+- Active branch work is not counted as merged behavior.
+
+### Safety and privacy
+
 - Destructive workflows include stop conditions.
-- Private data is not exposed.
-- External integration limitations are stated.
-- Developer file paths and feature traces still match the source tree.
-- Old page links still resolve.
-- No real player, case, address, secret, or credential data is present.
-- Requirements matrix and implementation-status page agree.
+- Private evidence, addresses, coordinates and secrets are not exposed.
+- Optional-provider limitations are explicit.
+- Recovery advice does not recommend blind retries or raw storage edits.
+
+### Validation
+
+- `python scripts/wiki/validate_wiki.py` passes.
+- Changed external source links were manually checked.
+- Wiki validation and normal repository checks pass on the final PR head.
