@@ -6,6 +6,13 @@ LiteBans remains the source of truth until a validated cutover commits `ACTIVE`.
 
 The inspected source must contain the configured-prefix `bans`, `mutes`, and `history` tables. Column names are discovered from a bounded allowlist; table prefixes and identifiers are validated before SQL is built.
 
+Inspection handles sanction, history, and audit-only tables independently. It
+reports missing columns in canonical order so repeated preflight runs produce a
+stable blocker list. Staff-column resolution prefers the alias for the current
+sanction type while retaining the shared legacy fallback used by supported
+LiteBans schemas. Inspection never invents a mapping for a column that is not
+present.
+
 The importer preserves:
 
 - ban, IP-ban, and mute source IDs;

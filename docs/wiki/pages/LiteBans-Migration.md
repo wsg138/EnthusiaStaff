@@ -43,6 +43,16 @@ Migration must provide:
 Raw addresses must not be imported into staff-visible records. Use protected
 network tokens and reject ambiguous ownership.
 
+### Source schema inspection
+
+The configured table prefix is validated before metadata lookup. The inspector
+requires the prefixed `bans`, `mutes`, and `history` tables, maps only bounded
+known column aliases, and treats `kicks` and `warnings` as audit-only inputs.
+Missing columns are reported in a stable canonical order so operators can
+compare repeated preflight results. Staff-column selection prefers the alias for
+the current sanction type while retaining the supported shared legacy fallback.
+No absent column is inferred or silently substituted.
+
 ## Concurrency
 
 Only one migration run may own the migration lease. Source reads should use a

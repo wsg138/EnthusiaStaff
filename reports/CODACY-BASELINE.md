@@ -812,10 +812,43 @@ the Velocity jar is 7,606,354 bytes with SHA-256
 PMD 7 and threshold-matched Lizard report no result in the three changed Java
 files, and PMD CPD reports no 100-token duplicate in Paper production source.
 Opengrep reports the same 16 repository-baseline findings with none in the
-changed files. Trivy reports zero vulnerabilities or secrets. Hosted Codacy
-static analysis passed the implementation head. No issue, rule, or first-party
-path was suppressed. Exact-final-head hosted coverage, Codacy branch totals,
-Pi staging, and the single ready-state review remain required before merge.
+changed files. Trivy reports zero vulnerabilities or secrets. No issue, rule,
+or first-party path was suppressed.
+
+Final head `54c82e2d2d9a6313e7b08d8ca6b73c6112adf6c0` passed the
+hosted build and Wiki validation. Hosted Codacy reported zero new and zero fixed
+issues, 32 added complexity, zero duplication, 38.46% diff coverage, and a
++0.12 percentage-point coverage variation. Exact-SHA wrapper run `30707407074`
+and delegated Pi staging run `30707410497` passed in 10 minutes 37 seconds. The
+ready-state event also queued a redundant Pi run at the identical SHA; run
+`30707812296` was cancelled because the authoritative exact-SHA result had
+already passed.
+
+The single ready-state review made two documentation-only suggestions. The
+architecture text already limited the new ownership claim to vanish and kept
+freeze/staff recovery separate; an ephemeral PR number was not added to the
+long-lived architecture document. The pre-merge Codacy snapshot was retained,
+while the PR description recorded every final hosted and Pi gate. Both review
+threads were answered and resolved without another automated review cycle. PR
+#34 merged as `92f9f26ba8b9b81168bfce884d21d0870108f992`.
+
+### PR #35 LiteBans schema-inspection checkpoint
+
+Draft PR #35 starts from merged PR #34 and does not touch active PR #27 files.
+Implementation head `739c93cd10aae014aa766c19c4d7a2db5dec5ecb`
+separates sanction, history, and audit-only source inspection, reads the source
+catalog once, hoists bounded alias sets out of loops, and reports missing
+columns in stable canonical order. Accepted source variants remain unchanged;
+focused tests preserve sanction-specific staff-column precedence and the shared
+legacy fallback.
+
+All persistence unit tests and the Docker-backed
+`LiteBansMigrationIntegrationTest` pass. PMD 7 and threshold-matched Lizard
+report no result in the changed source or test, removing the inspector's prior
+NPath, cyclomatic-complexity, method-length, duplicate-literal, and loop-
+allocation findings locally. No issue or rule is suppressed. The clean full
+build, complete MariaDB suite, hosted Codacy, exact-head Pi staging, and final
+review remain required before merge.
 
 ## Remediation order
 
