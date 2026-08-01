@@ -1,0 +1,82 @@
+name: Validate Folia-safe alert integration
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr27-folia-fix
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Apply and publish focused source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TARGET_BRANCH="automation/pr27-folia-fix"
+          git checkout -B "$TARGET_BRANCH" HEAD
+
+          set +e
+          python3 scripts/fix-alert-folia.py > /tmp/patch.log 2>&1
+          STATUS=$?
+          set -e
+          if test "$STATUS" -ne 0; then
+            mkdir -p .patch-analysis
+            printf 'source=%s\nphase=patch-failed\n' "$(git rev-parse HEAD)" > .patch-analysis/state.txt
+            cp /tmp/patch.log .patch-analysis/patch-failure.txt
+            git add .patch-analysis
+            git commit --no-verify -m "Record Folia alert patch failure"
+            git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+            exit "$STATUS"
+          fi
+
+          git rm --ignore-unmatch .github/workflows/pr27-folia-fix.yml
+          git rm --ignore-unmatch scripts/fix-alert-folia.py
+          git diff --check
+          if grep -R -n -E '^(<<<<<<< |>>>>>>> )' --exclude-dir=.git .; then
+            echo "Unresolved Git conflict markers remain" >&2
+            exit 1
+          fi
+          git add -A
+          git commit --no-verify -m "Run punishment alerts on recipient entity schedulers"
+          git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+
+      - name: Build exact patched source
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_BRANCH="automation/pr27-folia-fix"
+          set +e
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain 2>&1 | tee /tmp/build.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if test "$STATUS" -ne 0; then
+            mkdir -p .patch-analysis
+            printf 'source=%s\nphase=build-failed\n' "$(git rev-parse HEAD)" > .patch-analysis/state.txt
+            tail -n 1400 /tmp/build.log > .patch-analysis/build-failure.txt
+            git add .patch-analysis
+            git commit --no-verify -m "Record Folia alert build failure"
+            git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+          fi
+          exit "$STATUS"
