@@ -87,8 +87,8 @@ Docker must be reachable. MariaDB Testcontainers suites are part of complete
 validation and cannot be silently skipped.
 
 Record the exact revision, command, test totals, MariaDB totals, skipped work and
-unavailable staging groups. Detailed validation expectations belong in the Wiki
-[[Build and Testing]] page.
+unavailable staging groups. Detailed validation expectations belong in the
+[Build and Testing](wiki/pages/Build-and-Testing.md) page.
 
 ## Runtime artifacts
 
