@@ -163,6 +163,7 @@ class PunishmentRequestAlertControllerTest {
         Thread reload = Thread.ofPlatform().start(() -> result.set(controller.apply(enabled(20))));
         assertTrue(factory.replacementEntered.await(5, TimeUnit.SECONDS));
         Thread shutdown = Thread.ofPlatform().start(controller::close);
+        assertTrue(awaitState(shutdown, Thread.State.BLOCKED, Duration.ofSeconds(5)));
         factory.releaseReplacement.countDown();
         reload.join();
         shutdown.join();
@@ -184,6 +185,21 @@ class PunishmentRequestAlertControllerTest {
         assertEquals(2, factory.created.size());
         assertEquals(1, factory.created.getFirst().closed.get());
         assertTrue(controller.active());
+    }
+
+    private static boolean awaitState(
+            Thread thread,
+            Thread.State expected,
+            Duration timeout
+    ) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (thread.getState() == expected) {
+                return true;
+            }
+            Thread.sleep(1L);
+        }
+        return thread.getState() == expected;
     }
 
     private static PunishmentRequestAlertController controller(

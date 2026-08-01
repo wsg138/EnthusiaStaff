@@ -79,7 +79,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
         PunishmentRequestAlertController.ApplyResult alertResult = alertController.apply(
                 candidate.configuration().punishmentRequestAlerts()
         );
-        return finish(candidate, previousConfiguration, previousPolicies, policiesChanged, alertResult);
+        return finish(candidate, previousConfiguration, policiesChanged, alertResult);
     }
 
     public synchronized PaperConfigurationSnapshot activeSnapshot() {
@@ -89,7 +89,6 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
     private ConfigurationReloadResult finish(
             Candidate candidate,
             PaperConfigurationSnapshot previousConfiguration,
-            ReasonPolicyState previousPolicies,
             boolean policiesChanged,
             PunishmentRequestAlertController.ApplyResult alertResult
     ) {
@@ -120,14 +119,13 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                     false
             );
             case NO_CHANGES, ENABLED, DISABLED, REPLACED, WAITING_FOR_STORAGE ->
-                    publishAccepted(candidate, previousConfiguration, previousPolicies, policiesChanged, alertResult);
+                    publishAccepted(candidate, previousConfiguration, policiesChanged, alertResult);
         };
     }
 
     private ConfigurationReloadResult publishAccepted(
             Candidate candidate,
             PaperConfigurationSnapshot previousConfiguration,
-            ReasonPolicyState previousPolicies,
             boolean policiesChanged,
             PunishmentRequestAlertController.ApplyResult alertResult
     ) {
