@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 
 class ReplayGuardTest {
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
+    private static final String BACKEND = "backend";
+    private static final String BACKEND_ONE = "backend-1";
 
     @Test
     void rejectsInvalidBounds() {
@@ -31,37 +33,37 @@ class ReplayGuardTest {
     void rejectsTheSameServerAndNonceBeforeRetentionExpires() {
         ReplayGuard guard = new ReplayGuard(10, Duration.ofMinutes(1));
 
-        assertTrue(guard.recordIfNew("backend-1", "nonce", NOW));
-        assertFalse(guard.recordIfNew("backend-1", "nonce", NOW.plusSeconds(59)));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW));
+        assertFalse(guard.recordIfNew(BACKEND_ONE, "nonce", NOW.plusSeconds(59)));
     }
 
     @Test
     void acceptsTheSameNonceForDifferentServersAndDifferentNoncesForOneServer() {
         ReplayGuard guard = new ReplayGuard(10, Duration.ofMinutes(1));
 
-        assertTrue(guard.recordIfNew("backend-1", "nonce-1", NOW));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce-1", NOW));
         assertTrue(guard.recordIfNew("backend-2", "nonce-1", NOW));
-        assertTrue(guard.recordIfNew("backend-1", "nonce-2", NOW));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce-2", NOW));
     }
 
     @Test
     void expirationIsInclusiveAtTheRetentionBoundary() {
         ReplayGuard guard = new ReplayGuard(10, Duration.ofMinutes(1));
 
-        assertTrue(guard.recordIfNew("backend-1", "nonce", NOW));
-        assertTrue(guard.recordIfNew("backend-1", "nonce", NOW.plus(Duration.ofMinutes(1))));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW.plus(Duration.ofMinutes(1))));
     }
 
     @Test
     void capacityEvictsTheOldestRecordedKey() {
         ReplayGuard guard = new ReplayGuard(2, Duration.ofHours(1));
 
-        assertTrue(guard.recordIfNew("backend", "first", NOW));
-        assertTrue(guard.recordIfNew("backend", "second", NOW));
-        assertTrue(guard.recordIfNew("backend", "third", NOW));
+        assertTrue(guard.recordIfNew(BACKEND, "first", NOW));
+        assertTrue(guard.recordIfNew(BACKEND, "second", NOW));
+        assertTrue(guard.recordIfNew(BACKEND, "third", NOW));
 
-        assertTrue(guard.recordIfNew("backend", "first", NOW));
-        assertFalse(guard.recordIfNew("backend", "third", NOW));
+        assertTrue(guard.recordIfNew(BACKEND, "first", NOW));
+        assertFalse(guard.recordIfNew(BACKEND, "third", NOW));
     }
 
     @Test
@@ -115,6 +117,6 @@ class ReplayGuardTest {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("concurrent replay test was interrupted", exception);
         }
-        return guard.recordIfNew("backend-1", "same-nonce", now);
+        return guard.recordIfNew(BACKEND_ONE, "same-nonce", now);
     }
 }
