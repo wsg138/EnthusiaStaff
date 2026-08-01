@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 
 class ProtocolEnvelopeTest {
     private static final UUID MESSAGE_ID = UUID.fromString("53fa6153-2ad8-42ba-a4e9-8fb10d630f08");
+    private static final String HUB = "hub";
+    private static final String TYPE = "TYPE";
+    private static final String NONCE = "nonce";
 
     @Test
     void trimsAllValidatedTextFields() {
@@ -22,26 +25,26 @@ class ProtocolEnvelopeTest {
                 " aa "
         );
 
-        assertEquals("hub", envelope.serverId());
-        assertEquals("TYPE", envelope.messageType());
-        assertEquals("nonce", envelope.nonce());
+        assertEquals(HUB, envelope.serverId());
+        assertEquals(TYPE, envelope.messageType());
+        assertEquals(NONCE, envelope.nonce());
         assertEquals("{}", envelope.payloadJson());
         assertEquals("aa", envelope.mac());
     }
 
     @Test
     void rejectsInvalidVersionAndMissingMessageId() {
-        assertThrows(IllegalArgumentException.class, () -> envelope(0, MESSAGE_ID, "hub", "TYPE", "nonce", "{}", "aa"));
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, null, "hub", "TYPE", "nonce", "{}", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(0, MESSAGE_ID, HUB, TYPE, NONCE, "{}", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, null, HUB, TYPE, NONCE, "{}", "aa"));
     }
 
     @Test
     void rejectsBlankRequiredTextFields() {
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, " ", "TYPE", "nonce", "{}", "aa"));
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, "hub", " ", "nonce", "{}", "aa"));
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, "hub", "TYPE", " ", "{}", "aa"));
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, "hub", "TYPE", "nonce", " ", "aa"));
-        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, "hub", "TYPE", "nonce", "{}", " "));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, " ", TYPE, NONCE, "{}", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, HUB, " ", NONCE, "{}", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, HUB, TYPE, " ", "{}", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, HUB, TYPE, NONCE, " ", "aa"));
+        assertThrows(IllegalArgumentException.class, () -> envelope(1, MESSAGE_ID, HUB, TYPE, NONCE, "{}", " "));
     }
 
     @Test
@@ -66,19 +69,19 @@ class ProtocolEnvelopeTest {
     @Test
     void rejectsFieldsAboveTheirMaximumLengths() {
         assertThrows(IllegalArgumentException.class, () -> envelope(
-                1, MESSAGE_ID, "s".repeat(65), "TYPE", "nonce", "{}", "aa"
+                1, MESSAGE_ID, "s".repeat(65), TYPE, NONCE, "{}", "aa"
         ));
         assertThrows(IllegalArgumentException.class, () -> envelope(
-                1, MESSAGE_ID, "hub", "t".repeat(65), "nonce", "{}", "aa"
+                1, MESSAGE_ID, HUB, "t".repeat(65), NONCE, "{}", "aa"
         ));
         assertThrows(IllegalArgumentException.class, () -> envelope(
-                1, MESSAGE_ID, "hub", "TYPE", "n".repeat(97), "{}", "aa"
+                1, MESSAGE_ID, HUB, TYPE, "n".repeat(97), "{}", "aa"
         ));
         assertThrows(IllegalArgumentException.class, () -> envelope(
-                1, MESSAGE_ID, "hub", "TYPE", "nonce", "p".repeat(1_000_001), "aa"
+                1, MESSAGE_ID, HUB, TYPE, NONCE, "p".repeat(1_000_001), "aa"
         ));
         assertThrows(IllegalArgumentException.class, () -> envelope(
-                1, MESSAGE_ID, "hub", "TYPE", "nonce", "{}", "a".repeat(129)
+                1, MESSAGE_ID, HUB, TYPE, NONCE, "{}", "a".repeat(129)
         ));
     }
 
@@ -87,10 +90,10 @@ class ProtocolEnvelopeTest {
         UnsignedEnvelope unsigned = new UnsignedEnvelope(
                 3,
                 MESSAGE_ID,
-                "hub",
-                "TYPE",
+                HUB,
+                TYPE,
                 456L,
-                "nonce",
+                NONCE,
                 "{\"ok\":true}"
         );
 
