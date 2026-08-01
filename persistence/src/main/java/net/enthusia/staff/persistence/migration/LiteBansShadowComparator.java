@@ -10,6 +10,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,85 +51,16 @@ final class LiteBansShadowComparator {
     ShadowSummary compare(UUID runId, LiteBansReadReport read, int rejectedRows) {
         List<LegacySanction> source = read.records();
         Map<String, ImportedRow> imported = importedRows(read.sourceCounts().keySet());
-        long checksumMismatches = 0;
-        long activeMismatches = rejectedRows;
-        long uuidMismatches = rejectedRows;
-        long expirationMismatches = rejectedRows;
-        long loginCompared = 0;
-        long loginMismatched = 0;
-        long muteCompared = 0;
-        long muteMismatched = 0;
-        long ipCompared = 0;
-        long ipMismatched = 0;
         Instant now = clock.instant();
+        ShadowMetrics metrics = new ShadowMetrics(rejectedRows, now, targetImporter);
         Set<String> sourceKeys = new HashSet<>();
         for (LegacySanction legacy : source) {
             String key = key(legacy.sourceTable(), legacy.externalId());
             sourceKeys.add(key);
-            ImportedRow row = imported.get(key);
-            boolean expectedActive = legacy.active()
-                    && legacy.expiresAt().map(expiration -> expiration.isAfter(now)).orElse(true);
-            boolean activeMatch = row != null && row.active() == expectedActive;
-            boolean typeMatch = row != null && row.type() == LiteBansTargetImporter.sanctionType(legacy.type());
-            boolean decisionMatch = activeMatch && typeMatch;
-            if (legacy.type() == LegacySanctionType.IP_BAN) {
-                decisionMatch = decisionMatch && row != null
-                        && targetImporter.protectedIdentityExists(
-                                row.targetId(), legacy.networkAddress().orElseThrow()
-                        );
-            }
-            if (!new MigrationChecksum().calculate(List.of(legacy)).equals(row == null ? "" : row.checksum())) {
-                checksumMismatches++;
-            }
-            if (!activeMatch) {
-                activeMismatches++;
-            }
-            if (legacy.playerId().isPresent()
-                    && (row == null || !legacy.playerId().orElseThrow().equals(row.targetId()))) {
-                uuidMismatches++;
-            }
-            if (row == null || !legacy.expiresAt().equals(row.expiresAt())) {
-                expirationMismatches++;
-            }
-            switch (legacy.type()) {
-                case BAN -> {
-                    loginCompared++;
-                    if (!decisionMatch) {
-                        loginMismatched++;
-                    }
-                }
-                case MUTE -> {
-                    muteCompared++;
-                    if (!decisionMatch) {
-                        muteMismatched++;
-                    }
-                }
-                case IP_BAN -> {
-                    ipCompared++;
-                    if (!decisionMatch) {
-                        ipMismatched++;
-                    }
-                }
-                default -> throw new IllegalStateException(
-                        "Unsupported legacy sanction type: " + legacy.type()
-                );
-            }
+            metrics.compare(legacy, imported.get(key));
         }
         long extraMappings = imported.keySet().stream().filter(key -> !sourceKeys.contains(key)).count();
-        boolean countsMatch = imported.size() == source.size() && rejectedRows == 0;
-        long mismatchCount = checksumMismatches + activeMismatches + uuidMismatches + expirationMismatches
-                + loginMismatched + muteMismatched + ipMismatched + extraMappings;
-        ShadowSummary summary = new ShadowSummary(
-                countsMatch,
-                checksumMismatches == 0, // nosemgrep: java.lang.correctness.eqeq.eqeq -- compares against literal zero.
-                activeMismatches == 0,
-                uuidMismatches == 0,
-                expirationMismatches == 0,
-                new DecisionComparison(loginCompared, loginMismatched),
-                new DecisionComparison(muteCompared, muteMismatched),
-                new DecisionComparison(ipCompared, ipMismatched),
-                mismatchCount
-        );
+        ShadowSummary summary = metrics.summary(source.size(), imported.size(), extraMappings);
         persist(runId, summary, now);
         return summary;
     }
@@ -147,22 +79,19 @@ final class LiteBansShadowComparator {
                 WHERE m.source_system = 'LITEBANS' AND m.source_table IN (%s)
                 """.formatted(placeholders);
         try (Connection connection = target.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+            PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             for (String table : sourceTables) {
-                statement.setString(index++, table);
+                statement.setString(index, table);
+                index++;
             }
             try (ResultSet result = statement.executeQuery()) {
                 Map<String, ImportedRow> rows = new HashMap<>();
                 while (result.next()) {
-                    Timestamp expiration = result.getTimestamp("expiration_at");
-                    rows.put(key(result.getString("source_table"), result.getString("external_id")), new ImportedRow(
-                            result.getString("source_checksum"),
-                            UuidBytes.fromBytes(result.getBytes("target_id")),
-                            SanctionType.valueOf(result.getString("sanction_type")),
-                            "ACTIVE".equals(result.getString("status")),
-                            expiration == null ? Optional.empty() : Optional.of(expiration.toInstant())
-                    ));
+                    rows.put(
+                            key(result.getString("source_table"), result.getString("external_id")),
+                            importedRow(result)
+                    );
                 }
                 return Map.copyOf(rows);
             }
@@ -171,16 +100,24 @@ final class LiteBansShadowComparator {
         }
     }
 
+    private static ImportedRow importedRow(ResultSet result) throws SQLException {
+        Timestamp expiration = result.getTimestamp("expiration_at");
+        return new ImportedRow(
+                result.getString("source_checksum"),
+                UuidBytes.fromBytes(result.getBytes("target_id")),
+                SanctionType.valueOf(result.getString("sanction_type")),
+                "ACTIVE".equals(result.getString("status")),
+                expiration == null ? Optional.empty() : Optional.of(expiration.toInstant())
+        );
+    }
+
     private void persist(UUID runId, ShadowSummary summary, Instant now) {
         Map<String, ComparisonValue> values = Map.of(
-                "COUNTS", new ComparisonValue(summary.countsMatch(), 1, summary.countsMatch() ? 0 : 1),
-                "CHECKSUMS", new ComparisonValue(summary.checksumsMatch(), 1, summary.checksumsMatch() ? 0 : 1),
-                "ACTIVE_SANCTIONS", new ComparisonValue(summary.activeSanctionsMatch(), 1,
-                        summary.activeSanctionsMatch() ? 0 : 1),
-                "UUID_MAPPINGS", new ComparisonValue(summary.uuidMappingsMatch(), 1,
-                        summary.uuidMappingsMatch() ? 0 : 1),
-                "EXPIRATIONS", new ComparisonValue(summary.expirationsMatch(), 1,
-                        summary.expirationsMatch() ? 0 : 1),
+                "COUNTS", binaryComparison(summary.countsMatch()),
+                "CHECKSUMS", binaryComparison(summary.checksumsMatch()),
+                "ACTIVE_SANCTIONS", binaryComparison(summary.activeSanctionsMatch()),
+                "UUID_MAPPINGS", binaryComparison(summary.uuidMappingsMatch()),
+                "EXPIRATIONS", binaryComparison(summary.expirationsMatch()),
                 "LOGIN_DECISIONS", new ComparisonValue(summary.loginDecisions().matches(),
                         summary.loginDecisions().compared(), summary.loginDecisions().mismatched()),
                 "MUTE_DECISIONS", new ComparisonValue(summary.muteDecisions().matches(),
@@ -228,5 +165,137 @@ final class LiteBansShadowComparator {
     }
 
     private record ComparisonValue(boolean matched, long compared, long mismatched) {
+    }
+
+    private static final class ShadowMetrics {
+        private final int rejectedRows;
+        private final Instant now;
+        private final LiteBansTargetImporter targetImporter;
+        private final MigrationChecksum checksum = new MigrationChecksum();
+        private final EnumMap<LegacySanctionType, DecisionCounter> decisions =
+                new EnumMap<>(LegacySanctionType.class);
+        private long checksumMismatches;
+        private long activeMismatches;
+        private long uuidMismatches;
+        private long expirationMismatches;
+
+        private ShadowMetrics(int rejectedRows, Instant now, LiteBansTargetImporter targetImporter) {
+            this.rejectedRows = rejectedRows;
+            this.now = now;
+            this.targetImporter = targetImporter;
+            this.activeMismatches = rejectedRows;
+            this.uuidMismatches = rejectedRows;
+            this.expirationMismatches = rejectedRows;
+            decisions.put(LegacySanctionType.BAN, new DecisionCounter());
+            decisions.put(LegacySanctionType.MUTE, new DecisionCounter());
+            decisions.put(LegacySanctionType.IP_BAN, new DecisionCounter());
+        }
+
+        private void compare(LegacySanction legacy, ImportedRow row) {
+            RowComparison comparison = comparison(legacy, row);
+            if (!comparison.checksumMatches()) {
+                checksumMismatches++;
+            }
+            if (!comparison.activeMatches()) {
+                activeMismatches++;
+            }
+            if (!comparison.uuidMatches()) {
+                uuidMismatches++;
+            }
+            if (!comparison.expirationMatches()) {
+                expirationMismatches++;
+            }
+            decisionCounter(legacy.type()).record(comparison.decisionMatches());
+        }
+
+        private RowComparison comparison(LegacySanction legacy, ImportedRow row) {
+            boolean activeMatches = activeMatches(legacy, row);
+            boolean typeMatches = row != null
+                    && row.type() == LiteBansTargetImporter.sanctionType(legacy.type());
+            return new RowComparison(
+                    row != null && checksum.calculate(List.of(legacy)).equals(row.checksum()),
+                    activeMatches,
+                    uuidMatches(legacy, row),
+                    row != null && legacy.expiresAt().equals(row.expiresAt()),
+                    activeMatches && typeMatches && networkIdentityMatches(legacy, row)
+            );
+        }
+
+        private boolean activeMatches(LegacySanction legacy, ImportedRow row) {
+            boolean expectedActive = legacy.active()
+                    && legacy.expiresAt().map(expiration -> expiration.isAfter(now)).orElse(true);
+            return row != null && row.active() == expectedActive;
+        }
+
+        private static boolean uuidMatches(LegacySanction legacy, ImportedRow row) {
+            return legacy.playerId().isEmpty()
+                    || row != null && legacy.playerId().orElseThrow().equals(row.targetId());
+        }
+
+        private boolean networkIdentityMatches(LegacySanction legacy, ImportedRow row) {
+            if (legacy.type() != LegacySanctionType.IP_BAN) {
+                return true;
+            }
+            return targetImporter.protectedIdentityExists(
+                    row.targetId(), legacy.networkAddress().orElseThrow()
+            );
+        }
+
+        private DecisionCounter decisionCounter(LegacySanctionType type) {
+            DecisionCounter counter = decisions.get(type);
+            if (counter == null) {
+                throw new IllegalStateException("Unsupported legacy sanction type: " + type);
+            }
+            return counter;
+        }
+
+        private ShadowSummary summary(int sourceRows, int importedRows, long extraMappings) {
+            DecisionCounter login = decisionCounter(LegacySanctionType.BAN);
+            DecisionCounter mute = decisionCounter(LegacySanctionType.MUTE);
+            DecisionCounter ipBan = decisionCounter(LegacySanctionType.IP_BAN);
+            long mismatchCount = checksumMismatches + activeMismatches + uuidMismatches
+                    + expirationMismatches + login.mismatched + mute.mismatched
+                    + ipBan.mismatched + extraMappings;
+            return new ShadowSummary(
+                    importedRows == sourceRows && rejectedRows == 0,
+                    checksumMismatches == 0,
+                    activeMismatches == 0,
+                    uuidMismatches == 0,
+                    expirationMismatches == 0,
+                    login.comparison(),
+                    mute.comparison(),
+                    ipBan.comparison(),
+                    mismatchCount
+            );
+        }
+    }
+
+    private static ComparisonValue binaryComparison(boolean matched) {
+        return new ComparisonValue(matched, 1, matched ? 0 : 1);
+    }
+
+    private static final class DecisionCounter {
+        private long compared;
+        private long mismatched;
+
+        private void record(boolean matched) {
+            compared++;
+            if (!matched) {
+                mismatched++;
+            }
+        }
+
+        private DecisionComparison comparison() {
+            return new DecisionComparison(compared, mismatched);
+        }
+    }
+
+    private record RowComparison(
+            boolean checksumMatches,
+            boolean activeMatches,
+            boolean uuidMatches,
+            boolean expirationMatches,
+            boolean decisionMatches
+    ) {
     }
 }

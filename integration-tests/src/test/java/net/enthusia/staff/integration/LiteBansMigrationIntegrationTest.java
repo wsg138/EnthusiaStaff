@@ -24,6 +24,7 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
+import net.enthusia.staff.persistence.migration.ShadowSummary;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -31,6 +32,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class LiteBansMigrationIntegrationTest {
+    private static final String LEGACY_PREFIX = "legacy_";
     private static final UUID PLAYER_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
     private static final Instant ISSUED_AT = Instant.parse("2026-07-01T00:00:00Z");
     private static final Instant EXPIRES_AT = Instant.parse("2026-08-01T00:00:00Z");
@@ -104,58 +106,98 @@ class LiteBansMigrationIntegrationTest {
             NetworkIdentityProtector protector = protector();
 
             MigrationExecutionReport initial = runtime.liteBansMigrationService(protector).execute(
-                    config, "legacy_", 100, MigrationMode.SHADOW
+                    config, LEGACY_PREFIX, 100, MigrationMode.SHADOW
             );
+            assertInitialMigration(initial);
 
-            assertEquals(2, initial.importedRecords());
-            assertEquals(0, initial.reconciledRecords());
-            assertEquals(1, initial.protectedIdentityRecords());
-            assertEquals(0, initial.shadowSummary().orElseThrow().mismatchCount());
-            assertEquals(2, importedCaseCount());
-
-            Instant removedAt = Instant.parse("2026-07-25T12:00:00Z");
-            try (Connection connection = sourceConnection();
-                 PreparedStatement statement = connection.prepareStatement("""
-                         UPDATE legacy_bans SET active = FALSE, removed_by_date = ? WHERE id = 1
-                         """)) {
-                statement.setTimestamp(1, Timestamp.from(removedAt));
-                assertEquals(1, statement.executeUpdate());
-            }
+            endLegacyBan();
 
             MigrationExecutionReport reconciled = runtime.liteBansMigrationService(protector).execute(
-                    config, "legacy_", 100, MigrationMode.SHADOW
+                    config, LEGACY_PREFIX, 100, MigrationMode.SHADOW
             );
-
-            assertEquals(0, reconciled.importedRecords());
-            assertEquals(1, reconciled.reconciledRecords());
-            assertEquals(1, reconciled.replayedRecords());
-            assertEquals(0, reconciled.shadowSummary().orElseThrow().mismatchCount());
-            assertEquals("ENDED_EARLY", importedBanStatus());
-            assertEquals(1, legacySyncEventCount());
+            assertReconciledMigration(reconciled);
 
             MigrationExecutionReport replay = runtime.liteBansMigrationService(protector).execute(
-                    config, "legacy_", 100, MigrationMode.SHADOW
+                    config, LEGACY_PREFIX, 100, MigrationMode.SHADOW
             );
+            assertReplayMigration(replay);
 
-            assertEquals(0, replay.importedRecords());
-            assertEquals(0, replay.reconciledRecords());
-            assertEquals(2, replay.replayedRecords());
-            assertEquals(2, importedCaseCount());
-            assertEquals(1, legacySyncEventCount());
-
-            try (Connection connection = sourceConnection();
-                 PreparedStatement statement = connection.prepareStatement("DELETE FROM legacy_bans WHERE id = 1")) {
-                assertEquals(1, statement.executeUpdate());
-            }
+            deleteLegacyBan();
 
             MigrationExecutionReport deletedSource = runtime.liteBansMigrationService(protector).execute(
-                    config, "legacy_", 100, MigrationMode.SHADOW
+                    config, LEGACY_PREFIX, 100, MigrationMode.SHADOW
             );
-
-            assertFalse(deletedSource.shadowSummary().orElseThrow().countsMatch());
-            assertTrue(deletedSource.shadowSummary().orElseThrow().mismatchCount() > 0);
-            assertEquals(2, importedCaseCount());
+            assertDeletedSourceDetected(deletedSource);
         }
+    }
+
+    private static void assertInitialMigration(MigrationExecutionReport report) throws SQLException {
+        assertEquals(2, report.importedRecords());
+        assertEquals(0, report.reconciledRecords());
+        assertEquals(1, report.protectedIdentityRecords());
+        assertCleanShadowSummary(report);
+        assertEquals(2, importedCaseCount());
+    }
+
+    private static void assertReconciledMigration(MigrationExecutionReport report) throws SQLException {
+        assertEquals(0, report.importedRecords());
+        assertEquals(1, report.reconciledRecords());
+        assertEquals(1, report.replayedRecords());
+        assertCleanShadowSummary(report);
+        assertEquals("ENDED_EARLY", importedBanStatus());
+        assertEquals(1, legacySyncEventCount());
+    }
+
+    private static void assertReplayMigration(MigrationExecutionReport report) throws SQLException {
+        assertEquals(0, report.importedRecords());
+        assertEquals(0, report.reconciledRecords());
+        assertEquals(2, report.replayedRecords());
+        assertCleanShadowSummary(report);
+        assertEquals(2, importedCaseCount());
+        assertEquals(1, legacySyncEventCount());
+    }
+
+    private static void assertDeletedSourceDetected(MigrationExecutionReport report) throws SQLException {
+        ShadowSummary summary = report.shadowSummary().orElseThrow();
+        assertFalse(summary.countsMatch());
+        assertComparisonDimensionsMatch(summary);
+        assertEquals(1, summary.mismatchCount());
+        assertEquals(2, importedCaseCount());
+    }
+
+    private static void endLegacyBan() throws SQLException {
+        Instant removedAt = Instant.parse("2026-07-25T12:00:00Z");
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE legacy_bans SET active = FALSE, removed_by_date = ? WHERE id = 1
+                     """)) {
+            statement.setTimestamp(1, Timestamp.from(removedAt));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void deleteLegacyBan() throws SQLException {
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM legacy_bans WHERE id = 1")) {
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void assertCleanShadowSummary(MigrationExecutionReport report) {
+        ShadowSummary summary = report.shadowSummary().orElseThrow();
+        assertTrue(summary.countsMatch());
+        assertComparisonDimensionsMatch(summary);
+        assertEquals(0, summary.mismatchCount());
+    }
+
+    private static void assertComparisonDimensionsMatch(ShadowSummary summary) {
+        assertTrue(summary.checksumsMatch());
+        assertTrue(summary.activeSanctionsMatch());
+        assertTrue(summary.uuidMappingsMatch());
+        assertTrue(summary.expirationsMatch());
+        assertTrue(summary.loginDecisions().matches());
+        assertTrue(summary.muteDecisions().matches());
+        assertTrue(summary.ipBanDecisions().matches());
     }
 
     private static void insertLegacyRows() throws SQLException {
@@ -200,7 +242,9 @@ class LiteBansMigrationIntegrationTest {
                      WHERE m.source_table = 'legacy_bans' AND m.external_id = '1'
                      """);
              ResultSet result = statement.executeQuery()) {
-            assertTrue(result.next());
+            if (!result.next()) {
+                throw new AssertionError("Imported ban was not found");
+            }
             return result.getString(1);
         }
     }
@@ -225,7 +269,9 @@ class LiteBansMigrationIntegrationTest {
 
     private static long count(PreparedStatement statement) throws SQLException {
         try (ResultSet result = statement.executeQuery()) {
-            assertTrue(result.next());
+            if (!result.next()) {
+                throw new AssertionError("Count query did not return a row");
+            }
             return result.getLong(1);
         }
     }

@@ -55,6 +55,19 @@ Each write pass takes a database-wide advisory lock, recovers abandoned `RUNNING
 
 A crash can leave already committed mappings or protected identity tokens. The next locked run marks the abandoned run failed and safely replays those rows. It never duplicates cases or sanction events for an already committed checksum.
 
+## Shadow comparison accounting
+
+Each shadow pass compares source and target counts, source checksums, active
+state, UUID mappings, expiration values, and the resulting login, mute, and
+IP-ban decisions. The result of every dimension is persisted in
+`shadow_comparisons`; a successful aggregate is not inferred from counts alone.
+
+A target mapping whose source row disappeared is reported as an extra mapping.
+It makes the count comparison fail and contributes to the aggregate mismatch
+count even when every remaining source row still matches. Rejected source rows
+also keep the aggregate non-zero. Resolve these discrepancies at the source or
+through the documented recovery process before cutover.
+
 ## Preflight
 
 1. Back up the LiteBans and EnthusiaStaff databases and verify restoration on staging.

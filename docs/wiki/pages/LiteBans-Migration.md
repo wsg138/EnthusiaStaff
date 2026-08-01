@@ -53,6 +53,15 @@ compare repeated preflight results. Staff-column selection prefers the alias for
 the current sanction type while retaining the supported shared legacy fallback.
 No absent column is inferred or silently substituted.
 
+### Shadow comparison evidence
+
+Every shadow pass records count, checksum, active-state, UUID, expiration,
+login-decision, mute-decision, and IP-ban-decision results. Operators must
+review the individual dimensions; matching counts alone are not a cutover
+signal. A durable target mapping whose source row has disappeared remains an
+explicit extra-mapping mismatch until it is resolved through the migration
+recovery process.
+
 ## Concurrency
 
 Only one migration run may own the migration lease. Source reads should use a

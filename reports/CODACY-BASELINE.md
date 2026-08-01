@@ -834,7 +834,7 @@ threads were answered and resolved without another automated review cycle. PR
 
 ### PR #35 LiteBans schema-inspection checkpoint
 
-Draft PR #35 starts from merged PR #34 and does not touch active PR #27 files.
+PR #35 started from merged PR #34 and did not touch active PR #27 files.
 Implementation head `739c93cd10aae014aa766c19c4d7a2db5dec5ecb`
 separates sanction, history, and audit-only source inspection, reads the source
 catalog once, hoists bounded alias sets out of loops, and reports missing
@@ -846,9 +846,48 @@ All persistence unit tests and the Docker-backed
 `LiteBansMigrationIntegrationTest` pass. PMD 7 and threshold-matched Lizard
 report no result in the changed source or test, removing the inspector's prior
 NPath, cyclomatic-complexity, method-length, duplicate-literal, and loop-
-allocation findings locally. No issue or rule is suppressed. The clean full
-build, complete MariaDB suite, hosted Codacy, exact-head Pi staging, and final
-review remain required before merge.
+allocation findings locally. No issue or rule was suppressed.
+
+Final head `940225015e5934babd3214017393e862b4f16eb2` passed the clean
+Java 21 build with all 40 tasks, 99 suites, and 398 tests. The Docker-backed
+subset comprised 15 MariaDB suites and 68 tests, with no failure, error, or
+skip. Runtime artifacts were:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,441,300 | `A29C74319052E0B78BE5111469566967393F1D003226DFE697A52A4B65F070A8` |
+| Velocity runtime jar | 7,607,190 | `628832932AF3FDD62758A5C7C58A5E1BE3255CA82A39780630350B46EA74DCEF` |
+
+Hosted Codacy reported zero new issues, three fixed issues, 89.23% diff
+coverage, a `+0.057` coverage delta, and no clone increase. Exact-head Pi boot
+and restart staging passed run `30708422761`. CodeRabbit's single ready-state
+attempt was rate-limited for 31 minutes and produced no code findings; it was
+not retried. A focused local diff review found no unresolved issue. The
+redundant same-head Pi run triggered solely by the ready-state event was
+cancelled after the exact commit had already passed. PR #35 merged as
+`dbf27e1ac1055342aceefd9801b0757cdbe12702`.
+
+The completed `main` analysis now reports 265 active findings: 180 complexity,
+75 error-prone, and 10 performance findings. Severity is one High and 264
+Warning. The remaining High `UseProperClassLoader` result is in `MariaDb.java`,
+which remains part of active PR #27 and is intentionally not edited in the
+concurrent migration section.
+
+### PR #36 LiteBans shadow-comparison checkpoint
+
+Draft PR #36 starts from merged PR #35 and does not touch active PR #27 files.
+Implementation head `e005bfb` separates per-row comparison from aggregate
+mismatch accounting, reuses one checksum calculator per run, and isolates JDBC
+row materialization from result iteration. The Docker-backed lifecycle test now
+asserts every comparison dimension through initial import, reconciliation,
+idempotent replay, and source-row deletion, including an exact one-count orphan
+mapping result.
+
+All persistence tests and the focused MariaDB Testcontainers scenario pass.
+PMD 7 and threshold-matched Lizard report zero findings in changed Java. No
+issue or rule is suppressed. The full clean build, complete MariaDB suite,
+hosted Codacy, exact-head Pi staging, and final review remain required before
+merge.
 
 ## Remediation order
 
