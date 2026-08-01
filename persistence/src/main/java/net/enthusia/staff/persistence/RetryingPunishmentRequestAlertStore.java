@@ -26,10 +26,12 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 /**
  * Preserves independent audience-recipient progress when MariaDB skips a shared parent-intent row.
  *
- * <p>The primary store performs materialization and the normal claim. If that claim is empty, this
- * wrapper performs one bounded fallback transaction whose locking selection touches only the
- * recipient delivery row. Parent intent state and current authorization are rechecked through an
- * eligibility subquery, so no stale or ineligible delivery can be leased.</p>
+ * <p>The primary store performs materialization and the normal claim. An empty result may be an
+ * ordinary idle poll or a parent-row lock skip, so fallback is rate-limited independently per
+ * audience. At most one bounded fallback transaction is admitted per interval; its locking
+ * selection touches only the recipient delivery row. Parent intent state and current authorization
+ * are rechecked through an eligibility subquery, so no stale or ineligible delivery can be leased.
+ * A successful primary claim reopens the gate so subsequent real contention can recover promptly.</p>
  */
 final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAlertStore {
     private static final Duration FALLBACK_INTERVAL = Duration.ofSeconds(1);
@@ -282,7 +284,7 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
                       WHERE i.alert_id = d.alert_id
                         AND i.intent_state = 'ACTIVE' AND i.expires_at > ?
                         AND i.audience = 'ELIGIBLE_REVIEWERS'
-                        AND i.excluded_recipient_id <> d.recipient_id
+                        AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
                         AND CASE i.minimum_rank
                               WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                               WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
@@ -377,7 +379,7 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
                       WHERE i.alert_id = d.alert_id
                         AND i.intent_state = 'ACTIVE' AND i.expires_at > ?
                         AND i.audience = 'ELIGIBLE_REVIEWERS'
-                        AND i.excluded_recipient_id <> d.recipient_id
+                        AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
                         AND CASE i.minimum_rank
                               WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                               WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
