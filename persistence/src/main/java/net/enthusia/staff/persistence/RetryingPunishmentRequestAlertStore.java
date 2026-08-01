@@ -284,7 +284,7 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
                       WHERE i.alert_id = d.alert_id
                         AND i.intent_state = 'ACTIVE' AND i.expires_at > ?
                         AND i.audience = 'ELIGIBLE_REVIEWERS'
-                        AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
+                        AND (i.excluded_recipient_id IS NOT NULL AND i.excluded_recipient_id <> d.recipient_id)
                         AND CASE i.minimum_rank
                               WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                               WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
@@ -379,7 +379,7 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
                       WHERE i.alert_id = d.alert_id
                         AND i.intent_state = 'ACTIVE' AND i.expires_at > ?
                         AND i.audience = 'ELIGIBLE_REVIEWERS'
-                        AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
+                        AND (i.excluded_recipient_id IS NOT NULL AND i.excluded_recipient_id <> d.recipient_id)
                         AND CASE i.minimum_rank
                               WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                               WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
