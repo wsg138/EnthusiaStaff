@@ -471,24 +471,34 @@ public final class EnthusiaStaffVelocityPlugin {
                     loaded.punishmentCodeProtectorFromEnvironment()
             );
             AuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
+            Clock apiClock = Clock.systemUTC();
+            SanctionChangeService sanctionChanges = new SanctionChangeService(
+                    authorization,
+                    runtime.sanctionMutationStore()
+            );
             int created = store.ensureEligibleCodes(Clock.systemUTC().instant(), 5_000);
             server = new WebsiteApiServer(
-                    InetAddress.getByName(loaded.websiteApiBindAddress()),
-                    loaded.websiteApiPort(),
-                    loaded.websiteApiMaximumBodyBytes(),
-                    loaded.websiteApiWorkerThreads(),
-                    loaded.websiteApiQueueCapacity(),
-                    loaded.websiteApiBearerTokenFromEnvironment(),
-                    loaded.websiteApiHmacSecretFromEnvironment(),
-                    Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
-                    store,
-                    authorization,
-                    new SanctionChangeService(
-                            authorization,
-                            runtime.sanctionMutationStore()
+                    new WebsiteApiServerConfiguration(
+                            InetAddress.getByName(loaded.websiteApiBindAddress()),
+                            loaded.websiteApiPort(),
+                            loaded.websiteApiMaximumBodyBytes(),
+                            loaded.websiteApiWorkerThreads(),
+                            loaded.websiteApiQueueCapacity()
                     ),
-                    authorityMode::get,
-                    Clock.systemUTC(),
+                    new WebsiteApiAuthenticator(
+                            loaded.websiteApiBearerTokenFromEnvironment(),
+                            loaded.websiteApiHmacSecretFromEnvironment(),
+                            Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
+                            store
+                    ),
+                    new WebsiteApiRouter(
+                            store,
+                            authorization,
+                            sanctionChanges,
+                            authorityMode::get,
+                            apiClock
+                    ),
+                    apiClock,
                     (message, failure) -> logger.error(message, failure)
             );
             server.start();

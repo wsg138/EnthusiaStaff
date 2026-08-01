@@ -30,6 +30,6 @@ final class WebsiteApiActorTest {
     }
 
     private static Actor actor(UUID actorId, String rank) {
-        return WebsiteApiServer.websiteActor(actorId, rank);
+        return WebsiteAppealEndpoint.websiteActor(actorId, rank);
     }
 }
