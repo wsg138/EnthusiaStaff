@@ -670,6 +670,49 @@ now describe the bridge and this exact-SHA gate; all 29 Wiki pages validate.
 CodeRabbit skipped the draft automatically, so one lightweight ready-state pass
 remains and no approval is claimed here.
 
+The PR #31 review fixes produced final head
+`d5ef5d2f5ec5209d4d11d0acf94da7777450476a`. A fresh clean Java 21 build passed
+365 tests, including all 52 MariaDB tests across 12 Testcontainers suites.
+Hosted Codacy reported zero new and 22 fixed issues, 80.53% diff coverage, a
++1.571 percentage-point coverage variation, complexity delta +79, and
+duplication delta +10. Exact-head Pi staging run `30698581440` passed both
+Paper 1.21.11 boot/storage/command/shutdown cycles. PR #31 merged in
+`02fe5fa584b04939de45401818c675a94428c71a`; Wiki publication run
+`30698968797` subsequently completed successfully. The automatic post-fix
+CodeRabbit attempt was rate-limited and was not retried or represented as an
+approval.
+
+### PR #32 report persistence and evidence checkpoint
+
+Draft PR #32 starts from merged PR #31 and addresses report-path correctness
+before the remaining GUI work. At pushed checkpoint
+`40f27160ae88ef0fda669306613254402f1e37a4`, it includes:
+
+- configured Java-time JSON persistence for chat and private-message evidence;
+- concurrency-safe state-change replay and semantic idempotency conflicts;
+- exact submission fingerprints so a key cannot replay different report
+  content;
+- explicit rollback on SQL, JSON, runtime, and fatal-error paths before pooled
+  auto-commit restoration;
+- bounded 2,000-message report contexts;
+- separate submission, replay, query, state, and evidence-maintenance JDBC
+  responsibilities behind `JdbcReportStore`;
+- physical seven-day cleanup for public-chat, private-message, and report-linked
+  client evidence, with bounded asynchronous scheduling;
+- sanitized asynchronous `/report` failure feedback; and
+- MariaDB coverage for merges, exact replay, semantic conflicts, deterministic
+  concurrent state changes, queue/state transitions, failure-injected rollback,
+  and physical retention.
+
+The focused report MariaDB suite passes all seven tests. The focused Paper tests,
+including report context bounds and maintenance cadence, pass. PMD 7 and Lizard
+report zero findings on the new or refactored report files; the nine findings
+reported when the Paper bootstrap is included are its pre-existing executor,
+logging, literal, and loop findings rather than new report-line findings. No
+finding, rule, or first-party path was suppressed. Full clean-build, repository
+analyzer, hosted Codacy, and exact-head Pi evidence remain pending at this draft
+checkpoint and must be recorded before merge.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
