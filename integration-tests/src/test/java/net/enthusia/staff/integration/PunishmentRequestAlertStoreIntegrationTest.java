@@ -507,7 +507,8 @@ class PunishmentRequestAlertStoreIntegrationTest {
     }
 
     private static int count(String sql, UUID... ids) throws SQLException {
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+        // Test helper callers supply only fixed SQL literals declared in this class.
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             for (int index = 0; index < ids.length; index++) {
                 statement.setBytes(index + 1, MariaDbIntegrationSupport.uuidBytes(ids[index]));
             }
@@ -569,7 +570,8 @@ class PunishmentRequestAlertStoreIntegrationTest {
     }
 
     private static void rawUpdate(String sql, UUID alertId) throws SQLException {
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+        // Test helper callers supply only fixed SQL literals declared in this class.
+        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
             statement.executeUpdate();
         }

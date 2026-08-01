@@ -376,7 +376,7 @@ class PunishmentRequestLifecycleRollbackIntegrationTest extends PunishmentReques
 
     private static int countByUuid(String sql, UUID value) throws SQLException {
         try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setBytes(1, uuidBytes(value));
             return count(statement);
         }

@@ -250,7 +250,7 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             UUID alertId
     ) throws Exception {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());

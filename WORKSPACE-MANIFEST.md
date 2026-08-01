@@ -49,20 +49,17 @@ checks, Wiki validation, exact-head staging and review are finished.
 
 | Field | Current value |
 | --- | --- |
-| State | Draft, open and unmerged; exact-head validation and independent review remain required |
+| State | Open review candidate; merge requires green exact-head CI, current hosted analysis and completed review |
 | Branch | `section/punishment-request-notifications-recovery` |
-| Current visible PR head before final promotion | `f553e353a1524596f587cd185c17ba3e0869f52f` |
-| Reconciled implementation source | `5a4df2fdce8aa3dbb5e40a6e62d45a212cb4716f`, merged with current `main` at `398aba781355827dcb2dd080dde509b1c585f5a8` in an isolated candidate |
-| Conflict result | Git found one documentation conflict in this manifest; no Java, migration, test, runtime or workflow conflict with PR #38 |
-| Implemented scope | Durable recipient-specific alert persistence and migrations; Paper polling, reconnect delivery and maintenance; validated modular YAML; atomic reason-policy reload; alert enable/disable/replacement/rollback; runtime health reporting; Folia-safe startup, recipient presentation and reload dispatch |
-| Quality remediation | Actionable high findings were fixed or precisely suppressed; Oracle `RAC_*` reports against MariaDB migration SQL remain documented analyzer false positives requiring exact Codacy disposition |
-| Validation boundary | Helper builds are diagnostic only. The final promoted PR head still requires the repository's clean Java 21 build, complete MariaDB Testcontainers suite, aggregate coverage and runtime-JAR inspection |
-| Remaining gates | Exact-head CI, refreshed paged Codacy triage, exact false-positive disposition, actual CodeRabbit review, review-thread resolution, and later staging/live/Discord/production work |
+| Base | Includes `main` at `398aba781355827dcb2dd080dde509b1c585f5a8` |
+| Reconciliation | Preserves the current Paper composition root, persistence boundaries, Folia scheduling model and PR #38 documentation; no unresolved Java or migration conflict remains |
+| Implemented scope | Durable recipient-specific alert persistence and migrations; Paper polling, reconnect delivery and maintenance; modular validated YAML; atomic reason-policy reload; alert enable/disable/replacement/rollback; health reporting; Folia-safe startup, recipient presentation and reload dispatch |
+| Quality scope | Production SQL selection is closed over compile-time statements; test-only fixed-query helpers are precisely annotated; the Oracle-only RAC rule is excluded only for the reviewed MariaDB V11-V13 migrations |
+| Deployment boundary | This PR does not enable production alerts, replace LiteBans, send live Discord notifications or authorize production deployment |
 
-PR #27 now adopts the current Paper composition root, persistence boundaries,
-Folia scheduling model, validated configuration structure and current documentation
-blueprint without discarding its durable notification history. It must remain draft
-and unmerged until the exact promoted head passes every remaining gate.
+PR #27 is reconciled as an engineering merge candidate. Exact-head build, runtime
+artifact, coverage, hosted-quality and review evidence belongs to the pull request
+and must remain green for the final reviewed head before merge.
 
 ## Related repositories
 

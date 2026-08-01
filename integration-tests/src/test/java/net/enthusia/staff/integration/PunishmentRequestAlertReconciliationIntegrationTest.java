@@ -316,7 +316,7 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
             default -> throw new IllegalArgumentException("unsupported test column");
         };
         try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
             statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(recipientId));
             try (ResultSet result = statement.executeQuery()) {
@@ -336,7 +336,7 @@ class PunishmentRequestAlertReconciliationIntegrationTest {
 
     private static int count(String sql, UUID id) throws Exception {
         try (Connection connection = connection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(id));
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());

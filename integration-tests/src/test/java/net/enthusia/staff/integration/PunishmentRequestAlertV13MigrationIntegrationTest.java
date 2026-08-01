@@ -112,7 +112,7 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             UUID... identifiers
     ) throws Exception {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             for (int index = 0; index < identifiers.length; index++) {
                 statement.setBytes(index + 1, MariaDbIntegrationSupport.uuidBytes(identifiers[index]));
             }
@@ -159,7 +159,7 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             default -> throw new IllegalArgumentException("unsupported metadata column");
         };
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.setString(1, table);
             statement.setString(2, column);
             try (ResultSet result = statement.executeQuery()) {

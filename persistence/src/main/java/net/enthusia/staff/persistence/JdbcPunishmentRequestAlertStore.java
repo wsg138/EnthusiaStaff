@@ -552,8 +552,8 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             Duration lease,
             Instant now
     ) throws SQLException {
-        return claimWithQuery(connection, recipientId, owner, limit, lease, now,
-                SELECT_DIRECT_DUE, LEASE_DIRECT, 0);
+        return claimWithQuery(
+                connection, ClaimQuery.DIRECT, recipientId, owner, limit, lease, now, 0);
     }
 
     private static List<PunishmentRequestAlertClaim> claimReviewerDeliveries(
@@ -565,8 +565,16 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             Duration lease,
             Instant now
     ) throws SQLException {
-        return claimWithQuery(connection, recipientId, owner, limit, lease, now,
-                SELECT_REVIEWER_DUE, LEASE_REVIEWER, reviewerLevel(rank));
+        return claimWithQuery(
+                connection,
+                ClaimQuery.REVIEWER,
+                recipientId,
+                owner,
+                limit,
+                lease,
+                now,
+                reviewerLevel(rank)
+        );
     }
 
     private static List<PunishmentRequestAlertClaim> claimOperationalDeliveries(
@@ -577,47 +585,46 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             Duration lease,
             Instant now
     ) throws SQLException {
-        return claimWithQuery(connection, recipientId, owner, limit, lease, now,
-                SELECT_OPERATIONAL_DUE, LEASE_OPERATIONAL, 0);
+        return claimWithQuery(
+                connection, ClaimQuery.OPERATIONAL, recipientId, owner, limit, lease, now, 0);
     }
 
     private static List<PunishmentRequestAlertClaim> claimWithQuery(
             Connection connection,
+            ClaimQuery query,
             UUID recipientId,
             String owner,
             int limit,
             Duration lease,
             Instant now,
-            String selectionSql,
-            String leaseSql,
             int reviewerLevel
     ) throws SQLException {
         List<DeliveryCandidate> candidates = selectDue(
-                connection, selectionSql, recipientId, reviewerLevel, limit, now);
+                connection, query, recipientId, reviewerLevel, limit, now);
         if (candidates.isEmpty()) {
             return List.of();
         }
         Instant leaseUntil = now.plus(lease);
-        lease(connection, leaseSql, candidates, owner, reviewerLevel, now, leaseUntil);
+        lease(connection, query, candidates, owner, reviewerLevel, now, leaseUntil);
         return loadClaims(connection, candidates, leaseUntil);
     }
 
     private static List<DeliveryCandidate> selectDue(
             Connection connection,
-            String sql,
+            ClaimQuery query,
             UUID recipientId,
             int reviewerLevel,
             int limit,
             Instant now
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = selectionStatement(connection, query)) {
             Timestamp timestamp = Timestamp.from(now);
             statement.setBytes(1, UuidBytes.toBytes(recipientId));
             statement.setTimestamp(2, timestamp);
             statement.setTimestamp(3, timestamp);
             statement.setTimestamp(4, timestamp);
             int next = 5;
-            if (SELECT_REVIEWER_DUE.equals(sql)) {
+            if (query == ClaimQuery.REVIEWER) {
                 statement.setInt(next++, reviewerLevel);
             }
             statement.setInt(next, limit);
@@ -637,16 +644,27 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
         }
     }
 
+    private static PreparedStatement selectionStatement(
+            Connection connection,
+            ClaimQuery query
+    ) throws SQLException {
+        return switch (query) {
+            case DIRECT -> connection.prepareStatement(SELECT_DIRECT_DUE);
+            case REVIEWER -> connection.prepareStatement(SELECT_REVIEWER_DUE);
+            case OPERATIONAL -> connection.prepareStatement(SELECT_OPERATIONAL_DUE);
+        };
+    }
+
     private static void lease(
             Connection connection,
-            String sql,
+            ClaimQuery query,
             List<DeliveryCandidate> candidates,
             String owner,
             int reviewerLevel,
             Instant now,
             Instant leaseUntil
     ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = leaseStatement(connection, query)) {
             for (DeliveryCandidate candidate : candidates) {
                 statement.setString(1, owner);
                 statement.setTimestamp(2, Timestamp.from(leaseUntil));
@@ -654,7 +672,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 bindDeliveryId(statement, 4, candidate.deliveryId());
                 statement.setTimestamp(6, Timestamp.from(now));
                 statement.setTimestamp(7, Timestamp.from(now));
-                if (LEASE_REVIEWER.equals(sql)) {
+                if (query == ClaimQuery.REVIEWER) {
                     statement.setInt(8, reviewerLevel);
                 }
                 statement.addBatch();
@@ -665,6 +683,23 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                     "punishment request alert delivery lost eligibility while acquiring its lease"
             );
         }
+    }
+
+    private static PreparedStatement leaseStatement(
+            Connection connection,
+            ClaimQuery query
+    ) throws SQLException {
+        return switch (query) {
+            case DIRECT -> connection.prepareStatement(LEASE_DIRECT);
+            case REVIEWER -> connection.prepareStatement(LEASE_REVIEWER);
+            case OPERATIONAL -> connection.prepareStatement(LEASE_OPERATIONAL);
+        };
+    }
+
+    private enum ClaimQuery {
+        DIRECT,
+        REVIEWER,
+        OPERATIONAL
     }
 
     private static final String BASE_SELECTION = """

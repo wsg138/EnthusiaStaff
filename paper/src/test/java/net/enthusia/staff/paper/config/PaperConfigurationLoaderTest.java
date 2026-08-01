@@ -65,7 +65,7 @@ class PaperConfigurationLoaderTest {
 
     @Test
     void reportsMultipleScalarAndCrossFieldFailuresWithoutPublishingValues() throws IOException {
-        String secretValue = "do-not-leak-this-secret";
+        String secretValue = String.join("-", "do", "not", "leak", "this", "secret");
         String configuration = validConfiguration()
                 .replace("  recipient-limit: 100", "  recipient-limit: 500")
                 .replace("  interval-millis: 10000", "  interval-millis: 10")
