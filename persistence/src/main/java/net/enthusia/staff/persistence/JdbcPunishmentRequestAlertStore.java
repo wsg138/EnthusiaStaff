@@ -459,7 +459,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 WHERE i.audience = 'ELIGIBLE_REVIEWERS'
                   AND i.intent_state = 'ACTIVE'
                   AND i.expires_at > ?
-                  AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> ?)
+                  AND (i.excluded_recipient_id IS NOT NULL AND i.excluded_recipient_id <> ?)
                   AND CASE i.minimum_rank
                         WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                         WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
@@ -788,7 +788,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
 
     private static final String SELECT_REVIEWER_DUE = BASE_SELECTION + """
               AND i.audience = 'ELIGIBLE_REVIEWERS'
-              AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
+              AND (i.excluded_recipient_id IS NOT NULL AND i.excluded_recipient_id <> d.recipient_id)
               AND CASE i.minimum_rank
                     WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                     WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
@@ -823,7 +823,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
 
     private static final String LEASE_REVIEWER = BASE_LEASE + """
                     AND i.audience = 'ELIGIBLE_REVIEWERS'
-                    AND (i.excluded_recipient_id IS NULL OR i.excluded_recipient_id <> d.recipient_id)
+                    AND (i.excluded_recipient_id IS NOT NULL AND i.excluded_recipient_id <> d.recipient_id)
                     AND CASE i.minimum_rank
                           WHEN 'HELPER' THEN 1 WHEN 'MOD' THEN 1
                           WHEN 'ADMIN' THEN 2 WHEN 'FOUNDER' THEN 3 ELSE 99 END <= ?
