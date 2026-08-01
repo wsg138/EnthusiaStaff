@@ -1,34 +1,27 @@
 name: Branch source export
 
 on:
-  push:
+  pull_request:
     branches:
-      - section/punishment-request-notifications-recovery
+      - main
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   export:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Report temporary run coordinate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/27/comments" \
-            -f body="TEMPORARY SOURCE EXPORT START — run ${GITHUB_RUN_ID}; commit ${GITHUB_SHA}. This comment will be removed after connector-backed integration."
-
-      - name: Check out branch head
+      - name: Check out tested commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Upload exact source snapshot
-        id: source
         uses: actions/upload-artifact@v7
         with:
-          name: branch-source-${{ github.sha }}
+          name: branch-source-${{ github.event.pull_request.head.sha }}
           path: |
             .github
             build.gradle.kts
@@ -47,11 +40,3 @@ jobs:
             velocity
           if-no-files-found: error
           retention-days: 1
-
-      - name: Report temporary artifact coordinate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: ${{ steps.source.outputs.artifact-id }}
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/issues/27/comments" \
-            -f body="TEMPORARY SOURCE EXPORT READY — run ${GITHUB_RUN_ID}; artifact ${ARTIFACT_ID}; commit ${GITHUB_SHA}. This comment will be removed after connector-backed integration."
