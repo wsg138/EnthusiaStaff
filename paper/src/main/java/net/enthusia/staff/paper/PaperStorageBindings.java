@@ -20,6 +20,8 @@ import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
+import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
+import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
@@ -44,7 +46,9 @@ record PaperStorageBindings(
                 runtime.caseLookup(),
                 runtime.caseReviewStore(),
                 runtime.reportStore(),
-                runtime.clientEvidenceStore()
+                runtime.clientEvidenceStore(),
+                runtime.punishmentRequestAlertStore(),
+                runtime.punishmentRequestStore()
         );
         AssetStores assets = new AssetStores(
                 runtime.freezeStore(),
@@ -71,7 +75,7 @@ record PaperStorageBindings(
                 identifiers,
                 authorization,
                 punishment,
-                runtime.punishmentRequestStore()
+                moderation.punishmentRequestStore()
         );
         ApplicationServices services = new ApplicationServices(
                 punishment,
@@ -114,6 +118,14 @@ record PaperStorageBindings(
 
     ClientEvidenceStore clientEvidenceStore() {
         return moderation.clientEvidenceStore();
+    }
+
+    PunishmentRequestAlertStore punishmentRequestAlertStore() {
+        return moderation.punishmentRequestAlertStore();
+    }
+
+    PunishmentRequestStore punishmentRequestStore() {
+        return moderation.punishmentRequestStore();
     }
 
     FreezeStore freezeStore() {
@@ -159,7 +171,9 @@ record PaperStorageBindings(
             CaseLookup caseLookup,
             CaseReviewStore caseReviewStore,
             ReportStore reportStore,
-            ClientEvidenceStore clientEvidenceStore
+            ClientEvidenceStore clientEvidenceStore,
+            PunishmentRequestAlertStore punishmentRequestAlertStore,
+            PunishmentRequestStore punishmentRequestStore
     ) {
     }
 
