@@ -33,17 +33,61 @@ public final class EnvelopeAuthenticator {
             Map<String, SecretKey> serverKeys,
             ReplayGuard replayGuard
     ) {
-        if (protocolVersion < 1 || clock == null || permittedAge == null || permittedClockSkew == null
-                || permittedAge.isZero() || permittedAge.isNegative() || permittedClockSkew.isNegative()
-                || serverKeys == null || serverKeys.isEmpty() || replayGuard == null) {
-            throw new IllegalArgumentException("authenticator configuration must be present and time bounds must be safe");
-        }
+        validateConfiguration(
+                protocolVersion,
+                clock,
+                permittedAge,
+                permittedClockSkew,
+                serverKeys,
+                replayGuard
+        );
         this.protocolVersion = protocolVersion;
         this.clock = clock;
         this.permittedAge = permittedAge;
         this.permittedClockSkew = permittedClockSkew;
         this.serverKeys = Map.copyOf(serverKeys);
         this.replayGuard = replayGuard;
+    }
+
+    private static void validateConfiguration(
+            int protocolVersion,
+            Clock clock,
+            Duration permittedAge,
+            Duration permittedClockSkew,
+            Map<String, SecretKey> serverKeys,
+            ReplayGuard replayGuard
+    ) {
+        if (protocolVersion < 1) {
+            throw invalidConfiguration();
+        }
+        requirePresent(clock, permittedAge, permittedClockSkew, serverKeys, replayGuard);
+        if (serverKeys.isEmpty()) {
+            throw invalidConfiguration();
+        }
+        validateTimeBounds(permittedAge, permittedClockSkew);
+    }
+
+    private static void requirePresent(Object... values) {
+        for (Object value : values) {
+            if (value == null) {
+                throw invalidConfiguration();
+            }
+        }
+    }
+
+    private static void validateTimeBounds(Duration permittedAge, Duration permittedClockSkew) {
+        if (permittedAge.isZero() || permittedAge.isNegative()) {
+            throw invalidConfiguration();
+        }
+        if (permittedClockSkew.isNegative()) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static IllegalArgumentException invalidConfiguration() {
+        return new IllegalArgumentException(
+                "authenticator configuration must be present and time bounds must be safe"
+        );
     }
 
     public ProtocolEnvelope sign(UnsignedEnvelope envelope) {
