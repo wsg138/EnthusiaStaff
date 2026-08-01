@@ -4,6 +4,16 @@ import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connectio
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPlayer;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.NOW;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.accepted;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.apply;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.assertQueueContains;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.assertQueueExcludes;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.change;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.reject;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.request;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.requestWithEvidence;
+import static net.enthusia.staff.integration.ReportIntegrationFixtures.stateChange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,7 +29,6 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -27,10 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import net.enthusia.staff.common.IdempotencyKey;
-import net.enthusia.staff.domain.evidence.ClientEvidenceSnapshot;
-import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.ReportStore;
-import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
@@ -49,9 +55,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class ReportStoreIntegrationTest {
-    private static final Instant NOW = Instant.parse("2026-08-01T12:00:00Z");
-    private static final String REASON_ID = "chat.abuse";
-    private static final String SERVER_ID = "paper-report-test";
     private static final int CONCURRENT_OPERATION_COUNT = 2;
 
     @Container
@@ -250,17 +253,17 @@ class ReportStoreIntegrationTest {
                     "retention"
             ))).reportId();
 
-            assertEquals(1L, reportEvidenceCount("report_chat_snapshots", reportId));
-            assertEquals(1L, reportEvidenceCount("report_private_message_snapshots", reportId));
-            assertEquals(1L, reportEvidenceCount("report_client_evidence_snapshots", reportId));
+            assertEquals(1L, reportChatEvidenceCount(reportId));
+            assertEquals(1L, reportPrivateMessageEvidenceCount(reportId));
+            assertEquals(1L, reportClientEvidenceCount(reportId));
             assertEquals(1L, clientEvidenceCount(targetId));
 
             int purged = store.purgeExpiredEvidence(NOW, 100);
 
             assertEquals(3, purged);
-            assertEquals(0L, reportEvidenceCount("report_chat_snapshots", reportId));
-            assertEquals(0L, reportEvidenceCount("report_private_message_snapshots", reportId));
-            assertEquals(0L, reportEvidenceCount("report_client_evidence_snapshots", reportId));
+            assertEquals(0L, reportChatEvidenceCount(reportId));
+            assertEquals(0L, reportPrivateMessageEvidenceCount(reportId));
+            assertEquals(0L, reportClientEvidenceCount(reportId));
             assertEquals(0L, clientEvidenceCount(targetId));
             assertEquals(0, store.purgeExpiredEvidence(NOW, 100));
         }
@@ -287,7 +290,7 @@ class ReportStoreIntegrationTest {
             assertEquals("IDEMPOTENCY_CONFLICT", conflict.code());
             assertEquals(1L, reportCount(accepted.reportId()));
             assertEquals(0L, reportMessageCount(accepted.reportId()));
-            assertEquals(1L, reportEvidenceCount("report_chat_snapshots", accepted.reportId()));
+            assertEquals(1L, reportChatEvidenceCount(accepted.reportId()));
         }
     }
 
@@ -313,14 +316,8 @@ class ReportStoreIntegrationTest {
             ReportStore broken = new JdbcReportStore(dataSource, failingJson());
             assertThrows(AssertionError.class, () -> broken.submit(request));
         }
-        assertEquals(0L, stringCount(
-                "SELECT COUNT(*) FROM reports WHERE idempotency_key = ?",
-                request.idempotencyKey().value()
-        ));
-        assertEquals(0L, stringCount(
-                "SELECT COUNT(*) FROM report_submission_keys WHERE idempotency_key = ?",
-                request.idempotencyKey().value()
-        ));
+        assertEquals(0L, reportIdempotencyCount(request.idempotencyKey().value()));
+        assertEquals(0L, reportSubmissionKeyCount(request.idempotencyKey().value()));
 
         UUID reportId;
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
@@ -342,149 +339,6 @@ class ReportStoreIntegrationTest {
     private static void seedPlayers(UUID reporterId, UUID targetId) throws SQLException {
         insertPlayer(DATABASE, reporterId, "Reporter" + reporterId.toString().substring(0, 6), NOW);
         insertPlayer(DATABASE, targetId, "Target" + targetId.toString().substring(0, 8), NOW);
-    }
-
-    private static CreateReportRequest request(
-            UUID reporterId,
-            UUID targetId,
-            String idempotencyKey,
-            Instant createdAt,
-            String evidenceLabel
-    ) {
-        return new CreateReportRequest(
-                new IdempotencyKey(idempotencyKey),
-                reporterId,
-                targetId,
-                REASON_ID,
-                "Report description " + evidenceLabel,
-                SERVER_ID,
-                Optional.of("minecraft:overworld"),
-                Optional.of("1,64,1"),
-                Optional.of("2,64,2"),
-                createdAt,
-                List.of(new CreateReportRequest.ChatContextMessage(
-                        reporterId,
-                        "Reporter",
-                        "Public evidence " + evidenceLabel,
-                        createdAt
-                )),
-                List.of(new CreateReportRequest.PrivateMessageContextMessage(
-                        reporterId,
-                        "Reporter",
-                        targetId,
-                        "Target",
-                        "Private evidence " + evidenceLabel,
-                        createdAt
-                )),
-                Optional.empty()
-        );
-    }
-
-    private static CreateReportRequest requestWithEvidence(
-            UUID reporterId,
-            UUID targetId,
-            String idempotencyKey,
-            Instant createdAt,
-            String evidenceLabel
-    ) {
-        CreateReportRequest base = request(reporterId, targetId, idempotencyKey, createdAt, evidenceLabel);
-        return new CreateReportRequest(
-                base.idempotencyKey(),
-                base.reporterId(),
-                base.targetId(),
-                base.reasonId(),
-                base.description(),
-                base.serverId(),
-                base.worldId(),
-                base.reporterCoordinates(),
-                base.targetCoordinates(),
-                base.createdAt(),
-                base.publicChatContext(),
-                base.privateMessageContext(),
-                Optional.of(clientEvidence(targetId, createdAt))
-        );
-    }
-
-    private static ClientEvidenceSnapshot clientEvidence(UUID targetId, Instant capturedAt) {
-        return new ClientEvidenceSnapshot(
-                targetId,
-                capturedAt,
-                PlayerPlatform.JAVA,
-                Optional.of(774),
-                Optional.of("1.21.11"),
-                Optional.of("vanilla"),
-                IntegrationAvailability.AVAILABLE,
-                Optional.of("5.10.0"),
-                IntegrationAvailability.AVAILABLE,
-                false,
-                Optional.empty(),
-                Optional.empty(),
-                IntegrationAvailability.NOT_INSTALLED,
-                IntegrationAvailability.NOT_INSTALLED,
-                Optional.empty(),
-                IntegrationAvailability.NOT_INSTALLED,
-                Optional.empty()
-        );
-    }
-
-    private static ReportStateChangeRequest change(UUID reportId, UUID actorId, String key) {
-        return stateChange(reportId, actorId, ReportAction.CLAIM, 0L, key);
-    }
-
-    private static ReportStateChangeRequest stateChange(
-            UUID reportId,
-            UUID actorId,
-            ReportAction action,
-            long revision,
-            String key
-    ) {
-        return new ReportStateChangeRequest(
-                reportId,
-                actorId,
-                action,
-                revision,
-                "Investigating report",
-                new IdempotencyKey(key),
-                NOW.plusSeconds(revision + 1)
-        );
-    }
-
-    private static ReportSubmissionResult.Accepted accepted(ReportSubmissionResult result) {
-        return assertInstanceOf(ReportSubmissionResult.Accepted.class, result);
-    }
-
-    private static ReportStateChangeResult.Applied apply(
-            ReportStore store,
-            ReportStateChangeRequest request
-    ) {
-        return assertInstanceOf(ReportStateChangeResult.Applied.class, store.changeState(request));
-    }
-
-    private static ReportStateChangeResult.Rejected reject(
-            ReportStore store,
-            ReportStateChangeRequest request
-    ) {
-        return assertInstanceOf(ReportStateChangeResult.Rejected.class, store.changeState(request));
-    }
-
-    private static void assertQueueContains(
-            ReportStore store,
-            ReportQueue queue,
-            UUID actorId,
-            UUID reportId
-    ) {
-        assertTrue(store.list(queue, actorId, 100).stream()
-                .anyMatch(report -> report.reportId().equals(reportId)));
-    }
-
-    private static void assertQueueExcludes(
-            ReportStore store,
-            ReportQueue queue,
-            UUID actorId,
-            UUID reportId
-    ) {
-        assertTrue(store.list(queue, actorId, 100).stream()
-                .noneMatch(report -> report.reportId().equals(reportId)));
     }
 
     private static ReportStateChangeResult changeWhenReleased(
@@ -538,23 +392,59 @@ class ReportStoreIntegrationTest {
     }
 
     private static long reportCount(UUID reportId) throws SQLException {
-        return uuidCount("SELECT COUNT(*) FROM reports WHERE report_id = ?", reportId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM reports WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
     }
 
     private static long reportMessageCount(UUID reportId) throws SQLException {
-        return uuidCount("SELECT COUNT(*) FROM report_messages WHERE report_id = ?", reportId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_messages WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
     }
 
     private static long reportEventCount(UUID reportId) throws SQLException {
-        return uuidCount("SELECT COUNT(*) FROM report_events WHERE report_id = ?", reportId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_events WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
     }
 
-    private static long reportEvidenceCount(String table, UUID reportId) throws SQLException {
-        return uuidCount("SELECT COUNT(*) FROM " + table + " WHERE report_id = ?", reportId);
+    private static long reportChatEvidenceCount(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_chat_snapshots WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
+    }
+
+    private static long reportPrivateMessageEvidenceCount(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_private_message_snapshots WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
+    }
+
+    private static long reportClientEvidenceCount(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_client_evidence_snapshots WHERE report_id = ?")) {
+            return uuidCount(statement, reportId);
+        }
     }
 
     private static long clientEvidenceCount(UUID playerId) throws SQLException {
-        return uuidCount("SELECT COUNT(*) FROM client_evidence_snapshots WHERE player_id = ?", playerId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM client_evidence_snapshots WHERE player_id = ?")) {
+            return uuidCount(statement, playerId);
+        }
     }
 
     private static String reportState(UUID reportId) throws SQLException {
@@ -569,25 +459,35 @@ class ReportStoreIntegrationTest {
         }
     }
 
-    private static long stringCount(String sql, String value) throws SQLException {
+    private static long reportIdempotencyCount(String idempotencyKey) throws SQLException {
         try (Connection connection = connection(DATABASE);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, value);
-            try (ResultSet result = statement.executeQuery()) {
-                requireRow(result, "The string count query returned no row");
-                return result.getLong(1);
-            }
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM reports WHERE idempotency_key = ?")) {
+            return stringCount(statement, idempotencyKey);
         }
     }
 
-    private static long uuidCount(String sql, UUID value) throws SQLException {
+    private static long reportSubmissionKeyCount(String idempotencyKey) throws SQLException {
         try (Connection connection = connection(DATABASE);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, uuidBytes(value));
-            try (ResultSet result = statement.executeQuery()) {
-                requireRow(result, "The count query returned no row");
-                return result.getLong(1);
-            }
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM report_submission_keys WHERE idempotency_key = ?")) {
+            return stringCount(statement, idempotencyKey);
+        }
+    }
+
+    private static long stringCount(PreparedStatement statement, String value) throws SQLException {
+        statement.setString(1, value);
+        try (ResultSet result = statement.executeQuery()) {
+            requireRow(result, "The string count query returned no row");
+            return result.getLong(1);
+        }
+    }
+
+    private static long uuidCount(PreparedStatement statement, UUID value) throws SQLException {
+        statement.setBytes(1, uuidBytes(value));
+        try (ResultSet result = statement.executeQuery()) {
+            requireRow(result, "The count query returned no row");
+            return result.getLong(1);
         }
     }
 
