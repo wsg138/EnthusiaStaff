@@ -5,17 +5,18 @@ content of those documents.
 
 ## Start by task
 
-| I need to... | Open |
-| --- | --- |
-| See how complete every feature is | [Feature Completion Status](Implementation-Status) |
-| See what development remains and in what order | [Remaining Development Map](Development-Blueprint) |
-| Find the files and services for a feature | [[Developer Code Guide]] |
-| Understand module boundaries and dependency direction | [[Architecture]] |
-| Set up a development environment | [[Development Setup]] |
-| Build, test and validate a change | [[Build and Testing]] |
-| Understand Paper–Velocity traffic and ReplayGuard | [[Protocol and Network Traffic]] |
-| Review vanish events, packets and visibility gaps | [[Vanish Internals]] |
-| Update or publish documentation | [[Wiki Maintenance]] |
+- **See how complete every feature is:**
+  [[Feature Completion Status|Implementation-Status]]
+- **See what development remains and in what order:**
+  [[Remaining Development Map|Development-Blueprint]]
+- **Find the files and services for a feature:** [[Developer Code Guide]]
+- **Understand module boundaries and dependency direction:** [[Architecture]]
+- **Set up a development environment:** [[Development Setup]]
+- **Build, test and validate a change:** [[Build and Testing]]
+- **Understand Paper–Velocity traffic and ReplayGuard:**
+  [[Protocol and Network Traffic]]
+- **Review vanish events, packets and visibility gaps:** [[Vanish Internals]]
+- **Update or publish documentation:** [[Wiki Maintenance]]
 
 ## Core developer documents
 
