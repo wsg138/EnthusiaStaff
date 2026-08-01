@@ -121,6 +121,9 @@ public final class JdbcModerationStore implements ModerationStore {
                     }
                 }
                 throw new ModerationPersistenceException("Punishment transaction failed", exception);
+            } catch (RuntimeException | Error exception) {
+                rollback(connection, exception);
+                throw exception;
             } finally {
                 restoreAutoCommit(connection);
             }
@@ -370,7 +373,7 @@ public final class JdbcModerationStore implements ModerationStore {
         }
     }
 
-    private static void rollback(Connection connection, Exception original) {
+    private static void rollback(Connection connection, Throwable original) {
         try {
             connection.rollback();
         } catch (SQLException rollbackFailure) {

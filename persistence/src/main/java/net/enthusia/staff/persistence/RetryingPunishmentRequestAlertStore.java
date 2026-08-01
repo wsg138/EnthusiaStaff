@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertBacklog;
@@ -31,18 +32,54 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
  * eligibility subquery, so no stale or ineligible delivery can be leased.</p>
  */
 final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAlertStore {
-    private final DataSource dataSource;
+    private static final Duration FALLBACK_INTERVAL = Duration.ofSeconds(1);
+
     private final PunishmentRequestAlertStore delegate;
+    private final Duration fallbackInterval;
+    private final FallbackClaimer fallbackClaimer;
+    private final AtomicReference<Instant> nextReviewerFallback = new AtomicReference<>();
+    private final AtomicReference<Instant> nextOperationalFallback = new AtomicReference<>();
 
     RetryingPunishmentRequestAlertStore(
             DataSource dataSource,
             PunishmentRequestAlertStore delegate
     ) {
-        if (dataSource == null || delegate == null) {
-            throw new IllegalArgumentException("data source and delegate must be present");
+        this(
+                delegate,
+                FALLBACK_INTERVAL,
+                (audience, recipientId, recipientRank, owner, limit, lease, now) ->
+                        JdbcTransactionSupport.execute(
+                                dataSource,
+                                "Unable to retry audience punishment request alert deliveries",
+                                connection -> fallbackClaim(
+                                        connection,
+                                        audience,
+                                        recipientId,
+                                        recipientRank,
+                                        owner,
+                                        limit,
+                                        lease,
+                                        now
+                                )
+                        )
+        );
+        if (dataSource == null) {
+            throw new IllegalArgumentException("data source must be present");
         }
-        this.dataSource = dataSource;
+    }
+
+    RetryingPunishmentRequestAlertStore(
+            PunishmentRequestAlertStore delegate,
+            Duration fallbackInterval,
+            FallbackClaimer fallbackClaimer
+    ) {
+        if (delegate == null || fallbackInterval == null || fallbackInterval.isNegative()
+                || fallbackInterval.isZero() || fallbackClaimer == null) {
+            throw new IllegalArgumentException("retrying alert store dependencies must be present");
+        }
         this.delegate = delegate;
+        this.fallbackInterval = fallbackInterval;
+        this.fallbackClaimer = fallbackClaimer;
     }
 
     @Override
@@ -74,21 +111,22 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
         List<PunishmentRequestAlertClaim> claims = delegate.claimAudience(
                 audience, recipientId, recipientRank, owner, limit, lease, now);
         if (!claims.isEmpty()) {
+            if (audience != PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
+                fallbackGate(audience).set(null);
+            }
             return claims;
         }
-        return JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to retry audience punishment request alert deliveries",
-                connection -> fallbackClaim(
-                        connection,
-                        audience,
-                        recipientId,
-                        recipientRank,
-                        owner,
-                        limit,
-                        lease,
-                        now
-                )
+        if (!reserveFallback(audience, now)) {
+            return List.of();
+        }
+        return fallbackClaimer.claim(
+                audience,
+                recipientId,
+                recipientRank,
+                owner,
+                limit,
+                lease,
+                now
         );
     }
 
@@ -171,6 +209,31 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
     @Override
     public int deleteTerminalIntentsBefore(Instant cutoff, int limit) {
         return delegate.deleteTerminalIntentsBefore(cutoff, limit);
+    }
+
+    private boolean reserveFallback(PunishmentRequestAlertAudience audience, Instant now) {
+        if (audience == PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
+            return false;
+        }
+        AtomicReference<Instant> gate = fallbackGate(audience);
+        while (true) {
+            Instant next = gate.get();
+            if (next != null && now.isBefore(next)) {
+                return false;
+            }
+            if (gate.compareAndSet(next, now.plus(fallbackInterval))) {
+                return true;
+            }
+        }
+    }
+
+    private AtomicReference<Instant> fallbackGate(PunishmentRequestAlertAudience audience) {
+        return switch (audience) {
+            case ELIGIBLE_REVIEWERS -> nextReviewerFallback;
+            case OPERATIONAL_ADMINISTRATORS -> nextOperationalFallback;
+            case DIRECT_RECIPIENT -> throw new IllegalArgumentException(
+                    "direct recipient delivery does not use audience fallback");
+        };
     }
 
     private static List<PunishmentRequestAlertClaim> fallbackClaim(
@@ -457,6 +520,19 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
             case FOUNDER -> 3;
             default -> 0;
         };
+    }
+
+    @FunctionalInterface
+    interface FallbackClaimer {
+        List<PunishmentRequestAlertClaim> claim(
+                PunishmentRequestAlertAudience audience,
+                UUID recipientId,
+                StaffRank recipientRank,
+                String owner,
+                int limit,
+                Duration lease,
+                Instant now
+        );
     }
 
     private record DeliveryCandidate(

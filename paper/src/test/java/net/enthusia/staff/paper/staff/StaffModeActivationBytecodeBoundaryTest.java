@@ -1,37 +1,26 @@
-package net.enthusia.staff.paper;
+package net.enthusia.staff.paper.staff;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.List;
 import java.util.spi.ToolProvider;
 import org.junit.jupiter.api.Test;
 
-class StorageBootstrapBytecodeBoundaryTest {
+class StaffModeActivationBytecodeBoundaryTest {
     @Test
-    void asynchronousStoragePhaseContainsNoDirectBukkitOrPlayerRecoveryInvocation() {
-        String disassembly = disassemble(EnthusiaStaffPaperPlugin.class);
+    void durableSessionIsPublishedOnlyAfterStaffStateApplicationSucceeds() {
+        String disassembly = disassemble(StaffModeManager.class);
 
-        String method = methodBody(disassembly,
-                "private net.enthusia.staff.paper.EnthusiaStaffPaperPlugin$StorageBootstrapContext openStoragePhase();");
-        assertTrue(method.contains("MariaDb.initialize"), method);
-        for (String forbidden : List.of(
-                "getServer",
-                "getOnlinePlayers",
-                "recoverOnlinePlayers",
-                "org/bukkit",
-                "org/bukkit/entity/Player",
-                "captureStartupPlayer",
-                "attachPunishmentRequestAlerts",
-                "publishBootstrapPromotion"
-        )) {
-            assertFalse(method.contains(forbidden),
-                    () -> "Worker storage phase directly crosses the Bukkit recovery boundary: " + forbidden
-                            + System.lineSeparator() + method);
-        }
+        String method = methodBody(disassembly, "private void activateDurableSession(");
+        int apply = method.indexOf("applyStaffState");
+        int publish = method.indexOf("java/util/Map.put");
+        int success = method.indexOf("sendMessage");
+        assertTrue(apply >= 0 && publish > apply,
+                () -> "Active staff-session publication preceded state application:\n" + method);
+        assertTrue(success > publish,
+                () -> "Staff-mode success was reported before active publication:\n" + method);
     }
 
     private static String methodBody(String disassembly, String signature) {

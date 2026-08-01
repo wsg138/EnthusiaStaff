@@ -32,6 +32,8 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
         UUID alertId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         UUID recipientId = UUID.randomUUID();
+        UUID deadLetterAlertId = UUID.randomUUID();
+        UUID deadLetterRecipientId = UUID.randomUUID();
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             Flyway.configure()
                     .dataSource(dataSource)
@@ -42,7 +44,14 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
                     .load()
                     .migrate();
 
-            insertV12Direct(dataSource, alertId, requestId, recipientId);
+            insertV12Direct(dataSource, alertId, requestId, recipientId, "PENDING");
+            insertV12Direct(
+                    dataSource,
+                    deadLetterAlertId,
+                    UUID.randomUUID(),
+                    deadLetterRecipientId,
+                    "DEAD_LETTER"
+            );
 
             Flyway.configure()
                     .dataSource(dataSource)
@@ -58,6 +67,10 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
                     SELECT state FROM staff_alert_deliveries
                     WHERE alert_id=? AND recipient_id=?
                     """, alertId, recipientId));
+            assertEquals("DEAD_LETTER", stringValue(dataSource, """
+                    SELECT state FROM staff_alert_deliveries
+                    WHERE alert_id=? AND recipient_id=?
+                    """, deadLetterAlertId, deadLetterRecipientId));
             assertTrue(enumContains(dataSource, "staff_alert_deliveries", "state", "CANCELLED"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancelled_at"));
             assertTrue(columnExists(dataSource, "staff_alert_deliveries", "cancel_reason"));
@@ -68,7 +81,8 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
             HikariDataSource dataSource,
             UUID alertId,
             UUID requestId,
-            UUID recipientId
+            UUID recipientId,
+            String deliveryState
     ) throws Exception {
         try (Connection connection = dataSource.getConnection()) {
             try (PreparedStatement statement = connection.prepareStatement("""
@@ -77,30 +91,32 @@ class PunishmentRequestAlertV13MigrationIntegrationTest {
                         audience, recipient_id, minimum_rank, excluded_recipient_id, visibility,
                         schema_version, alert_type, payload_json, state, attempt_count,
                         available_at, created_at, expires_at, intent_state)
-                    VALUES (?, 'migration:v13', ?, 7, 'REQUEST_SUBMITTED',
+                    VALUES (?, ?, ?, 7, 'REQUEST_SUBMITTED',
                         'DIRECT_RECIPIENT', ?, NULL, NULL, 'PRIVATE', 1,
                         'REQUEST_SUBMITTED', JSON_OBJECT('schemaVersion', 1), 'PENDING', 0,
                         ?, ?, ?, 'ACTIVE')
                     """)) {
                 statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
-                statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(requestId));
-                statement.setBytes(3, MariaDbIntegrationSupport.uuidBytes(recipientId));
-                statement.setTimestamp(4, Timestamp.from(CREATED));
+                statement.setString(2, "migration:v13:" + alertId);
+                statement.setBytes(3, MariaDbIntegrationSupport.uuidBytes(requestId));
+                statement.setBytes(4, MariaDbIntegrationSupport.uuidBytes(recipientId));
                 statement.setTimestamp(5, Timestamp.from(CREATED));
-                statement.setTimestamp(6, Timestamp.from(CREATED.plusSeconds(3600)));
+                statement.setTimestamp(6, Timestamp.from(CREATED));
+                statement.setTimestamp(7, Timestamp.from(CREATED.plusSeconds(3600)));
                 assertEquals(1, statement.executeUpdate());
             }
             try (PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO staff_alert_deliveries(
                         alert_id, recipient_id, state, attempt_count,
                         available_at, created_at, updated_at)
-                    VALUES (?, ?, 'PENDING', 0, ?, ?, ?)
+                    VALUES (?, ?, ?, 0, ?, ?, ?)
                     """)) {
                 statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
                 statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(recipientId));
-                statement.setTimestamp(3, Timestamp.from(CREATED));
+                statement.setString(3, deliveryState);
                 statement.setTimestamp(4, Timestamp.from(CREATED));
                 statement.setTimestamp(5, Timestamp.from(CREATED));
+                statement.setTimestamp(6, Timestamp.from(CREATED));
                 assertEquals(1, statement.executeUpdate());
             }
         }

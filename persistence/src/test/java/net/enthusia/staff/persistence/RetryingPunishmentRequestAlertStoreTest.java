@@ -1,0 +1,108 @@
+package net.enthusia.staff.persistence;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.lang.reflect.Proxy;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
+import net.enthusia.staff.domain.application.PunishmentRequestAlertClaim;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
+import org.junit.jupiter.api.Test;
+
+class RetryingPunishmentRequestAlertStoreTest {
+    private static final UUID RECIPIENT = UUID.fromString("72000000-0000-0000-0000-000000000001");
+    private static final Instant NOW = Instant.parse("2026-08-01T20:00:00Z");
+
+    @Test
+    void emptyIdlePollsUseAtMostOneFallbackPerAudienceInterval() {
+        AtomicInteger fallbacks = new AtomicInteger();
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate(new AtomicReference<>(List.of())),
+                Duration.ofSeconds(5),
+                (audience, recipientId, rank, owner, limit, lease, now) -> {
+                    fallbacks.incrementAndGet();
+                    return List.of();
+                }
+        );
+
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW);
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(1));
+        claim(store, PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS, NOW.plusSeconds(1));
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(5));
+
+        assertEquals(3, fallbacks.get());
+    }
+
+    @Test
+    void successfulPrimaryClaimReopensTheFallbackGate() {
+        AtomicReference<List<PunishmentRequestAlertClaim>> primary = new AtomicReference<>(List.of());
+        AtomicInteger fallbacks = new AtomicInteger();
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate(primary),
+                Duration.ofMinutes(1),
+                (audience, recipientId, rank, owner, limit, lease, now) -> {
+                    fallbacks.incrementAndGet();
+                    return List.of();
+                }
+        );
+
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW);
+        primary.set(Collections.singletonList(null));
+        assertEquals(1, claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(1)).size());
+        primary.set(List.of());
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, NOW.plusSeconds(2));
+
+        assertEquals(2, fallbacks.get());
+    }
+
+    private static List<PunishmentRequestAlertClaim> claim(
+            RetryingPunishmentRequestAlertStore store,
+            PunishmentRequestAlertAudience audience,
+            Instant now
+    ) {
+        return store.claimAudience(
+                audience,
+                RECIPIENT,
+                audience == PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS
+                        ? StaffRank.ADMIN : StaffRank.MOD,
+                "worker",
+                4,
+                Duration.ofSeconds(30),
+                now
+        );
+    }
+
+    private static PunishmentRequestAlertStore delegate(
+            AtomicReference<List<PunishmentRequestAlertClaim>> primary
+    ) {
+        return (PunishmentRequestAlertStore) Proxy.newProxyInstance(
+                PunishmentRequestAlertStore.class.getClassLoader(),
+                new Class<?>[]{PunishmentRequestAlertStore.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("claimAudience")) {
+                        return primary.get();
+                    }
+                    Class<?> type = method.getReturnType();
+                    if (type == boolean.class) {
+                        return false;
+                    }
+                    if (type == int.class) {
+                        return 0;
+                    }
+                    if (List.class.isAssignableFrom(type)) {
+                        return List.of();
+                    }
+                    return null;
+                }
+        );
+    }
+
+}

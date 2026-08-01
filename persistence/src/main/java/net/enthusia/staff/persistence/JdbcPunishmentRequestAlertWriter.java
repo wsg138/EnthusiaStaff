@@ -21,8 +21,6 @@ import net.enthusia.staff.domain.casefile.CaseVisibility;
 
 /** Connection-scoped immutable alert persistence used by workers and lifecycle transactions. */
 final class JdbcPunishmentRequestAlertWriter {
-    private static final int MARIA_DB_DUPLICATE_KEY = 1062;
-
     boolean insertOrReplay(Connection connection, PunishmentRequestAlertIntent intent) throws SQLException {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(intent, "intent");
@@ -31,11 +29,11 @@ final class JdbcPunishmentRequestAlertWriter {
             ensureDirectDelivery(connection, intent);
             return true;
         } catch (SQLException exception) {
-            if (!isDuplicateKey(exception)) {
+            if (!JdbcSqlErrors.isDuplicateKey(exception)) {
                 throw exception;
             }
-            StoredIntent byKey = findByIntentKey(connection, intent.intentKey());
-            StoredIntent byId = findByAlertId(connection, intent.alertId());
+            StoredIntent byKey = lockByIntentKey(connection, intent.intentKey());
+            StoredIntent byId = lockByAlertId(connection, intent.alertId());
             if (byKey == null) {
                 throw duplicateConflict(
                         "duplicate alert identifier does not match the deterministic intent key", exception);
@@ -211,45 +209,42 @@ final class JdbcPunishmentRequestAlertWriter {
         }
     }
 
-    private static StoredIntent findByIntentKey(Connection connection, String intentKey) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(SELECT_STORED_INTENT_BY_KEY)) {
+    private static StoredIntent lockByIntentKey(Connection connection, String intentKey)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(SELECT_STORED_INTENT_BY_KEY_FOR_UPDATE)) {
             statement.setString(1, intentKey);
             return readOne(statement);
         }
     }
 
-    private static StoredIntent findByAlertId(Connection connection, UUID alertId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(SELECT_STORED_INTENT_BY_ID)) {
+    private static StoredIntent lockByAlertId(Connection connection, UUID alertId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(SELECT_STORED_INTENT_BY_ID_FOR_UPDATE)) {
             statement.setBytes(1, UuidBytes.toBytes(alertId));
             return readOne(statement);
         }
     }
 
-    private static final String SELECT_STORED_INTENT_BY_KEY = """
+    private static final String SELECT_STORED_INTENT = """
             SELECT alert_id, intent_key, request_id, request_revision, lifecycle_event,
                    occurrence_key, lifecycle_actor_id, audience, recipient_id,
                    excluded_recipient_id, minimum_rank, visibility, schema_version,
                    created_at, expires_at
-            FROM staff_alerts WHERE intent_key = ?
+            FROM staff_alerts
             """;
 
-    private static final String SELECT_STORED_INTENT_BY_ID = """
-            SELECT alert_id, intent_key, request_id, request_revision, lifecycle_event,
-                   occurrence_key, lifecycle_actor_id, audience, recipient_id,
-                   excluded_recipient_id, minimum_rank, visibility, schema_version,
-                   created_at, expires_at
-            FROM staff_alerts WHERE alert_id = ?
+    private static final String SELECT_STORED_INTENT_BY_KEY_FOR_UPDATE = SELECT_STORED_INTENT + """
+            WHERE intent_key = ? FOR UPDATE
+            """;
+
+    private static final String SELECT_STORED_INTENT_BY_ID_FOR_UPDATE = SELECT_STORED_INTENT + """
+            WHERE alert_id = ? FOR UPDATE
             """;
 
     private static StoredIntent readOne(PreparedStatement statement) throws SQLException {
         try (ResultSet result = statement.executeQuery()) {
             return result.next() ? StoredIntent.read(result) : null;
         }
-    }
-
-    private static boolean isDuplicateKey(SQLException exception) {
-        return exception.getErrorCode() == MARIA_DB_DUPLICATE_KEY
-                && "23000".equals(exception.getSQLState());
     }
 
     private static SQLException duplicateConflict(String message, SQLException cause) {

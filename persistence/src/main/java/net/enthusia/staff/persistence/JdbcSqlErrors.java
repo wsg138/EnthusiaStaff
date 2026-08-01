@@ -1,6 +1,10 @@
 package net.enthusia.staff.persistence;
 
 import java.sql.SQLException;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 final class JdbcSqlErrors {
     private static final int MARIA_DB_DUPLICATE_KEY = 1062;
@@ -20,14 +24,42 @@ final class JdbcSqlErrors {
     }
 
     private static boolean containsSqlError(Throwable failure, int errorCode, String sqlState) {
-        Throwable current = failure;
-        while (current != null) {
-            if (current instanceof SQLException sqlException
-                    && sqlException.getErrorCode() == errorCode
-                    && sqlState.equals(sqlException.getSQLState())) {
-                return true;
+        if (failure == null) {
+            return false;
+        }
+        ArrayDeque<Throwable> pending = new ArrayDeque<>();
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        pending.add(failure);
+        while (!pending.isEmpty()) {
+            Throwable current = pending.removeFirst();
+            if (!visited.add(current)) {
+                continue;
             }
-            current = current.getCause();
+            if (current instanceof SQLException sqlException) {
+                SQLException linked = sqlException;
+                while (linked != null) {
+                    if (linked != sqlException && !visited.add(linked)) {
+                        break;
+                    }
+                    if (linked.getErrorCode() == errorCode && sqlState.equals(linked.getSQLState())) {
+                        return true;
+                    }
+                    Throwable cause = linked.getCause();
+                    if (cause != null && cause != linked && !visited.contains(cause)) {
+                        pending.addLast(cause);
+                    }
+                    SQLException next = linked.getNextException();
+                    if (next == linked) {
+                        break;
+                    }
+                    linked = next;
+                }
+            } else {
+                Throwable cause = current.getCause();
+                if (cause != null && cause != current && !visited.contains(cause)) {
+                    pending.addLast(cause);
+                }
+            }
         }
         return false;
     }

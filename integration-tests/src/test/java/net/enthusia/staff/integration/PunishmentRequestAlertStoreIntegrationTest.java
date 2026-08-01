@@ -12,6 +12,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
@@ -23,6 +25,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertBacklog;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertClaim;
@@ -390,6 +394,32 @@ class PunishmentRequestAlertStoreIntegrationTest {
             UUID storedAlertId = alertIdByKey(canonical.intentKey());
             assertNotNull(storedAlertId);
             assertEquals(1, deliveryCount(storedAlertId, canonical.recipientId()));
+        }
+    }
+
+    @Test
+    void duplicateReplayUsesCurrentReadAfterConcurrentProducerCommits() throws Exception {
+        PunishmentRequestAlertIntent canonical = direct(
+                UUID.randomUUID(), 1, NOW.plusSeconds(1), NOW.plus(Duration.ofHours(1)));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (MariaDbRuntime runtime = runtime(); Connection producer = connection()) {
+            producer.setAutoCommit(false);
+            insertUncommittedIntent(producer, canonical);
+
+            CountDownLatch submitted = new CountDownLatch(1);
+            Future<Boolean> replay = executor.submit(() -> {
+                submitted.countDown();
+                return runtime.punishmentRequestAlertStore().insert(withNewAlertId(canonical));
+            });
+            assertTrue(submitted.await(2, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class, () -> replay.get(200, TimeUnit.MILLISECONDS));
+
+            producer.commit();
+            assertFalse(replay.get(5, TimeUnit.SECONDS));
+            assertEquals(1, intentCountByKey(canonical.intentKey()));
+            assertEquals(1, deliveryCount(canonical.alertId(), canonical.recipientId()));
+        } finally {
+            executor.shutdownNow();
         }
     }
 
