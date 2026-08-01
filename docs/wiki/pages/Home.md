@@ -46,7 +46,7 @@ Choose the path that matches what you are doing:
 | I need to... | Open this page |
 | --- | --- |
 | See how complete a feature is | [Feature Completion Status](https://github.com/wsg138/EnthusiaStaff/wiki/Implementation-Status) |
-| Understand what a feature group does and find its source files | [Core platform](https://github.com/wsg138/EnthusiaStaff/wiki/Core-Platform-and-Infrastructure), [moderation](https://github.com/wsg138/EnthusiaStaff/wiki/Moderation-Punishments-and-Reports), [staff tools](https://github.com/wsg138/EnthusiaStaff/wiki/Staff-Tools-Investigations-and-Player-State-Safety), or [integrations/release](https://github.com/wsg138/EnthusiaStaff/wiki/Integrations-Migration-and-Release-Readiness) |
+| Understand what a feature group does and find its source files | [Core platform](https://github.com/wsg138/EnthusiaStaff/wiki/Core-Platform-and-Infrastructure), [moderation](https://github.com/wsg138/EnthusiaStaff/wiki/Moderation,-Punishments,-and-Reports), [staff tools](https://github.com/wsg138/EnthusiaStaff/wiki/Staff-Tools,-Investigations,-and-Player-State-Safety), or [integrations/release](https://github.com/wsg138/EnthusiaStaff/wiki/Integrations,-Migration,-and-Release-Readiness) |
 | Handle a player report | [Reports and Evidence](https://github.com/wsg138/EnthusiaStaff/wiki/Reports-and-Evidence) |
 | Apply or correct a punishment | [Punishment System](https://github.com/wsg138/EnthusiaStaff/wiki/Punishment-System) |
 | Use staff mode, vanish or freeze | [Staff Mode, Vanish, and Freeze](https://github.com/wsg138/EnthusiaStaff/wiki/Staff-Mode-Vanish-and-Freeze) |
