@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# This file is temporary integration tooling and is deleted from the resolved candidate.
+
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     matches = text.count(old)
