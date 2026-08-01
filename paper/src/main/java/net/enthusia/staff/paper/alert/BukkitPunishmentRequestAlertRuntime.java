@@ -39,7 +39,7 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
         if (limit < 1) {
             throw new IllegalArgumentException("recipient limit must be positive");
         }
-        List<Player> online = plugin.getServer().getOnlinePlayers().stream()
+        List<? extends Player> online = plugin.getServer().getOnlinePlayers().stream()
                 .limit(limit)
                 .toList();
         List<PunishmentRequestAlertRecipient> cached = new ArrayList<>(online.size());
