@@ -30,10 +30,12 @@ final class JdbcReportSubmissionStore {
 
     private final DataSource dataSource;
     private final ObjectMapper json;
+    private final JdbcReportSubmissionReplay replays;
 
     JdbcReportSubmissionStore(DataSource dataSource, ObjectMapper json) {
         this.dataSource = dataSource;
         this.json = json;
+        this.replays = new JdbcReportSubmissionReplay(dataSource, json);
     }
 
     ReportSubmissionResult submit(CreateReportRequest request) {
@@ -41,13 +43,16 @@ final class JdbcReportSubmissionStore {
             connection.setAutoCommit(false);
             try {
                 return submitInTransaction(connection, request);
-            } catch (SQLException | JsonProcessingException exception) {
+            } catch (SQLException | JsonProcessingException | RuntimeException exception) {
                 rollback(connection, exception);
-                ExistingSubmission replay = existingAfterConflict(request.idempotencyKey().value());
+                ReportSubmissionResult replay = replays.findAfterConflict(request);
                 if (replay != null) {
-                    return acceptedReplay(replay);
+                    return replay;
                 }
                 throw new ModerationPersistenceException("Report transaction failed", exception);
+            } catch (Error error) {
+                rollback(connection, error);
+                throw error;
             } finally {
                 restoreAutoCommit(connection);
             }
@@ -60,9 +65,9 @@ final class JdbcReportSubmissionStore {
             Connection connection,
             CreateReportRequest request
     ) throws SQLException, JsonProcessingException {
-        ExistingSubmission replay = existingByIdempotency(connection, request.idempotencyKey().value());
+        ReportSubmissionResult replay = replays.find(connection, request);
         if (replay != null) {
-            return rollbackAndReturn(connection, acceptedReplay(replay));
+            return rollbackAndReturn(connection, replay);
         }
         lockReporter(connection, request.reporterId());
         UUID duplicate = nearDuplicate(connection, request);
@@ -325,7 +330,9 @@ final class JdbcReportSubmissionStore {
             statement.setBytes(4, UuidBytes.toBytes(request.targetId()));
             statement.setString(5, eventType);
             statement.setString(6, json.writeValueAsString(Map.of(
-                    REPORT_ID_FIELD, reportId.toString(), REASON_ID_FIELD, request.reasonId()
+                    REPORT_ID_FIELD, reportId.toString(),
+                    REASON_ID_FIELD, request.reasonId(),
+                    JdbcReportSubmissionReplay.FINGERPRINT_FIELD, replays.fingerprint(request)
             )));
             statement.setTimestamp(7, Timestamp.from(request.createdAt()));
             statement.setString(8, request.idempotencyKey().value());
@@ -358,18 +365,6 @@ final class JdbcReportSubmissionStore {
         }
     }
 
-    private static ExistingSubmission existingByIdempotency(Connection connection, String key) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT report_id, merged FROM report_submission_keys WHERE idempotency_key = ?")) {
-            statement.setString(1, key);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next()
-                        ? new ExistingSubmission(UuidBytes.fromBytes(result.getBytes(1)), result.getBoolean(2))
-                        : null;
-            }
-        }
-    }
-
     private static void insertSubmissionKey(
             Connection connection,
             UUID reportId,
@@ -386,18 +381,6 @@ final class JdbcReportSubmissionStore {
             statement.setTimestamp(4, Timestamp.from(request.createdAt()));
             statement.executeUpdate();
         }
-    }
-
-    private ExistingSubmission existingAfterConflict(String key) {
-        try (Connection connection = dataSource.getConnection()) {
-            return existingByIdempotency(connection, key);
-        } catch (SQLException exception) {
-            return null;
-        }
-    }
-
-    private static ReportSubmissionResult.Accepted acceptedReplay(ExistingSubmission replay) {
-        return new ReportSubmissionResult.Accepted(replay.reportId(), replay.merged(), true);
     }
 
     private static <T> T rollbackAndReturn(Connection connection, T result) throws SQLException {
@@ -419,7 +402,7 @@ final class JdbcReportSubmissionStore {
         }
     }
 
-    private static void rollback(Connection connection, Exception original) {
+    private static void rollback(Connection connection, Throwable original) {
         try {
             connection.rollback();
         } catch (SQLException rollbackFailure) {
@@ -435,6 +418,4 @@ final class JdbcReportSubmissionStore {
         }
     }
 
-    private record ExistingSubmission(UUID reportId, boolean merged) {
-    }
 }

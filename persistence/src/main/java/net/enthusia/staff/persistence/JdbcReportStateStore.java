@@ -38,13 +38,16 @@ final class JdbcReportStateStore {
             connection.setAutoCommit(false);
             try {
                 return changeInTransaction(connection, request);
-            } catch (SQLException | JsonProcessingException exception) {
+            } catch (SQLException | JsonProcessingException | RuntimeException exception) {
                 rollback(connection, exception);
                 ReportStateChangeResult replay = existingStateChangeAfterConflict(request);
                 if (replay != null) {
                     return replay;
                 }
                 throw new ModerationPersistenceException("Report state transaction failed", exception);
+            } catch (Error error) {
+                rollback(connection, error);
+                throw error;
             } finally {
                 restoreAutoCommit(connection);
             }
@@ -318,7 +321,7 @@ final class JdbcReportStateStore {
         return result;
     }
 
-    private static void rollback(Connection connection, Exception original) {
+    private static void rollback(Connection connection, Throwable original) {
         try {
             connection.rollback();
         } catch (SQLException rollbackFailure) {

@@ -6,8 +6,12 @@ import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPla
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -37,6 +41,7 @@ import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
+import net.enthusia.staff.persistence.JdbcReportStore;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -261,6 +266,79 @@ class ReportStoreIntegrationTest {
         }
     }
 
+    @Test
+    void reusedSubmissionKeyCannotReplayDifferentEvidence() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            String key = "report:submission-conflict";
+            ReportSubmissionResult.Accepted accepted = accepted(store.submit(
+                    request(reporterId, targetId, key, NOW, "original")
+            ));
+
+            ReportSubmissionResult.Rejected conflict = assertInstanceOf(
+                    ReportSubmissionResult.Rejected.class,
+                    store.submit(request(reporterId, targetId, key, NOW, "changed"))
+            );
+
+            assertEquals("IDEMPOTENCY_CONFLICT", conflict.code());
+            assertEquals(1L, reportCount(accepted.reportId()));
+            assertEquals(0L, reportMessageCount(accepted.reportId()));
+            assertEquals(1L, reportEvidenceCount("report_chat_snapshots", accepted.reportId()));
+        }
+    }
+
+    @Test
+    void unexpectedErrorsRollBackReportCreationAndStateChange() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        CreateReportRequest request = request(
+                reporterId,
+                targetId,
+                "report:rollback-error",
+                NOW,
+                "rollback"
+        );
+
+        try (MariaDbRuntime migrationRuntime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            assertTrue(migrationRuntime.reportStore() != null);
+            seedPlayers(reporterId, targetId);
+            insertPlayer(DATABASE, actorId, "RollbackActor", NOW);
+        }
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig(DATABASE))) {
+            ReportStore broken = new JdbcReportStore(dataSource, failingJson());
+            assertThrows(AssertionError.class, () -> broken.submit(request));
+        }
+        assertEquals(0L, stringCount(
+                "SELECT COUNT(*) FROM reports WHERE idempotency_key = ?",
+                request.idempotencyKey().value()
+        ));
+        assertEquals(0L, stringCount(
+                "SELECT COUNT(*) FROM report_submission_keys WHERE idempotency_key = ?",
+                request.idempotencyKey().value()
+        ));
+
+        UUID reportId;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            reportId = accepted(runtime.reportStore().submit(request)).reportId();
+        }
+        ReportStateChangeRequest change = change(reportId, actorId, "report-change:rollback-error");
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig(DATABASE))) {
+            ReportStore broken = new JdbcReportStore(dataSource, failingJson());
+            assertThrows(AssertionError.class, () -> broken.changeState(change));
+        }
+        assertEquals(ReportState.OPEN.name(), reportState(reportId));
+        assertEquals(0L, reportEventCount(reportId));
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            ReportStateChangeResult.Applied applied = apply(runtime.reportStore(), change);
+            assertEquals(ReportState.CLAIMED, applied.state());
+        }
+    }
+
     private static void seedPlayers(UUID reporterId, UUID targetId) throws SQLException {
         insertPlayer(DATABASE, reporterId, "Reporter" + reporterId.toString().substring(0, 6), NOW);
         insertPlayer(DATABASE, targetId, "Target" + targetId.toString().substring(0, 8), NOW);
@@ -479,6 +557,29 @@ class ReportStoreIntegrationTest {
         return uuidCount("SELECT COUNT(*) FROM client_evidence_snapshots WHERE player_id = ?", playerId);
     }
 
+    private static String reportState(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT state FROM reports WHERE report_id = ?")) {
+            statement.setBytes(1, uuidBytes(reportId));
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The report state query returned no row");
+                return result.getString(1);
+            }
+        }
+    }
+
+    private static long stringCount(String sql, String value) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The string count query returned no row");
+                return result.getLong(1);
+            }
+        }
+    }
+
     private static long uuidCount(String sql, UUID value) throws SQLException {
         try (Connection connection = connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -507,5 +608,14 @@ class ReportStoreIntegrationTest {
         if (!result.next()) {
             throw new SQLException(message);
         }
+    }
+
+    private static ObjectMapper failingJson() {
+        return new ObjectMapper() {
+            @Override
+            public String writeValueAsString(Object value) throws JsonProcessingException {
+                throw new AssertionError("simulated process failure while storing report JSON");
+            }
+        };
     }
 }
