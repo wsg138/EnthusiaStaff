@@ -11,10 +11,10 @@ public final class MariaDb {
     }
 
     public static HikariDataSource open(DatabaseConfig database) {
-        return new HikariDataSource(hikariConfig(database));
+        return new HikariDataSource(configuration(database));
     }
 
-    static HikariConfig hikariConfig(DatabaseConfig database) {
+    static HikariConfig configuration(DatabaseConfig database) {
         HikariConfig config = new HikariConfig();
         config.setDriverClassName("org.mariadb.jdbc.Driver");
         config.setJdbcUrl(database.jdbcUrl());

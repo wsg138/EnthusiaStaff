@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.command.RemoteConsoleCommandSender;
 import org.junit.jupiter.api.Test;
 
 class EstaffCommandPermissionTest {
@@ -20,6 +22,24 @@ class EstaffCommandPermissionTest {
 
         assertTrue(EstaffCommand.requirePermission(console, STATUS_PERMISSION, "Denied"));
         assertEquals(0, messages.get());
+    }
+
+    @Test
+    void commandBlocksDoNotReceiveTheLocalConsoleBypass() {
+        AtomicInteger messages = new AtomicInteger();
+        CommandSender commandBlock = sender(BlockCommandSender.class, false, messages);
+
+        assertFalse(EstaffCommand.requirePermission(commandBlock, STATUS_PERMISSION, "Denied"));
+        assertEquals(1, messages.get());
+    }
+
+    @Test
+    void remoteConsoleDoesNotReceiveTheLocalConsoleBypass() {
+        AtomicInteger messages = new AtomicInteger();
+        CommandSender remoteConsole = sender(RemoteConsoleCommandSender.class, false, messages);
+
+        assertFalse(EstaffCommand.requirePermission(remoteConsole, STATUS_PERMISSION, "Denied"));
+        assertEquals(1, messages.get());
     }
 
     @Test
