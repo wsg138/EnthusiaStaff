@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class VelocityConfigurationTest {
+    private static final String SECRET = "SECRET";
+    private static final String TLS_KEY_STORE = "channel.tls-key-store";
+
     @Test
     void bundledDefaultsLoadAndResolveInsideDataDirectory(@TempDir Path directory) throws IOException {
         VelocityConfiguration configuration = VelocityConfiguration.load(directory);
@@ -50,18 +53,18 @@ final class VelocityConfigurationTest {
         assertEquals(24, configuration.liteBansShadowIntervalHours());
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> configuration.backendSecretEnvironments().put("OTHER", "SECRET")
+                () -> configuration.backendSecretEnvironments().put("OTHER", SECRET)
         );
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> configuration.discordWebhookEnvironments().put("other", "SECRET")
+                () -> configuration.discordWebhookEnvironments().put("other", SECRET)
         );
     }
 
     @Test
     void optionalValuesUseSafeDefaults(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
-        properties.remove("channel.tls-key-store");
+        properties.remove(TLS_KEY_STORE);
         properties.remove("channel.tls-key-store-password-environment");
         properties.remove("litebans.shadow-schedule-enabled");
         properties.remove("litebans.shadow-interval-hours");
@@ -85,7 +88,7 @@ final class VelocityConfigurationTest {
     void absoluteKeyStorePathIsAcceptedAndNormalized(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
         Path configured = directory.resolve("nested/../absolute.p12").toAbsolutePath();
-        properties.setProperty("channel.tls-key-store", configured.toString());
+        properties.setProperty(TLS_KEY_STORE, configured.toString());
         store(directory, properties);
 
         assertEquals(
@@ -97,7 +100,7 @@ final class VelocityConfigurationTest {
     @Test
     void nestedRelativeKeyStorePathRemainsInsideTheDataDirectory(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
-        properties.setProperty("channel.tls-key-store", "tls/../tls/channel.p12");
+        properties.setProperty(TLS_KEY_STORE, "tls/../tls/channel.p12");
         store(directory, properties);
 
         assertEquals(
@@ -162,13 +165,13 @@ final class VelocityConfigurationTest {
         String maximumId = "A".repeat(64);
 
         assertAccepted(directory, baseline, properties ->
-                properties.setProperty("channel.backend." + maximumId + ".secret-environment", "SECRET"));
+                properties.setProperty("channel.backend." + maximumId + ".secret-environment", SECRET));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend..secret-environment", "SECRET"));
+                properties.setProperty("channel.backend..secret-environment", SECRET));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend." + "A".repeat(65) + ".secret-environment", "SECRET"));
+                properties.setProperty("channel.backend." + "A".repeat(65) + ".secret-environment", SECRET));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend.path/escape.secret-environment", "SECRET"));
+                properties.setProperty("channel.backend.path/escape.secret-environment", SECRET));
     }
 
     @Test
@@ -176,9 +179,9 @@ final class VelocityConfigurationTest {
         Properties baseline = copiedDefaults(directory);
 
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend.bad.id.secret-environment", "SECRET"));
+                properties.setProperty("channel.backend.bad.id.secret-environment", SECRET));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.tls-key-store", "../outside.p12"));
+                properties.setProperty(TLS_KEY_STORE, "../outside.p12"));
         assertRejected(directory, baseline, properties ->
                 properties.setProperty("enforcement.fail-closed-while-active", "sometimes"));
         assertRejected(directory, baseline, properties ->
