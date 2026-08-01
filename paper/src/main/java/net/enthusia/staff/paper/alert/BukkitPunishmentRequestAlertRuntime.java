@@ -23,6 +23,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAlertRuntime {
     private final JavaPlugin plugin;
+    private final Map<UUID, Player> onlinePlayers = new ConcurrentHashMap<>();
     private final Map<UUID, PunishmentRequestAlertRecipient> recipientSnapshots =
             new ConcurrentHashMap<>();
 
@@ -44,11 +45,12 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
         List<PunishmentRequestAlertRecipient> cached = new ArrayList<>(online.size());
         for (Player player : online) {
             UUID playerId = player.getUniqueId();
+            onlinePlayers.put(playerId, player);
             refreshSnapshot(player, playerId);
             PunishmentRequestAlertRecipient snapshot = recipientSnapshots.get(playerId);
-            if (snapshot != null) {
-                cached.add(snapshot);
-            }
+            cached.add(snapshot == null
+                    ? new PunishmentRequestAlertRecipient(playerId, playerId.toString(), null)
+                    : snapshot);
         }
         return List.copyOf(cached);
     }
@@ -60,11 +62,14 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
 
     @Override
     public Optional<PunishmentRequestAlertRecipient> currentRecipient(UUID playerId) {
-        Player player = plugin.getServer().getPlayer(playerId);
+        Player player = onlinePlayers.get(playerId);
         if (player == null || !player.isOnline()) {
+            forget(playerId);
             return Optional.empty();
         }
-        return Optional.of(snapshot(player));
+        PunishmentRequestAlertRecipient snapshot = snapshot(player);
+        recipientSnapshots.put(playerId, snapshot);
+        return Optional.of(snapshot);
     }
 
     @Override
@@ -72,8 +77,9 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
             PunishmentRequestAlertRecipient recipient,
             PunishmentRequestAlertPresentation presentation
     ) {
-        Player player = plugin.getServer().getPlayer(recipient.playerId());
+        Player player = onlinePlayers.get(recipient.playerId());
         if (player == null || !player.isOnline()) {
+            forget(recipient.playerId());
             return false;
         }
         player.sendMessage(presentation.message());
@@ -85,13 +91,18 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
         JoinListener registered = new JoinListener(
                 player -> {
                     UUID playerId = player.getUniqueId();
+                    onlinePlayers.put(playerId, player);
                     recipientSnapshots.put(playerId, snapshot(player));
                     listener.accept(playerId);
                 },
-                recipientSnapshots::remove
+                this::forget
         );
         plugin.getServer().getPluginManager().registerEvents(registered, plugin);
-        return () -> HandlerList.unregisterAll(registered);
+        return () -> {
+            HandlerList.unregisterAll(registered);
+            onlinePlayers.clear();
+            recipientSnapshots.clear();
+        };
     }
 
     @Override
@@ -141,12 +152,20 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
             Runnable action,
             Runnable retired
     ) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null || !player.isOnline()) {
+        Player player = onlinePlayers.get(playerId);
+        if (player == null) {
             recipientSnapshots.remove(playerId);
             return false;
         }
-        return player.getScheduler().execute(plugin, action, retired, 1L);
+        return player.getScheduler().execute(
+                plugin,
+                action,
+                () -> {
+                    forget(playerId);
+                    retired.run();
+                },
+                1L
+        );
     }
 
     @Override
@@ -166,15 +185,20 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
                     if (player.isOnline()) {
                         recipientSnapshots.put(playerId, snapshot(player));
                     } else {
-                        recipientSnapshots.remove(playerId);
+                        forget(playerId);
                     }
                 },
-                () -> recipientSnapshots.remove(playerId),
+                () -> forget(playerId),
                 1L
         );
         if (!scheduled) {
-            recipientSnapshots.remove(playerId);
+            forget(playerId);
         }
+    }
+
+    private void forget(UUID playerId) {
+        onlinePlayers.remove(playerId);
+        recipientSnapshots.remove(playerId);
     }
 
     private PunishmentRequestAlertRecipient snapshot(Player player) {
