@@ -24,7 +24,7 @@ class RetryingPunishmentRequestAlertStoreTest {
     private static final Instant NOW = Instant.parse("2026-08-01T20:00:00Z");
 
     @Test
-    void emptyIdlePollsUseAtMostOneFallbackPerAudienceInterval() {
+    void emptyIdlePollsUseAtMostOneFallbackPerRecipientAndAudienceInterval() {
         AtomicInteger fallbacks = new AtomicInteger();
         RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
                 delegate(new AtomicReference<>(List.of())),
@@ -36,11 +36,12 @@ class RetryingPunishmentRequestAlertStoreTest {
         );
 
         claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW);
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW.plusSeconds(1));
         claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, OTHER_RECIPIENT, NOW.plusSeconds(1));
         claim(store, PunishmentRequestAlertAudience.OPERATIONAL_ADMINISTRATORS, RECIPIENT, NOW.plusSeconds(1));
-        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, OTHER_RECIPIENT, NOW.plusSeconds(5));
+        claim(store, PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS, RECIPIENT, NOW.plusSeconds(5));
 
-        assertEquals(3, fallbacks.get());
+        assertEquals(4, fallbacks.get());
     }
 
     @Test
