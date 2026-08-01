@@ -120,6 +120,29 @@ final class WebsiteAppealEndpointTest {
         assertEquals("STALE_STATE", store.completedOutcome);
     }
 
+    @Test
+    void returnsDurablePreparationRejectionWithoutCallingMutationService() {
+        AppealStore store = new AppealStore();
+        store.preparation = new AppealAcceptancePreparation.Rejected(
+                "PUNISHMENT_NOT_FOUND",
+                "The punishment could not be found"
+        );
+        RecordingMutationStore mutations = new RecordingMutationStore(
+                new SanctionChangeResult.Applied(1, false)
+        );
+        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+
+        WebsiteApiException error = assertThrows(
+                WebsiteApiException.class,
+                () -> endpoint.accept(headers(), input("MOD"))
+        );
+
+        assertEquals(404, error.status());
+        assertEquals("PUNISHMENT_NOT_FOUND", error.code());
+        assertNull(mutations.request);
+        assertNull(store.completedState);
+    }
+
     private static WebsiteAppealEndpoint endpoint(
             AppealStore store,
             RecordingMutationStore mutations,
@@ -155,6 +178,8 @@ final class WebsiteAppealEndpointTest {
     }
 
     private static final class AppealStore extends WebsiteModerationStoreStub {
+        private AppealAcceptancePreparation preparation =
+                new AppealAcceptancePreparation.Ready(false);
         private int preparations;
         private UUID completedAppealId;
         private String completedState;
@@ -170,7 +195,7 @@ final class WebsiteAppealEndpointTest {
                 Instant now
         ) {
             preparations++;
-            return new AppealAcceptancePreparation.Ready(false);
+            return preparation;
         }
 
         @Override

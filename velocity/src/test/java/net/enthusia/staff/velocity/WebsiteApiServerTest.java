@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.Headers;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -95,6 +96,45 @@ final class WebsiteApiServerTest {
     }
 
     @Test
+    void failedBindReleasesRuntimeForSafeRetry() throws Exception {
+        int port;
+        WebsiteApiServer server;
+        try (LoopbackPortReservation blocker = LoopbackPortReservation.reserve()) {
+            port = blocker.port();
+            server = server(port, new TransportStore());
+            assertThrows(IOException.class, server::start);
+        }
+        try (server) {
+            server.start();
+        }
+    }
+
+    @Test
+    void rejectsOversizedBodyBeforeAuthenticationOrStorage() throws Exception {
+        TransportStore store = new TransportStore();
+        int port = freePort();
+        try (WebsiteApiServer server = server(port, store);
+             HttpClient client = HttpClient.newHttpClient()) {
+            server.start();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(
+                            "http://127.0.0.1:" + port + "/v1/website/punishment-codes/claim"))
+                    .header("content-type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(new byte[1_025]))
+                    .build();
+
+            HttpResponse<String> response = client.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(413, response.statusCode());
+            assertEquals(0, store.recordedNonces);
+            JsonNode body = new ObjectMapper().readTree(response.body());
+            assertEquals("REQUEST_TOO_LARGE", body.path("error").path("code").textValue());
+        }
+    }
+
+    @Test
     void configurationRequiresLoopbackAndBoundedCapacity() throws Exception {
         InetAddress loopback = InetAddress.getLoopbackAddress();
         assertThrows(
@@ -159,9 +199,30 @@ final class WebsiteApiServerTest {
         return URI.create("http://127.0.0.1:" + port + PUBLIC_PATH);
     }
 
-    private static int freePort() throws java.io.IOException {
-        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+    private static int freePort() throws IOException {
+        try (LoopbackPortReservation reservation = LoopbackPortReservation.reserve()) {
+            return reservation.port();
+        }
+    }
+
+    private static final class LoopbackPortReservation implements AutoCloseable {
+        private final ServerSocket socket;
+
+        private LoopbackPortReservation() throws IOException {
+            socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        }
+
+        private static LoopbackPortReservation reserve() throws IOException {
+            return new LoopbackPortReservation();
+        }
+
+        private int port() {
             return socket.getLocalPort();
+        }
+
+        @Override
+        public void close() throws IOException {
+            socket.close();
         }
     }
 

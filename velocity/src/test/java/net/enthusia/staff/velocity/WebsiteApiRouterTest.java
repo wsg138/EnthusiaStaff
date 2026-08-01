@@ -147,6 +147,50 @@ final class WebsiteApiRouterTest {
         assertEquals(0, store.mutations);
     }
 
+    @Test
+    void rejectsUnexpectedBodiesContentTypesAndKnownRouteQueries() {
+        RecordingStore store = new RecordingStore();
+        WebsiteApiRouter router = router(store);
+
+        assertApiError(
+                "UNEXPECTED_BODY",
+                () -> router.route(
+                        GET,
+                        URI.create("/v1/public/punishments"),
+                        new Headers(),
+                        bytes("{}")
+                )
+        );
+        assertApiError(
+                "JSON_REQUIRED",
+                () -> router.route(
+                        POST,
+                        URI.create("/v1/website/punishment-codes/claim"),
+                        new Headers(),
+                        bytes("{}")
+                )
+        );
+        assertApiError(
+                "UNKNOWN_QUERY_PARAMETER",
+                () -> router.route(
+                        POST,
+                        URI.create("/v1/website/punishment-codes/revalidate?unexpected=true"),
+                        jsonHeaders(),
+                        bytes("{}")
+                )
+        );
+        assertApiError(
+                "NOT_FOUND",
+                () -> router.route(
+                        POST,
+                        URI.create("/v1/website/unknown?preserved=true"),
+                        jsonHeaders(),
+                        bytes("{}")
+                )
+        );
+        assertEquals(0, store.mutations);
+    }
+
     private static WebsiteApiRouter router(RecordingStore store) {
         AuthorizationPolicy authorization = (actor, action) -> true;
         return new WebsiteApiRouter(
