@@ -57,7 +57,7 @@ final class WebsitePunishmentProjectionTest {
     }
 
     @Test
-    void codeEligibilityRevalidatesEveryLiveState() {
+    void codeEligibilityAcceptsLiveSanctionsUntilExpiration() {
         assertEquals(
                 "ELIGIBLE",
                 WebsitePunishmentProjection.eligibilityState(
@@ -71,18 +71,6 @@ final class WebsitePunishmentProjectionTest {
                 )
         );
         assertEquals(
-                "CODE_REVOKED",
-                WebsitePunishmentProjection.eligibilityState(
-                        "REVOKED", CASE_OPEN, STATUS_ACTIVE, TYPE_BAN, null, NOW
-                )
-        );
-        assertEquals(
-                "OVERTURNED",
-                WebsitePunishmentProjection.eligibilityState(
-                        STATUS_ACTIVE, "FULLY_OVERTURNED", "OVERTURNED", TYPE_BAN, null, NOW
-                )
-        );
-        assertEquals(
                 "ELIGIBLE",
                 WebsitePunishmentProjection.eligibilityState(
                         STATUS_ACTIVE, CASE_OPEN, STATUS_APPLIED, TYPE_BAN, NOW.plusSeconds(60), NOW
@@ -92,6 +80,22 @@ final class WebsitePunishmentProjectionTest {
                 "SANCTION_EXPIRED",
                 WebsitePunishmentProjection.eligibilityState(
                         STATUS_ACTIVE, CASE_OPEN, STATUS_APPLIED, TYPE_BAN, NOW, NOW
+                )
+        );
+    }
+
+    @Test
+    void codeEligibilityRejectsInvalidLifecycleStates() {
+        assertEquals(
+                "CODE_REVOKED",
+                WebsitePunishmentProjection.eligibilityState(
+                        "REVOKED", CASE_OPEN, STATUS_ACTIVE, TYPE_BAN, null, NOW
+                )
+        );
+        assertEquals(
+                "OVERTURNED",
+                WebsitePunishmentProjection.eligibilityState(
+                        STATUS_ACTIVE, "FULLY_OVERTURNED", "OVERTURNED", TYPE_BAN, null, NOW
                 )
         );
         assertEquals(

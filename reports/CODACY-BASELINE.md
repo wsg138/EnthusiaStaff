@@ -593,6 +593,24 @@ Lizard and Opengrep runs likewise report no changed-file findings, Trivy
 reports zero findings, and the five repository-wide 100-token CPD groups do
 not include a changed file. No analyzer finding was ignored or suppressed.
 
+Exact PR head `4457888e341a99822235e54e4dc68a805c226a55` subsequently
+passed the hosted build and merged as PR #30 in
+`477b8c509dba7e437968ffa5a3faef0f2f9c0aad`. Hosted Codacy reported
+the head up to standards with zero introduced issues, 24 fixed issues, 88.31%
+diff coverage across 667 coverable lines, +2.863 percentage-point coverage
+variation, complexity delta +147, and duplication delta +42. The one
+non-gating potential Lizard signal was a 56-line test method; it was split at
+the start of the next plugin checkpoint rather than ignored.
+
+The exact head also passed trusted Pi staging run `30695268906`. Its Java 21
+build produced an 8,239,663-byte Paper runtime with SHA-256
+`4757DB24955D942F7B3DC10626BE5D9118F0DAC9D0452DEF180245C84DF21A3E`.
+Paper 1.21.11 build 132 completed two boot/storage/command/shutdown cycles in
+`SHADOW_MIGRATION`, with zero provider API leaks, zero critical failure
+patterns, and exit code zero in both cycles. CodeRabbit's earlier findings
+were addressed; its final status was rate-limited and is not represented as a
+fresh approval.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
