@@ -17,7 +17,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
@@ -145,8 +144,8 @@ class JdbcModerationUncheckedRollbackIntegrationTest extends PunishmentRequestMa
             PunishmentResult.Accepted first = runtime.moderationStore().createPunishment(plan);
             PunishmentResult.Accepted replay = runtime.moderationStore().createPunishment(plan);
 
-            assertFalse(first.idempotentReplay());
-            assertTrue(replay.idempotentReplay());
+            assertFalse(first.replayed());
+            assertTrue(replay.replayed());
             assertEquals(first.caseId(), replay.caseId());
         }
         assertEquals(1, countCases(caseId));
