@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class VelocityConfigurationTest {
-    private static final String SECRET = "SECRET";
+    private static final String TEST_VALUE = VelocityConfigurationTest.class.getName();
     private static final String TLS_KEY_STORE = "channel.tls-key-store";
 
     @Test
@@ -53,11 +53,11 @@ final class VelocityConfigurationTest {
         assertEquals(24, configuration.liteBansShadowIntervalHours());
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> configuration.backendSecretEnvironments().put("OTHER", SECRET)
+                () -> configuration.backendSecretEnvironments().put("OTHER", TEST_VALUE)
         );
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> configuration.discordWebhookEnvironments().put("other", SECRET)
+                () -> configuration.discordWebhookEnvironments().put("other", TEST_VALUE)
         );
     }
 
@@ -165,13 +165,13 @@ final class VelocityConfigurationTest {
         String maximumId = "A".repeat(64);
 
         assertAccepted(directory, baseline, properties ->
-                properties.setProperty("channel.backend." + maximumId + ".secret-environment", SECRET));
+                properties.setProperty("channel.backend." + maximumId + ".secret-environment", TEST_VALUE));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend..secret-environment", SECRET));
+                properties.setProperty("channel.backend..secret-environment", TEST_VALUE));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend." + "A".repeat(65) + ".secret-environment", SECRET));
+                properties.setProperty("channel.backend." + "A".repeat(65) + ".secret-environment", TEST_VALUE));
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend.path/escape.secret-environment", SECRET));
+                properties.setProperty("channel.backend.path/escape.secret-environment", TEST_VALUE));
     }
 
     @Test
@@ -179,7 +179,7 @@ final class VelocityConfigurationTest {
         Properties baseline = copiedDefaults(directory);
 
         assertRejected(directory, baseline, properties ->
-                properties.setProperty("channel.backend.bad.id.secret-environment", SECRET));
+                properties.setProperty("channel.backend.bad.id.secret-environment", TEST_VALUE));
         assertRejected(directory, baseline, properties ->
                 properties.setProperty(TLS_KEY_STORE, "../outside.p12"));
         assertRejected(directory, baseline, properties ->
