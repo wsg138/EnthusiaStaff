@@ -85,7 +85,6 @@ final class JdbcWebsiteAppealStore {
             String idempotencyKey,
             Instant now
     ) throws SQLException {
-        CodeRow code = punishmentCodes.selectCodeBySanction(connection, punishmentId, true);
         List<AppealRow> existing = appeals.selectCandidates(
                 connection,
                 appealId,
@@ -103,6 +102,7 @@ final class JdbcWebsiteAppealStore {
                     idempotencyKey
             );
         }
+        CodeRow code = punishmentCodes.selectCodeBySanction(connection, punishmentId, true);
         AppealAcceptancePreparation.Rejected rejection = bindingRejection(
                 code,
                 caseId,

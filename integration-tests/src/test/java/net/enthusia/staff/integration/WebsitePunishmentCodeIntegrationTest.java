@@ -53,6 +53,7 @@ class WebsitePunishmentCodeIntegrationTest {
     private static final int BATCH_LIMIT = 20;
     private static final Instant NOW = Instant.parse("2026-08-01T12:00:00Z");
     private static final String ACTIVE = "ACTIVE";
+    private static final String APPLIED = "APPLIED";
     private static final String BAN_TYPE = "BAN";
     private static final String ACCOUNT_ONE = uuid(901).toString();
     private static final String ACCOUNT_TWO = uuid(902).toString();
@@ -229,21 +230,76 @@ class WebsitePunishmentCodeIntegrationTest {
     }
 
     @Test
+    void concurrentMissingCodeReadsCreateOneReplayableCode() throws Exception {
+        CodeFixture fixture = seedEligiblePunishment(13, NOW.minusSeconds(60));
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE));
+             ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            WebsiteModerationStore store = runtime.websiteModerationStore(CODE_PROTECTOR);
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            Future<PunishmentCodeDisplay> first = executor.submit(
+                    () -> codeWhenReleased(store, fixture.sanctionId(), ready, start)
+            );
+            Future<PunishmentCodeDisplay> second = executor.submit(
+                    () -> codeWhenReleased(store, fixture.sanctionId(), ready, start)
+            );
+
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
+        }
+
+        assertEquals(1, codeCount(fixture.sanctionId()));
+    }
+
+    @Test
+    void existingCodeReadsDoNotTakeExclusiveSanctionLocks() throws Exception {
+        CodeFixture fixture = seedEligiblePunishment(12, NOW.minusSeconds(60));
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE));
+             ExecutorService executor = Executors.newSingleThreadExecutor();
+             Connection blocker = connection(DATABASE)) {
+            WebsiteModerationStore store = runtime.websiteModerationStore(CODE_PROTECTOR);
+            PunishmentCodeDisplay expected = store.codeForSanction(fixture.sanctionId(), NOW).orElseThrow();
+            blocker.setAutoCommit(false);
+            try (PreparedStatement statement = blocker.prepareStatement(
+                    "SELECT sanction_id FROM sanctions WHERE sanction_id = ? FOR UPDATE")) {
+                statement.setBytes(1, uuidBytes(fixture.sanctionId()));
+                try (ResultSet result = statement.executeQuery()) {
+                    requireRow(result);
+                }
+            }
+
+            Future<List<PunishmentCodeDisplay>> reads = executor.submit(() -> List.of(
+                    store.codeForSanction(fixture.sanctionId(), NOW).orElseThrow(),
+                    store.codesForCase(fixture.caseId(), NOW).getFirst()
+            ));
+            assertEquals(List.of(expected, expected), reads.get(5, TimeUnit.SECONDS));
+            blocker.rollback();
+        }
+    }
+
+    @Test
     void eligibleCodeBackfillSkipsExpiredWarningAndOverturnedSanctions() throws SQLException {
         CodeFixture eligibleBan = seedEligiblePunishment(5, NOW.minusSeconds(120));
         CodeFixture eligibleMute = seedPunishment(6, "MUTE", ACTIVE, NOW.plusSeconds(3_600));
         CodeFixture expired = seedPunishment(7, BAN_TYPE, ACTIVE, NOW);
         CodeFixture warning = seedPunishment(8, "WARNING", ACTIVE, NOW.plusSeconds(3_600));
         CodeFixture overturned = seedPunishment(9, BAN_TYPE, ACTIVE, NOW.plusSeconds(3_600));
+        CodeFixture applied = seedPunishment(10, BAN_TYPE, APPLIED, NOW.plusSeconds(3_600));
+        CodeFixture expiredApplied = seedPunishment(11, BAN_TYPE, APPLIED, NOW);
         setCaseState(overturned.caseId(), "FULLY_OVERTURNED");
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore store = runtime.websiteModerationStore(CODE_PROTECTOR);
-            assertEquals(2, store.ensureEligibleCodes(NOW, BATCH_LIMIT));
+            assertEquals(3, store.ensureEligibleCodes(NOW, BATCH_LIMIT));
             assertEquals(0, store.ensureEligibleCodes(NOW, BATCH_LIMIT));
             assertTrue(store.codeForSanction(eligibleBan.sanctionId(), NOW).isPresent());
             assertTrue(store.codeForSanction(eligibleMute.sanctionId(), NOW).isPresent());
+            assertTrue(store.codeForSanction(applied.sanctionId(), NOW).isPresent());
             assertTrue(store.codeForSanction(expired.sanctionId(), NOW).isEmpty());
+            assertTrue(store.codeForSanction(expiredApplied.sanctionId(), NOW).isEmpty());
             assertTrue(store.codeForSanction(warning.sanctionId(), NOW).isEmpty());
             assertTrue(store.codeForSanction(overturned.sanctionId(), NOW).isEmpty());
         }
@@ -268,8 +324,21 @@ class WebsitePunishmentCodeIntegrationTest {
         }
     }
 
-    private static CodeFixture seedEligiblePunishment(int suffix, Instant issuedAt) throws SQLException {
-        return seedPunishment(suffix, BAN_TYPE, ACTIVE, issuedAt.plusSeconds(3_600));
+    private static PunishmentCodeDisplay codeWhenReleased(
+            WebsiteModerationStore store,
+            UUID sanctionId,
+            CountDownLatch ready,
+            CountDownLatch start
+    ) throws InterruptedException {
+        ready.countDown();
+        if (!start.await(10, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Concurrent code start was not released");
+        }
+        return store.codeForSanction(sanctionId, NOW).orElseThrow();
+    }
+
+    private static CodeFixture seedEligiblePunishment(int suffix, Instant expirationBasis) throws SQLException {
+        return seedPunishment(suffix, BAN_TYPE, ACTIVE, expirationBasis.plusSeconds(3_600));
     }
 
     private static CodeFixture seedPunishment(

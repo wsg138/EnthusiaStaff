@@ -64,8 +64,7 @@ final class WebsitePunishmentProjection {
         return switch (status) {
             case STATUS_REVOKED, STATUS_ENDED_EARLY -> PublicPunishmentState.REVOKED;
             case STATUS_EXPIRED -> PublicPunishmentState.EXPIRED;
-            case STATUS_ACTIVE -> activePublicState(expiration, now);
-            case STATUS_APPLIED -> PublicPunishmentState.ACTIVE;
+            case STATUS_ACTIVE, STATUS_APPLIED -> activePublicState(expiration, now);
             default -> throw new IllegalArgumentException("Unsupported public sanction state");
         };
     }
@@ -120,7 +119,7 @@ final class WebsitePunishmentProjection {
         if (isExpired(sanctionStatus, expiration, now)) {
             return SANCTION_EXPIRED;
         }
-        if (!STATUS_ACTIVE.equals(sanctionStatus)) {
+        if (!isActiveSanction(sanctionStatus)) {
             return SANCTION_INACTIVE;
         }
         return ELIGIBLE;
@@ -128,9 +127,13 @@ final class WebsitePunishmentProjection {
 
     private static boolean isExpired(String sanctionStatus, Instant expiration, Instant now) {
         return STATUS_EXPIRED.equals(sanctionStatus)
-                || (STATUS_ACTIVE.equals(sanctionStatus)
+                || (isActiveSanction(sanctionStatus)
                 && expiration != null
                 && !expiration.isAfter(now));
+    }
+
+    private static boolean isActiveSanction(String sanctionStatus) {
+        return STATUS_ACTIVE.equals(sanctionStatus) || STATUS_APPLIED.equals(sanctionStatus);
     }
 
     static String encodeCursor(Instant issuedAt, UUID sanctionId) {

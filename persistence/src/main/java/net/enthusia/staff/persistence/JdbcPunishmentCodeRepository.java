@@ -14,6 +14,8 @@ import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 
 final class JdbcPunishmentCodeRepository {
+    private static final int DUPLICATE_KEY_ERROR = 1_062;
+    private static final String INTEGRITY_SQL_STATE = "23000";
     private static final String CODE_ROW_SELECT = """
             SELECT pc.sanction_id, pc.case_id, pc.key_version, pc.generation,
                    pc.code_hash, pc.status AS code_status, pc.claimed_account_token,
@@ -64,13 +66,16 @@ final class JdbcPunishmentCodeRepository {
         }
     }
 
-    List<SanctionRow> selectSanctionsForCase(Connection connection, CaseId caseId)
+    List<SanctionRow> selectSanctionsForCase(
+            Connection connection,
+            CaseId caseId,
+            boolean lock
+    )
             throws SQLException {
         String sql = sanctionSelect() + """
                  WHERE s.case_id = ?
                  ORDER BY s.issued_at, s.sanction_id
-                 FOR UPDATE
-                """;
+                """ + lockClause(lock);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, caseId.value());
             try (ResultSet result = statement.executeQuery()) {
@@ -89,7 +94,7 @@ final class JdbcPunishmentCodeRepository {
             int limit
     ) throws SQLException {
         String sql = sanctionSelect() + """
-                 WHERE s.status = 'ACTIVE'
+                 WHERE s.status IN ('ACTIVE', 'APPLIED')
                    AND (s.expiration_at IS NULL OR s.expiration_at > ?)
                    AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE')
                    AND c.state <> 'FULLY_OVERTURNED'
@@ -172,7 +177,7 @@ final class JdbcPunishmentCodeRepository {
             Instant now
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT IGNORE INTO punishment_codes(
+                INSERT INTO punishment_codes(
                     sanction_id, case_id, key_version, generation, code_hash, status, created_at
                 ) VALUES (?, ?, ?, 1, ?, 'ACTIVE', ?)
                 """)) {
@@ -181,13 +186,22 @@ final class JdbcPunishmentCodeRepository {
             statement.setInt(3, keyVersion);
             statement.setBytes(4, hash);
             statement.setTimestamp(5, Timestamp.from(now));
-            int changed = statement.executeUpdate();
-            JdbcTransactionSupport.requireOptionalSingleUpdate(
-                    changed,
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
                     "Punishment code backfill changed an unexpected number of rows"
             );
-            return changed;
+            return 1;
+        } catch (SQLException exception) {
+            if (isDuplicateKey(exception)) {
+                return 0;
+            }
+            throw exception;
         }
+    }
+
+    private static boolean isDuplicateKey(SQLException exception) {
+        return exception.getErrorCode() == DUPLICATE_KEY_ERROR
+                && INTEGRITY_SQL_STATE.equals(exception.getSQLState());
     }
 
     int claimCode(

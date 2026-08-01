@@ -191,14 +191,7 @@ final class JdbcPunishmentCodeStore {
             UUID punishmentId,
             Instant now
     ) throws SQLException {
-        SanctionRow sanction = repository.selectSanction(connection, punishmentId, true);
-        if (sanction == null || !eligibleSanction(sanction, now)) {
-            return Optional.empty();
-        }
-        CodeRecord code = existingOrCreateCode(connection, sanction, now);
-        return ACTIVE.equals(code.status())
-                ? Optional.of(display(sanction, code))
-                : Optional.empty();
+        return existingOrCreateDisplay(connection, punishmentId, now);
     }
 
     private List<PunishmentCodeDisplay> codesForCase(
@@ -207,16 +200,33 @@ final class JdbcPunishmentCodeStore {
             Instant now
     ) throws SQLException {
         List<PunishmentCodeDisplay> displays = new ArrayList<>();
-        for (SanctionRow sanction : repository.selectSanctionsForCase(connection, caseId)) {
-            if (!eligibleSanction(sanction, now)) {
-                continue;
-            }
-            CodeRecord code = existingOrCreateCode(connection, sanction, now);
-            if (ACTIVE.equals(code.status())) {
-                displays.add(display(sanction, code));
-            }
+        for (SanctionRow sanction : repository.selectSanctionsForCase(connection, caseId, false)) {
+            existingOrCreateDisplay(connection, sanction.sanctionId(), now).ifPresent(displays::add);
         }
         return List.copyOf(displays);
+    }
+
+    private Optional<PunishmentCodeDisplay> existingOrCreateDisplay(
+            Connection connection,
+            UUID punishmentId,
+            Instant now
+    ) throws SQLException {
+        CodeRow existing = repository.selectCodeBySanction(connection, punishmentId, false);
+        if (existing != null) {
+            return ACTIVE.equals(existing.codeStatus()) && ELIGIBLE.equals(eligibility(existing, now))
+                    ? Optional.of(display(existing))
+                    : Optional.empty();
+        }
+
+        SanctionRow sanction = repository.selectSanction(connection, punishmentId, true);
+        if (sanction == null || !eligibleSanction(sanction, now)) {
+            return Optional.empty();
+        }
+        CodeRecord locked = repository.selectCodeRecord(connection, punishmentId, true);
+        CodeRecord code = locked == null ? createCode(connection, sanction, 1, now, null) : locked;
+        return ACTIVE.equals(code.status())
+                ? Optional.of(display(sanction, code))
+                : Optional.empty();
     }
 
     private int ensureEligibleCodes(Connection connection, Instant now, int limit) throws SQLException {
@@ -334,15 +344,6 @@ final class JdbcPunishmentCodeStore {
         return false;
     }
 
-    private CodeRecord existingOrCreateCode(
-            Connection connection,
-            SanctionRow sanction,
-            Instant now
-    ) throws SQLException {
-        CodeRecord code = repository.selectCodeRecord(connection, sanction.sanctionId(), true);
-        return code == null ? createCode(connection, sanction, 1, now, null) : code;
-    }
-
     private CodeRecord createCode(
             Connection connection,
             SanctionRow sanction,
@@ -381,6 +382,21 @@ final class JdbcPunishmentCodeStore {
                 code.generation(),
                 WebsitePunishmentProjection.publicType(sanction.sanctionType()),
                 derived
+        );
+    }
+
+    private PunishmentCodeDisplay display(CodeRow row) {
+        return display(
+                new SanctionRow(
+                        row.sanctionId(),
+                        row.caseId(),
+                        row.targetId(),
+                        row.sanctionType(),
+                        row.sanctionStatus(),
+                        row.expiration(),
+                        row.caseState()
+                ),
+                new CodeRecord(row.keyVersion(), row.generation(), row.codeHash(), row.codeStatus())
         );
     }
 

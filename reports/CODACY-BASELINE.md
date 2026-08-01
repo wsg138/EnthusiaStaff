@@ -535,7 +535,7 @@ checkpoint and are now fixed:
 - concurrent or conflicting appeal preparation could surface a raw duplicate-key
   persistence exception instead of the documented idempotency conflict.
 
-At exact PR head `103f654bccb82f31eff65176b5f325769f726424`, the clean Java
+At implementation checkpoint `103f654bccb82f31eff65176b5f325769f726424`, the clean Java
 21 `clean test check runtimeJars jacocoAggregateReport` gate passed. Test XML
 records 344 tests with zero failures, including 50 tests across 12 MariaDB
 11.8.3 Testcontainers suites. The website-specific MariaDB coverage comprises
@@ -546,7 +546,7 @@ records 344 tests with zero failures, including 50 tests across 12 MariaDB
 | Paper runtime jar | 8,239,206 | `97A10170E0D733D7112603F5FD22B26B5D44B8997BB26E307544EE8169720937` |
 | Velocity runtime jar | 7,440,725 | `43C20F76C237228351D03ADAFC066B8D799EA8AEA9E046DCE5C443291DE44148` |
 
-Hosted Codacy reports the exact head is up to standards with zero introduced
+Hosted Codacy reports that implementation checkpoint is up to standards with zero introduced
 issues, 24 fixed issues, 88.62% diff coverage, and a +2.83 percentage-point
 coverage variation. It also reports complexity delta +134 and duplication
 delta +38. These structural deltas remain visible and were not ignored. The
@@ -560,7 +560,7 @@ findings, 396 Lizard findings, 18 Opengrep findings, zero Trivy findings, and
 six 100-token CPD clone groups. These are repository totals, not new PR
 findings. No rule, first-party path, or finding was suppressed or ignored.
 
-The exact PR head also passed the guarded Pi staging workflow. A trusted Java
+The same implementation checkpoint also passed the guarded Pi staging workflow. A trusted Java
 21 build produced the Paper runtime, verified its checksum, ZIP integrity,
 plugin main class, and zero provider-API leaks, then loaded it on Paper 1.21.11.
 Two disposable boot/shutdown cycles each reached `SHADOW_MIGRATION`, passed
@@ -571,9 +571,27 @@ failure patterns. This is a useful standalone Paper/runtime gate; it is not a
 claim that multi-server, Bedrock, provider-plugin, Discord, or production-data
 acceptance has been completed.
 
-CodeRabbit was intentionally not polled repeatedly. Its draft check did not
-produce an independent review finding; one lightweight ready-for-review
-checkpoint remains before merge.
+The subsequent ready-for-review pass identified four focused correctness and
+documentation findings. The branch fixes those findings without requesting a
+second automated review cycle; the resulting PR head must repeat the hosted
+build, Codacy, and guarded Pi gates before merge.
+
+The review-fix checkpoint passed a fresh Java 21
+`clean test check runtimeJars jacocoAggregateReport` run with all tasks rerun
+and build caches disabled. Test XML records 348 tests with zero failures,
+including 52 tests across all 12 MariaDB 11.8.3 Testcontainers suites. The 16
+website tests now include simultaneous first-code creation, non-blocking
+existing-code reads, and `APPLIED` sanction eligibility and expiration.
+
+| Review-fix artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,769 | `559C484B5B049E21295C53A9F0242753AAFC55A9EDE6D474157FEAB585CAF2B8` |
+| Velocity runtime jar | 7,441,288 | `5DBAF8B159D3EA8BA1E2A6F162DB73BAABDCB34541519CB8D73A55401ED345D5` |
+
+Focused PMD 7 reports zero findings in the six changed Java files. The full
+Lizard and Opengrep runs likewise report no changed-file findings, Trivy
+reports zero findings, and the five repository-wide 100-token CPD groups do
+not include a changed file. No analyzer finding was ignored or suppressed.
 
 ## Remediation order
 
