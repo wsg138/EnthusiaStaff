@@ -81,3 +81,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Remove one-time Codacy comment workflow"
           git push origin HEAD:section/punishment-request-notifications-recovery
+
+# Triggered after registration.
