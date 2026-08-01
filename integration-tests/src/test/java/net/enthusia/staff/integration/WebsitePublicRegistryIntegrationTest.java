@@ -1,8 +1,12 @@
 package net.enthusia.staff.integration;
 
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connection;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.clearWebsiteModerationFixtures;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertCase;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPlayer;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertPlayerName;
+import static net.enthusia.staff.integration.MariaDbIntegrationSupport.insertSanction;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -14,7 +18,6 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -75,13 +78,7 @@ class WebsitePublicRegistryIntegrationTest {
 
     @BeforeEach
     void clearWebsiteFixtures() throws SQLException {
-        try (Connection database = connection(DATABASE); Statement statement = database.createStatement()) {
-            statement.executeUpdate("DELETE FROM punishment_codes");
-            statement.executeUpdate("DELETE FROM sanctions");
-            statement.executeUpdate("DELETE FROM cases");
-            statement.executeUpdate("DELETE FROM player_names");
-            statement.executeUpdate("DELETE FROM players");
-        }
+        clearWebsiteModerationFixtures(DATABASE);
     }
 
     @Test
@@ -186,8 +183,8 @@ class WebsitePublicRegistryIntegrationTest {
     private static void assertActivePunishment(PublicPunishment punishment, CaseId expectedCase) {
         assertEquals("ActivePlayer", punishment.player());
         assertEquals(BAN_TYPE, punishment.punishmentType());
-        assertEquals("CHAT", punishment.broadReason());
-        assertEquals("Public integration reason", punishment.publicReason());
+        assertEquals("TEST", punishment.broadReason());
+        assertEquals("Integration test", punishment.publicReason());
         assertEquals(PublicPunishmentState.ACTIVE, punishment.state());
         assertEquals(expectedCase, punishment.caseId());
         assertTrue(punishment.appealAvailable());
@@ -251,64 +248,17 @@ class WebsitePublicRegistryIntegrationTest {
             Instant expiration
     ) throws SQLException {
         insertPlayer(DATABASE, playerId, username, issuedAt);
-        insertCase(caseId, playerId, visibility, issuedAt);
-        insertSanction(sanctionId, caseId, playerId, sanctionType, issuedAt, expiration);
-    }
-
-    private static void insertCase(
-            CaseId caseId,
-            UUID playerId,
-            String visibility,
-            Instant issuedAt
-    ) throws SQLException {
-        try (Connection database = connection(DATABASE);
-             PreparedStatement statement = database.prepareStatement("""
-                     INSERT INTO cases(
-                         case_id, idempotency_key, target_id, actor_id, actor_name, actor_rank,
-                         public_reason, exact_reason_id, sanction_family, internal_explanation,
-                         configuration_version, visibility, state, issued_at
-                     ) VALUES (?, ?, ?, ?, 'P2wn', 'OWNER', 'Public integration reason',
-                         'website.registry.test', 'CHAT', 'Private integration detail',
-                         'integration-test-v1', ?, 'OPEN', ?)
-                     """)) {
-            statement.setString(1, caseId.value());
-            statement.setString(2, "case:website:" + caseId.value());
-            statement.setBytes(3, uuidBytes(playerId));
-            statement.setBytes(4, uuidBytes(uuid(900)));
-            statement.setString(5, visibility);
-            statement.setTimestamp(6, Timestamp.from(issuedAt));
-            assertEquals(1, statement.executeUpdate());
-        }
-    }
-
-    private static void insertSanction(
-            UUID sanctionId,
-            CaseId caseId,
-            UUID playerId,
-            String sanctionType,
-            Instant issuedAt,
-            Instant expiration
-    ) throws SQLException {
-        try (Connection database = connection(DATABASE);
-             PreparedStatement statement = database.prepareStatement("""
-                     INSERT INTO sanctions(
-                         sanction_id, case_id, target_id, sanction_type, status,
-                         issued_at, activated_at, expiration_at
-                     ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-                     """)) {
-            statement.setBytes(1, uuidBytes(sanctionId));
-            statement.setString(2, caseId.value());
-            statement.setBytes(3, uuidBytes(playerId));
-            statement.setString(4, sanctionType);
-            statement.setTimestamp(5, Timestamp.from(issuedAt));
-            statement.setTimestamp(6, Timestamp.from(issuedAt));
-            if (expiration == null) {
-                statement.setTimestamp(7, null);
-            } else {
-                statement.setTimestamp(7, Timestamp.from(expiration));
-            }
-            assertEquals(1, statement.executeUpdate());
-        }
+        insertCase(DATABASE, caseId.value(), playerId, uuid(900), visibility, issuedAt);
+        insertSanction(
+                DATABASE,
+                sanctionId,
+                caseId.value(),
+                playerId,
+                sanctionType,
+                ACTIVE_STATUS,
+                issuedAt,
+                expiration
+        );
     }
 
     private static void insertCode(UUID sanctionId, CaseId caseId, String status) throws SQLException {
@@ -331,19 +281,7 @@ class WebsitePublicRegistryIntegrationTest {
     }
 
     private static void insertHistoricName(UUID playerId, String username) throws SQLException {
-        try (Connection database = connection(DATABASE);
-             PreparedStatement statement = database.prepareStatement("""
-                     INSERT INTO player_names(
-                         player_id, username, lowercase_username, first_seen_at, last_seen_at
-                     ) VALUES (?, ?, LOWER(?), ?, ?)
-                     """)) {
-            statement.setBytes(1, uuidBytes(playerId));
-            statement.setString(2, username);
-            statement.setString(3, username);
-            statement.setTimestamp(4, Timestamp.from(NOW.minusSeconds(600)));
-            statement.setTimestamp(5, Timestamp.from(NOW.minusSeconds(300)));
-            assertEquals(1, statement.executeUpdate());
-        }
+        insertPlayerName(DATABASE, playerId, username, NOW.minusSeconds(600), NOW.minusSeconds(300));
     }
 
     private static CaseId caseId(long suffix) {
