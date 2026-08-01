@@ -32,15 +32,16 @@ final class JdbcPunishmentCodeStore {
     JdbcPunishmentCodeStore(
             DataSource dataSource,
             PunishmentCodeProtector codeProtector,
+            JdbcPunishmentCodeRepository repository,
             JdbcWebsiteAuditWriter auditWriter
     ) {
-        if (dataSource == null || codeProtector == null || auditWriter == null) {
+        if (dataSource == null || codeProtector == null || repository == null || auditWriter == null) {
             throw new IllegalArgumentException("Punishment-code store dependencies are required");
         }
         this.dataSource = dataSource;
         this.codeProtector = codeProtector;
+        this.repository = repository;
         this.auditWriter = auditWriter;
-        this.repository = new JdbcPunishmentCodeRepository();
     }
 
     PunishmentCodeBinding claimCode(String code, String accountId, String username, Instant now) {
