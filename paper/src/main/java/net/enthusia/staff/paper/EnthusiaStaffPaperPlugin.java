@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import java.io.File;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +32,8 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
+import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
-import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.automod.AutomodListener;
@@ -54,7 +54,14 @@ import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ConfigurationValidationException;
+import net.enthusia.staff.paper.config.PaperConfigurationLoader;
+import net.enthusia.staff.paper.config.PaperConfigurationSnapshot;
+import net.enthusia.staff.paper.config.PaperConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
+import net.enthusia.staff.paper.config.RestartRequiredConfiguration;
+import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
+import net.enthusia.staff.paper.config.reload.ConfigurationReloadCoordinator;
+import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
 import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
@@ -87,6 +94,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private final RuntimeHealth health = new RuntimeHealth();
     private final AtomicReference<OperationalMode> mode = new AtomicReference<>(OperationalMode.BOOTSTRAP);
     private final ConcurrentHashMap<String, String> featureIssues = new ConcurrentHashMap<>();
+    private final AtomicReference<Map<String, String>> operationalIssues = new AtomicReference<>(
+            Map.of("bootstrap", "Initialization has not completed")
+    );
     private final PaperRuntimeLifecycle<PaperStorageBindings, ScheduledTask, PersistentChannelClient> lifecycle =
             new PaperRuntimeLifecycle<>();
 
@@ -109,16 +119,38 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
     private PaperStorageBootstrapCoordinator<PreparedStorage> storageBootstrap;
-    private PunishmentRequestAlertLifecycle punishmentRequestAlerts;
+    private PaperConfigurationLoader configurationLoader;
+    private PaperConfigurationSnapshot configurationSnapshot;
+    private PunishmentRequestAlertController alertController;
+    private ConfigurationReloadCoordinator reloadCoordinator;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        configurationLoader = new PaperConfigurationLoader();
+        try {
+            configurationSnapshot = configurationLoader.load(configurationFile(), dataDirectory());
+        } catch (PaperConfigurationValidationException exception) {
+            publishStartupConfigurationFailure(exception);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         saveResource("reason-policies.yml", false);
         boolean policiesReady = loadReasonPolicies();
-        int threads = getConfig().getInt("workers.threads", 4);
-        int queueCapacity = getConfig().getInt("workers.queue-capacity", 256);
-        workers = BoundedExecutorFactory.create(threads, queueCapacity);
+        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
+        workers = BoundedExecutorFactory.create(bootstrap.workerThreads(), bootstrap.workerQueueCapacity());
+        initializeAlertController();
+        if (policiesReady) {
+            reloadCoordinator = new ConfigurationReloadCoordinator(
+                    configurationSnapshot,
+                    () -> configurationLoader.load(configurationFile(), dataDirectory()),
+                    () -> new ReasonPolicyConfigurationLoader().load(reasonPolicyFile()),
+                    reasonPolicies,
+                    alertController,
+                    this::logRejectedConfiguration,
+                    this::publishReloadIssue
+            );
+        }
         freezeManager = new FreezeManager(
                 this,
                 Clock.systemUTC(),
@@ -218,6 +250,87 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         return workers;
     }
 
+    private void initializeAlertController() {
+        String owner = "paper:" + networkServerId() + ":" + UUID.randomUUID();
+        alertController = new PunishmentRequestAlertController(
+                owner,
+                configurationSnapshot.punishmentRequestAlerts(),
+                (leaseOwner, settings, storage) -> new PunishmentRequestAlertLifecycle(
+                        this,
+                        Clock.systemUTC(),
+                        leaseOwner,
+                        settings,
+                        storage.alerts(),
+                        storage.requests(),
+                        storage.players(),
+                        workers,
+                        lifecycle::stopping
+                ),
+                this::publishAlertStatus
+        );
+    }
+
+    private Path dataDirectory() {
+        return getDataFolder().toPath().toAbsolutePath().normalize();
+    }
+
+    private Path configurationFile() {
+        return dataDirectory().resolve("config.yml");
+    }
+
+    private Path reasonPolicyFile() {
+        return dataDirectory().resolve("reason-policies.yml");
+    }
+
+    private void publishStartupConfigurationFailure(PaperConfigurationValidationException exception) {
+        List<String> errors = exception.errors();
+        featureIssues.put("configuration", "Startup configuration validation failed");
+        health.update(OperationalMode.DEGRADED, Map.copyOf(featureIssues));
+        getLogger().severe("EnthusiaStaff configuration is invalid; the plugin will be disabled");
+        for (String error : errors) {
+            getLogger().severe("Configuration error: " + error);
+        }
+    }
+
+    private ConfigurationReloadAction reloadAction() {
+        ConfigurationReloadCoordinator coordinator = reloadCoordinator;
+        if (coordinator != null) {
+            return coordinator;
+        }
+        return () -> new ConfigurationReloadResult(
+                ConfigurationReloadResult.Outcome.APPLY_FAILED,
+                "Reload is unavailable because initial reason-policy validation did not succeed",
+                List.of("Correct reason-policies.yml and perform a full server restart"),
+                false
+        );
+    }
+
+    private void logRejectedConfiguration(List<String> details) {
+        getLogger().warning("EnthusiaStaff configuration reload was rejected");
+        for (String detail : details) {
+            getLogger().warning("Reload detail: " + detail);
+        }
+    }
+
+    private void publishReloadIssue(String issue) {
+        if (issue == null || issue.isBlank()) {
+            featureIssues.remove("configuration-reload");
+        } else {
+            featureIssues.put("configuration-reload", issue);
+        }
+        refreshHealth(mode.get());
+    }
+
+    private void publishAlertStatus(PunishmentRequestAlertController.Status status) {
+        if (status.state() == PunishmentRequestAlertController.State.ACTIVE
+                || status.state() == PunishmentRequestAlertController.State.CLOSED) {
+            featureIssues.remove("punishment-request-alerts");
+        } else {
+            featureIssues.put("punishment-request-alerts", status.issue());
+        }
+        refreshHealth(mode.get());
+    }
+
     private void startStorageBootstrap() {
         DatabaseConfig database = databaseConfiguration();
         if (database == null) {
@@ -246,9 +359,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private DatabaseConfig databaseConfiguration() {
-        String url = environment("storage.jdbc-url-environment");
-        String username = environment("storage.username-environment");
-        String password = environment("storage.password-environment");
+        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
+        String url = environmentVariable(bootstrap.storageJdbcUrlEnvironment());
+        String username = environmentVariable(bootstrap.storageUsernameEnvironment());
+        String password = environmentVariable(bootstrap.storagePasswordEnvironment());
         if (url == null || username == null || password == null) {
             return null;
         }
@@ -256,14 +370,17 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 url,
                 username,
                 password,
-                getConfig().getInt("storage.maximum-pool-size", 8),
-                getConfig().getLong("storage.connection-timeout-millis", 5_000)
+                bootstrap.storageMaximumPoolSize(),
+                bootstrap.storageConnectionTimeoutMillis()
         );
     }
 
     private PaperPersistentChannelFactory.Settings channelSettings() {
         try {
-            PaperPersistentChannelFactory.Settings settings = PaperPersistentChannelFactory.snapshot(this);
+            PaperPersistentChannelFactory.Settings settings = PaperPersistentChannelFactory.snapshot(
+                    configurationSnapshot.restartRequired(),
+                    dataDirectory()
+            );
             if (!settings.enabled()) {
                 getLogger().warning(
                         "Persistent Velocity channel is disabled; new punishment writes remain disabled"
@@ -376,7 +493,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (lifecycle.stopping()) {
             return;
         }
-        startPunishmentRequestAlerts(prepared.bindings());
+        attachPunishmentRequestAlertStorage(prepared.bindings());
         if (lifecycle.stopping()) {
             return;
         }
@@ -407,51 +524,19 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private void startPunishmentRequestAlerts(PaperStorageBindings bindings) {
-        PunishmentRequestAlertWorkerSettings settings = PunishmentRequestAlertWorkerSettings.safeDefaults(
-                getConfig().getBoolean("punishment-request-alerts.enabled", false)
-        );
-        if (!settings.enabled()) {
-            featureIssues.put(
-                    "punishment-request-alerts",
-                    "Durable punishment-request alerts are disabled by configuration"
-            );
+    private void attachPunishmentRequestAlertStorage(PaperStorageBindings bindings) {
+        if (alertController == null || lifecycle.stopping()) {
             return;
         }
-        if (lifecycle.stopping()) {
-            return;
-        }
-        PunishmentRequestAlertLifecycle candidate = new PunishmentRequestAlertLifecycle(
-                this,
-                Clock.systemUTC(),
-                "paper:" + networkServerId() + ":" + UUID.randomUUID(),
-                settings,
-                bindings.punishmentRequestAlertStore(),
-                bindings.punishmentRequestStore(),
-                bindings.playerDirectory(),
-                workers,
-                lifecycle::stopping
+        PunishmentRequestAlertController.ApplyResult result = alertController.attachStorage(
+                new PunishmentRequestAlertController.Storage(
+                        bindings.punishmentRequestAlertStore(),
+                        bindings.punishmentRequestStore(),
+                        bindings.playerDirectory()
+                )
         );
-        try {
-            if (!candidate.start()) {
-                candidate.close();
-                featureIssues.put(
-                        "punishment-request-alerts",
-                        "Durable punishment-request alerts could not be started"
-                );
-                return;
-            }
-            punishmentRequestAlerts = candidate;
-            featureIssues.remove("punishment-request-alerts");
-        } catch (RuntimeException exception) {
-            candidate.close();
-            featureIssues.put(
-                    "punishment-request-alerts",
-                    "Durable punishment-request alert startup failed; moderation remains available"
-            );
-            getLogger().log(Level.SEVERE,
-                    "Punishment-request alert subsystem startup failed",
-                    exception);
+        if (result.failure() != null) {
+            getLogger().log(Level.SEVERE, "Punishment-request alert subsystem startup failed", result.failure());
         }
     }
 
@@ -481,7 +566,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (removed.isEmpty()) {
             return;
         }
-        closePunishmentRequestAlerts();
+        if (alertController != null) {
+            alertController.detachStorage();
+        }
         cancelOperationalStateTask();
         closeChannelClient();
         closeSafely("partially published MariaDB runtime", prepared.bindings().runtime());
@@ -516,15 +603,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             mode.set(OperationalMode.MAINTENANCE);
             publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
         });
-        closePunishmentRequestAlerts();
+        closeSafely("punishment-request alert controller", alertController);
         cancelOperationalStateTask();
         closeChannelClient();
-    }
-
-    private void closePunishmentRequestAlerts() {
-        PunishmentRequestAlertLifecycle current = punishmentRequestAlerts;
-        punishmentRequestAlerts = null;
-        closeSafely("punishment-request alert lifecycle", current);
     }
 
     private void cancelOperationalStateTask() {
@@ -635,9 +716,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         });
     }
 
-    private String environment(String configurationPath) {
-        String variable = getConfig().getString(configurationPath);
-        return variable == null || variable.isBlank() ? null : System.getenv(variable);
+    private static String environmentVariable(String variable) {
+        if (variable == null || variable.isBlank()) {
+            return null;
+        }
+        String value = System.getenv(variable);
+        return value == null || value.isBlank() ? null : value;
     }
 
     private void setDegraded(String component, String reason) {
@@ -650,7 +734,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerStatusCommand() {
         PluginCommand command = Objects.requireNonNull(getCommand("estaff"), "estaff command is missing from plugin.yml");
-        command.setExecutor(new EstaffCommand(health));
+        EstaffCommand executor = new EstaffCommand(health, reloadAction());
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
     }
 
     private void initializeAutomod() {
@@ -815,8 +901,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void publishHealth(OperationalMode currentMode, Map<String, String> dynamicIssues) {
+        operationalIssues.set(Map.copyOf(dynamicIssues));
+        refreshHealth(currentMode);
+    }
+
+    private void refreshHealth(OperationalMode currentMode) {
         Map<String, String> combined = new java.util.LinkedHashMap<>(featureIssues);
-        combined.putAll(dynamicIssues);
+        combined.putAll(operationalIssues.get());
         health.update(currentMode, combined);
     }
 
@@ -998,11 +1089,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private String networkServerId() {
-        return getConfig().getString("network.server-id", "SMP");
+        return configurationSnapshot.restartRequired().networkServerId();
     }
 
     private String inventoryScopeId() {
-        return getConfig().getString("inventory.scope-id", networkServerId());
+        return configurationSnapshot.restartRequired().inventoryScopeId();
     }
 
     private OperationalMode effectiveWriteMode() {
@@ -1056,9 +1147,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private boolean loadReasonPolicies() {
-        File file = new File(getDataFolder(), "reason-policies.yml");
         try {
-            ReasonPolicyConfigurationLoader.LoadedPolicies loaded = new ReasonPolicyConfigurationLoader().load(file.toPath());
+            ReasonPolicyConfigurationLoader.LoadedPolicies loaded =
+                    new ReasonPolicyConfigurationLoader().load(reasonPolicyFile());
             reasonPolicies = new AtomicReasonPolicyRepository(loaded.version(), loaded.policies());
             return true;
         } catch (ConfigurationValidationException exception) {

@@ -13,6 +13,7 @@ import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.protocol.PersistentChannelClient;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.enthusia.staff.protocol.TlsContextLoader;
+import net.enthusia.staff.paper.config.RestartRequiredConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class PaperPersistentChannelFactory {
@@ -35,6 +36,23 @@ final class PaperPersistentChannelFactory {
                         "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD"
                 ),
                 plugin.getDataFolder().toPath().toAbsolutePath().normalize()
+        );
+    }
+
+    static Settings snapshot(RestartRequiredConfiguration configuration, Path dataDirectory) {
+        Objects.requireNonNull(configuration, "configuration");
+        Objects.requireNonNull(dataDirectory, "dataDirectory");
+        return new Settings(
+                configuration.channelEnabled(),
+                configuration.networkServerId(),
+                configuration.channelHost(),
+                configuration.channelPort(),
+                configuration.channelProxyId(),
+                configuration.channelBackendSecretEnvironment(),
+                configuration.channelProxySecretEnvironment(),
+                configuration.channelTrustStore(),
+                configuration.channelTrustStorePasswordEnvironment(),
+                dataDirectory.toAbsolutePath().normalize()
         );
     }
 

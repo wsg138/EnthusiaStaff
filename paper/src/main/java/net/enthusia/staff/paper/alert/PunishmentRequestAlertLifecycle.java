@@ -20,7 +20,7 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class PunishmentRequestAlertLifecycle implements AutoCloseable {
+public final class PunishmentRequestAlertLifecycle implements PunishmentRequestAlertManagedLifecycle {
     private static final long MAINTENANCE_LOG_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
 
     private final PunishmentRequestAlertRuntime runtime;

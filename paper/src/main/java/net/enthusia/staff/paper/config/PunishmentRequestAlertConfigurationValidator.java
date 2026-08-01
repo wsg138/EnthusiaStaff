@@ -24,6 +24,18 @@ final class PunishmentRequestAlertConfigurationValidator {
             errors.add("punishment-request-alerts.polling.recipient-limit must not exceed "
                     + "workers.threads plus workers.queue-capacity");
         }
+        long audienceClaimsPerRecipient = (long) values.directBatch()
+                + values.reviewerBatch()
+                + values.operationalBatch();
+        long supportedClaims = executorCapacity * audienceClaimsPerRecipient;
+        if (values.totalClaimLimit() > supportedClaims) {
+            errors.add("punishment-request-alerts.polling.total-claim-limit must not exceed "
+                    + "executor capacity multiplied by the configured audience batches");
+        }
+        if (values.presentationLimit() > supportedClaims) {
+            errors.add("punishment-request-alerts.polling.presentation-limit must not exceed "
+                    + "executor capacity multiplied by the configured audience batches");
+        }
         long minimumLease = minimumLeaseSeconds(values.pollMillis());
         if (values.leaseSeconds() < minimumLease) {
             errors.add("punishment-request-alerts.delivery.lease-seconds must be at least "

@@ -148,7 +148,8 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
             return update(ApplyResult.failed(
                     Outcome.RESTORED,
                     setStatus(Status.restored("Replacement construction failed; previous alert worker remains active")),
-                    "Alert-worker replacement failed before shutdown; previous lifecycle remains active"
+                    "Alert-worker replacement failed before shutdown; previous lifecycle remains active",
+                    exception
             ));
         }
 
@@ -234,7 +235,7 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
             desired = settings;
             return update(ApplyResult.failed(
                     Outcome.UNAVAILABLE,
-                    setStatus(Status.unavaile("Alert worker startup failed")),
+                    setStatus(Status.unavailable("Alert worker startup failed")),
                     "Punishment-request alerts could not be started",
                     exception
             ));
@@ -269,7 +270,7 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
     }
 
     private void publish(Status next) {
-        statusSink.acept(next);
+        statusSink.accept(next);
     }
 
     @FunctionalInterface
@@ -374,7 +375,7 @@ public final class PunishmentRequestAlertController implements AutoCloseable {
         }
 
         static ApplyResult failed(Outcome outcome, Status status, String message) {
-            return new ApplyResult(outcome, status, messae, null);
+            return new ApplyResult(outcome, status, message, null);
         }
 
         static ApplyResult failed(
