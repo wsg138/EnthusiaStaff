@@ -1,10 +1,5 @@
 ---
 engines:
-  Opengrep:
-    exclude_paths:
-      - "persistence/src/main/resources/db/migration/V11__durable_punishment_request_alerts.sql"
-      - "persistence/src/main/resources/db/migration/V12__recipient_specific_staff_alert_deliveries.sql"
-      - "persistence/src/main/resources/db/migration/V13__terminal_alert_delivery_reconciliation.sql"
   SQLint:
     exclude_paths:
       - "persistence/src/main/resources/db/migration/**"
