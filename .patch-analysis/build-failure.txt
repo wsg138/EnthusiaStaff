@@ -1,0 +1,102 @@
+Downloading https://services.gradle.org/distributions/gradle-8.13-bin.zip
+.............10%.............20%.............30%.............40%.............50%.............60%.............70%.............80%.............90%.............100%
+
+Welcome to Gradle 8.13!
+
+Here are the highlights of this release:
+ - Daemon JVM auto-provisioning
+ - Enhancements for Scala plugin and JUnit testing
+ - Improvements for build authors and plugin developers
+
+For more details see https://docs.gradle.org/8.13/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :clean UP-TO-DATE
+> Task :common:clean UP-TO-DATE
+> Task :domain:clean UP-TO-DATE
+> Task :integration-contracts:clean UP-TO-DATE
+> Task :integration-tests:clean UP-TO-DATE
+> Task :paper:clean UP-TO-DATE
+> Task :persistence:clean UP-TO-DATE
+> Task :protocol:clean UP-TO-DATE
+> Task :velocity:clean UP-TO-DATE
+> Task :assemble UP-TO-DATE
+> Task :check UP-TO-DATE
+> Task :build UP-TO-DATE
+> Task :common:compileJava
+> Task :common:processResources NO-SOURCE
+> Task :common:classes
+> Task :common:jar
+> Task :common:sourcesJar
+> Task :common:assemble
+> Task :common:compileTestJava
+> Task :common:processTestResources NO-SOURCE
+> Task :common:testClasses
+> Task :common:test
+> Task :common:check
+> Task :common:build
+> Task :domain:compileJava
+> Task :domain:processResources NO-SOURCE
+> Task :domain:classes
+> Task :domain:jar
+> Task :domain:sourcesJar
+> Task :domain:assemble
+> Task :domain:compileTestJava
+> Task :domain:processTestResources NO-SOURCE
+> Task :domain:testClasses
+> Task :domain:test
+> Task :domain:check
+> Task :domain:build
+> Task :integration-contracts:compileJava
+> Task :integration-contracts:processResources NO-SOURCE
+> Task :integration-contracts:classes
+> Task :integration-contracts:jar SKIPPED
+> Task :integration-contracts:sourcesJar
+> Task :integration-contracts:assemble
+> Task :integration-contracts:compileTestJava NO-SOURCE
+> Task :integration-contracts:processTestResources NO-SOURCE
+> Task :integration-contracts:testClasses UP-TO-DATE
+> Task :integration-contracts:test NO-SOURCE
+> Task :integration-contracts:check UP-TO-DATE
+> Task :integration-contracts:build
+> Task :integration-tests:compileJava NO-SOURCE
+> Task :integration-tests:processResources NO-SOURCE
+> Task :integration-tests:classes UP-TO-DATE
+> Task :integration-tests:jar
+> Task :integration-tests:sourcesJar
+> Task :integration-tests:assemble
+> Task :persistence:compileJava
+> Task :protocol:compileJava
+> Task :integration-tests:compileTestJava
+> Task :integration-tests:processTestResources NO-SOURCE
+> Task :integration-tests:testClasses
+
+> Task :paper:compileJava FAILED
+/home/runner/work/EnthusiaStaff/EnthusiaStaff/paper/src/main/java/net/enthusia/staff/paper/alert/BukkitPunishmentRequestAlertRuntime.java:43: error: incompatible types: List<CAP#1> cannot be converted to List<Player>
+                .toList();
+                       ^
+  where CAP#1 is a fresh type-variable:
+    CAP#1 extends Player from capture of ? extends Player
+1 error
+
+[Incubating] Problems report is available at: file:///home/runner/work/EnthusiaStaff/EnthusiaStaff/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':paper:compileJava'.
+> Compilation failed; see the compiler output below.
+  /home/runner/work/EnthusiaStaff/EnthusiaStaff/paper/src/main/java/net/enthusia/staff/paper/alert/BukkitPunishmentRequestAlertRuntime.java:43: error: incompatible types: List<CAP#1> cannot be converted to List<Player>
+                  .toList();
+                         ^
+    where CAP#1 is a fresh type-variable:
+      CAP#1 extends Player from capture of ? extends Player
+  1 error
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+BUILD FAILED in 59s
+27 actionable tasks: 18 executed, 9 up-to-date
