@@ -1,0 +1,40 @@
+name: Branch source export
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out branch head
+        uses: actions/checkout@v6
+
+      - name: Upload exact source snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: branch-source-${{ github.sha }}
+          path: |
+            .github
+            build.gradle.kts
+            settings.gradle.kts
+            gradle.properties
+            gradle
+            gradlew
+            gradlew.bat
+            common
+            domain
+            integration-contracts
+            integration-tests
+            paper
+            persistence
+            protocol
+            velocity
+          if-no-files-found: error
+          retention-days: 1
