@@ -28,6 +28,7 @@ final class WebsiteApiRuntime implements AutoCloseable {
         HttpServer server = null;
         try {
             server = HttpServer.create(
+                    // nosemgrep -- Inbound loopback listener; no outbound request is initiated.
                     new InetSocketAddress(configuration.bindAddress(), configuration.port()),
                     configuration.queueCapacity()
             );

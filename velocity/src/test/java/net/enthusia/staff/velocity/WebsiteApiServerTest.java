@@ -209,6 +209,7 @@ final class WebsiteApiServerTest {
         private final ServerSocket socket;
 
         private LoopbackPortReservation() throws IOException {
+            // nosemgrep -- Test-only port reservation; no application data crosses this socket.
             socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
         }
 
