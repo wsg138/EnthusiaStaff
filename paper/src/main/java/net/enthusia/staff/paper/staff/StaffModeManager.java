@@ -56,6 +56,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffSessionSnapshot> active = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
+    private final StaffModeActivationCoordinator activation;
     private volatile Consumer<UUID> exitListener = ignored -> {
     };
 
@@ -73,6 +74,14 @@ public final class StaffModeManager implements Listener {
         this.workers = workers;
         this.combat = new CombatStatusAdapter(plugin);
         this.staffToolKey = new NamespacedKey(plugin, "staff_tool");
+        this.activation = new StaffModeActivationCoordinator(
+                clock,
+                workers,
+                plugin.getLogger(),
+                active,
+                ranks,
+                transitions
+        );
     }
 
     public boolean active(UUID playerId) {
@@ -129,6 +138,7 @@ public final class StaffModeManager implements Listener {
                         loaded,
                         current,
                         rank,
+                        StaffModeActivationCoordinator.ActivationPath.INITIAL_ENTRY,
                         "Staff mode entered after durable snapshot commit."
                 ));
             } catch (RuntimeException exception) {
@@ -258,6 +268,7 @@ public final class StaffModeManager implements Listener {
                 loaded,
                 player,
                 currentRank,
+                StaffModeActivationCoordinator.ActivationPath.ACTIVE_RECOVERY,
                 "Your active staff session was resumed."
         );
     }
@@ -268,52 +279,23 @@ public final class StaffModeManager implements Listener {
             StaffSessionStore loaded,
             Player player,
             StaffRank rank,
+            StaffModeActivationCoordinator.ActivationPath path,
             String successMessage
     ) {
-        try {
-            applyStaffState(player, rank);
-            active.put(playerId, session);
-            ranks.put(playerId, rank);
-            transitions.remove(playerId);
-            player.sendMessage(Component.text(successMessage));
-        } catch (RuntimeException exception) {
-            active.remove(playerId);
-            ranks.remove(playerId);
-            plugin.getLogger().log(Level.SEVERE,
-                    "Staff state application failed after durable session creation; restoring snapshot",
-                    exception);
-            player.sendMessage(Component.text(
-                    "Staff mode could not be applied completely; restoring your durable snapshot."
-            ));
-            if (!submit(() -> beginApplyFailureRecovery(playerId, session, loaded))) {
-                transitions.remove(playerId);
-                player.sendMessage(Component.text(
-                        "Snapshot restoration could not be queued; contact an administrator immediately."
-                ));
-            }
-        }
-    }
-
-    private void beginApplyFailureRecovery(
-            UUID playerId,
-            StaffSessionSnapshot session,
-            StaffSessionStore loaded
-    ) {
-        try {
-            Instant now = clock.instant();
-            loaded.recoveryRequired(
-                    session.sessionId(),
-                    "Staff state application failed after durable session creation",
-                    now
-            );
-            StaffSessionSnapshot exiting = loaded.beginExit(playerId, now).orElse(session);
-            restoreAndVerify(playerId, exiting, loaded);
-        } catch (RuntimeException exception) {
-            transitions.remove(playerId);
-            plugin.getLogger().log(Level.SEVERE, "Staff state apply-failure recovery could not begin", exception);
-            message(playerId,
-                    "Your durable staff snapshot requires administrator recovery before staff mode can be used.");
-        }
+        activation.activate(
+                playerId,
+                session,
+                loaded,
+                rank,
+                path,
+                () -> applyStaffState(player, rank),
+                () -> {
+                    StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
+                    restoreAndVerify(playerId, exiting, loaded);
+                },
+                message -> player.sendMessage(Component.text(message)),
+                successMessage
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
