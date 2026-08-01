@@ -36,7 +36,7 @@ class JdbcSqlErrorsTest {
     void logicallyEqualExceptionsRemainDistinctDuringIdentityTraversal() {
         EqualSQLException root = new EqualSQLException("root", "HY000", 0);
         EqualSQLException duplicate = new EqualSQLException("duplicate", "23000", 1062);
-        root.next = duplicate;
+        root.linkTo(duplicate);
 
         assertTrue(JdbcSqlErrors.isDuplicateKey(root));
     }
@@ -81,6 +81,10 @@ class JdbcSqlErrorsTest {
 
         private LoopingSQLException(String reason, String state, int code) {
             super(reason, state, code);
+        }
+
+        private void linkTo(SQLException linked) {
+            next = linked;
         }
 
         @Override
