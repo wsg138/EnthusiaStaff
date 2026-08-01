@@ -1,8 +1,29 @@
 # Configuration
 
-The target configuration is modular, versioned, reloadable, and validated as
-one immutable model. Current builds still use a more limited configuration
-shape; do not assume every file below exists yet.
+EnthusiaStaff is moving toward a modular, versioned configuration tree that is
+validated as one immutable model. Current `main` still uses a smaller
+configuration shape, so this page distinguishes **what exists now** from the
+**target layout**.
+
+- Core completion, source files and remaining work: [[Core Platform and Infrastructure]]
+- Commands and permissions: [[Commands and Permissions]]
+- Provider settings: [[Integrations]]
+- Validation/reload testing: [[Build and Testing]]
+
+## Current configuration sources
+
+| File or class | Current purpose |
+| --- | --- |
+| [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Current Paper runtime settings |
+| [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | Current reason, ladder and escalation policy |
+| [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | Commands, permissions and soft dependencies |
+| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Parses and validates reason policies |
+| [`PaperReasonPolicyBootstrap.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperReasonPolicyBootstrap.java) | Publishes the valid reason-policy model |
+| [`PaperDatabaseConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperDatabaseConfiguration.java) | Resolves database settings and environment-variable names |
+| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy boundary |
+| [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Velocity settings and environment-backed secret references |
+
+The full modular tree below is not yet implemented on `main`.
 
 ## Target layout
 
@@ -54,33 +75,36 @@ plugins/EnthusiaStaff/
     └── other-extreme.yml
 ```
 
-## Current limitation
+## Design rules
 
-The requirements matrix currently describes Paper configuration as monolithic
-and incomplete, with `config.yml` and `reason-policies.yml` covering only part
-of the target model. Required GUI and feature-specific files are not all
-present.
+Every modular file should provide:
 
-Document the deployed files, not only the target tree.
+- comments and examples;
+- a configuration version;
+- stable IDs and explicit aliases;
+- path-aware validation errors;
+- immutable runtime models;
+- explicit restart-required settings;
+- safe defaults that do not enable production authority accidentally.
 
 ## Secrets
 
-Keep these outside Git and ordinary YAML where supported:
+Keep real secrets outside Git and ordinary Wiki examples:
 
-- MariaDB passwords
-- TLS key/trust store passwords
-- Network identity encryption/HMAC keys
-- Discord webhook URLs
-- Website bridge secrets
-- Cloudflare, email, Turnstile, D1, R2, and Hyperdrive credentials
-- Private provider API secrets
+- MariaDB passwords;
+- TLS key/trust-store passwords;
+- network-identity encryption/HMAC keys;
+- Discord webhook URLs;
+- website bridge secrets;
+- Cloudflare/email/Turnstile/D1/R2/Hyperdrive credentials;
+- private provider credentials.
 
-Use environment variables or an approved secret manager. Never place real
-values in Wiki examples.
+Use environment variables or an approved secret manager. Configuration should
+store the environment-variable **name**, not the secret value.
 
-## Durations and IDs
+## Stable IDs and durations
 
-Configurations should use:
+Supported duration examples:
 
 ```text
 6h
@@ -89,10 +113,9 @@ Configurations should use:
 permanent
 ```
 
-Reason, family, ladder, GUI, server, and integration identifiers must be stable.
-A display-name change must not silently create a new policy identity. Removed
-IDs remain readable for history but unselectable. Renames require explicit
-aliases.
+Reason, family, ladder, GUI, server and integration IDs must remain stable.
+Display-name changes must not create new policy identities. Removed IDs remain
+readable in history but unselectable. Renames require explicit aliases.
 
 ## Reload
 
@@ -100,50 +123,76 @@ aliases.
 /estaff reload
 ```
 
-Target reload behavior:
+The target reload transaction is:
 
-1. Read into a temporary configuration tree.
-2. Validate every file, version, path, reference, alias, ladder, GUI slot,
-   duration, server, permission, and integration.
-3. Reject the entire reload on any error.
-4. Keep the current valid runtime model unchanged.
-5. Atomically swap only a fully valid immutable model.
-6. Preserve active sanctions, drafts, sessions, reports, locks, journals, and
-   recovery work.
+1. read every reloadable file into a temporary tree;
+2. validate versions, paths, aliases, cross-references, ladders, GUI slots,
+   durations, permissions, servers and integrations;
+3. reject the entire candidate when any validation fails;
+4. leave the current valid model unchanged;
+5. atomically publish only a complete valid immutable model;
+6. preserve active sanctions, drafts, requests, reports, staff sessions, locks,
+   journals and recovery state.
 
-A reload must not partially apply some files.
+A reload must never partially apply only some files.
+
+Active PR #27 contains additional validated alert configuration/reload work. It is
+not current `main` behavior until merged.
 
 ## Restart-required settings
 
-TLS material, server identity, database connection pools, provider
-classloading, and other bootstrap settings may require restart. Verification
-must say **RESTART REQUIRED** rather than pretending reload applied them.
+Examples likely to require restart include:
+
+- database connection pools and credentials;
+- TLS key/trust material;
+- proxy/backend server identity;
+- persistent-channel sockets;
+- provider classloading;
+- executor capacity and ownership.
+
+Verification should report **RESTART REQUIRED** rather than claiming those
+changes applied through reload.
 
 ## Operational modes
 
-- `BOOTSTRAP`
-- `DEGRADED`
-- `SHADOW_MIGRATION`
-- `ACTIVE`
-- `MAINTENANCE`
-- `READ_ONLY_FAILURE`
+```text
+BOOTSTRAP
+DEGRADED
+SHADOW_MIGRATION
+ACTIVE
+MAINTENANCE
+READ_ONLY_FAILURE
+```
 
-Mode changes are safety controls. Do not change them merely to make a command
-available.
+Modes are safety controls, not convenience toggles. A configuration change must
+not switch authority merely to make a command available.
 
 ## Validation checklist
 
-Before approving a config change:
+Before approving a configuration change, confirm:
 
-- IDs are unique and stable
-- Aliases resolve once
-- Every reason has family, severity, ladder, decay, visibility, reportability,
-  rank, automation eligibility, confiscation options, and alt inheritance
-- Every GUI reference exists
-- Slots do not conflict
-- Durations parse
-- Permission nodes are known
-- Server scopes are unambiguous
-- Secrets are absent from the diff
-- Reload test rejects a deliberately invalid copy
-- Current active sanctions remain interpretable
+- IDs are unique and stable;
+- aliases resolve exactly once;
+- every reason has family, severity, ladder, decay, visibility, reportability,
+  rank, automation eligibility, confiscation options and alt inheritance;
+- every GUI reference exists and slots do not conflict;
+- durations parse and limits are bounded;
+- permission nodes and server scopes are known;
+- secrets are absent from the diff/logs/errors;
+- invalid candidates are rejected atomically;
+- restart-only settings are reported clearly;
+- active sanctions and stored historical policy remain interpretable.
+
+## Current completion
+
+Modular configuration is roughly **30%** complete and full atomic reload roughly
+**40%** complete. The detailed breakdown and primary files are maintained in
+[[Core Platform and Infrastructure]].
+
+## Related pages
+
+- [[Core Platform and Infrastructure]]
+- [[Commands and Permissions]]
+- [[Integrations]]
+- [[Build and Testing]]
+- [[Recovery and Troubleshooting]]
