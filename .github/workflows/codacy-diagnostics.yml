@@ -1,192 +1,355 @@
-name: Codacy Diagnostics
+name: Apply Codacy Fixes
 
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - agent/expand-test-coverage
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: apply-codacy-fixes
+  cancel-in-progress: false
 
 jobs:
-  export:
-    name: Export exact Codacy issue delta
+  fix:
+    name: Apply and validate exact Codacy fixes
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+    timeout-minutes: 30
 
     steps:
-      - name: Check out tested commit
+      - name: Check out branch
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: agent/expand-test-coverage
           fetch-depth: 0
 
-      - name: Require Codacy repository token
-        run: |
-          if [[ -z "${CODACY_PROJECT_TOKEN}" ]]; then
-            echo "::error::CODACY_PROJECT_TOKEN is not configured."
-            exit 1
-          fi
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
 
-      - name: Export branch and main issues
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+
+      - name: Apply deterministic fixes
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/reports/codacy
-          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/codacy/changed-java-files.txt
-
           python3 - <<'PY'
-          import collections
-          import json
-          import os
-          import time
-          import urllib.error
-          import urllib.parse
-          import urllib.request
           from pathlib import Path
 
-          root = Path("build/reports/codacy")
-          paths = [
-              line.strip()
-              for line in (root / "changed-java-files.txt").read_text(encoding="utf-8").splitlines()
-              if line.strip()
-          ]
-          if not paths:
-              raise SystemExit("No changed Java files were found")
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
 
-          token = os.environ["CODACY_PROJECT_TOKEN"]
-          branch = "agent/expand-test-coverage"
+          def write(path: str, content: str) -> None:
+              Path(path).write_text(content, encoding="utf-8")
 
-          def normalize(payload):
-              if isinstance(payload, list):
-                  values = payload
-              elif isinstance(payload, dict):
-                  values = next(
-                      (
-                          payload[key]
-                          for key in ("issues", "data", "results", "items")
-                          if isinstance(payload.get(key), list)
-                      ),
-                      [],
-                  )
-              else:
-                  values = []
-              return [item for item in values if isinstance(item, dict)]
+          def replace_exact(content: str, old: str, new: str, expected: int | None = None) -> str:
+              count = content.count(old)
+              if expected is not None and count != expected:
+                  raise SystemExit(f"Expected {expected} occurrences of {old!r}, found {count}")
+              if count == 0:
+                  raise SystemExit(f"Required text not found: {old!r}")
+              return content.replace(old, new)
 
-          def fetch(path: str, branch_name: str):
-              encoded = urllib.parse.quote(path, safe="")
-              query = urllib.parse.urlencode({"branch": branch_name})
-              url = f"https://api.codacy.com/2.0/project/file/issues/{encoded}?{query}"
-              request = urllib.request.Request(
-                  url,
-                  headers={
-                      "Accept": "application/json",
-                      "project-token": token,
-                  },
-              )
-              for attempt in range(1, 7):
-                  try:
-                      with urllib.request.urlopen(request, timeout=30) as response:
-                          raw = json.loads(response.read().decode("utf-8"))
-                          return raw, normalize(raw)
-                  except urllib.error.HTTPError as error:
-                      if error.code == 404:
-                          return [], []
-                      if error.code not in {429, 500, 502, 503, 504} or attempt == 6:
-                          body = error.read().decode("utf-8", errors="replace")
-                          raise RuntimeError(
-                              f"Codacy request failed for {path} on {branch_name}: "
-                              f"HTTP {error.code}: {body[:300]}"
-                          ) from error
-                  except urllib.error.URLError as error:
-                      if attempt == 6:
-                          raise RuntimeError(
-                              f"Codacy request failed for {path} on {branch_name}: {error}"
-                          ) from error
-                  time.sleep(attempt * 2)
-              raise AssertionError("unreachable")
+          def insert_after(content: str, marker: str, addition: str) -> str:
+              if addition.strip() in content:
+                  raise SystemExit(f"Addition already present after {marker!r}")
+              if content.count(marker) != 1:
+                  raise SystemExit(f"Expected one marker {marker!r}, found {content.count(marker)}")
+              return content.replace(marker, marker + addition, 1)
 
-          raw_branch = {}
-          raw_main = {}
-          branch_results = {}
-          main_results = {}
-          delta = []
+          # Common validation literals.
+          path = "common/src/test/java/net/enthusia/staff/common/ChecksTest.java"
+          text = read(path)
+          text = insert_after(text, "class ChecksTest {\n", "    private static final String FIELD = \"field\";\n\n")
+          text = replace_exact(text, '"field"', "FIELD", 7)
+          write(path, text)
 
-          for path in paths:
-              current_raw, current = fetch(path, branch)
-              baseline_raw, baseline = fetch(path, "main")
-              raw_branch[path] = current_raw
-              raw_main[path] = baseline_raw
-              branch_results[path] = current
-              main_results[path] = baseline
-
-              remaining = collections.Counter(
-                  (item.get("patternId"), item.get("message"), item.get("level"))
-                  for item in baseline
-              )
-              for item in sorted(current, key=lambda value: value.get("startLine", 0)):
-                  signature = (
-                      item.get("patternId"),
-                      item.get("message"),
-                      item.get("level"),
-                  )
-                  if remaining[signature] > 0:
-                      remaining[signature] -= 1
-                  else:
-                      delta.append({"filePath": path, **item})
-
-          for filename, payload in (
-              ("raw-branch-responses.json", raw_branch),
-              ("raw-main-responses.json", raw_main),
-              ("branch-issues.json", branch_results),
-              ("main-issues.json", main_results),
-              ("new-issues.json", delta),
-          ):
-              (root / filename).write_text(
-                  json.dumps(payload, indent=2, sort_keys=True) + "\n",
-                  encoding="utf-8",
-              )
-
-          by_level = collections.Counter(item.get("level", "unknown") for item in delta)
-          response_shapes = collections.Counter(
-              type(payload).__name__ for payload in raw_branch.values()
+          # Paper lifecycle handle names.
+          path = "paper/src/test/java/net/enthusia/staff/paper/PaperRuntimeLifecycleTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              '    private static final String STORAGE = "storage";\n',
+              '    private static final String TASK = "task";\n'
+              '    private static final String CHANNEL = "channel";\n'
           )
-          lines = [
-              "# Exact Codacy issue delta",
-              "",
-              f"- Changed Java files queried: **{len(paths)}**",
-              f"- New branch issues: **{len(delta)}**",
-              f"- Levels: `{', '.join(f'{key}: {value}' for key, value in sorted(by_level.items())) or 'none'}`",
-              f"- Branch response shapes: `{', '.join(f'{key}: {value}' for key, value in sorted(response_shapes.items()))}`",
-              "",
-              "## Findings",
-              "",
-          ]
-          if delta:
-              for item in delta:
-                  lines.append(
-                      f"- `{item['filePath']}:{item.get('startLine', '?')}` "
-                      f"pattern `{item.get('patternId', '?')}` ({item.get('level', 'unknown')}) — "
-                      f"{item.get('message', '').strip()}"
-                  )
-          else:
-              lines.append("- None")
+          text = replace_exact(text, '"task"', "TASK", 5)
+          text = replace_exact(text, '"channel"', "CHANNEL", 5)
+          write(path, text)
 
-          text = "\n".join(lines) + "\n"
-          (root / "summary.md").write_text(text, encoding="utf-8")
-          print(text)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              summary.write(text)
+          # Paper health issue key.
+          path = "paper/src/test/java/net/enthusia/staff/paper/RuntimeHealthTest.java"
+          text = read(path)
+          text = insert_after(text, "class RuntimeHealthTest {\n", '    private static final String DATABASE = "database";\n\n')
+          text = replace_exact(text, '"database"', "DATABASE", 5)
+          write(path, text)
+
+          # Keep metadata checks visible to static JUnit analysis by asserting once
+          # at method scope instead of only inside callbacks.
+          path = "paper/src/test/java/net/enthusia/staff/paper/config/PluginMetadataIntegrityTest.java"
+          text = read(path)
+          old = '''    @Test
+              void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
+                  JsonNode metadata = pluginMetadata();
+                  JsonNode permissions = metadata.path("permissions");
+
+                  metadata.path("commands").properties().forEach(entry -> {
+                      JsonNode permission = entry.getValue().path("permission");
+                      if (!permission.isMissingNode()) {
+                          assertTrue(permissions.has(permission.asText()), entry.getKey() + " -> " + permission.asText());
+                      }
+                  });
+              }
+          '''.replace("              ", "")
+          new = '''    @Test
+              void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
+                  JsonNode metadata = pluginMetadata();
+                  JsonNode permissions = metadata.path("permissions");
+                  Set<String> missingPermissions = new HashSet<>();
+
+                  metadata.path("commands").properties().forEach(entry -> {
+                      JsonNode permission = entry.getValue().path("permission");
+                      if (!permission.isMissingNode() && !permissions.has(permission.asText())) {
+                          missingPermissions.add(entry.getKey() + " -> " + permission.asText());
+                      }
+                  });
+
+                  assertTrue(missingPermissions.isEmpty(), "Undeclared command permissions: " + missingPermissions);
+              }
+          '''.replace("              ", "")
+          text = replace_exact(text, old, new, 1)
+
+          old = '''    @Test
+              void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
+                  JsonNode permissions = pluginMetadata().path("permissions");
+
+                  permissions.properties().forEach(parent -> parent.getValue()
+                          .path("children")
+                          .properties()
+                          .forEach(child -> assertTrue(
+                                  permissions.has(child.getKey()),
+                                  parent.getKey() + " -> " + child.getKey()
+                          )));
+              }
+          '''.replace("              ", "")
+          new = '''    @Test
+              void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
+                  JsonNode permissions = pluginMetadata().path("permissions");
+                  Set<String> missingChildren = new HashSet<>();
+
+                  permissions.properties().forEach(parent -> parent.getValue()
+                          .path("children")
+                          .properties()
+                          .filter(child -> !permissions.has(child.getKey()))
+                          .forEach(child -> missingChildren.add(
+                                  parent.getKey() + " -> " + child.getKey()
+                          )));
+
+                  assertTrue(missingChildren.isEmpty(), "Undeclared child permissions: " + missingChildren);
+              }
+          '''.replace("              ", "")
+          text = replace_exact(text, old, new, 1)
+          write(path, text)
+
+          # Database configuration credentials.
+          path = "persistence/src/test/java/net/enthusia/staff/persistence/DatabaseConfigTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              '    private static final String URL = "jdbc:mariadb://127.0.0.1:3306/enthusiastaff";\n',
+              '    private static final String USERNAME = "staff";\n'
+              '    private static final String PASSWORD = "secret";\n'
+          )
+          text = replace_exact(text, '"staff"', "USERNAME", 15)
+          text = replace_exact(text, '"secret"', "PASSWORD", 14)
+          write(path, text)
+
+          # JDBC transaction messages and expected values.
+          path = "persistence/src/test/java/net/enthusia/staff/persistence/JdbcTransactionSupportTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              "final class JdbcTransactionSupportTest {\n",
+              '    private static final String TRANSACTION_FAILED = "Transaction failed";\n'
+              '    private static final String COMMITTED = "committed";\n'
+              '    private static final String WRONG_COUNT = "wrong count";\n'
+              '    private static final String WRONG_BATCH = "wrong batch";\n\n'
+          )
+          text = replace_exact(text, '"Transaction failed"', "TRANSACTION_FAILED", 5)
+          text = replace_exact(text, '"committed"', "COMMITTED", 4)
+          text = replace_exact(text, '"wrong count"', "WRONG_COUNT", 8)
+          text = replace_exact(text, '"wrong batch"', "WRONG_BATCH", 5)
+          write(path, text)
+
+          # Split constructor validation into small fail-closed helpers.
+          path = "protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeAuthenticator.java"
+          text = read(path)
+          old = '''        if (protocolVersion < 1 || clock == null || permittedAge == null || permittedClockSkew == null
+                          || permittedAge.isZero() || permittedAge.isNegative() || permittedClockSkew.isNegative()
+                          || serverKeys == null || serverKeys.isEmpty() || replayGuard == null) {
+                      throw new IllegalArgumentException("authenticator configuration must be present and time bounds must be safe");
+                  }
+          '''.replace("          ", "")
+          new = '''        validateConfiguration(
+                          protocolVersion,
+                          clock,
+                          permittedAge,
+                          permittedClockSkew,
+                          serverKeys,
+                          replayGuard
+                  );
+          '''.replace("          ", "")
+          text = replace_exact(text, old, new, 1)
+          marker = '''    public ProtocolEnvelope sign(UnsignedEnvelope envelope) {
+          '''.replace("          ", "")
+          helpers = '''    private static void validateConfiguration(
+                          int protocolVersion,
+                          Clock clock,
+                          Duration permittedAge,
+                          Duration permittedClockSkew,
+                          Map<String, SecretKey> serverKeys,
+                          ReplayGuard replayGuard
+                  ) {
+                      if (protocolVersion < 1) {
+                          throw invalidConfiguration();
+                      }
+                      requirePresent(clock, permittedAge, permittedClockSkew, serverKeys, replayGuard);
+                      if (serverKeys.isEmpty()) {
+                          throw invalidConfiguration();
+                      }
+                      validateTimeBounds(permittedAge, permittedClockSkew);
+                  }
+
+                  private static void requirePresent(Object... values) {
+                      for (Object value : values) {
+                          if (value == null) {
+                              throw invalidConfiguration();
+                          }
+                      }
+                  }
+
+                  private static void validateTimeBounds(Duration permittedAge, Duration permittedClockSkew) {
+                      if (permittedAge.isZero() || permittedAge.isNegative()) {
+                          throw invalidConfiguration();
+                      }
+                      if (permittedClockSkew.isNegative()) {
+                          throw invalidConfiguration();
+                      }
+                  }
+
+                  private static IllegalArgumentException invalidConfiguration() {
+                      return new IllegalArgumentException(
+                              "authenticator configuration must be present and time bounds must be safe"
+                      );
+                  }
+
+          '''.replace("          ", "")
+          if text.count(marker) != 1:
+              raise SystemExit("EnvelopeAuthenticator sign marker was not unique")
+          text = text.replace(marker, helpers + marker, 1)
+          write(path, text)
+
+          # Protocol test identifiers.
+          path = "protocol/src/test/java/net/enthusia/staff/protocol/EnvelopeAuthenticatorTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              '    private static final Duration MAX_SKEW = Duration.ofSeconds(30);\n',
+              '    private static final String HUB = "hub";\n'
+          )
+          text = replace_exact(text, '"hub"', "HUB", 6)
+          write(path, text)
+
+          path = "protocol/src/test/java/net/enthusia/staff/protocol/ProtocolEnvelopeTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              '    private static final UUID MESSAGE_ID = UUID.fromString("53fa6153-2ad8-42ba-a4e9-8fb10d630f08");\n',
+              '    private static final String HUB = "hub";\n'
+              '    private static final String TYPE = "TYPE";\n'
+              '    private static final String NONCE = "nonce";\n'
+          )
+          text = replace_exact(text, '"hub"', "HUB", 10)
+          text = replace_exact(text, '"TYPE"', "TYPE", 11)
+          text = replace_exact(text, '"nonce"', "NONCE", 10)
+          write(path, text)
+
+          path = "protocol/src/test/java/net/enthusia/staff/protocol/ReplayGuardTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              '    private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");\n',
+              '    private static final String BACKEND = "backend";\n'
+              '    private static final String BACKEND_ONE = "backend-1";\n'
+          )
+          text = replace_exact(text, '"backend-1"', "BACKEND_ONE", 7)
+          text = replace_exact(text, '"backend"', "BACKEND", 6)
+          write(path, text)
+
+          # Velocity configuration literals.
+          path = "velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              "final class VelocityConfigurationTest {\n",
+              '    private static final String SECRET = "SECRET";\n'
+              '    private static final String TLS_KEY_STORE = "channel.tls-key-store";\n\n'
+          )
+          text = replace_exact(text, '"SECRET"', "SECRET", 8)
+          text = replace_exact(text, '"channel.tls-key-store"', "TLS_KEY_STORE", 5)
+          write(path, text)
+
+          path = "velocity/src/test/java/net/enthusia/staff/velocity/VelocityRuntimeHealthTest.java"
+          text = read(path)
+          text = insert_after(
+              text,
+              "class VelocityRuntimeHealthTest {\n",
+              '    private static final String CHANNEL = "channel";\n\n'
+          )
+          text = replace_exact(text, '"channel"', "CHANNEL", 5)
+          write(path, text)
           PY
 
-      - name: Upload Codacy diagnostics
-        uses: actions/upload-artifact@v7
-        with:
-          name: codacy-exact-diagnostics-${{ github.event.pull_request.number || github.run_id }}
-          path: build/reports/codacy
-          if-no-files-found: error
-          retention-days: 3
+      - name: Build and test the corrected branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+
+      - name: Commit validated corrections
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "::error::The guarded fixer produced no changes."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            common/src/test/java/net/enthusia/staff/common/ChecksTest.java \
+            paper/src/test/java/net/enthusia/staff/paper/PaperRuntimeLifecycleTest.java \
+            paper/src/test/java/net/enthusia/staff/paper/RuntimeHealthTest.java \
+            paper/src/test/java/net/enthusia/staff/paper/config/PluginMetadataIntegrityTest.java \
+            persistence/src/test/java/net/enthusia/staff/persistence/DatabaseConfigTest.java \
+            persistence/src/test/java/net/enthusia/staff/persistence/JdbcTransactionSupportTest.java \
+            protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeAuthenticator.java \
+            protocol/src/test/java/net/enthusia/staff/protocol/EnvelopeAuthenticatorTest.java \
+            protocol/src/test/java/net/enthusia/staff/protocol/ProtocolEnvelopeTest.java \
+            protocol/src/test/java/net/enthusia/staff/protocol/ReplayGuardTest.java \
+            velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java \
+            velocity/src/test/java/net/enthusia/staff/velocity/VelocityRuntimeHealthTest.java
+          git commit -m "Resolve Codacy findings in expanded test coverage"
+          git push origin HEAD:agent/expand-test-coverage
