@@ -36,6 +36,7 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             tested_sha="${{ github.event.pull_request.head.sha }}"
           fi
+          export tested_sha
           echo "tested_sha=${tested_sha}" >> "${GITHUB_ENV}"
 
           # Codacy's analysis can finish shortly after the GitHub push. Retry only
