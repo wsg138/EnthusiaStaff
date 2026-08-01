@@ -3,31 +3,32 @@
 This document turns `ENTHUSIASTAFF-GOALS.md` and
 `reports/REQUIREMENTS-MATRIX.md` into an ordered path from the current codebase
 to a production-authoritative EnthusiaStaff release. It is a planning and review
-tool, not a release promise and not a substitute for exact-SHA evidence.
+tool, not a release promise and not a substitute for exact-revision evidence.
 
 ## Current checkpoint
 
 At this documentation checkpoint:
 
-- `main` is `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9` after merged PR #36 completed the LiteBans shadow-comparison decomposition.
-- PR #36 final head `3afeffc926571170e8df18c7d096ca7f4d89ec1b` passed 40/40 clean Java 21 tasks, 99 suites / 398 tests, and all 68 tests across 15 MariaDB 11.8.3 Testcontainers suites.
-- PR #36 also passed hosted Codacy with zero new findings, three fixed findings, 92.59% diff coverage, no clone increase, and exact-SHA Pi staging run `30709333535`.
+- The current merged repository state is `main` at `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`, the merge commit for PR #36.
+- The latest fully validated EnthusiaStaff implementation revision is PR #36 head `3afeffc926571170e8df18c7d096ca7f4d89ec1b`. All PR #36 build, test, Codacy, artifact and Pi evidence below attaches to that exact revision; the later merge commit is not separately claimed as tested.
+- Revision `3afeffc926571170e8df18c7d096ca7f4d89ec1b` passed 40/40 clean Java 21 tasks, 99 suites / 398 tests, and all 68 tests across 15 MariaDB 11.8.3 Testcontainers suites.
+- The same revision passed hosted Codacy with zero new findings, three fixed findings, 92.59% diff coverage and no clone increase. Exact-SHA Pi staging run `30709333535` also tested `3afeffc926571170e8df18c7d096ca7f4d89ec1b`.
 - Draft PR #37 is the active LiteBans cutover-coordination workstream. Its current first checkpoint adds focused MariaDB coverage but is not a completed or fully validated section.
-- Draft PR #27 remains separate concurrent punishment-request notification, staff-mode, and freeze work. It must be reconciled without discarding, duplicating, or silently overriding its 95-commit history.
+- Draft PR #27 remains separate concurrent punishment-request notification, staff-mode and freeze work. It must be reconciled without discarding, duplicating or silently overriding its 95-commit history.
 - EnthusiaStaff is not approved to replace LiteBans or the current production staff stack.
 
-Checkpoint numbers above must be replaced when a newer exact head completes all
-claimed gates. A green branch proves only its tested scope.
+Checkpoint numbers above must be replaced when a newer exact revision completes
+all claimed gates. A green branch proves only its tested scope.
 
 ## Status language
 
 | Status | Meaning |
 | --- | --- |
 | **Built** | A code path exists, but complete behavior is not proven. |
-| **Tested** | Relevant automated tests ran successfully at one exact commit. |
-| **Pi verified** | The standalone Paper boot/storage/command/shutdown subset passed for one exact SHA. |
-| **Staging required** | Real Paper, Velocity, provider, Bedrock, Folia, multi-server, load, or failure behavior remains unproven. |
-| **Blocked** | A required API, repository, environment, secret, dataset, or client is unavailable. |
+| **Tested** | Relevant automated tests ran successfully at one exact repository revision. |
+| **Pi verified** | The standalone Paper boot/storage/command/shutdown subset passed for one exact EnthusiaStaff revision. |
+| **Staging required** | Real Paper, Velocity, provider, Bedrock, Folia, multi-server, load or failure behavior remains unproven. |
+| **Blocked** | A required API, repository, environment, secret, dataset or client is unavailable. |
 | **Release gate** | Evidence required before production authority can move from LiteBans. |
 
 ## Road to production
@@ -40,7 +41,7 @@ flowchart TD
     D["3 — Prove stateful staff safety<br/>Staff mode, freeze, vanish, inventory,<br/>confiscation and crash recovery"]
     E["4 — Complete integrations<br/>Provider APIs, RoseChat, Discord,<br/>website, Java and Bedrock"]
     F["5 — Migration release candidate<br/>LiteBans variants, replay, shadow,<br/>cutover, emergency freeze and rollback"]
-    G{"One exact SHA passes<br/>the full acceptance suite?"}
+    G{"One release manifest covers<br/>every repository and acceptance gate?"}
     H["6 — 168-hour non-enforcing shadow<br/>Daily parity and mismatch review"]
     I{"Every mismatch explained<br/>and recovery rehearsed?"}
     J["7 — Final cutover rehearsal<br/>Founder authorization, backups,<br/>freeze, rollback and reconciliation"]
@@ -156,27 +157,33 @@ Prove:
 - writer fencing, duplicate activation rejection, transition audit, emergency freeze and founder override;
 - realistic private data and production-volume behavior.
 
-### Milestone 6 — Full acceptance at one exact SHA
+### Milestone 6 — Full acceptance under one release manifest
 
-One commit and matching jar hashes must pass all applicable:
+Create a signed release manifest that identifies one authenticated revision for
+every participating repository, including EnthusiaStaff, each provider and the
+private website. The manifest must bind those revisions to their artifact hashes,
+configuration checksums, dependency/environment versions and acceptance evidence.
+
+All applicable gates must pass against that exact manifest:
 
 - build, packaging, static analysis and coverage gates;
 - MariaDB, transaction, concurrency and process-kill suites;
 - Paper, Velocity, multi-backend and no-online-player transport;
-- provider and website integration;
+- provider and website integration at their declared revisions;
 - Java, Bedrock/Geyser and Folia behavior;
 - load, queue saturation, circuit breaker and backpressure tests;
 - install, upgrade, restart, reload, recovery, quarantine and rollback procedures.
 
-Evidence from different commits cannot be combined into a fictional release
-candidate.
+Evidence may span repositories only when every revision is declared in the same
+manifest and tested together. Untracked evidence from unrelated revisions cannot
+be combined into a fictional release candidate.
 
 ### Milestone 7 — Shadow, cutover and authority
 
 Run the mandatory 168-hour non-enforcing shadow window, retain daily evidence and
 resolve every discrepancy. Rehearse cutover, emergency freeze and rollback
-immediately before activation. Record Founder authorization, exact artifacts,
-configuration checksums, backups and rollback evidence.
+immediately before activation. Record Founder authorization, the release manifest,
+exact artifacts, configuration checksums, backups and rollback evidence.
 
 LiteBans data and jars are not destroyed during cutover. Legacy removal is a
 later manual operation after accepted production observation.
@@ -210,7 +217,7 @@ Unless a higher-risk correctness or security issue interrupts the order:
 8. Prove staff mode, freeze, vanish, inventory and confiscation under live ownership and failure conditions.
 9. Reconstruct and validate providers, then complete the private website.
 10. Finish migration recovery, full shadow, emergency freeze and rollback.
-11. Run full acceptance, the 168-hour shadow period and final cutover rehearsal.
+11. Run full acceptance against one release manifest, then the 168-hour shadow period and final cutover rehearsal.
 
 ## Feature definition of done
 
@@ -226,7 +233,7 @@ A feature may move to a higher status only when all applicable layers are covere
 8. Real staging where mocks cannot prove behavior
 9. Accurate verification and degraded-mode output
 10. Configuration, operator procedure, privacy, rollback and Wiki documentation
-11. Requirements-matrix evidence at one exact SHA
+11. Requirements-matrix evidence at one exact repository revision, plus release-manifest evidence for cross-repository acceptance
 
 ## Pull-request path
 
@@ -239,7 +246,7 @@ For each coherent section:
 5. Run Wiki validation for documentation changes.
 6. Review hosted Codacy and total baseline; do not hide legitimate findings.
 7. Run the exact-head Pi gate when eligible.
-8. Record exact SHA, commands, counts, hashes, staging runs and unavailable groups.
+8. Record exact repository revision, commands, counts, hashes, staging runs and unavailable groups.
 9. Update this blueprint, the requirements matrix and workspace manifest when the root checkpoint changes.
 
 A green pull request never waives provider, multi-server, Bedrock, Folia, load,
