@@ -112,6 +112,8 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
         );
     }
 
+    // Ownership transfers to joinRegistration on success and close() releases it.
+    @SuppressWarnings("PMD.CloseResource")
     public boolean start() {
         if (!settings.enabled() || isStopping() || !active.compareAndSet(false, true)) {
             return false;
@@ -312,8 +314,7 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
             return;
         }
         active.set(false);
-        AutoCloseable registration = joinRegistration.getAndSet(null);
-        closeQuietly(registration);
+        closeQuietly(joinRegistration.getAndSet(null));
         tasks.forEach(this::cancel);
         tasks.clear();
         polling.set(false);

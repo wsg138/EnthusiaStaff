@@ -26,6 +26,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
+// Reflection is intentional: these tests validate a package-private runtime factory in both
+// the normal module and an isolated shaded-JAR class loader without widening production API.
+@SuppressWarnings("PMD.AvoidAccessibilityAlteration")
 class MariaDbDriverIntegrationTest {
     private static final String DRIVER_CLASS_NAME = "org.mariadb.jdbc.Driver";
     private static final String DRIVER_CLASS_ENTRY = "org/mariadb/jdbc/Driver.class";
@@ -120,10 +123,9 @@ class MariaDbDriverIntegrationTest {
             Object driver = driverType.getDeclaredConstructor().newInstance();
             assertInstanceOf(Driver.class, driver);
 
-            InputStream serviceStream = loader.getResourceAsStream(DRIVER_SERVICE_ENTRY);
-            assertNotNull(serviceStream, "MariaDB JDBC service registration must be present");
-            try (InputStream input = serviceStream) {
-                String providers = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            try (InputStream serviceStream = loader.getResourceAsStream(DRIVER_SERVICE_ENTRY)) {
+                assertNotNull(serviceStream, "MariaDB JDBC service registration must be present");
+                String providers = new String(serviceStream.readAllBytes(), StandardCharsets.UTF_8);
                 assertTrue(
                         providers.lines().map(String::trim).anyMatch(DRIVER_CLASS_NAME::equals),
                         "MariaDB JDBC service registration must name the driver"

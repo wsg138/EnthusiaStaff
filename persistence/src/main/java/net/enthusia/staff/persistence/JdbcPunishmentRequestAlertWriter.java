@@ -283,7 +283,7 @@ final class JdbcPunishmentRequestAlertWriter {
 
     private static boolean sameInstant(Instant first, Instant second) {
         if (first == null || second == null) {
-            return first == second;
+            return Objects.equals(first, second);
         }
         return first.truncatedTo(ChronoUnit.MICROS)
                 .equals(second.truncatedTo(ChronoUnit.MICROS));

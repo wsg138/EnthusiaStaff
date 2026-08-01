@@ -617,7 +617,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
             statement.setTimestamp(3, timestamp);
             statement.setTimestamp(4, timestamp);
             int next = 5;
-            if (sql == SELECT_REVIEWER_DUE) {
+            if (SELECT_REVIEWER_DUE.equals(sql)) {
                 statement.setInt(next++, reviewerLevel);
             }
             statement.setInt(next, limit);
@@ -654,7 +654,7 @@ public final class JdbcPunishmentRequestAlertStore implements PunishmentRequestA
                 bindDeliveryId(statement, 4, candidate.deliveryId());
                 statement.setTimestamp(6, Timestamp.from(now));
                 statement.setTimestamp(7, Timestamp.from(now));
-                if (sql == LEASE_REVIEWER) {
+                if (LEASE_REVIEWER.equals(sql)) {
                     statement.setInt(8, reviewerLevel);
                 }
                 statement.addBatch();
