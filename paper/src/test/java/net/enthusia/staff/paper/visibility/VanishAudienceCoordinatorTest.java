@@ -98,6 +98,22 @@ final class VanishAudienceCoordinatorTest {
     }
 
     @Test
+    void ownerBroadcastSchedulesEachCurrentSession() {
+        Fixture fixture = new Fixture();
+        EntityHandle viewer = new EntityHandle(VIEWER_NAME);
+        EntityHandle target = new EntityHandle(TARGET_NAME);
+        List<EntityHandle> callbacks = new ArrayList<>();
+        fixture.audiences.register(VIEWER_ID, viewer, GameMode.SURVIVAL);
+        fixture.audiences.register(TARGET_ID, target, GameMode.SURVIVAL);
+
+        fixture.audiences.forEachOwner(callbacks::add);
+        assertTrue(callbacks.isEmpty());
+
+        fixture.scheduler.runAll();
+        assertEquals(Set.of(viewer, target), Set.copyOf(callbacks));
+    }
+
+    @Test
     void ownerCallbackIsFencedAgainstReconnect() {
         Fixture fixture = new Fixture();
         EntityHandle oldViewer = new EntityHandle("old-viewer");

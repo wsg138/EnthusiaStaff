@@ -37,10 +37,6 @@ final class VanishAudienceCoordinator<T> {
         online.remove(playerId);
     }
 
-    List<OnlineEntity<T>> snapshot() {
-        return List.copyOf(online.values());
-    }
-
     boolean onOwner(UUID playerId, Consumer<T> operation) {
         Objects.requireNonNull(operation, "operation");
         OnlineEntity<T> scheduled = online.get(playerId);
@@ -53,6 +49,10 @@ final class VanishAudienceCoordinator<T> {
                 operation.accept(current.owner());
             }
         });
+    }
+
+    void forEachOwner(Consumer<T> operation) {
+        List.copyOf(online.keySet()).forEach(playerId -> onOwner(playerId, operation));
     }
 
     void refreshAll() {

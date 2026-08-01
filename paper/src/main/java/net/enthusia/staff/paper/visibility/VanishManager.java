@@ -87,9 +87,9 @@ public final class VanishManager implements Listener {
 
     private void recoverOnlinePlayer(Player player) {
         UUID playerId = player.getUniqueId();
-        audiences.register(playerId, player, player.getGameMode());
         recordViewerRank(player);
         applySpectatorPolicy(player, player.getGameMode(), false);
+        audiences.register(playerId, player, player.getGameMode());
         audiences.refreshViewer(playerId);
         audiences.refreshTarget(playerId);
     }
@@ -198,10 +198,10 @@ public final class VanishManager implements Listener {
 
     private void finishSet(Player player, boolean vanished) {
         UUID playerId = player.getUniqueId();
-        audiences.updateGameMode(playerId, player.getGameMode());
         if (!vanished) {
             applySpectatorPolicy(player, player.getGameMode(), true);
         }
+        audiences.updateGameMode(playerId, player.getGameMode());
         audiences.refreshTarget(playerId);
         player.sendMessage(Component.text(vanished ? "Vanish enabled." : "Vanish disabled."));
     }
@@ -209,9 +209,9 @@ public final class VanishManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onGameModeChange(PlayerGameModeChangeEvent event) {
         Player player = event.getPlayer();
-        audiences.updateGameMode(player.getUniqueId(), event.getNewGameMode());
         recordViewerRank(player);
         applySpectatorPolicy(player, event.getNewGameMode(), true);
+        audiences.updateGameMode(player.getUniqueId(), event.getNewGameMode());
         audiences.refreshTarget(player.getUniqueId());
     }
 
@@ -219,9 +219,9 @@ public final class VanishManager implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
-        audiences.register(playerId, player, player.getGameMode());
         recordViewerRank(player);
         applySpectatorPolicy(player, player.getGameMode(), true);
+        audiences.register(playerId, player, player.getGameMode());
         if (visibility.isVanished(playerId)) {
             event.joinMessage(null);
         }
@@ -392,16 +392,16 @@ public final class VanishManager implements Listener {
     }
 
     private void packetMaskFailed() {
-        for (VanishAudienceCoordinator.OnlineEntity<Player> player : audiences.snapshot()) {
-            UUID playerId = player.playerId();
-            StaffRank rank = onlineStaffRanks.get(playerId);
-            if (player.gameMode() == GameMode.SPECTATOR
-                    && SpectatorTabPolicy.masksSpectatorEntry(rank)
-                    && !visibility.isVanished(playerId)) {
-                hiddenSpectators.add(playerId);
-                audiences.refreshTarget(playerId);
-            }
-        }
+        audiences.forEachOwner(this::applyPacketMaskFailure);
+    }
+
+    private void applyPacketMaskFailure(Player player) {
+        UUID playerId = player.getUniqueId();
+        GameMode gameMode = player.getGameMode();
+        recordViewerRank(player);
+        applySpectatorPolicy(player, gameMode, false);
+        audiences.updateGameMode(playerId, gameMode);
+        audiences.refreshTarget(playerId);
     }
 
     private StaffRank resolveRank(Player player) {
