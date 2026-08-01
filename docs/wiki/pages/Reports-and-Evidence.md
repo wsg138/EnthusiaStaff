@@ -136,8 +136,8 @@ evidence expire after seven days. An asynchronous bounded maintenance task runs
 after storage startup, normally once per hour. It retries a detected backlog
 after one minute and retries cleanup failures after five minutes. Cleanup
 failure is logged but does not change moderation authority or report state.
-Expired chat and private-message evidence is excluded from reads even before
-physical deletion.
+Expired chat, private-message, and client evidence is excluded from reads even
+before physical deletion.
 
 ## Evidence quality
 

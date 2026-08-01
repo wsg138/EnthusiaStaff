@@ -728,6 +728,25 @@ findings rather than new report-line findings. No finding, rule, or first-party
 path was suppressed. Hosted Codacy and an exact-final-head Pi run must pass
 before merge.
 
+Exact candidate `ce6860255f5bc76bdc81690cafe50ef04fc77c58` repeated the full
+clean Java 21 gate with 374 passing tests and all 59 MariaDB tests. Hosted
+Codacy reported zero new and 13 fixed issues, 76.26% diff coverage, and a
++2.458 percentage-point coverage variation. Wiki validation passed, and Pi
+staging run `30701863189` passed the independently built artifact through both
+boot/storage/command/shutdown cycles.
+
+The single ready-state review found eight code concerns and one validation
+provenance concern. Commit `d3356165` addresses the code findings: report
+evidence cleanup no longer blocks operational-state refresh; per-category
+purge counts drive backlog scheduling; expired client evidence is hidden at
+read time; UUID report targets resolve online evidence correctly; and replay
+comparison, conflict fallback, and fingerprint serialization are null-safe and
+mapper-independent. Focused report unit and MariaDB tests pass, and PMD 7,
+Opengrep, and Lizard introduce no finding outside the already recorded Paper
+composition-root backlog. This documentation update corrects the provenance
+finding. The post-review head must repeat hosted Codacy, the clean build, and
+the exact-SHA Pi gate before merge; no second automated review is requested.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
