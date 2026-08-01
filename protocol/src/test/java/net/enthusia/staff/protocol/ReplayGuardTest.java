@@ -20,6 +20,7 @@ class ReplayGuardTest {
     private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");
     private static final String BACKEND = "backend";
     private static final String BACKEND_ONE = "backend-1";
+    private static final String NONCE = "nonce";
 
     @Test
     void rejectsInvalidBounds() {
@@ -33,8 +34,8 @@ class ReplayGuardTest {
     void rejectsTheSameServerAndNonceBeforeRetentionExpires() {
         ReplayGuard guard = new ReplayGuard(10, Duration.ofMinutes(1));
 
-        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW));
-        assertFalse(guard.recordIfNew(BACKEND_ONE, "nonce", NOW.plusSeconds(59)));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, NONCE, NOW));
+        assertFalse(guard.recordIfNew(BACKEND_ONE, NONCE, NOW.plusSeconds(59)));
     }
 
     @Test
@@ -50,8 +51,8 @@ class ReplayGuardTest {
     void expirationIsInclusiveAtTheRetentionBoundary() {
         ReplayGuard guard = new ReplayGuard(10, Duration.ofMinutes(1));
 
-        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW));
-        assertTrue(guard.recordIfNew(BACKEND_ONE, "nonce", NOW.plus(Duration.ofMinutes(1))));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, NONCE, NOW));
+        assertTrue(guard.recordIfNew(BACKEND_ONE, NONCE, NOW.plus(Duration.ofMinutes(1))));
     }
 
     @Test
