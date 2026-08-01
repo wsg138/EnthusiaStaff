@@ -9,14 +9,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
@@ -26,30 +24,12 @@ import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
 import net.enthusia.staff.domain.website.PublicPunishment;
 import net.enthusia.staff.domain.website.PublicPunishmentFilter;
 import net.enthusia.staff.domain.website.PublicPunishmentPage;
-import net.enthusia.staff.domain.website.PublicPunishmentState;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 public final class JdbcWebsiteModerationStore implements WebsiteModerationStore {
-    private static final int MAX_PUBLIC_LIMIT = 100;
     private static final int MAX_BATCH = 5_000;
-    private static final String PUBLIC_TYPE_CONDITION = """
-              AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'WARNING')
-              AND s.status IN ('ACTIVE', 'APPLIED', 'EXPIRED', 'ENDED_EARLY', 'REVOKED')
-              AND CHAR_LENGTH(p.current_username) BETWEEN 3 AND 16
-              AND p.current_username REGEXP '^[A-Za-z0-9_]{3,16}$'
-            """;
-    private static final String PUBLIC_SELECT = """
-            SELECT s.sanction_id, s.case_id, s.sanction_type, s.status, s.issued_at,
-                   s.expiration_at, c.public_reason, c.sanction_family, p.current_username,
-                   pc.status AS code_status
-            FROM public_sanctions s
-            JOIN public_cases c ON c.case_id = s.case_id
-            JOIN public_player_names p ON p.player_id = s.target_id
-            LEFT JOIN punishment_codes pc ON pc.sanction_id = s.sanction_id
-            WHERE 1 = 1
-            """ + PUBLIC_TYPE_CONDITION;
     private static final String CODE_ROW_SELECT = """
             SELECT pc.sanction_id, pc.case_id, pc.key_version, pc.generation,
                    pc.code_hash, pc.status AS code_status, pc.claimed_account_token,
@@ -64,6 +44,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
     private final DataSource dataSource;
     private final PunishmentCodeProtector codeProtector;
     private final ObjectMapper json;
+    private final JdbcPublicPunishmentRegistry publicRegistry;
 
     public JdbcWebsiteModerationStore(
             DataSource dataSource,
@@ -76,6 +57,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         this.dataSource = dataSource;
         this.codeProtector = codeProtector;
         this.json = json;
+        this.publicRegistry = new JdbcPublicPunishmentRegistry(dataSource);
     }
 
     @Override
@@ -85,121 +67,17 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             int limit,
             Instant now
     ) {
-        if (filter == null || encodedCursor == null || limit < 1 || limit > MAX_PUBLIC_LIMIT || now == null) {
-            throw invalid("INVALID_PUBLIC_QUERY", "The public punishment query is invalid");
-        }
-        Optional<WebsitePunishmentProjection.Cursor> cursor =
-                WebsitePunishmentProjection.decodeCursor(encodedCursor);
-        StringBuilder sql = new StringBuilder(PUBLIC_SELECT);
-        sql.append(switch (filter) {
-            case ALL -> "";
-            case BAN -> " AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN')";
-            case MUTE -> " AND s.sanction_type = 'MUTE'";
-            case WARNING -> " AND s.sanction_type = 'WARNING'";
-        });
-        if (cursor.isPresent()) {
-            sql.append(" AND (s.issued_at < ? OR (s.issued_at = ? AND s.sanction_id < ?))");
-        }
-        sql.append(" ORDER BY s.issued_at DESC, s.sanction_id DESC LIMIT ?");
-
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql.toString())) {
-            int index = 1;
-            if (cursor.isPresent()) {
-                WebsitePunishmentProjection.Cursor value = cursor.orElseThrow();
-                Timestamp issuedAt = Timestamp.from(value.issuedAt());
-                statement.setTimestamp(index++, issuedAt);
-                statement.setTimestamp(index++, issuedAt);
-                statement.setBytes(index++, UuidBytes.toBytes(value.sanctionId()));
-            }
-            statement.setInt(index, limit + 1);
-            try (ResultSet result = statement.executeQuery()) {
-                List<PublicRow> rows = new ArrayList<>();
-                while (result.next()) {
-                    rows.add(readPublicRow(result, now));
-                }
-                boolean more = rows.size() > limit;
-                if (more) {
-                    rows.removeLast();
-                }
-                Optional<String> next = more && !rows.isEmpty()
-                        ? Optional.of(WebsitePunishmentProjection.encodeCursor(
-                                rows.getLast().issuedAt(), rows.getLast().sanctionId()
-                        ))
-                        : Optional.empty();
-                return new PublicPunishmentPage(
-                        rows.stream().map(PublicRow::punishment).toList(),
-                        next
-                );
-            }
-        } catch (SQLException | IllegalArgumentException exception) {
-            throw persistence("Unable to read the public punishment registry", exception);
-        }
+        return publicRegistry.listPublic(filter, encodedCursor, limit, now);
     }
 
     @Override
     public List<PublicPunishment> searchPublic(String query, int limit, Instant now) {
-        if (query == null || limit < 1 || limit > MAX_PUBLIC_LIMIT || now == null) {
-            throw invalid("INVALID_SEARCH", "The punishment search is invalid");
-        }
-        String normalized = query.trim();
-        if (normalized.length() < 2 || normalized.length() > 80
-                || !normalized.matches("[A-Za-z0-9_-]+")) {
-            throw invalid("INVALID_SEARCH", "Search for a username or case ID");
-        }
-        String sql = PUBLIC_SELECT + """
-              AND (
-                    c.case_id = ?
-                    OR p.lowercase_username = ?
-                    OR EXISTS (
-                        SELECT 1 FROM public_player_name_history history
-                        WHERE history.player_id = s.target_id
-                          AND history.lowercase_username = ?
-                    )
-              )
-            ORDER BY s.issued_at DESC, s.sanction_id DESC
-            LIMIT ?
-            """;
-        String lower = normalized.toLowerCase(Locale.ROOT);
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, normalized.toUpperCase(Locale.ROOT));
-            statement.setString(2, lower);
-            statement.setString(3, lower);
-            statement.setInt(4, limit);
-            try (ResultSet result = statement.executeQuery()) {
-                List<PublicPunishment> punishments = new ArrayList<>();
-                while (result.next()) {
-                    punishments.add(readPublicRow(result, now).punishment());
-                }
-                return List.copyOf(punishments);
-            }
-        } catch (SQLException | IllegalArgumentException exception) {
-            throw persistence("Unable to search the public punishment registry", exception);
-        }
+        return publicRegistry.searchPublic(query, limit, now);
     }
 
     @Override
     public Optional<PublicPunishment> publicCase(CaseId caseId, Instant now) {
-        if (caseId == null || now == null) {
-            throw invalid("INVALID_CASE_ID", "The case ID is invalid");
-        }
-        String sql = PUBLIC_SELECT + """
-              AND c.case_id = ?
-            ORDER BY s.issued_at DESC, s.sanction_id DESC
-            LIMIT 1
-            """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, caseId.value());
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next()
-                        ? Optional.of(readPublicRow(result, now).punishment())
-                        : Optional.empty();
-            }
-        } catch (SQLException | IllegalArgumentException exception) {
-            throw persistence("Unable to read the public case", exception);
-        }
+        return publicRegistry.publicCase(caseId, now);
     }
 
     @Override
@@ -743,38 +621,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         }
     }
 
-    private PublicRow readPublicRow(ResultSet result, Instant now) throws SQLException {
-        UUID sanctionId = UuidBytes.fromBytes(result.getBytes("sanction_id"));
-        Instant issuedAt = result.getTimestamp("issued_at").toInstant();
-        Timestamp expirationValue = result.getTimestamp("expiration_at");
-        Instant expiration = expirationValue == null ? null : expirationValue.toInstant();
-        PublicPunishmentState state = WebsitePunishmentProjection.publicState(
-                result.getString("status"), expiration, now
-        );
-        OptionalLong remaining = expiration == null
-                ? OptionalLong.empty()
-                : OptionalLong.of(state == PublicPunishmentState.ACTIVE
-                        ? Math.max(0, Duration.between(now, expiration).toSeconds())
-                        : 0);
-        String sanctionType = result.getString("sanction_type");
-        boolean appealAvailable = state == PublicPunishmentState.ACTIVE
-                && WebsitePunishmentProjection.isCodeEligibleType(sanctionType)
-                && "ACTIVE".equals(result.getString("code_status"));
-        PublicPunishment punishment = new PublicPunishment(
-                result.getString("current_username"),
-                WebsitePunishmentProjection.publicType(sanctionType),
-                result.getString("sanction_family"),
-                result.getString("public_reason"),
-                issuedAt,
-                Optional.ofNullable(expiration),
-                remaining,
-                state,
-                new CaseId(result.getString("case_id")),
-                appealAvailable
-        );
-        return new PublicRow(sanctionId, issuedAt, punishment);
-    }
-
     private CodeRow selectCodeByHash(Connection connection, byte[] hash, boolean lock) throws SQLException {
         String sql = CODE_ROW_SELECT + " WHERE pc.key_version = ? AND pc.code_hash = ?"
                 + (lock ? " FOR UPDATE" : "");
@@ -1137,9 +983,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         return exception instanceof ModerationPersistenceException persistenceException
                 ? persistenceException
                 : new ModerationPersistenceException(message, exception);
-    }
-
-    private record PublicRow(UUID sanctionId, Instant issuedAt, PublicPunishment punishment) {
     }
 
     private record CodeRow(

@@ -14,10 +14,13 @@ import org.junit.jupiter.api.Test;
 
 final class WebsitePunishmentProjectionTest {
     private static final Instant NOW = Instant.parse("2026-07-23T12:00:00.123456Z");
+    private static final String TYPE_BAN = "BAN";
+    private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String CASE_OPEN = "OPEN";
 
     @Test
     void mapsOnlySanitizedPublicTypes() {
-        assertEquals("BAN", WebsitePunishmentProjection.publicType("NETWORK_BAN"));
+        assertEquals(TYPE_BAN, WebsitePunishmentProjection.publicType("NETWORK_BAN"));
         assertEquals("IP_BAN", WebsitePunishmentProjection.publicType("NETWORK_IDENTITY_BAN"));
         assertEquals("MUTE", WebsitePunishmentProjection.publicType("MUTE"));
         assertEquals("WARNING", WebsitePunishmentProjection.publicType("WARNING"));
@@ -31,11 +34,11 @@ final class WebsitePunishmentProjectionTest {
     void derivesLivePublicStateFromStatusAndExpiration() {
         assertEquals(
                 PublicPunishmentState.ACTIVE,
-                WebsitePunishmentProjection.publicState("ACTIVE", NOW.plusSeconds(1), NOW)
+                WebsitePunishmentProjection.publicState(STATUS_ACTIVE, NOW.plusSeconds(1), NOW)
         );
         assertEquals(
                 PublicPunishmentState.EXPIRED,
-                WebsitePunishmentProjection.publicState("ACTIVE", NOW, NOW)
+                WebsitePunishmentProjection.publicState(STATUS_ACTIVE, NOW, NOW)
         );
         assertEquals(
                 PublicPunishmentState.REVOKED,
@@ -52,29 +55,50 @@ final class WebsitePunishmentProjectionTest {
         assertEquals(
                 "ELIGIBLE",
                 WebsitePunishmentProjection.eligibilityState(
-                        "ACTIVE", "OPEN", "ACTIVE", "BAN", NOW.plusSeconds(60), NOW
+                        STATUS_ACTIVE, CASE_OPEN, STATUS_ACTIVE, TYPE_BAN, NOW.plusSeconds(60), NOW
                 )
         );
         assertEquals(
                 "SANCTION_EXPIRED",
                 WebsitePunishmentProjection.eligibilityState(
-                        "ACTIVE", "OPEN", "ACTIVE", "MUTE", NOW, NOW
+                        STATUS_ACTIVE, CASE_OPEN, STATUS_ACTIVE, "MUTE", NOW, NOW
                 )
         );
         assertEquals(
                 "CODE_REVOKED",
                 WebsitePunishmentProjection.eligibilityState(
-                        "REVOKED", "OPEN", "ACTIVE", "BAN", null, NOW
+                        "REVOKED", CASE_OPEN, STATUS_ACTIVE, TYPE_BAN, null, NOW
                 )
         );
         assertEquals(
                 "OVERTURNED",
                 WebsitePunishmentProjection.eligibilityState(
-                        "ACTIVE", "FULLY_OVERTURNED", "OVERTURNED", "BAN", null, NOW
+                        STATUS_ACTIVE, "FULLY_OVERTURNED", "OVERTURNED", TYPE_BAN, null, NOW
                 )
         );
         assertFalse(WebsitePunishmentProjection.isCodeEligibleType("WARNING"));
         assertTrue(WebsitePunishmentProjection.isCodeEligibleType("NETWORK_IDENTITY_BAN"));
+        assertTrue(WebsitePunishmentProjection.appealAvailable(
+                PublicPunishmentState.ACTIVE,
+                TYPE_BAN,
+                STATUS_ACTIVE
+        ));
+        assertFalse(WebsitePunishmentProjection.appealAvailable(
+                PublicPunishmentState.EXPIRED,
+                TYPE_BAN,
+                STATUS_ACTIVE
+        ));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> WebsitePunishmentProjection.eligibilityState(
+                        STATUS_ACTIVE,
+                        CASE_OPEN,
+                        STATUS_ACTIVE,
+                        TYPE_BAN,
+                        null,
+                        null
+                )
+        );
     }
 
     @Test
