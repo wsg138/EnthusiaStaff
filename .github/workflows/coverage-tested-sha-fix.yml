@@ -29,11 +29,13 @@ jobs:
           path = Path('.github/workflows/coverage-measurement.yml')
           text = path.read_text(encoding='utf-8')
 
-          checkout = '''      - name: Check out tested commit
-                uses: actions/checkout@v6
-                with:
-                  ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          '''.replace('                ', '')
+          expression = '${' + "{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          checkout = (
+              '      - name: Check out tested commit\n'
+              '        uses: actions/checkout@v6\n'
+              '        with:\n'
+              f'          ref: {expression}\n'
+          )
           record = checkout + '''
       - name: Record checked-out SHA
         shell: bash
@@ -61,11 +63,11 @@ jobs:
               raise SystemExit('runtime inspection block was not found')
           text = text.replace(inspect, inspected, 1)
 
-          text = text.replace(
-              '            build/reports/runtime-jars/inspection.txt\n',
-              '            build/reports/runtime-jars\n',
-              1,
-          )
+          old_artifact = '            build/reports/runtime-jars/inspection.txt\n'
+          if old_artifact not in text:
+              raise SystemExit('runtime artifact path was not found')
+          text = text.replace(old_artifact, '            build/reports/runtime-jars\n', 1)
+
           old_label = "f\"- Tested commit: `{os.environ.get('GITHUB_SHA', 'unknown')}`\","
           new_label = "f\"- Tested commit: `{os.environ.get('TESTED_SHA', 'unknown')}`\","
           if old_label not in text:
