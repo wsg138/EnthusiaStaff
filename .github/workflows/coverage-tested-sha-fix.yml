@@ -1,0 +1,82 @@
+name: Apply Coverage tested-SHA correction
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out branch head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Correct tested-SHA diagnostics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/coverage-measurement.yml')
+          text = path.read_text(encoding='utf-8')
+
+          checkout = '''      - name: Check out tested commit
+                uses: actions/checkout@v6
+                with:
+                  ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          '''.replace('                ', '')
+          record = checkout + '''
+      - name: Record checked-out SHA
+        shell: bash
+        run: |
+          TESTED_SHA="$(git rev-parse HEAD)"
+          test -n "${TESTED_SHA}"
+          echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
+'''
+          if checkout not in text:
+              raise SystemExit('checkout block was not found')
+          text = text.replace(checkout, record, 1)
+
+          inspect = '''      - name: Inspect runtime jars
+        run: |
+          python3 - <<'PY'
+'''
+          inspected = '''      - name: Inspect runtime jars
+        run: |
+          test "${TESTED_SHA}" = "$(git rev-parse HEAD)"
+          mkdir -p build/reports/runtime-jars
+          printf '%s\\n' "${TESTED_SHA}" > build/reports/runtime-jars/tested-sha.txt
+          python3 - <<'PY'
+'''
+          if inspect not in text:
+              raise SystemExit('runtime inspection block was not found')
+          text = text.replace(inspect, inspected, 1)
+
+          text = text.replace(
+              '            build/reports/runtime-jars/inspection.txt\n',
+              '            build/reports/runtime-jars\n',
+              1,
+          )
+          old_label = "f\"- Tested commit: `{os.environ.get('GITHUB_SHA', 'unknown')}`\","
+          new_label = "f\"- Tested commit: `{os.environ.get('TESTED_SHA', 'unknown')}`\","
+          if old_label not in text:
+              raise SystemExit('failure tested-commit label was not found')
+          text = text.replace(old_label, new_label, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm .github/workflows/coverage-tested-sha-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Report the checked-out SHA in Coverage failures"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
