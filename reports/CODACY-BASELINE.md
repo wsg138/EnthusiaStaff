@@ -744,8 +744,12 @@ comparison, conflict fallback, and fingerprint serialization are null-safe and
 mapper-independent. Focused report unit and MariaDB tests pass, and PMD 7,
 Opengrep, and Lizard introduce no finding outside the already recorded Paper
 composition-root backlog. This documentation update corrects the provenance
-finding. The post-review head must repeat hosted Codacy, the clean build, and
-the exact-SHA Pi gate before merge; no second automated review is requested.
+finding. Final head `04c9f37d4b0ad683766218ea237428315a2f2bb6` passed the clean
+Java 21 gate with 378 tests, including all 59 MariaDB tests. Hosted Codacy
+reported zero new and 13 fixed issues with 76.27% diff coverage; the hosted
+build and Wiki validation passed, and exact-SHA Pi run `30702688979` passed in
+10 minutes 46 seconds. No second automated review was requested. PR #32 merged
+as `7555d1504666ad52178005b29b94525b54e088b6`.
 
 ## Remediation order
 
