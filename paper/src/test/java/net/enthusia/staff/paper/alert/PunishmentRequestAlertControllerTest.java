@@ -27,7 +27,7 @@ class PunishmentRequestAlertControllerTest {
     void disabledToEnabledStartsExactlyOneLifecycleWithStableOwner() {
         Factory factory = new Factory();
         AtomicReference<PunishmentRequestAlertController.Status> status = new AtomicReference<>();
-        PunishmentRequestAlertController controller = controller(disabled(), factory, status);
+        PunishmentRequestAlertController controller = controller(disabled(), factory, status::set);
 
         PunishmentRequestAlertController.ApplyResult attached = controller.attachStorage(storage());
         PunishmentRequestAlertController.ApplyResult enabled = controller.apply(enabled(10));

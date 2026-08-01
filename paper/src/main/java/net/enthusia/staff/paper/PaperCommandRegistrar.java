@@ -71,7 +71,7 @@ final class PaperCommandRegistrar {
             RuntimeHealth health,
             ConfigurationReloadAction reloadAction
     ) {
-        registerStatus(plugin, health, new EstaffCommand(health, reloadAction));
+        registerStatus(plugin, health, new EstaffCommand(plugin, health, reloadAction));
     }
 
     private static void registerStatus(JavaPlugin plugin, RuntimeHealth health, EstaffCommand executor) {

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.paper.RuntimeHealth;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
@@ -41,6 +42,66 @@ class EstaffCommandReloadTest {
 
         assertTrue(called.get());
         assertEquals(List.of("Alerts enabled", "Reason policies were replaced atomically."), messages);
+    }
+
+    @Test
+    void scheduledReloadDefersExecutionAndReportsTheFinalResultLater() {
+        AtomicBoolean called = new AtomicBoolean();
+        AtomicReference<Runnable> scheduled = new AtomicReference<>();
+        List<String> messages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(
+                health(),
+                () -> {
+                    called.set(true);
+                    return result(ConfigurationReloadResult.Outcome.APPLIED, "Applied", List.of(), false);
+                },
+                (sender, action, reporter) -> {
+                    scheduled.set(() -> reporter.accept(action.reload()));
+                    return EstaffCommand.ReloadDispatch.SCHEDULED;
+                }
+        );
+
+        command.onCommand(
+                sender(Map.of("enthusiastaff.reload", true), messages),
+                COMMAND,
+                "estaff",
+                new String[]{"reload"}
+        );
+
+        assertFalse(called.get());
+        assertEquals(List.of("EnthusiaStaff reload scheduled on the global region thread."), messages);
+        scheduled.get().run();
+        assertTrue(called.get());
+        assertEquals(List.of(
+                "EnthusiaStaff reload scheduled on the global region thread.",
+                "Applied"
+        ), messages);
+    }
+
+    @Test
+    void rejectedReloadDoesNotRunOrClaimConfigurationChanged() {
+        AtomicBoolean called = new AtomicBoolean();
+        List<String> messages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(
+                health(),
+                () -> {
+                    called.set(true);
+                    return result(ConfigurationReloadResult.Outcome.APPLIED, "unexpected", List.of(), false);
+                },
+                (sender, action, reporter) -> EstaffCommand.ReloadDispatch.REJECTED
+        );
+
+        command.onCommand(
+                sender(Map.of("enthusiastaff.reload", true), messages),
+                COMMAND,
+                "estaff",
+                new String[]{"reload"}
+        );
+
+        assertFalse(called.get());
+        assertEquals(List.of(
+                "EnthusiaStaff reload could not be scheduled; no configuration was changed."
+        ), messages);
     }
 
     @Test
