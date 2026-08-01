@@ -30,6 +30,7 @@ import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
+import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
@@ -62,11 +63,25 @@ final class PaperCommandRegistrar {
     }
 
     static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
+        registerStatus(plugin, health, new EstaffCommand(health));
+    }
+
+    static void registerStatus(
+            JavaPlugin plugin,
+            RuntimeHealth health,
+            ConfigurationReloadAction reloadAction
+    ) {
+        registerStatus(plugin, health, new EstaffCommand(health, reloadAction));
+    }
+
+    private static void registerStatus(JavaPlugin plugin, RuntimeHealth health, EstaffCommand executor) {
+        Objects.requireNonNull(health, "health");
         PluginCommand command = Objects.requireNonNull(
                 plugin.getCommand("estaff"),
                 "estaff command is missing from plugin.yml"
         );
-        command.setExecutor(new EstaffCommand(health));
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
     }
 
     void register() {

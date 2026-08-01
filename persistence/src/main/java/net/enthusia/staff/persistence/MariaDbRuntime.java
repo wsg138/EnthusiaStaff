@@ -115,15 +115,10 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     public LiteBansMigrationService liteBansMigrationService(NetworkIdentityProtector protector) {
-<<<<<<< ours
-        if (protector == null) throw new IllegalArgumentException("network identity protector must be present");
-        return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC(), protector);
-=======
         if (protector == null) {
             throw new IllegalArgumentException("network identity protector must be present");
         }
         return new LiteBansMigrationService(dataSource, jsonMapper(), Clock.systemUTC(), protector);
->>>>>>> theirs
     }
 
     public CutoverCoordinator cutoverCoordinator() {

@@ -1,6 +1,0 @@
-100644 fa2c1e69ed055e85b5b9978d5cf75df4de1ff346 1	paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java
-100644 5e6069daf9a3f47f9b29ce7b69cdc924e8fb04f9 2	paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java
-100644 d9f554f5220d6d34bf9a7aba4c3aabcdd2692851 3	paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java
-100644 a2bba38853cd94285b03c1c4dee508a7a249bc63 1	persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java
-100644 5a8901ec022ebccad632d0848ce576530601f948 2	persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java
-100644 e4fd79de5240aff3046554119afddc867bb77581 3	persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java
