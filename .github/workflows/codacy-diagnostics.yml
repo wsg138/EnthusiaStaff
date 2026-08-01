@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: apply-codacy-fixes
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   fix:
@@ -40,281 +40,261 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
-          def read(path: str) -> str:
+          def load(path: str) -> str:
               return Path(path).read_text(encoding="utf-8")
 
-          def write(path: str, content: str) -> None:
-              Path(path).write_text(content, encoding="utf-8")
+          def save(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding="utf-8")
 
-          def replace_exact(content: str, old: str, new: str, expected: int | None = None) -> str:
-              count = content.count(old)
-              if expected is not None and count != expected:
-                  raise SystemExit(f"Expected {expected} occurrences of {old!r}, found {count}")
-              if count == 0:
-                  raise SystemExit(f"Required text not found: {old!r}")
-              return content.replace(old, new)
+          def replace_literal(
+              path: str,
+              literal: str,
+              constant: str,
+              marker: str,
+              declaration: str,
+          ) -> None:
+              text = load(path)
+              if declaration.strip() in text:
+                  return
+              quoted = f'"{literal}"'
+              if text.count(quoted) < 2:
+                  raise SystemExit(f"Expected duplicate literal {quoted} in {path}")
+              if text.count(marker) != 1:
+                  raise SystemExit(f"Marker is not unique in {path}: {marker!r}")
+              text = text.replace(quoted, constant)
+              text = text.replace(marker, marker + declaration, 1)
+              save(path, text)
 
-          def insert_after(content: str, marker: str, addition: str) -> str:
-              if addition.strip() in content:
-                  raise SystemExit(f"Addition already present after {marker!r}")
-              if content.count(marker) != 1:
-                  raise SystemExit(f"Expected one marker {marker!r}, found {content.count(marker)}")
-              return content.replace(marker, marker + addition, 1)
+          replace_literal(
+              "common/src/test/java/net/enthusia/staff/common/ChecksTest.java",
+              "field",
+              "FIELD",
+              "class ChecksTest {\n",
+              '    private static final String FIELD = "field";\n\n',
+          )
 
-          # Common validation literals.
-          path = "common/src/test/java/net/enthusia/staff/common/ChecksTest.java"
-          text = read(path)
-          text = insert_after(text, "class ChecksTest {\n", "    private static final String FIELD = \"field\";\n\n")
-          text = replace_exact(text, '"field"', "FIELD", 7)
-          write(path, text)
-
-          # Paper lifecycle handle names.
-          path = "paper/src/test/java/net/enthusia/staff/paper/PaperRuntimeLifecycleTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
+          lifecycle = "paper/src/test/java/net/enthusia/staff/paper/PaperRuntimeLifecycleTest.java"
+          replace_literal(
+              lifecycle,
+              "task",
+              "TASK",
               '    private static final String STORAGE = "storage";\n',
-              '    private static final String TASK = "task";\n'
-              '    private static final String CHANNEL = "channel";\n'
+              '    private static final String TASK = "task";\n',
           )
-          text = replace_exact(text, '"task"', "TASK", 5)
-          text = replace_exact(text, '"channel"', "CHANNEL", 5)
-          write(path, text)
+          replace_literal(
+              lifecycle,
+              "channel",
+              "CHANNEL",
+              '    private static final String TASK = "task";\n',
+              '    private static final String CHANNEL = "channel";\n',
+          )
 
-          # Paper health issue key.
-          path = "paper/src/test/java/net/enthusia/staff/paper/RuntimeHealthTest.java"
-          text = read(path)
-          text = insert_after(text, "class RuntimeHealthTest {\n", '    private static final String DATABASE = "database";\n\n')
-          text = replace_exact(text, '"database"', "DATABASE", 5)
-          write(path, text)
+          replace_literal(
+              "paper/src/test/java/net/enthusia/staff/paper/RuntimeHealthTest.java",
+              "database",
+              "DATABASE",
+              "class RuntimeHealthTest {\n",
+              '    private static final String DATABASE = "database";\n\n',
+          )
 
-          # Keep metadata checks visible to static JUnit analysis by asserting once
-          # at method scope instead of only inside callbacks.
-          path = "paper/src/test/java/net/enthusia/staff/paper/config/PluginMetadataIntegrityTest.java"
-          text = read(path)
-          old = '''    @Test
-              void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
-                  JsonNode metadata = pluginMetadata();
-                  JsonNode permissions = metadata.path("permissions");
+          metadata_path = "paper/src/test/java/net/enthusia/staff/paper/config/PluginMetadataIntegrityTest.java"
+          metadata = load(metadata_path)
+          command_method = '''    @Test
+          void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
+              JsonNode metadata = pluginMetadata();
+              JsonNode permissions = metadata.path("permissions");
+              Set<String> missingPermissions = new HashSet<>();
 
-                  metadata.path("commands").properties().forEach(entry -> {
-                      JsonNode permission = entry.getValue().path("permission");
-                      if (!permission.isMissingNode()) {
-                          assertTrue(permissions.has(permission.asText()), entry.getKey() + " -> " + permission.asText());
-                      }
-                  });
-              }
-          '''.replace("              ", "")
-          new = '''    @Test
-              void everyCommandPermissionReferencesADeclaredPermission() throws IOException {
-                  JsonNode metadata = pluginMetadata();
-                  JsonNode permissions = metadata.path("permissions");
-                  Set<String> missingPermissions = new HashSet<>();
+              metadata.path("commands").properties().forEach(entry -> {
+                  JsonNode permission = entry.getValue().path("permission");
+                  if (!permission.isMissingNode() && !permissions.has(permission.asText())) {
+                      missingPermissions.add(entry.getKey() + " -> " + permission.asText());
+                  }
+              });
 
-                  metadata.path("commands").properties().forEach(entry -> {
-                      JsonNode permission = entry.getValue().path("permission");
-                      if (!permission.isMissingNode() && !permissions.has(permission.asText())) {
-                          missingPermissions.add(entry.getKey() + " -> " + permission.asText());
-                      }
-                  });
+              assertTrue(missingPermissions.isEmpty(), "Undeclared command permissions: " + missingPermissions);
+          }
+'''
+          child_method = '''    @Test
+          void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
+              JsonNode permissions = pluginMetadata().path("permissions");
+              Set<String> missingChildren = new HashSet<>();
 
-                  assertTrue(missingPermissions.isEmpty(), "Undeclared command permissions: " + missingPermissions);
-              }
-          '''.replace("              ", "")
-          text = replace_exact(text, old, new, 1)
+              permissions.properties().forEach(parent -> parent.getValue()
+                      .path("children")
+                      .properties()
+                      .filter(child -> !permissions.has(child.getKey()))
+                      .forEach(child -> missingChildren.add(
+                              parent.getKey() + " -> " + child.getKey()
+                      )));
 
-          old = '''    @Test
-              void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
-                  JsonNode permissions = pluginMetadata().path("permissions");
+              assertTrue(missingChildren.isEmpty(), "Undeclared child permissions: " + missingChildren);
+          }
+'''
+          patterns = (
+              (
+                  r"    @Test\n    void everyCommandPermissionReferencesADeclaredPermission\(\) throws IOException \{.*?\n    \}\n(?=\n    @Test)",
+                  command_method.rstrip("\n"),
+              ),
+              (
+                  r"    @Test\n    void everyPermissionChildReferencesAnotherDeclaredPermission\(\) throws IOException \{.*?\n    \}\n(?=\n    @Test)",
+                  child_method.rstrip("\n"),
+              ),
+          )
+          for pattern, replacement in patterns:
+              metadata, count = re.subn(pattern, replacement, metadata, count=1, flags=re.DOTALL)
+              if count != 1:
+                  raise SystemExit(f"Unable to replace metadata test matching {pattern}")
+          save(metadata_path, metadata)
 
-                  permissions.properties().forEach(parent -> parent.getValue()
-                          .path("children")
-                          .properties()
-                          .forEach(child -> assertTrue(
-                                  permissions.has(child.getKey()),
-                                  parent.getKey() + " -> " + child.getKey()
-                          )));
-              }
-          '''.replace("              ", "")
-          new = '''    @Test
-              void everyPermissionChildReferencesAnotherDeclaredPermission() throws IOException {
-                  JsonNode permissions = pluginMetadata().path("permissions");
-                  Set<String> missingChildren = new HashSet<>();
-
-                  permissions.properties().forEach(parent -> parent.getValue()
-                          .path("children")
-                          .properties()
-                          .filter(child -> !permissions.has(child.getKey()))
-                          .forEach(child -> missingChildren.add(
-                                  parent.getKey() + " -> " + child.getKey()
-                          )));
-
-                  assertTrue(missingChildren.isEmpty(), "Undeclared child permissions: " + missingChildren);
-              }
-          '''.replace("              ", "")
-          text = replace_exact(text, old, new, 1)
-          write(path, text)
-
-          # Database configuration credentials.
-          path = "persistence/src/test/java/net/enthusia/staff/persistence/DatabaseConfigTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
+          database_config = "persistence/src/test/java/net/enthusia/staff/persistence/DatabaseConfigTest.java"
+          replace_literal(
+              database_config,
+              "staff",
+              "USERNAME",
               '    private static final String URL = "jdbc:mariadb://127.0.0.1:3306/enthusiastaff";\n',
-              '    private static final String USERNAME = "staff";\n'
-              '    private static final String PASSWORD = "secret";\n'
+              '    private static final String USERNAME = "staff";\n',
           )
-          text = replace_exact(text, '"staff"', "USERNAME", 15)
-          text = replace_exact(text, '"secret"', "PASSWORD", 14)
-          write(path, text)
-
-          # JDBC transaction messages and expected values.
-          path = "persistence/src/test/java/net/enthusia/staff/persistence/JdbcTransactionSupportTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
-              "final class JdbcTransactionSupportTest {\n",
-              '    private static final String TRANSACTION_FAILED = "Transaction failed";\n'
-              '    private static final String COMMITTED = "committed";\n'
-              '    private static final String WRONG_COUNT = "wrong count";\n'
-              '    private static final String WRONG_BATCH = "wrong batch";\n\n'
+          replace_literal(
+              database_config,
+              "secret",
+              "PASSWORD",
+              '    private static final String USERNAME = "staff";\n',
+              '    private static final String PASSWORD = "secret";\n',
           )
-          text = replace_exact(text, '"Transaction failed"', "TRANSACTION_FAILED", 5)
-          text = replace_exact(text, '"committed"', "COMMITTED", 4)
-          text = replace_exact(text, '"wrong count"', "WRONG_COUNT", 8)
-          text = replace_exact(text, '"wrong batch"', "WRONG_BATCH", 5)
-          write(path, text)
 
-          # Split constructor validation into small fail-closed helpers.
-          path = "protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeAuthenticator.java"
-          text = read(path)
-          old = '''        if (protocolVersion < 1 || clock == null || permittedAge == null || permittedClockSkew == null
-                          || permittedAge.isZero() || permittedAge.isNegative() || permittedClockSkew.isNegative()
-                          || serverKeys == null || serverKeys.isEmpty() || replayGuard == null) {
-                      throw new IllegalArgumentException("authenticator configuration must be present and time bounds must be safe");
+          jdbc_test = "persistence/src/test/java/net/enthusia/staff/persistence/JdbcTransactionSupportTest.java"
+          constants = (
+              ("Transaction failed", "TRANSACTION_FAILED"),
+              ("committed", "COMMITTED"),
+              ("wrong count", "WRONG_COUNT"),
+              ("wrong batch", "WRONG_BATCH"),
+          )
+          marker = "final class JdbcTransactionSupportTest {\n"
+          for literal, constant in constants:
+              declaration = f'    private static final String {constant} = "{literal}";\n'
+              replace_literal(jdbc_test, literal, constant, marker, declaration)
+              marker = declaration
+          jdbc_text = load(jdbc_test)
+          first_test = "\n    @Test\n"
+          if "WRONG_BATCH;\n\n    @Test" not in jdbc_text:
+              jdbc_text = jdbc_text.replace("WRONG_BATCH;\n    @Test", "WRONG_BATCH;\n\n    @Test", 1)
+              save(jdbc_test, jdbc_text)
+
+          authenticator_path = "protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeAuthenticator.java"
+          authenticator = load(authenticator_path)
+          constructor_pattern = re.compile(
+              r"        if \(protocolVersion < 1.*?\n        \}\n        this\.protocolVersion",
+              re.DOTALL,
+          )
+          constructor_replacement = '''        validateConfiguration(
+                  protocolVersion,
+                  clock,
+                  permittedAge,
+                  permittedClockSkew,
+                  serverKeys,
+                  replayGuard
+          );
+          this.protocolVersion'''
+          authenticator, count = constructor_pattern.subn(constructor_replacement, authenticator, count=1)
+          if count != 1:
+              raise SystemExit("Unable to replace EnvelopeAuthenticator constructor validation")
+
+          if "private static void validateConfiguration(" not in authenticator:
+              helpers = '''    private static void validateConfiguration(
+                  int protocolVersion,
+                  Clock clock,
+                  Duration permittedAge,
+                  Duration permittedClockSkew,
+                  Map<String, SecretKey> serverKeys,
+                  ReplayGuard replayGuard
+          ) {
+              if (protocolVersion < 1) {
+                  throw invalidConfiguration();
+              }
+              requirePresent(clock, permittedAge, permittedClockSkew, serverKeys, replayGuard);
+              if (serverKeys.isEmpty()) {
+                  throw invalidConfiguration();
+              }
+              validateTimeBounds(permittedAge, permittedClockSkew);
+          }
+
+          private static void requirePresent(Object... values) {
+              for (Object value : values) {
+                  if (value == null) {
+                      throw invalidConfiguration();
                   }
-          '''.replace("          ", "")
-          new = '''        validateConfiguration(
-                          protocolVersion,
-                          clock,
-                          permittedAge,
-                          permittedClockSkew,
-                          serverKeys,
-                          replayGuard
-                  );
-          '''.replace("          ", "")
-          text = replace_exact(text, old, new, 1)
-          marker = '''    public ProtocolEnvelope sign(UnsignedEnvelope envelope) {
-          '''.replace("          ", "")
-          helpers = '''    private static void validateConfiguration(
-                          int protocolVersion,
-                          Clock clock,
-                          Duration permittedAge,
-                          Duration permittedClockSkew,
-                          Map<String, SecretKey> serverKeys,
-                          ReplayGuard replayGuard
-                  ) {
-                      if (protocolVersion < 1) {
-                          throw invalidConfiguration();
-                      }
-                      requirePresent(clock, permittedAge, permittedClockSkew, serverKeys, replayGuard);
-                      if (serverKeys.isEmpty()) {
-                          throw invalidConfiguration();
-                      }
-                      validateTimeBounds(permittedAge, permittedClockSkew);
-                  }
+              }
+          }
 
-                  private static void requirePresent(Object... values) {
-                      for (Object value : values) {
-                          if (value == null) {
-                              throw invalidConfiguration();
-                          }
-                      }
-                  }
+          private static void validateTimeBounds(Duration permittedAge, Duration permittedClockSkew) {
+              if (permittedAge.isZero() || permittedAge.isNegative()) {
+                  throw invalidConfiguration();
+              }
+              if (permittedClockSkew.isNegative()) {
+                  throw invalidConfiguration();
+              }
+          }
 
-                  private static void validateTimeBounds(Duration permittedAge, Duration permittedClockSkew) {
-                      if (permittedAge.isZero() || permittedAge.isNegative()) {
-                          throw invalidConfiguration();
-                      }
-                      if (permittedClockSkew.isNegative()) {
-                          throw invalidConfiguration();
-                      }
-                  }
+          private static IllegalArgumentException invalidConfiguration() {
+              return new IllegalArgumentException(
+                      "authenticator configuration must be present and time bounds must be safe"
+              );
+          }
 
-                  private static IllegalArgumentException invalidConfiguration() {
-                      return new IllegalArgumentException(
-                              "authenticator configuration must be present and time bounds must be safe"
-                      );
-                  }
+'''
+              marker = "    public ProtocolEnvelope sign(UnsignedEnvelope envelope) {\n"
+              if authenticator.count(marker) != 1:
+                  raise SystemExit("EnvelopeAuthenticator sign marker is not unique")
+              authenticator = authenticator.replace(marker, helpers + marker, 1)
+          save(authenticator_path, authenticator)
 
-          '''.replace("          ", "")
-          if text.count(marker) != 1:
-              raise SystemExit("EnvelopeAuthenticator sign marker was not unique")
-          text = text.replace(marker, helpers + marker, 1)
-          write(path, text)
-
-          # Protocol test identifiers.
-          path = "protocol/src/test/java/net/enthusia/staff/protocol/EnvelopeAuthenticatorTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
+          replace_literal(
+              "protocol/src/test/java/net/enthusia/staff/protocol/EnvelopeAuthenticatorTest.java",
+              "hub",
+              "HUB",
               '    private static final Duration MAX_SKEW = Duration.ofSeconds(30);\n',
-              '    private static final String HUB = "hub";\n'
+              '    private static final String HUB = "hub";\n',
           )
-          text = replace_exact(text, '"hub"', "HUB", 6)
-          write(path, text)
 
-          path = "protocol/src/test/java/net/enthusia/staff/protocol/ProtocolEnvelopeTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
-              '    private static final UUID MESSAGE_ID = UUID.fromString("53fa6153-2ad8-42ba-a4e9-8fb10d630f08");\n',
-              '    private static final String HUB = "hub";\n'
-              '    private static final String TYPE = "TYPE";\n'
-              '    private static final String NONCE = "nonce";\n'
-          )
-          text = replace_exact(text, '"hub"', "HUB", 10)
-          text = replace_exact(text, '"TYPE"', "TYPE", 11)
-          text = replace_exact(text, '"nonce"', "NONCE", 10)
-          write(path, text)
+          protocol_envelope_test = "protocol/src/test/java/net/enthusia/staff/protocol/ProtocolEnvelopeTest.java"
+          protocol_marker = '    private static final UUID MESSAGE_ID = UUID.fromString("53fa6153-2ad8-42ba-a4e9-8fb10d630f08");\n'
+          for literal, constant in (("hub", "HUB"), ("TYPE", "TYPE"), ("nonce", "NONCE")):
+              declaration = f'    private static final String {constant} = "{literal}";\n'
+              replace_literal(protocol_envelope_test, literal, constant, protocol_marker, declaration)
+              protocol_marker = declaration
 
-          path = "protocol/src/test/java/net/enthusia/staff/protocol/ReplayGuardTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
-              '    private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");\n',
-              '    private static final String BACKEND = "backend";\n'
-              '    private static final String BACKEND_ONE = "backend-1";\n'
-          )
-          text = replace_exact(text, '"backend-1"', "BACKEND_ONE", 7)
-          text = replace_exact(text, '"backend"', "BACKEND", 6)
-          write(path, text)
+          replay_test = "protocol/src/test/java/net/enthusia/staff/protocol/ReplayGuardTest.java"
+          replay_marker = '    private static final Instant NOW = Instant.parse("2026-07-28T00:00:00Z");\n'
+          for literal, constant in (("backend", "BACKEND"), ("backend-1", "BACKEND_ONE")):
+              declaration = f'    private static final String {constant} = "{literal}";\n'
+              replace_literal(replay_test, literal, constant, replay_marker, declaration)
+              replay_marker = declaration
 
-          # Velocity configuration literals.
-          path = "velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
-              "final class VelocityConfigurationTest {\n",
-              '    private static final String SECRET = "SECRET";\n'
-              '    private static final String TLS_KEY_STORE = "channel.tls-key-store";\n\n'
-          )
-          text = replace_exact(text, '"SECRET"', "SECRET", 8)
-          text = replace_exact(text, '"channel.tls-key-store"', "TLS_KEY_STORE", 5)
-          write(path, text)
+          velocity_config_test = "velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java"
+          velocity_marker = "final class VelocityConfigurationTest {\n"
+          for literal, constant in (("SECRET", "SECRET"), ("channel.tls-key-store", "TLS_KEY_STORE")):
+              declaration = f'    private static final String {constant} = "{literal}";\n'
+              replace_literal(velocity_config_test, literal, constant, velocity_marker, declaration)
+              velocity_marker = declaration
+          velocity_text = load(velocity_config_test)
+          if "TLS_KEY_STORE;\n\n    @Test" not in velocity_text:
+              velocity_text = velocity_text.replace("TLS_KEY_STORE;\n    @Test", "TLS_KEY_STORE;\n\n    @Test", 1)
+              save(velocity_config_test, velocity_text)
 
-          path = "velocity/src/test/java/net/enthusia/staff/velocity/VelocityRuntimeHealthTest.java"
-          text = read(path)
-          text = insert_after(
-              text,
+          replace_literal(
+              "velocity/src/test/java/net/enthusia/staff/velocity/VelocityRuntimeHealthTest.java",
+              "channel",
+              "CHANNEL",
               "class VelocityRuntimeHealthTest {\n",
-              '    private static final String CHANNEL = "channel";\n\n'
+              '    private static final String CHANNEL = "channel";\n\n',
           )
-          text = replace_exact(text, '"channel"', "CHANNEL", 5)
-          write(path, text)
           PY
+
+          git diff --check
 
       - name: Build and test the corrected branch
         shell: bash
