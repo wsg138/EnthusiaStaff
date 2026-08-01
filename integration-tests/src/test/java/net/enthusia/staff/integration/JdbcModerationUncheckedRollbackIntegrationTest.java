@@ -157,6 +157,11 @@ class JdbcModerationUncheckedRollbackIntegrationTest extends PunishmentRequestMa
         }
     }
 
+    private static Connection connection() throws SQLException {
+        return DriverManager.getConnection(
+                DATABASE.getJdbcUrl(), DATABASE.getUsername(), DATABASE.getPassword());
+    }
+
     private static ObjectMapper failingJson(IllegalStateException failure) {
         return new ObjectMapper() {
             private static final long serialVersionUID = 1L;
