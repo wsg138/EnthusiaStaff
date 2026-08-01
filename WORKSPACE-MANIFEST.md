@@ -14,6 +14,7 @@ This manifest records the durable punishment-request notification work on draft 
 - Draft PR: #27 — `Add durable punishment request notifications and recovery`
 - Main reconciliation merge commit: `a40f0ad8fb18311611d4e3bed76c56ee82e470bf`
 - Validated post-merge/deadlock-fix head: `5faf99021b394411a8737a15e5a9a2540fe3bc2b`
+- Validated Paper bootstrap-threading head: `aeea8be35156d3ddedfc1719fdfc16cac431af02`
 - PR #27 status at this checkpoint: open, draft, unmerged, mergeable
 
 The merge was produced through temporary PR #28 because the active repository environment had connected GitHub write access but no local authenticated Git/`gh` checkout. PR #28 merged `main` into the existing development branch with a normal merge commit. It did not merge or mark PR #27 ready.
@@ -138,7 +139,7 @@ MariaDB selected the direct-punishment transaction as the deadlock victim while 
 
 ## Deadlock correction
 
-The development branch now wraps the public MariaDB moderation store with bounded deadlock recovery while retaining the raw connection-scoped store for request approval transactions.
+The public MariaDB moderation store is now wrapped with bounded deadlock recovery while the raw connection-scoped store remains in use for request approval transactions.
 
 Properties:
 
@@ -185,50 +186,130 @@ Evidence:
 - Provider API leaks: `0`
 - Validation artifact: `8811922938`
 - Artifact digest: `sha256:479ef30818cece42b7357f60679a3de200d9dc77fee1cd1a9266a9d8967681e3`
-- Codacy coverage upload: success
-- Codacy final notification: success
+- Codacy coverage upload and final notification: success
 
-This exact-head evidence validates the reconciled persistence/lifecycle checkpoint and the bounded deadlock correction. It does not validate B3 Paper delivery.
+This exact-head evidence validates the reconciled persistence/lifecycle checkpoint and bounded deadlock correction. It does not validate B3 Paper delivery.
 
-## Existing Paper startup-thread defect
+## Paper bootstrap-thread correction
 
-The current plugin still submits `initializeStorage()` to the worker executor and directly enters a completion method that:
+The prior plugin opened and migrated MariaDB asynchronously, then directly continued into Bukkit-facing recovery work from the executor thread. The correction now uses an explicit `PaperStorageBootstrapCoordinator` with three phases.
 
-- reads online players;
-- calls manager recovery/initialization methods using Bukkit;
-- performs persisted operational-state work;
-- starts the persistent channel;
-- registers recurring database work.
+### Asynchronous storage phase
 
-This must not be moved wholesale to the Bukkit thread. The required correction is:
+- reads already-snapshotted database settings;
+- opens Hikari and executes Flyway;
+- constructs `MariaDbRuntime` and `PaperStorageBindings`;
+- reads and transitions persisted operational state;
+- publishes storage only while the lifecycle is still running.
 
-1. asynchronous database open, Flyway migration, non-Bukkit binding construction, and persisted-state calculation;
-2. synchronous Bukkit manager recovery and runtime publication through the Paper scheduler;
-3. asynchronous persistent-channel startup and recurring database operations.
+### Synchronous Bukkit phase
 
-Every handoff must recheck shutdown. A late synchronous callback must not publish or restart components after shutdown, and an unpublished runtime must close exactly once.
+Scheduled through Paper's global-region scheduler:
+
+- snapshots online player UUID, name, and current rank;
+- starts freeze verification using immutable UUID/name data;
+- starts staff-session recovery using immutable UUID/rank data;
+- initializes vanish visibility;
+- publishes operational mode and health;
+- rechecks shutdown before each publication step and during player iteration.
+
+`FreezeManager` and `StaffModeManager` now reacquire current players by UUID on the appropriate scheduler rather than retaining mutable `Player` objects across asynchronous persistence work. Active staff-session recovery also performs a fresh synchronous rank check before applying Bukkit state.
+
+### Asynchronous follow-up phase
+
+- loads channel secrets and TLS material;
+- starts the persistent Velocity socket client;
+- registers recurring operational-state database work.
+
+`PaperPersistentChannelFactory` now separates a synchronous immutable configuration snapshot from asynchronous environment/TLS/network startup, so Bukkit configuration is not read from the executor thread.
+
+### Shutdown behavior
+
+- shutdown before publication closes the unpublished MariaDB runtime;
+- shutdown after conditional publication but before Bukkit completion removes and closes that exact runtime;
+- a late synchronous callback cannot publish mode, recover managers, or restart follow-up components after shutdown;
+- cleanup is conditional on runtime identity, preventing a stale callback from closing a replacement runtime;
+- coordinator tests cover phase order, shutdown during open, shutdown between phases, synchronous failure, and duplicate start rejection.
+
+Pushed Phase C commits:
+
+- `34d405dfbd810c903ea407d3de19ccd044aa24d4` — `Add Paper storage bootstrap coordinator`
+- `266623546dd1b60a94d480d94e3100ae7b703438` — `Test Paper storage bootstrap thread transitions`
+- `f3362375de1775978a7d905eeb05824cc434646f` — `Remove asynchronous Player capture from freeze recovery`
+- `c4e1715b45e45c8a41b691d2b8754bd3064ff800` — `Remove asynchronous Player capture from staff recovery`
+- `c643acdc2dbc4a824b8990a4b50de39a3db2247e` — `Snapshot persistent channel configuration synchronously`
+- `fe0b690ac791efe28469b6c1c3b2181cffe6f7f4` — `Return Paper storage bootstrap to the Bukkit scheduler`
+- `aeea8be35156d3ddedfc1719fdfc16cac431af02` — `Fix persistent channel settings validation`
+
+An intermediate compile run at `c643acdc...` exposed a stale call signature and an invalid compact-record-constructor return. Both were corrected before the validated head.
+
+## Validated Paper bootstrap-threading checkpoint
+
+Validated exact head:
+
+`aeea8be35156d3ddedfc1719fdfc16cac431af02`
+
+Evidence:
+
+- Workflow run: `30680602051`
+- Job: `91316711573`
+- Result: success
+- Java: Temurin `21.0.11+10`
+- Command: the exact clean Java 21 command recorded above
+- Build: `BUILD SUCCESSFUL in 3m 1s`
+- Tasks: 49 actionable; 40 executed, 9 up-to-date
+- MariaDB/Testcontainers integration suites: executed successfully
+- Paper tests: success
+- Paper runtime JAR count: `1`
+- Velocity runtime JAR count: `1`
+- ZIP integrity: success for both runtime JARs
+- Paper SHA-256: `82871630fc9cdc7d411acb52d28cd7ddcefa2f1717cf6f9f8b22118815e1e21e`
+- Velocity SHA-256: `f6880b683a7c08e7321cf953aa406e05631bc3142bab10a4afb2ef021bc2bf1e`
+- Provider API source types checked per runtime: `24`
+- Provider API leaks: `0`
+- Aggregate lines: `34.72%`
+- Aggregate branches: `28.25%`
+- Aggregate instructions: `37.03%`
+- Validation artifact: `8812093760`
+- Artifact digest: `sha256:14ccc12397c12cdcea963136bc8d87e06b44d2df8c33de25ba16dc91108c42ba`
+- Codacy coverage upload and final notification: success
+
+This validates the Paper startup-thread correction. It does not validate the B3 alert worker, configuration reload, staging, live Discord delivery, or production operation.
+
+## B3 API review started
+
+The existing interfaces and command implementation were inspected before worker development:
+
+- alert work is claimed per delivery recipient through `claimDirect(...)` and `claimAudience(...)`;
+- claims carry the durable delivery ID, immutable intent, attempt count, and lease deadline;
+- request rendering can use `PunishmentRequestStore.find(...)` asynchronously;
+- all six lifecycle events already exist;
+- immutable intents already encode direct/reviewer/operational audience, requester exclusion, minimum rank, and visibility;
+- the actual review click command is `/punish review <request-id>`.
+
+No B3 delivery worker has been committed at this checkpoint.
 
 ## B3 status
 
 B3 remains unvalidated and incomplete. Required remaining work includes:
 
 - Paper alert presentation contracts and renderer;
-- bounded alert worker with async claim / sync authorization+presentation / async outcome recording;
+- bounded alert worker with async claim / sync authorization and presentation / async outcome recording;
 - direct, reviewer, and operational authorization rechecks;
 - disconnect/retry/cancellation/dead-letter classification;
 - periodic and join-triggered single-flight scheduling;
 - bounded maintenance operations;
 - validated immutable worker configuration;
 - real `/estaff reload` with old-config retention on failure;
-- storage-port exposure and lifecycle ownership;
-- orchestration, renderer, startup-thread, configuration, reload, and integration tests;
+- storage-port exposure and worker lifecycle ownership;
+- orchestration, renderer, configuration, reload, and integration tests;
 - refreshed Codacy finding review;
 - one-off CodeRabbit review;
 - exact-head B3 validation.
 
 ## Quality state
 
-The latest known aggregate before B3 work was not clean:
+The latest known static-analysis aggregate before B3 work was not clean:
 
 - 51 total findings
 - 7 critical
@@ -237,8 +318,8 @@ The latest known aggregate before B3 work was not clean:
 - 83.65% diff coverage
 - +2.18% overall coverage variation
 
-These values must be refreshed at the intended review head. They are not treated as approval and must not be copied forward as current B3 results without verification.
+These values have not yet been refreshed at the intended B3 review head. They are not treated as approval and must not be copied forward as current B3 results without verification.
 
 ## Documentation-head rule
 
-This manifest update creates a later documentation head than `5faf9902...`. The manifest commit itself must receive its own exact-head CI evidence before it is described as the current validated branch head. The evidence above remains valid evidence for the exact code head it names.
+This manifest update creates a later documentation head than `aeea8be3...`. The manifest commit itself requires exact-head CI evidence before it can be described as the current validated branch head. The evidence above remains valid for the exact code head it names.
