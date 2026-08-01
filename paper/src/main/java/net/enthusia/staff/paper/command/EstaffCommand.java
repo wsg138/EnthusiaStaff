@@ -5,6 +5,7 @@ import net.enthusia.staff.paper.RuntimeHealth;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.jetbrains.annotations.NotNull;
 
 public final class EstaffCommand implements CommandExecutor {
@@ -28,7 +29,7 @@ public final class EstaffCommand implements CommandExecutor {
         String operation = args.length == 0 ? "status" : args[0].toLowerCase(java.util.Locale.ROOT);
         String permission = permissionFor(operation);
         if (permission == null) {
-            if (CommandPermissionGate.require(
+            if (requirePermission(
                     sender,
                     STATUS_PERMISSION,
                     "You do not have permission to view EnthusiaStaff status."
@@ -37,7 +38,7 @@ public final class EstaffCommand implements CommandExecutor {
             }
             return true;
         }
-        if (!CommandPermissionGate.require(sender, permission, denialMessage(operation))) {
+        if (!requirePermission(sender, permission, denialMessage(operation))) {
             return true;
         }
         if (operation.equals("reload")) {
@@ -54,6 +55,13 @@ public final class EstaffCommand implements CommandExecutor {
             }
         }
         return true;
+    }
+
+    static boolean requirePermission(CommandSender sender, String permission, String denialMessage) {
+        if (permission != null && !permission.isBlank() && sender instanceof ConsoleCommandSender) {
+            return true;
+        }
+        return CommandPermissionGate.require(sender, permission, denialMessage);
     }
 
     private static String permissionFor(String operation) {

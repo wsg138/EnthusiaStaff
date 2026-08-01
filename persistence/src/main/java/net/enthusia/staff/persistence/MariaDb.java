@@ -31,7 +31,7 @@ public final class MariaDb {
     }
 
     public static MigrateResult migrate(DataSource dataSource) {
-        return Flyway.configure()
+        return Flyway.configure(MariaDb.class.getClassLoader())
                 .dataSource(dataSource)
                 .locations("classpath:db/migration")
                 .validateMigrationNaming(true)

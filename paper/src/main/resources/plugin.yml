@@ -27,7 +27,6 @@ commands:
   estaff:
     description: EnthusiaStaff status, verification, and recovery commands
     usage: /estaff <status|verify|reload>
-    permission: enthusiastaff.status
   punish:
     description: Open or execute the central punishment workflow
     usage: /punish <player> [reason-id] or /punish resume <player>
