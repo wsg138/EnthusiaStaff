@@ -23,59 +23,8 @@ jobs:
       - name: Correct tested-SHA diagnostics
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/workflows/coverage-measurement.yml')
-          text = path.read_text(encoding='utf-8')
-
-          expression = '${' + "{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          checkout = (
-              '      - name: Check out tested commit\n'
-              '        uses: actions/checkout@v6\n'
-              '        with:\n'
-              f'          ref: {expression}\n'
-          )
-          record = checkout + '''
-      - name: Record checked-out SHA
-        shell: bash
-        run: |
-          TESTED_SHA="$(git rev-parse HEAD)"
-          test -n "${TESTED_SHA}"
-          echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
-'''
-          if checkout not in text:
-              raise SystemExit('checkout block was not found')
-          text = text.replace(checkout, record, 1)
-
-          inspect = '''      - name: Inspect runtime jars
-        run: |
-          python3 - <<'PY'
-'''
-          inspected = '''      - name: Inspect runtime jars
-        run: |
-          test "${TESTED_SHA}" = "$(git rev-parse HEAD)"
-          mkdir -p build/reports/runtime-jars
-          printf '%s\\n' "${TESTED_SHA}" > build/reports/runtime-jars/tested-sha.txt
-          python3 - <<'PY'
-'''
-          if inspect not in text:
-              raise SystemExit('runtime inspection block was not found')
-          text = text.replace(inspect, inspected, 1)
-
-          old_artifact = '            build/reports/runtime-jars/inspection.txt\n'
-          if old_artifact not in text:
-              raise SystemExit('runtime artifact path was not found')
-          text = text.replace(old_artifact, '            build/reports/runtime-jars\n', 1)
-
-          old_label = "f\"- Tested commit: `{os.environ.get('GITHUB_SHA', 'unknown')}`\","
-          new_label = "f\"- Tested commit: `{os.environ.get('TESTED_SHA', 'unknown')}`\","
-          if old_label not in text:
-              raise SystemExit('failure tested-commit label was not found')
-          text = text.replace(old_label, new_label, 1)
-          path.write_text(text, encoding='utf-8')
-          PY
-
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwYXRoID0gUGF0aCgnLmdpdGh1Yi93b3JrZmxvd3MvY292ZXJhZ2UtbWVhc3VyZW1lbnQueW1sJykKdGV4dCA9IHBhdGgucmVhZF90ZXh0KGVuY29kaW5nPSd1dGYtOCcpCmV4cHJlc3Npb24gPSAnJHsnICsgInsgZ2l0aHViLmV2ZW50X25hbWUgPT0gJ3B1bGxfcmVxdWVzdCcgJiYgZ2l0aHViLmV2ZW50LnB1bGxfcmVxdWVzdC5oZWFkLnNoYSB8fCBnaXRodWIuc2hhIH19IgpjaGVja291dCA9ICgKICAgICcgICAgICAtIG5hbWU6IENoZWNrIG91dCB0ZXN0ZWQgY29tbWl0XG4nCiAgICAnICAgICAgICB1c2VzOiBhY3Rpb25zL2NoZWNrb3V0QHY2XG4nCiAgICAnICAgICAgICB3aXRoOlxuJwogICAgZicgICAgICAgICAgcmVmOiB7ZXhwcmVzc2lvbn1cbicKKQpyZWNvcmQgPSBjaGVja291dCArICgKICAgICdcbicKICAgICcgICAgICAtIG5hbWU6IFJlY29yZCBjaGVja2VkLW91dCBTSEFcbicKICAgICcgICAgICAgIHNoZWxsOiBiYXNoXG4nCiAgICAnICAgICAgICBydW46IHxcbicKICAgICcgICAgICAgICAgVEVTVEVEX1NIQT0iJChnaXQgcmV2LXBhcnNlIEhFQUQpIlxuJwogICAgJyAgICAgICAgICB0ZXN0IC1uICIke1RFU1RFRF9TSEF9IlxuJwogICAgJyAgICAgICAgICBlY2hvICJURVNURURfU0hBPSR7VEVTVEVEX1NIQX0iID4+ICIke0dJVEhVQl9FTlZ9IlxuJwopCmlmIGNoZWNrb3V0IG5vdCBpbiB0ZXh0OgogICAgcmFpc2UgU3lzdGVtRXhpdCgnY2hlY2tvdXQgYmxvY2sgd2FzIG5vdCBmb3VuZCcpCnRleHQgPSB0ZXh0LnJlcGxhY2UoY2hlY2tvdXQsIHJlY29yZCwgMSkKaW5zcGVjdCA9ICIgICAgICAtIG5hbWU6IEluc3BlY3QgcnVudGltZSBqYXJzXG4gICAgICAgIHJ1bjogfFxuICAgICAgICAgIHB5dGhvbjMgLSA8PCdQWSdcbiIKaW5zcGVjdGVkID0gKAogICAgJyAgICAgIC0gbmFtZTogSW5zcGVjdCBydW50aW1lIGphcnNcbicKICAgICcgICAgICAgIHJ1bjogfFxuJwogICAgJyAgICAgICAgICB0ZXN0ICIke1RFU1RFRF9TSEF9IiA9ICIkKGdpdCByZXYtcGFyc2UgSEVBRCkiXG4nCiAgICAnICAgICAgICAgIG1rZGlyIC1wIGJ1aWxkL3JlcG9ydHMvcnVudGltZS1qYXJzXG4nCiAgICAiICAgICAgICAgIHByaW50ZiAnJXNcXG4nIFwiJHtURVNURURfU0hBfVwiID4gYnVpbGQvcmVwb3J0cy9ydW50aW1lLWphcnMvdGVzdGVkLXNoYS50eHRcbiIKICAgICIgICAgICAgICAgcHl0aG9uMyAtIDw8J1BZJ1xuIgopCmlmIGluc3BlY3Qgbm90IGluIHRleHQ6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCdydW50aW1lIGluc3BlY3Rpb24gYmxvY2sgd2FzIG5vdCBmb3VuZCcpCnRleHQgPSB0ZXh0LnJlcGxhY2UoaW5zcGVjdCwgaW5zcGVjdGVkLCAxKQpvbGRfYXJ0aWZhY3QgPSAnICAgICAgICAgICAgYnVpbGQvcmVwb3J0cy9ydW50aW1lLWphcnMvaW5zcGVjdGlvbi50eHRcbicKaWYgb2xkX2FydGlmYWN0IG5vdCBpbiB0ZXh0OgogICAgcmFpc2UgU3lzdGVtRXhpdCgncnVudGltZSBhcnRpZmFjdCBwYXRoIHdhcyBub3QgZm91bmQnKQp0ZXh0ID0gdGV4dC5yZXBsYWNlKG9sZF9hcnRpZmFjdCwgJyAgICAgICAgICAgIGJ1aWxkL3JlcG9ydHMvcnVudGltZS1qYXJzXG4nLCAxKQpvbGRfbGFiZWwgPSAiZlwiLSBUZXN0ZWQgY29tbWl0OiBge29zLmVudmlyb24uZ2V0KCdHSVRIVUJfU0hBJywgJ3Vua25vd24nKX1gXCIsIgpuZXdfbGFiZWwgPSAiZlwiLSBUZXN0ZWQgY29tbWl0OiBge29zLmVudmlyb24uZ2V0KCdURVNURURfU0hBJywgJ3Vua25vd24nKX1gXCIsIgppZiBvbGRfbGFiZWwgbm90IGluIHRleHQ6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCdmYWlsdXJlIHRlc3RlZC1jb21taXQgbGFiZWwgd2FzIG5vdCBmb3VuZCcpCnRleHQgPSB0ZXh0LnJlcGxhY2Uob2xkX2xhYmVsLCBuZXdfbGFiZWwsIDEpCnBhdGgud3JpdGVfdGV4dCh0ZXh0LCBlbmNvZGluZz0ndXRmLTgnKQo=' | base64 --decode > /tmp/fix-coverage.py
+          python3 /tmp/fix-coverage.py
           rm .github/workflows/coverage-tested-sha-fix.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
