@@ -9,28 +9,30 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ChecksTest {
+    private static final String FIELD = "field";
+
     @Test
     void nonBlankTrimsAndReturnsTheNormalizedValue() {
-        assertEquals("value", Checks.nonBlank("  value  ", "field", 5));
+        assertEquals("value", Checks.nonBlank("  value  ", FIELD, 5));
     }
 
     @Test
     void nonBlankAcceptsTheExactMaximumLengthAfterTrimming() {
-        assertEquals("12345", Checks.nonBlank(" 12345 ", "field", 5));
+        assertEquals("12345", Checks.nonBlank(" 12345 ", FIELD, 5));
     }
 
     @Test
     void nonBlankRejectsNullEmptyAndWhitespaceOnlyValues() {
-        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank(null, "field", 5));
-        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank("", "field", 5));
-        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank("   ", "field", 5));
+        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank(null, FIELD, 5));
+        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank("", FIELD, 5));
+        assertThrows(IllegalArgumentException.class, () -> Checks.nonBlank("   ", FIELD, 5));
     }
 
     @Test
     void nonBlankRejectsValuesAboveTheMaximumAfterTrimming() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> Checks.nonBlank(" 123456 ", "field", 5)
+                () -> Checks.nonBlank(" 123456 ", FIELD, 5)
         );
         assertEquals("field exceeds 5 characters", exception.getMessage());
     }
