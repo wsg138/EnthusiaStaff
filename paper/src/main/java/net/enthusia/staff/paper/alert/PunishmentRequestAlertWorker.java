@@ -257,12 +257,7 @@ public final class PunishmentRequestAlertWorker {
             ClaimBudget budget
     ) {
         Instant now = clock.instant();
-        alerts.reconcileRecipientAuthorization(
-                recipient.playerId(),
-                recipient.rank(),
-                now,
-                settings.totalClaimLimit()
-        );
+        reconcileAuthorization(recipient, now);
         List<PunishmentRequestAlertClaim> claimed = new ArrayList<>();
         claimDirect(recipient, budget, now, claimed);
         StaffRank rank = recipient.rank();
@@ -289,6 +284,26 @@ public final class PunishmentRequestAlertWorker {
             );
         }
         return List.copyOf(claimed);
+    }
+
+    private void reconcileAuthorization(
+            PunishmentRequestAlertRecipient recipient,
+            Instant now
+    ) {
+        try {
+            alerts.reconcileRecipientAuthorization(
+                    recipient.playerId(),
+                    recipient.rank(),
+                    now,
+                    settings.totalClaimLimit()
+            );
+        } catch (RuntimeException exception) {
+            logger.log(
+                    Level.WARNING,
+                    "Punishment request alert authorization reconciliation failed; direct delivery will continue",
+                    exception
+            );
+        }
     }
 
     private void claimDirect(

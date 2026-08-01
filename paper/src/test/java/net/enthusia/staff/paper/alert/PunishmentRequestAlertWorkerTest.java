@@ -139,6 +139,18 @@ class PunishmentRequestAlertWorkerTest {
     }
 
     @Test
+    void reconciliationFailureDoesNotBlockDirectRequesterDelivery() {
+        Harness harness = Harness.direct();
+        harness.alerts.throwOnReconciliation = true;
+
+        harness.runComplete();
+
+        assertEquals(1, harness.alerts.reconciliationCalls);
+        assertEquals(1, harness.presenter.presented);
+        assertEquals(1, harness.alerts.delivered);
+    }
+
+    @Test
     void developerAndHelperNeverClaimReviewerAlerts() {
         for (StaffRank rank : List.of(StaffRank.DEVELOPER, StaffRank.HELPER)) {
             Harness harness = Harness.reviewer(StaffRank.MOD, rank, rank);
@@ -514,6 +526,7 @@ class PunishmentRequestAlertWorkerTest {
         private String lastCode;
         private int lastMaximumAttempts;
         private boolean throwOnDelivered;
+        private boolean throwOnReconciliation;
 
         private RecordingAlertStore(AtomicReference<Role> role) {
             this.role = role;
@@ -567,6 +580,9 @@ class PunishmentRequestAlertWorkerTest {
             requireAsync();
             reconciliationCalls++;
             lastReconciliationRank = currentRank;
+            if (throwOnReconciliation) {
+                throw new IllegalStateException("simulated reconciliation failure");
+            }
             return 0;
         }
 

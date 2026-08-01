@@ -27,6 +27,7 @@ import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
+import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.config.PaperConfigurationLoader;
@@ -73,6 +74,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ConfigurationReloadCoordinator reloadCoordinator;
     private PaperDatabaseConfiguration.Settings databaseSettings;
     private StorageBootstrapCoordinator<StorageBootstrapContext> storageBootstrap;
+    private PaperOperationalTaskCoordinator operationalTasks;
 
     @Override
     public void onEnable() {
@@ -104,6 +106,16 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             );
         }
         runtimeComponents = createRuntimeComponents();
+        operationalTasks = new PaperOperationalTaskCoordinator(
+                workers,
+                lifecycle::stopping,
+                this::refreshOperationalState,
+                runtimeComponents.reportEvidenceMaintenance(),
+                () -> storageValue(PaperStorageBindings::punishmentRequestStore),
+                this::activeAlertSettings,
+                Clock.systemUTC(),
+                getLogger()
+        );
         integrations = createIntegrationManager();
         integrations.initializeEconomy();
         clientEvidenceCollector = ClientEvidenceCollector.discover(this, Clock.systemUTC());
@@ -391,7 +403,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             Runnable retired
     ) {
         Player located = getServer().getPlayer(playerId);
-        if (located == null || !located.isOnline()) {
+        if (located == null) {
             retired.run();
             return;
         }
@@ -523,19 +535,17 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void runOperationalTasks() {
-        refreshOperationalState();
-        if (workers == null || workers.isShutdown()) {
-            return;
+        PaperOperationalTaskCoordinator current = operationalTasks;
+        if (current != null) {
+            current.trigger();
         }
-        try {
-            workers.execute(runtimeComponents.reportEvidenceMaintenance());
-        } catch (RejectedExecutionException exception) {
-            getLogger().log(
-                    Level.FINE,
-                    "Report evidence maintenance was rejected; the next operational tick will retry",
-                    exception
-            );
-        }
+    }
+
+    private PunishmentRequestAlertWorkerSettings activeAlertSettings() {
+        ConfigurationReloadCoordinator current = reloadCoordinator;
+        return current == null
+                ? configurationSnapshot.punishmentRequestAlerts()
+                : current.activeSnapshot().punishmentRequestAlerts();
     }
 
     private void degradeBootstrap(String reason) {
@@ -549,6 +559,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             mode.set(OperationalMode.MAINTENANCE);
             publishHealth(OperationalMode.MAINTENANCE, Map.of("shutdown", "Runtime is shutting down"));
         });
+        resources.close("operational task coordinator", operationalTasks);
         resources.close("punishment-request alert controller", alertController);
         cancelOperationalStateTask();
         closeChannelClient();

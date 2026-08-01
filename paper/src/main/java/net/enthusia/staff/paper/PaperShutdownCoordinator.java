@@ -23,9 +23,25 @@ final class PaperShutdownCoordinator {
     }
 
     void shutdown() {
-        closeOperationalRuntime.run();
-        closeNonDatabaseResources.run();
-        drainWorkers.run();
-        closeDatabase.run();
+        RuntimeException failure = run(closeOperationalRuntime, null);
+        failure = run(closeNonDatabaseResources, failure);
+        failure = run(drainWorkers, failure);
+        failure = run(closeDatabase, failure);
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    private static RuntimeException run(Runnable operation, RuntimeException previous) {
+        try {
+            operation.run();
+            return previous;
+        } catch (RuntimeException exception) {
+            if (previous == null) {
+                return exception;
+            }
+            previous.addSuppressed(exception);
+            return previous;
+        }
     }
 }
