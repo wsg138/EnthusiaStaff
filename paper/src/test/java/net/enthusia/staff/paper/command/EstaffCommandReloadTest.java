@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.paper.RuntimeHealth;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
+import net.kyori.adventure.text.TextComponent;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -228,13 +229,20 @@ class EstaffCommandReloadTest {
                 (instance, method, arguments) -> switch (method.getName()) {
                     case "hasPermission" -> permissions.getOrDefault(String.valueOf(arguments[0]), false);
                     case "sendMessage" -> {
-                        messages.add(String.valueOf(arguments[0]));
+                        messages.add(messageText(arguments[0]));
                         yield null;
                     }
                     case "getName" -> "EstaffCommandReloadTest";
                     default -> defaultValue(method.getReturnType());
                 }
         );
+    }
+
+    private static String messageText(Object value) {
+        if (value instanceof TextComponent component) {
+            return component.content();
+        }
+        return String.valueOf(value);
     }
 
     private static Object defaultValue(Class<?> type) {
