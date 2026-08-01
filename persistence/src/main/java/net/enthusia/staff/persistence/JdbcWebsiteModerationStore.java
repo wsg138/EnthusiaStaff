@@ -1,6 +1,5 @@
 package net.enthusia.staff.persistence;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -8,12 +7,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.sql.Types;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -27,24 +22,18 @@ import net.enthusia.staff.domain.website.PublicPunishmentPage;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
+import net.enthusia.staff.persistence.JdbcPunishmentCodeRepository.CodeRow;
 
 public final class JdbcWebsiteModerationStore implements WebsiteModerationStore {
     private static final int MAX_BATCH = 5_000;
-    private static final String CODE_ROW_SELECT = """
-            SELECT pc.sanction_id, pc.case_id, pc.key_version, pc.generation,
-                   pc.code_hash, pc.status AS code_status, pc.claimed_account_token,
-                   s.target_id, s.sanction_type, s.status AS sanction_status,
-                   s.expiration_at, c.state AS case_state, p.current_username
-            FROM punishment_codes pc
-            JOIN sanctions s ON s.sanction_id = pc.sanction_id
-            JOIN cases c ON c.case_id = pc.case_id
-            JOIN players p ON p.player_id = s.target_id
-            """;
+    private static final String APPEAL_APPLIED = "APPLIED";
+    private static final String APPEAL_REJECTED = "REJECTED";
 
     private final DataSource dataSource;
     private final PunishmentCodeProtector codeProtector;
-    private final ObjectMapper json;
     private final JdbcPublicPunishmentRegistry publicRegistry;
+    private final JdbcPunishmentCodeStore punishmentCodes;
+    private final JdbcPunishmentCodeRepository punishmentCodeRepository;
 
     public JdbcWebsiteModerationStore(
             DataSource dataSource,
@@ -56,8 +45,13 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         }
         this.dataSource = dataSource;
         this.codeProtector = codeProtector;
-        this.json = json;
         this.publicRegistry = new JdbcPublicPunishmentRegistry(dataSource);
+        this.punishmentCodeRepository = new JdbcPunishmentCodeRepository();
+        this.punishmentCodes = new JdbcPunishmentCodeStore(
+                dataSource,
+                codeProtector,
+                new JdbcWebsiteAuditWriter(json)
+        );
     }
 
     @Override
@@ -82,64 +76,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
 
     @Override
     public PunishmentCodeBinding claimCode(String code, String accountId, String username, Instant now) {
-        if (username == null || !username.matches("[A-Za-z0-9_]{3,16}") || now == null) {
-            throw invalid("INVALID_CODE_CLAIM", "The punishment-code claim is invalid");
-        }
-        byte[] codeHash = codeHash(code);
-        byte[] accountToken = accountToken(accountId);
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                CodeRow row = selectCodeByHash(connection, codeHash, true);
-                if (row == null || !usernameMatches(connection, row.targetId(), username)) {
-                    connection.rollback();
-                    throw notFound("PUNISHMENT_CODE_INVALID", "The punishment code could not be verified");
-                }
-                String eligibility = eligibility(row, now);
-                if (!"ELIGIBLE".equals(eligibility)) {
-                    connection.rollback();
-                    throw ineligible("PUNISHMENT_INELIGIBLE", "That punishment is not eligible for an appeal");
-                }
-                boolean firstClaim = row.claimedAccountToken() == null;
-                if (!firstClaim && !MessageDigest.isEqual(row.claimedAccountToken(), accountToken)) {
-                    connection.rollback();
-                    throw conflict("PUNISHMENT_ALREADY_BOUND", "That punishment is already bound");
-                }
-                if (firstClaim) {
-                    try (PreparedStatement update = connection.prepareStatement("""
-                            UPDATE punishment_codes
-                            SET claimed_account_token = ?, claimed_at = ?
-                            WHERE sanction_id = ? AND claimed_account_token IS NULL
-                            """)) {
-                        update.setBytes(1, accountToken);
-                        update.setTimestamp(2, Timestamp.from(now));
-                        update.setBytes(3, UuidBytes.toBytes(row.sanctionId()));
-                        if (update.executeUpdate() != 1) {
-                            connection.rollback();
-                            throw conflict("PUNISHMENT_ALREADY_BOUND", "That punishment is already bound");
-                        }
-                    }
-                    insertAudit(
-                            connection,
-                            "PUNISHMENT_CODE_CLAIMED",
-                            null,
-                            row.targetId(),
-                            row.caseId(),
-                            Map.of("punishmentId", row.sanctionId().toString(), "firstClaim", true),
-                            now
-                    );
-                }
-                connection.commit();
-                return binding(row, eligibility, username);
-            } catch (SQLException | JsonProcessingException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to claim the punishment code", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.claimCode(code, accountId, username, now);
     }
 
     @Override
@@ -149,296 +86,32 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             String accountId,
             Instant now
     ) {
-        if (punishmentId == null || codeGeneration < 1 || now == null) {
-            throw invalid("INVALID_BINDING", "The punishment binding is invalid");
-        }
-        byte[] accountToken = accountToken(accountId);
-        try (Connection connection = dataSource.getConnection()) {
-            CodeRow row = selectCodeBySanction(connection, punishmentId, false);
-            if (row == null) {
-                throw notFound("BINDING_NOT_FOUND", "The punishment binding could not be found");
-            }
-            if (row.generation() != codeGeneration) {
-                return binding(row, "CODE_ROTATED", requiredUsername(row.currentUsername()));
-            }
-            if (row.claimedAccountToken() == null
-                    || !MessageDigest.isEqual(row.claimedAccountToken(), accountToken)) {
-                throw conflict("BINDING_ACCOUNT_MISMATCH", "The punishment binding belongs to another account");
-            }
-            return binding(row, eligibility(row, now), requiredUsername(row.currentUsername()));
-        } catch (SQLException exception) {
-            throw persistence("Unable to revalidate the punishment binding", exception);
-        }
+        return punishmentCodes.revalidateCode(punishmentId, codeGeneration, accountId, now);
     }
 
     @Override
     public Optional<PunishmentCodeDisplay> codeForSanction(UUID punishmentId, Instant now) {
-        if (punishmentId == null || now == null) {
-            throw invalid("INVALID_PUNISHMENT", "The punishment ID is invalid");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                SanctionRow sanction = selectSanction(connection, punishmentId, true);
-                if (sanction == null || !eligibleSanction(sanction, now)) {
-                    connection.rollback();
-                    return Optional.empty();
-                }
-                CodeRecord code = selectCodeRecord(connection, punishmentId, true);
-                if (code == null) {
-                    code = createCode(connection, sanction, 1, now, null);
-                }
-                if (!"ACTIVE".equals(code.status())) {
-                    connection.rollback();
-                    return Optional.empty();
-                }
-                PunishmentCodeDisplay display = display(sanction, code);
-                connection.commit();
-                return Optional.of(display);
-            } catch (SQLException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to obtain the punishment code", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.codeForSanction(punishmentId, now);
     }
 
     @Override
     public List<PunishmentCodeDisplay> codesForCase(CaseId caseId, Instant now) {
-        if (caseId == null || now == null) {
-            throw invalid("INVALID_CASE_ID", "The case ID is invalid");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                List<SanctionRow> sanctions = new ArrayList<>();
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        SELECT s.sanction_id, s.case_id, s.target_id, s.sanction_type,
-                               s.status AS sanction_status, s.expiration_at, c.state AS case_state
-                        FROM sanctions s
-                        JOIN cases c ON c.case_id = s.case_id
-                        WHERE s.case_id = ?
-                        ORDER BY s.issued_at, s.sanction_id
-                        FOR UPDATE
-                        """)) {
-                    statement.setString(1, caseId.value());
-                    try (ResultSet result = statement.executeQuery()) {
-                        while (result.next()) {
-                            sanctions.add(readSanction(result));
-                        }
-                    }
-                }
-                List<PunishmentCodeDisplay> displays = new ArrayList<>();
-                for (SanctionRow sanction : sanctions) {
-                    if (!eligibleSanction(sanction, now)) {
-                        continue;
-                    }
-                    CodeRecord code = selectCodeRecord(connection, sanction.sanctionId(), true);
-                    if (code == null) {
-                        code = createCode(connection, sanction, 1, now, null);
-                    }
-                    if ("ACTIVE".equals(code.status())) {
-                        displays.add(display(sanction, code));
-                    }
-                }
-                connection.commit();
-                return List.copyOf(displays);
-            } catch (SQLException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to read punishment codes for the case", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.codesForCase(caseId, now);
     }
 
     @Override
     public int ensureEligibleCodes(Instant now, int limit) {
-        if (now == null || limit < 1 || limit > MAX_BATCH) {
-            throw invalid("INVALID_CODE_BATCH", "The punishment-code batch is invalid");
-        }
-        String sql = """
-                SELECT s.sanction_id, s.case_id, s.target_id, s.sanction_type,
-                       s.status AS sanction_status, s.expiration_at, c.state AS case_state
-                FROM sanctions s
-                JOIN cases c ON c.case_id = s.case_id
-                WHERE s.status = 'ACTIVE'
-                  AND (s.expiration_at IS NULL OR s.expiration_at > ?)
-                  AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE')
-                  AND c.state <> 'FULLY_OVERTURNED'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM punishment_codes pc WHERE pc.sanction_id = s.sanction_id
-                  )
-                ORDER BY s.issued_at, s.sanction_id
-                LIMIT ?
-                """;
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                List<SanctionRow> sanctions = new ArrayList<>();
-                try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                    statement.setTimestamp(1, Timestamp.from(now));
-                    statement.setInt(2, limit);
-                    try (ResultSet result = statement.executeQuery()) {
-                        while (result.next()) {
-                            sanctions.add(readSanction(result));
-                        }
-                    }
-                }
-                int inserted = 0;
-                for (SanctionRow sanction : sanctions) {
-                    String derived = codeProtector.code(sanction.sanctionId(), 1);
-                    byte[] hash = codeProtector.verificationHash(derived);
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            INSERT IGNORE INTO punishment_codes(
-                                sanction_id, case_id, key_version, generation, code_hash, status, created_at
-                            ) VALUES (?, ?, ?, 1, ?, 'ACTIVE', ?)
-                            """)) {
-                        statement.setBytes(1, UuidBytes.toBytes(sanction.sanctionId()));
-                        statement.setString(2, sanction.caseId().value());
-                        statement.setInt(3, codeProtector.keyVersion());
-                        statement.setBytes(4, hash);
-                        statement.setTimestamp(5, Timestamp.from(now));
-                        int changed = statement.executeUpdate();
-                        if (changed == 1) {
-                            inserted++;
-                        } else if (!codeExists(connection, sanction.sanctionId())) {
-                            throw new SQLException("Punishment code hash collision detected");
-                        }
-                    }
-                }
-                connection.commit();
-                return inserted;
-            } catch (SQLException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to backfill punishment codes", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.ensureEligibleCodes(now, limit);
     }
 
     @Override
     public PunishmentCodeDisplay rotateCode(UUID punishmentId, UUID actorId, Instant now) {
-        if (punishmentId == null || actorId == null || now == null) {
-            throw invalid("INVALID_CODE_ROTATION", "The code rotation request is invalid");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                SanctionRow sanction = selectSanction(connection, punishmentId, true);
-                if (sanction == null) {
-                    connection.rollback();
-                    throw notFound("PUNISHMENT_NOT_FOUND", "The punishment could not be found");
-                }
-                if (!eligibleSanction(sanction, now)) {
-                    connection.rollback();
-                    throw ineligible("PUNISHMENT_INELIGIBLE", "That punishment is not eligible for a code");
-                }
-                CodeRecord existing = selectCodeRecord(connection, punishmentId, true);
-                int generation = existing == null ? 1 : Math.addExact(existing.generation(), 1);
-                String derived = codeProtector.code(punishmentId, generation);
-                byte[] hash = codeProtector.verificationHash(derived);
-                if (existing == null) {
-                    insertCodeRow(connection, sanction, generation, hash, now, actorId);
-                } else {
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            UPDATE punishment_codes
-                            SET key_version = ?, generation = ?, code_hash = ?, status = 'ACTIVE',
-                                claimed_account_token = NULL, claimed_at = NULL, rotated_at = ?,
-                                rotated_by = ?, revoked_at = NULL, revoked_by = NULL
-                            WHERE sanction_id = ?
-                            """)) {
-                        statement.setInt(1, codeProtector.keyVersion());
-                        statement.setInt(2, generation);
-                        statement.setBytes(3, hash);
-                        statement.setTimestamp(4, Timestamp.from(now));
-                        statement.setBytes(5, UuidBytes.toBytes(actorId));
-                        statement.setBytes(6, UuidBytes.toBytes(punishmentId));
-                        statement.executeUpdate();
-                    }
-                }
-                insertAudit(
-                        connection,
-                        "PUNISHMENT_CODE_ROTATED",
-                        actorId,
-                        sanction.targetId(),
-                        sanction.caseId(),
-                        Map.of("punishmentId", punishmentId.toString(), "generation", generation),
-                        now
-                );
-                connection.commit();
-                return new PunishmentCodeDisplay(
-                        punishmentId,
-                        sanction.caseId(),
-                        generation,
-                        WebsitePunishmentProjection.publicType(sanction.sanctionType()),
-                        derived
-                );
-            } catch (SQLException | JsonProcessingException | ArithmeticException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to rotate the punishment code", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.rotateCode(punishmentId, actorId, now);
     }
 
     @Override
     public boolean revokeCode(UUID punishmentId, UUID actorId, Instant now) {
-        if (punishmentId == null || actorId == null || now == null) {
-            throw invalid("INVALID_CODE_REVOCATION", "The code revocation request is invalid");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                SanctionRow sanction = selectSanction(connection, punishmentId, true);
-                if (sanction == null) {
-                    connection.rollback();
-                    throw notFound("PUNISHMENT_NOT_FOUND", "The punishment could not be found");
-                }
-                int changed;
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE punishment_codes
-                        SET status = 'REVOKED', revoked_at = ?, revoked_by = ?
-                        WHERE sanction_id = ? AND status = 'ACTIVE'
-                        """)) {
-                    statement.setTimestamp(1, Timestamp.from(now));
-                    statement.setBytes(2, UuidBytes.toBytes(actorId));
-                    statement.setBytes(3, UuidBytes.toBytes(punishmentId));
-                    changed = statement.executeUpdate();
-                }
-                if (changed == 1) {
-                    insertAudit(
-                            connection,
-                            "PUNISHMENT_CODE_REVOKED",
-                            actorId,
-                            sanction.targetId(),
-                            sanction.caseId(),
-                            Map.of("punishmentId", punishmentId.toString()),
-                            now
-                    );
-                }
-                connection.commit();
-                return changed == 1;
-            } catch (SQLException | JsonProcessingException exception) {
-                rollback(connection, exception);
-                throw persistence("Unable to revoke the punishment code", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to open a punishment-code transaction", exception);
-        }
+        return punishmentCodes.revokeCode(punishmentId, actorId, now);
     }
 
     @Override
@@ -505,7 +178,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                         throw conflict("APPEAL_IDEMPOTENCY_CONFLICT", "The appeal request conflicts with prior state");
                     }
                     connection.rollback();
-                    if ("REJECTED".equals(existing.state())) {
+                    if (APPEAL_REJECTED.equals(existing.state())) {
                         return new AppealAcceptancePreparation.Rejected(
                                 existing.outcomeCode() == null ? "APPEAL_REJECTED" : existing.outcomeCode(),
                                 "The appeal acceptance was previously rejected"
@@ -513,7 +186,11 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                     }
                     return new AppealAcceptancePreparation.Ready(true);
                 }
-                CodeRow row = selectCodeBySanction(connection, punishmentId, true);
+                CodeRow row = punishmentCodeRepository.selectCodeBySanction(
+                        connection,
+                        punishmentId,
+                        true
+                );
                 if (row == null || !row.caseId().equals(caseId)) {
                     connection.rollback();
                     return new AppealAcceptancePreparation.Rejected(
@@ -564,7 +241,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
 
     @Override
     public void completeAppealAcceptance(UUID appealId, String state, String outcomeCode, Instant now) {
-        if (appealId == null || now == null || !List.of("APPLIED", "REJECTED").contains(state)
+        if (appealId == null || now == null || !List.of(APPEAL_APPLIED, APPEAL_REJECTED).contains(state)
                 || outcomeCode == null || !outcomeCode.matches("[A-Z0-9_]{3,64}")) {
             throw invalid("INVALID_APPEAL_COMPLETION", "The appeal completion is invalid");
         }
@@ -605,9 +282,10 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                     update.setString(2, outcomeCode);
                     update.setTimestamp(3, Timestamp.from(now));
                     update.setBytes(4, UuidBytes.toBytes(appealId));
-                    if (update.executeUpdate() != 1) {
-                        throw new SQLException("Appeal state changed during completion");
-                    }
+                    JdbcTransactionSupport.requireSingleUpdate(
+                            update.executeUpdate(),
+                            "Appeal state changed during completion"
+                    );
                 }
                 connection.commit();
             } catch (SQLException exception) {
@@ -621,222 +299,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         }
     }
 
-    private CodeRow selectCodeByHash(Connection connection, byte[] hash, boolean lock) throws SQLException {
-        String sql = CODE_ROW_SELECT + " WHERE pc.key_version = ? AND pc.code_hash = ?"
-                + (lock ? " FOR UPDATE" : "");
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setInt(1, codeProtector.keyVersion());
-            statement.setBytes(2, hash);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? readCodeRow(result) : null;
-            }
-        }
-    }
-
-    private static CodeRow selectCodeBySanction(Connection connection, UUID punishmentId, boolean lock)
-            throws SQLException {
-        String sql = CODE_ROW_SELECT + " WHERE pc.sanction_id = ?" + (lock ? " FOR UPDATE" : "");
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? readCodeRow(result) : null;
-            }
-        }
-    }
-
-    private static CodeRow readCodeRow(ResultSet result) throws SQLException {
-        Timestamp expiration = result.getTimestamp("expiration_at");
-        return new CodeRow(
-                UuidBytes.fromBytes(result.getBytes("sanction_id")),
-                new CaseId(result.getString("case_id")),
-                result.getInt("key_version"),
-                result.getInt("generation"),
-                result.getBytes("code_hash"),
-                result.getString("code_status"),
-                result.getBytes("claimed_account_token"),
-                UuidBytes.fromBytes(result.getBytes("target_id")),
-                result.getString("sanction_type"),
-                result.getString("sanction_status"),
-                expiration == null ? null : expiration.toInstant(),
-                result.getString("case_state"),
-                result.getString("current_username")
-        );
-    }
-
-    private static SanctionRow selectSanction(Connection connection, UUID punishmentId, boolean lock)
-            throws SQLException {
-        String sql = """
-                SELECT s.sanction_id, s.case_id, s.target_id, s.sanction_type,
-                       s.status AS sanction_status, s.expiration_at, c.state AS case_state
-                FROM sanctions s
-                JOIN cases c ON c.case_id = s.case_id
-                WHERE s.sanction_id = ?
-                """ + (lock ? " FOR UPDATE" : "");
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? readSanction(result) : null;
-            }
-        }
-    }
-
-    private static SanctionRow readSanction(ResultSet result) throws SQLException {
-        Timestamp expiration = result.getTimestamp("expiration_at");
-        return new SanctionRow(
-                UuidBytes.fromBytes(result.getBytes("sanction_id")),
-                new CaseId(result.getString("case_id")),
-                UuidBytes.fromBytes(result.getBytes("target_id")),
-                result.getString("sanction_type"),
-                result.getString("sanction_status"),
-                expiration == null ? null : expiration.toInstant(),
-                result.getString("case_state")
-        );
-    }
-
-    private static CodeRecord selectCodeRecord(Connection connection, UUID punishmentId, boolean lock)
-            throws SQLException {
-        String sql = """
-                SELECT key_version, generation, code_hash, status
-                FROM punishment_codes
-                WHERE sanction_id = ?
-                """ + (lock ? " FOR UPDATE" : "");
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next()
-                        ? new CodeRecord(
-                                result.getInt("key_version"),
-                                result.getInt("generation"),
-                                result.getBytes("code_hash"),
-                                result.getString("status")
-                        )
-                        : null;
-            }
-        }
-    }
-
-    private CodeRecord createCode(
-            Connection connection,
-            SanctionRow sanction,
-            int generation,
-            Instant now,
-            UUID actorId
-    ) throws SQLException {
-        String derived = codeProtector.code(sanction.sanctionId(), generation);
-        byte[] hash = codeProtector.verificationHash(derived);
-        insertCodeRow(connection, sanction, generation, hash, now, actorId);
-        return new CodeRecord(codeProtector.keyVersion(), generation, hash, "ACTIVE");
-    }
-
-    private void insertCodeRow(
-            Connection connection,
-            SanctionRow sanction,
-            int generation,
-            byte[] hash,
-            Instant now,
-            UUID actorId
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO punishment_codes(
-                    sanction_id, case_id, key_version, generation, code_hash, status,
-                    created_at, rotated_at, rotated_by
-                ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(sanction.sanctionId()));
-            statement.setString(2, sanction.caseId().value());
-            statement.setInt(3, codeProtector.keyVersion());
-            statement.setInt(4, generation);
-            statement.setBytes(5, hash);
-            statement.setTimestamp(6, Timestamp.from(now));
-            if (actorId == null) {
-                statement.setNull(7, Types.TIMESTAMP);
-                statement.setNull(8, Types.BINARY);
-            } else {
-                statement.setTimestamp(7, Timestamp.from(now));
-                statement.setBytes(8, UuidBytes.toBytes(actorId));
-            }
-            statement.executeUpdate();
-        }
-    }
-
-    private PunishmentCodeDisplay display(SanctionRow sanction, CodeRecord code) {
-        if (code.keyVersion() != codeProtector.keyVersion()) {
-            throw unavailable(
-                    "PUNISHMENT_CODE_KEY_UNAVAILABLE",
-                    "The punishment code uses an unavailable key version"
-            );
-        }
-        String derived = codeProtector.code(sanction.sanctionId(), code.generation());
-        if (!MessageDigest.isEqual(code.codeHash(), codeProtector.verificationHash(derived))) {
-            throw unavailable("PUNISHMENT_CODE_INTEGRITY_FAILURE", "The punishment code failed integrity verification");
-        }
-        return new PunishmentCodeDisplay(
-                sanction.sanctionId(),
-                sanction.caseId(),
-                code.generation(),
-                WebsitePunishmentProjection.publicType(sanction.sanctionType()),
-                derived
-        );
-    }
-
-    private static boolean codeExists(Connection connection, UUID punishmentId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT 1 FROM punishment_codes WHERE sanction_id = ?")) {
-            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next();
-            }
-        }
-    }
-
-    private static boolean usernameMatches(Connection connection, UUID targetId, String username)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT 1
-                FROM players p
-                WHERE p.player_id = ?
-                  AND (
-                      p.lowercase_username = ?
-                      OR EXISTS (
-                          SELECT 1 FROM player_names history
-                          WHERE history.player_id = p.player_id
-                            AND history.lowercase_username = ?
-                      )
-                  )
-                """)) {
-            String lower = username.toLowerCase(Locale.ROOT);
-            statement.setBytes(1, UuidBytes.toBytes(targetId));
-            statement.setString(2, lower);
-            statement.setString(3, lower);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next();
-            }
-        }
-    }
-
-    private PunishmentCodeBinding binding(CodeRow row, String eligibility, String fallbackUsername) {
-        String username = row.currentUsername();
-        if (username == null || !username.matches("[A-Za-z0-9_]{3,16}")) {
-            username = requiredUsername(fallbackUsername);
-        }
-        return new PunishmentCodeBinding(
-                row.sanctionId(),
-                row.caseId(),
-                row.generation(),
-                WebsitePunishmentProjection.publicType(row.sanctionType()),
-                username,
-                "ELIGIBLE".equals(eligibility),
-                eligibility
-        );
-    }
-
-    private static String requiredUsername(String username) {
-        if (username == null || !username.matches("[A-Za-z0-9_]{3,16}")) {
-            throw notFound("PLAYER_IDENTITY_UNAVAILABLE", "The punishment player identity is unavailable");
-        }
-        return username;
-    }
-
     private static String eligibility(CodeRow row, Instant now) {
         return WebsitePunishmentProjection.eligibilityState(
                 row.codeStatus(),
@@ -846,25 +308,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                 row.expiration(),
                 now
         );
-    }
-
-    private static boolean eligibleSanction(SanctionRow row, Instant now) {
-        return "ELIGIBLE".equals(WebsitePunishmentProjection.eligibilityState(
-                "ACTIVE",
-                row.caseState(),
-                row.sanctionStatus(),
-                row.sanctionType(),
-                row.expiration(),
-                now
-        ));
-    }
-
-    private byte[] codeHash(String code) {
-        try {
-            return codeProtector.verificationHash(code);
-        } catch (IllegalArgumentException exception) {
-            throw notFound("PUNISHMENT_CODE_INVALID", "The punishment code could not be verified");
-        }
     }
 
     private byte[] accountToken(String accountId) {
@@ -893,15 +336,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             try (ResultSet result = statement.executeQuery()) {
                 ExistingAppeal found = null;
                 while (result.next()) {
-                    ExistingAppeal current = new ExistingAppeal(
-                            UuidBytes.fromBytes(result.getBytes("appeal_id")),
-                            UuidBytes.fromBytes(result.getBytes("punishment_id")),
-                            new CaseId(result.getString("case_id")),
-                            result.getBytes("player_account_token"),
-                            result.getString("idempotency_key"),
-                            result.getString("state"),
-                            result.getString("outcome_code")
-                    );
+                    ExistingAppeal current = readExistingAppeal(result);
                     if (found != null) {
                         throw new SQLException("Appeal ID and idempotency key identify different requests");
                     }
@@ -912,35 +347,16 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         }
     }
 
-    private void insertAudit(
-            Connection connection,
-            String eventType,
-            UUID actorId,
-            UUID targetId,
-            CaseId caseId,
-            Map<String, Object> details,
-            Instant now
-    ) throws SQLException, JsonProcessingException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO audit_events(
-                    event_id, correlation_id, actor_id, target_id, case_id,
-                    event_type, outcome, event_json, occurred_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'COMMITTED', ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(UUID.randomUUID()));
-            if (actorId == null) {
-                statement.setNull(3, Types.BINARY);
-            } else {
-                statement.setBytes(3, UuidBytes.toBytes(actorId));
-            }
-            statement.setBytes(4, UuidBytes.toBytes(targetId));
-            statement.setString(5, caseId.value());
-            statement.setString(6, eventType);
-            statement.setString(7, json.writeValueAsString(details));
-            statement.setTimestamp(8, Timestamp.from(now));
-            statement.executeUpdate();
-        }
+    private static ExistingAppeal readExistingAppeal(ResultSet result) throws SQLException {
+        return new ExistingAppeal(
+                UuidBytes.fromBytes(result.getBytes("appeal_id")),
+                UuidBytes.fromBytes(result.getBytes("punishment_id")),
+                new CaseId(result.getString("case_id")),
+                result.getBytes("player_account_token"),
+                result.getString("idempotency_key"),
+                result.getString("state"),
+                result.getString("outcome_code")
+        );
     }
 
     private static void rollback(Connection connection, Exception original) {
@@ -971,49 +387,10 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         return new WebsiteModerationException(WebsiteModerationException.Kind.CONFLICT, code, message);
     }
 
-    private static WebsiteModerationException ineligible(String code, String message) {
-        return new WebsiteModerationException(WebsiteModerationException.Kind.INELIGIBLE, code, message);
-    }
-
-    private static WebsiteModerationException unavailable(String code, String message) {
-        return new WebsiteModerationException(WebsiteModerationException.Kind.UNAVAILABLE, code, message);
-    }
-
     private static ModerationPersistenceException persistence(String message, Exception exception) {
         return exception instanceof ModerationPersistenceException persistenceException
                 ? persistenceException
                 : new ModerationPersistenceException(message, exception);
-    }
-
-    private record CodeRow(
-            UUID sanctionId,
-            CaseId caseId,
-            int keyVersion,
-            int generation,
-            byte[] codeHash,
-            String codeStatus,
-            byte[] claimedAccountToken,
-            UUID targetId,
-            String sanctionType,
-            String sanctionStatus,
-            Instant expiration,
-            String caseState,
-            String currentUsername
-    ) {
-    }
-
-    private record SanctionRow(
-            UUID sanctionId,
-            CaseId caseId,
-            UUID targetId,
-            String sanctionType,
-            String sanctionStatus,
-            Instant expiration,
-            String caseState
-    ) {
-    }
-
-    private record CodeRecord(int keyVersion, int generation, byte[] codeHash, String status) {
     }
 
     private record ExistingAppeal(
