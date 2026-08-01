@@ -12,63 +12,112 @@ permissions:
 
 jobs:
   export:
-    name: Export Codacy PR diagnostics
+    name: Reproduce Codacy PMD findings
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CODACY_API_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
     steps:
-      - name: Require Codacy token
-        run: |
-          if [[ -z "${CODACY_API_TOKEN}" ]]; then
-            echo "::error::CODACY_PROJECT_TOKEN is not configured."
-            exit 1
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - name: Check out tested commit
+        uses: actions/checkout@v6
         with:
-          node-version: "24"
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
-      - name: Install Codacy Cloud CLI
-        run: npm install --global @codacy/codacy-cloud-cli
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
 
-      - name: Export pull-request analysis
+      - name: Download PMD 7.26.0
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/reports/codacy
+          curl --fail --location --silent --show-error \
+            --output pmd.zip \
+            "https://repo1.maven.org/maven2/net/sourceforge/pmd/pmd-dist/7.26.0/pmd-dist-7.26.0-bin.zip"
+          unzip -q pmd.zip
 
-          pr_number="${{ github.event.pull_request.number }}"
-          if [[ -z "${pr_number}" ]]; then
-            pr_number="29"
+      - name: Analyze changed Java files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports/pmd
+          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/pmd/changed-java-files.txt
+
+          if [[ ! -s build/reports/pmd/changed-java-files.txt ]]; then
+            echo "::error::No changed Java files were found."
+            exit 1
           fi
-          echo "pr_number=${pr_number}" >> "${GITHUB_ENV}"
 
-          codacy pull-request gh wsg138 EnthusiaStaff "${pr_number}" \
-            --output json > build/reports/codacy/pull-request.json
-          codacy pull-request gh wsg138 EnthusiaStaff "${pr_number}" \
-            --diff --output json > build/reports/codacy/diff.json
+          files_csv="$(paste -sd, build/reports/pmd/changed-java-files.txt)"
+          rulesets="category/java/errorprone.xml,category/java/bestpractices.xml"
+
+          set +e
+          pmd-bin-7.26.0/bin/pmd check \
+            --dir "${files_csv}" \
+            --rulesets "${rulesets}" \
+            --format json \
+            --report-file build/reports/pmd/report.json \
+            --no-cache \
+            --minimum-priority 5
+          json_status=$?
+
+          pmd-bin-7.26.0/bin/pmd check \
+            --dir "${files_csv}" \
+            --rulesets "${rulesets}" \
+            --format text \
+            --report-file build/reports/pmd/report.txt \
+            --no-cache \
+            --minimum-priority 5
+          text_status=$?
+          set -e
+
+          for status in "${json_status}" "${text_status}"; do
+            if [[ "${status}" -ne 0 && "${status}" -ne 4 ]]; then
+              echo "::error::PMD failed with unexpected exit code ${status}."
+              exit "${status}"
+            fi
+          done
 
           python3 - <<'PY'
           import json
           import os
+          from collections import Counter
           from pathlib import Path
 
-          root = Path("build/reports/codacy")
-          pr_payload = json.loads((root / "pull-request.json").read_text(encoding="utf-8"))
-          diff_payload = json.loads((root / "diff.json").read_text(encoding="utf-8"))
+          root = Path("build/reports/pmd")
+          payload = json.loads((root / "report.json").read_text(encoding="utf-8"))
+          violations = []
+          for file_result in payload.get("files", []):
+              filename = file_result.get("filename", "unknown")
+              for violation in file_result.get("violations", []):
+                  violations.append({"file": filename, **violation})
 
+          rules = Counter(item.get("rule", "unknown") for item in violations)
+          categories = Counter(item.get("ruleset", "unknown") for item in violations)
           lines = [
-              "# Codacy PR diagnostics",
+              "# PMD reproduction of Codacy findings",
               "",
-              f"- Pull request: **#{os.environ.get('pr_number', '29')}**",
-              f"- Summary keys: `{', '.join(sorted(pr_payload)) if isinstance(pr_payload, dict) else type(pr_payload).__name__}`",
-              f"- Diff keys: `{', '.join(sorted(diff_payload)) if isinstance(diff_payload, dict) else type(diff_payload).__name__}`",
+              f"- Changed Java files scanned: **{len((root / 'changed-java-files.txt').read_text(encoding='utf-8').splitlines())}**",
+              f"- PMD findings: **{len(violations)}**",
+              f"- Rulesets: `{', '.join(f'{name}: {count}' for name, count in sorted(categories.items()))}`",
               "",
-              "The complete machine-readable outputs are attached in the workflow artifact.",
+              "## Rule counts",
+              "",
           ]
+          if rules:
+              lines.extend(f"- `{rule}`: {count}" for rule, count in sorted(rules.items()))
+          else:
+              lines.append("- None")
+
+          lines.extend(["", "## Findings", ""])
+          for item in violations:
+              lines.append(
+                  f"- `{item['file']}:{item.get('beginline', '?')}` "
+                  f"`{item.get('rule', 'unknown')}` — {item.get('description', '').strip()}"
+              )
+
           text = "\n".join(lines) + "\n"
           (root / "summary.md").write_text(text, encoding="utf-8")
           print(text)
@@ -76,10 +125,10 @@ jobs:
               handle.write(text)
           PY
 
-      - name: Upload Codacy diagnostics
+      - name: Upload PMD diagnostics
         uses: actions/upload-artifact@v7
         with:
-          name: codacy-pr-${{ env.pr_number }}-diagnostics
-          path: build/reports/codacy
+          name: codacy-pmd-diagnostics-${{ github.event.pull_request.number || github.run_id }}
+          path: build/reports/pmd
           if-no-files-found: error
           retention-days: 3
