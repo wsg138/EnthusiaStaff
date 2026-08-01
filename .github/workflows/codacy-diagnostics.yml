@@ -1,0 +1,112 @@
+name: Codacy Diagnostics
+
+on:
+  push:
+    branches:
+      - agent/expand-test-coverage
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: Export remaining Codacy findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/expand-test-coverage
+          fetch-depth: 0
+
+      - name: Export branch issue delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CODACY_PROJECT_TOKEN}"
+          mkdir -p build/reports/codacy
+          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/codacy/changed-java-files.txt
+
+          python3 - <<'PY'
+          import collections
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          root = Path("build/reports/codacy")
+          paths = [line for line in root.joinpath("changed-java-files.txt").read_text().splitlines() if line]
+          token = os.environ["CODACY_PROJECT_TOKEN"]
+
+          def normalize(payload):
+              if isinstance(payload, list):
+                  return [item for item in payload if isinstance(item, dict)]
+              if isinstance(payload, dict):
+                  for key in ("issues", "data", "results", "items"):
+                      if isinstance(payload.get(key), list):
+                          return [item for item in payload[key] if isinstance(item, dict)]
+              return []
+
+          def fetch(path, branch):
+              encoded = urllib.parse.quote(path, safe="")
+              query = urllib.parse.urlencode({"branch": branch})
+              request = urllib.request.Request(
+                  f"https://api.codacy.com/2.0/project/file/issues/{encoded}?{query}",
+                  headers={"Accept": "application/json", "project-token": token},
+              )
+              for attempt in range(1, 7):
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          return normalize(json.loads(response.read().decode()))
+                  except urllib.error.HTTPError as error:
+                      if error.code == 404:
+                          return []
+                      if error.code not in {429, 500, 502, 503, 504} or attempt == 6:
+                          raise
+                  time.sleep(attempt * 2)
+              return []
+
+          delta = []
+          for path in paths:
+              current = fetch(path, "agent/expand-test-coverage")
+              baseline = fetch(path, "main")
+              remaining = collections.Counter(
+                  (item.get("patternId"), item.get("message"), item.get("level"))
+                  for item in baseline
+              )
+              for item in sorted(current, key=lambda value: value.get("startLine", 0)):
+                  signature = (item.get("patternId"), item.get("message"), item.get("level"))
+                  if remaining[signature]:
+                      remaining[signature] -= 1
+                  else:
+                      delta.append({"filePath": path, **item})
+
+          root.joinpath("new-issues.json").write_text(json.dumps(delta, indent=2, sort_keys=True) + "\n")
+          lines = ["# Remaining Codacy findings", "", f"Count: **{len(delta)}**", ""]
+          lines.extend(
+              f"- `{item['filePath']}:{item.get('startLine', '?')}` "
+              f"`{item.get('patternId', '?')}` ({item.get('level', '?')}) — {item.get('message', '')}"
+              for item in delta
+          )
+          text = "\n".join(lines) + "\n"
+          root.joinpath("summary.md").write_text(text)
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(text)
+          PY
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v7
+        with:
+          name: codacy-remaining-findings
+          path: build/reports/codacy
+          if-no-files-found: error
+          retention-days: 3
