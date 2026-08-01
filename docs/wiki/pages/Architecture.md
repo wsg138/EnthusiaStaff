@@ -66,6 +66,28 @@ logic.
 - Report and client evidence capture
 - Provider adapters that require Bukkit
 
+The `EnthusiaStaffPaperPlugin` entrypoint controls startup and shutdown order;
+it does not contain every command, integration, or configuration constructor.
+The composition boundary is split into focused collaborators:
+
+- `PaperRuntimeComponents` creates server-local managers and registers stable
+  Bukkit services;
+- `PaperCommandRegistrar` wires command executors, tab completers, and GUI
+  listeners while preserving lazy storage availability;
+- `PaperIntegrationManager` discovers optional providers and owns the
+  RoseChat/economy integration shutdown paths;
+- `PaperDatabaseConfiguration` resolves only configured environment-variable
+  names and never stores credentials in repository configuration;
+- `PaperReasonPolicyBootstrap` loads the versioned punishment policy;
+- `PaperNetworkMessageHandler` validates sanction messages before recording a
+  durable applied receipt; and
+- `PaperResourceCloser` applies one interruption-safe cleanup policy.
+
+MariaDB work remains on the bounded worker pool. Bukkit player mutations must
+run on the owning entity scheduler or another supported Paper scheduler. Full
+Folia ownership verification for staff recovery and visibility fan-out remains
+tracked work and is not implied by the standalone boot test.
+
 ### Velocity
 
 - Network login enforcement

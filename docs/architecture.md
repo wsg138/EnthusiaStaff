@@ -74,6 +74,16 @@ No platform module may be referenced from a shared module. Paper and Velocity ne
 - Queue network work off-thread and continue from the durable outbox after restart.
 - Register stable Bukkit service APIs for visibility, punishment queries, staff sessions, inventory locks, alts, the player directory, staff mode, and sanctions.
 
+The Paper entrypoint owns startup ordering rather than every adapter's wiring.
+`PaperRuntimeComponents` creates the server-local managers and service bindings,
+`PaperCommandRegistrar` wires commands and GUIs, and
+`PaperIntegrationManager` owns optional integration discovery and shutdown.
+Database environment resolution, reason-policy loading, network inbox handling,
+and resource cleanup are separate bounded collaborators. Storage initialization
+remains on the bounded worker pool. Player and visibility operations must return
+to the owning entity or supported Paper scheduler; live Folia ownership remains
+an explicit staging and remediation requirement.
+
 ### Velocity
 
 - Decide login admission for active network bans and inherited sanctions.

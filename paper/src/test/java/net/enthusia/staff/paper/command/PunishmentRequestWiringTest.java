@@ -17,8 +17,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
 
 final class PunishmentRequestWiringTest {
-    private static final Path PLUGIN_SOURCE = Path.of(
-            "src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java"
+    private static final Path REGISTRAR_SOURCE = Path.of(
+            "src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java"
     );
     private static final Path COMMAND_SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/command/PunishmentCommand.java"
@@ -63,14 +63,14 @@ final class PunishmentRequestWiringTest {
     }
 
     @Test
-    void pluginBootstrapRegistersTheRequestGuiWithThePlayerDirectory() throws IOException {
-        String source = normalizedSource(PLUGIN_SOURCE);
+    void commandRegistrarRegistersTheRequestGuiWithThePlayerDirectory() throws IOException {
+        String source = normalizedSource(REGISTRAR_SOURCE);
 
         assertTrue(source.contains("new PunishmentRequestGuiController("));
-        assertTrue(source.contains("punishmentRequestService,\n                playerDirectory,"));
-        assertTrue(source.contains("punishmentRequestGui.register();"));
+        assertTrue(source.contains("plugin(), requests, players, authorization(), workers()"));
+        assertTrue(source.contains("requestGui.register();"));
         assertTrue(source.contains("new PunishmentRequestCommandHandler("));
-        assertTrue(source.contains("punishmentRequestCommands,"));
+        assertTrue(source.contains("punishmentGui, requestHandler, workers()"));
     }
 
     @Test
