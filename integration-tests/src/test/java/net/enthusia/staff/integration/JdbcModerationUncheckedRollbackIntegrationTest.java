@@ -196,7 +196,7 @@ class JdbcModerationUncheckedRollbackIntegrationTest extends PunishmentRequestMa
 
         private Connection wrap(Connection connection) {
             return (Connection) Proxy.newProxyInstance(
-                    Connection.class.getClassLoader(),
+                    Thread.currentThread().getContextClassLoader(),
                     new Class<?>[]{Connection.class},
                     (proxy, method, arguments) -> {
                         if (method.getName().equals("rollback") && method.getParameterCount() == 0) {
