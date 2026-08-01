@@ -1,40 +1,61 @@
 # Punishment System
 
-This page explains how staff should use the punishment interface. Technical case,
-database, and escalation internals are covered in [[Developer Code Guide]].
+This page explains the **staff procedure** for creating and correcting
+punishments. For completion percentages, technical behavior and direct source
+links, use [[Moderation, Punishments, and Reports]].
 
-> **Current status:** Parts of the punishment workflow are implemented and tested,
-but the complete GUI, history view, approval flow, integrations, and live staging
-remain incomplete. Use the moderation system currently approved for production.
+> **Current deployment:** Continue using the moderation workflow currently
+> approved for the live server. A command or GUI existing in source does not mean
+> the complete workflow is production-ready.
 
-## Main command
+## Quick navigation
 
-Use:
+- Ordinary staff workflow: [[Staff Quick Start|Moderator-Quick-Start]]
+- Helper authority and approval: [[Helper Guide]]
+- Reports and evidence: [[Reports and Evidence]]
+- Rank boundaries: [[Roles and Permissions|Rank-Authority]]
+- Commands and nodes: [[Commands and Permissions]]
+- Feature status and files: [[Moderation, Punishments, and Reports]]
+- Source trace: [[Developer Code Guide]]
+
+## Main commands
 
 ```text
 /punish <player>
+/punish resume <player>
+/ban <player> [reason-id]
+/mute <player> [reason-id]
+/warn <player> [reason-id]
+/kick <player> [reason-id]
+/ipban <player> [reason-id]
 ```
 
-The direct commands `/warn`, `/mute`, `/kick`, `/ban`, and `/ipban` open filtered
-versions of the same central workflow. They should not bypass the normal reason,
-evidence, history, confirmation, or audit process.
+The filtered commands should enter the same central reason, history,
+authorization, evidence, confirmation and audit workflow. They should not bypass
+policy.
 
-## Standard staff workflow
+## Standard workflow
 
-1. Make sure you are acting on the correct player.
-2. Choose the broad rule category.
-3. Choose the exact reason that best matches what happened.
-4. Read the examples and the result shown by the interface.
-5. Add a clear internal note.
-6. Attach or reference the useful evidence.
-7. Check the public reason for clarity and privacy.
-8. Confirm once.
+1. **Confirm the target.** Check current name, UUID/offline match and any Bedrock
+   alias shown by the interface.
+2. **Choose the broad category.** Do not force unrelated behavior into the wrong
+   category simply because the result looks stronger.
+3. **Choose the exact stable reason.** Read the examples and related history.
+4. **Review the calculated result.** Check sanction type, duration, public reason,
+   contributing history and whether approval is required.
+5. **Add a factual internal note.** Explain what happened, when/where it happened
+   and which evidence supports the action.
+6. **Attach or reference evidence.** Use the linked report, captured context,
+   screenshot, video, logs or other approved source.
+7. **Check privacy.** Reporter identity, private messages, coordinates, internal
+   notes, alt/network data and confiscation details must remain private.
+8. **Confirm once.** Do not repeatedly click or rerun after an error, conflict or
+   pending result.
 
 The interface is intended to calculate the configured result from the selected
-reason and the player’s relevant punishment history. Staff should not need to
-memorize duration ladders or manually count old punishments.
+reason and relevant history. Staff should not need to memorize duration ladders.
 
-## Choosing the right action
+## Choosing the action
 
 ### Warning
 
@@ -43,120 +64,113 @@ problem.
 
 ### Mute
 
-Use for continued or serious chat-related behavior, including repeated spam,
-toxicity, slurs, sexually inappropriate comments, or ignoring earlier warnings.
+Use for continued or serious chat behavior, such as repeated spam, toxicity,
+slurs, sexually inappropriate comments or ignoring earlier warnings.
 
 ### Kick
 
-Use to stop immediate disruption, get a player’s attention, require a reconnect,
-or remove an inappropriate skin or username until it is changed. A kick is not a
-replacement for the proper punishment if the behavior continues.
+Use to stop immediate disruption, require a reconnect, get a player's attention
+or remove an inappropriate skin/username until it is changed. Continued behavior
+may still require a normal punishment.
 
 ### Ban or network action
 
 Use only when the selected reason and evidence justify removing the player from
-the server or network. Severe, permanent, IP/network, or unusual actions should
-receive the level of review required by the deployed policy.
+the server/network. Permanent, IP/network or unusual actions require the level of
+review configured for the actor's rank.
 
-## Helper approval
+## Approval requests
 
-The Helper role is being implemented on `section/helper-rank-authority`.
+Some results do not apply immediately:
 
-Helpers should use the same `/punish` interface for ordinary moderation. The
-current branch requires approval when a Helper’s calculated punishment includes a
-permanent sanction.
+- Helper results containing a permanent sanction become approval requests.
+- Developer may prepare a request but cannot directly punish or approve.
+- Self-approval and unauthorized approval must remain blocked.
 
-When approval is required:
+When review is required:
 
-1. Finish the evidence and internal note.
-2. Submit the request through the normal interface.
-3. Tell a Mod or above what needs review.
-4. Wait for the decision.
-5. Do not use another command to avoid approval.
+1. Finish the note and evidence.
+2. Submit through the normal interface.
+3. Tell an eligible reviewer what needs attention.
+4. Wait for the recorded decision.
+5. Do not use another command to work around approval.
 
-Helpers should also escalate complicated, severe, or uncertain cases even when the
-interface would technically allow an immediate action.
+The detailed request lifecycle, active development and source files are listed in
+[[Moderation, Punishments, and Reports]].
 
-## Evidence and internal notes
+## Durable drafts
 
-A useful note states:
-
-- what the player did;
-- when and where it happened;
-- which evidence supports the action;
-- any important context another staff member should know.
-
-Do not write insults, jokes, guesses presented as facts, or unrelated comments
-about the player.
-
-For chat cases, preserve the captured context or a screenshot. Serious cheating,
-exploits, theft, duplication, or economy cases may require video, logs,
-CoreProtect, inventory information, or another staff witness.
-
-## Public and private information
-
-The player may see the public reason and ordinary punishment details. They should
-not receive:
-
-- reporter identity;
-- private messages;
-- base coordinates;
-- internal staff notes;
-- alt or network-identity evidence;
-- private appeal material;
-- confiscated inventory or balance details.
-
-See [[Privacy and Data Handling]].
-
-## Saved drafts
-
-The intended interface saves an unfinished punishment draft so it can be resumed
-after closing the GUI, disconnecting, switching servers, or restarting.
-
-Resume with:
+An unfinished punishment may be saved and resumed:
 
 ```text
 /punish resume <player>
 ```
 
-Always review the draft again. Do not assume an old recommendation is still valid
-if new history, evidence, configuration, or staff decisions have changed.
+Review the draft again before confirming. History, evidence, configuration,
+authority or another staff decision may have changed since the draft was created.
+A stale recommendation should be recalculated rather than trusted blindly.
+
+## Evidence and notes
+
+A useful note states:
+
+- what the player did;
+- when and where it happened;
+- which evidence supports the decision;
+- any context another reviewer or appeal handler needs.
+
+Do not include insults, jokes, rumors or guesses presented as fact.
+
+## Public and private information
+
+Players may receive the public reason and ordinary sanction details. They should
+not receive:
+
+- reporter identity;
+- private messages;
+- base coordinates;
+- staff notes or internal discussion;
+- alt/network-identity evidence;
+- private appeal material;
+- confiscated item/balance details;
+- sensitive client or automation metadata.
+
+See [[Privacy and Data Handling]].
 
 ## Correcting or ending a punishment
 
-Use the normal punishment-change commands rather than deleting records or editing
-the database:
+Use the approved mutation commands rather than deleting rows or editing the
+database:
 
 ```text
 /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]
 /unban <player|case> <reason> [CONFIRM]
 /unmute <player|case> <reason> [CONFIRM]
 /removewarning <player|case> <reason> [CONFIRM]
+/unwarn <player|case> <reason> [CONFIRM]
 ```
 
-Select the exact case when a player has multiple punishments. Explain whether the
-change is correcting a mistake, ending a sanction early, responding to new
-evidence, or following an approved appeal.
+Select the exact case/sanction when multiple actions exist. A change should
+preserve the original record and explain whether it is a reduction, early ending,
+revocation, correction, appeal result or full overturn.
 
-Changing a punishment should preserve the original case and audit history. A full
-overturn means the punishment should no longer count as valid history and may
-require a separate approval.
+The required `/history` command and complete overturn workflow are not finished.
+See [[Moderation, Punishments, and Reports]] for current percentages and source
+files.
 
-## When to stop and ask for help
+## Stop and ask for help when
 
-Do not confirm or repeat the action when:
-
-- you may have selected the wrong player or reason;
-- the evidence is incomplete or conflicting;
-- the interface says the recommendation changed;
-- the draft is stale or another request is already pending;
+- the wrong player or reason may be selected;
+- evidence is incomplete or conflicting;
+- the recommendation changed or the draft is stale;
+- another request is already pending;
 - approval is required;
-- an error suggests the action may have applied only partially;
-- the player disconnects during a sensitive asset-related action;
-- you are unsure whether repeating the command is safe.
+- an error suggests partial application or recovery state;
+- a player disconnects during a related asset operation;
+- you are unsure whether retrying is safe.
 
-Record the report or case, save the error message, and contact another staff
-member or an administrator.
+Record the report/case, time, exact error and visible result. Do not delete
+storage rows or repeat a destructive action to “see whether it works.”
 
 ## Related pages
 
@@ -166,3 +180,5 @@ member or an administrator.
 - [[Reports and Evidence]]
 - [[Privacy and Data Handling]]
 - [[Incident Playbooks]]
+- [[Moderation, Punishments, and Reports]]
+- [[Commands and Permissions]]
