@@ -1,0 +1,59 @@
+name: Validate PR27 high-severity fixes
+
+on:
+  push:
+    branches:
+      - automation/pr27-reload-folia-validated
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr27-high-finding-fixes
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply focused fixes and publish clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 scripts/fix-pr27-high-findings.py
+          git rm .github/workflows/pr27-high-finding-fixes.yml
+          git rm scripts/fix-pr27-high-findings.py
+          git rm --ignore-unmatch scripts/.reload-folia-trigger
+          git diff --check
+          git add -A
+          git commit --no-verify -m 'Fix actionable PR27 high-severity findings'
+          git push --force origin HEAD:refs/heads/automation/pr27-high-fixes
+      - name: Build exact fixed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain 2>&1 | tee /tmp/build.log
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          if test "$STATUS" -ne 0; then
+            mkdir -p .quality-analysis
+            printf 'phase=build-failed\nsource=%s\n' "$(git rev-parse HEAD)" > .quality-analysis/state.txt
+            tail -n 1400 /tmp/build.log > .quality-analysis/build-failure.txt
+            git add .quality-analysis
+            git commit --no-verify -m 'Record PR27 high-fix build failure'
+            git push --force origin HEAD:refs/heads/automation/pr27-high-fixes
+          fi
+          exit "$STATUS"
