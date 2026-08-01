@@ -523,6 +523,62 @@ class PunishmentRequestAlertStoreIntegrationTest {
                 source.excludedRecipientId(), source.minimumRank(), visibility, schemaVersion, createdAt, expiresAt);
     }
 
+    private static void insertUncommittedIntent(
+            Connection connection,
+            PunishmentRequestAlertIntent intent
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO staff_alerts(
+                    alert_id, intent_key, request_id, request_revision, lifecycle_event,
+                    occurrence_key, lifecycle_actor_id, audience, recipient_id, minimum_rank,
+                    excluded_recipient_id, visibility, schema_version, alert_type, payload_json,
+                    state, attempt_count, available_at, created_at, expires_at, intent_state)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    JSON_OBJECT('schemaVersion', ?, 'occurrenceKey', ?, 'lifecycleActorId', ?),
+                    'PENDING', 0, ?, ?, ?, 'ACTIVE')
+                """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent.alertId()));
+            statement.setString(2, intent.intentKey());
+            statement.setBytes(3, MariaDbIntegrationSupport.uuidBytes(intent.requestId()));
+            statement.setLong(4, intent.requestRevision());
+            statement.setString(5, intent.eventType().name());
+            statement.setString(6, intent.occurrence().key());
+            setNullableUuid(statement, 7, intent.occurrence().actorId());
+            statement.setString(8, intent.audience().name());
+            setNullableUuid(statement, 9, intent.recipientId());
+            if (intent.minimumRank() == null) {
+                statement.setNull(10, Types.VARCHAR);
+            } else {
+                statement.setString(10, intent.minimumRank().name());
+            }
+            setNullableUuid(statement, 11, intent.excludedRecipientId());
+            statement.setString(12, intent.visibility().name());
+            statement.setInt(13, intent.schemaVersion());
+            statement.setString(14, intent.eventType().name());
+            statement.setInt(15, intent.schemaVersion());
+            statement.setString(16, intent.occurrence().key());
+            if (intent.occurrence().actorId() == null) {
+                statement.setNull(17, Types.VARCHAR);
+            } else {
+                statement.setString(17, intent.occurrence().actorId().toString());
+            }
+            Timestamp created = Timestamp.from(intent.createdAt());
+            statement.setTimestamp(18, created);
+            statement.setTimestamp(19, created);
+            statement.setTimestamp(20, Timestamp.from(intent.expiresAt()));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void setNullableUuid(PreparedStatement statement, int index, UUID value)
+            throws SQLException {
+        if (value == null) {
+            statement.setNull(index, Types.BINARY);
+        } else {
+            statement.setBytes(index, MariaDbIntegrationSupport.uuidBytes(value));
+        }
+    }
+
     private static int deliveryCount(UUID alertId, UUID recipientId) throws SQLException {
         return count("SELECT COUNT(*) FROM staff_alert_deliveries WHERE alert_id=? AND recipient_id=?",
                 alertId, recipientId);
