@@ -4,6 +4,9 @@ config-version: 1
 # ACTIVE is refused until a successful cutover record exists.
 operational-mode: BOOTSTRAP
 
+# The storage, workers, network, inventory, and channel sections are captured at
+# startup. Changing them requires a full server restart; /estaff reload rejects
+# the entire candidate when any of these values differ from the active snapshot.
 storage:
   # Secrets are read from the environment and are never written into this file.
   jdbc-url-environment: ES_DATABASE_URL
@@ -16,9 +19,45 @@ workers:
   threads: 4
   queue-capacity: 256
 
+# This section is reloadable. Unknown keys inside this section are rejected.
+# The subsystem remains disabled unless explicitly enabled.
 punishment-request-alerts:
-  # Checkpoint two only exposes the enable gate. Full validation and reload arrive later.
   enabled: false
+
+  polling:
+    # Values below 250 ms are rejected to prevent database hammering.
+    interval-millis: 10000
+    recipient-limit: 100
+    direct-batch: 4
+    reviewer-batch: 4
+    operational-batch: 2
+    total-claim-limit: 100
+    presentation-limit: 100
+
+  delivery:
+    lease-seconds: 45
+    maximum-attempts: 6
+    retry-base-seconds: 5
+    retry-maximum-seconds: 300
+    join-delay-ticks: 40
+
+  maintenance:
+    request-expiration:
+      interval-seconds: 60
+      batch: 100
+
+    intent-expiration:
+      interval-seconds: 60
+      batch: 100
+
+    lease-reclaim:
+      interval-seconds: 30
+      batch: 100
+
+    retention:
+      interval-minutes: 60
+      batch: 100
+      days: 30
 
 network:
   # Use a stable identifier such as HUB or SMP on each backend.
@@ -29,10 +68,12 @@ inventory:
   scope-id: SMP
 
 economy:
+  # Outside the current /estaff reload scope; restart to apply changes.
   # Each source must appear exactly once. Nested shulkers and bundles are handled by Currency.
   removal-order: [BANK, INVENTORY, ENDER_CHEST]
 
 rosechat:
+  # Outside the current /estaff reload scope; restart to apply changes.
   staff-channel: staff
   global-channel: global
   private-channels: []
@@ -50,11 +91,13 @@ channel:
     trust-store-password-environment: ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD
 
 automod:
+  # Outside the current /estaff reload scope; restart to apply changes.
   # Exact variants are intentionally empty. Populate them privately and enable only after review.
   enabled: false
   exact-variants: []
 
 visibility:
+  # Outside the current /estaff reload scope; restart to apply changes.
   matrix:
     MOD: [MOD, DEVELOPER]
     DEVELOPER: [MOD, DEVELOPER]
