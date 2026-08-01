@@ -1,0 +1,114 @@
+name: Build isolated PR27 main integration
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr27-main-integration-driver
+  cancel-in-progress: true
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact PR branch head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Create observable merge candidate and validate it
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+          TARGET_BRANCH="automation/pr27-main-integration-v2"
+          git checkout -B "$TARGET_BRANCH" "$SOURCE_SHA"
+
+          set +e
+          git merge --no-commit --no-ff refs/remotes/origin/main
+          MERGE_STATUS=$?
+          set -e
+          test "$MERGE_STATUS" -eq 0 || test "$MERGE_STATUS" -eq 1
+
+          mkdir -p .merge-analysis
+          printf 'source=%s\nmain=%s\nmerge_status=%s\nphase=raw-merge\n' \
+            "$SOURCE_SHA" "$MAIN_SHA" "$MERGE_STATUS" > .merge-analysis/state.txt
+          git status --short > .merge-analysis/status.txt
+          git diff --name-only --diff-filter=U > .merge-analysis/conflicts.txt
+          git ls-files -u > .merge-analysis/unmerged-stages.txt
+
+          while IFS= read -r path; do
+            test -n "$path" || continue
+            git checkout --conflict=merge -- "$path" 2>/dev/null \
+              || git checkout --ours -- "$path" 2>/dev/null \
+              || git checkout --theirs -- "$path" 2>/dev/null \
+              || true
+            if test -e "$path" || test -L "$path"; then
+              git add -- "$path"
+            else
+              git rm --ignore-unmatch -- "$path"
+            fi
+          done < .merge-analysis/conflicts.txt
+
+          git add -A
+          git commit --no-verify -m "Record raw current-main merge for PR27 integration"
+          git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+
+          set +e
+          python3 scripts/resolve-pr27-integration.py > /tmp/resolution.log 2>&1
+          RESOLUTION_STATUS=$?
+          set -e
+          if test "$RESOLUTION_STATUS" -ne 0; then
+            mkdir -p .merge-analysis
+            printf 'source=%s\nmain=%s\nphase=resolution-failed\n' \
+              "$SOURCE_SHA" "$MAIN_SHA" > .merge-analysis/state.txt
+            cp /tmp/resolution.log .merge-analysis/resolution-failure.txt
+            git add -A
+            git commit --no-verify -m "Record PR27 integration resolution failure"
+            git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+            exit "$RESOLUTION_STATUS"
+          fi
+
+          git rm -r --ignore-unmatch .merge-analysis
+          git rm --ignore-unmatch .github/workflows/pr27-integration-driver.yml
+          git rm --ignore-unmatch scripts/resolve-pr27-integration.py
+          if grep -R -n -E '^(<<<<<<< |>>>>>>> )' -- . ':!.git'; then
+            echo "Unresolved Git conflict markers remain" >&2
+            exit 1
+          fi
+          git diff --check
+          git add -A
+          git commit --no-verify -m "Resolve PR27 integration against current main"
+
+          set +e
+          chmod +x gradlew
+          ./gradlew clean test check runtimeJars jacocoAggregateReport \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain 2>&1 | tee /tmp/build.log
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          if test "$BUILD_STATUS" -ne 0; then
+            mkdir -p .merge-analysis
+            printf 'source=%s\nmain=%s\nphase=build-failed\n' \
+              "$SOURCE_SHA" "$MAIN_SHA" > .merge-analysis/state.txt
+            tail -n 1200 /tmp/build.log > .merge-analysis/build-failure.txt
+            git add .merge-analysis
+            git commit --no-verify -m "Record PR27 integration build failure"
+          fi
+
+          git push --force origin HEAD:refs/heads/$TARGET_BRANCH
+          exit "$BUILD_STATUS"
