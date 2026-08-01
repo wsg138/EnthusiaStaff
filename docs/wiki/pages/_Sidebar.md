@@ -4,10 +4,17 @@
 - [[Feature Completion Status|Implementation-Status]]
 - [[Remaining Development Map|Development-Blueprint]]
 
+## Feature hubs
+
+- [[Core Platform and Infrastructure]]
+- [[Moderation, Punishments, and Reports]]
+- [[Staff Tools, Investigations, and Player-State Safety]]
+- [[Integrations, Migration, and Release Readiness]]
+
 ## Staff guides
 
-- [[Staff Handbook]]
 - [[Staff Quick Start|Moderator-Quick-Start]]
+- [[Staff Handbook]]
 - [[Helper Guide]]
 - [[Punishment System]]
 - [[Reports and Evidence]]
@@ -17,7 +24,7 @@
 - [[Incident Playbooks]]
 - [[Privacy and Data Handling]]
 
-## Administration and reference
+## Administration
 
 - [[Commands and Permissions]]
 - [[Roles and Permissions|Rank-Authority]]
@@ -47,4 +54,4 @@
 - [Repository](https://github.com/wsg138/EnthusiaStaff)
 - [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
-- [Development blueprint](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/development-blueprint.md)
+- [Workspace manifest](https://github.com/wsg138/EnthusiaStaff/blob/main/WORKSPACE-MANIFEST.md)
