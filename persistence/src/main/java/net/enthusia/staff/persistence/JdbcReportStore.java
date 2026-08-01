@@ -33,6 +33,12 @@ public final class JdbcReportStore implements ReportStore {
     private static final Duration DUPLICATE_WINDOW = Duration.ofHours(2);
     private static final Duration CONTEXT_RETENTION = Duration.ofDays(7);
     private static final int MAX_OPEN_REPORTS = 5;
+    private static final String EXISTING_STATE_CHANGE_SQL = """
+            SELECT report_id, actor_id, event_type, note, to_state, resulting_revision
+            FROM report_events WHERE idempotency_key = ?
+            """;
+    private static final String LOCKED_EXISTING_STATE_CHANGE_SQL =
+            EXISTING_STATE_CHANGE_SQL + " FOR UPDATE";
 
     private final DataSource dataSource;
     private final ObjectMapper json;
@@ -176,9 +182,7 @@ public final class JdbcReportStore implements ReportStore {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                ReportStateChangeResult.Applied replay = existingStateChange(
-                        connection, request.idempotencyKey().value()
-                );
+                ReportStateChangeResult replay = existingStateChange(connection, request, false);
                 if (replay != null) {
                     connection.rollback();
                     return replay;
@@ -187,6 +191,11 @@ public final class JdbcReportStore implements ReportStore {
                 if (report == null) {
                     connection.rollback();
                     return new ReportStateChangeResult.Rejected("REPORT_NOT_FOUND", "The report does not exist");
+                }
+                replay = existingStateChange(connection, request, true);
+                if (replay != null) {
+                    connection.rollback();
+                    return replay;
                 }
                 if (report.revision() != request.expectedRevision()) {
                     connection.rollback();
@@ -209,9 +218,7 @@ public final class JdbcReportStore implements ReportStore {
                 return new ReportStateChangeResult.Applied(transition.nextState(), nextRevision, false);
             } catch (SQLException | JsonProcessingException exception) {
                 rollback(connection, exception);
-                ReportStateChangeResult.Applied replay = existingStateChangeAfterConflict(
-                        request.idempotencyKey().value()
-                );
+                ReportStateChangeResult replay = existingStateChangeAfterConflict(request);
                 if (replay != null) {
                     return replay;
                 }
@@ -491,23 +498,44 @@ public final class JdbcReportStore implements ReportStore {
         }
     }
 
-    private static ReportStateChangeResult.Applied existingStateChange(Connection connection, String key)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT to_state, resulting_revision FROM report_events WHERE idempotency_key = ?
-                """)) {
-            statement.setString(1, key);
+    private static ReportStateChangeResult existingStateChange(
+            Connection connection,
+            ReportStateChangeRequest request,
+            boolean lockLatest
+    ) throws SQLException {
+        String sql = lockLatest ? LOCKED_EXISTING_STATE_CHANGE_SQL : EXISTING_STATE_CHANGE_SQL;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, request.idempotencyKey().value());
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? new ReportStateChangeResult.Applied(
-                        ReportState.valueOf(result.getString(1)), result.getLong(2), true
-                ) : null;
+                if (!result.next()) {
+                    return null;
+                }
+                if (!sameStateChange(result, request)) {
+                    return new ReportStateChangeResult.Rejected(
+                            "IDEMPOTENCY_CONFLICT",
+                            "The idempotency key belongs to a different report action"
+                    );
+                }
+                return new ReportStateChangeResult.Applied(
+                        ReportState.valueOf(result.getString("to_state")),
+                        result.getLong("resulting_revision"),
+                        true
+                );
             }
         }
     }
 
-    private ReportStateChangeResult.Applied existingStateChangeAfterConflict(String key) {
+    private static boolean sameStateChange(ResultSet result, ReportStateChangeRequest request)
+            throws SQLException {
+        return UuidBytes.fromBytes(result.getBytes("report_id")).equals(request.reportId())
+                && UuidBytes.fromBytes(result.getBytes("actor_id")).equals(request.actorId())
+                && result.getString("event_type").equals(request.action().name())
+                && result.getString("note").equals(request.note().trim());
+    }
+
+    private ReportStateChangeResult existingStateChangeAfterConflict(ReportStateChangeRequest request) {
         try (Connection connection = dataSource.getConnection()) {
-            return existingStateChange(connection, key);
+            return existingStateChange(connection, request, false);
         } catch (SQLException | IllegalArgumentException exception) {
             return null;
         }
