@@ -685,8 +685,8 @@ approval.
 ### PR #32 report persistence and evidence checkpoint
 
 Draft PR #32 starts from merged PR #31 and addresses report-path correctness
-before the remaining GUI work. At pushed checkpoint
-`40f27160ae88ef0fda669306613254402f1e37a4`, it includes:
+before the remaining GUI work. At implementation checkpoint
+`2822fdc82983aed9c23c1af5182093e377f71644`, it includes:
 
 - configured Java-time JSON persistence for chat and private-message evidence;
 - concurrency-safe state-change replay and semantic idempotency conflicts;
@@ -704,14 +704,29 @@ before the remaining GUI work. At pushed checkpoint
   concurrent state changes, queue/state transitions, failure-injected rollback,
   and physical retention.
 
-The focused report MariaDB suite passes all seven tests. The focused Paper tests,
-including report context bounds and maintenance cadence, pass. PMD 7 and Lizard
-report zero findings on the new or refactored report files; the nine findings
-reported when the Paper bootstrap is included are its pre-existing executor,
-logging, literal, and loop findings rather than new report-line findings. No
-finding, rule, or first-party path was suppressed. Full clean-build, repository
-analyzer, hosted Codacy, and exact-head Pi evidence remain pending at this draft
-checkpoint and must be recorded before merge.
+The exact implementation checkpoint passed the Java 21
+`clean test check runtimeJars jacocoAggregateReport` gate with all 40 tasks
+executed and caches disabled. Test XML records 374 tests with zero failures,
+errors, or skips, including 59 tests across all 13 MariaDB 11.8.3
+Testcontainers suites. The Paper jar is 8,393,471 bytes with SHA-256
+`65F32E526A600FDD70CB9D77981859D4393B4F1F0CEA59F2BD0F078B6E4B9181`; the
+Velocity jar is 7,602,013 bytes with SHA-256
+`E242F77FEC7A8CE0EEE7080D6434EA54F146C9067678E85889B003BEEBC87E77`.
+Exact-SHA Pi staging run `30700846431` passed. Source-scoped CPD reports the
+same six repository duplication groups as the prior checkpoint and none touches
+the report changes.
+
+Hosted Codacy initially reported three new test-code findings at that head: one
+valid file-size warning and two generic SQL-helper security warnings. Commit
+`546d1e28` extracted shared fixtures and replaced the dynamic helpers with fixed
+prepared statements. The seven-test MariaDB report suite passes after that
+change. PMD 7 and Opengrep report zero findings on the two affected files;
+Lizard measures 470 non-comment lines in the test and 158 in its fixture, below
+the configured 500-line limit. The nine findings reported when the Paper
+bootstrap is included are its pre-existing executor, logging, literal, and loop
+findings rather than new report-line findings. No finding, rule, or first-party
+path was suppressed. Hosted Codacy and an exact-final-head Pi run must pass
+before merge.
 
 ## Remediation order
 
