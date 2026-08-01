@@ -17,6 +17,7 @@ import javax.crypto.SecretKey;
 
 public final class EnvelopeAuthenticator {
     private static final String ALGORITHM = "HmacSHA256";
+    private static final int MINIMUM_PROTOCOL_VERSION = 1;
 
     private final int protocolVersion;
     private final Clock clock;
@@ -57,7 +58,7 @@ public final class EnvelopeAuthenticator {
             Map<String, SecretKey> serverKeys,
             ReplayGuard replayGuard
     ) {
-        if (protocolVersion < 1) {
+        if (protocolVersion < MINIMUM_PROTOCOL_VERSION) {
             throw invalidConfiguration();
         }
         requirePresent(clock, permittedAge, permittedClockSkew, serverKeys, replayGuard);
