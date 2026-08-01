@@ -131,24 +131,23 @@ final class PaperPersistentChannelFactory {
     ) {
         Settings {
             Objects.requireNonNull(dataDirectory, "dataDirectory");
-            if (!enabled) {
-                return;
-            }
-            backendId = requireText(backendId, "backendId");
-            host = requireText(host, "host");
-            proxyId = requireText(proxyId, "proxyId");
-            backendSecretEnvironment = requireText(
-                    backendSecretEnvironment,
-                    "backendSecretEnvironment"
-            );
-            proxySecretEnvironment = requireText(proxySecretEnvironment, "proxySecretEnvironment");
-            trustStore = requireText(trustStore, "trustStore");
-            trustStorePasswordEnvironment = requireText(
-                    trustStorePasswordEnvironment,
-                    "trustStorePasswordEnvironment"
-            );
-            if (port < 1 || port > 65_535) {
-                throw new IllegalArgumentException("Persistent channel port must be between 1 and 65535");
+            if (enabled) {
+                backendId = requireText(backendId, "backendId");
+                host = requireText(host, "host");
+                proxyId = requireText(proxyId, "proxyId");
+                backendSecretEnvironment = requireText(
+                        backendSecretEnvironment,
+                        "backendSecretEnvironment"
+                );
+                proxySecretEnvironment = requireText(proxySecretEnvironment, "proxySecretEnvironment");
+                trustStore = requireText(trustStore, "trustStore");
+                trustStorePasswordEnvironment = requireText(
+                        trustStorePasswordEnvironment,
+                        "trustStorePasswordEnvironment"
+                );
+                if (port < 1 || port > 65_535) {
+                    throw new IllegalArgumentException("Persistent channel port must be between 1 and 65535");
+                }
             }
         }
 
