@@ -1,0 +1,83 @@
+name: Codacy high finding comment once
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  audit:
+    if: contains(github.event.head_commit.message, '[codacy-high-comment]')
+    name: Post sanitized Codacy findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out audit commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+
+      - name: Query and post sanitized findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CODACY_PROJECT_TOKEN}"
+          cat > high-request.json <<'JSON'
+          {"branchName":"section/punishment-request-notifications-recovery","levels":["Error"],"categories":["ErrorProne"]}
+          JSON
+          cat > security-request.json <<'JSON'
+          {"branchName":"section/punishment-request-notifications-recovery","levels":["Error","Warning"],"categories":["Security"]}
+          JSON
+          curl --fail-with-body --silent --show-error \
+            -X POST 'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/issues/search?limit=100' \
+            -H "project-token: ${CODACY_PROJECT_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @high-request.json > codacy-high-errorprone.json
+          curl --fail-with-body --silent --show-error \
+            -X POST 'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/issues/search?limit=100' \
+            -H "project-token: ${CODACY_PROJECT_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data @security-request.json > codacy-security.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          high=json.loads(Path('codacy-high-errorprone.json').read_text()).get('data', [])
+          security=json.loads(Path('codacy-security.json').read_text()).get('data', [])
+          lines=['## Codacy exact-branch high/security audit', '',
+                 f'- High ErrorProne findings: **{len(high)}**',
+                 f'- Error/Warning Security findings: **{len(security)}**', '']
+          for title, issues in [('High ErrorProne', high), ('Security', security)]:
+              if not issues:
+                  continue
+              lines += [f'### {title}', '']
+              for issue in issues:
+                  p=issue.get('patternInfo') or {}
+                  lines.append(
+                      f"- `{p.get('id','unknown')}` — `{issue.get('filePath','unknown')}:{issue.get('lineNumber','?')}` — "
+                      f"{issue.get('message') or p.get('title') or 'No message supplied'}")
+              lines.append('')
+          lines += ['Branch queried: `section/punishment-request-notifications-recovery`.',
+                    'This comment contains sanitized issue metadata only; no Codacy token or raw response is included.']
+          Path('codacy-comment.md').write_text('\n'.join(lines) + '\n')
+          PY
+          gh api "repos/${GITHUB_REPOSITORY}/issues/27/comments" --method POST -F body=@codacy-comment.md
+
+      - name: Remove one-time workflow
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/codacy-high-comment-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Remove one-time Codacy comment workflow"
+          git push origin HEAD:section/punishment-request-notifications-recovery
