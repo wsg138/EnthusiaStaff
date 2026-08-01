@@ -16,13 +16,13 @@ Use it with:
 
 ## Current checkpoint
 
-- Current `main`: `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`
-- Latest merged checkpoint: PR #36, LiteBans shadow-comparison decomposition
-- Validated PR #36 head: `3afeffc926571170e8df18c7d096ca7f4d89ec1b`
+- Current merged repository state: `main` at `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`, the PR #36 merge commit
+- Latest fully validated EnthusiaStaff revision: PR #36 head `3afeffc926571170e8df18c7d096ca7f4d89ec1b`
+- All evidence below attaches to `3afeffc926571170e8df18c7d096ca7f4d89ec1b`; the later merge commit is not separately claimed as tested
 - Clean validation: 40/40 tasks, 99 suites / 398 tests
 - MariaDB 11.8.3 Testcontainers: 15 suites / 68 tests
 - Hosted Codacy: zero new, three fixed, 92.59% diff coverage, no clone increase
-- Exact-SHA Pi staging: run `30709333535`
+- Exact-SHA Pi staging: run `30709333535`, testing `3afeffc926571170e8df18c7d096ca7f4d89ec1b`
 - Active draft PR #37: LiteBans cutover coordination; focused first checkpoint only
 - Separate draft PR #27: punishment-request notifications, staff mode and freeze; 95 commits requiring careful reconciliation
 
@@ -40,7 +40,7 @@ flowchart TD
     D["3 — Prove stateful staff safety<br/>Staff mode, freeze, vanish, inventory,<br/>confiscation and crash recovery"]
     E["4 — Complete integrations<br/>Providers, RoseChat, Discord,<br/>website, Java and Bedrock"]
     F["5 — Migration release candidate<br/>Variants, replay, full shadow evidence,<br/>cutover, freeze and rollback"]
-    G{"One exact SHA passes<br/>the full acceptance suite?"}
+    G{"One release manifest covers<br/>every repository and acceptance gate?"}
     H["6 — 168-hour non-enforcing shadow<br/>Daily parity and mismatch review"]
     I{"Every mismatch explained<br/>and recovery rehearsed?"}
     J["7 — Final cutover rehearsal<br/>Founder authorization, backups,<br/>freeze, rollback and reconciliation"]
@@ -135,19 +135,24 @@ reconciliation, source deletion, orphan mappings, full persisted shadow
 comparisons, seven daily summaries spanning 168 hours, final incremental import,
 activation fencing, emergency freeze and rollback against realistic private data.
 
-### 6 — Full acceptance
+### 6 — Full acceptance under one release manifest
 
-One exact SHA and matching jars must pass build, packaging, Codacy, MariaDB,
-Paper, Velocity, provider, website, Java, Bedrock, Folia, multi-backend, load,
-failure-injection, recovery and rollback groups. Evidence from different commits
-cannot be combined.
+Create a release manifest containing one authenticated revision for EnthusiaStaff,
+each provider and the private website. Bind every revision to its artifact hash,
+configuration checksum, dependency/environment versions and acceptance evidence.
+All applicable build, database, runtime, provider, website, platform, load,
+failure, recovery and rollback gates must pass against that exact manifest.
+
+Evidence may span repositories only when every revision is declared in the same
+manifest and tested together. Untracked evidence from unrelated revisions cannot
+be combined.
 
 ### 7 — Shadow and cutover
 
 Run the mandatory 168-hour non-enforcing shadow period and review every daily
 comparison. Rehearse cutover, emergency freeze and rollback immediately before
-Founder-authorized activation. Keep LiteBans data and jars available; legacy
-removal is a later manual decision.
+Founder-authorized activation. Record the release manifest and keep LiteBans data
+and jars available; legacy removal is a later manual decision.
 
 ## Immediate execution order
 
@@ -161,7 +166,7 @@ removal is a later manual decision.
 8. Stage staff mode, freeze, vanish, inventory and confiscation safety.
 9. Reconstruct providers and complete the private website.
 10. Finish migration recovery, full shadow, emergency freeze and rollback.
-11. Run full acceptance, the 168-hour shadow period and cutover rehearsal.
+11. Run full acceptance against one release manifest, the 168-hour shadow period and cutover rehearsal.
 
 Correctness, security, transaction integrity, recovery and resource ownership may
 interrupt this order at any time.
@@ -180,7 +185,7 @@ A feature is not complete until all applicable layers are covered:
 8. Real staging where mocks cannot prove behavior
 9. Accurate verification and degraded-mode output
 10. Configuration, operator, privacy, rollback and Wiki documentation
-11. Requirements-matrix evidence at one exact SHA
+11. Requirements-matrix evidence at one exact repository revision, plus release-manifest evidence for cross-repository acceptance
 
 ## Keeping this roadmap current
 
