@@ -8,16 +8,44 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class LiteBansSchemaInspectorTest {
+    private static final String BAN_STAFF = "banned_by_name";
+    private static final String MUTE_STAFF = "muted_by_name";
+    private static final String STAFF_COLUMN = "staff";
+
     @Test
     void resolvesKnownAliasesWithoutInventingMissingColumns() {
         Map<String, String> mapping = LiteBansSchemaInspector.resolveColumns(Set.of(
-                "id", "uuid", "name", "reason", "banned_by_name", "time", "until", "active",
+                "id", "uuid", "name", "reason", BAN_STAFF, "time", "until", "active",
                 "removed_by_date"
         ), "bans");
 
         assertEquals("name", mapping.get("username"));
-        assertEquals("banned_by_name", mapping.get("staff"));
+        assertEquals(BAN_STAFF, mapping.get(STAFF_COLUMN));
         assertEquals("removed_by_date", mapping.get("ended_at"));
         assertFalse(mapping.containsKey("ip_ban"));
+    }
+
+    @Test
+    void givesTheCurrentSanctionTypeStaffAliasPrecedence() {
+        Set<String> columns = Set.of(BAN_STAFF, MUTE_STAFF, "staff_name");
+
+        assertEquals(
+                BAN_STAFF,
+                LiteBansSchemaInspector.resolveColumns(columns, "bans").get(STAFF_COLUMN)
+        );
+        assertEquals(
+                MUTE_STAFF,
+                LiteBansSchemaInspector.resolveColumns(columns, "mutes").get(STAFF_COLUMN)
+        );
+    }
+
+    @Test
+    void acceptsTheSharedLegacyStaffAliasWhenItIsTheOnlyChoice() {
+        Map<String, String> mapping = LiteBansSchemaInspector.resolveColumns(
+                Set.of(BAN_STAFF),
+                "mutes"
+        );
+
+        assertEquals(BAN_STAFF, mapping.get(STAFF_COLUMN));
     }
 }

@@ -1,0 +1,2 @@
+# The repository-managed Wiki validator and publisher require stable LF pages.
+/docs/wiki/pages/*.md text eol=lf

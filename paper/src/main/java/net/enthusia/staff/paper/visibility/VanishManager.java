@@ -40,6 +40,7 @@ public final class VanishManager implements Listener {
     private final ExecutorService workers;
     private final Map<UUID, StaffRank> onlineStaffRanks = new ConcurrentHashMap<>();
     private final Set<UUID> hiddenSpectators = ConcurrentHashMap.newKeySet();
+    private final VanishAudienceCoordinator<Player> audiences;
     private final SpectatorTabPacketAdapter spectatorTabPackets;
 
     public VanishManager(
@@ -58,6 +59,7 @@ public final class VanishManager implements Listener {
         this.sessions = sessions;
         this.staffMode = staffMode;
         this.workers = workers;
+        this.audiences = new VanishAudienceCoordinator<>(this::onEntity, this::refreshPair);
         this.spectatorTabPackets = installSpectatorTabPackets();
     }
 
@@ -71,17 +73,25 @@ public final class VanishManager implements Listener {
                 for (VanishRecord record : loaded.active(10_000)) {
                     visibility.setVanished(record.staffId(), record.rank(), true);
                 }
-                sync(() -> {
-                    plugin.getServer().getOnlinePlayers().forEach(player -> {
-                        recordViewerRank(player);
-                        applySpectatorPolicy(player, player.getGameMode(), false);
-                    });
-                    refreshAll();
-                });
+                recoverOnlinePlayers();
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Vanish-state initialization failed", exception);
             }
         });
+    }
+
+    private void recoverOnlinePlayers() {
+        sync(() -> plugin.getServer().getOnlinePlayers().forEach(player ->
+                onEntity(player, () -> recoverOnlinePlayer(player))));
+    }
+
+    private void recoverOnlinePlayer(Player player) {
+        UUID playerId = player.getUniqueId();
+        recordViewerRank(player);
+        applySpectatorPolicy(player, player.getGameMode(), false);
+        audiences.register(playerId, player, player.getGameMode());
+        audiences.refreshViewer(playerId);
+        audiences.refreshTarget(playerId);
     }
 
     public boolean isVanished(UUID playerId) {
@@ -125,11 +135,11 @@ public final class VanishManager implements Listener {
                                 : "ProtocolLib spectator masking is unavailable; you remain hidden from tab."
                 ));
                 hiddenSpectators.add(player.getUniqueId());
-                refreshTarget(player);
+                audiences.refreshTarget(player.getUniqueId());
                 return;
             }
             hiddenSpectators.remove(player.getUniqueId());
-            refreshTarget(player);
+            audiences.refreshTarget(player.getUniqueId());
             player.sendMessage(Component.text("You now appear normally on tab while remaining in spectator. ",
                             NamedTextColor.GREEN)
                     .append(Component.text("[Hide again]", NamedTextColor.YELLOW)
@@ -138,18 +148,20 @@ public final class VanishManager implements Listener {
             return;
         }
         hiddenSpectators.add(player.getUniqueId());
-        refreshTarget(player);
+        audiences.refreshTarget(player.getUniqueId());
         player.sendMessage(Component.text("You are hidden from the tab list while spectating."));
     }
 
     public void staffModeExited(UUID playerId) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null || !visibility.isVanished(playerId)) {
-            return;
-        }
-        StaffRank rank = resolveRank(player);
-        if (rank != null && requiresStaffMode(rank)) {
-            set(player, rank, false);
+        audiences.onOwner(playerId, player -> disableAfterStaffModeExit(playerId, player));
+    }
+
+    private void disableAfterStaffModeExit(UUID playerId, Player player) {
+        if (visibility.isVanished(playerId)) {
+            StaffRank rank = resolveRank(player);
+            if (rank != null && requiresStaffMode(rank)) {
+                set(player, rank, false);
+            }
         }
     }
 
@@ -162,7 +174,7 @@ public final class VanishManager implements Listener {
         submit(() -> {
             VanishStore loaded = store.get();
             if (loaded == null) {
-                message(player, "Vanish storage is not ready; no visibility change was made.");
+                message(playerId, "Vanish storage is not ready; no visibility change was made.");
                 return;
             }
             try {
@@ -171,22 +183,27 @@ public final class VanishManager implements Listener {
                 if (sessionStore != null && staffMode.active(playerId)) {
                     sessionStore.setVanish(playerId, vanished, clock.instant());
                 }
-                sync(() -> {
-                    visibility.setViewerRank(playerId, rank);
-                    visibility.setVanished(playerId, rank, vanished);
-                    if (vanished) {
-                        hiddenSpectators.remove(playerId);
-                    } else {
-                        applySpectatorPolicy(player, player.getGameMode(), true);
-                    }
-                    refreshTarget(player);
-                    player.sendMessage(Component.text(vanished ? "Vanish enabled." : "Vanish disabled."));
-                });
+                visibility.setViewerRank(playerId, rank);
+                visibility.setVanished(playerId, rank, vanished);
+                if (vanished) {
+                    hiddenSpectators.remove(playerId);
+                }
+                audiences.onOwner(playerId, current -> finishSet(current, vanished));
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Vanish state change failed", exception);
-                message(player, "Vanish change failed; inspect the sanitized server log.");
+                message(playerId, "Vanish change failed; inspect the sanitized server log.");
             }
         });
+    }
+
+    private void finishSet(Player player, boolean vanished) {
+        UUID playerId = player.getUniqueId();
+        if (!vanished) {
+            applySpectatorPolicy(player, player.getGameMode(), true);
+        }
+        audiences.updateGameMode(playerId, player.getGameMode());
+        audiences.refreshTarget(playerId);
+        player.sendMessage(Component.text(vanished ? "Vanish enabled." : "Vanish disabled."));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -194,20 +211,22 @@ public final class VanishManager implements Listener {
         Player player = event.getPlayer();
         recordViewerRank(player);
         applySpectatorPolicy(player, event.getNewGameMode(), true);
-        refreshTarget(player);
-        player.getScheduler().execute(plugin, () -> refreshTarget(player), null, 1L);
+        audiences.updateGameMode(player.getUniqueId(), event.getNewGameMode());
+        audiences.refreshTarget(player.getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
         recordViewerRank(player);
         applySpectatorPolicy(player, player.getGameMode(), true);
-        if (visibility.isVanished(player.getUniqueId())) {
+        audiences.register(playerId, player, player.getGameMode());
+        if (visibility.isVanished(playerId)) {
             event.joinMessage(null);
         }
-        refreshViewer(player);
-        refreshTarget(player);
+        audiences.refreshViewer(playerId);
+        audiences.refreshTarget(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -217,6 +236,7 @@ public final class VanishManager implements Listener {
             event.quitMessage(null);
         }
         UUID playerId = player.getUniqueId();
+        audiences.remove(playerId);
         visibility.removeViewer(playerId);
         onlineStaffRanks.remove(playerId);
         hiddenSpectators.remove(playerId);
@@ -233,35 +253,35 @@ public final class VanishManager implements Listener {
     }
 
     public void refreshAll() {
-        for (Player viewer : plugin.getServer().getOnlinePlayers()) {
-            refreshViewer(viewer);
+        audiences.refreshAll();
+    }
+
+    private void refreshPair(
+            VanishAudienceCoordinator.OnlineEntity<Player> viewerEntry,
+            VanishAudienceCoordinator.OnlineEntity<Player> targetEntry
+    ) {
+        Player viewer = viewerEntry.owner();
+        Player target = targetEntry.owner();
+        boolean canSee = visibility.canSee(viewerEntry.playerId(), targetEntry.playerId());
+        try {
+            if (canSee) {
+                viewer.showPlayer(plugin, target);
+            } else {
+                viewer.hidePlayer(plugin, target);
+            }
+            applyTabListing(viewer, target, targetEntry, canSee && viewer.canSee(target));
+        } catch (IllegalStateException exception) {
+            plugin.getLogger().log(Level.FINE, "Player visibility refresh raced with disconnect", exception);
         }
     }
 
-    private void refreshViewer(Player viewer) {
-        for (Player target : plugin.getServer().getOnlinePlayers()) {
-            refreshPair(viewer, target);
-        }
-    }
-
-    private void refreshTarget(Player target) {
-        for (Player viewer : plugin.getServer().getOnlinePlayers()) {
-            refreshPair(viewer, target);
-        }
-    }
-
-    private void refreshPair(Player viewer, Player target) {
-        boolean canSee = visibility.canSee(viewer.getUniqueId(), target.getUniqueId());
-        if (canSee) {
-            viewer.showPlayer(plugin, target);
-        } else {
-            viewer.hidePlayer(plugin, target);
-        }
-        applyTabListing(viewer, target, canSee && viewer.canSee(target));
-    }
-
-    private void applyTabListing(Player viewer, Player target, boolean canSee) {
-        if (!shouldList(target, canSee)) {
+    private void applyTabListing(
+            Player viewer,
+            Player target,
+            VanishAudienceCoordinator.OnlineEntity<Player> targetEntry,
+            boolean canSee
+    ) {
+        if (!shouldList(targetEntry, canSee)) {
             unlistSafely(viewer, target);
             return;
         }
@@ -273,11 +293,11 @@ public final class VanishManager implements Listener {
         }
     }
 
-    private boolean shouldList(Player target, boolean canSee) {
-        UUID targetId = target.getUniqueId();
+    private boolean shouldList(VanishAudienceCoordinator.OnlineEntity<Player> target, boolean canSee) {
+        UUID targetId = target.playerId();
         return SpectatorTabPolicy.shouldList(
                 onlineStaffRanks.get(targetId),
-                target.getGameMode(),
+                target.gameMode(),
                 canSee,
                 hiddenSpectators.contains(targetId),
                 spectatorTabPackets.available()
@@ -295,25 +315,31 @@ public final class VanishManager implements Listener {
     private void applySpectatorPolicy(Player player, GameMode gameMode, boolean prompt) {
         UUID playerId = player.getUniqueId();
         StaffRank rank = onlineStaffRanks.get(playerId);
-        if (gameMode != GameMode.SPECTATOR || !SpectatorTabPolicy.masksSpectatorEntry(rank)) {
-            hiddenSpectators.remove(playerId);
-            return;
-        }
-        if (visibility.isVanished(playerId)) {
+        if (!requiresSpectatorMask(playerId, rank, gameMode)) {
             hiddenSpectators.remove(playerId);
             return;
         }
         if (SpectatorTabPolicy.offersVisibilityChoice(rank)) {
-            boolean newlyHidden = hiddenSpectators.add(playerId);
-            if (prompt && newlyHidden) {
-                promptSpectatorChoice(player);
-            }
+            applySpectatorChoice(player, playerId, prompt);
             return;
         }
         if (spectatorTabPackets.available()) {
             hiddenSpectators.remove(playerId);
         } else {
             hiddenSpectators.add(playerId);
+        }
+    }
+
+    private boolean requiresSpectatorMask(UUID playerId, StaffRank rank, GameMode gameMode) {
+        return gameMode == GameMode.SPECTATOR
+                && SpectatorTabPolicy.masksSpectatorEntry(rank)
+                && !visibility.isVanished(playerId);
+    }
+
+    private void applySpectatorChoice(Player player, UUID playerId, boolean prompt) {
+        boolean newlyHidden = hiddenSpectators.add(playerId);
+        if (prompt && newlyHidden) {
+            promptSpectatorChoice(player);
         }
     }
 
@@ -366,17 +392,16 @@ public final class VanishManager implements Listener {
     }
 
     private void packetMaskFailed() {
-        sync(() -> {
-            for (Player player : plugin.getServer().getOnlinePlayers()) {
-                StaffRank rank = onlineStaffRanks.get(player.getUniqueId());
-                if (player.getGameMode() == GameMode.SPECTATOR
-                        && SpectatorTabPolicy.masksSpectatorEntry(rank)
-                        && !visibility.isVanished(player.getUniqueId())) {
-                    hiddenSpectators.add(player.getUniqueId());
-                    refreshTarget(player);
-                }
-            }
-        });
+        audiences.forEachOwner(this::applyPacketMaskFailure);
+    }
+
+    private void applyPacketMaskFailure(Player player) {
+        UUID playerId = player.getUniqueId();
+        GameMode gameMode = player.getGameMode();
+        recordViewerRank(player);
+        applySpectatorPolicy(player, gameMode, false);
+        audiences.updateGameMode(playerId, gameMode);
+        audiences.refreshTarget(playerId);
     }
 
     private StaffRank resolveRank(Player player) {
@@ -407,7 +432,11 @@ public final class VanishManager implements Listener {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, operation);
     }
 
-    private void message(Player player, String message) {
-        player.getScheduler().execute(plugin, () -> player.sendMessage(Component.text(message)), null, 1L);
+    private void message(UUID playerId, String message) {
+        audiences.onOwner(playerId, player -> player.sendMessage(Component.text(message)));
+    }
+
+    private boolean onEntity(Player player, Runnable operation) {
+        return player.getScheduler().execute(plugin, operation, null, 1L);
     }
 }

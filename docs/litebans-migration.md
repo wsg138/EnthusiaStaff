@@ -6,6 +6,13 @@ LiteBans remains the source of truth until a validated cutover commits `ACTIVE`.
 
 The inspected source must contain the configured-prefix `bans`, `mutes`, and `history` tables. Column names are discovered from a bounded allowlist; table prefixes and identifiers are validated before SQL is built.
 
+Inspection handles sanction, history, and audit-only tables independently. It
+reports missing columns in canonical order so repeated preflight runs produce a
+stable blocker list. Staff-column resolution prefers the alias for the current
+sanction type while retaining the shared legacy fallback used by supported
+LiteBans schemas. Inspection never invents a mapping for a column that is not
+present.
+
 The importer preserves:
 
 - ban, IP-ban, and mute source IDs;
@@ -47,6 +54,19 @@ Each write pass takes a database-wide advisory lock, recovers abandoned `RUNNING
 - rejects changes to immutable identity, type, issue time, original actor, or original reason for manual review.
 
 A crash can leave already committed mappings or protected identity tokens. The next locked run marks the abandoned run failed and safely replays those rows. It never duplicates cases or sanction events for an already committed checksum.
+
+## Shadow comparison accounting
+
+Each shadow pass compares source and target counts, source checksums, active
+state, UUID mappings, expiration values, and the resulting login, mute, and
+IP-ban decisions. The result of every dimension is persisted in
+`shadow_comparisons`; a successful aggregate is not inferred from counts alone.
+
+A target mapping whose source row disappeared is reported as an extra mapping.
+It makes the count comparison fail and contributes to the aggregate mismatch
+count even when every remaining source row still matches. Rejected source rows
+also keep the aggregate non-zero. Resolve these discrepancies at the source or
+through the documented recovery process before cutover.
 
 ## Preflight
 

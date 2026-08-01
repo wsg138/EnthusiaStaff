@@ -2,6 +2,8 @@
 
 Captured: 2026-07-27 (America/Indianapolis)
 
+Last updated: 2026-08-01 (America/Indianapolis)
+
 This report records the state of `agent/complete-staff-platform` at pushed commit
 `c4fd4129f7a34ad011f87f146fb72c236e611b89` before the current remediation.
 It is a baseline, not a claim that the branch is clean.
@@ -516,6 +518,376 @@ Hosted Codacy reports validation head
 issues, complexity delta 26, and duplication delta zero. The complexity metric
 remains visible; it was not suppressed or dispositioned. CodeRabbit skipped the
 draft automatically; one lightweight ready-for-review checkpoint remains.
+
+### PR #30 website moderation persistence checkpoint
+
+Draft PR #30 decomposes the website moderation persistence boundary into
+separate public-registry, punishment-code, appeal, audit, and projection
+collaborators. The public `WebsiteModerationStore` contract is unchanged.
+Punishment-code and appeal mutations retain one MariaDB transaction and now use
+the shared transaction helper for rollback on both SQL and runtime failures.
+
+Regression coverage demonstrates two failures that existed before this
+checkpoint and are now fixed:
+
+- a punishment-code batch could commit an earlier code creation when a later
+  corrupt code caused a runtime integrity exception;
+- concurrent or conflicting appeal preparation could surface a raw duplicate-key
+  persistence exception instead of the documented idempotency conflict.
+
+At implementation checkpoint `103f654bccb82f31eff65176b5f325769f726424`, the clean Java
+21 `clean test check runtimeJars jacocoAggregateReport` gate passed. Test XML
+records 344 tests with zero failures, including 50 tests across 12 MariaDB
+11.8.3 Testcontainers suites. The website-specific MariaDB coverage comprises
+14 tests across public-registry, punishment-code, and appeal behavior.
+
+| Artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,206 | `97A10170E0D733D7112603F5FD22B26B5D44B8997BB26E307544EE8169720937` |
+| Velocity runtime jar | 7,440,725 | `43C20F76C237228351D03ADAFC066B8D799EA8AEA9E046DCE5C443291DE44148` |
+
+Hosted Codacy reports that implementation checkpoint is up to standards with zero introduced
+issues, 24 fixed issues, 88.62% diff coverage, and a +2.83 percentage-point
+coverage variation. It also reports complexity delta +134 and duplication
+delta +38. These structural deltas remain visible and were not ignored. The
+comparable local analyzers report zero PMD, Lizard, Opengrep, Trivy, or
+100-token CPD finding in a changed file. Lower-threshold CPD identifies small
+JDBC error factories and MariaDB test-fixture setup; these were not converted
+into cross-responsibility abstractions merely to reduce the metric.
+
+The repository-wide local analyzer snapshot at this checkpoint is 214 PMD
+findings, 396 Lizard findings, 18 Opengrep findings, zero Trivy findings, and
+six 100-token CPD clone groups. These are repository totals, not new PR
+findings. No rule, first-party path, or finding was suppressed or ignored.
+
+The same implementation checkpoint also passed the guarded Pi staging workflow. A trusted Java
+21 build produced the Paper runtime, verified its checksum, ZIP integrity,
+plugin main class, and zero provider-API leaks, then loaded it on Paper 1.21.11.
+Two disposable boot/shutdown cycles each reached `SHADOW_MIGRATION`, passed
+`/plugins`, `/version EnthusiaStaff`, `/estaff status`, and `/estaff verify`,
+and shut down with exit code zero. The sanitized evidence reports two completed
+server starts, two storage-ready cycles, and zero critical startup/runtime
+failure patterns. This is a useful standalone Paper/runtime gate; it is not a
+claim that multi-server, Bedrock, provider-plugin, Discord, or production-data
+acceptance has been completed.
+
+The subsequent ready-for-review pass identified four focused correctness and
+documentation findings. The branch fixes those findings without requesting a
+second automated review cycle; the resulting PR head must repeat the hosted
+build, Codacy, and guarded Pi gates before merge.
+
+The review-fix checkpoint passed a fresh Java 21
+`clean test check runtimeJars jacocoAggregateReport` run with all tasks rerun
+and build caches disabled. Test XML records 348 tests with zero failures,
+including 52 tests across all 12 MariaDB 11.8.3 Testcontainers suites. The 16
+website tests now include simultaneous first-code creation, non-blocking
+existing-code reads, and `APPLIED` sanction eligibility and expiration.
+
+| Review-fix artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,769 | `559C484B5B049E21295C53A9F0242753AAFC55A9EDE6D474157FEAB585CAF2B8` |
+| Velocity runtime jar | 7,441,288 | `5DBAF8B159D3EA8BA1E2A6F162DB73BAABDCB34541519CB8D73A55401ED345D5` |
+
+Focused PMD 7 reports zero findings in the six changed Java files. The full
+Lizard and Opengrep runs likewise report no changed-file findings, Trivy
+reports zero findings, and the five repository-wide 100-token CPD groups do
+not include a changed file. No analyzer finding was ignored or suppressed.
+
+Exact PR head `4457888e341a99822235e54e4dc68a805c226a55` subsequently
+passed the hosted build and merged as PR #30 in
+`477b8c509dba7e437968ffa5a3faef0f2f9c0aad`. Hosted Codacy reported
+the head up to standards with zero introduced issues, 24 fixed issues, 88.31%
+diff coverage across 667 coverable lines, +2.863 percentage-point coverage
+variation, complexity delta +147, and duplication delta +42. The one
+non-gating potential Lizard signal was a 56-line test method; it was split at
+the start of the next plugin checkpoint rather than ignored.
+
+The exact head also passed trusted Pi staging run `30695268906`. Its Java 21
+build produced an 8,239,663-byte Paper runtime with SHA-256
+`4757DB24955D942F7B3DC10626BE5D9118F0DAC9D0452DEF180245C84DF21A3E`.
+Paper 1.21.11 build 132 completed two boot/storage/command/shutdown cycles in
+`SHADOW_MIGRATION`, with zero provider API leaks, zero critical failure
+patterns, and exit code zero in both cycles. CodeRabbit's earlier findings
+were addressed; its final status was rate-limited and is not represented as a
+fresh approval.
+
+### PR #31 restricted website API boundary checkpoint
+
+Draft PR #31 decomposes the restricted Velocity website bridge without
+changing its route contract. `WebsiteApiServer` is now a transport boundary,
+while configuration validation, listener/executor ownership, request decoding,
+route dispatch, response projection, and durable appeal mutation live in
+focused collaborators. The server constructor was reduced from 14 parameters
+to five dependencies. Loopback binding and client checks, bearer/HMAC
+authentication, nonce replay protection, bounded bodies and queues, strict
+input fields, stable error envelopes, and hardened response headers remain
+explicit.
+
+Regression tests cover authenticated loopback transport, unsigned rejection,
+clean close/restart, failed-bind cleanup and retry, pre-authentication body
+limits, route/query/body/content-type rejection, authorized appeal acceptance,
+authority-mode replayability, terminal mutation rejection, and durable
+preparation rejection. The final Java 21
+`clean test check runtimeJars jacocoAggregateReport` run executed all 40 tasks
+with caches disabled and passed 365 tests with zero failures, errors, or skips.
+That includes all 52 tests across the 12 MariaDB 11.8.3 Testcontainers suites.
+
+| Artifact | Bytes | Local SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,239,769 | `EC6C7441DC330C4337D41CB54E4D523FC11A49EEDFCDF79D162105CA86BE1BF4` |
+| Velocity runtime jar | 7,452,204 | `D67A6C62A2F96F5EBC1674830946980BD2AAE641CABD5E0116343ECAB17DF8C3` |
+
+Hosted Codacy initially reported exactly two new Opengrep findings. One
+mistook the inbound `HttpServer` loopback bind for an outbound SSRF request.
+The other mistook a test-only ephemeral loopback port reservation, which sends
+no application data, for an unencrypted application transport. Both cited
+constructs are analyzer mismatches. They have narrow inline `nosemgrep`
+annotations on only the cited lines with the reason beside each annotation;
+no rule or first-party path is disabled. The Codacy CLI could read both exact
+findings, but its issue-state mutation endpoint returned `404`, so the
+source-scoped dispositions keep the evidence reviewable in version control.
+
+At exact head `6e8a4212ed17f3da135d5d844f3771614950313f`, hosted
+Codacy is up to standards with zero new and 22 fixed issues, 78.59% diff
+coverage across 383 coverable lines, a +1.514 percentage-point coverage
+variation, complexity delta +79, and duplication delta +10. The structural
+deltas remain visible. Local analyzers report 200 PMD findings, 395 Lizard
+findings, 18 Opengrep results (16 active and two source-suppressed), zero Trivy
+findings, and six 100-token CPD clone groups. None of the active results is
+introduced on a PR #31 changed line. The unrelated `migrationMode == null`
+Opengrep result in the
+touched Velocity composition root is the already reviewed self-comparison
+false positive recorded in the ignored baseline.
+
+The same exact head passed trusted Pi wrapper run `30697060008`. The independent
+Java 21 build produced an 8,239,663-byte Paper runtime with SHA-256
+`F356B67FE7F8503A83839FF5B00941359DA7AB60219E22B201D50755E051DDC2`.
+Paper 1.21.11 build 132 completed two `SHADOW_MIGRATION`
+boot/storage/command/shutdown cycles, checked 24 provider API source types with
+zero leaks, found zero critical startup/runtime patterns, and exited with code
+zero both times. Repository-managed Wiki Architecture and Build/Testing pages
+now describe the bridge and this exact-SHA gate; all 29 Wiki pages validate.
+CodeRabbit skipped the draft automatically, so one lightweight ready-state pass
+remains and no approval is claimed here.
+
+The PR #31 review fixes produced final head
+`d5ef5d2f5ec5209d4d11d0acf94da7777450476a`. A fresh clean Java 21 build passed
+365 tests, including all 52 MariaDB tests across 12 Testcontainers suites.
+Hosted Codacy reported zero new and 22 fixed issues, 80.53% diff coverage, a
++1.571 percentage-point coverage variation, complexity delta +79, and
+duplication delta +10. Exact-head Pi staging run `30698581440` passed both
+Paper 1.21.11 boot/storage/command/shutdown cycles. PR #31 merged in
+`02fe5fa584b04939de45401818c675a94428c71a`; Wiki publication run
+`30698968797` subsequently completed successfully. The automatic post-fix
+CodeRabbit attempt was rate-limited and was not retried or represented as an
+approval.
+
+### PR #32 report persistence and evidence checkpoint
+
+Draft PR #32 starts from merged PR #31 and addresses report-path correctness
+before the remaining GUI work. At implementation checkpoint
+`2822fdc82983aed9c23c1af5182093e377f71644`, it includes:
+
+- configured Java-time JSON persistence for chat and private-message evidence;
+- concurrency-safe state-change replay and semantic idempotency conflicts;
+- exact submission fingerprints so a key cannot replay different report
+  content;
+- explicit rollback on SQL, JSON, runtime, and fatal-error paths before pooled
+  auto-commit restoration;
+- bounded 2,000-message report contexts;
+- separate submission, replay, query, state, and evidence-maintenance JDBC
+  responsibilities behind `JdbcReportStore`;
+- physical seven-day cleanup for public-chat, private-message, and report-linked
+  client evidence, with bounded asynchronous scheduling;
+- sanitized asynchronous `/report` failure feedback; and
+- MariaDB coverage for merges, exact replay, semantic conflicts, deterministic
+  concurrent state changes, queue/state transitions, failure-injected rollback,
+  and physical retention.
+
+The exact implementation checkpoint passed the Java 21
+`clean test check runtimeJars jacocoAggregateReport` gate with all 40 tasks
+executed and caches disabled. Test XML records 374 tests with zero failures,
+errors, or skips, including 59 tests across all 13 MariaDB 11.8.3
+Testcontainers suites. The Paper jar is 8,393,471 bytes with SHA-256
+`65F32E526A600FDD70CB9D77981859D4393B4F1F0CEA59F2BD0F078B6E4B9181`; the
+Velocity jar is 7,602,013 bytes with SHA-256
+`E242F77FEC7A8CE0EEE7080D6434EA54F146C9067678E85889B003BEEBC87E77`.
+Exact-SHA Pi staging run `30700846431` passed. Source-scoped CPD reports the
+same six repository duplication groups as the prior checkpoint and none touches
+the report changes.
+
+Hosted Codacy initially reported three new test-code findings at that head: one
+valid file-size warning and two generic SQL-helper security warnings. Commit
+`546d1e28` extracted shared fixtures and replaced the dynamic helpers with fixed
+prepared statements. The seven-test MariaDB report suite passes after that
+change. PMD 7 and Opengrep report zero findings on the two affected files;
+Lizard measures 470 non-comment lines in the test and 158 in its fixture, below
+the configured 500-line limit. The nine findings reported when the Paper
+bootstrap is included are its pre-existing executor, logging, literal, and loop
+findings rather than new report-line findings. No finding, rule, or first-party
+path was suppressed. Hosted Codacy and an exact-final-head Pi run must pass
+before merge.
+
+Exact candidate `ce6860255f5bc76bdc81690cafe50ef04fc77c58` repeated the full
+clean Java 21 gate with 374 passing tests and all 59 MariaDB tests. Hosted
+Codacy reported zero new and 13 fixed issues, 76.26% diff coverage, and a
++2.458 percentage-point coverage variation. Wiki validation passed, and Pi
+staging run `30701863189` passed the independently built artifact through both
+boot/storage/command/shutdown cycles.
+
+The single ready-state review found eight code concerns and one validation
+provenance concern. Commit `d3356165` addresses the code findings: report
+evidence cleanup no longer blocks operational-state refresh; per-category
+purge counts drive backlog scheduling; expired client evidence is hidden at
+read time; UUID report targets resolve online evidence correctly; and replay
+comparison, conflict fallback, and fingerprint serialization are null-safe and
+mapper-independent. Focused report unit and MariaDB tests pass, and PMD 7,
+Opengrep, and Lizard introduce no finding outside the already recorded Paper
+composition-root backlog. This documentation update corrects the provenance
+finding. Final head `04c9f37d4b0ad683766218ea237428315a2f2bb6` passed the clean
+Java 21 gate with 378 tests, including all 59 MariaDB tests. Hosted Codacy
+reported zero new and 13 fixed issues with 76.27% diff coverage; the hosted
+build and Wiki validation passed, and exact-SHA Pi run `30702688979` passed in
+10 minutes 46 seconds. No second automated review was requested. PR #32 merged
+as `7555d1504666ad52178005b29b94525b54e088b6`.
+
+### PR #33 Paper bootstrap composition checkpoint
+
+Draft PR #33 continues from merged PR #32 without overlapping draft PR #27.
+Implementation head `3736933e35fd69b707b4f56f6fd455cfb34983e2`
+extracts command/GUI registration, runtime-manager construction, optional
+integration discovery, database environment resolution, reason-policy loading,
+network inbox handling, visibility-matrix parsing, and resource cleanup from
+the Paper entrypoint. The entrypoint fell from roughly 950 to 488 non-comment
+lines. Its former file-length, command method-length, duplicate-literal,
+loop-allocation, executor-resource, logging-guard, and branch-complexity
+findings are absent locally.
+
+The network handler now validates a sanction target and performs its idempotent
+mute-cache invalidation before recording the durable inbox receipt. A malformed
+payload therefore cannot be persisted as successfully applied. Focused tests
+cover valid ordering, malformed targets, unrelated events, visibility defaults
+and validation, and environment-name-only database configuration.
+
+Final head `d77fe281943786da826241679bbf06944ddde720` passed the
+uncached Java 21 `clean test check runtimeJars jacocoAggregateReport` gate with
+all 40 tasks executed. Test XML records 389 tests with zero failures, errors,
+or skips, including 59 tests across all 13 MariaDB 11.8.3 Testcontainers
+suites. The Paper jar SHA-256 is
+`4B708EF39D478BDCC046CFCDD19644BEDB8C890DBA9601505FE85AE98B2FE4C3`;
+the Velocity jar SHA-256 is
+`C2FA5977D9583F952A52C0AB6BDED6C648E5F18534A4BB9CB2C3B004FE1A1844`.
+Exact-SHA Pi staging run `30705886471` passed both independently built Paper
+boot/storage/command/shutdown cycles in 10 minutes 4 seconds.
+
+Hosted Codacy reported zero new and eight fixed issues, 82 complexity findings,
+six duplication findings, 11.00% diff coverage, -0.07 percentage-point coverage
+variation, and 39.44% branch coverage. PMD 7, threshold-matched Lizard, source-
+scoped CPD, Opengrep, and Trivy introduced no changed-file finding. The one
+ready-state review identified blank database environment values as a valid
+configuration defect; commit `c435858` rejects them. A hosted secret detector
+then misclassified test-only constant names as credentials, so commit `d77fe28`
+renamed those constants without suppressing the rule. No second automated review
+was requested. PR #33 merged as
+`0319ee789707b6b603a3308bb51c9454907a75b1`.
+
+### PR #34 vanish entity-ownership checkpoint
+
+Draft PR #34 continues from merged PR #33 without touching the active PR #27
+staff-mode and freeze files. Implementation heads `e81ab2e` and `0a3d96b`
+introduce a session-fenced audience coordinator and route viewer visibility,
+tab-list, message, startup-recovery, and packet-adapter failure work through the
+appropriate player entity scheduler. Queued callbacks are discarded after a
+disconnect/reconnect session change, and target data is read again when a viewer
+task executes.
+
+Implementation head `0a3d96b2ef9472a1e6d18fd047eab4219ff4f506` passed the
+uncached Java 21 clean gate with all 40 tasks executed. Test XML records 396
+tests with zero failures, errors, or skips, including all 59 tests in the 13
+MariaDB Testcontainers suites. The Paper jar is 8,440,464 bytes with SHA-256
+`11FA09C45BB9AE29A3F91D5964F2F66B9DC9C5631FFD5F32DC7C6B545BA9C9B6`;
+the Velocity jar is 7,606,354 bytes with SHA-256
+`C4B2962F53A73354D682B35FB8E9D551BAE3938C51ABA10EA58639631B158EA6`.
+
+PMD 7 and threshold-matched Lizard report no result in the three changed Java
+files, and PMD CPD reports no 100-token duplicate in Paper production source.
+Opengrep reports the same 16 repository-baseline findings with none in the
+changed files. Trivy reports zero vulnerabilities or secrets. No issue, rule,
+or first-party path was suppressed.
+
+Final head `54c82e2d2d9a6313e7b08d8ca6b73c6112adf6c0` passed the
+hosted build and Wiki validation. Hosted Codacy reported zero new and zero fixed
+issues, 32 added complexity, zero duplication, 38.46% diff coverage, and a
++0.12 percentage-point coverage variation. Exact-SHA wrapper run `30707407074`
+and delegated Pi staging run `30707410497` passed in 10 minutes 37 seconds. The
+ready-state event also queued a redundant Pi run at the identical SHA; run
+`30707812296` was cancelled because the authoritative exact-SHA result had
+already passed.
+
+The single ready-state review made two documentation-only suggestions. The
+architecture text already limited the new ownership claim to vanish and kept
+freeze/staff recovery separate; an ephemeral PR number was not added to the
+long-lived architecture document. The pre-merge Codacy snapshot was retained,
+while the PR description recorded every final hosted and Pi gate. Both review
+threads were answered and resolved without another automated review cycle. PR
+#34 merged as `92f9f26ba8b9b81168bfce884d21d0870108f992`.
+
+### PR #35 LiteBans schema-inspection checkpoint
+
+PR #35 started from merged PR #34 and did not touch active PR #27 files.
+Implementation head `739c93cd10aae014aa766c19c4d7a2db5dec5ecb`
+separates sanction, history, and audit-only source inspection, reads the source
+catalog once, hoists bounded alias sets out of loops, and reports missing
+columns in stable canonical order. Accepted source variants remain unchanged;
+focused tests preserve sanction-specific staff-column precedence and the shared
+legacy fallback.
+
+All persistence unit tests and the Docker-backed
+`LiteBansMigrationIntegrationTest` pass. PMD 7 and threshold-matched Lizard
+report no result in the changed source or test, removing the inspector's prior
+NPath, cyclomatic-complexity, method-length, duplicate-literal, and loop-
+allocation findings locally. No issue or rule was suppressed.
+
+Final head `940225015e5934babd3214017393e862b4f16eb2` passed the clean
+Java 21 build with all 40 tasks, 99 suites, and 398 tests. The Docker-backed
+subset comprised 15 MariaDB suites and 68 tests, with no failure, error, or
+skip. Runtime artifacts were:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Paper runtime jar | 8,441,300 | `A29C74319052E0B78BE5111469566967393F1D003226DFE697A52A4B65F070A8` |
+| Velocity runtime jar | 7,607,190 | `628832932AF3FDD62758A5C7C58A5E1BE3255CA82A39780630350B46EA74DCEF` |
+
+Hosted Codacy reported zero new issues, three fixed issues, 89.23% diff
+coverage, a `+0.057` coverage delta, and no clone increase. Exact-head Pi boot
+and restart staging passed run `30708422761`. CodeRabbit's single ready-state
+attempt was rate-limited for 31 minutes and produced no code findings; it was
+not retried. A focused local diff review found no unresolved issue. The
+redundant same-head Pi run triggered solely by the ready-state event was
+cancelled after the exact commit had already passed. PR #35 merged as
+`dbf27e1ac1055342aceefd9801b0757cdbe12702`.
+
+The completed `main` analysis now reports 265 active findings: 180 complexity,
+75 error-prone, and 10 performance findings. Severity is one High and 264
+Warning. The remaining High `UseProperClassLoader` result is in `MariaDb.java`,
+which remains part of active PR #27 and is intentionally not edited in the
+concurrent migration section.
+
+### PR #36 LiteBans shadow-comparison checkpoint
+
+Draft PR #36 starts from merged PR #35 and does not touch active PR #27 files.
+Implementation head `e005bfb` separates per-row comparison from aggregate
+mismatch accounting, reuses one checksum calculator per run, and isolates JDBC
+row materialization from result iteration. The Docker-backed lifecycle test now
+asserts every comparison dimension through initial import, reconciliation,
+idempotent replay, and source-row deletion, including an exact one-count orphan
+mapping result.
+
+All persistence tests and the focused MariaDB Testcontainers scenario pass.
+PMD 7 and threshold-matched Lizard report zero findings in changed Java. No
+issue or rule is suppressed. The full clean build, complete MariaDB suite,
+hosted Codacy, exact-head Pi staging, and final review remain required before
+merge.
 
 ## Remediation order
 

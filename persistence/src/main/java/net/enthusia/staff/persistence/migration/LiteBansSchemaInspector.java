@@ -15,22 +15,45 @@ import java.util.regex.Pattern;
 
 public final class LiteBansSchemaInspector {
     private static final Pattern PREFIX = Pattern.compile("[A-Za-z0-9_]{0,32}");
+    private static final String BANS = "bans";
+    private static final String MUTES = "mutes";
+    private static final String HISTORY = "history";
+    private static final String UUID_COLUMN = "uuid";
+    private static final String USERNAME_COLUMN = "username";
+    private static final String STAFF_COLUMN = "staff";
+    private static final String IP_COLUMN = "ip";
+    private static final List<String> SANCTION_TABLES = List.of(BANS, MUTES);
+    private static final List<String> AUDIT_ONLY_TABLES = List.of("kicks", "warnings");
+    private static final List<String> BAN_IP_FLAG_ALIASES = List.of("ipban", "ip_ban");
+    private static final List<String> NETWORK_ADDRESS_ALIASES = List.of(IP_COLUMN, "address");
+    private static final List<String> BAN_STAFF_ALIASES = List.of(
+            "banned_by_name", "staff_name", "executor"
+    );
+    private static final List<String> MUTE_STAFF_ALIASES = List.of(
+            "muted_by_name", "staff_name", "executor"
+    );
     private static final Map<String, List<String>> REQUIRED = Map.of(
             "id", List.of("id"),
-            "uuid", List.of("uuid"),
-            "username", List.of("name", "username"),
+            UUID_COLUMN, List.of(UUID_COLUMN),
+            USERNAME_COLUMN, List.of("name", USERNAME_COLUMN),
             "reason", List.of("reason"),
-            "staff", List.of("banned_by_name", "muted_by_name", "staff_name", "executor"),
+            STAFF_COLUMN, List.of("banned_by_name", "muted_by_name", "staff_name", "executor"),
             "issued_at", List.of("time", "created_at"),
             "expires_at", List.of("until", "expires_at"),
             "active", List.of("active")
     );
+    private static final List<String> REQUIRED_COLUMN_ORDER = List.of(
+            "id", UUID_COLUMN, USERNAME_COLUMN, "reason", STAFF_COLUMN, "issued_at", "expires_at", "active"
+    );
     private static final Map<String, List<String>> HISTORY_REQUIRED = Map.of(
             "id", List.of("id"),
-            "uuid", List.of("uuid"),
-            "username", List.of("name", "username"),
-            "ip", List.of("ip", "address"),
+            UUID_COLUMN, List.of(UUID_COLUMN),
+            USERNAME_COLUMN, List.of("name", USERNAME_COLUMN),
+            IP_COLUMN, NETWORK_ADDRESS_ALIASES,
             "observed_at", List.of("date", "observed_at", "created_at")
+    );
+    private static final List<String> HISTORY_COLUMN_ORDER = List.of(
+            "id", UUID_COLUMN, USERNAME_COLUMN, IP_COLUMN, "observed_at"
     );
 
     public LiteBansSchemaReport inspect(Connection connection, String prefix) {
@@ -39,68 +62,123 @@ public final class LiteBansSchemaInspector {
         }
         try {
             DatabaseMetaData metadata = connection.getMetaData();
-            Map<String, String> tables = tables(metadata, connection.getCatalog());
+            String catalog = connection.getCatalog();
+            Map<String, String> tables = tables(metadata, catalog);
             Map<String, LiteBansSchemaReport.TableMapping> importTables = new LinkedHashMap<>();
             Map<String, Set<String>> auditOnly = new LinkedHashMap<>();
             List<String> blockers = new ArrayList<>();
-            for (String kind : List.of("bans", "mutes")) {
-                String expected = (prefix + kind).toLowerCase(Locale.ROOT);
-                String actual = tables.get(expected);
-                if (actual == null) {
-                    blockers.add("MISSING_TABLE:" + expected);
-                    continue;
-                }
-                Set<String> columns = columns(metadata, connection.getCatalog(), actual);
-                Map<String, String> resolved = resolveColumns(columns, kind);
-                for (String canonical : REQUIRED.keySet()) {
-                    if (!resolved.containsKey(canonical)) {
-                        blockers.add("MISSING_COLUMN:" + actual + ':' + canonical);
-                    }
-                }
-                if (kind.equals("bans")) {
-                    resolve(columns, List.of("ipban", "ip_ban")).ifPresent(value -> resolved.put("ip_ban", value));
-                    resolve(columns, List.of("ip", "address")).ifPresentOrElse(
-                            value -> resolved.put("ip", value),
-                            () -> blockers.add("MISSING_COLUMN:" + actual + ":ip")
-                    );
-                }
-                importTables.put(kind, new LiteBansSchemaReport.TableMapping(actual, resolved));
-            }
-            String historyTable = tables.get((prefix + "history").toLowerCase(Locale.ROOT));
-            if (historyTable == null) {
-                blockers.add("MISSING_TABLE:" + prefix + "history");
-            } else {
-                Set<String> historyColumns = columns(metadata, connection.getCatalog(), historyTable);
-                Map<String, String> historyResolved = resolveRequired(historyColumns, HISTORY_REQUIRED);
-                for (String canonical : HISTORY_REQUIRED.keySet()) {
-                    if (!historyResolved.containsKey(canonical)) {
-                        blockers.add("MISSING_COLUMN:" + historyTable + ':' + canonical);
-                    }
-                }
-                importTables.put("history", new LiteBansSchemaReport.TableMapping(historyTable, historyResolved));
-            }
-            for (String kind : List.of("kicks", "warnings")) {
-                String actual = tables.get((prefix + kind).toLowerCase(Locale.ROOT));
-                if (actual != null) {
-                    auditOnly.put(kind, columns(metadata, connection.getCatalog(), actual));
-                }
-            }
+            inspectSanctionTables(metadata, catalog, prefix, tables, importTables, blockers);
+            inspectHistoryTable(metadata, catalog, prefix, tables, importTables, blockers);
+            inspectAuditOnlyTables(metadata, catalog, prefix, tables, auditOnly);
             return new LiteBansSchemaReport(prefix, importTables, auditOnly, blockers);
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to inspect LiteBans schema", exception);
         }
     }
 
+    private static void inspectSanctionTables(
+            DatabaseMetaData metadata,
+            String catalog,
+            String prefix,
+            Map<String, String> tables,
+            Map<String, LiteBansSchemaReport.TableMapping> importTables,
+            List<String> blockers
+    ) throws SQLException {
+        for (String kind : SANCTION_TABLES) {
+            inspectSanctionTable(metadata, catalog, prefix, kind, tables, importTables, blockers);
+        }
+    }
+
+    private static void inspectSanctionTable(
+            DatabaseMetaData metadata,
+            String catalog,
+            String prefix,
+            String kind,
+            Map<String, String> tables,
+            Map<String, LiteBansSchemaReport.TableMapping> importTables,
+            List<String> blockers
+    ) throws SQLException {
+        String expected = expectedTable(prefix, kind);
+        String actual = tables.get(expected);
+        if (actual == null) {
+            blockers.add("MISSING_TABLE:" + expected);
+            return;
+        }
+        Set<String> available = columns(metadata, catalog, actual);
+        Map<String, String> resolved = resolveColumns(available, kind);
+        addMissingColumns(actual, REQUIRED_COLUMN_ORDER, resolved, blockers);
+        if (BANS.equals(kind)) {
+            resolve(available, BAN_IP_FLAG_ALIASES).ifPresent(value -> resolved.put("ip_ban", value));
+            resolve(available, NETWORK_ADDRESS_ALIASES).ifPresentOrElse(
+                    value -> resolved.put(IP_COLUMN, value),
+                    () -> blockers.add("MISSING_COLUMN:" + actual + ':' + IP_COLUMN)
+            );
+        }
+        importTables.put(kind, new LiteBansSchemaReport.TableMapping(actual, resolved));
+    }
+
+    private static void inspectHistoryTable(
+            DatabaseMetaData metadata,
+            String catalog,
+            String prefix,
+            Map<String, String> tables,
+            Map<String, LiteBansSchemaReport.TableMapping> importTables,
+            List<String> blockers
+    ) throws SQLException {
+        String expected = expectedTable(prefix, HISTORY);
+        String actual = tables.get(expected);
+        if (actual == null) {
+            blockers.add("MISSING_TABLE:" + prefix + HISTORY);
+            return;
+        }
+        Set<String> available = columns(metadata, catalog, actual);
+        Map<String, String> resolved = resolveRequired(available, HISTORY_REQUIRED);
+        addMissingColumns(actual, HISTORY_COLUMN_ORDER, resolved, blockers);
+        importTables.put(HISTORY, new LiteBansSchemaReport.TableMapping(actual, resolved));
+    }
+
+    private static void inspectAuditOnlyTables(
+            DatabaseMetaData metadata,
+            String catalog,
+            String prefix,
+            Map<String, String> tables,
+            Map<String, Set<String>> auditOnly
+    ) throws SQLException {
+        for (String kind : AUDIT_ONLY_TABLES) {
+            String actual = tables.get(expectedTable(prefix, kind));
+            if (actual != null) {
+                auditOnly.put(kind, columns(metadata, catalog, actual));
+            }
+        }
+    }
+
+    private static void addMissingColumns(
+            String table,
+            List<String> required,
+            Map<String, String> resolved,
+            List<String> blockers
+    ) {
+        for (String canonical : required) {
+            if (!resolved.containsKey(canonical)) {
+                blockers.add("MISSING_COLUMN:" + table + ':' + canonical);
+            }
+        }
+    }
+
+    private static String expectedTable(String prefix, String kind) {
+        return (prefix + kind).toLowerCase(Locale.ROOT);
+    }
+
     static Map<String, String> resolveColumns(Set<String> availableColumns, String kind) {
         Map<String, String> resolved = new LinkedHashMap<>();
         REQUIRED.forEach((canonical, aliases) -> resolve(availableColumns, aliases)
                 .ifPresent(value -> resolved.put(canonical, value)));
-        if (kind.equals("bans")) {
-            resolve(availableColumns, List.of("banned_by_name", "staff_name", "executor"))
-                    .ifPresent(value -> resolved.put("staff", value));
-        } else if (kind.equals("mutes")) {
-            resolve(availableColumns, List.of("muted_by_name", "staff_name", "executor"))
-                    .ifPresent(value -> resolved.put("staff", value));
+        if (BANS.equals(kind)) {
+            resolve(availableColumns, BAN_STAFF_ALIASES)
+                    .ifPresent(value -> resolved.put(STAFF_COLUMN, value));
+        } else if (MUTES.equals(kind)) {
+            resolve(availableColumns, MUTE_STAFF_ALIASES)
+                    .ifPresent(value -> resolved.put(STAFF_COLUMN, value));
         }
         resolve(availableColumns, List.of("removed_by_date", "removed_at", "ended_at"))
                 .ifPresent(value -> resolved.put("ended_at", value));

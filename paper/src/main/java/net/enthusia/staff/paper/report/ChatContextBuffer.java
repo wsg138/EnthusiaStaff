@@ -17,6 +17,7 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 public final class ChatContextBuffer implements Listener {
     private static final Duration WINDOW = Duration.ofMinutes(15);
     private static final int MAX_MESSAGES = 10_000;
+    private static final int MAX_CONTEXT_MESSAGES = 2_000;
     private static final int MAX_BODY = 1_000;
 
     private final Clock clock;
@@ -31,15 +32,23 @@ public final class ChatContextBuffer implements Listener {
     @SuppressWarnings("deprecation")
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onChat(AsyncPlayerChatEvent event) {
-        Instant now = clock.instant();
-        String body = event.getMessage();
-        if (body.length() > MAX_BODY) {
-            body = body.substring(0, MAX_BODY);
+        capturePublic(
+                event.getPlayer().getUniqueId(),
+                event.getPlayer().getName(),
+                event.getMessage()
+        );
+    }
+
+    void capturePublic(UUID senderId, String senderName, String body) {
+        if (senderId == null || senderName == null || body == null) {
+            throw new IllegalArgumentException("public context message fields are required");
         }
+        Instant now = clock.instant();
+        String boundedBody = body.length() <= MAX_BODY ? body : body.substring(0, MAX_BODY);
         synchronized (messages) {
             prunePublic(now);
             messages.addLast(new CreateReportRequest.ChatContextMessage(
-                    event.getPlayer().getUniqueId(), event.getPlayer().getName(), body, now
+                    senderId, senderName, boundedBody, now
             ));
             while (messages.size() > MAX_MESSAGES) {
                 messages.removeFirst();
@@ -50,7 +59,7 @@ public final class ChatContextBuffer implements Listener {
     public List<CreateReportRequest.ChatContextMessage> snapshot(Instant now) {
         synchronized (messages) {
             prunePublic(now);
-            return List.copyOf(new ArrayList<>(messages));
+            return boundedSnapshot(new ArrayList<>(messages));
         }
     }
 
@@ -95,10 +104,15 @@ public final class ChatContextBuffer implements Listener {
         }
         synchronized (privateMessages) {
             prunePrivate(now);
-            return privateMessages.stream()
+            return boundedSnapshot(privateMessages.stream()
                     .filter(message -> participantsMatch(message, first, second))
-                    .toList();
+                    .toList());
         }
+    }
+
+    private static <T> List<T> boundedSnapshot(List<T> snapshot) {
+        int first = Math.max(0, snapshot.size() - MAX_CONTEXT_MESSAGES);
+        return List.copyOf(snapshot.subList(first, snapshot.size()));
     }
 
     private void prunePublic(Instant now) {

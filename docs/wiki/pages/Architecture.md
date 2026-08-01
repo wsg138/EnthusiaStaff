@@ -66,6 +66,30 @@ logic.
 - Report and client evidence capture
 - Provider adapters that require Bukkit
 
+The `EnthusiaStaffPaperPlugin` entrypoint controls startup and shutdown order;
+it does not contain every command, integration, or configuration constructor.
+The composition boundary is split into focused collaborators:
+
+- `PaperRuntimeComponents` creates server-local managers and registers stable
+  Bukkit services;
+- `PaperCommandRegistrar` wires command executors, tab completers, and GUI
+  listeners while preserving lazy storage availability;
+- `PaperIntegrationManager` discovers optional providers and owns the
+  RoseChat/economy integration shutdown paths;
+- `PaperDatabaseConfiguration` resolves only configured environment-variable
+  names and never stores credentials in repository configuration;
+- `PaperReasonPolicyBootstrap` loads the versioned punishment policy;
+- `PaperNetworkMessageHandler` validates sanction messages before recording a
+  durable applied receipt; and
+- `PaperResourceCloser` applies one interruption-safe cleanup policy.
+
+MariaDB work remains on the bounded worker pool. Bukkit player mutations must
+run on the owning entity scheduler or another supported Paper scheduler. Vanish
+startup and visibility fan-out now use session-fenced entity scheduling, including
+reconnect and packet-adapter failure paths. Freeze and staff-session recovery are
+still tracked separately, and full Folia verification is not implied by the
+standalone boot test.
+
 ### Velocity
 
 - Network login enforcement
@@ -75,6 +99,30 @@ logic.
 - Durable network and Discord workers
 - Migration/shadow/cutover coordination
 - Restricted website/API bridge
+
+### Restricted website bridge
+
+The Velocity website bridge is an inbound, loopback-only HTTP boundary for a
+trusted local site service or reverse proxy. It must never be exposed directly
+to an untrusted network. Requests require the configured bearer and HMAC
+authentication, a bounded timestamp window, and nonce replay protection.
+
+The implementation separates responsibilities so transport failures cannot
+silently become moderation decisions:
+
+- `WebsiteApiRuntime` owns the listener and bounded executor lifecycle;
+- `WebsiteApiServer` enforces loopback clients, body limits, authentication,
+  hardened response headers, and stable error envelopes;
+- `WebsiteApiRequestDecoder` rejects unknown fields, unsupported query keys,
+  malformed identifiers, and invalid content types;
+- `WebsiteApiRouter` maps the small versioned route surface to domain ports;
+- `WebsiteAppealEndpoint` authorizes the reviewer and coordinates durable
+  prepare, sanction mutation, and terminal appeal state.
+
+An authority-mode rejection leaves a prepared appeal replayable instead of
+recording a false terminal result. Other rejected mutations record a durable
+rejection before returning a conflict. Public responses continue to come from
+sanitized MariaDB projections rather than mutable runtime objects.
 
 ### MariaDB
 

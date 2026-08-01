@@ -396,13 +396,17 @@ Typical path:
 /report
   -> paper/command/ReportCommand
   -> domain/report request and policy
-  -> persistence/JdbcReportStore
+  -> persistence/JdbcReportStore facade
+  -> JdbcReportSubmissionStore / JdbcReportSubmissionReplay
+  -> JdbcReportQueryStore / JdbcReportStateStore
+  -> JdbcReportEvidenceMaintenance
   -> reports queue and staff actions
 ```
 
 Context capture also involves:
 
 - `paper/report/ChatContextBuffer.java`
+- `paper/report/ReportEvidenceMaintenance.java`
 - `paper/command/ReportsCommand.java`
 - client-evidence adapters under `paper/client/`
 - RoseChat integration for private-message evidence where supported.

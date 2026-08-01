@@ -1,18 +1,17 @@
 package net.enthusia.staff.paper;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+<<<<<<< ours
 import java.nio.file.Path;
+=======
+>>>>>>> theirs
 import java.time.Clock;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,18 +19,18 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
-import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
-import net.enthusia.staff.domain.application.PunishmentRequestService;
-import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+<<<<<<< ours
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
+=======
+>>>>>>> theirs
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
-import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
+<<<<<<< ours
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
@@ -81,12 +80,15 @@ import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
+=======
+import net.enthusia.staff.paper.client.ClientEvidenceCollector;
+import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
+import net.enthusia.staff.paper.report.ChatContextBuffer;
+>>>>>>> theirs
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
-import org.bukkit.command.PluginCommand;
-import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
@@ -106,16 +108,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private final AtomicBoolean channelConnected = new AtomicBoolean();
     private final ObjectMapper json = new ObjectMapper();
     private ChatContextBuffer chatContext;
-    private FreezeManager freezeManager;
-    private StaffModeManager staffModeManager;
-    private DefaultStaffVisibilityService visibilityService;
-    private VanishManager vanishManager;
-    private InventoryOperationContext inventoryOperationContext;
-    private InventoryCoordinator inventoryCoordinator;
-    private EconomyCoordinator economyCoordinator;
-    private ConfiscationCoordinator confiscationCoordinator;
-    private RoseChatIntegration roseChatIntegration;
+    private PaperRuntimeComponents runtimeComponents;
+    private PaperIntegrationManager integrations;
     private ClientEvidenceCollector clientEvidenceCollector;
+<<<<<<< ours
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
     private PaperStorageBootstrapCoordinator<PreparedStorage> storageBootstrap;
@@ -123,9 +119,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperConfigurationSnapshot configurationSnapshot;
     private PunishmentRequestAlertController alertController;
     private ConfigurationReloadCoordinator reloadCoordinator;
+=======
+    private PaperResourceCloser resources;
+>>>>>>> theirs
 
     @Override
     public void onEnable() {
+        resources = new PaperResourceCloser(getLogger());
         saveDefaultConfig();
         configurationLoader = new PaperConfigurationLoader();
         try {
@@ -137,6 +137,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
         saveResource("reason-policies.yml", false);
         boolean policiesReady = loadReasonPolicies();
+<<<<<<< ours
         RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
         workers = BoundedExecutorFactory.create(bootstrap.workerThreads(), bootstrap.workerQueueCapacity());
         initializeAlertController();
@@ -193,22 +194,30 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         getServer().getPluginManager().registerEvents(inventoryCoordinator, this);
         initializeEconomyIntegration();
+=======
+        int threads = getConfig().getInt("workers.threads", 4);
+        int queueCapacity = getConfig().getInt("workers.queue-capacity", 256);
+        workers = BoundedExecutorFactory.create(threads, queueCapacity);
+        runtimeComponents = createRuntimeComponents();
+        integrations = createIntegrationManager();
+        integrations.initializeEconomy();
+>>>>>>> theirs
         clientEvidenceCollector = ClientEvidenceCollector.discover(this, Clock.systemUTC());
-        initializeModerationIntegrations();
-        if (!staffModeManager.combat().availableWhenRequired()) {
+        integrations.initializeModerationProviders();
+        if (!runtimeComponents.staffMode().combat().availableWhenRequired()) {
             featureIssues.put("combatlogx", "CombatLogX is present but its combat-query API is unavailable");
         }
         if (policiesReady) {
             chatContext = new ChatContextBuffer(Clock.systemUTC());
             getServer().getPluginManager().registerEvents(chatContext, this);
-            initializeAutomod();
+            integrations.initializeAutomod();
         }
         if (policiesReady) {
             registerCommands();
         } else {
-            registerStatusCommand();
+            PaperCommandRegistrar.registerStatus(this, health);
         }
-        registerServices();
+        runtimeComponents.registerServices(this);
         if (policiesReady) {
             muteEnforcement = new MuteEnforcementListener(
                     this,
@@ -221,19 +230,27 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             );
             getServer().getPluginManager().registerEvents(muteEnforcement, this);
             muteEnforcement.start();
+<<<<<<< ours
             initializeRoseChatIntegration();
             startStorageBootstrap();
+=======
+            integrations.initializeRoseChat();
+            workers.execute(this::initializeStorage);
+>>>>>>> theirs
         }
     }
 
     @Override
     public void onDisable() {
         stopOperationalRuntime();
-        closeSafely("RoseChat bridge", roseChatIntegration);
-        closeSafely("mute enforcement", muteEnforcement);
-        closeSafely("inventory coordinator", inventoryCoordinator);
-        closeSafely("economy coordinator", economyCoordinator);
-        closeSafely("confiscation coordinator", confiscationCoordinator);
+        if (integrations != null) {
+            integrations.closeChatBridge();
+        }
+        resources.close("mute enforcement", muteEnforcement);
+        resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
+        if (integrations != null) {
+            integrations.closeEconomyResources();
+        }
         shutdownWorkers();
         closeDatabaseRuntime();
     }
@@ -290,6 +307,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         for (String error : errors) {
             getLogger().severe("Configuration error: " + error);
         }
+<<<<<<< ours
     }
 
     private ConfigurationReloadAction reloadAction() {
@@ -334,6 +352,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void startStorageBootstrap() {
         DatabaseConfig database = databaseConfiguration();
         if (database == null) {
+=======
+        Optional<DatabaseConfig> database = new PaperDatabaseConfiguration(getConfig(), System::getenv).load();
+        if (database.isEmpty()) {
+>>>>>>> theirs
             degradeBootstrap(
                     "Required database environment variables are missing; destructive actions are disabled"
             );
@@ -377,6 +399,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private PaperPersistentChannelFactory.Settings channelSettings() {
         try {
+<<<<<<< ours
             PaperPersistentChannelFactory.Settings settings = PaperPersistentChannelFactory.snapshot(
                     configurationSnapshot.restartRequired(),
                     dataDirectory()
@@ -411,13 +434,25 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         MariaDbRuntime opened = null;
         try {
             opened = MariaDb.initialize(configuration.database());
+=======
+            opened = MariaDb.initialize(database.orElseThrow());
+>>>>>>> theirs
             PaperStorageBindings bindings = PaperStorageBindings.create(
                     opened,
                     authorizationPolicy,
                     reasonPolicies
             );
+<<<<<<< ours
             BootstrapModeSnapshot bootstrapMode = resolveBootstrapMode(opened);
             return new PreparedStorage(bindings, bootstrapMode, configuration.channel());
+=======
+            if (!lifecycle.publishStorage(bindings)) {
+                resources.close("MariaDB runtime opened during shutdown", opened);
+                return;
+            }
+            published = true;
+            finishStorageInitialization(bindings);
+>>>>>>> theirs
         } catch (RuntimeException exception) {
             closeSafely("partially initialized MariaDB runtime", opened);
             throw exception;
@@ -463,6 +498,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         return new BootstrapModeSnapshot(next, issues);
     }
 
+<<<<<<< ours
     private void completeBukkitStorageInitialization(PreparedStorage prepared) {
         if (lifecycle.stopping()) {
             return;
@@ -495,6 +531,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
         attachPunishmentRequestAlertStorage(prepared.bindings());
         if (lifecycle.stopping()) {
+=======
+    private void finishStorageInitialization(PaperStorageBindings bindings) {
+        if (!runtimeComponents.recoverOnlinePlayers(
+                getServer().getOnlinePlayers(),
+                () -> !lifecycle.stopping()
+        )) {
+>>>>>>> theirs
             return;
         }
         publishBootstrapMode(prepared.bootstrapMode().mode(), prepared.bootstrapMode().issues());
@@ -543,13 +586,29 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void registerOperationalStateTask() {
         ScheduledTask task = getServer().getAsyncScheduler().runAtFixedRate(
                 this,
-                ignored -> refreshOperationalState(),
+                ignored -> runOperationalTasks(),
                 5,
                 5,
                 TimeUnit.SECONDS
         );
         if (!lifecycle.publishTask(task)) {
             cancelTask(task);
+        }
+    }
+
+    private void runOperationalTasks() {
+        refreshOperationalState();
+        if (workers == null || workers.isShutdown()) {
+            return;
+        }
+        try {
+            workers.execute(runtimeComponents.reportEvidenceMaintenance());
+        } catch (RejectedExecutionException exception) {
+            getLogger().log(
+                    Level.FINE,
+                    "Report evidence maintenance was rejected; the next operational tick will retry",
+                    exception
+            );
         }
     }
 
@@ -566,6 +625,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (removed.isEmpty()) {
             return;
         }
+<<<<<<< ours
         if (alertController != null) {
             alertController.detachStorage();
         }
@@ -595,6 +655,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         } catch (RuntimeException schedulingFailure) {
             exception.addSuppressed(schedulingFailure);
             getLogger().log(Level.SEVERE, "Could not schedule degraded bootstrap publication", schedulingFailure);
+=======
+        if (!published) {
+            resources.close("partially initialized MariaDB runtime", opened);
+            return;
+        }
+        Optional<PaperStorageBindings> removed =
+                lifecycle.removeStorageIf(bindings -> bindings.runtime() == opened);
+        if (removed.isPresent()) {
+            cancelOperationalStateTask();
+            closeChannelClient();
+            resources.close("partially initialized MariaDB runtime", opened);
+>>>>>>> theirs
         }
     }
 
@@ -623,28 +695,27 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void closeChannelClient() {
         channelConnected.set(false);
         lifecycle.removeChannel()
-                .ifPresent(client -> closeSafely("persistent Velocity channel", client));
+                .ifPresent(client -> resources.close("persistent Velocity channel", client));
     }
 
     private void shutdownWorkers() {
-        ExecutorService executor = workers;
-        if (executor == null) {
+        if (workers == null) {
             return;
         }
         try {
-            executor.shutdown();
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            workers.shutdown();
+            if (!workers.awaitTermination(5, TimeUnit.SECONDS)) {
+                workers.shutdownNow();
+                if (!workers.awaitTermination(5, TimeUnit.SECONDS)) {
                     getLogger().warning("Worker tasks did not terminate within the shutdown deadline");
                 }
             }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            executor.shutdownNow();
+            workers.shutdownNow();
         } catch (RuntimeException exception) {
             try {
-                executor.shutdownNow();
+                workers.shutdownNow();
             } catch (RuntimeException forcedFailure) {
                 exception.addSuppressed(forcedFailure);
             }
@@ -654,21 +725,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void closeDatabaseRuntime() {
         Optional<PaperStorageBindings> current = lifecycle.removeStorage();
-        current.ifPresent(bindings -> closeSafely("MariaDB runtime", bindings.runtime()));
-    }
-
-    private void closeSafely(String component, AutoCloseable resource) {
-        if (resource == null) {
-            return;
-        }
-        try {
-            resource.close();
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            getLogger().log(Level.WARNING, component + " cleanup was interrupted", exception);
-        } catch (Exception exception) {
-            getLogger().log(Level.WARNING, component + " cleanup failed", exception);
-        }
+        current.ifPresent(bindings -> resources.close("MariaDB runtime", bindings.runtime()));
     }
 
     private <T> T storageValue(Function<PaperStorageBindings, T> selector) {
@@ -683,39 +740,108 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         MariaDbRuntime runtime = current.orElseThrow().runtime();
         try {
             OperationalStateSnapshot state = runtime.operationalStateStore().current();
-            if (state.mode() == OperationalMode.ACTIVE && !runtime.operationalStateStore().hasAuthorizedCutover()) {
-                setDegraded("cutover", "ACTIVE has no authorized cutover record; enforcement remains blocked");
+            if (!acceptOperationalState(runtime.operationalStateStore(), state)) {
                 return;
             }
             OperationalMode previous = mode.getAndSet(state.mode());
-            if (previous != state.mode()) {
-                getLogger().info("Operational mode changed from " + previous + " to " + state.mode());
-            }
-            publishHealth(state.mode(), state.mode() == OperationalMode.ACTIVE && channelConnected.get()
-                    ? Map.of()
-                    : state.mode() == OperationalMode.ACTIVE
-                            ? Map.of("channel", "Persistent Velocity connection is unavailable; new punishments are disabled")
-                    : Map.of("mode", "Sensitive actions are disabled in " + state.mode()));
+            logModeChange(previous, state.mode());
+            publishHealth(state.mode(), operationalIssues(state.mode()));
         } catch (RuntimeException exception) {
-            if (mode.get() == OperationalMode.ACTIVE) {
-                publishHealth(OperationalMode.DEGRADED, Map.of(
-                        "operational-state", "State refresh failed; cached active-sanction enforcement remains fail-closed"
-                ));
-            } else {
-                setDegraded("operational-state", "Operational state refresh failed; enforcement is disabled");
-            }
+            handleOperationalStateFailure();
             getLogger().log(Level.SEVERE, "Operational state refresh failed", exception);
         }
     }
 
+<<<<<<< ours
+=======
+    private boolean acceptOperationalState(OperationalStateStore states, OperationalStateSnapshot state) {
+        if (state.mode() != OperationalMode.ACTIVE || states.hasAuthorizedCutover()) {
+            return true;
+        }
+        setDegraded("cutover", "ACTIVE has no authorized cutover record; enforcement remains blocked");
+        return false;
+    }
+
+    private void logModeChange(OperationalMode previous, OperationalMode current) {
+        if (previous != current && getLogger().isLoggable(Level.INFO)) {
+            getLogger().info("Operational mode changed from " + previous + " to " + current);
+        }
+    }
+
+    private Map<String, String> operationalIssues(OperationalMode current) {
+        if (current != OperationalMode.ACTIVE) {
+            return Map.of("mode", "Sensitive actions are disabled in " + current);
+        }
+        if (channelConnected.get()) {
+            return Map.of();
+        }
+        return Map.of("channel", "Persistent Velocity connection is unavailable; new punishments are disabled");
+    }
+
+    private void handleOperationalStateFailure() {
+        if (mode.get() == OperationalMode.ACTIVE) {
+            publishHealth(OperationalMode.DEGRADED, Map.of(
+                    "operational-state", "State refresh failed; cached active-sanction enforcement remains fail-closed"
+            ));
+            return;
+        }
+        setDegraded("operational-state", "Operational state refresh failed; enforcement is disabled");
+    }
+
+    private void promoteAfterBootstrap(MariaDbRuntime runtime) {
+        OperationalStateStore states = runtime.operationalStateStore();
+        OperationalStateSnapshot persisted = states.current();
+        Optional<OperationalMode> next = promotionMode(states, persisted);
+        next.ifPresent(value -> publishBootstrapMode(value, bootstrapIssues(value)));
+    }
+
+    private Optional<OperationalMode> promotionMode(
+            OperationalStateStore states,
+            OperationalStateSnapshot persisted
+    ) {
+        if (persisted.mode() == OperationalMode.ACTIVE && !states.hasAuthorizedCutover()) {
+            setDegraded("cutover", "Persistent ACTIVE state has no authorized cutover record; enforcement is blocked");
+            return Optional.empty();
+        }
+        if (persisted.mode() != OperationalMode.BOOTSTRAP) {
+            return Optional.of(persisted.mode());
+        }
+        boolean transitioned = states.transition(
+                persisted.revision(),
+                OperationalMode.SHADOW_MIGRATION,
+                null,
+                "Schema initialized; LiteBans remains authoritative during shadow migration",
+                Clock.systemUTC().instant()
+        );
+        if (!transitioned) {
+            setDegraded("operational-state", "Concurrent bootstrap transition detected; retry after state review");
+            return Optional.empty();
+        }
+        return Optional.of(OperationalMode.SHADOW_MIGRATION);
+    }
+
+    private Map<String, String> bootstrapIssues(OperationalMode next) {
+        return switch (next) {
+            case ACTIVE -> Map.of();
+            case SHADOW_MIGRATION -> Map.of(
+                    "authority", "LiteBans remains authoritative; EnthusiaStaff enforcement is disabled");
+            case MAINTENANCE -> Map.of("maintenance", "Maintenance mode blocks sensitive state changes");
+            default -> Map.of("mode", "Sensitive actions are disabled in " + next);
+        };
+    }
+
+>>>>>>> theirs
     private void publishBootstrapMode(OperationalMode next, Map<String, String> issues) {
         lifecycle.runIfRunning(() -> {
             mode.set(next);
             publishHealth(next, issues);
-            getLogger().info("Storage verified; EnthusiaStaff entered " + next);
+            if (getLogger().isLoggable(Level.INFO)) {
+                getLogger().info("Storage verified; EnthusiaStaff entered " + next);
+            }
         });
     }
 
+<<<<<<< ours
     private static String environmentVariable(String variable) {
         if (variable == null || variable.isBlank()) {
             return null;
@@ -724,6 +850,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         return value == null || value.isBlank() ? null : value;
     }
 
+=======
+>>>>>>> theirs
     private void setDegraded(String component, String reason) {
         lifecycle.runIfRunning(() -> {
             mode.set(OperationalMode.DEGRADED);
@@ -732,6 +860,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         });
     }
 
+<<<<<<< ours
     private void registerStatusCommand() {
         PluginCommand command = Objects.requireNonNull(getCommand("estaff"), "estaff command is missing from plugin.yml");
         EstaffCommand executor = new EstaffCommand(health, reloadAction());
@@ -900,6 +1029,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
+=======
+>>>>>>> theirs
     private void publishHealth(OperationalMode currentMode, Map<String, String> dynamicIssues) {
         operationalIssues.set(Map.copyOf(dynamicIssues));
         refreshHealth(currentMode);
@@ -912,180 +1043,70 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void registerCommands() {
-        registerStatusCommand();
-        Supplier<PunishmentDraftWorkflow> punishmentDraftWorkflow =
-                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow);
-        Supplier<PunishmentRequestService> punishmentRequestService =
-                () -> storageValue(PaperStorageBindings::punishmentRequestService);
-        Supplier<SanctionChangeService> sanctionChangeService =
-                () -> storageValue(PaperStorageBindings::sanctionChangeService);
-        Supplier<PlayerDirectory> playerDirectory =
-                () -> storageValue(PaperStorageBindings::playerDirectory);
-        Supplier<CaseLookup> caseLookup = () -> storageValue(PaperStorageBindings::caseLookup);
-        PunishmentGuiController punishmentGui = new PunishmentGuiController(
-                this,
-                this::effectiveWriteMode,
-                punishmentDraftWorkflow,
-                playerDirectory,
-                authorizationPolicy,
-                reasonPolicies,
-                workers
-        );
-        getServer().getPluginManager().registerEvents(punishmentGui, this);
-        PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
-                this,
-                punishmentRequestService,
-                playerDirectory,
-                authorizationPolicy,
-                workers
-        );
-        punishmentRequestGui.register();
-        PunishmentRequestCommandHandler punishmentRequestCommands = new PunishmentRequestCommandHandler(
-                this,
-                punishmentRequestService,
-                authorizationPolicy,
-                punishmentRequestGui,
-                workers
-        );
-        PunishmentCommand punishment = new PunishmentCommand(
-                this,
-                this::effectiveWriteMode,
-                punishmentDraftWorkflow,
-                playerDirectory,
-                authorizationPolicy,
-                punishmentGui,
-                punishmentRequestCommands,
-                workers
-        );
-        for (String name : java.util.List.of("punish", "ban", "mute", "warn", "kick", "ipban")) {
-            PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing from plugin.yml");
-            command.setExecutor(punishment);
-            command.setTabCompleter(punishment);
-        }
-        SanctionChangeGuiController sanctionChangeGui = new SanctionChangeGuiController(
-                this,
-                Clock.systemUTC(),
-                this::effectiveWriteMode,
-                sanctionChangeService,
-                playerDirectory,
-                caseLookup,
-                () -> storageValue(PaperStorageBindings::caseReviewStore),
-                authorizationPolicy,
-                workers
-        );
-        getServer().getPluginManager().registerEvents(sanctionChangeGui, this);
-        SanctionChangeCommand changes = new SanctionChangeCommand(
-                this,
-                this::effectiveWriteMode,
-                sanctionChangeService,
-                playerDirectory,
-                caseLookup,
-                authorizationPolicy,
-                workers,
-                sanctionChangeGui
-        );
-        for (String name : java.util.List.of(
-                "removepunishment", "unban", "unmute", "removewarning", "unwarn"
-        )) {
-            PluginCommand command = Objects.requireNonNull(
-                    getCommand(name), name + " command is missing from plugin.yml"
-            );
-            command.setExecutor(changes);
-            command.setTabCompleter(changes);
-        }
-        ReportCommand report = new ReportCommand(
-                this,
-                Clock.systemUTC(),
-                networkServerId(),
-                mode::get,
-                playerDirectory,
-                () -> storageValue(PaperStorageBindings::reportStore),
-                () -> storageValue(PaperStorageBindings::sanctionLookup),
-                reasonPolicies,
-                chatContext,
-                clientEvidenceCollector,
-                workers
-        );
-        PluginCommand reportCommand = Objects.requireNonNull(getCommand("report"), "report command is missing");
-        reportCommand.setExecutor(report);
-        reportCommand.setTabCompleter(report);
-        ClientCommand client = new ClientCommand(
-                this,
-                clientEvidenceCollector,
-                () -> storageValue(PaperStorageBindings::clientEvidenceStore),
-                workers
-        );
-        PluginCommand clientCommand = Objects.requireNonNull(
-                getCommand("client"),
-                "client command is missing"
-        );
-        clientCommand.setExecutor(client);
-        clientCommand.setTabCompleter(client);
-        ReportsCommand reports = new ReportsCommand(
-                this,
-                Clock.systemUTC(),
-                () -> storageValue(PaperStorageBindings::reportStore),
-                workers
-        );
-        PluginCommand reportsCommand = Objects.requireNonNull(getCommand("reports"), "reports command is missing");
-        reportsCommand.setExecutor(reports);
-        reportsCommand.setTabCompleter(reports);
-        FreezeCommand freezes = new FreezeCommand(
-                this,
-                Clock.systemUTC(),
-                this::effectiveWriteMode,
-                playerDirectory,
-                () -> storageValue(PaperStorageBindings::freezeStore),
-                freezeManager,
-                workers
-        );
-        Objects.requireNonNull(getCommand("freeze"), "freeze command is missing").setExecutor(freezes);
-        Objects.requireNonNull(getCommand("unfreeze"), "unfreeze command is missing").setExecutor(freezes);
-        Objects.requireNonNull(getCommand("staff"), "staff command is missing")
-                .setExecutor(new StaffModeCommand(this::effectiveWriteMode, staffModeManager));
-        Objects.requireNonNull(getCommand("vanish"), "vanish command is missing")
-                .setExecutor(new VanishCommand(this::effectiveWriteMode, vanishManager));
-        Objects.requireNonNull(getCommand("staffchat"), "staffchat command is missing")
-                .setExecutor(new StaffChatCommand(() -> roseChatIntegration));
-        InventoryCommand inventory = new InventoryCommand(
-                this,
-                Clock.systemUTC(),
-                playerDirectory,
-                inventoryCoordinator,
-                workers
-        );
-        for (String name : java.util.List.of("invsee", "endersee")) {
-            PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing");
-            command.setExecutor(inventory);
-            command.setTabCompleter(inventory);
-        }
-        InspectCommand inspect = new InspectCommand(
-                this,
-                Clock.systemUTC(),
-                playerDirectory,
-                caseLookup,
-                () -> economyCoordinator,
-                () -> confiscationCoordinator,
-                inventoryCoordinator,
-                authorizationPolicy,
-                () -> marketIntegration,
-                () -> reputationIntegration,
-                workers
-        );
-        PluginCommand inspectCommand = Objects.requireNonNull(
-                getCommand("inspect"),
-                "inspect command is missing"
-        );
-        inspectCommand.setExecutor(inspect);
-        inspectCommand.setTabCompleter(inspect);
-        Objects.requireNonNull(getCommand("case"), "case command is missing")
-                .setExecutor(new CaseCommand(
-                        this,
-                        caseLookup,
-                        () -> confiscationCoordinator,
-                        authorizationPolicy,
-                        workers
-                ));
+        PaperCommandRegistrar.registerStatus(this, health);
+        new PaperCommandRegistrar(new PaperCommandRegistrar.Dependencies(
+                new PaperCommandRegistrar.Environment(this, Clock.systemUTC(), networkServerId(), workers),
+                new PaperCommandRegistrar.Policy(mode::get, this::effectiveWriteMode, authorizationPolicy, reasonPolicies),
+                lifecycle::storage,
+                new PaperCommandRegistrar.PlayerComponents(
+                        runtimeComponents.freeze(),
+                        runtimeComponents.staffMode(),
+                        runtimeComponents.vanish(),
+                        runtimeComponents.inventory()
+                ),
+                new PaperCommandRegistrar.IntegrationSuppliers(
+                        integrations::economy,
+                        integrations::confiscation,
+                        integrations::roseChat,
+                        integrations::market,
+                        integrations::reputation
+                ),
+                new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
+        )).register();
+    }
+
+    private PaperRuntimeComponents createRuntimeComponents() {
+        return PaperRuntimeComponents.create(new PaperRuntimeComponents.Dependencies(
+                new PaperRuntimeComponents.Environment(
+                        this, Clock.systemUTC(), networkServerId(), inventoryScopeId(), workers
+                ),
+                new PaperRuntimeComponents.Policy(this::effectiveWriteMode),
+                new PaperRuntimeComponents.Stores(
+                        () -> storageValue(PaperStorageBindings::reportStore),
+                        () -> storageValue(PaperStorageBindings::freezeStore),
+                        () -> storageValue(PaperStorageBindings::staffSessionStore),
+                        () -> storageValue(PaperStorageBindings::vanishStore),
+                        () -> storageValue(PaperStorageBindings::inventoryJournalStore),
+                        () -> storageValue(PaperStorageBindings::playerDirectory)
+                ),
+                featureIssues
+        ));
+    }
+
+    private PaperIntegrationManager createIntegrationManager() {
+        return new PaperIntegrationManager(new PaperIntegrationManager.Dependencies(
+                new PaperIntegrationManager.Environment(
+                        this, Clock.systemUTC(), networkServerId(), workers, json
+                ),
+                new PaperIntegrationManager.Policy(
+                        mode::get, this::effectiveWriteMode, authorizationPolicy, reasonPolicies
+                ),
+                new PaperIntegrationManager.Stores(
+                        () -> storageValue(PaperStorageBindings::punishmentService),
+                        () -> storageValue(PaperStorageBindings::economyJournalStore),
+                        () -> storageValue(PaperStorageBindings::inventoryJournalStore)
+                ),
+                new PaperIntegrationManager.PlayerComponents(
+                        runtimeComponents.freeze(),
+                        runtimeComponents.visibility(),
+                        runtimeComponents.inventoryContext(),
+                        runtimeComponents.inventory()
+                ),
+                new PaperIntegrationManager.EvidenceComponents(
+                        () -> chatContext, () -> muteEnforcement
+                ),
+                featureIssues
+        ));
     }
 
     private String networkServerId() {
@@ -1103,6 +1124,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 : authoritative;
     }
 
+<<<<<<< ours
     private void startChannelClient(
             MariaDbRuntime runtime,
             PaperPersistentChannelFactory.Settings settings
@@ -1110,43 +1132,32 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         PaperPersistentChannelFactory.start(
                 settings,
                 (backendId, envelope) -> handleNetworkMessage(runtime, backendId, envelope),
+=======
+    private void startChannelClient(MariaDbRuntime runtime) {
+        PaperNetworkMessageHandler messageHandler = new PaperNetworkMessageHandler(
+                json,
+                Clock.systemUTC(),
+                playerId -> {
+                    MuteEnforcementListener enforcement = muteEnforcement;
+                    if (enforcement != null) {
+                        enforcement.invalidate(playerId);
+                    }
+                }
+        );
+        PaperPersistentChannelFactory.start(
+                this,
+                (backendId, envelope) -> messageHandler.handle(runtime.networkOutboxStore(), backendId, envelope),
+>>>>>>> theirs
                 state -> channelConnected.set(!lifecycle.stopping() && "CONNECTED".equals(state))
         ).ifPresent(started -> {
             if (!lifecycle.publishChannel(started)) {
-                closeSafely("persistent Velocity channel opened during shutdown", started);
+                resources.close("persistent Velocity channel opened during shutdown", started);
             }
         });
     }
 
-    private boolean handleNetworkMessage(
-            MariaDbRuntime runtime,
-            String backendId,
-            net.enthusia.staff.protocol.ProtocolEnvelope envelope
-    ) {
-        runtime.networkOutboxStore().recordInboxOnce(
-                backendId,
-                envelope.messageId(),
-                envelope.messageType(),
-                "{\"outcome\":\"applied\"}",
-                Clock.systemUTC().instant()
-        );
-        if ("PUNISHMENT_CREATED".equals(envelope.messageType())
-                || "SANCTION_CHANGED".equals(envelope.messageType())
-                || "ALT_SANCTION_INHERITED".equals(envelope.messageType())) {
-            try {
-                JsonNode payload = json.readTree(envelope.payloadJson());
-                UUID target = UUID.fromString(payload.path("targetId").asText());
-                if (muteEnforcement != null) {
-                    muteEnforcement.invalidate(target);
-                }
-            } catch (java.io.IOException | IllegalArgumentException exception) {
-                throw new IllegalArgumentException("Network sanction message has an invalid target", exception);
-            }
-        }
-        return true;
-    }
-
     private boolean loadReasonPolicies() {
+<<<<<<< ours
         try {
             ReasonPolicyConfigurationLoader.LoadedPolicies loaded =
                     new ReasonPolicyConfigurationLoader().load(reasonPolicyFile());
@@ -1165,58 +1176,14 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 visibilityService,
                 this,
                 ServicePriority.Normal
+=======
+        Optional<AtomicReasonPolicyRepository> loaded = new PaperReasonPolicyBootstrap(getLogger()).load(
+                getDataFolder().toPath().resolve("reason-policies.yml"),
+                reason -> setDegraded("reason-policies", reason)
+>>>>>>> theirs
         );
-        getServer().getServicesManager().register(
-                net.enthusia.staff.paper.api.InventoryLockService.class,
-                inventoryCoordinator,
-                this,
-                ServicePriority.Normal
-        );
-        getServer().getServicesManager().register(
-                net.enthusia.staff.paper.api.StaffModeQueryService.class,
-                staffModeManager::active,
-                this,
-                ServicePriority.Normal
-        );
-        getServer().getServicesManager().register(
-                net.enthusia.staff.paper.api.StaffSessionService.class,
-                staffModeManager::active,
-                this,
-                ServicePriority.Normal
-        );
-    }
-
-    private Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
-            loadVisibilityMatrix() {
-        Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
-                defaults = DefaultStaffVisibilityService.defaultMatrix();
-        Map<net.enthusia.staff.domain.auth.StaffRank, java.util.Set<net.enthusia.staff.domain.auth.StaffRank>>
-                configured = new java.util.EnumMap<>(net.enthusia.staff.domain.auth.StaffRank.class);
-        try {
-            for (net.enthusia.staff.domain.auth.StaffRank viewer : new net.enthusia.staff.domain.auth.StaffRank[]{
-                    net.enthusia.staff.domain.auth.StaffRank.MOD,
-                    net.enthusia.staff.domain.auth.StaffRank.DEVELOPER,
-                    net.enthusia.staff.domain.auth.StaffRank.ADMIN,
-                    net.enthusia.staff.domain.auth.StaffRank.FOUNDER
-            }) {
-                java.util.Set<net.enthusia.staff.domain.auth.StaffRank> targets =
-                        new java.util.LinkedHashSet<>();
-                for (String value : getConfig().getStringList("visibility.matrix." + viewer.name())) {
-                    net.enthusia.staff.domain.auth.StaffRank target =
-                            net.enthusia.staff.domain.auth.StaffRank.valueOf(value.toUpperCase(java.util.Locale.ROOT));
-                    if (target == net.enthusia.staff.domain.auth.StaffRank.SYSTEM) {
-                        throw new IllegalArgumentException("SYSTEM is not a visible staff rank");
-                    }
-                    targets.add(target);
-                }
-                configured.put(viewer, targets.isEmpty() ? defaults.get(viewer) : java.util.Set.copyOf(targets));
-            }
-            return Map.copyOf(configured);
-        } catch (IllegalArgumentException exception) {
-            featureIssues.put("visibility", "Configured rank visibility matrix is invalid; safe defaults are active");
-            getLogger().log(Level.SEVERE, "Vanish visibility matrix validation failed", exception);
-            return defaults;
-        }
+        loaded.ifPresent(policy -> reasonPolicies = policy);
+        return loaded.isPresent();
     }
 
     private record StorageBootstrapConfiguration(

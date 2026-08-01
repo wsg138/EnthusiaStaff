@@ -19,9 +19,9 @@ Run the complete validation from the repository root:
 
 On Linux or macOS, use `./gradlew` with the same arguments.
 
-Docker must be reachable before starting the build. Six integration tests use
-temporary MariaDB containers. Those tests are mandatory: a run with skipped
-container tests is not a complete validation.
+Docker must be reachable before starting the build. The integration-test module
+uses temporary MariaDB containers. Those tests are mandatory: a run with
+skipped container tests is not a complete validation.
 
 The build creates exactly two deployable artifacts:
 

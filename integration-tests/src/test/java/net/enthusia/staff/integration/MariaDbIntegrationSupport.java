@@ -6,6 +6,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
@@ -70,6 +71,17 @@ final class MariaDbIntegrationSupport {
             UUID actorId,
             Instant now
     ) throws SQLException {
+        insertCase(database, caseId, targetId, actorId, "PRIVATE", now);
+    }
+
+    static void insertCase(
+            MariaDBContainer<?> database,
+            String caseId,
+            UUID targetId,
+            UUID actorId,
+            String visibility,
+            Instant now
+    ) throws SQLException {
         try (Connection connection = connection(database);
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT IGNORE INTO cases(
@@ -78,14 +90,83 @@ final class MariaDbIntegrationSupport {
                          configuration_version, visibility, state, issued_at
                      ) VALUES (?, ?, ?, ?, 'P2wn', 'OWNER', 'Integration test', 'integration.test',
                          'TEST', 'Asset journal verification', 'integration-test-v1',
-                         'PRIVATE', 'OPEN', ?)
+                         ?, 'OPEN', ?)
                      """)) {
             statement.setString(1, caseId);
             statement.setString(2, "case:test:" + caseId);
             statement.setBytes(3, uuidBytes(targetId));
             statement.setBytes(4, uuidBytes(actorId));
-            statement.setTimestamp(5, Timestamp.from(now));
+            statement.setString(5, visibility);
+            statement.setTimestamp(6, Timestamp.from(now));
             statement.executeUpdate();
+        }
+    }
+
+    static void insertSanction(
+            MariaDBContainer<?> database,
+            UUID sanctionId,
+            String caseId,
+            UUID targetId,
+            String sanctionType,
+            String status,
+            Instant issuedAt,
+            Instant expiration
+    ) throws SQLException {
+        try (Connection connection = connection(database);
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT IGNORE INTO sanctions(
+                         sanction_id, case_id, target_id, sanction_type, status,
+                         issued_at, activated_at, expiration_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     """)) {
+            statement.setBytes(1, uuidBytes(sanctionId));
+            statement.setString(2, caseId);
+            statement.setBytes(3, uuidBytes(targetId));
+            statement.setString(4, sanctionType);
+            statement.setString(5, status);
+            statement.setTimestamp(6, Timestamp.from(issuedAt));
+            statement.setTimestamp(7, Timestamp.from(issuedAt));
+            if (expiration == null) {
+                statement.setNull(8, Types.TIMESTAMP);
+            } else {
+                statement.setTimestamp(8, Timestamp.from(expiration));
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    static void insertPlayerName(
+            MariaDBContainer<?> database,
+            UUID playerId,
+            String username,
+            Instant firstSeen,
+            Instant lastSeen
+    ) throws SQLException {
+        try (Connection connection = connection(database);
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT IGNORE INTO player_names(
+                         player_id, username, lowercase_username, first_seen_at, last_seen_at
+                     ) VALUES (?, ?, ?, ?, ?)
+                     """)) {
+            statement.setBytes(1, uuidBytes(playerId));
+            statement.setString(2, username);
+            statement.setString(3, username.toLowerCase(Locale.ROOT));
+            statement.setTimestamp(4, Timestamp.from(firstSeen));
+            statement.setTimestamp(5, Timestamp.from(lastSeen));
+            statement.executeUpdate();
+        }
+    }
+
+    static void clearWebsiteModerationFixtures(MariaDBContainer<?> database) throws SQLException {
+        try (Connection connection = connection(database);
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DELETE FROM website_appeal_requests");
+            statement.executeUpdate("DELETE FROM punishment_codes");
+            statement.executeUpdate("DELETE FROM audit_events");
+            statement.executeUpdate("DELETE FROM sanctions");
+            statement.executeUpdate("DELETE FROM cases");
+            statement.executeUpdate("DELETE FROM player_names");
+            statement.executeUpdate("DELETE FROM players");
         }
     }
 
