@@ -1,86 +1,142 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-07-30 (America/Indianapolis)
+Last updated: 2026-08-01 (America/Indianapolis)
 
-This manifest records review, recovery, and validation state. Nothing listed here
-has been deployed, released, applied to production data, or used to replace
-LiteBans.
+This manifest records repository, validation and blocker state for development
+coordination. Nothing listed here authorizes a production deployment, release,
+LiteBans replacement or production-data change.
 
-## Repository checkpoint
+## Root repository state and validated checkpoint
 
-| Repository | Remote URL | Default branch | Working branch | Current checkpoint | Build and test status | Codacy status | Current blockers |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `https://github.com/wsg138/EnthusiaStaff.git` | `main` at `7675ac0625d993dec55b5f31ac6b7cdbfec1d6d1` | `section/punishment-request-interfaces` for PR #21 | PR #20 merged as `133ace65b9ccdfd459d38089928e4bea612ed2a6`; PR #21 implementation, review fixes, and focused tests validated at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; checkpoint documentation is current | PASS at `ec7b3077cd1c229ac3ef15eb0a3b616175612582`: Java 21 multi-module build, unit tests, MariaDB Testcontainers, aggregate JaCoCo, Paper/Velocity runtime-jar integrity, 24 provider API source-type checks per jar, and zero provider API leakage; validation run `30588491828`, artifact `8777480221` | Codacy reports zero introduced issues on `ec7b3077cd1c229ac3ef15eb0a3b616175612582`; 12.95% diff coverage and -0.78% coverage variation remain within the configured gate | Explicit merge authorization is still required. The prior full CodeRabbit review's actionable findings are addressed and both review threads are resolved; its incremental rereview was rate-limited. The current PR head must retain green exact-head checks. Production-like Paper/Velocity/provider staging remains unavailable. |
-| enthusia-site | `https://github.com/wsg138/enthusia-site.git` | `main` | Expected feature branch not reconstructed | No PR #21 website changes | NOT_RUN | NOT_ANALYZED | Provider/site work remains deferred until the root punishment checkpoint is complete. |
-| EnthusiaCurrency | `https://github.com/wsg138/EnthusiaCurrency.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| EnthusiaCommend | `https://github.com/wsg138/EnthusiaCommend.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| EnthusiaAutoClicker | `https://github.com/wsg138/EnthusiaAutoClicker.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Provider API reconstruction and staging remain outstanding. |
-| Enthusia-RoseChat | Intended `wsg138/Enthusia-RoseChat` remains missing or inaccessible | UNKNOWN | None | BLOCKED | BLOCKED | NOT_ANALYZED | Do not invent a remote or push to an upstream owner. |
-| EnthusiaMarket | `https://github.com/wsg138/EnthusiaMarket.git` | `main` | Expected provider branch not reconstructed | No PR #21 provider changes | NOT_RUN | NOT_ANALYZED | Existing detached/upstream references are read-only; provider reconstruction remains outstanding. |
+| Field | Current value |
+| --- | --- |
+| Repository | `wsg138/EnthusiaStaff` |
+| Default branch | `main` |
+| Current merged repository state | `main` at `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9`, the PR #36 merge commit |
+| Latest fully validated implementation revision | PR #36 head `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| Evidence boundary | Every build, test, Codacy, artifact and Pi result in this section attaches to `3afeffc926571170e8df18c7d096ca7f4d89ec1b`; the later merge commit is not separately claimed as tested |
+| Clean Java validation | 40/40 tasks; 99 suites / 398 tests; no failures, errors or skips at `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| MariaDB validation | 15 MariaDB 11.8.3 Testcontainers suites / 68 tests at `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| Runtime artifacts | From `3afeffc926571170e8df18c7d096ca7f4d89ec1b`: Paper SHA-256 `83D457FCA65839B6E674CC937F37E63782620D023E9B202F89ED3A88CF4D5060`; Velocity SHA-256 `FA17E9F891286250FEC21AD19CD425540C15CC163D58D65DF5E177856AEBDBD9` |
+| Hosted quality result | At `3afeffc926571170e8df18c7d096ca7f4d89ec1b`: zero new Codacy findings, three fixed, 92.59% diff coverage, +0.103 coverage variation, no clone increase |
+| Exact-SHA Pi staging | PASS — run `30709333535`, tested revision `3afeffc926571170e8df18c7d096ca7f4d89ec1b` |
+| Production authority | **NOT READY**; LiteBans and the existing staff stack remain authoritative |
 
-## Merged PR #20 checkpoint
+PR #36 preserved and tested every LiteBans shadow dimension across import,
+reconciliation, replay and source deletion: counts, checksums, active state, UUID
+mappings, expirations, login decisions, mute decisions, IP-ban decisions,
+rejected rows and extra/orphan mappings.
 
-- Pull request: #20, **Add durable punishment request workflow**.
-- Final reviewed head: `a334f46adc9beea679b4f5d6d13ee7d4c3960ef4`.
-- Squash merge on `main`: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Final validation run: `30572347767`.
-- Source branch retained: `section/durable-punishment-requests`.
-- Complete Java 21 build, unit tests, MariaDB 11.8.3 Testcontainers,
-  aggregate JaCoCo, and Paper/Velocity runtime-jar inspection passed.
-- Twenty-four provider API source types were checked and no provider API class
-  leaked into either runtime jar.
-- Codacy reported zero introduced issues and no unresolved GitHub review thread
-  remained. CodeRabbit could not review the final head because its allowance was
-  exhausted.
+## Active root pull requests
 
-## Active PR #21 checkpoint
+### PR #37 — Harden LiteBans cutover coordination
 
-- Pull request: #21, **Expose durable punishment request interfaces**.
-- Branch: `section/punishment-request-interfaces`; the branch was not reset,
-  renamed, recreated, or replaced.
-- Merge base with PR #20: `133ace65b9ccdfd459d38089928e4bea612ed2a6`.
-- Validated implementation/test head: `ec7b3077cd1c229ac3ef15eb0a3b616175612582`.
-- Exact implementation validation run: `30588491828`; validation artifact:
-  `8777480221`.
-- Build result: `BUILD SUCCESSFUL`; 49 actionable Gradle tasks, 40 executed and
-  9 up-to-date.
-- Runtime jars:
-  - Paper SHA-256 `9c0c19589be72189f11a8ed6892ff9e3a87a79fb4e8604b8f8f3f991347f3293`.
-  - Velocity SHA-256 `6e855b0d8a202fedb8951cfe9fb5593e06322413630343755be1e8cf77b0f575`.
-  - Both checked 24 provider API source types with zero leaks.
-- Aggregate JaCoCo at that checkpoint: line 32.21%, branch 26.41%, instruction
-  34.52%.
-- Codacy reports zero introduced issues, 12.95% diff coverage, and a -0.78%
-  overall coverage variation against the PR merge base.
-- The full CodeRabbit review identified two major findings and two maintenance
-  findings. Shared approval rules, storage-readiness guards, explicit player
-  directory wiring, and centralized denial presets address them; both inline
-  review threads are resolved. A later incremental rereview was rate-limited.
-- Implemented interface behavior includes routed draft confirmation, filtered and
-  paginated review queues, fenced claim/approve/deny actions, stale/resolved-state
-  handling, offline target presentation, revision display, self/Developer/rank
-  restrictions, idempotent retry messaging, separated GUI rendering, and clear
-  pre-bootstrap storage responses.
-- Existing domain and MariaDB tests cover direct temporary Helper application,
-  permanent Helper requests, Developer request-only behavior, stale fences, lost
-  leases, expiry, external fulfillment, approval-time sanction start, and
-  idempotent decisions. Focused PR #21 tests additionally cover the shared
-  approval predicate, explicit bootstrap wiring, permission consistency,
-  presentation states, pagination, empty queues, offline targets, and reviewer
-  visibility.
-- The Wiki has not been changed for PR #21. Staff-facing Wiki updates remain
-  deferred until the interfaces are final and must distinguish automated testing
-  from staging verification.
+| Field | Current value |
+| --- | --- |
+| State | Draft, open |
+| Branch | `section/plugin` |
+| Base | `main` at `3f4e2a1164d570aadfb82522b07b4b32c9f2a7f9` |
+| Current head | `511c92f7a36a8d892002e5904501d9dbb36cf4a6` |
+| Current scope | Maintenance entry, duplicate rejection, abort, emergency freeze, transition audit, exact 168-hour/seven-summary gate, final incremental import, activation linkage and duplicate activation rejection |
+| Current evidence | Focused MariaDB Testcontainers class passed; local PMD/Lizard clean for the new test |
+| Status boundary | First focused checkpoint only; production refactor and complete validation remain unfinished |
 
-## Workspace and release rules
+PR #37 is the immediate LiteBans workstream. Do not represent it as complete until
+its implementation, complete clean build, full MariaDB suite, hosted quality
+checks, Wiki validation, exact-head staging and review are finished.
 
-- Keep remaining root-plugin work on `section/plugin` after PR #21 merges and is
-  incorporated into the latest `main`.
-- Update every SHA, PR, validation, coverage, Codacy, review, and blocker field at
-  coherent checkpoints.
-- A skipped or superseded run is never recorded as passed.
-- A merged PR is a checkpoint, not deployment authorization.
-- Only merge a current head whose required checks are green; any later source
-  change invalidates prior exact-head evidence until validation runs again.
-- Keep each related repository independent and never stage `related-repos/` in
-  the root repository.
+### PR #27 — Durable punishment request notifications and recovery
+
+| Field | Current value |
+| --- | --- |
+| State | Draft, open; must remain unmerged until reconciled and completed |
+| Branch | `section/punishment-request-notifications-recovery` |
+| Current visible head | `094da12f11bfbf9f486186a624258d2159c64bfd` |
+| Size | 95 commits; long-lived concurrent history |
+| Implemented checkpoint | Paper punishment-request alert delivery, reconnect processing, maintenance and lifecycle foundations |
+| Validated internal checkpoint | `a5ab8b9b543ecd78facbf29a2b8824b30220c6c3` completed the recorded Java build and runtime-jar checks |
+| Deferred | Complete YAML parsing, atomic reload/worker replacement, final quality cleanup, review, Pi/live staging, Discord sending and production configuration |
+
+PR #27 predates many merged root refactors. Reconciliation must preserve its
+notification, staff-mode and freeze behavior while adopting current composition,
+persistence, scheduling, configuration and quality boundaries. Do not discard its
+history or merge duplicate implementations.
+
+## Related repositories
+
+| Repository | Expected role | Current coordinated status | Main blocker |
+| --- | --- | --- | --- |
+| `wsg138/enthusia-site` | Private punishment and appeal website | Root bridge exists; complete site branch not reconstructed or validated here | Auth/session/CSRF/media/rate-limit work, secrets and private staging |
+| `wsg138/EnthusiaCurrency` | Exact economy moderation snapshots and plans | Root integration contract/adapter exists; provider implementation not validated | Provider branch and cross-plugin staging |
+| `wsg138/EnthusiaCommend` | Persistent reputation restriction API | Root contract/adapter exists; provider implementation not validated | Provider branch and all write-entry enforcement tests |
+| `wsg138/EnthusiaAutoClicker` | Versioned bounded client evidence | Root contract/adapter exists; provider implementation not validated | Provider branch and handshake/offline evidence staging |
+| Intended `wsg138/Enthusia-RoseChat` | Moderation/staff channel and evidence bridge | Blocked; repository/API remains missing or inaccessible | Do not invent a remote or unsupported reflective/command integration |
+| `wsg138/EnthusiaMarket` | Supported stall moderation and escrow-safe behavior | Root adapter exists; provider implementation not validated | Provider branch and transaction-compatible staging |
+
+Each related project remains an independent Git repository. Histories must not be
+flattened into EnthusiaStaff, and provider-owned API classes must not leak into the
+Paper or Velocity runtime jars.
+
+A cross-repository release candidate must use a release manifest containing one
+authenticated revision per repository, with matching artifact hashes,
+configuration checksums, environment versions and acceptance evidence. There is
+no single global commit that can identify independent provider and website state.
+
+## Current development route
+
+The detailed path is maintained in:
+
+```text
+docs/development-blueprint.md
+docs/wiki/pages/Development-Blueprint.md
+reports/REQUIREMENTS-MATRIX.md
+```
+
+Immediate order:
+
+1. Complete PR #37's implementation, full validation and review.
+2. Rebase and reconcile PR #27 without losing or duplicating its work.
+3. Establish a clean new `main` checkpoint and refresh this manifest.
+4. Complete punishment history, appeal-linked decisions and durable notifications.
+5. Finish modular configuration, operational modes, report UI/privacy and RoseChat evidence.
+6. Stage staff mode, freeze, vanish, inventory and confiscation under real ownership and failure conditions.
+7. Reconstruct providers and complete the private website.
+8. Finish LiteBans recovery, seven-day shadow evidence, activation, emergency freeze and rollback.
+9. Run one complete release-manifest acceptance candidate, then the mandatory 168-hour shadow period and final cutover rehearsal.
+
+## Checkpoint update rules
+
+At every coherent repository checkpoint record:
+
+- repository and branch;
+- base, implementation and final reviewed revisions;
+- PR URL and state;
+- exact validation commands;
+- task, suite, total-test and MariaDB counts;
+- runtime jar sizes and hashes;
+- provider API source-type/leak inspection;
+- hosted Codacy baseline, new/fixed issues, duplication and diff coverage;
+- Wiki validation page count;
+- exact staging run and tested revision;
+- review findings and unresolved threads;
+- blockers and unavailable acceptance groups.
+
+For a cross-repository release candidate, additionally record one authenticated
+revision per repository in the release manifest and test those revisions together.
+
+A skipped, cancelled, superseded or different-revision run is never recorded as
+passed. A merged PR is a development checkpoint, not deployment authorization.
+
+## Release boundaries
+
+- Keep LiteBans authoritative until full release-manifest acceptance, the exact
+  168-hour shadow window, final reconciliation, cutover rehearsal and Founder
+  authorization pass.
+- Never combine evidence from undeclared revisions into one release candidate.
+- Keep production credentials, private jars, databases, logs, evidence and
+  runtime folders out of Git.
+- Keep destructive operations configuration-gated and recovery-visible.
+- Retain migration backups and legacy data through cutover; legacy removal is a
+  later manual operation.
+- Update this manifest, the requirements matrix, development blueprint and Wiki
+  together when a root checkpoint changes.

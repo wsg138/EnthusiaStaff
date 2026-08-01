@@ -14,9 +14,10 @@
 
 ## Reference
 
+- [[Implementation Status]]
+- [[Development Blueprint]]
 - [[Commands and Permissions]]
 - [[Roles and Permissions|Rank-Authority]]
-- [[Implementation Status]]
 - [[Configuration]]
 - [[Integrations]]
 - [[Recovery and Troubleshooting]]
@@ -29,6 +30,12 @@
 
 ## Development
 
+- [[Development Blueprint]]
+  - [[Road to production|Development-Blueprint#road-to-production]]
+  - [[Workstream map|Development-Blueprint#workstream-map]]
+  - [[Milestone path|Development-Blueprint#milestone-path]]
+  - [[Immediate execution order|Development-Blueprint#immediate-execution-order]]
+  - [[Feature definition of done|Development-Blueprint#feature-definition-of-done]]
 - [[Developer Guide Index]]
 - [[Architecture]]
 - [[Developer Code Guide]]
@@ -55,3 +62,4 @@
 - [Repository](https://github.com/wsg138/EnthusiaStaff)
 - [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
+- [Development blueprint](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/development-blueprint.md)
