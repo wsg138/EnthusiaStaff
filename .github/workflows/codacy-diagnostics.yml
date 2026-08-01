@@ -61,6 +61,22 @@ jobs:
           token = os.environ["CODACY_PROJECT_TOKEN"]
           branch = "agent/expand-test-coverage"
 
+          def normalize(payload):
+              if isinstance(payload, list):
+                  values = payload
+              elif isinstance(payload, dict):
+                  values = next(
+                      (
+                          payload[key]
+                          for key in ("issues", "data", "results", "items")
+                          if isinstance(payload.get(key), list)
+                      ),
+                      [],
+                  )
+              else:
+                  values = []
+              return [item for item in values if isinstance(item, dict)]
+
           def fetch(path: str, branch_name: str):
               encoded = urllib.parse.quote(path, safe="")
               query = urllib.parse.urlencode({"branch": branch_name})
@@ -75,10 +91,11 @@ jobs:
               for attempt in range(1, 7):
                   try:
                       with urllib.request.urlopen(request, timeout=30) as response:
-                          return json.loads(response.read().decode("utf-8"))
+                          raw = json.loads(response.read().decode("utf-8"))
+                          return raw, normalize(raw)
                   except urllib.error.HTTPError as error:
                       if error.code == 404:
-                          return []
+                          return [], []
                       if error.code not in {429, 500, 502, 503, 504} or attempt == 6:
                           body = error.read().decode("utf-8", errors="replace")
                           raise RuntimeError(
@@ -93,13 +110,17 @@ jobs:
                   time.sleep(attempt * 2)
               raise AssertionError("unreachable")
 
+          raw_branch = {}
+          raw_main = {}
           branch_results = {}
           main_results = {}
           delta = []
 
           for path in paths:
-              current = fetch(path, branch)
-              baseline = fetch(path, "main")
+              current_raw, current = fetch(path, branch)
+              baseline_raw, baseline = fetch(path, "main")
+              raw_branch[path] = current_raw
+              raw_main[path] = baseline_raw
               branch_results[path] = current
               main_results[path] = baseline
 
@@ -118,26 +139,29 @@ jobs:
                   else:
                       delta.append({"filePath": path, **item})
 
-          (root / "branch-issues.json").write_text(
-              json.dumps(branch_results, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          (root / "main-issues.json").write_text(
-              json.dumps(main_results, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          (root / "new-issues.json").write_text(
-              json.dumps(delta, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
+          for filename, payload in (
+              ("raw-branch-responses.json", raw_branch),
+              ("raw-main-responses.json", raw_main),
+              ("branch-issues.json", branch_results),
+              ("main-issues.json", main_results),
+              ("new-issues.json", delta),
+          ):
+              (root / filename).write_text(
+                  json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                  encoding="utf-8",
+              )
 
           by_level = collections.Counter(item.get("level", "unknown") for item in delta)
+          response_shapes = collections.Counter(
+              type(payload).__name__ for payload in raw_branch.values()
+          )
           lines = [
               "# Exact Codacy issue delta",
               "",
               f"- Changed Java files queried: **{len(paths)}**",
               f"- New branch issues: **{len(delta)}**",
               f"- Levels: `{', '.join(f'{key}: {value}' for key, value in sorted(by_level.items())) or 'none'}`",
+              f"- Branch response shapes: `{', '.join(f'{key}: {value}' for key, value in sorted(response_shapes.items()))}`",
               "",
               "## Findings",
               "",
