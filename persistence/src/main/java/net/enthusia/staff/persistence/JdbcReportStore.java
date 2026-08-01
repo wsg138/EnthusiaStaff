@@ -17,10 +17,8 @@ import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
-import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportQueue;
-import net.enthusia.staff.domain.report.ReportState;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
@@ -32,21 +30,16 @@ public final class JdbcReportStore implements ReportStore {
     private static final Duration DUPLICATE_WINDOW = Duration.ofHours(2);
     private static final Duration CONTEXT_RETENTION = Duration.ofDays(7);
     private static final int MAX_OPEN_REPORTS = 5;
-    private static final String EXISTING_STATE_CHANGE_SQL = """
-            SELECT report_id, actor_id, event_type, note, to_state, resulting_revision
-            FROM report_events WHERE idempotency_key = ?
-            """;
-    private static final String LOCKED_EXISTING_STATE_CHANGE_SQL =
-            EXISTING_STATE_CHANGE_SQL + " FOR UPDATE";
-
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final JdbcReportQueryStore queries;
+    private final JdbcReportStateStore states;
 
     public JdbcReportStore(DataSource dataSource, ObjectMapper json) {
         this.dataSource = dataSource;
         this.json = json;
         this.queries = new JdbcReportQueryStore(dataSource);
+        this.states = new JdbcReportStateStore(dataSource, json);
     }
 
     @Override
@@ -115,56 +108,7 @@ public final class JdbcReportStore implements ReportStore {
 
     @Override
     public ReportStateChangeResult changeState(ReportStateChangeRequest request) {
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                ReportStateChangeResult replay = existingStateChange(connection, request, false);
-                if (replay != null) {
-                    connection.rollback();
-                    return replay;
-                }
-                LockedReport report = lockReport(connection, request.reportId());
-                if (report == null) {
-                    connection.rollback();
-                    return new ReportStateChangeResult.Rejected("REPORT_NOT_FOUND", "The report does not exist");
-                }
-                replay = existingStateChange(connection, request, true);
-                if (replay != null) {
-                    connection.rollback();
-                    return replay;
-                }
-                if (report.revision() != request.expectedRevision()) {
-                    connection.rollback();
-                    return new ReportStateChangeResult.Rejected(
-                            "STALE_REVISION", "The report changed; reopen it before taking action"
-                    );
-                }
-                Transition transition = transition(report, request);
-                if (transition.rejection() != null) {
-                    connection.rollback();
-                    return transition.rejection();
-                }
-                long nextRevision = report.revision() + 1;
-                updateReport(connection, request, transition.nextState(), nextRevision);
-                insertReportEvent(connection, request, report.state(), transition.nextState(), nextRevision);
-                insertReportActionMessage(connection, request);
-                insertReportActionAudit(connection, request, report.targetId(), transition.nextState());
-                insertReportActionDiscord(connection, request, report.targetId(), transition.nextState());
-                connection.commit();
-                return new ReportStateChangeResult.Applied(transition.nextState(), nextRevision, false);
-            } catch (SQLException | JsonProcessingException exception) {
-                rollback(connection, exception);
-                ReportStateChangeResult replay = existingStateChangeAfterConflict(request);
-                if (replay != null) {
-                    return replay;
-                }
-                throw new ModerationPersistenceException("Report state transaction failed", exception);
-            } finally {
-                restoreAutoCommit(connection);
-            }
-        } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to open report state transaction", exception);
-        }
+        return states.changeState(request);
     }
 
     private void insertChatContextSnapshot(
@@ -209,217 +153,6 @@ public final class JdbcReportStore implements ReportStore {
         statement.setTimestamp(4, Timestamp.from(capturedAt.plus(CONTEXT_RETENTION)));
         statement.setString(5, json.writeValueAsString(messages));
         statement.executeUpdate();
-    }
-
-    private static LockedReport lockReport(Connection connection, UUID reportId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT target_id, state, assigned_to, revision FROM reports
-                WHERE report_id = ? FOR UPDATE
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(reportId));
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return null;
-                }
-                byte[] assigned = result.getBytes("assigned_to");
-                return new LockedReport(
-                        UuidBytes.fromBytes(result.getBytes("target_id")),
-                        ReportState.valueOf(result.getString("state")),
-                        assigned == null ? Optional.empty() : Optional.of(UuidBytes.fromBytes(assigned)),
-                        result.getLong("revision")
-                );
-            }
-        }
-    }
-
-    private static Transition transition(LockedReport report, ReportStateChangeRequest request) {
-        return switch (request.action()) {
-            case CLAIM -> report.state() == ReportState.OPEN
-                    ? Transition.to(ReportState.CLAIMED)
-                    : Transition.reject("INVALID_STATE", "Only open reports can be claimed");
-            case AWAIT_REVIEW -> report.state() == ReportState.CLAIMED
-                    && report.assignedTo().filter(request.actorId()::equals).isPresent()
-                    ? Transition.to(ReportState.AWAITING_REVIEW)
-                    : Transition.reject("NOT_ASSIGNEE", "Only the assigned staff member can request review");
-            case CLOSE -> report.state() == ReportState.CLAIMED || report.state() == ReportState.AWAITING_REVIEW
-                    ? Transition.to(ReportState.CLOSED)
-                    : Transition.reject("INVALID_STATE", "Claim the report before closing it");
-            case NO_VIOLATION -> report.state() == ReportState.CLAIMED
-                    || report.state() == ReportState.AWAITING_REVIEW
-                    ? Transition.to(ReportState.NO_VIOLATION)
-                    : Transition.reject("INVALID_STATE", "Claim the report before resolving it");
-        };
-    }
-
-    private static void updateReport(
-            Connection connection,
-            ReportStateChangeRequest request,
-            ReportState next,
-            long nextRevision
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE reports SET state = ?, assigned_to = CASE WHEN ? = 'CLAIMED' THEN ? ELSE assigned_to END,
-                    updated_at = ?, revision = ?
-                WHERE report_id = ? AND revision = ?
-                """)) {
-            statement.setString(1, next.name());
-            statement.setString(2, next.name());
-            statement.setBytes(3, UuidBytes.toBytes(request.actorId()));
-            statement.setTimestamp(4, Timestamp.from(request.changedAt()));
-            statement.setLong(5, nextRevision);
-            statement.setBytes(6, UuidBytes.toBytes(request.reportId()));
-            statement.setLong(7, request.expectedRevision());
-            if (statement.executeUpdate() != 1) {
-                throw new SQLException("report revision changed during locked update");
-            }
-        }
-    }
-
-    private static void insertReportEvent(
-            Connection connection,
-            ReportStateChangeRequest request,
-            ReportState previous,
-            ReportState next,
-            long revision
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO report_events(event_id, report_id, actor_id, event_type, from_state,
-                    to_state, note, idempotency_key, occurred_at, resulting_revision)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(request.reportId()));
-            statement.setBytes(3, UuidBytes.toBytes(request.actorId()));
-            statement.setString(4, request.action().name());
-            statement.setString(5, previous.name());
-            statement.setString(6, next.name());
-            statement.setString(7, request.note().trim());
-            statement.setString(8, request.idempotencyKey().value());
-            statement.setTimestamp(9, Timestamp.from(request.changedAt()));
-            statement.setLong(10, revision);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void insertReportActionMessage(Connection connection, ReportStateChangeRequest request)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(request.reportId()));
-            statement.setBytes(3, UuidBytes.toBytes(request.actorId()));
-            statement.setString(4, request.action().name() + ": " + request.note().trim());
-            statement.setTimestamp(5, Timestamp.from(request.changedAt()));
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertReportActionAudit(
-            Connection connection,
-            ReportStateChangeRequest request,
-            UUID targetId,
-            ReportState next
-    ) throws SQLException, JsonProcessingException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO audit_events(event_id, correlation_id, actor_id, target_id,
-                    event_type, outcome, event_json, occurred_at, idempotency_key)
-                VALUES (?, ?, ?, ?, 'REPORT_STATE_CHANGED', 'COMMITTED', ?, ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(request.reportId()));
-            statement.setBytes(3, UuidBytes.toBytes(request.actorId()));
-            statement.setBytes(4, UuidBytes.toBytes(targetId));
-            statement.setString(5, json.writeValueAsString(Map.of(
-                    "reportId", request.reportId().toString(), "state", next.name()
-            )));
-            statement.setTimestamp(6, Timestamp.from(request.changedAt()));
-            statement.setString(7, request.idempotencyKey().value());
-            statement.executeUpdate();
-        }
-    }
-
-    private void insertReportActionDiscord(
-            Connection connection,
-            ReportStateChangeRequest request,
-            UUID targetId,
-            ReportState next
-    ) throws SQLException, JsonProcessingException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
-                    payload_json, available_at, created_at)
-                VALUES (?, ?, 'reports', ?, ?, ?, ?)
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setString(2, request.idempotencyKey().value() + ":discord");
-            statement.setString(3, "REPORT_" + next.name());
-            statement.setString(4, json.writeValueAsString(Map.of(
-                    "reportId", request.reportId().toString(),
-                    "targetId", targetId.toString(),
-                    "actorId", request.actorId().toString(),
-                    "state", next.name()
-            )));
-            statement.setTimestamp(5, Timestamp.from(request.changedAt()));
-            statement.setTimestamp(6, Timestamp.from(request.changedAt()));
-            statement.executeUpdate();
-        }
-    }
-
-    private static ReportStateChangeResult existingStateChange(
-            Connection connection,
-            ReportStateChangeRequest request,
-            boolean lockLatest
-    ) throws SQLException {
-        String sql = lockLatest ? LOCKED_EXISTING_STATE_CHANGE_SQL : EXISTING_STATE_CHANGE_SQL;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, request.idempotencyKey().value());
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return null;
-                }
-                if (!sameStateChange(result, request)) {
-                    return new ReportStateChangeResult.Rejected(
-                            "IDEMPOTENCY_CONFLICT",
-                            "The idempotency key belongs to a different report action"
-                    );
-                }
-                return new ReportStateChangeResult.Applied(
-                        ReportState.valueOf(result.getString("to_state")),
-                        result.getLong("resulting_revision"),
-                        true
-                );
-            }
-        }
-    }
-
-    private static boolean sameStateChange(ResultSet result, ReportStateChangeRequest request)
-            throws SQLException {
-        return UuidBytes.fromBytes(result.getBytes("report_id")).equals(request.reportId())
-                && UuidBytes.fromBytes(result.getBytes("actor_id")).equals(request.actorId())
-                && result.getString("event_type").equals(request.action().name())
-                && result.getString("note").equals(request.note().trim());
-    }
-
-    private ReportStateChangeResult existingStateChangeAfterConflict(ReportStateChangeRequest request) {
-        try (Connection connection = dataSource.getConnection()) {
-            return existingStateChange(connection, request, false);
-        } catch (SQLException | IllegalArgumentException exception) {
-            return null;
-        }
-    }
-
-    private record LockedReport(UUID targetId, ReportState state, Optional<UUID> assignedTo, long revision) {
-    }
-
-    private record Transition(ReportState nextState, ReportStateChangeResult.Rejected rejection) {
-        private static Transition to(ReportState next) {
-            return new Transition(next, null);
-        }
-
-        private static Transition reject(String code, String message) {
-            return new Transition(null, new ReportStateChangeResult.Rejected(code, message));
-        }
     }
 
     private static void lockReporter(Connection connection, UUID reporterId) throws SQLException {

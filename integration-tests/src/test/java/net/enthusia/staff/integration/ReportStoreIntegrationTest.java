@@ -26,6 +26,7 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -177,6 +178,52 @@ class ReportStoreIntegrationTest {
         }
     }
 
+    @Test
+    void stateLifecycleEnforcesAssignmentRevisionAndQueues() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID otherActorId = UUID.randomUUID();
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            insertPlayer(DATABASE, actorId, "LifecycleActor", NOW);
+            insertPlayer(DATABASE, otherActorId, "OtherActor", NOW);
+            ReportStore store = runtime.reportStore();
+            UUID reportId = accepted(store.submit(
+                    request(reporterId, targetId, "report:lifecycle", NOW, "lifecycle")
+            )).reportId();
+
+            assertQueueContains(store, ReportQueue.OPEN, actorId, reportId);
+            ReportStateChangeResult.Applied claimed = apply(store, stateChange(
+                    reportId, actorId, ReportAction.CLAIM, 0L, "report-change:lifecycle:claim"
+            ));
+            assertEquals(1L, claimed.revision());
+            assertQueueContains(store, ReportQueue.CLAIMED_BY_ME, actorId, reportId);
+            assertQueueExcludes(store, ReportQueue.CLAIMED_BY_ME, otherActorId, reportId);
+
+            ReportStateChangeResult.Rejected notAssigned = reject(store, stateChange(
+                    reportId, otherActorId, ReportAction.AWAIT_REVIEW, 1L, "report-change:lifecycle:wrong-actor"
+            ));
+            assertEquals("NOT_ASSIGNEE", notAssigned.code());
+            ReportStateChangeResult.Applied awaiting = apply(store, stateChange(
+                    reportId, actorId, ReportAction.AWAIT_REVIEW, 1L, "report-change:lifecycle:await"
+            ));
+            assertEquals(2L, awaiting.revision());
+            assertQueueContains(store, ReportQueue.AWAITING_REVIEW, actorId, reportId);
+
+            ReportStateChangeResult.Rejected stale = reject(store, stateChange(
+                    reportId, actorId, ReportAction.CLOSE, 1L, "report-change:lifecycle:stale"
+            ));
+            assertEquals("STALE_REVISION", stale.code());
+            ReportStateChangeResult.Applied closed = apply(store, stateChange(
+                    reportId, actorId, ReportAction.CLOSE, 2L, "report-change:lifecycle:close"
+            ));
+            assertEquals(ReportState.CLOSED, closed.state());
+            assertQueueContains(store, ReportQueue.RECENTLY_CLOSED, actorId, reportId);
+        }
+    }
+
     private static void seedPlayers(UUID reporterId, UUID targetId) throws SQLException {
         insertPlayer(DATABASE, reporterId, "Reporter" + reporterId.toString().substring(0, 6), NOW);
         insertPlayer(DATABASE, targetId, "Target" + targetId.toString().substring(0, 8), NOW);
@@ -219,19 +266,63 @@ class ReportStoreIntegrationTest {
     }
 
     private static ReportStateChangeRequest change(UUID reportId, UUID actorId, String key) {
+        return stateChange(reportId, actorId, ReportAction.CLAIM, 0L, key);
+    }
+
+    private static ReportStateChangeRequest stateChange(
+            UUID reportId,
+            UUID actorId,
+            ReportAction action,
+            long revision,
+            String key
+    ) {
         return new ReportStateChangeRequest(
                 reportId,
                 actorId,
-                ReportAction.CLAIM,
-                0L,
+                action,
+                revision,
                 "Investigating report",
                 new IdempotencyKey(key),
-                NOW.plusSeconds(1)
+                NOW.plusSeconds(revision + 1)
         );
     }
 
     private static ReportSubmissionResult.Accepted accepted(ReportSubmissionResult result) {
         return assertInstanceOf(ReportSubmissionResult.Accepted.class, result);
+    }
+
+    private static ReportStateChangeResult.Applied apply(
+            ReportStore store,
+            ReportStateChangeRequest request
+    ) {
+        return assertInstanceOf(ReportStateChangeResult.Applied.class, store.changeState(request));
+    }
+
+    private static ReportStateChangeResult.Rejected reject(
+            ReportStore store,
+            ReportStateChangeRequest request
+    ) {
+        return assertInstanceOf(ReportStateChangeResult.Rejected.class, store.changeState(request));
+    }
+
+    private static void assertQueueContains(
+            ReportStore store,
+            ReportQueue queue,
+            UUID actorId,
+            UUID reportId
+    ) {
+        assertTrue(store.list(queue, actorId, 100).stream()
+                .anyMatch(report -> report.reportId().equals(reportId)));
+    }
+
+    private static void assertQueueExcludes(
+            ReportStore store,
+            ReportQueue queue,
+            UUID actorId,
+            UUID reportId
+    ) {
+        assertTrue(store.list(queue, actorId, 100).stream()
+                .noneMatch(report -> report.reportId().equals(reportId)));
     }
 
     private static ReportStateChangeResult changeWhenReleased(
