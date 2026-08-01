@@ -131,11 +131,14 @@ final class VelocityConfigurationTest {
                 new Bound("storage.maximum-pool-size", 1, 64),
                 new Bound("storage.connection-timeout-millis", 250, 60_000),
                 new Bound("website-api.port", 1, 65_535),
+                new Bound("website-api.code-key-version", 1, Integer.MAX_VALUE),
                 new Bound("website-api.timestamp-skew-seconds", 30, 900),
                 new Bound("website-api.maximum-body-bytes", 1_024, 1_048_576),
                 new Bound("website-api.worker-threads", 1, 16),
                 new Bound("website-api.queue-capacity", 8, 2_048),
                 new Bound("channel.port", 1, 65_535),
+                new Bound("network-identity.hmac-key-version", 1, Integer.MAX_VALUE),
+                new Bound("network-identity.encryption-key-version", 1, Integer.MAX_VALUE),
                 new Bound("discord.maximum-attempts", 1, 100),
                 new Bound("discord.failure-threshold", 1, 100),
                 new Bound("discord.circuit-open-seconds", 10, 86_400),
@@ -153,8 +156,9 @@ final class VelocityConfigurationTest {
                     properties.setProperty(bound.key(), Integer.toString(bound.maximum())));
             assertRejected(directory, baseline, properties ->
                     properties.setProperty(bound.key(), Integer.toString(bound.minimum() - 1)));
+            String aboveMaximum = Long.toString((long) bound.maximum() + 1L);
             assertRejected(directory, baseline, properties ->
-                    properties.setProperty(bound.key(), Integer.toString(bound.maximum() + 1)));
+                    properties.setProperty(bound.key(), aboveMaximum));
         }
     }
 
