@@ -1,0 +1,45 @@
+name: Export final review tree
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    if: contains(github.event.head_commit.message, '[export-final-review-tree]')
+    name: Export exact reviewed parent tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out helper commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+
+      - name: Verify and package reviewed parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "fde6dcc7817e9b896f86b4abbf66ec0a28af8980"
+          printf '%s\n' "fde6dcc7817e9b896f86b4abbf66ec0a28af8980" > SOURCE_SHA.txt
+          git archive --format=zip --output=enthusiastaff-final-review-tree.zip HEAD^
+
+      - name: Upload exact final tree
+        uses: actions/upload-artifact@v7
+        with:
+          name: enthusiastaff-final-review-tree-fde6dcc
+          path: |
+            enthusiastaff-final-review-tree.zip
+            SOURCE_SHA.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove temporary export branch if present
+        continue-on-error: true
+        shell: bash
+        run: git push origin --delete does-not-use-temp
