@@ -34,7 +34,8 @@ class EnvelopeCodecTest {
 
     @Test
     void rejectsUnknownJsonProperties() {
-        String json = validJson().replace("}", ",\"unexpected\":true}");
+        String base = validJson();
+        String json = base.substring(0, base.length() - 1) + ",\"unexpected\":true}";
 
         assertThrows(IllegalArgumentException.class, () -> codec.decode(json.getBytes(StandardCharsets.UTF_8)));
     }
@@ -81,11 +82,13 @@ class EnvelopeCodecTest {
     }
 
     private static String validJson() {
-        return """
-                {"protocolVersion":1,"messageId":"53fa6153-2ad8-42ba-a4e9-8fb10d630f08",\
-                "serverId":"hub","messageType":"PUNISHMENT_CREATED",\
-                "timestampEpochMillis":1785000000000,"nonce":"nonce","payloadJson":"{}",\
-                "mac":"0000000000000000000000000000000000000000000000000000000000000000"}
-                """.replace("\\\n", "").trim();
+        return "{\"protocolVersion\":1,"
+                + "\"messageId\":\"53fa6153-2ad8-42ba-a4e9-8fb10d630f08\","
+                + "\"serverId\":\"hub\","
+                + "\"messageType\":\"PUNISHMENT_CREATED\","
+                + "\"timestampEpochMillis\":1785000000000,"
+                + "\"nonce\":\"nonce\","
+                + "\"payloadJson\":\"{}\","
+                + "\"mac\":\"0000000000000000000000000000000000000000000000000000000000000000\"}";
     }
 }
