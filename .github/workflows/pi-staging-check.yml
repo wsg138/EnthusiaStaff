@@ -2,7 +2,7 @@ name: Pi Staging
 
 on:
   workflow_dispatch:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - synchronize
@@ -27,7 +27,7 @@ jobs:
     env:
       STAGING_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
       SOURCE_REPOSITORY: ${{ github.repository }}
-      SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      SOURCE_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
       SOURCE_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
       SOURCE_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
       SOURCE_PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
@@ -44,7 +44,7 @@ jobs:
           eligible=true
           reason='main commit or same-repository pull request'
 
-          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request' \
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' \
               && "${SOURCE_PR_HEAD_REPOSITORY}" != "${SOURCE_REPOSITORY}" ]]; then
             eligible=false
             reason='fork pull requests are intentionally limited to hosted build, test, and Codacy checks'
@@ -269,7 +269,10 @@ jobs:
               "https://api.github.com/repos/$STAGING_REPOSITORY/actions/artifacts/$artifact_id/zip" \
               --output "$archive"
             mkdir -p "$diagnostics/evidence/${artifact_name}"
-            unzip -q "$archive" -d "$diagnostics/evidence/${artifact_name}"
+            if ! unzip -q "$archive" -d "$diagnostics/evidence/${artifact_name}"; then
+              echo "Unable to extract $artifact_name; the original ZIP is retained." \
+                >> "$diagnostics/failure-summary.md"
+            fi
           done < <(
             jq -r '.artifacts[] | select(.name | startswith("enthusiastaff-pi-evidence-")) | [.id, .name] | @tsv' \
               "$diagnostics/artifacts.json"
