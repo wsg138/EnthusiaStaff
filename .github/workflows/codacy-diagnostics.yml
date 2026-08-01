@@ -12,9 +12,11 @@ permissions:
 
 jobs:
   export:
-    name: Reproduce Codacy PMD findings
+    name: Export exact Codacy issue delta
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
 
     steps:
       - name: Check out tested commit
@@ -23,112 +25,144 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Set up Java 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Download PMD 7.26.0
-        shell: bash
+      - name: Require Codacy repository token
         run: |
-          set -euo pipefail
-          curl --fail --location --silent --show-error \
-            --output pmd.zip \
-            "https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.26.0/pmd-dist-7.26.0-bin.zip"
-          unzip -q pmd.zip
-
-      - name: Analyze changed Java files
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/reports/pmd
-          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/pmd/changed-java-files.txt
-
-          if [[ ! -s build/reports/pmd/changed-java-files.txt ]]; then
-            echo "::error::No changed Java files were found."
+          if [[ -z "${CODACY_PROJECT_TOKEN}" ]]; then
+            echo "::error::CODACY_PROJECT_TOKEN is not configured."
             exit 1
           fi
 
-          files_csv="$(paste -sd, build/reports/pmd/changed-java-files.txt)"
-          rulesets="category/java/errorprone.xml,category/java/bestpractices.xml"
-
-          set +e
-          pmd-bin-7.26.0/bin/pmd check \
-            --dir "${files_csv}" \
-            --rulesets "${rulesets}" \
-            --format json \
-            --report-file build/reports/pmd/report.json \
-            --no-cache \
-            --minimum-priority 5
-          json_status=$?
-
-          pmd-bin-7.26.0/bin/pmd check \
-            --dir "${files_csv}" \
-            --rulesets "${rulesets}" \
-            --format text \
-            --report-file build/reports/pmd/report.txt \
-            --no-cache \
-            --minimum-priority 5
-          text_status=$?
-          set -e
-
-          for status in "${json_status}" "${text_status}"; do
-            if [[ "${status}" -ne 0 && "${status}" -ne 4 ]]; then
-              echo "::error::PMD failed with unexpected exit code ${status}."
-              exit "${status}"
-            fi
-          done
+      - name: Export branch and main issues
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports/codacy
+          git diff --name-only origin/main...HEAD -- '*.java' > build/reports/codacy/changed-java-files.txt
 
           python3 - <<'PY'
+          import collections
           import json
           import os
-          from collections import Counter
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
           from pathlib import Path
 
-          root = Path("build/reports/pmd")
-          payload = json.loads((root / "report.json").read_text(encoding="utf-8"))
-          violations = []
-          for file_result in payload.get("files", []):
-              filename = file_result.get("filename", "unknown")
-              for violation in file_result.get("violations", []):
-                  violations.append({"file": filename, **violation})
+          root = Path("build/reports/codacy")
+          paths = [
+              line.strip()
+              for line in (root / "changed-java-files.txt").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if not paths:
+              raise SystemExit("No changed Java files were found")
 
-          rules = Counter(item.get("rule", "unknown") for item in violations)
-          categories = Counter(item.get("ruleset", "unknown") for item in violations)
+          token = os.environ["CODACY_PROJECT_TOKEN"]
+          branch = "agent/expand-test-coverage"
+
+          def fetch(path: str, branch_name: str):
+              encoded = urllib.parse.quote(path, safe="")
+              query = urllib.parse.urlencode({"branch": branch_name})
+              url = f"https://api.codacy.com/2.0/project/file/issues/{encoded}?{query}"
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "project-token": token,
+                  },
+              )
+              for attempt in range(1, 7):
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          return json.loads(response.read().decode("utf-8"))
+                  except urllib.error.HTTPError as error:
+                      if error.code == 404:
+                          return []
+                      if error.code not in {429, 500, 502, 503, 504} or attempt == 6:
+                          body = error.read().decode("utf-8", errors="replace")
+                          raise RuntimeError(
+                              f"Codacy request failed for {path} on {branch_name}: "
+                              f"HTTP {error.code}: {body[:300]}"
+                          ) from error
+                  except urllib.error.URLError as error:
+                      if attempt == 6:
+                          raise RuntimeError(
+                              f"Codacy request failed for {path} on {branch_name}: {error}"
+                          ) from error
+                  time.sleep(attempt * 2)
+              raise AssertionError("unreachable")
+
+          branch_results = {}
+          main_results = {}
+          delta = []
+
+          for path in paths:
+              current = fetch(path, branch)
+              baseline = fetch(path, "main")
+              branch_results[path] = current
+              main_results[path] = baseline
+
+              remaining = collections.Counter(
+                  (item.get("patternId"), item.get("message"), item.get("level"))
+                  for item in baseline
+              )
+              for item in sorted(current, key=lambda value: value.get("startLine", 0)):
+                  signature = (
+                      item.get("patternId"),
+                      item.get("message"),
+                      item.get("level"),
+                  )
+                  if remaining[signature] > 0:
+                      remaining[signature] -= 1
+                  else:
+                      delta.append({"filePath": path, **item})
+
+          (root / "branch-issues.json").write_text(
+              json.dumps(branch_results, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          (root / "main-issues.json").write_text(
+              json.dumps(main_results, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          (root / "new-issues.json").write_text(
+              json.dumps(delta, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          by_level = collections.Counter(item.get("level", "unknown") for item in delta)
           lines = [
-              "# PMD reproduction of Codacy findings",
+              "# Exact Codacy issue delta",
               "",
-              f"- Changed Java files scanned: **{len((root / 'changed-java-files.txt').read_text(encoding='utf-8').splitlines())}**",
-              f"- PMD findings: **{len(violations)}**",
-              f"- Rulesets: `{', '.join(f'{name}: {count}' for name, count in sorted(categories.items()))}`",
+              f"- Changed Java files queried: **{len(paths)}**",
+              f"- New branch issues: **{len(delta)}**",
+              f"- Levels: `{', '.join(f'{key}: {value}' for key, value in sorted(by_level.items())) or 'none'}`",
               "",
-              "## Rule counts",
+              "## Findings",
               "",
           ]
-          if rules:
-              lines.extend(f"- `{rule}`: {count}" for rule, count in sorted(rules.items()))
+          if delta:
+              for item in delta:
+                  lines.append(
+                      f"- `{item['filePath']}:{item.get('startLine', '?')}` "
+                      f"pattern `{item.get('patternId', '?')}` ({item.get('level', 'unknown')}) — "
+                      f"{item.get('message', '').strip()}"
+                  )
           else:
               lines.append("- None")
-
-          lines.extend(["", "## Findings", ""])
-          for item in violations:
-              lines.append(
-                  f"- `{item['file']}:{item.get('beginline', '?')}` "
-                  f"`{item.get('rule', 'unknown')}` — {item.get('description', '').strip()}"
-              )
 
           text = "\n".join(lines) + "\n"
           (root / "summary.md").write_text(text, encoding="utf-8")
           print(text)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
-              handle.write(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(text)
           PY
 
-      - name: Upload PMD diagnostics
+      - name: Upload Codacy diagnostics
         uses: actions/upload-artifact@v7
         with:
-          name: codacy-pmd-diagnostics-${{ github.event.pull_request.number || github.run_id }}
-          path: build/reports/pmd
+          name: codacy-exact-diagnostics-${{ github.event.pull_request.number || github.run_id }}
+          path: build/reports/codacy
           if-no-files-found: error
           retention-days: 3
