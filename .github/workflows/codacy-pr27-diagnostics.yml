@@ -53,17 +53,17 @@ jobs:
               "repositories/EnthusiaStaff/pull-requests/27/issues"
           )
 
-          def request_page(cursor=None):
-              query = {"status": "new", "onlyPotential": "false", "limit": "100"}
+          def request_page(only_potential, cursor=None):
+              query = {
+                  "status": "new",
+                  "onlyPotential": "true" if only_potential else "false",
+                  "limit": "100",
+              }
               if cursor:
                   query["cursor"] = cursor
-              url = base_url + "?" + urllib.parse.urlencode(query)
               request = urllib.request.Request(
-                  url,
-                  headers={
-                      "Accept": "application/json",
-                      "project-token": token,
-                  },
+                  base_url + "?" + urllib.parse.urlencode(query),
+                  headers={"Accept": "application/json", "project-token": token},
               )
               for attempt in range(1, 7):
                   try:
@@ -81,27 +81,28 @@ jobs:
                   time.sleep(attempt * 2)
               raise AssertionError("unreachable")
 
-          records = []
-          analyzed_values = []
-          cursor = None
-          page_count = 0
-          reported_total = None
-          while True:
-              payload = request_page(cursor)
-              page_count += 1
-              analyzed_values.append(payload.get("analyzed"))
-              data = payload.get("data")
-              if not isinstance(data, list):
-                  raise RuntimeError(f"Unexpected Codacy data shape: {type(data).__name__}")
-              records.extend(item for item in data if isinstance(item, dict))
-              pagination = payload.get("pagination") if isinstance(payload.get("pagination"), dict) else {}
-              if reported_total is None:
-                  reported_total = pagination.get("total")
-              cursor = pagination.get("cursor")
-              if not cursor:
-                  break
-              if page_count >= 20:
-                  raise RuntimeError("Codacy PR issues pagination exceeded 20 pages")
+          def collect(only_potential):
+              records = []
+              analyzed = []
+              cursor = None
+              reported_total = None
+              pages = 0
+              while True:
+                  payload = request_page(only_potential, cursor)
+                  pages += 1
+                  analyzed.append(payload.get("analyzed"))
+                  data = payload.get("data")
+                  if not isinstance(data, list):
+                      raise RuntimeError(f"Unexpected Codacy data shape: {type(data).__name__}")
+                  records.extend(item for item in data if isinstance(item, dict))
+                  pagination = payload.get("pagination") if isinstance(payload.get("pagination"), dict) else {}
+                  if reported_total is None:
+                      reported_total = pagination.get("total")
+                  cursor = pagination.get("cursor")
+                  if not cursor:
+                      return records, analyzed, pages, reported_total
+                  if pages >= 20:
+                      raise RuntimeError("Codacy PR issues pagination exceeded 20 pages")
 
           def first(mapping, *keys):
               for key in keys:
@@ -110,18 +111,15 @@ jobs:
                       return value
               return None
 
-          sanitized = []
-          for wrapper in records:
+          def sanitize(wrapper):
               commit_issue = wrapper.get("commitIssue") if isinstance(wrapper.get("commitIssue"), dict) else wrapper
               nested = commit_issue.get("commitIssue") if isinstance(commit_issue.get("commitIssue"), dict) else commit_issue
               pattern = nested.get("patternInfo") if isinstance(nested.get("patternInfo"), dict) else {}
               tool = nested.get("toolInfo") if isinstance(nested.get("toolInfo"), dict) else {}
               location = nested.get("location") if isinstance(nested.get("location"), dict) else {}
-              delta_type = wrapper.get("deltaType")
-
-              issue = {
+              return {
                   "issueId": first(commit_issue, "issueId", "id", "uuid", "fingerprint") or first(nested, "issueId", "id", "uuid", "fingerprint"),
-                  "deltaType": delta_type,
+                  "deltaType": wrapper.get("deltaType"),
                   "tool": first(tool, "name", "id", "uuid") or first(nested, "tool", "toolName", "toolId"),
                   "toolUuid": first(tool, "uuid", "id"),
                   "patternId": first(pattern, "id", "patternId", "name") or first(nested, "patternId", "ruleId"),
@@ -133,98 +131,124 @@ jobs:
                   "filePath": first(nested, "filePath", "path", "filename") or first(location, "filePath", "path", "filename"),
                   "startLine": first(nested, "lineNumber", "startLine", "line") or first(location, "startLine", "line"),
                   "endLine": first(nested, "endLine") or first(location, "endLine"),
+                  "lineText": first(nested, "lineText"),
                   "message": first(nested, "message", "description", "title"),
                   "language": first(nested, "language"),
                   "url": first(nested, "url", "issueUrl", "htmlUrl"),
-                  "rawWrapperKeys": sorted(wrapper.keys()),
-                  "rawCommitIssueKeys": sorted(commit_issue.keys()),
-                  "rawNestedKeys": sorted(nested.keys()),
-                  "rawPatternKeys": sorted(pattern.keys()),
-                  "rawToolKeys": sorted(tool.keys()),
               }
-              sanitized.append(issue)
 
           def severity_key(issue):
               return str(issue.get("severityLevel") or issue.get("level") or "").strip().lower()
 
-          high = [issue for issue in sanitized if severity_key(issue) in {"critical", "high", "error"}]
-          patterns = collections.Counter(
-              (
-                  str(issue.get("tool") or "unknown-tool"),
-                  str(issue.get("patternId") or "unknown-pattern"),
-                  str(issue.get("patternName") or "unknown-name"),
-                  str(issue.get("severityLevel") or issue.get("level") or "unknown-severity"),
+          def summarize(issues):
+              severities = collections.Counter(
+                  str(issue.get("severityLevel") or issue.get("level") or "unknown")
+                  for issue in issues
               )
-              for issue in sanitized
-          )
-          areas = collections.Counter(
-              (
-                  str(issue.get("filePath") or "unknown").split("/", 1)[0],
-                  "test" if "/src/test/" in str(issue.get("filePath") or "") or str(issue.get("filePath") or "").startswith("integration-tests/") else "production",
-                  str(issue.get("severityLevel") or issue.get("level") or "unknown-severity"),
+              patterns = collections.Counter(
+                  (
+                      str(issue.get("tool") or "unknown-tool"),
+                      str(issue.get("patternId") or "unknown-pattern"),
+                      str(issue.get("patternName") or "unknown-name"),
+                      str(issue.get("severityLevel") or issue.get("level") or "unknown-severity"),
+                  )
+                  for issue in issues
               )
-              for issue in sanitized
-          )
-          severities = collections.Counter(
-              str(issue.get("severityLevel") or issue.get("level") or "unknown")
-              for issue in sanitized
-          )
+              areas = collections.Counter(
+                  (
+                      str(issue.get("filePath") or "unknown").split("/", 1)[0],
+                      "test" if "/src/test/" in str(issue.get("filePath") or "") or str(issue.get("filePath") or "").startswith("integration-tests/") else "production",
+                      str(issue.get("severityLevel") or issue.get("level") or "unknown-severity"),
+                  )
+                  for issue in issues
+              )
+              return {
+                  "count": len(issues),
+                  "severities": dict(sorted(severities.items())),
+                  "high": [issue for issue in issues if severity_key(issue) in {"critical", "high", "error"}],
+                  "patternGroups": [
+                      {
+                          "tool": tool,
+                          "patternId": pattern_id,
+                          "patternName": pattern_name,
+                          "severity": severity,
+                          "count": count,
+                      }
+                      for (tool, pattern_id, pattern_name, severity), count in sorted(patterns.items())
+                  ],
+                  "sourceAreaGroups": [
+                      {"area": area, "codeKind": kind, "severity": severity, "count": count}
+                      for (area, kind, severity), count in sorted(areas.items())
+                  ],
+              }
+
+          all_raw, all_analyzed, all_pages, all_total = collect(False)
+          potential_raw, potential_analyzed, potential_pages, potential_total = collect(True)
+          all_issues = [sanitize(item) for item in all_raw]
+          potential_issues = [sanitize(item) for item in potential_raw]
+          potential_ids = {item.get("issueId") for item in potential_issues if item.get("issueId")}
+          direct_issues = [item for item in all_issues if item.get("issueId") not in potential_ids]
 
           output = {
               "checkedOutHead": os.popen("git rev-parse HEAD").read().strip(),
-              "analyzedValues": analyzed_values,
-              "pages": page_count,
-              "reportedTotal": reported_total,
-              "issueCount": len(sanitized),
-              "severities": dict(sorted(severities.items())),
-              "highCount": len(high),
-              "highIssues": high,
-              "patternGroups": [
-                  {
-                      "tool": tool,
-                      "patternId": pattern_id,
-                      "patternName": pattern_name,
-                      "severity": severity,
-                      "count": count,
-                  }
-                  for (tool, pattern_id, pattern_name, severity), count in sorted(patterns.items())
-              ],
-              "sourceAreaGroups": [
-                  {"area": area, "codeKind": kind, "severity": severity, "count": count}
-                  for (area, kind, severity), count in sorted(areas.items())
-              ],
-              "issues": sanitized,
+              "all": {
+                  "analyzedValues": all_analyzed,
+                  "pages": all_pages,
+                  "reportedTotal": all_total,
+                  **summarize(all_issues),
+                  "issues": all_issues,
+              },
+              "potential": {
+                  "analyzedValues": potential_analyzed,
+                  "pages": potential_pages,
+                  "reportedTotal": potential_total,
+                  **summarize(potential_issues),
+                  "issues": potential_issues,
+              },
+              "direct": {
+                  **summarize(direct_issues),
+                  "issues": direct_issues,
+              },
           }
           (root / "sanitized-pr-findings.json").write_text(
               json.dumps(output, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
 
-          print("=== CODACY PR 27 PR-SPECIFIC SUMMARY ===")
+          print("=== CODACY PR 27 DIRECT/POTENTIAL SPLIT ===")
           print(f"checked_out_head={output['checkedOutHead']}")
-          print(f"analyzed_values={json.dumps(analyzed_values)}")
-          print(f"pages={page_count}")
-          print(f"reported_total={reported_total}")
-          print(f"issue_count={len(sanitized)}")
-          print("severities=" + json.dumps(dict(sorted(severities.items())), sort_keys=True))
-          print(f"high_count={len(high)}")
+          for name in ("all", "potential", "direct"):
+              section = output[name]
+              print(
+                  f"{name}: count={section['count']} severities="
+                  + json.dumps(section["severities"], sort_keys=True)
+                  + f" high={len(section['high'])}"
+              )
+              if name != "direct":
+                  print(
+                      f"{name}: analyzed={json.dumps(section['analyzedValues'])} "
+                      f"pages={section['pages']} reported_total={section['reportedTotal']}"
+                  )
 
-          print("\n=== HIGH ISSUES ===")
-          print(json.dumps(high, indent=2, sort_keys=True))
-
-          print("\n=== PATTERN GROUPS ===")
-          for group in output["patternGroups"]:
+          print("\n=== DIRECT HIGH ISSUES ===")
+          print(json.dumps(output["direct"]["high"], indent=2, sort_keys=True))
+          print("\n=== POTENTIAL HIGH ISSUES ===")
+          print(json.dumps(output["potential"]["high"], indent=2, sort_keys=True))
+          print("\n=== DIRECT PATTERN GROUPS ===")
+          for group in output["direct"]["patternGroups"]:
               print(json.dumps(group, sort_keys=True))
-
-          print("\n=== SOURCE AREA GROUPS ===")
-          for group in output["sourceAreaGroups"]:
+          print("\n=== DIRECT SOURCE AREA GROUPS ===")
+          for group in output["direct"]["sourceAreaGroups"]:
               print(json.dumps(group, sort_keys=True))
+          print("\n=== DIRECT ISSUES ===")
+          for issue in output["direct"]["issues"]:
+              print(json.dumps(issue, sort_keys=True))
           PY
 
       - name: Upload sanitized diagnostics
         uses: actions/upload-artifact@v7
         with:
-          name: codacy-pr27-pr-specific-${{ github.event.pull_request.head.sha || github.sha }}
+          name: codacy-pr27-direct-potential-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/reports/codacy-pr27/sanitized-pr-findings.json
           if-no-files-found: error
           retention-days: 3
