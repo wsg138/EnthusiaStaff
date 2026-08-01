@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -57,6 +58,7 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -104,6 +106,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ClientEvidenceCollector clientEvidenceCollector;
     private MarketIntegration marketIntegration;
     private ReputationIntegration reputationIntegration;
+    private ReportEvidenceMaintenance reportEvidenceMaintenance;
 
     @Override
     public void onEnable() {
@@ -113,6 +116,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         int threads = getConfig().getInt("workers.threads", 4);
         int queueCapacity = getConfig().getInt("workers.queue-capacity", 256);
         workers = BoundedExecutorFactory.create(threads, queueCapacity);
+        reportEvidenceMaintenance = new ReportEvidenceMaintenance(
+                Clock.systemUTC(),
+                () -> storageValue(PaperStorageBindings::reportStore),
+                getLogger()
+        );
         freezeManager = new FreezeManager(
                 this,
                 Clock.systemUTC(),
@@ -292,13 +300,29 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void registerOperationalStateTask() {
         ScheduledTask task = getServer().getAsyncScheduler().runAtFixedRate(
                 this,
-                ignored -> refreshOperationalState(),
+                ignored -> runOperationalTasks(),
                 5,
                 5,
                 TimeUnit.SECONDS
         );
         if (!lifecycle.publishTask(task)) {
             cancelTask(task);
+        }
+    }
+
+    private void runOperationalTasks() {
+        refreshOperationalState();
+        if (workers == null || workers.isShutdown()) {
+            return;
+        }
+        try {
+            workers.execute(reportEvidenceMaintenance);
+        } catch (RejectedExecutionException exception) {
+            getLogger().log(
+                    Level.FINE,
+                    "Report evidence maintenance was rejected; the next operational tick will retry",
+                    exception
+            );
         }
     }
 
@@ -742,16 +766,18 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             command.setTabCompleter(changes);
         }
         ReportCommand report = new ReportCommand(
-                this,
-                Clock.systemUTC(),
-                networkServerId(),
-                mode::get,
-                playerDirectory,
-                () -> storageValue(PaperStorageBindings::reportStore),
-                () -> storageValue(PaperStorageBindings::sanctionLookup),
-                reasonPolicies,
-                chatContext,
-                clientEvidenceCollector,
+                new ReportCommand.Dependencies(
+                        this,
+                        Clock.systemUTC(),
+                        networkServerId(),
+                        mode::get,
+                        playerDirectory,
+                        () -> storageValue(PaperStorageBindings::reportStore),
+                        () -> storageValue(PaperStorageBindings::sanctionLookup),
+                        reasonPolicies,
+                        chatContext,
+                        clientEvidenceCollector
+                ),
                 workers
         );
         PluginCommand reportCommand = Objects.requireNonNull(getCommand("report"), "report command is missing");

@@ -1,6 +1,8 @@
 package net.enthusia.staff.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
@@ -52,7 +54,7 @@ public final class MariaDbRuntime implements AutoCloseable {
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
-        ObjectMapper json = new ObjectMapper();
+        ObjectMapper json = jsonMapper();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
         this.moderationStore = moderation;
         this.punishmentRequestStore = new JdbcPunishmentRequestStore(dataSource, json, moderation);
@@ -152,22 +154,28 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {
-        return new JdbcWebsiteModerationStore(dataSource, codeProtector, new ObjectMapper());
+        return new JdbcWebsiteModerationStore(dataSource, codeProtector, jsonMapper());
     }
 
     public LiteBansMigrationService liteBansMigrationService() {
-        return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC());
+        return new LiteBansMigrationService(dataSource, jsonMapper(), Clock.systemUTC());
     }
 
     public LiteBansMigrationService liteBansMigrationService(NetworkIdentityProtector protector) {
         if (protector == null) {
             throw new IllegalArgumentException("network identity protector must be present");
         }
-        return new LiteBansMigrationService(dataSource, new ObjectMapper(), Clock.systemUTC(), protector);
+        return new LiteBansMigrationService(dataSource, jsonMapper(), Clock.systemUTC(), protector);
     }
 
     public CutoverCoordinator cutoverCoordinator() {
-        return new CutoverCoordinator(dataSource, new ObjectMapper(), Clock.systemUTC());
+        return new CutoverCoordinator(dataSource, jsonMapper(), Clock.systemUTC());
+    }
+
+    private static ObjectMapper jsonMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     @Override

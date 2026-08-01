@@ -670,6 +670,83 @@ now describe the bridge and this exact-SHA gate; all 29 Wiki pages validate.
 CodeRabbit skipped the draft automatically, so one lightweight ready-state pass
 remains and no approval is claimed here.
 
+The PR #31 review fixes produced final head
+`d5ef5d2f5ec5209d4d11d0acf94da7777450476a`. A fresh clean Java 21 build passed
+365 tests, including all 52 MariaDB tests across 12 Testcontainers suites.
+Hosted Codacy reported zero new and 22 fixed issues, 80.53% diff coverage, a
++1.571 percentage-point coverage variation, complexity delta +79, and
+duplication delta +10. Exact-head Pi staging run `30698581440` passed both
+Paper 1.21.11 boot/storage/command/shutdown cycles. PR #31 merged in
+`02fe5fa584b04939de45401818c675a94428c71a`; Wiki publication run
+`30698968797` subsequently completed successfully. The automatic post-fix
+CodeRabbit attempt was rate-limited and was not retried or represented as an
+approval.
+
+### PR #32 report persistence and evidence checkpoint
+
+Draft PR #32 starts from merged PR #31 and addresses report-path correctness
+before the remaining GUI work. At implementation checkpoint
+`2822fdc82983aed9c23c1af5182093e377f71644`, it includes:
+
+- configured Java-time JSON persistence for chat and private-message evidence;
+- concurrency-safe state-change replay and semantic idempotency conflicts;
+- exact submission fingerprints so a key cannot replay different report
+  content;
+- explicit rollback on SQL, JSON, runtime, and fatal-error paths before pooled
+  auto-commit restoration;
+- bounded 2,000-message report contexts;
+- separate submission, replay, query, state, and evidence-maintenance JDBC
+  responsibilities behind `JdbcReportStore`;
+- physical seven-day cleanup for public-chat, private-message, and report-linked
+  client evidence, with bounded asynchronous scheduling;
+- sanitized asynchronous `/report` failure feedback; and
+- MariaDB coverage for merges, exact replay, semantic conflicts, deterministic
+  concurrent state changes, queue/state transitions, failure-injected rollback,
+  and physical retention.
+
+The exact implementation checkpoint passed the Java 21
+`clean test check runtimeJars jacocoAggregateReport` gate with all 40 tasks
+executed and caches disabled. Test XML records 374 tests with zero failures,
+errors, or skips, including 59 tests across all 13 MariaDB 11.8.3
+Testcontainers suites. The Paper jar is 8,393,471 bytes with SHA-256
+`65F32E526A600FDD70CB9D77981859D4393B4F1F0CEA59F2BD0F078B6E4B9181`; the
+Velocity jar is 7,602,013 bytes with SHA-256
+`E242F77FEC7A8CE0EEE7080D6434EA54F146C9067678E85889B003BEEBC87E77`.
+Exact-SHA Pi staging run `30700846431` passed. Source-scoped CPD reports the
+same six repository duplication groups as the prior checkpoint and none touches
+the report changes.
+
+Hosted Codacy initially reported three new test-code findings at that head: one
+valid file-size warning and two generic SQL-helper security warnings. Commit
+`546d1e28` extracted shared fixtures and replaced the dynamic helpers with fixed
+prepared statements. The seven-test MariaDB report suite passes after that
+change. PMD 7 and Opengrep report zero findings on the two affected files;
+Lizard measures 470 non-comment lines in the test and 158 in its fixture, below
+the configured 500-line limit. The nine findings reported when the Paper
+bootstrap is included are its pre-existing executor, logging, literal, and loop
+findings rather than new report-line findings. No finding, rule, or first-party
+path was suppressed. Hosted Codacy and an exact-final-head Pi run must pass
+before merge.
+
+Exact candidate `ce6860255f5bc76bdc81690cafe50ef04fc77c58` repeated the full
+clean Java 21 gate with 374 passing tests and all 59 MariaDB tests. Hosted
+Codacy reported zero new and 13 fixed issues, 76.26% diff coverage, and a
++2.458 percentage-point coverage variation. Wiki validation passed, and Pi
+staging run `30701863189` passed the independently built artifact through both
+boot/storage/command/shutdown cycles.
+
+The single ready-state review found eight code concerns and one validation
+provenance concern. Commit `d3356165` addresses the code findings: report
+evidence cleanup no longer blocks operational-state refresh; per-category
+purge counts drive backlog scheduling; expired client evidence is hidden at
+read time; UUID report targets resolve online evidence correctly; and replay
+comparison, conflict fallback, and fingerprint serialization are null-safe and
+mapper-independent. Focused report unit and MariaDB tests pass, and PMD 7,
+Opengrep, and Lizard introduce no finding outside the already recorded Paper
+composition-root backlog. This documentation update corrects the provenance
+finding. The post-review head must repeat hosted Codacy, the clean build, and
+the exact-SHA Pi gate before merge; no second automated review is requested.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
