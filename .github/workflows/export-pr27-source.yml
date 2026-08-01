@@ -1,0 +1,41 @@
+name: Export PR27 source bundle
+
+on:
+  push:
+    branches:
+      - section/punishment-request-notifications-recovery
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch current main and create bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git branch --force export-pr27 HEAD
+          git branch --force export-main refs/remotes/origin/main
+          git bundle create pr27-source.bundle export-pr27 export-main
+          git bundle verify pr27-source.bundle
+          printf '%s\n' "branch=$(git rev-parse export-pr27)" "main=$(git rev-parse export-main)" > exported-shas.txt
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr27-source-${{ github.sha }}
+          path: |
+            pr27-source.bundle
+            exported-shas.txt
+          if-no-files-found: error
+          retention-days: 1
