@@ -81,3 +81,5 @@ jobs:
           git commit -m "Remove one-time Codacy audit workflow"
           git push origin HEAD:section/punishment-request-notifications-recovery
           git push origin --delete codacy-audit-temp || true
+
+# Registered in the preceding commit; this commit triggers the one-time audit.
