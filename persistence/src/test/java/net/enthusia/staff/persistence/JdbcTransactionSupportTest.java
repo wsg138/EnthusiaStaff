@@ -17,17 +17,22 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 
 final class JdbcTransactionSupportTest {
+    private static final String TRANSACTION_FAILED = "Transaction failed";
+    private static final String COMMITTED = "committed";
+    private static final String WRONG_COUNT = "wrong count";
+    private static final String WRONG_BATCH = "wrong batch";
+
     @Test
     void commitsReturnsAndRestoresSuccessfulTransactions() {
         ConnectionState state = new ConnectionState();
 
         String result = JdbcTransactionSupport.execute(
                 dataSource(state.connection()),
-                "Transaction failed",
-                connection -> "committed"
+                TRANSACTION_FAILED,
+                connection -> COMMITTED
         );
 
-        assertEquals("committed", result);
+        assertEquals(COMMITTED, result);
         assertEquals(1, state.autoCommitDisableCalls);
         assertEquals(1, state.commitCalls);
         assertEquals(0, state.rollbackCalls);
@@ -44,7 +49,7 @@ final class JdbcTransactionSupportTest {
                 IllegalStateException.class,
                 () -> JdbcTransactionSupport.execute(
                         dataSource(state.connection()),
-                        "Transaction failed",
+                        TRANSACTION_FAILED,
                         connection -> {
                             throw failure;
                         }
@@ -66,14 +71,14 @@ final class JdbcTransactionSupportTest {
                 ModerationPersistenceException.class,
                 () -> JdbcTransactionSupport.execute(
                         dataSource(state.connection()),
-                        "Transaction failed",
+                        TRANSACTION_FAILED,
                         connection -> {
                             throw failure;
                         }
                 )
         );
 
-        assertEquals("Transaction failed", thrown.getMessage());
+        assertEquals(TRANSACTION_FAILED, thrown.getMessage());
         assertSame(failure, thrown.getCause());
         assertEquals(1, state.rollbackCalls);
         assertEquals(1, state.autoCommitResetCalls);
@@ -153,7 +158,7 @@ final class JdbcTransactionSupportTest {
                 () -> JdbcTransactionSupport.execute(
                         dataSource(state.connection()),
                         "Close failed",
-                        connection -> "committed"
+                        connection -> COMMITTED
                 )
         );
 
@@ -175,7 +180,7 @@ final class JdbcTransactionSupportTest {
                 AssertionError.class,
                 () -> JdbcTransactionSupport.execute(
                         dataSource(state.connection()),
-                        "Transaction failed",
+                        TRANSACTION_FAILED,
                         connection -> {
                             throw failure;
                         }
@@ -200,11 +205,11 @@ final class JdbcTransactionSupportTest {
 
         String result = JdbcTransactionSupport.execute(
                 dataSource(state.connection()),
-                "Transaction failed",
-                connection -> "committed"
+                TRANSACTION_FAILED,
+                connection -> COMMITTED
         );
 
-        assertEquals("committed", result);
+        assertEquals(COMMITTED, result);
         assertEquals(1, state.commitCalls);
         assertEquals(0, state.rollbackCalls);
         assertEquals(1, state.autoCommitResetCalls);
@@ -218,23 +223,23 @@ final class JdbcTransactionSupportTest {
         assertFalse(JdbcTransactionSupport.updatedOne(2));
         assertFalse(JdbcTransactionSupport.updatedOne(Statement.SUCCESS_NO_INFO));
 
-        JdbcTransactionSupport.requireSingleUpdate(1, "wrong count");
-        assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireSingleUpdate(0, "wrong count"));
-        assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireSingleUpdate(2, "wrong count"));
+        JdbcTransactionSupport.requireSingleUpdate(1, WRONG_COUNT);
+        assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireSingleUpdate(0, WRONG_COUNT));
+        assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireSingleUpdate(2, WRONG_COUNT));
     }
 
     @Test
     void optionalSingleUpdateAcceptsZeroOrOneRowOnly() throws SQLException {
-        JdbcTransactionSupport.requireOptionalSingleUpdate(0, "wrong count");
-        JdbcTransactionSupport.requireOptionalSingleUpdate(1, "wrong count");
+        JdbcTransactionSupport.requireOptionalSingleUpdate(0, WRONG_COUNT);
+        JdbcTransactionSupport.requireOptionalSingleUpdate(1, WRONG_COUNT);
 
         assertThrows(
                 SQLException.class,
-                () -> JdbcTransactionSupport.requireOptionalSingleUpdate(-1, "wrong count")
+                () -> JdbcTransactionSupport.requireOptionalSingleUpdate(-1, WRONG_COUNT)
         );
         assertThrows(
                 SQLException.class,
-                () -> JdbcTransactionSupport.requireOptionalSingleUpdate(2, "wrong count")
+                () -> JdbcTransactionSupport.requireOptionalSingleUpdate(2, WRONG_COUNT)
         );
     }
 
@@ -243,23 +248,23 @@ final class JdbcTransactionSupportTest {
         JdbcTransactionSupport.requireBatchUpdate(
                 new int[]{1, Statement.SUCCESS_NO_INFO, 1},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         );
 
         assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireBatchUpdate(
                 new int[]{1, Statement.SUCCESS_NO_INFO},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         ));
         assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireBatchUpdate(
                 new int[]{1, 0, 1},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         ));
         assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireBatchUpdate(
                 new int[]{1, Statement.EXECUTE_FAILED, 1},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         ));
     }
 
@@ -268,13 +273,13 @@ final class JdbcTransactionSupportTest {
         JdbcTransactionSupport.requireIdempotentBatchUpdate(
                 new int[]{1, 0, Statement.SUCCESS_NO_INFO},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         );
 
         assertThrows(SQLException.class, () -> JdbcTransactionSupport.requireIdempotentBatchUpdate(
                 new int[]{1, Statement.EXECUTE_FAILED, 0},
                 3,
-                "wrong batch"
+                WRONG_BATCH
         ));
     }
 
