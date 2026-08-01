@@ -18,11 +18,12 @@ class EnvelopeAuthenticatorTest {
     private static final Instant NOW = Instant.parse("2026-07-22T12:00:00Z");
     private static final Duration MAX_AGE = Duration.ofMinutes(5);
     private static final Duration MAX_SKEW = Duration.ofSeconds(30);
+    private static final String HUB = "hub";
 
     @Test
     void rejectsUnsafeOrMissingConfiguration() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        Map<String, SecretKey> keys = Map.of("hub", key());
+        Map<String, SecretKey> keys = Map.of(HUB, key());
         ReplayGuard guard = new ReplayGuard(100, Duration.ofMinutes(6));
 
         assertThrows(IllegalArgumentException.class, () -> new EnvelopeAuthenticator(
@@ -64,7 +65,7 @@ class EnvelopeAuthenticatorTest {
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 MAX_AGE,
                 Duration.ZERO,
-                Map.of("hub", key()),
+                Map.of(HUB, key()),
                 new ReplayGuard(100, Duration.ofMinutes(6))
         );
 
@@ -191,7 +192,7 @@ class EnvelopeAuthenticatorTest {
     void allowedServerViewIsImmutable() {
         EnvelopeAuthenticator authenticator = authenticator();
 
-        assertEquals(java.util.Set.of("hub"), authenticator.allowedServers());
+        assertEquals(java.util.Set.of(HUB), authenticator.allowedServers());
         assertThrows(UnsupportedOperationException.class, () -> authenticator.allowedServers().clear());
     }
 
@@ -226,7 +227,7 @@ class EnvelopeAuthenticatorTest {
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 MAX_AGE,
                 MAX_SKEW,
-                Map.of("hub", key()),
+                Map.of(HUB, key()),
                 new ReplayGuard(100, Duration.ofMinutes(6))
         );
     }
@@ -239,7 +240,7 @@ class EnvelopeAuthenticatorTest {
         return new UnsignedEnvelope(
                 1,
                 UUID.randomUUID(),
-                "hub",
+                HUB,
                 "PUNISHMENT_CREATED",
                 timestamp.toEpochMilli(),
                 UUID.randomUUID().toString(),
