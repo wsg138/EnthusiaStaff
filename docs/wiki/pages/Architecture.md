@@ -2,180 +2,192 @@
 
 EnthusiaStaff is a distributed moderation platform, not a single Bukkit command
 plugin. It separates policy and durable state from Paper, Velocity, MariaDB,
-Discord, website, and provider implementations.
+Discord, the website and optional provider implementations.
 
-This page explains the system boundaries and write model. Developers who need a
-file-by-file review map, important classes, feature traces, tests, and review
-checklists should continue to [[Developer Code Guide]].
+## Where to continue
+
+- Foundation percentages and important source files: [[Core Platform and Infrastructure]]
+- Moderation feature paths: [[Moderation, Punishments, and Reports]]
+- Stateful staff/asset paths: [[Staff Tools, Investigations, and Player-State Safety]]
+- Provider/migration/release paths: [[Integrations, Migration, and Release Readiness]]
+- Complete file-by-file map and traces: [[Developer Code Guide]]
+- Paper–Velocity details: [[Protocol and Network Traffic]]
 
 ## Deployable artifacts
 
-Exactly two runtime jars:
+Exactly two runtime plugins are intended:
 
 1. `EnthusiaStaff-Paper-<version>.jar`
 2. `EnthusiaStaff-Velocity-<version>.jar`
 
-Internal modules include:
+Internal modules:
 
-```text
-common
-domain
-integration-contracts
-persistence
-protocol
-paper
-velocity
-integration-tests
-docs
-```
+| Module | Responsibility |
+| --- | --- |
+| `common` | Shared identifiers, validation, security primitives and bounded utilities |
+| `domain` | Business policy, authorization, state machines, application services and ports |
+| `integration-contracts` | Compile-time contracts for optional Enthusia-owned providers |
+| `persistence` | MariaDB bootstrap, migrations, JDBC stores, journals, leases and outboxes |
+| `protocol` | Authenticated Paper–Velocity transport, replay protection and acknowledgements |
+| `paper` | Commands, GUIs, listeners and server-local player-state behavior |
+| `velocity` | Network enforcement, identity, workers, migration, Discord and website bridge |
+| `integration-tests` | MariaDB/cross-module transaction, recovery and migration tests; never deployed |
 
-Provider API classes must not be duplicated into runtime jars when provider
-plugins own them.
+See the [root build](https://github.com/wsg138/EnthusiaStaff/blob/main/build.gradle.kts)
+and [module settings](https://github.com/wsg138/EnthusiaStaff/blob/main/settings.gradle.kts).
 
 ## Dependency direction
 
-Domain code must not directly depend on Bukkit, Velocity, Discord, MariaDB
-implementations, or web frameworks.
+Policy must not depend on platform implementations:
 
-Commands and GUIs translate input into application requests. They do not own
-punishment policy, inventory transaction rules, authorization, or recovery
-logic.
+```text
+Paper / Velocity / website / provider adapters
+                     |
+                     v
+          domain application services
+                     |
+                     v
+              domain ports/models
+                     ^
+                     |
+        persistence / protocol adapters
+```
+
+Commands and GUIs translate input and display results. They must not independently
+implement punishment ladders, authorization, inventory transactions or recovery.
 
 ## Bounded contexts
 
-- Identity and player directory
-- Cases, punishments, sanctions, escalation
-- Reports and appeals
-- Alts and network identity
-- Inventory, economy, market, reputation
-- Staff sessions, vanish, freeze, tools
-- Discord delivery
-- Migration and cutover
-- Verification, audit, configuration
-- External integrations
+- identity and player directory;
+- cases, punishments, sanctions and escalation;
+- reports and appeals;
+- alts and protected network identity;
+- inventory, economy, market and reputation;
+- staff sessions, vanish, freeze and tools;
+- Discord delivery;
+- migration/shadow/cutover;
+- verification, audit and configuration;
+- external integrations.
 
-## Runtime ownership
+Each bounded context should have one authoritative application-service path and
+explicit ports to persistence or platform adapters.
 
-### Paper
+## Paper runtime ownership
 
-- Staff commands and GUIs
-- Server-local player state
-- Staff mode and vanish application
-- Inventory/Ender interaction
-- Freeze restrictions
-- Report and client evidence capture
-- Provider adapters that require Bukkit
+Paper owns:
 
-The `EnthusiaStaffPaperPlugin` entrypoint controls startup and shutdown order;
-it does not contain every command, integration, or configuration constructor.
-The composition boundary is split into focused collaborators:
+- staff commands and GUIs;
+- server-local player state;
+- staff mode and vanish application;
+- inventory/Ender access;
+- freeze restrictions;
+- report/client evidence capture;
+- Bukkit-side provider adapters.
 
-- `PaperRuntimeComponents` creates server-local managers and registers stable
-  Bukkit services;
-- `PaperCommandRegistrar` wires command executors, tab completers, and GUI
-  listeners while preserving lazy storage availability;
-- `PaperIntegrationManager` discovers optional providers and owns the
-  RoseChat/economy integration shutdown paths;
-- `PaperDatabaseConfiguration` resolves only configured environment-variable
-  names and never stores credentials in repository configuration;
-- `PaperReasonPolicyBootstrap` loads the versioned punishment policy;
-- `PaperNetworkMessageHandler` validates sanction messages before recording a
-  durable applied receipt; and
-- `PaperResourceCloser` applies one interruption-safe cleanup policy.
+Important entry points:
 
-MariaDB work remains on the bounded worker pool. Bukkit player mutations must
-run on the owning entity scheduler or another supported Paper scheduler. Vanish
-startup and visibility fan-out now use session-fenced entity scheduling, including
-reconnect and packet-adapter failure paths. Freeze and staff-session recovery are
-still tracked separately, and full Folia verification is not implied by the
-standalone boot test.
+- [Paper plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
+- [Runtime lifecycle](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeLifecycle.java)
+- [Runtime components](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java)
+- [Command registrar](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java)
+- [Storage bindings](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java)
+- [Integration manager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java)
+- [Resource closer](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperResourceCloser.java)
 
-### Velocity
+MariaDB/provider work must remain off the game thread. Player/entity mutations
+must run on the supported owning scheduler. Standalone Paper boot staging does not
+prove complete Folia ownership behavior.
 
-- Network login enforcement
-- Network mute and server-switch coordination
-- Protected network identity observations
-- Persistent channel server
-- Durable network and Discord workers
-- Migration/shadow/cutover coordination
-- Restricted website/API bridge
+## Velocity runtime ownership
 
-### Restricted website bridge
+Velocity owns:
 
-The Velocity website bridge is an inbound, loopback-only HTTP boundary for a
-trusted local site service or reverse proxy. It must never be exposed directly
-to an untrusted network. Requests require the configured bearer and HMAC
-authentication, a bounded timestamp window, and nonce replay protection.
+- login and server-switch enforcement;
+- protected network-identity observations;
+- persistent channel server;
+- durable network and Discord workers;
+- LiteBans migration, shadow and cutover coordination;
+- restricted website/API bridge.
 
-The implementation separates responsibilities so transport failures cannot
-silently become moderation decisions:
+Important entry points:
 
-- `WebsiteApiRuntime` owns the listener and bounded executor lifecycle;
-- `WebsiteApiServer` enforces loopback clients, body limits, authentication,
-  hardened response headers, and stable error envelopes;
-- `WebsiteApiRequestDecoder` rejects unknown fields, unsupported query keys,
-  malformed identifiers, and invalid content types;
-- `WebsiteApiRouter` maps the small versioned route surface to domain ports;
-- `WebsiteAppealEndpoint` authorizes the reviewer and coordinates durable
-  prepare, sanction mutation, and terminal appeal state.
+- [Velocity plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
+- [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
+- [Network worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/NetworkOutboxWorker.java)
+- [Discord worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
+- [Website API server](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiServer.java)
 
-An authority-mode rejection leaves a prepared appeal replayable instead of
-recording a false terminal result. Other rejected mutations record a durable
-rejection before returning a conflict. Public responses continue to come from
-sanitized MariaDB projections rather than mutable runtime objects.
+Velocity event threads must not block on JDBC, HTTP, filesystem or socket work.
 
-### MariaDB
+## MariaDB authority
 
-Authoritative cases, sanctions, identities, drafts, reports, staff sessions,
-inventory/economy journals, outboxes, migrations, configuration versions,
-audit, leases, and recovery quarantine.
+MariaDB is authoritative for:
+
+- cases and sanctions;
+- identities and sessions;
+- drafts and approval requests;
+- reports and retained evidence;
+- staff mode, vanish and freeze state;
+- inventory/economy journals and queued patches;
+- network/Discord inboxes and outboxes;
+- migration runs/mappings/shadow comparisons;
+- configuration versions, audit, leases and quarantine.
+
+Primary entry points:
+
+- [MariaDB bootstrap](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDb.java)
+- [Runtime bindings](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java)
+- [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
+- [Persistence package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 
 ## Authoritative write flow
 
 A destructive distributed operation should:
 
-1. Validate input and identity.
-2. Authorize in the application service.
-3. Persist durable intent.
-4. Commit acceptance.
-5. Apply local or external side effect.
-6. Verify resulting state.
-7. Commit terminal state and audit.
-8. Deliver network/Discord messages from durable outbox.
-9. Retry idempotently or quarantine ambiguity.
+1. validate input and identity;
+2. authorize inside the application service;
+3. persist durable intent;
+4. commit acceptance;
+5. apply the local/provider/network effect;
+6. verify resulting state;
+7. commit terminal state and audit;
+8. deliver network/Discord messages from durable outboxes;
+9. retry idempotently or quarantine ambiguity.
 
-Transport is at-least-once with idempotent consumers. The architecture must not
-claim true exactly-once network delivery.
+Transport is at-least-once. Duplicate safety comes from idempotent consumers,
+unique inbox/outbox keys, revisions, leases and fencing—not from claiming
+exactly-once networking.
 
-## Paper–Velocity protocol
+## Safe failure principles
 
-Required properties:
-
-- Persistent connection; no online-player transport requirement
-- Server allowlist
-- Protocol negotiation
-- TLS plus authenticated message envelope
-- Replay protection
-- Message IDs and acknowledgements
-- Idempotent handlers
-- Reconnect with bounded backoff
-- Bounded queues and backpressure
-- Health reporting
-- Durable MariaDB outbox
-
-## Safe failure
-
-- Punishment failure cannot partially apply a combined case.
-- Removal failure cannot alter unrelated sanctions.
-- Inventory/economy failure preserves the original state or quarantines.
+- A punishment cannot partially apply one combined case.
+- A sanction change cannot alter unrelated sanctions.
+- Inventory/economy ambiguity preserves original state or enters quarantine.
 - Stale state cannot overwrite newer state.
 - Migration mismatch blocks cutover.
-- Optional integration failure disables only that feature.
-- Success is reported only after durable commit.
+- Optional integration failure disables only dependent features.
+- Success is reported only after durable commit/verification.
 
-## Internal services
+## Restricted website boundary
 
-Expected Bukkit-facing services include:
+The Velocity website bridge is an inbound loopback-only boundary for a trusted
+local site/reverse proxy. It must not be exposed directly to an untrusted network.
+Requests require bearer/HMAC authentication, bounded timestamp and nonce replay
+protection.
+
+Important files:
+
+- [Website API runtime](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRuntime.java)
+- [Website API server](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiServer.java)
+- [Request decoder](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRequestDecoder.java)
+- [Router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
+- [Appeal endpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealEndpoint.java)
+
+Only sanitized projections may cross this boundary.
+
+## Stable internal services
+
+Expected Bukkit-facing service boundaries include:
 
 - `StaffVisibilityService`
 - `PunishmentQueryService`
@@ -186,17 +198,25 @@ Expected Bukkit-facing services include:
 - `AltRelationshipService`
 - `PlayerDirectoryService`
 
-These services provide stable boundaries for other plugins without exposing
-mutable internals.
+Other plugins should depend on stable service interfaces rather than mutable
+runtime internals.
 
-## Continue reviewing
+## Review path
 
-Use [[Developer Code Guide]] for:
+1. Read the matching group page for purpose/status/important files.
+2. Read [[Developer Code Guide]] for the end-to-end trace.
+3. Locate the domain service and authorization boundary.
+4. Locate the port, migration and JDBC store.
+5. Locate the Paper/Velocity/provider adapter.
+6. Inspect duplicate, stale, failure, restart and concurrency tests.
+7. Identify the real staging requirement automated tests cannot prove.
 
-- the recommended source reading order;
-- important root files and composition roots;
-- package and class responsibilities;
-- punishment, report, inventory, confiscation, staff-state, alt, migration,
-  Discord, and website feature traces;
-- persistence and protocol review checklists;
-- test locations, concurrency rules, and high-risk review areas.
+## Related pages
+
+- [[Core Platform and Infrastructure]]
+- [[Moderation, Punishments, and Reports]]
+- [[Staff Tools, Investigations, and Player-State Safety]]
+- [[Integrations, Migration, and Release Readiness]]
+- [[Developer Code Guide]]
+- [[Protocol and Network Traffic]]
+- [[Build and Testing]]
