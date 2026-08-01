@@ -8,9 +8,10 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertBacklog;
@@ -27,20 +28,22 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
  * Preserves independent audience-recipient progress when MariaDB skips a shared parent-intent row.
  *
  * <p>The primary store performs materialization and the normal claim. An empty result may be an
- * ordinary idle poll or a parent-row lock skip, so fallback is rate-limited independently per
- * audience. At most one bounded fallback transaction is admitted per interval; its locking
- * selection touches only the recipient delivery row. Parent intent state and current authorization
- * are rechecked through an eligibility subquery, so no stale or ineligible delivery can be leased.
- * A successful primary claim reopens the gate so subsequent real contention can recover promptly.</p>
+ * ordinary idle poll or a parent-row lock skip, so fallback is rate-limited per audience-recipient
+ * pair. At most one bounded fallback transaction is admitted per pair and interval; unrelated
+ * recipients remain independent. The fallback locking selection touches only the recipient delivery
+ * row. Parent intent state and current authorization are rechecked through an eligibility subquery,
+ * so no stale or ineligible delivery can be leased. A successful primary claim reopens that
+ * recipient's gate so subsequent real contention can recover promptly.</p>
  */
 final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAlertStore {
     private static final Duration FALLBACK_INTERVAL = Duration.ofSeconds(1);
+    private static final int MAX_FALLBACK_GATES = 4096;
 
     private final PunishmentRequestAlertStore delegate;
     private final Duration fallbackInterval;
     private final FallbackClaimer fallbackClaimer;
-    private final AtomicReference<Instant> nextReviewerFallback = new AtomicReference<>();
-    private final AtomicReference<Instant> nextOperationalFallback = new AtomicReference<>();
+    private final Map<FallbackKey, Instant> nextFallbackByRecipient =
+            new LinkedHashMap<>(128, 0.75F, true);
 
     RetryingPunishmentRequestAlertStore(
             DataSource dataSource,
@@ -113,12 +116,10 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
         List<PunishmentRequestAlertClaim> claims = delegate.claimAudience(
                 audience, recipientId, recipientRank, owner, limit, lease, now);
         if (!claims.isEmpty()) {
-            if (audience != PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
-                fallbackGate(audience).set(null);
-            }
+            releaseFallback(audience, recipientId);
             return claims;
         }
-        if (!reserveFallback(audience, now)) {
+        if (!reserveFallback(audience, recipientId, now)) {
             return List.of();
         }
         return fallbackClaimer.claim(
@@ -213,29 +214,35 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
         return delegate.deleteTerminalIntentsBefore(cutoff, limit);
     }
 
-    private boolean reserveFallback(PunishmentRequestAlertAudience audience, Instant now) {
+    private synchronized boolean reserveFallback(
+            PunishmentRequestAlertAudience audience,
+            UUID recipientId,
+            Instant now
+    ) {
         if (audience == PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
             return false;
         }
-        AtomicReference<Instant> gate = fallbackGate(audience);
-        while (true) {
-            Instant next = gate.get();
-            if (next != null && now.isBefore(next)) {
-                return false;
-            }
-            if (gate.compareAndSet(next, now.plus(fallbackInterval))) {
-                return true;
-            }
+        nextFallbackByRecipient.entrySet().removeIf(entry -> !now.isBefore(entry.getValue()));
+        FallbackKey key = new FallbackKey(audience, recipientId);
+        Instant next = nextFallbackByRecipient.get(key);
+        if (next != null && now.isBefore(next)) {
+            return false;
         }
+        nextFallbackByRecipient.put(key, now.plus(fallbackInterval));
+        while (nextFallbackByRecipient.size() > MAX_FALLBACK_GATES) {
+            FallbackKey eldest = nextFallbackByRecipient.keySet().iterator().next();
+            nextFallbackByRecipient.remove(eldest);
+        }
+        return true;
     }
 
-    private AtomicReference<Instant> fallbackGate(PunishmentRequestAlertAudience audience) {
-        return switch (audience) {
-            case ELIGIBLE_REVIEWERS -> nextReviewerFallback;
-            case OPERATIONAL_ADMINISTRATORS -> nextOperationalFallback;
-            case DIRECT_RECIPIENT -> throw new IllegalArgumentException(
-                    "direct recipient delivery does not use audience fallback");
-        };
+    private synchronized void releaseFallback(
+            PunishmentRequestAlertAudience audience,
+            UUID recipientId
+    ) {
+        if (audience != PunishmentRequestAlertAudience.DIRECT_RECIPIENT) {
+            nextFallbackByRecipient.remove(new FallbackKey(audience, recipientId));
+        }
     }
 
     private static List<PunishmentRequestAlertClaim> fallbackClaim(
@@ -535,6 +542,12 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
                 Duration lease,
                 Instant now
         );
+    }
+
+    private record FallbackKey(
+            PunishmentRequestAlertAudience audience,
+            UUID recipientId
+    ) {
     }
 
     private record DeliveryCandidate(
