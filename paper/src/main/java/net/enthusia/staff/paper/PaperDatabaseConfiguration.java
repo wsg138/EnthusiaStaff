@@ -32,6 +32,10 @@ final class PaperDatabaseConfiguration {
 
     private String environment(String configurationPath) {
         String variable = configuration.getString(configurationPath);
-        return variable == null || variable.isBlank() ? null : environment.apply(variable);
+        if (variable == null || variable.isBlank()) {
+            return null;
+        }
+        String value = environment.apply(variable);
+        return value == null || value.isBlank() ? null : value;
     }
 }
