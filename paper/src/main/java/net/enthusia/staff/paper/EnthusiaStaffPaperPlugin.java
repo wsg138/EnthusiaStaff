@@ -21,34 +21,16 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
-import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
-import net.enthusia.staff.domain.application.PunishmentRequestService;
-import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
-import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
-import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.command.EstaffCommand;
-import net.enthusia.staff.paper.command.CaseCommand;
-import net.enthusia.staff.paper.command.ClientCommand;
-import net.enthusia.staff.paper.command.PunishmentCommand;
-import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
-import net.enthusia.staff.paper.command.SanctionChangeCommand;
-import net.enthusia.staff.paper.command.ReportCommand;
-import net.enthusia.staff.paper.command.ReportsCommand;
-import net.enthusia.staff.paper.command.FreezeCommand;
-import net.enthusia.staff.paper.command.InventoryCommand;
-import net.enthusia.staff.paper.command.InspectCommand;
-import net.enthusia.staff.paper.command.StaffChatCommand;
-import net.enthusia.staff.paper.command.StaffModeCommand;
-import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
@@ -66,9 +48,6 @@ import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
-import net.enthusia.staff.paper.punishment.PunishmentGuiController;
-import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
-import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -685,181 +664,22 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void registerCommands() {
         registerStatusCommand();
-        Supplier<PunishmentDraftWorkflow> punishmentDraftWorkflow =
-                () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow);
-        Supplier<PunishmentRequestService> punishmentRequestService =
-                () -> storageValue(PaperStorageBindings::punishmentRequestService);
-        Supplier<SanctionChangeService> sanctionChangeService =
-                () -> storageValue(PaperStorageBindings::sanctionChangeService);
-        Supplier<PlayerDirectory> playerDirectory =
-                () -> storageValue(PaperStorageBindings::playerDirectory);
-        Supplier<CaseLookup> caseLookup = () -> storageValue(PaperStorageBindings::caseLookup);
-        PunishmentGuiController punishmentGui = new PunishmentGuiController(
-                this,
-                this::effectiveWriteMode,
-                punishmentDraftWorkflow,
-                playerDirectory,
-                authorizationPolicy,
-                reasonPolicies,
-                workers
-        );
-        getServer().getPluginManager().registerEvents(punishmentGui, this);
-        PunishmentRequestGuiController punishmentRequestGui = new PunishmentRequestGuiController(
-                this,
-                punishmentRequestService,
-                playerDirectory,
-                authorizationPolicy,
-                workers
-        );
-        punishmentRequestGui.register();
-        PunishmentRequestCommandHandler punishmentRequestCommands = new PunishmentRequestCommandHandler(
-                this,
-                punishmentRequestService,
-                authorizationPolicy,
-                punishmentRequestGui,
-                workers
-        );
-        PunishmentCommand punishment = new PunishmentCommand(
-                this,
-                this::effectiveWriteMode,
-                punishmentDraftWorkflow,
-                playerDirectory,
-                authorizationPolicy,
-                punishmentGui,
-                punishmentRequestCommands,
-                workers
-        );
-        for (String name : java.util.List.of("punish", "ban", "mute", "warn", "kick", "ipban")) {
-            PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing from plugin.yml");
-            command.setExecutor(punishment);
-            command.setTabCompleter(punishment);
-        }
-        SanctionChangeGuiController sanctionChangeGui = new SanctionChangeGuiController(
-                this,
-                Clock.systemUTC(),
-                this::effectiveWriteMode,
-                sanctionChangeService,
-                playerDirectory,
-                caseLookup,
-                () -> storageValue(PaperStorageBindings::caseReviewStore),
-                authorizationPolicy,
-                workers
-        );
-        getServer().getPluginManager().registerEvents(sanctionChangeGui, this);
-        SanctionChangeCommand changes = new SanctionChangeCommand(
-                this,
-                this::effectiveWriteMode,
-                sanctionChangeService,
-                playerDirectory,
-                caseLookup,
-                authorizationPolicy,
-                workers,
-                sanctionChangeGui
-        );
-        for (String name : java.util.List.of(
-                "removepunishment", "unban", "unmute", "removewarning", "unwarn"
-        )) {
-            PluginCommand command = Objects.requireNonNull(
-                    getCommand(name), name + " command is missing from plugin.yml"
-            );
-            command.setExecutor(changes);
-            command.setTabCompleter(changes);
-        }
-        ReportCommand report = new ReportCommand(
-                new ReportCommand.Dependencies(
-                        this,
-                        Clock.systemUTC(),
-                        networkServerId(),
-                        mode::get,
-                        playerDirectory,
-                        () -> storageValue(PaperStorageBindings::reportStore),
-                        () -> storageValue(PaperStorageBindings::sanctionLookup),
-                        reasonPolicies,
-                        chatContext,
-                        clientEvidenceCollector
+        new PaperCommandRegistrar(new PaperCommandRegistrar.Dependencies(
+                new PaperCommandRegistrar.Environment(this, Clock.systemUTC(), networkServerId(), workers),
+                new PaperCommandRegistrar.Policy(mode::get, this::effectiveWriteMode, authorizationPolicy, reasonPolicies),
+                lifecycle::storage,
+                new PaperCommandRegistrar.PlayerComponents(
+                        freezeManager, staffModeManager, vanishManager, inventoryCoordinator
                 ),
-                workers
-        );
-        PluginCommand reportCommand = Objects.requireNonNull(getCommand("report"), "report command is missing");
-        reportCommand.setExecutor(report);
-        reportCommand.setTabCompleter(report);
-        ClientCommand client = new ClientCommand(
-                this,
-                clientEvidenceCollector,
-                () -> storageValue(PaperStorageBindings::clientEvidenceStore),
-                workers
-        );
-        PluginCommand clientCommand = Objects.requireNonNull(
-                getCommand("client"),
-                "client command is missing"
-        );
-        clientCommand.setExecutor(client);
-        clientCommand.setTabCompleter(client);
-        ReportsCommand reports = new ReportsCommand(
-                this,
-                Clock.systemUTC(),
-                () -> storageValue(PaperStorageBindings::reportStore),
-                workers
-        );
-        PluginCommand reportsCommand = Objects.requireNonNull(getCommand("reports"), "reports command is missing");
-        reportsCommand.setExecutor(reports);
-        reportsCommand.setTabCompleter(reports);
-        FreezeCommand freezes = new FreezeCommand(
-                this,
-                Clock.systemUTC(),
-                this::effectiveWriteMode,
-                playerDirectory,
-                () -> storageValue(PaperStorageBindings::freezeStore),
-                freezeManager,
-                workers
-        );
-        Objects.requireNonNull(getCommand("freeze"), "freeze command is missing").setExecutor(freezes);
-        Objects.requireNonNull(getCommand("unfreeze"), "unfreeze command is missing").setExecutor(freezes);
-        Objects.requireNonNull(getCommand("staff"), "staff command is missing")
-                .setExecutor(new StaffModeCommand(this::effectiveWriteMode, staffModeManager));
-        Objects.requireNonNull(getCommand("vanish"), "vanish command is missing")
-                .setExecutor(new VanishCommand(this::effectiveWriteMode, vanishManager));
-        Objects.requireNonNull(getCommand("staffchat"), "staffchat command is missing")
-                .setExecutor(new StaffChatCommand(() -> roseChatIntegration));
-        InventoryCommand inventory = new InventoryCommand(
-                this,
-                Clock.systemUTC(),
-                playerDirectory,
-                inventoryCoordinator,
-                workers
-        );
-        for (String name : java.util.List.of("invsee", "endersee")) {
-            PluginCommand command = Objects.requireNonNull(getCommand(name), name + " command is missing");
-            command.setExecutor(inventory);
-            command.setTabCompleter(inventory);
-        }
-        InspectCommand inspect = new InspectCommand(
-                this,
-                Clock.systemUTC(),
-                playerDirectory,
-                caseLookup,
-                () -> economyCoordinator,
-                () -> confiscationCoordinator,
-                inventoryCoordinator,
-                authorizationPolicy,
-                () -> marketIntegration,
-                () -> reputationIntegration,
-                workers
-        );
-        PluginCommand inspectCommand = Objects.requireNonNull(
-                getCommand("inspect"),
-                "inspect command is missing"
-        );
-        inspectCommand.setExecutor(inspect);
-        inspectCommand.setTabCompleter(inspect);
-        Objects.requireNonNull(getCommand("case"), "case command is missing")
-                .setExecutor(new CaseCommand(
-                        this,
-                        caseLookup,
+                new PaperCommandRegistrar.IntegrationSuppliers(
+                        () -> economyCoordinator,
                         () -> confiscationCoordinator,
-                        authorizationPolicy,
-                        workers
-                ));
+                        () -> roseChatIntegration,
+                        () -> marketIntegration,
+                        () -> reputationIntegration
+                ),
+                new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
+        )).register();
     }
 
     private String networkServerId() {
