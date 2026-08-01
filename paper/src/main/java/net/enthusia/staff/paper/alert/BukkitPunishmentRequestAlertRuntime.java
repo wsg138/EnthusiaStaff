@@ -2,9 +2,12 @@ package net.enthusia.staff.paper.alert;
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -15,10 +18,13 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAlertRuntime {
     private final JavaPlugin plugin;
+    private final Map<UUID, PunishmentRequestAlertRecipient> recipientSnapshots =
+            new ConcurrentHashMap<>();
 
     BukkitPunishmentRequestAlertRuntime(JavaPlugin plugin) {
         if (plugin == null) {
@@ -32,10 +38,24 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
         if (limit < 1) {
             throw new IllegalArgumentException("recipient limit must be positive");
         }
-        return plugin.getServer().getOnlinePlayers().stream()
+        List<Player> online = plugin.getServer().getOnlinePlayers().stream()
                 .limit(limit)
-                .map(this::snapshot)
                 .toList();
+        List<PunishmentRequestAlertRecipient> cached = new ArrayList<>(online.size());
+        for (Player player : online) {
+            UUID playerId = player.getUniqueId();
+            refreshSnapshot(player, playerId);
+            PunishmentRequestAlertRecipient snapshot = recipientSnapshots.get(playerId);
+            if (snapshot != null) {
+                cached.add(snapshot);
+            }
+        }
+        return List.copyOf(cached);
+    }
+
+    @Override
+    public Optional<PunishmentRequestAlertRecipient> snapshotRecipient(UUID playerId) {
+        return Optional.ofNullable(recipientSnapshots.get(playerId));
     }
 
     @Override
@@ -62,7 +82,14 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
 
     @Override
     public AutoCloseable registerJoinListener(Consumer<UUID> listener) {
-        JoinListener registered = new JoinListener(listener);
+        JoinListener registered = new JoinListener(
+                player -> {
+                    UUID playerId = player.getUniqueId();
+                    recipientSnapshots.put(playerId, snapshot(player));
+                    listener.accept(playerId);
+                },
+                recipientSnapshots::remove
+        );
         plugin.getServer().getPluginManager().registerEvents(registered, plugin);
         return () -> HandlerList.unregisterAll(registered);
     }
@@ -109,6 +136,20 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
     }
 
     @Override
+    public boolean executeForRecipient(
+            UUID playerId,
+            Runnable action,
+            Runnable retired
+    ) {
+        Player player = plugin.getServer().getPlayer(playerId);
+        if (player == null || !player.isOnline()) {
+            recipientSnapshots.remove(playerId);
+            return false;
+        }
+        return player.getScheduler().execute(plugin, action, retired, 1L);
+    }
+
+    @Override
     public void executeSynchronously(Runnable action) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, action);
     }
@@ -116,6 +157,24 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
     @Override
     public Logger logger() {
         return plugin.getLogger();
+    }
+
+    private void refreshSnapshot(Player player, UUID playerId) {
+        boolean scheduled = player.getScheduler().execute(
+                plugin,
+                () -> {
+                    if (player.isOnline()) {
+                        recipientSnapshots.put(playerId, snapshot(player));
+                    } else {
+                        recipientSnapshots.remove(playerId);
+                    }
+                },
+                () -> recipientSnapshots.remove(playerId),
+                1L
+        );
+        if (!scheduled) {
+            recipientSnapshots.remove(playerId);
+        }
     }
 
     private PunishmentRequestAlertRecipient snapshot(Player player) {
@@ -133,18 +192,25 @@ final class BukkitPunishmentRequestAlertRuntime implements PunishmentRequestAler
     }
 
     private static final class JoinListener implements Listener {
-        private final Consumer<UUID> listener;
+        private final Consumer<Player> joined;
+        private final Consumer<UUID> quit;
 
-        private JoinListener(Consumer<UUID> listener) {
-            if (listener == null) {
-                throw new IllegalArgumentException("join listener must be present");
+        private JoinListener(Consumer<Player> joined, Consumer<UUID> quit) {
+            if (joined == null || quit == null) {
+                throw new IllegalArgumentException("join and quit listeners must be present");
             }
-            this.listener = listener;
+            this.joined = joined;
+            this.quit = quit;
         }
 
         @EventHandler
         public void onJoin(PlayerJoinEvent event) {
-            listener.accept(event.getPlayer().getUniqueId());
+            joined.accept(event.getPlayer());
+        }
+
+        @EventHandler
+        public void onQuit(PlayerQuitEvent event) {
+            quit.accept(event.getPlayer().getUniqueId());
         }
     }
 }

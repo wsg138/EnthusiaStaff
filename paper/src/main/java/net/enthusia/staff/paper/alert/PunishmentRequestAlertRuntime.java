@@ -10,6 +10,10 @@ import java.util.logging.Logger;
 interface PunishmentRequestAlertRuntime {
     List<PunishmentRequestAlertRecipient> onlineRecipients(int limit);
 
+    default Optional<PunishmentRequestAlertRecipient> snapshotRecipient(UUID playerId) {
+        return currentRecipient(playerId);
+    }
+
     Optional<PunishmentRequestAlertRecipient> currentRecipient(UUID playerId);
 
     boolean present(
@@ -24,6 +28,15 @@ interface PunishmentRequestAlertRuntime {
     Cancellable scheduleSynchronousDelayed(Runnable action, Duration delay);
 
     Cancellable scheduleAsynchronousRepeating(Runnable action, Duration initialDelay, Duration interval);
+
+    default boolean executeForRecipient(
+            UUID playerId,
+            Runnable action,
+            Runnable retired
+    ) {
+        executeSynchronously(action);
+        return true;
+    }
 
     void executeSynchronously(Runnable action);
 

@@ -47,7 +47,7 @@ public final class PunishmentRequestAlertWorker {
     private final PunishmentRequestAlertPresenter presenter;
     private final PunishmentRequestRecipientPolicy recipientPolicy;
     private final Executor asynchronous;
-    private final Consumer<Runnable> synchronous;
+    private final RecipientExecutor synchronous;
     private final BooleanSupplier stopping;
     private final Logger logger;
 
@@ -62,6 +62,36 @@ public final class PunishmentRequestAlertWorker {
             PunishmentRequestAlertPresenter presenter,
             Executor asynchronous,
             Consumer<Runnable> synchronous,
+            BooleanSupplier stopping,
+            Logger logger
+    ) {
+        this(
+                clock,
+                owner,
+                settings,
+                alerts,
+                requests,
+                players,
+                renderer,
+                presenter,
+                asynchronous,
+                globalExecutor(synchronous),
+                stopping,
+                logger
+        );
+    }
+
+    PunishmentRequestAlertWorker(
+            Clock clock,
+            String owner,
+            PunishmentRequestAlertWorkerSettings settings,
+            PunishmentRequestAlertStore alerts,
+            PunishmentRequestStore requests,
+            PlayerDirectory players,
+            PunishmentRequestAlertRenderer renderer,
+            PunishmentRequestAlertPresenter presenter,
+            Executor asynchronous,
+            RecipientExecutor synchronous,
             BooleanSupplier stopping,
             Logger logger
     ) {
@@ -81,6 +111,14 @@ public final class PunishmentRequestAlertWorker {
         this.synchronous = Objects.requireNonNull(synchronous, "synchronous");
         this.stopping = Objects.requireNonNull(stopping, "stopping");
         this.logger = Objects.requireNonNull(logger, "logger");
+    }
+
+    private static RecipientExecutor globalExecutor(Consumer<Runnable> synchronous) {
+        Objects.requireNonNull(synchronous, "synchronous");
+        return (ignored, action, retired) -> {
+            synchronous.accept(action);
+            return true;
+        };
     }
 
     public void deliver(
@@ -163,12 +201,55 @@ public final class PunishmentRequestAlertWorker {
             completion.run();
             return;
         }
+        handoff(snapshot.playerId(), presentations, completion);
+    }
+
+    private void handoff(
+            UUID recipientId,
+            List<PunishmentRequestAlertPresentation> presentations,
+            Completion completion
+    ) {
+        AtomicBoolean resolved = new AtomicBoolean();
+        Runnable retired = () -> retryHandoff(
+                resolved,
+                presentations,
+                PLAYER_OFFLINE,
+                completion
+        );
         try {
-            synchronous.accept(() -> present(snapshot.playerId(), presentations, completion));
+            boolean scheduled = synchronous.execute(
+                    recipientId,
+                    () -> {
+                        if (resolved.compareAndSet(false, true)) {
+                            present(recipientId, presentations, completion);
+                        }
+                    },
+                    retired
+            );
+            if (!scheduled) {
+                retired.run();
+            }
         } catch (RuntimeException exception) {
-            logger.log(Level.WARNING, "Punishment request alert synchronous handoff failed", exception);
-            completion.run();
+            logger.log(Level.WARNING, "Punishment request alert recipient handoff failed", exception);
+            retryHandoff(resolved, presentations, PRESENTATION_UNAVAILABLE, completion);
         }
+    }
+
+    private void retryHandoff(
+            AtomicBoolean resolved,
+            List<PunishmentRequestAlertPresentation> presentations,
+            String code,
+            Completion completion
+    ) {
+        if (!resolved.compareAndSet(false, true)) {
+            return;
+        }
+        queueOutcomes(
+                presentations.stream()
+                        .map(value -> Outcome.retry(value.claim(), code))
+                        .toList(),
+                completion
+        );
     }
 
     private List<PunishmentRequestAlertClaim> claim(
@@ -465,6 +546,11 @@ public final class PunishmentRequestAlertWorker {
         private static Outcome retry(PunishmentRequestAlertClaim claim, String code) {
             return new Outcome(OutcomeKind.RETRY, claim, code);
         }
+    }
+
+    @FunctionalInterface
+    interface RecipientExecutor {
+        boolean execute(UUID playerId, Runnable action, Runnable retired);
     }
 
     public static final class ClaimBudget {

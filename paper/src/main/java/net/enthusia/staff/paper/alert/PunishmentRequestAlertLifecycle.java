@@ -106,7 +106,7 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
                 new PunishmentRequestAlertRenderer(),
                 presenter,
                 asynchronous,
-                runtime::executeSynchronously,
+                runtime::executeForRecipient,
                 this::isStopping,
                 runtime.logger()
         );
@@ -238,7 +238,7 @@ public final class PunishmentRequestAlertLifecycle implements PunishmentRequestA
         }
         Optional<PunishmentRequestAlertRecipient> recipient;
         try {
-            recipient = runtime.currentRecipient(playerId);
+            recipient = runtime.snapshotRecipient(playerId);
         } catch (RuntimeException exception) {
             recipientFlights.remove(playerId);
             runtime.logger().log(Level.WARNING,

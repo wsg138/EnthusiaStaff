@@ -89,6 +89,33 @@ class PunishmentRequestAlertWorkerTest {
     }
 
     @Test
+    void rejectedRecipientSchedulerRetriesAsOfflineExactlyOnce() {
+        Harness harness = Harness.direct((playerId, action, retired) -> false);
+
+        harness.runComplete();
+
+        assertEquals(0, harness.presenter.presented);
+        assertEquals(1, harness.alerts.failed);
+        assertEquals(PunishmentRequestAlertWorker.PLAYER_OFFLINE, harness.alerts.lastCode);
+        assertTrue(harness.completed.get());
+    }
+
+    @Test
+    void retiredRecipientSchedulerRetriesAsOfflineExactlyOnce() {
+        Harness harness = Harness.direct((playerId, action, retired) -> {
+            retired.run();
+            return true;
+        });
+
+        harness.runComplete();
+
+        assertEquals(0, harness.presenter.presented);
+        assertEquals(1, harness.alerts.failed);
+        assertEquals(PunishmentRequestAlertWorker.PLAYER_OFFLINE, harness.alerts.lastCode);
+        assertTrue(harness.completed.get());
+    }
+
+    @Test
     void authorizationLossCancelsBeforePresentation() {
         Harness harness = Harness.reviewer(StaffRank.ADMIN, StaffRank.ADMIN, StaffRank.MOD);
 
@@ -275,8 +302,21 @@ class PunishmentRequestAlertWorkerTest {
         private final PunishmentRequestAlertWorker worker;
 
         private Harness(PunishmentRequestAlertRecipient snapshot) {
+            this(snapshot, null);
+        }
+
+        private Harness(
+                PunishmentRequestAlertRecipient snapshot,
+                PunishmentRequestAlertWorker.RecipientExecutor recipientExecutor
+        ) {
             this.snapshot = snapshot;
             presenter.current = Optional.of(snapshot);
+            PunishmentRequestAlertWorker.RecipientExecutor selected = recipientExecutor == null
+                    ? (playerId, action, retired) -> {
+                        synchronous.execute(action);
+                        return true;
+                    }
+                    : recipientExecutor;
             worker = new PunishmentRequestAlertWorker(
                     Clock.fixed(PunishmentRequestAlertTestFixtures.NOW, ZoneOffset.UTC),
                     "test-owner",
@@ -287,18 +327,22 @@ class PunishmentRequestAlertWorkerTest {
                     new PunishmentRequestAlertRenderer(),
                     presenter,
                     asynchronous,
-                    synchronous::execute,
+                    selected,
                     stopping::get,
                     Logger.getLogger("PunishmentRequestAlertWorkerTest")
             );
         }
 
         static Harness direct() {
+            return direct(null);
+        }
+
+        static Harness direct(PunishmentRequestAlertWorker.RecipientExecutor recipientExecutor) {
             Harness harness = new Harness(new PunishmentRequestAlertRecipient(
                     PunishmentRequestAlertTestFixtures.REQUESTER_ID,
                     "RequestingHelper",
                     StaffRank.HELPER
-            ));
+            ), recipientExecutor);
             harness.alerts.directClaims = List.of(PunishmentRequestAlertTestFixtures.claim(
                     PunishmentRequestLifecycleEventType.REQUEST_SUBMITTED,
                     PunishmentRequestAlertAudience.DIRECT_RECIPIENT,
