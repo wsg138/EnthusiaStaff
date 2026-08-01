@@ -1,209 +1,244 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-07-31 (America/Indianapolis)
+Last updated: 2026-07-31 (America/Indiana/Indianapolis)
 
-This manifest records repository, review, recovery, and validation state. Nothing
-listed here has been deployed, released, applied to production data, or used to
-replace LiteBans.
+This manifest records the durable punishment-request notification work on draft PR #27. It is evidence and handoff documentation, not a production-readiness claim.
 
-## Repository checkpoint
+## Repository state
 
-| Repository | Default branch | Working branch | Current checkpoint | Validation state | Current blockers |
-| --- | --- | --- | --- | --- | --- |
-| EnthusiaStaff | `main` at merged PR #21 commit `90cfb0eb809b2895d105193b7bddf33fd6f95aa0` | `section/punishment-request-notifications-recovery` for draft PR #27 | B1.3 terminal-delivery reconciliation, repeatable lifecycle occurrence identity, and connection-scoped alert persistence | PASS at exact implementation/test head `c14e654b80f1e8aabb737bb686ab963dc9f4f2b7`; Coverage run `30673652541` | B2 lifecycle transaction integration remains outstanding. Paper workers, Bukkit presentation, reconnect delivery, live Discord sending, staging, and production remain out of scope. |
-| EnthusiaStaff-Staging | Separate repository; not inspected or modified | Unchanged | OUT OF SCOPE | NOT_RUN | Owned by the separate staging workflow/chat. |
+- Repository: `wsg138/EnthusiaStaff`
+- Primary branch: `main`
+- Verified `main` head before reconciliation: `b18fe55482d4c491acfebec8ad784c6690f63f20`
+- Development branch: `section/punishment-request-notifications-recovery`
+- Verified starting development head: `9d1cde3abe5ef7d19c2ea920880ed12b2590de96`
+- Draft PR: #27 — `Add durable punishment request notifications and recovery`
+- Main reconciliation merge commit: `a40f0ad8fb18311611d4e3bed76c56ee82e470bf`
+- Validated post-merge/deadlock-fix head: `5faf99021b394411a8737a15e5a9a2540fe3bc2b`
+- PR #27 status at this checkpoint: open, draft, unmerged, mergeable
 
-## Merged PR #21 checkpoint
+The merge was produced through temporary PR #28 because the active repository environment had connected GitHub write access but no local authenticated Git/`gh` checkout. PR #28 merged `main` into the existing development branch with a normal merge commit. It did not merge or mark PR #27 ready.
 
-- Pull request: #21, **Expose durable punishment request interfaces**.
-- Final head: `da531a4022d79935ed157c97c3260c42631d23f1`.
-- Merge commit on `main`: `90cfb0eb809b2895d105193b7bddf33fd6f95aa0`.
-- No deployment or staging claim is implied by the merge.
+## Hard boundaries
 
-## Draft PR #27 checkpoint history
+This work does not authorize or include:
 
-- Pull request: #27, **Add durable punishment request notifications and recovery**.
-- Branch: `section/punishment-request-notifications-recovery`.
-- Base: `90cfb0eb809b2895d105193b7bddf33fd6f95aa0`.
-- PR remains open, draft, and unmerged.
-- B1.1 validated implementation/test head:
-  `80101acadbaa06d09958076611ef933f1cc4efde`.
-- B1.1 validation: Coverage run `30603219197`, success; artifact
-  `8782689224`.
-- B1.2 validated head:
-  `8dc1395a244b0e388eea51f71390497d400789ba`.
-- B1.2 validation: Coverage run `30604253987`, success; artifact
-  `8783056530`.
-- B1.3 validated implementation/test head:
-  `c14e654b80f1e8aabb737bb686ab963dc9f4f2b7`.
-- B1.3 validation: Coverage run `30673652541`, success; job
-  `91296363283`; artifact `8809706107`.
+- direct modification of `main`;
+- force-push, rebase, squash, or history rewrite;
+- merging PR #27 or marking it ready;
+- staging-repository or staging-workflow administration;
+- inspection, rerun, cancellation, or debugging of automatic Pi staging;
+- Lincoln-PI-4 access;
+- Bloom or production database access;
+- production Discord credentials;
+- live Discord network sending;
+- live server testing;
+- production configuration changes;
+- a production-readiness claim.
 
-## B1.3 commit sequence
+A push may automatically trigger the separately owned Pi staging workflow. This development checkpoint does not inspect or use that workflow as evidence.
 
-- `94e7ca769f02a002a01b9b68699f3a12aefcbb1b` — add terminal delivery and
-  occurrence contracts plus forward-only Flyway V13.
-- `38f2b78651338dc8f1931a7de11954e51578fdfe` — implement terminal delivery
-  reconciliation, fenced cancellation, dead-letter recovery, and shared
-  connection-scoped immutable alert persistence.
-- `1fabd14e1bc8487b1347e1d629a53cb15f8430ad` — add occurrence, migration,
-  cancellation, authorization-loss, cleanup, and recovery coverage.
-- `d196ec7541009c3ed29ee78076a6c09a22a39aab` — correct the integration-test
-  warning required by `-Werror`.
-- `2c8983832708fe52dd45c320c29c546f68901047` — preserve compatibility for
-  unrelated producers using the shared `staff_alerts` table.
-- `fe6f03dec96f4c16619538b39cafb4251e67d5c3` — add bounded retry for
-  transient audience claim contention.
-- `c14e654b80f1e8aabb737bb686ab963dc9f4f2b7` — make audience fallback
-  selection lock only recipient delivery rows while rechecking parent intent and
-  current authorization through fixed SQL predicates.
+## Preserved B1.3/B2 model
 
-## B1.3 state-machine checkpoint
+The branch continues to preserve:
 
-`staff_alerts` remains the immutable lifecycle intent. `staff_alert_deliveries`
-remains recipient-specific and now has these authoritative states:
+- MariaDB-authoritative punishment-request state;
+- immutable logical intents in `staff_alerts`;
+- recipient-specific durable state in `staff_alert_deliveries`;
+- unique delivery identity `(alert_id, recipient_id)`;
+- `PENDING`, `LEASED`, `DELIVERED`, `CANCELLED`, and `DEAD_LETTER` states;
+- fenced acknowledgement, failure, and cancellation;
+- bounded lease recovery and terminal-parent reconciliation;
+- explicit dead-letter requeue and resolution;
+- deterministic `pra:v2` intent identity;
+- revision occurrence identity for non-repeatable events;
+- lease-fence/reviewer identity for repeatable claim events;
+- connection-scoped immutable alert persistence;
+- atomic request transition, alert, delivery, lifecycle-event, and Discord-outbox insertion;
+- explicit bounded request expiration with deterministic ordering and `FOR UPDATE SKIP LOCKED`;
+- non-mutating request reads;
+- Testcontainers rollback and concurrency coverage.
 
-- `PENDING`: eligible work available for a future recipient lease.
-- `LEASED`: work owned by one fenced worker until `lease_until`.
-- `DELIVERED`: presentation was acknowledged successfully.
-- `CANCELLED`: terminally suppressed because the intent became obsolete or the
-  recipient was no longer eligible; this is not represented as delivered or as a
-  transport failure.
-- `DEAD_LETTER`: retry policy was exhausted and explicit operational recovery or
-  resolution is required.
+Delivery remains at-least-once. A crash after Bukkit presentation but before acknowledgement can cause a visible duplicate after lease recovery.
 
-Terminal reconciliation rules:
+## Verified B2 evidence
 
-- Closing or expiring an intent changes its currently pending deliveries to
-  `CANCELLED` in the same transaction.
-- A still-valid lease may be acknowledged after parent intent expiry, preserving
-  the cross-expiry acknowledgement rule.
-- An expired lease under an active, unexpired parent returns to `PENDING`.
-- An expired lease under a closed or expired parent becomes `CANCELLED`.
-- Worker cancellation requires the exact delivery ID, matching lease owner,
-  `LEASED` state, and an unexpired lease.
-- A stale owner cannot cancel, acknowledge, or fail a reclaimed lease.
-- Current audience authorization is checked during materialization and claim.
-  Previously materialized pending work is cancelled as
-  `RECIPIENT_INELIGIBLE` after rank loss or requester conflict.
-- A later Bukkit worker can perform a synchronous final eligibility check and use
-  fenced cancellation without falsely acknowledging presentation.
-- Cancelled deliveries do not block retention cleanup.
-- Unresolved dead letters do block cleanup. Operators may explicitly requeue an
-  active-parent dead letter or resolve it to `CANCELLED` with a recorded reason.
+Validated exact head:
 
-## B1.3 lifecycle occurrence identity
+`9d1cde3abe5ef7d19c2ea920880ed12b2590de96`
 
-- Deterministic alert keys now use the canonical `pra:v2` format.
-- Non-repeatable lifecycle events use a request-revision occurrence.
-- Repeatable `REQUEST_CLAIMED` events use the successful operation-lease fence
-  token plus the immutable claiming reviewer UUID.
-- Two later legitimate claims therefore produce distinct requester notifications.
-- Replaying the same successful lease occurrence produces the same canonical key
-  and no duplicate intent or direct delivery.
-- Exact replay comparison includes occurrence key, lifecycle actor UUID, all
-  audience/filter fields, schema version, creation time, and expiry.
-- Wall-clock timestamps, display names, randomness, and secrets are not the sole
-  claim occurrence identity.
+Evidence:
 
-## Flyway V13 checkpoint
+- Workflow run: `30675287547`
+- Job: `91301146989`
+- Result: success
+- Java: Temurin `21.0.11+10`
+- Command:
 
-V13 is forward-only. V11 and V12 were not edited or renumbered. V13:
+```bash
+./gradlew clean build jacocoAggregateReport runtimeJars \
+  --no-daemon \
+  --no-build-cache \
+  --no-configuration-cache \
+  --console=plain
+```
 
-- adds `occurrence_key` and `lifecycle_actor_id` to the shared `staff_alerts`
-  table;
-- backfills punishment-request rows with a stable legacy occurrence;
-- keeps occurrence columns nullable at the shared-schema level so unrelated
-  legacy alert producers remain compatible, while the punishment-request domain
-  and JDBC writer require occurrence data;
-- adds an event-occurrence lookup index;
-- extends recipient delivery state with `CANCELLED`;
-- adds `cancelled_at` and `cancel_reason`.
+- Build: `BUILD SUCCESSFUL`
+- Tasks: 49 actionable; 40 executed, 9 up-to-date
+- Aggregate lines: `34.39%`
+- Aggregate branches: `28.01%`
+- Aggregate instructions: `36.76%`
+- Paper SHA-256: `0319150654b8c08e8c7dcacebf48fd49eec781647925ec6eb5546eefb15e837b`
+- Velocity SHA-256: `bbdc61c54ac0696025421cc13adcb4a69f305cc32e58492e72ecddd747b245ac`
+- Provider API source types checked per runtime: `24`
+- Provider API leaks: `0`
+- Validation artifact: `8810248079`
+- Artifact digest: `sha256:da3c423a81720c966edc87c1fa8e84bfd67c7542e706c790d222168d92de0196`
+- Codacy coverage upload and final notification: success
 
-## Connection-scoped persistence
+The previously documented run `30675533640` and job `91301882084` could not be resolved through GitHub and are not evidence. No manifest-only commit existed after the validated B2 head.
 
-- `JdbcPunishmentRequestAlertWriter` owns immutable insertion, exact replay,
-  direct-delivery creation, intent closure, and pending-child reconciliation on a
-  caller-supplied JDBC `Connection`.
-- The public `PunishmentRequestAlertStore` continues to open and manage its own
-  transactions for worker-facing operations.
-- Lifecycle transactions can reuse the existing connection without opening a
-  nested transaction.
-- Direct delivery creation remains atomic with immutable intent insertion.
-- MariaDB duplicate-key error 1062 is considered a replay only after exact stored
-  immutable-field comparison. Unrelated SQL exceptions propagate.
-- Audience claim SQL uses fixed internal query variants and bound values; no
-  user-controlled SQL fragment is accepted.
+## Main reconciliation
 
-## B1.3 validation evidence
+All nine newer `main` commits were inspected before reconciliation. They covered:
 
-Exact implementation/test head: `c14e654b80f1e8aabb737bb686ab963dc9f4f2b7`.
+- trusted automatic Pi staging workflow changes;
+- hosted Java failure-evidence improvements;
+- `/estaff` console and permission behavior;
+- Paper database classloader discovery.
 
-- Workflow: Coverage run `30673652541`, success.
-- Job: `91296363283`, success.
-- Runtime: Temurin Java `21.0.11+10`.
-- Exact command:
+The staging workflow files were accepted from `main` without behavioral edits or staging administration.
 
-  ```bash
-  ./gradlew clean build jacocoAggregateReport runtimeJars \
-    --no-daemon \
-    --no-build-cache \
-    --no-configuration-cache \
-    --console=plain
-  ```
+The merged `MariaDb` implementation preserves both required behaviors:
 
-- Gradle result: `BUILD SUCCESSFUL in 2m 43s`; 49 actionable tasks, 40 executed
-  and 9 up-to-date.
-- MariaDB 11.8.3 Testcontainers executed, including V12-to-V13 migration,
-  terminal reconciliation, lease recovery, stale-owner fencing,
-  authorization-loss suppression, dead-letter policy, occurrence replay, and the
-  prior B1.1/B1.2 suites.
-- Aggregate JaCoCo: lines `34.19%`, branches `27.82%`, instructions `36.53%`.
-- Exactly one Paper runtime JAR and one Velocity runtime JAR were found and
-  passed ZIP integrity inspection.
-- Twenty-four provider API source types were checked against each runtime JAR;
-  provider API leakage was zero for both.
-- Paper SHA-256:
-  `bb2222ebc7260221caa73dcd4f8bd12237f3296146f19124df42c0f59c34ba8d`.
-- Velocity SHA-256:
-  `7a5b7a91c1777d71019442e3d1bc86610e8e11c64b44c705fc8060ce60126717`.
-- Validation artifact: `8809706107`; artifact digest:
-  `sha256:bfc69745443849f9ee3247cbcfa77c909dd86250aaca688ab71f4aed4e898a46`.
-- Codacy coverage upload and final notification succeeded for the exact head.
+```java
+static HikariConfig hikariConfig(DatabaseConfig database)
+```
 
-## Codacy and review checkpoint
+and:
 
-The accessible Codacy summary reported 39 new findings at the B1.3 head: 5
-critical, 11 high, and 23 medium. Detailed authenticated per-finding data was not
-available through the GitHub connector. The implementation review nevertheless
-addressed the concrete high-risk pattern visible in the diff:
+```java
+Flyway.configure(MariaDb.class.getClassLoader())
+```
 
-- runtime query construction was replaced with fixed internal SQL variants and
-  bound parameters;
-- no public API accepts SQL fragments;
-- canonical replay remains strict rather than using broad `INSERT IGNORE`;
-- shared-schema nullability was corrected instead of disabling the quality gate;
-- all source compiles under `-Xlint:all -Werror` in the required build.
+## Post-merge validation failure
 
-Remaining Codacy items must be classified from the refreshed exact-head report
-when per-finding details are available. The global quality gate was not lowered or
-disabled. CodeRabbit skipped review because PR #27 remains draft.
+The first exact post-merge validation attempted head:
 
-## Explicit B2 scope
+`a40f0ad8fb18311611d4e3bed76c56ee82e470bf`
 
-B2 may now integrate the durable alert writer and Discord outbox insertion into
-submission, claim, approval, denial, external fulfillment, and bounded expiration
-transactions. It must remove read-triggered expiration mutation and keep reads as
-reads. It must stop before Paper alert workers, Bukkit presentation, reconnect
-listeners, recurring scheduler registration, and live Discord network delivery.
+- Workflow run: `30679869607`
+- Job: `91314602904`
+- Result: failure
+- Failed test: `PunishmentRequestLifecycleConcurrencyIntegrationTest.externalPunishmentRacingApprovalProducesOneRequestTerminalTransition()`
+- Database failure: MariaDB deadlock error `1213`, SQLState `40001`
+- Failure artifact: `8811850755`
+- Failure artifact digest: `sha256:37585b150c3bbeaddecfc3ccca8985ddd8fff4d0167a4359a343978c98fad720`
 
-## Isolation and release rules
+MariaDB selected the direct-punishment transaction as the deadlock victim while it raced request approval. `JdbcModerationStore` rolled the transaction back correctly, but the public moderation-store boundary propagated the rollback without a bounded retry. The merge checkpoint was therefore not called validated at `a40f0ad8...`.
 
-- Do not modify `main`.
-- Do not modify `wsg138/EnthusiaStaff-Staging` or dispatch staging workflows.
-- Do not access `Lincoln-PI-4`, Bloom, production databases, or production
-  Discord credentials.
-- Keep PR #27 draft and do not merge it.
-- A pushed source commit is not a validated checkpoint until exact-head required
-  checks pass.
-- Unit tests and Testcontainers alone do not establish production readiness.
+## Deadlock correction
+
+The development branch now wraps the public MariaDB moderation store with bounded deadlock recovery while retaining the raw connection-scoped store for request approval transactions.
+
+Properties:
+
+- retries only MariaDB error `1213` with SQLState `40001`;
+- permits at most three total transaction attempts;
+- uses bounded pauses before retries;
+- does not retry lock-timeout error `1205` or unrelated SQL failures;
+- preserves idempotency/replay behavior inside `JdbcModerationStore`;
+- does not weaken the approval-vs-external-fulfillment concurrency assertion.
+
+Pushed correction commits:
+
+- `a578a9423eacfe3537cf00e4d48490289ab18d49` — `Add bounded moderation deadlock retries`
+- `c2b5ff77558060ce04017b5b241ce48bd99f2ac2` — `Classify MariaDB transaction deadlocks`
+- `3fb73da75ac2fd172938030e33e719e62f6008fe` — `Use bounded moderation retries in MariaDB runtime`
+- `5faf99021b394411a8737a15e5a9a2540fe3bc2b` — `Test bounded moderation deadlock retries`
+
+Focused tests cover successful retry, unrelated-failure passthrough, and retry exhaustion.
+
+## Validated post-merge/deadlock-fix checkpoint
+
+Validated exact head:
+
+`5faf99021b394411a8737a15e5a9a2540fe3bc2b`
+
+Evidence:
+
+- Workflow run: `30680060081`
+- Job: `91315164090`
+- Result: success
+- Java: Temurin `21.0.11+10`
+- Command: the exact clean Java 21 command recorded above
+- Build: `BUILD SUCCESSFUL in 3m 12s`
+- Tasks: 49 actionable; 40 executed, 9 up-to-date
+- Aggregate lines: `34.74%`
+- Aggregate branches: `28.22%`
+- Aggregate instructions: `37.09%`
+- Paper runtime JAR count: `1`
+- Velocity runtime JAR count: `1`
+- ZIP integrity: success for both runtime JARs
+- Paper SHA-256: `09a8eab143eefd9c56c49aa07a9fb4bd7aaeac804daa2135a591a2ed8c1a7e3c`
+- Velocity SHA-256: `a2fe18813414f1a35cda9a74f3fdcee9de4e928acf6475a8d8c38f2176955a7a`
+- Provider API source types checked per runtime: `24`
+- Provider API leaks: `0`
+- Validation artifact: `8811922938`
+- Artifact digest: `sha256:479ef30818cece42b7357f60679a3de200d9dc77fee1cd1a9266a9d8967681e3`
+- Codacy coverage upload: success
+- Codacy final notification: success
+
+This exact-head evidence validates the reconciled persistence/lifecycle checkpoint and the bounded deadlock correction. It does not validate B3 Paper delivery.
+
+## Existing Paper startup-thread defect
+
+The current plugin still submits `initializeStorage()` to the worker executor and directly enters a completion method that:
+
+- reads online players;
+- calls manager recovery/initialization methods using Bukkit;
+- performs persisted operational-state work;
+- starts the persistent channel;
+- registers recurring database work.
+
+This must not be moved wholesale to the Bukkit thread. The required correction is:
+
+1. asynchronous database open, Flyway migration, non-Bukkit binding construction, and persisted-state calculation;
+2. synchronous Bukkit manager recovery and runtime publication through the Paper scheduler;
+3. asynchronous persistent-channel startup and recurring database operations.
+
+Every handoff must recheck shutdown. A late synchronous callback must not publish or restart components after shutdown, and an unpublished runtime must close exactly once.
+
+## B3 status
+
+B3 remains unvalidated and incomplete. Required remaining work includes:
+
+- Paper alert presentation contracts and renderer;
+- bounded alert worker with async claim / sync authorization+presentation / async outcome recording;
+- direct, reviewer, and operational authorization rechecks;
+- disconnect/retry/cancellation/dead-letter classification;
+- periodic and join-triggered single-flight scheduling;
+- bounded maintenance operations;
+- validated immutable worker configuration;
+- real `/estaff reload` with old-config retention on failure;
+- storage-port exposure and lifecycle ownership;
+- orchestration, renderer, startup-thread, configuration, reload, and integration tests;
+- refreshed Codacy finding review;
+- one-off CodeRabbit review;
+- exact-head B3 validation.
+
+## Quality state
+
+The latest known aggregate before B3 work was not clean:
+
+- 51 total findings
+- 7 critical
+- 11 high
+- 33 medium
+- 83.65% diff coverage
+- +2.18% overall coverage variation
+
+These values must be refreshed at the intended review head. They are not treated as approval and must not be copied forward as current B3 results without verification.
+
+## Documentation-head rule
+
+This manifest update creates a later documentation head than `5faf9902...`. The manifest commit itself must receive its own exact-head CI evidence before it is described as the current validated branch head. The evidence above remains valid evidence for the exact code head it names.
