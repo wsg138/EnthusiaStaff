@@ -115,7 +115,7 @@ public final class StaffModeManager implements Listener {
             StaffSessionStore loaded = store.get();
             if (loaded == null) {
                 transitions.remove(playerId);
-                message(player, "Staff session storage is not ready; your inventory was not changed.");
+                message(playerId, "Staff session storage is not ready; your inventory was not changed.");
                 return;
             }
             try {
@@ -123,12 +123,12 @@ public final class StaffModeManager implements Listener {
                         playerId, serverId, captured.schemaVersion(), captured.checksum(),
                         captured.snapshot(), clock.instant()
                 );
-                onEntity(player, () -> {
+                onEntity(playerId, current -> {
                     try {
                         active.put(playerId, session);
                         ranks.put(playerId, rank);
-                        applyStaffState(player, rank);
-                        player.sendMessage(Component.text("Staff mode entered after durable snapshot commit."));
+                        applyStaffState(current, rank);
+                        current.sendMessage(Component.text("Staff mode entered after durable snapshot commit."));
                     } finally {
                         transitions.remove(playerId);
                     }
@@ -136,7 +136,7 @@ public final class StaffModeManager implements Listener {
             } catch (RuntimeException exception) {
                 transitions.remove(playerId);
                 plugin.getLogger().log(Level.SEVERE, "Staff session entry failed", exception);
-                message(player, "Staff mode entry failed before your inventory was changed.");
+                message(playerId, "Staff mode entry failed before your inventory was changed.");
             }
         })) {
             transitions.remove(playerId);
@@ -154,7 +154,7 @@ public final class StaffModeManager implements Listener {
             StaffSessionStore loaded = store.get();
             if (loaded == null) {
                 transitions.remove(playerId);
-                message(player, "Staff session storage is unavailable; exit failed safely.");
+                message(playerId, "Staff session storage is unavailable; exit failed safely.");
                 return;
             }
             StaffSessionSnapshot session;
@@ -163,15 +163,15 @@ public final class StaffModeManager implements Listener {
             } catch (RuntimeException exception) {
                 transitions.remove(playerId);
                 plugin.getLogger().log(Level.SEVERE, "Staff session exit transition failed", exception);
-                message(player, "Staff mode exit could not begin safely.");
+                message(playerId, "Staff mode exit could not begin safely.");
                 return;
             }
             if (session == null) {
                 transitions.remove(playerId);
-                message(player, "No active staff session was found.");
+                message(playerId, "No active staff session was found.");
                 return;
             }
-            restoreAndVerify(player, session, loaded);
+            restoreAndVerify(playerId, session, loaded);
         })) {
             transitions.remove(playerId);
             player.sendMessage(Component.text("The bounded work queue is full; staff mode exit did not start."));
@@ -184,7 +184,13 @@ public final class StaffModeManager implements Listener {
     }
 
     public void recover(Player player) {
-        UUID playerId = player.getUniqueId();
+        recover(
+                player.getUniqueId(),
+                PaperStaffRankResolver.resolve(player::hasPermission).orElse(null)
+        );
+    }
+
+    public void recover(UUID playerId, StaffRank rankSnapshot) {
         submit(() -> {
             StaffSessionStore loaded = store.get();
             if (loaded == null) {
@@ -196,33 +202,59 @@ public final class StaffModeManager implements Listener {
                     return;
                 }
                 if (!session.serverId().equals(serverId)) {
-                    loaded.recoveryRequired(session.sessionId(), "Original backend is required for restoration", clock.instant());
-                    message(player, "Your staff session requires recovery on backend " + session.serverId() + '.');
+                    loaded.recoveryRequired(
+                            session.sessionId(),
+                            "Original backend is required for restoration",
+                            clock.instant()
+                    );
+                    message(playerId, "Your staff session requires recovery on backend " + session.serverId() + '.');
                     return;
                 }
                 if (session.state() == StaffSessionState.EXITING
                         || session.state() == StaffSessionState.RECOVERY_REQUIRED) {
-                    restoreAndVerify(player, session, loaded);
+                    restoreAndVerify(playerId, session, loaded);
                     return;
                 }
-                StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
-                if (rank == null) {
+                if (rankSnapshot == null) {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
-                    message(player, "Your explicit staff rank is no longer assigned; restoring your saved state.");
-                    restoreAndVerify(player, exiting, loaded);
+                    message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+                    restoreAndVerify(playerId, exiting, loaded);
                     return;
                 }
-                onEntity(player, () -> {
-                    active.put(playerId, session);
-                    ranks.put(playerId, rank);
-                    applyStaffState(player, rank);
-                    player.sendMessage(Component.text("Your active staff session was resumed."));
-                });
+                onEntity(playerId, current -> finishActiveRecovery(playerId, session, loaded, current));
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Staff session recovery failed", exception);
-                message(player, "Your staff session could not be recovered automatically; contact an administrator.");
+                message(playerId, "Your staff session could not be recovered automatically; contact an administrator.");
             }
         });
+    }
+
+    private void finishActiveRecovery(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded,
+            Player player
+    ) {
+        StaffRank currentRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (currentRank == null) {
+            player.sendMessage(Component.text(
+                    "Your explicit staff rank is no longer assigned; restoring your saved state."
+            ));
+            submit(() -> {
+                try {
+                    StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
+                    restoreAndVerify(playerId, exiting, loaded);
+                } catch (RuntimeException exception) {
+                    plugin.getLogger().log(Level.SEVERE, "Staff session recovery exit failed", exception);
+                    message(playerId, "Your staff session could not be recovered automatically; contact an administrator.");
+                }
+            });
+            return;
+        }
+        active.put(playerId, session);
+        ranks.put(playerId, currentRank);
+        applyStaffState(player, currentRank);
+        player.sendMessage(Component.text("Your active staff session was resumed."));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -336,9 +368,8 @@ public final class StaffModeManager implements Listener {
         return cached == null ? rank(player) : cached;
     }
 
-    private void restoreAndVerify(Player player, StaffSessionSnapshot session, StaffSessionStore loaded) {
-        UUID playerId = player.getUniqueId();
-        onEntity(player, () -> {
+    private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
+        onEntity(playerId, player -> {
             try {
                 removeStaffTools(player);
                 if (!codec.restore(player, session.snapshot())) {
@@ -356,9 +387,9 @@ public final class StaffModeManager implements Listener {
                         active.remove(playerId);
                         ranks.remove(playerId);
                         exitListener.accept(playerId);
-                        message(player, "Staff mode exited; your exact saved state was restored and verified.");
+                        message(playerId, "Staff mode exited; your exact saved state was restored and verified.");
                     } else {
-                        message(player, "State was restored, but checksum verification requires administrator review.");
+                        message(playerId, "State was restored, but checksum verification requires administrator review.");
                     }
                     transitions.remove(playerId);
                 });
@@ -457,12 +488,17 @@ public final class StaffModeManager implements Listener {
         }
     }
 
-    private void message(Player player, String message) {
-        onEntity(player, () -> player.sendMessage(Component.text(message)));
+    private void message(UUID playerId, String message) {
+        onEntity(playerId, player -> player.sendMessage(Component.text(message)));
     }
 
-    private void onEntity(Player player, Runnable operation) {
-        player.getScheduler().execute(plugin, operation, null, 1L);
+    private void onEntity(UUID playerId, Consumer<Player> operation) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            Player player = plugin.getServer().getPlayer(playerId);
+            if (player != null) {
+                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+            }
+        });
     }
 
     private record Tool(Material material, String id, String displayName) {
