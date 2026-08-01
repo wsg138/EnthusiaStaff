@@ -37,7 +37,7 @@ jobs:
           python3 scripts/clean-pr27-codacy-security.py
           git rm .github/workflows/pr27-final-quality.yml
           git rm scripts/clean-pr27-codacy-security.py
-          git show HEAD^:.github/workflows/coverage-measurement.yml > .github/workflows/coverage-measurement.yml
+          git show 2b8856b66f5cea374733c47552a8abdcbf78b656:.github/workflows/coverage-measurement.yml > .github/workflows/coverage-measurement.yml
           git diff --check
 
       - name: Set up Java 21
