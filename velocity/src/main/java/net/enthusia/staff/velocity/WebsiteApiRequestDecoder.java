@@ -139,7 +139,7 @@ final class WebsiteApiRequestDecoder {
 
     int integer(ObjectNode input, String field, int minimum, int maximum) {
         JsonNode value = input.get(field);
-        if (value == null || !value.canConvertToInt()) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()) {
             throw invalidNumericField(field);
         }
         int converted = value.intValue();

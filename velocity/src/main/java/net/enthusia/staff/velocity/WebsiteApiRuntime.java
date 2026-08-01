@@ -62,6 +62,7 @@ final class WebsiteApiRuntime implements AutoCloseable {
                 TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(configuration.queueCapacity()),
                 threads,
+                // HttpServer closes a connection when its request dispatch is rejected.
                 new ThreadPoolExecutor.AbortPolicy()
         );
     }

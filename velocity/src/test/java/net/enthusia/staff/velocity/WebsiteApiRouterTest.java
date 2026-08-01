@@ -129,6 +129,25 @@ final class WebsiteApiRouterTest {
                 )
         );
         assertApiError(
+                "INVALID_SEARCH",
+                () -> router.route(
+                        GET,
+                        URI.create("/v1/public/search?q="),
+                        new Headers(),
+                        new byte[0]
+                )
+        );
+        assertApiError(
+                "INVALID_CODEGENERATION",
+                () -> router.route(
+                        POST,
+                        URI.create("/v1/website/punishment-codes/revalidate"),
+                        jsonHeaders(),
+                        bytes("{\"accountId\":\"" + ACCOUNT_ID + "\",\"punishmentId\":\""
+                                + PUNISHMENT_ID + "\",\"codeGeneration\":2.9}")
+                )
+        );
+        assertApiError(
                 "UNKNOWN_FIELD",
                 () -> router.route(
                         POST,

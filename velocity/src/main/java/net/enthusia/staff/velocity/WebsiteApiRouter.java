@@ -148,7 +148,7 @@ final class WebsiteApiRouter {
         decoder.requireEmptyBody(body);
         decoder.requireQueryKeys(query, Set.of("q"));
         String search = query.get("q");
-        if (search == null) {
+        if (search == null || search.isBlank()) {
             throw badRequest("INVALID_SEARCH", "Search for a username or case ID");
         }
         return Map.of(

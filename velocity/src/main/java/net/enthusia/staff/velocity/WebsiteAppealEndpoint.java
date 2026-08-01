@@ -119,17 +119,18 @@ final class WebsiteAppealEndpoint {
                 "Appeal " + appealId + " accepted by website reviewer "
                         + reviewerAccountId + ": " + reason
         );
-        SanctionChangeResult result = sanctionChanges.apply(request, authorityMode.get());
-        if (result instanceof SanctionChangeResult.Applied applied) {
-            String outcome = applied.replayed() ? "REPLAYED" : "APPLIED";
-            store.completeAppealAcceptance(appealId, "APPLIED", outcome, clock.instant());
-            return Map.of(
-                    "applied", true,
-                    "replayed", applied.replayed(),
-                    "affectedSanctions", applied.affectedSanctions()
-            );
-        }
-        throw rejectedChange(appealId, (SanctionChangeResult.Rejected) result);
+        return switch (sanctionChanges.apply(request, authorityMode.get())) {
+            case SanctionChangeResult.Applied applied -> {
+                String outcome = applied.replayed() ? "REPLAYED" : "APPLIED";
+                store.completeAppealAcceptance(appealId, "APPLIED", outcome, clock.instant());
+                yield Map.of(
+                        "applied", true,
+                        "replayed", applied.replayed(),
+                        "affectedSanctions", applied.affectedSanctions()
+                );
+            }
+            case SanctionChangeResult.Rejected rejected -> throw rejectedChange(appealId, rejected);
+        };
     }
 
     private WebsiteApiException rejectedChange(

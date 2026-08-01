@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.RejectedExecutionException;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 final class WebsiteApiServer implements AutoCloseable {
@@ -81,24 +80,12 @@ final class WebsiteApiServer implements AutoCloseable {
                     exception.getMessage(),
                     requestId
             );
-        } catch (RejectedExecutionException exception) {
-            sendOverloaded(exchange, requestId);
         } catch (RuntimeException exception) {
             errors.report("Website API request " + requestId + " failed", exception);
             sendUnavailable(exchange, requestId);
         } finally {
             exchange.close();
         }
-    }
-
-    private void sendOverloaded(HttpExchange exchange, String requestId) {
-        sendError(
-                exchange,
-                503,
-                "API_OVERLOADED",
-                "The moderation API is temporarily busy",
-                requestId
-        );
     }
 
     private void sendUnavailable(HttpExchange exchange, String requestId) {
