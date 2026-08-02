@@ -13,36 +13,41 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.evidence.ClientEvidenceSnapshot;
 import net.enthusia.staff.domain.report.CreateReportRequest;
+import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 
 final class JdbcReportSubmissionStore {
-    private static final Duration ANY_COOLDOWN = Duration.ofMinutes(2);
-    private static final Duration TARGET_COOLDOWN = Duration.ofMinutes(30);
-    private static final Duration DUPLICATE_WINDOW = Duration.ofHours(2);
-    private static final Duration CONTEXT_RETENTION = Duration.ofDays(7);
-    private static final int MAX_OPEN_REPORTS = 5;
     private static final String REPORT_ID_FIELD = "reportId";
     private static final String REASON_ID_FIELD = "reasonId";
 
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final JdbcReportSubmissionReplay replays;
+    private final Supplier<ReportPolicy> policy;
 
-    JdbcReportSubmissionStore(DataSource dataSource, ObjectMapper json) {
-        this.dataSource = dataSource;
-        this.json = json;
+    JdbcReportSubmissionStore(
+            DataSource dataSource,
+            ObjectMapper json,
+            Supplier<ReportPolicy> policy
+    ) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.json = Objects.requireNonNull(json, "json");
         this.replays = new JdbcReportSubmissionReplay(dataSource, json);
+        this.policy = Objects.requireNonNull(policy, "policy");
     }
 
     ReportSubmissionResult submit(CreateReportRequest request) {
+        ReportPolicy activePolicy = currentPolicy();
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                return submitInTransaction(connection, request);
+                return submitInTransaction(connection, request, activePolicy);
             } catch (SQLException | JsonProcessingException | RuntimeException exception) {
                 rollback(connection, exception);
                 ReportSubmissionResult replay = replays.findAfterConflict(request);
@@ -63,31 +68,33 @@ final class JdbcReportSubmissionStore {
 
     private ReportSubmissionResult submitInTransaction(
             Connection connection,
-            CreateReportRequest request
+            CreateReportRequest request,
+            ReportPolicy activePolicy
     ) throws SQLException, JsonProcessingException {
         ReportSubmissionResult replay = replays.find(connection, request);
         if (replay != null) {
             return rollbackAndReturn(connection, replay);
         }
         lockReporter(connection, request.reporterId());
-        UUID duplicate = nearDuplicate(connection, request);
+        UUID duplicate = nearDuplicate(connection, request, activePolicy.duplicateWindow());
         if (duplicate != null) {
-            return mergeDuplicate(connection, duplicate, request);
+            return mergeDuplicate(connection, duplicate, request, activePolicy.evidenceRetention());
         }
-        ReportSubmissionResult.Rejected rejection = validateNewReport(connection, request);
+        ReportSubmissionResult.Rejected rejection = validateNewReport(connection, request, activePolicy);
         if (rejection != null) {
             return rollbackAndReturn(connection, rejection);
         }
-        return createReport(connection, request);
+        return createReport(connection, request, activePolicy.evidenceRetention());
     }
 
     private ReportSubmissionResult mergeDuplicate(
             Connection connection,
             UUID reportId,
-            CreateReportRequest request
+            CreateReportRequest request,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
         merge(connection, reportId, request);
-        insertContextSnapshots(connection, reportId, request);
+        insertContextSnapshots(connection, reportId, request, evidenceRetention);
         insertSubmissionKey(connection, reportId, request, true);
         insertAudit(connection, reportId, request, "REPORT_MERGED");
         connection.commit();
@@ -96,15 +103,18 @@ final class JdbcReportSubmissionStore {
 
     private static ReportSubmissionResult.Rejected validateNewReport(
             Connection connection,
-            CreateReportRequest request
+            CreateReportRequest request,
+            ReportPolicy activePolicy
     ) throws SQLException {
-        String cooldown = cooldown(connection, request);
+        String cooldown = cooldown(connection, request, activePolicy);
         if (cooldown != null) {
             return new ReportSubmissionResult.Rejected("COOLDOWN", cooldown);
         }
-        if (openReportCount(connection, request.reporterId()) >= MAX_OPEN_REPORTS) {
+        if (openReportCount(connection, request.reporterId()) >= activePolicy.maxOpenReports()) {
             return new ReportSubmissionResult.Rejected(
-                    "OPEN_REPORT_LIMIT", "Resolve an existing report before opening another"
+                    "OPEN_REPORT_LIMIT",
+                    "Resolve an existing report before opening another; limit is "
+                            + activePolicy.maxOpenReports()
             );
         }
         return null;
@@ -112,12 +122,13 @@ final class JdbcReportSubmissionStore {
 
     private ReportSubmissionResult createReport(
             Connection connection,
-            CreateReportRequest request
+            CreateReportRequest request,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
         UUID reportId = UUID.randomUUID();
         insertReport(connection, reportId, request);
         insertSubmissionKey(connection, reportId, request, false);
-        insertContextSnapshots(connection, reportId, request);
+        insertContextSnapshots(connection, reportId, request, evidenceRetention);
         insertAudit(connection, reportId, request, "REPORT_CREATED");
         insertDiscordOutbox(connection, reportId, request);
         connection.commit();
@@ -128,14 +139,15 @@ final class JdbcReportSubmissionStore {
             Connection connection,
             UUID reportId,
             Instant capturedAt,
-            List<?> messages
+            List<?> messages,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO report_chat_snapshots
                     (snapshot_id, report_id, captured_at, expires_at, messages_json)
                 VALUES (?, ?, ?, ?, ?)
                 """)) {
-            writeContextSnapshot(statement, reportId, capturedAt, messages);
+            writeContextSnapshot(statement, reportId, capturedAt, messages, evidenceRetention);
         }
     }
 
@@ -143,14 +155,15 @@ final class JdbcReportSubmissionStore {
             Connection connection,
             UUID reportId,
             Instant capturedAt,
-            List<?> messages
+            List<?> messages,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO report_private_message_snapshots
                     (snapshot_id, report_id, captured_at, expires_at, messages_json)
                 VALUES (?, ?, ?, ?, ?)
                 """)) {
-            writeContextSnapshot(statement, reportId, capturedAt, messages);
+            writeContextSnapshot(statement, reportId, capturedAt, messages, evidenceRetention);
         }
     }
 
@@ -158,12 +171,13 @@ final class JdbcReportSubmissionStore {
             PreparedStatement statement,
             UUID reportId,
             Instant capturedAt,
-            List<?> messages
+            List<?> messages,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
         statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
         statement.setBytes(2, UuidBytes.toBytes(reportId));
         statement.setTimestamp(3, Timestamp.from(capturedAt));
-        statement.setTimestamp(4, Timestamp.from(capturedAt.plus(CONTEXT_RETENTION)));
+        statement.setTimestamp(4, Timestamp.from(capturedAt.plus(evidenceRetention)));
         statement.setString(5, json.writeValueAsString(messages));
         statement.executeUpdate();
     }
@@ -178,7 +192,11 @@ final class JdbcReportSubmissionStore {
         }
     }
 
-    private static UUID nearDuplicate(Connection connection, CreateReportRequest request) throws SQLException {
+    private static UUID nearDuplicate(
+            Connection connection,
+            CreateReportRequest request,
+            Duration duplicateWindow
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT report_id FROM reports
                 WHERE reporter_id = ? AND target_id = ? AND reason_id = ?
@@ -188,14 +206,18 @@ final class JdbcReportSubmissionStore {
             statement.setBytes(1, UuidBytes.toBytes(request.reporterId()));
             statement.setBytes(2, UuidBytes.toBytes(request.targetId()));
             statement.setString(3, request.reasonId());
-            statement.setTimestamp(4, Timestamp.from(request.createdAt().minus(DUPLICATE_WINDOW)));
+            statement.setTimestamp(4, Timestamp.from(request.createdAt().minus(duplicateWindow)));
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? UuidBytes.fromBytes(result.getBytes(1)) : null;
             }
         }
     }
 
-    private static String cooldown(Connection connection, CreateReportRequest request) throws SQLException {
+    private static String cooldown(
+            Connection connection,
+            CreateReportRequest request,
+            ReportPolicy activePolicy
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT MAX(created_at) latest_any,
                        MAX(CASE WHEN target_id = ? THEN created_at END) latest_target
@@ -205,19 +227,24 @@ final class JdbcReportSubmissionStore {
             statement.setBytes(2, UuidBytes.toBytes(request.reporterId()));
             try (ResultSet result = statement.executeQuery()) {
                 requireRow(result, "report cooldown aggregate returned no row");
-                return cooldown(result, request.createdAt());
+                return cooldown(result, request.createdAt(), activePolicy);
             }
         }
     }
 
-    private static String cooldown(ResultSet result, Instant createdAt) throws SQLException {
+    private static String cooldown(
+            ResultSet result,
+            Instant createdAt,
+            ReportPolicy activePolicy
+    ) throws SQLException {
         Timestamp any = result.getTimestamp("latest_any");
         Timestamp target = result.getTimestamp("latest_target");
-        if (any != null && any.toInstant().isAfter(createdAt.minus(ANY_COOLDOWN))) {
-            return "Wait two minutes between reports";
+        if (any != null && any.toInstant().isAfter(createdAt.minus(activePolicy.anyCooldown()))) {
+            return "Wait " + humanDuration(activePolicy.anyCooldown()) + " between reports";
         }
-        if (target != null && target.toInstant().isAfter(createdAt.minus(TARGET_COOLDOWN))) {
-            return "Wait thirty minutes before reporting the same target again";
+        if (target != null && target.toInstant().isAfter(createdAt.minus(activePolicy.targetCooldown()))) {
+            return "Wait " + humanDuration(activePolicy.targetCooldown())
+                    + " before reporting the same target again";
         }
         return null;
     }
@@ -285,10 +312,23 @@ final class JdbcReportSubmissionStore {
     private void insertContextSnapshots(
             Connection connection,
             UUID reportId,
-            CreateReportRequest request
+            CreateReportRequest request,
+            Duration evidenceRetention
     ) throws SQLException, JsonProcessingException {
-        insertChatContextSnapshot(connection, reportId, request.createdAt(), request.publicChatContext());
-        insertPrivateMessageContextSnapshot(connection, reportId, request.createdAt(), request.privateMessageContext());
+        insertChatContextSnapshot(
+                connection,
+                reportId,
+                request.createdAt(),
+                request.publicChatContext(),
+                evidenceRetention
+        );
+        insertPrivateMessageContextSnapshot(
+                connection,
+                reportId,
+                request.createdAt(),
+                request.privateMessageContext(),
+                evidenceRetention
+        );
         if (request.targetClientEvidence().isPresent()) {
             ClientEvidenceSnapshot snapshot = request.targetClientEvidence().orElseThrow();
             UUID snapshotId = ClientEvidencePersistence.insert(connection, json, snapshot);
@@ -383,6 +423,28 @@ final class JdbcReportSubmissionStore {
         }
     }
 
+    private ReportPolicy currentPolicy() {
+        return Objects.requireNonNull(policy.get(), "active report policy");
+    }
+
+    private static String humanDuration(Duration duration) {
+        long seconds = duration.getSeconds();
+        if (seconds % 86_400 == 0) {
+            return amount(seconds / 86_400, "day");
+        }
+        if (seconds % 3_600 == 0) {
+            return amount(seconds / 3_600, "hour");
+        }
+        if (seconds % 60 == 0) {
+            return amount(seconds / 60, "minute");
+        }
+        return amount(seconds, "second");
+    }
+
+    private static String amount(long value, String unit) {
+        return value + " " + unit + (value == 1 ? "" : "s");
+    }
+
     private static <T> T rollbackAndReturn(Connection connection, T result) throws SQLException {
         connection.rollback();
         return result;
@@ -417,5 +479,4 @@ final class JdbcReportSubmissionStore {
             // Closing returns the connection to the pool; the original failure remains authoritative.
         }
     }
-
 }
