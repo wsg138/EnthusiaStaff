@@ -3,6 +3,8 @@ package net.enthusia.staff.paper.report;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -37,8 +39,9 @@ public final class ReportGuiController implements Listener {
     private final Supplier<ReportStore> reports;
     private final ExecutorService workers;
     private final ReportGuiRenderer renderer = new ReportGuiRenderer();
-    private final java.util.Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
-    private final java.util.Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> pendingLoads = new ConcurrentHashMap<>();
+    private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
 
     public ReportGuiController(
             JavaPlugin plugin,
@@ -56,6 +59,9 @@ public final class ReportGuiController implements Listener {
     }
 
     public void openQueue(Player viewer, ReportQueue queue) {
+        if (queue == null) {
+            throw new IllegalArgumentException("report queue must be present");
+        }
         if (authorized(viewer)) {
             loadQueue(viewer, queue, 0);
         }
@@ -121,6 +127,7 @@ public final class ReportGuiController implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
         inputCaptures.remove(viewerId);
+        pendingLoads.remove(viewerId);
         confirmations.remove(viewerId);
     }
 
@@ -228,7 +235,8 @@ public final class ReportGuiController implements Listener {
     }
 
     private void confirm(Player viewer, ReportGuiState.Review state) {
-        if (!confirmations.add(viewer.getUniqueId())) {
+        UUID actorId = state.viewerId();
+        if (!confirmations.add(actorId)) {
             viewer.sendMessage(Component.text("That report action is already being confirmed."));
             return;
         }
@@ -242,7 +250,7 @@ public final class ReportGuiController implements Listener {
                 ReportSummary summary = state.details().summary();
                 ReportStateChangeResult result = store.changeState(new ReportStateChangeRequest(
                         summary.reportId(),
-                        viewer.getUniqueId(),
+                        actorId,
                         state.action(),
                         summary.revision(),
                         state.note(),
@@ -259,11 +267,11 @@ public final class ReportGuiController implements Listener {
                 ReportStateChangeResult.Rejected rejected = (ReportStateChangeResult.Rejected) result;
                 showResult(viewer, state, fresh, rejected.code() + ": " + rejected.message());
             } finally {
-                confirmations.remove(viewer.getUniqueId());
+                confirmations.remove(actorId);
             }
         });
         if (!submitted) {
-            confirmations.remove(viewer.getUniqueId());
+            confirmations.remove(actorId);
         }
     }
 
@@ -274,51 +282,87 @@ public final class ReportGuiController implements Listener {
                 loadQueue(viewer, state.queue(), state.queuePage());
             } else {
                 openState(viewer, new ReportGuiState.Detail(
-                        viewer.getUniqueId(), state.queue(), state.queuePage(), fresh
+                        state.viewerId(), state.queue(), state.queuePage(), fresh
                 ));
             }
         });
     }
 
     private void loadQueue(Player viewer, ReportQueue queue, int requestedPage) {
-        submit(viewer, () -> {
+        UUID viewerId = viewer.getUniqueId();
+        UUID loadId = beginLoad(viewerId);
+        submitLoad(viewer, viewerId, loadId, () -> {
             ReportStore store = reports.get();
             if (store == null) {
-                message(viewer, "Report storage is not ready.");
+                failLoad(viewer, viewerId, loadId, "Report storage is not ready.");
                 return;
             }
-            List<ReportSummary> summaries = store.list(queue, viewer.getUniqueId(), QUERY_LIMIT);
+            List<ReportSummary> summaries = store.list(queue, viewerId, QUERY_LIMIT);
             int lastPage = summaries.isEmpty() ? 0 : (summaries.size() - 1) / ReportGuiRenderer.CONTENT_SIZE;
             int page = Math.min(requestedPage, lastPage);
-            openState(viewer, new ReportGuiState.Queue(viewer.getUniqueId(), queue, summaries, page));
+            openLoadedState(viewer, loadId, new ReportGuiState.Queue(viewerId, queue, summaries, page));
         });
     }
 
     private void loadDetails(Player viewer, ReportQueue queue, int queuePage, UUID reportId) {
-        submit(viewer, () -> {
+        UUID viewerId = viewer.getUniqueId();
+        UUID loadId = beginLoad(viewerId);
+        submitLoad(viewer, viewerId, loadId, () -> {
             ReportStore store = reports.get();
             if (store == null) {
-                message(viewer, "Report storage is not ready.");
+                failLoad(viewer, viewerId, loadId, "Report storage is not ready.");
                 return;
             }
             ReportDetails details = store.details(reportId).orElse(null);
             if (details == null) {
-                message(viewer, "That report does not exist.");
-                loadQueue(viewer, queue, queuePage);
+                onCurrentLoad(viewer, viewerId, loadId, () -> {
+                    viewer.sendMessage(Component.text("That report does not exist."));
+                    loadQueue(viewer, queue, queuePage);
+                });
                 return;
             }
-            openState(viewer, new ReportGuiState.Detail(
-                    viewer.getUniqueId(), queue, queuePage, details
+            openLoadedState(viewer, loadId, new ReportGuiState.Detail(
+                    viewerId, queue, queuePage, details
             ));
         });
     }
 
-    private void openState(Player viewer, ReportGuiState state) {
+    private UUID beginLoad(UUID viewerId) {
+        UUID loadId = UUID.randomUUID();
+        pendingLoads.put(viewerId, loadId);
+        return loadId;
+    }
+
+    private void failLoad(Player viewer, UUID viewerId, UUID loadId, String body) {
+        onCurrentLoad(viewer, viewerId, loadId, () -> viewer.sendMessage(Component.text(body)));
+    }
+
+    private void openLoadedState(Player viewer, UUID loadId, ReportGuiState state) {
+        onCurrentLoad(viewer, state.viewerId(), loadId, () -> renderState(viewer, state));
+    }
+
+    private void onCurrentLoad(
+            Player viewer,
+            UUID viewerId,
+            UUID loadId,
+            Runnable task
+    ) {
         onEntity(viewer, () -> {
-            if (authorized(viewer)) {
-                viewer.openInventory(renderer.render(state));
+            if (pendingLoads.remove(viewerId, loadId)) {
+                task.run();
             }
         });
+    }
+
+    private void openState(Player viewer, ReportGuiState state) {
+        pendingLoads.remove(state.viewerId());
+        onEntity(viewer, () -> renderState(viewer, state));
+    }
+
+    private void renderState(Player viewer, ReportGuiState state) {
+        if (authorized(viewer)) {
+            viewer.openInventory(renderer.render(state));
+        }
     }
 
     private boolean authorized(Player viewer) {
@@ -345,6 +389,28 @@ public final class ReportGuiController implements Listener {
         } catch (RejectedExecutionException exception) {
             viewer.sendMessage(Component.text("The bounded work queue is full; no report operation started."));
             return false;
+        }
+    }
+
+    private void submitLoad(
+            Player viewer,
+            UUID viewerId,
+            UUID loadId,
+            Runnable work
+    ) {
+        try {
+            workers.execute(() -> {
+                try {
+                    work.run();
+                } catch (RuntimeException exception) {
+                    plugin.getLogger().log(Level.SEVERE, "Report GUI load failed", exception);
+                    failLoad(viewer, viewerId, loadId, "The report could not be loaded; inspect the sanitized log.");
+                }
+            });
+        } catch (RejectedExecutionException exception) {
+            if (pendingLoads.remove(viewerId, loadId)) {
+                viewer.sendMessage(Component.text("The bounded work queue is full; no report load started."));
+            }
         }
     }
 
