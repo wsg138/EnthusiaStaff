@@ -4,6 +4,14 @@ Cutover changes network moderation authority and must be performed in a schedule
 
 The complete production-like rehearsal and evidence gate is in [cutover-acceptance.md](cutover-acceptance.md). A green CI run does not replace that acceptance record.
 
+## Merge and activation boundaries
+
+The dormant implementation may be merged after code review, automated tests, exact-head Java 21 build and packaging, migration checksum compatibility, and fail-closed default verification are complete. Merging does not deploy a JAR, start a shadow window, enter `ACTIVE`, disable LiteBans, or authorize production use.
+
+Issue #43 blocks production activation and cutover authorization. It does not block merging dormant, reviewed implementation code into the development branch. Issue #43 must remain open until the representative restore, uninterrupted shadow window, final migration rehearsal, activation/freeze/rollback exercises, distributed-runtime acceptance, and operator approval are complete.
+
+Automatic LiteBans shadow summaries are disabled by default and require explicit configuration. Even when enabled, they run only while the durable operational mode is `SHADOW_MIGRATION`.
+
 ## Preconditions
 
 - Verified backups and a tested restore procedure exist.
@@ -13,6 +21,8 @@ The complete production-like rehearsal and evidence gate is in [cutover-acceptan
 - The MariaDB pool has at least two connections. One connection may hold the operational-state fence while the guarded authoritative operation uses another.
 - Recovery quarantine, outbox dead letters, incomplete inventory work, incomplete economy work, and pending restoration reservations are zero.
 - Staff understand the rollback procedure and old jars remain available.
+
+These preconditions are production cutover requirements. They are not prerequisites for merging dormant implementation code.
 
 ## Authoritative write fence
 
@@ -69,6 +79,6 @@ MariaDB integration coverage verifies maintenance fencing, active pass-through, 
 
 Restart-recovery coverage also verifies that an abandoned migration run fails closed before a replacement begins, a committed activation can be retried after restart without a duplicate cutover record or audit, and emergency freeze remains durable and non-duplicating across another restart.
 
-This code does not authorize or perform a production cutover. Before release, the project still requires a real uninterrupted 168-hour shadow window, a final incremental import rehearsal from a production-like backup, the complete acceptance record in [cutover-acceptance.md](cutover-acceptance.md), rollback rehearsal, and post-cutover reconciliation evidence.
+This code does not authorize or perform a production cutover. Before production deployment or activation, the project still requires a real uninterrupted 168-hour shadow window, a final incremental import rehearsal from a production-like backup, the complete acceptance record in [cutover-acceptance.md](cutover-acceptance.md), rollback rehearsal, and post-cutover reconciliation evidence.
 
 Do not remove `LiteBans.jar`, Staff++, Punishments, or TigerReports support jars during this procedure. Removal occurs only after the post-cutover acceptance period described in the upgrade manifest.
