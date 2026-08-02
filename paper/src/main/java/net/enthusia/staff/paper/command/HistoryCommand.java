@@ -5,8 +5,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
@@ -15,6 +13,7 @@ import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
@@ -22,6 +21,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
@@ -85,7 +85,8 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         String input = args[0];
-        boolean sensitive = sender.hasPermission(SENSITIVE_PERMISSION);
+        boolean sensitive = sender instanceof ConsoleCommandSender
+                || sender.hasPermission(SENSITIVE_PERMISSION);
         submit(sender, () -> load(sender, input, page, sensitive));
         return true;
     }
@@ -97,18 +98,33 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             responses.send(sender, Component.text("Punishment history is unavailable while storage is offline."));
             return;
         }
-        Optional<PlayerIdentity> resolved;
+        PlayerResolution resolution;
         try {
-            resolved = directory.find(input);
+            resolution = directory.resolve(input);
         } catch (RuntimeException exception) {
             failure(sender, "player resolution", exception);
             return;
         }
-        if (resolved.isEmpty()) {
+        if (resolution instanceof PlayerResolution.Missing) {
             responses.send(sender, Component.text("No known player matches '" + input + "'."));
             return;
         }
-        PlayerIdentity identity = resolved.orElseThrow();
+        if (resolution instanceof PlayerResolution.Ambiguous ambiguous) {
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.text(
+                    "The username '" + input + "' matches multiple historical identities. Use an exact UUID:"
+            ));
+            for (PlayerIdentity match : ambiguous.matches()) {
+                lines.add(Component.text(
+                        "- " + match.currentUsername().orElse("unknown") + " | "
+                                + match.playerId() + " | " + match.platform()
+                ));
+            }
+            responses.send(sender, lines);
+            return;
+        }
+        PlayerResolution.Resolved resolved = (PlayerResolution.Resolved) resolution;
+        PlayerIdentity identity = resolved.identity();
         ModerationFeatureSettings active = settings.get();
         HistoryQueryOptions options = new HistoryQueryOptions(
                 active.includeRequestEvents(),
@@ -125,22 +141,21 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             failure(sender, "history query", exception);
             return;
         }
-        responses.send(sender, render(input, identity, result, active.historyTimezone(), sensitive));
+        responses.send(sender, render(identity, resolved.matchKind(), result, active.historyTimezone(), sensitive));
     }
 
     private static List<Component> render(
-            String input,
             PlayerIdentity identity,
+            PlayerResolution.MatchKind matchKind,
             ModerationHistoryPage page,
             ZoneId timezone,
             boolean sensitive
     ) {
         List<Component> lines = new ArrayList<>();
         String currentName = identity.currentUsername().orElse("unknown");
-        String match = matchDescription(input, identity);
         lines.add(Component.text(
                 "History for " + currentName + " (" + identity.playerId() + ", "
-                        + identity.platform() + ", matched by " + match + ")"
+                        + identity.platform() + ", matched by " + human(matchKind.name()) + ")"
         ));
         if (page.entries().isEmpty()) {
             lines.add(Component.text("No moderation history is recorded for this player."));
@@ -194,20 +209,6 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
         }
         return line.toString();
-    }
-
-    private static String matchDescription(String input, PlayerIdentity identity) {
-        try {
-            if (UUID.fromString(input).equals(identity.playerId())) {
-                return "UUID";
-            }
-        } catch (IllegalArgumentException ignored) {
-            // Username matching follows.
-        }
-        return identity.currentUsername()
-                .filter(value -> value.equalsIgnoreCase(input))
-                .map(ignored -> "current username")
-                .orElse("historical username");
     }
 
     private static String human(String value) {
