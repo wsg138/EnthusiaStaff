@@ -23,10 +23,10 @@ class DatabaseConfigTest {
 
     @Test
     void acceptsPoolAndTimeoutBoundaryValues() {
-        DatabaseConfig minimum = new DatabaseConfig(URL, USERNAME, AUTHENTICATION_VALUE, 1, 250);
+        DatabaseConfig minimum = new DatabaseConfig(URL, USERNAME, AUTHENTICATION_VALUE, 2, 250);
         DatabaseConfig maximum = new DatabaseConfig(URL, USERNAME, AUTHENTICATION_VALUE, 32, 60_000);
 
-        assertEquals(1, minimum.maximumPoolSize());
+        assertEquals(2, minimum.maximumPoolSize());
         assertEquals(250, minimum.connectionTimeoutMillis());
         assertEquals(32, maximum.maximumPoolSize());
         assertEquals(60_000, maximum.connectionTimeoutMillis());
@@ -89,7 +89,7 @@ class DatabaseConfigTest {
                 URL,
                 USERNAME,
                 AUTHENTICATION_VALUE,
-                0,
+                1,
                 5_000
         ));
         assertThrows(IllegalArgumentException.class, () -> new DatabaseConfig(
