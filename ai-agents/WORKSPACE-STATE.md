@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-02 19:24 America/Indiana/Indianapolis
+Last updated: 2026-08-02 19:35 America/Indiana/Indianapolis
 
 This file is a concise routing record for the next AI agent. It must be verified against live GitHub and repository state before use.
 
@@ -10,32 +10,33 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | `9d7f31945db37f9b2872ac57cb24de6b6b281198` at PR #48 start; live verify before acting |
-| Checkpoint before report-GUI work | `9d7f31945db37f9b2872ac57cb24de6b6b281198` |
+| Current `main` SHA | `39e616bbdcd61f540d77406155f3b579b4fc57ab` at report-configuration work start; live verify before acting |
+| Checkpoint before report-configuration work | `39e616bbdcd61f540d77406155f3b579b4fc57ab` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
 
-## Intended post-merge work state
+## Current work
 
 | Field | Value |
 | --- | --- |
-| State | `IDLE` after PR #48 merges; otherwise resume PR #48 |
-| Active PR | `#48 — Add staff report queue and detail GUI` until live merge verification |
-| Active branch | `feature/report-queue-gui` until live merge and cleanup verification |
-| Active work item | None after PR #48 merges |
-| Known blocker | None recorded in tracked state; read PR #48 exact-head evidence live |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr48-report-queue-gui.md` |
+| State | `PLANNING` |
+| Active PR | Draft PR pending creation from the active branch |
+| Active branch | `feature/report-configuration-reload` |
+| Active work item | Modular report policy and GUI configuration with validated reload behavior |
+| Known blocker | None recorded; implementation and exact-head validation remain |
+| Handoff | Pending final timestamped report in this PR |
 
-The next agent must inspect live pull requests, review threads, checks and branch state. Resume PR #48 if it remains open or blocked; do not start competing report-GUI work.
+Live GitHub showed no open pull requests at work-item start. Every remaining remote branch was fully contained in `main`, so no unfinished branch work was displaced.
 
-## Latest product work
+## Latest completed product work
 
 | Field | Value |
 | --- | --- |
 | PR | `#48 — Add staff report queue and detail GUI` |
 | Branch | `feature/report-queue-gui` |
-| Intended result | Staff report inventory queues, report detail/review screens, exact-revision actions and text-command fallback |
+| Merge commit | `39e616bbdcd61f540d77406155f3b579b4fc57ab` |
+| Result | Staff report inventory queues, report detail/review screens, exact-revision actions and text-command fallback |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr48-report-queue-gui.md` |
 | Exact validation and merge evidence | Read PR #48 live |
 
@@ -62,13 +63,11 @@ Implemented scope in PR #48:
 | Merge commit | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr46-punishment-history.md` |
 
-## Next recommended work item
+## Active work scope
 
 ### Modular report policy and GUI configuration
 
 Priority: High
-
-Start only after live verification that PR #48 is merged and no older relevant PR requires work.
 
 Expected scope:
 
@@ -85,17 +84,16 @@ Do not silently combine this with the separate RoseChat callback bridge, Discord
 
 | Field | Value |
 | --- | --- |
-| Live highest migration at PR #48 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration at work-item start | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
-| PR #48 schema result | No migration added or edited |
+| Current work schema result | No migration is planned; live verify before final validation |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
 
-## Remaining report-system work
+## Remaining report-system work outside the active scope
 
-- modular report and GUI configuration;
 - supported RoseChat private-message callback integration;
 - dedicated sensitive-evidence presentation and privacy review;
 - Discord report rendering and delivery validation;
@@ -106,7 +104,7 @@ Never edit an existing migration. Verify the live migration directory before add
 - LiteBans remains authoritative.
 - Issue #43 remains open.
 - No production deployment is authorized.
-- No production database, credentials, production-derived backup or private player evidence was accessed.
+- No production database, credentials, production-derived backup or private player evidence may be accessed.
 - No 168-hour production acceptance window is active.
 - Merging dormant development code does not authorize production cutover.
 - Staging controls are separate and must not be changed unless the current work item explicitly requires them.
@@ -124,6 +122,6 @@ Read before implementation:
 
 ## Update contract
 
-The next work PR must update this file before tracked content is frozen for exact-head validation.
+The current work PR must update this file before tracked content is frozen for exact-head validation.
 
 Do not create a circular commit sequence by embedding the current PR's final SHA, final CI run IDs or merge commit in this tracked file. Exact live evidence belongs in the PR description or comments, and every next agent must reconcile this file with GitHub before acting.
