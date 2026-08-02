@@ -1,0 +1,32 @@
+name: Delete obsolete PR29 staging branch
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  delete-obsolete-branch:
+    if: github.event.pull_request.number == 37 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete exact obsolete branch ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -Eeuo pipefail
+          branch='agent/inspect-pr29-staging'
+          encoded_ref='heads/agent%2Finspect-pr29-staging'
+          api="https://api.github.com/repos/${REPOSITORY}"
+          auth=(-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H "Authorization: Bearer ${GH_TOKEN}")
+          default_branch="$(curl --fail --silent --show-error "${auth[@]}" "$api" | jq -r '.default_branch')"
+          if [[ "$branch" == "$default_branch" || "$branch" == "${{ github.event.pull_request.head.ref }}" ]]; then
+            echo 'Refusing to delete a protected current/default branch.' >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --request DELETE "${auth[@]}" \
+            "$api/git/refs/${encoded_ref}"
+          echo "Deleted refs/heads/${branch}."
