@@ -2,7 +2,7 @@
 
 These rules apply to every AI-assisted work session that uses this repository.
 
-They govern how an agent selects work, resumes pull requests, reviews changes, validates the exact final revision, merges, cleans up, and leaves a handoff.
+They govern how an agent selects work, resumes pull requests, reviews changes, validates the exact final revision, merges, cleans up, and leaves a durable handoff.
 
 ## 1. Core operating principle
 
@@ -51,7 +51,7 @@ Live repository state overrides stale recorded state. Reconcile discrepancies ex
 - `ENTHUSIASTAFF-GOALS.md` defines the intended finished product.
 - This file defines the agent workflow and safety process.
 - `WORKSPACE-STATE.md` identifies the expected current step but may be stale.
-- Handoff reports provide evidence and context but do not override code, tests, requirements, or current GitHub state.
+- Handoff reports provide context and route the next agent to the relevant PR evidence. They do not override code, tests, requirements, or current GitHub state.
 
 Do not claim a feature exists because it appears in a plan, PR description, handoff, matrix, or class name. Verify behavior in code and tests.
 
@@ -113,7 +113,7 @@ Update `WORKSPACE-STATE.md` when the state materially changes and ensure the fin
 - Do not merge while the branch is behind `main` unless the repository's current documented workflow explicitly permits it and the final exact revision is retested.
 - Do not represent a merge-ref-only run as exact feature-head evidence unless the check is specifically defined to validate the merge result and this distinction is recorded.
 
-The universal agent prompt is explicit authorization to manually merge the single current work item after every merge gate in this file passes. It is not authorization to weaken those gates or to enable auto-merge.
+The universal agent prompt is explicit authorization to manually merge the single current work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge.
 
 ## 7. Branch cleanup
 
@@ -230,9 +230,24 @@ Classify findings as:
 
 Fix merge blockers and confirmed defects. Do not create endless speculative cleanup merely to postpone completion.
 
-## 12. Exact-head validation
+## 12. Freeze tracked content before exact-head validation
 
-Validation must apply to the final reviewed feature head.
+A tracked file inside a PR cannot safely contain that same PR's final SHA, final CI run IDs, or merge commit without changing the revision again. Do not create a self-referential validation loop.
+
+Before starting final exact-head validation:
+
+1. finish all code, tests, migrations, documentation, state, and handoff-file changes;
+2. update `ai-agents/WORKSPACE-STATE.md` to the intended post-merge state without embedding a not-yet-existing merge SHA;
+3. add the timestamped handoff report;
+4. update `ai-agents/reports/agent-handoffs/latest.md` to point to it and the PR;
+5. ensure the handoff explains where exact-head and merge evidence will be recorded;
+6. stop changing tracked files unless validation or review finds a real defect.
+
+If a real defect requires another commit, repeat the harsh review and exact-head validation for the new final head.
+
+## 13. Exact-head validation
+
+Validation must apply to the final reviewed feature head after tracked content is frozen.
 
 Use the repository's actual configured checks. Normally verify:
 
@@ -261,7 +276,9 @@ Run safe Pi boot/restart validation when the existing workflow supports the exac
 
 Never claim a check passed without direct evidence.
 
-Record:
+Record exact-head evidence in the PR description or a final pre-merge PR comment, because editing those does not change the feature SHA.
+
+Record at minimum:
 
 - final feature SHA;
 - workflow run and job IDs;
@@ -276,9 +293,9 @@ Record:
 - review-thread count;
 - Pi result or an explicit statement that no exact-head Pi result exists.
 
-A skipped, cancelled, superseded, different-revision, or merely runtime-equivalent run must be labeled accurately.
+A skipped, cancelled, superseded, different-revision, merge-ref-only, or merely runtime-equivalent run must be labeled accurately.
 
-## 13. Merge gate
+## 14. Merge gate
 
 Merge only when all of the following are true:
 
@@ -290,65 +307,63 @@ Merge only when all of the following are true:
 - migrations are safe and old migrations are unchanged;
 - permissions and configuration are documented;
 - no unresolved review thread remains;
-- the PR description reflects the final scope and evidence;
+- the PR description or final pre-merge comment contains the exact final-head evidence;
 - `WORKSPACE-STATE.md` is updated for the intended post-merge state;
-- a durable handoff report is included;
+- a durable handoff report and latest pointer are included;
 - no known release blocker remains for this specific PR.
 
 Production acceptance requirements block a development merge only when the PR is itself a production deployment or cutover action. They do not automatically block dormant, reviewed implementation code.
 
-## 14. State and handoff update
+## 15. State and handoff files
 
-Before merging the feature PR:
+Before final validation, update `ai-agents/WORKSPACE-STATE.md` with:
 
-1. update `ai-agents/WORKSPACE-STATE.md` with:
-   - the PR number;
-   - final feature head;
-   - intended post-merge status;
-   - completed work summary;
-   - next recommended work item;
-   - current migration boundary;
-   - remaining blockers;
-2. add a timestamped report under `ai-agents/reports/agent-handoffs/`;
-3. update `ai-agents/reports/agent-handoffs/latest.md` to point to the new report;
-4. include final exact-head evidence in the report;
-5. note that the merge commit must be verified live after merge.
+- the PR number;
+- branch;
+- intended post-merge status;
+- completed-work summary;
+- next recommended work item;
+- current migration boundary;
+- remaining blockers;
+- handoff link.
 
-After merging:
+Do not require the state file to contain the final feature SHA, final CI run IDs, or merge commit. Those values are live evidence and belong in the PR description or comments.
 
-- verify the actual merge commit and resulting `main` SHA;
-- put the exact merge result in the PR description or a final PR comment;
-- include the same result in the final user response;
-- do not make a direct follow-up commit to `main` merely to insert the merge SHA into the handoff;
-- the next agent must reconcile the recorded state with live GitHub before acting.
-
-This approach keeps the handoff in the same reviewed PR without allowing direct pushes to `main`.
-
-## 15. Handoff quality
-
-A handoff must let another agent resume without reading the prior chat.
-
-It must include:
+The timestamped handoff report must include:
 
 - repository and work item;
 - starting `main`;
 - branch and PR;
-- original and final feature heads;
 - implemented behavior;
 - files or architecture materially changed;
 - migrations added and immutable migration boundary;
 - commands, permissions, and configuration added;
 - review findings and fixes;
-- exact-head validation evidence;
-- artifact hashes where relevant;
+- validation requirements and a link to the PR's exact-head evidence;
 - merge readiness or blocker;
 - production boundary;
 - remaining work;
 - next recommended work item.
 
+`latest.md` must point to the report and PR and state that exact-head and merge evidence must be read live from GitHub.
+
 Do not include secrets, raw production data, private player information, credentials, or sensitive evidence.
 
-## 16. Blocked work
+## 16. Post-merge verification
+
+After merging:
+
+- verify the actual merge commit and resulting `main` SHA;
+- verify the final feature head is contained in `main`;
+- put the exact merge result in the PR description or a final PR comment;
+- include the exact result in the final user response;
+- perform safe branch cleanup;
+- do not make a direct follow-up commit to `main` merely to insert the merge SHA into the handoff;
+- the next agent must reconcile the committed state and handoff with live GitHub before acting.
+
+This keeps the handoff in the reviewed PR while preserving exact live evidence without a circular commit sequence.
+
+## 17. Blocked work
 
 When work cannot proceed because of a genuine blocker:
 
@@ -362,7 +377,7 @@ When work cannot proceed because of a genuine blocker:
 - leave the PR draft when the work is not mergeable;
 - stop.
 
-## 17. Safeguard against self-approval
+## 18. Safeguard against self-approval
 
 An agent may improve these workflow documents, but it may not weaken them merely to make its current PR mergeable.
 
@@ -379,7 +394,7 @@ Changes to any of the following require explicit justification in the PR and sep
 
 Editing a checklist does not prove the underlying requirement is satisfied.
 
-## 18. Stop condition
+## 19. Stop condition
 
 After the single work item is merged or accurately recorded as blocked:
 
