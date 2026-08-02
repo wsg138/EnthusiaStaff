@@ -10,6 +10,7 @@ import net.enthusia.staff.domain.auth.Actor;
 public record ExactSanctionChangeRequest(
         IdempotencyKey idempotencyKey,
         UUID sanctionId,
+        long expectedRevision,
         Actor actor,
         SanctionChangeAction action,
         Optional<Instant> replacementExpiration,
@@ -20,7 +21,7 @@ public record ExactSanctionChangeRequest(
         boolean bypassHierarchy
 ) {
     public ExactSanctionChangeRequest {
-        if (idempotencyKey == null || sanctionId == null || actor == null || action == null
+        if (idempotencyKey == null || sanctionId == null || expectedRevision < 0 || actor == null || action == null
                 || replacementExpiration == null || linkedAppealId == null
                 || linkedPunishmentRequestId == null) {
             throw new IllegalArgumentException("exact sanction change fields must be present");

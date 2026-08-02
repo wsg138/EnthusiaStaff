@@ -1,5 +1,8 @@
 package net.enthusia.staff.persistence.migration;
 
+import java.util.OptionalLong;
+import java.util.UUID;
+
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
@@ -29,6 +32,11 @@ public final class FencedSanctionMutationStore implements SanctionMutationStore 
                         "Sanction changes are disabled by the operational mode"
                 )
         );
+    }
+
+    @Override
+    public OptionalLong exactRevision(UUID sanctionId) {
+        return delegate.exactRevision(sanctionId);
     }
 
     @Override

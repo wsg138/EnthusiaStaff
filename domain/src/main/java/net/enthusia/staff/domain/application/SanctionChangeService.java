@@ -1,5 +1,8 @@
 package net.enthusia.staff.domain.application;
 
+import java.util.OptionalLong;
+import java.util.UUID;
+
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
@@ -32,6 +35,13 @@ public final class SanctionChangeService {
             return new SanctionChangeResult.Rejected("FORBIDDEN", "The actor is not permitted to perform this change");
         }
         return store.apply(request);
+    }
+
+    public OptionalLong exactRevision(UUID sanctionId) {
+        if (sanctionId == null) {
+            throw new IllegalArgumentException("sanctionId must be present");
+        }
+        return store.exactRevision(sanctionId);
     }
 
     public ExactSanctionChangeResult applyExact(

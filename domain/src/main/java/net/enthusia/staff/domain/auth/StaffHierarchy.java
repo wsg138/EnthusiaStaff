@@ -8,6 +8,9 @@ public final class StaffHierarchy {
         if (actor == null || issuer == null) {
             return false;
         }
+        if (issuer == StaffRank.SYSTEM) {
+            return false;
+        }
         if (bypassHierarchy) {
             return actor == StaffRank.FOUNDER;
         }

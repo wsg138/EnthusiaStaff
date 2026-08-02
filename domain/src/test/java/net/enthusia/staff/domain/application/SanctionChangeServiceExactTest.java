@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -110,13 +111,14 @@ final class SanctionChangeServiceExactTest {
         );
 
         assertSame(store.result, result);
-        assertEquals(true, called.get());
+        assertTrue(called.get());
     }
 
     private static ExactSanctionChangeRequest request(String reason) {
         return new ExactSanctionChangeRequest(
                 new IdempotencyKey("test-exact-sanction-change"),
                 SANCTION_ID,
+                0L,
                 new Actor(ACTOR_ID, "Moderator", StaffRank.MOD),
                 SanctionChangeAction.END_EARLY,
                 Optional.empty(),
@@ -152,6 +154,11 @@ final class SanctionChangeServiceExactTest {
         @Override
         public SanctionChangeResult apply(SanctionChangeRequest request) {
             throw new AssertionError("legacy mutation path was called");
+        }
+
+        @Override
+        public java.util.OptionalLong exactRevision(UUID sanctionId) {
+            return java.util.OptionalLong.of(0L);
         }
 
         @Override

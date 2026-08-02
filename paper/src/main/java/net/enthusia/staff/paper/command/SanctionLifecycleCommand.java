@@ -103,36 +103,50 @@ public final class SanctionLifecycleCommand {
             sender.sendMessage(Component.text("Your staff identity could not be resolved."));
             return true;
         }
-        ExactSanctionChangeRequest request = new ExactSanctionChangeRequest(
-                idempotency(actor.orElseThrow(), selected, parsed),
-                parsed.sanctionId,
+        PendingChange pending = new PendingChange(
                 actor.orElseThrow(),
-                selected.action,
-                parsed.expiration,
-                parsed.reason,
-                parsed.appealId,
-                parsed.punishmentRequestId,
-                originRuntime,
+                selected,
+                parsed,
                 sender.hasPermission(BYPASS_HIERARCHY_PERMISSION)
         );
-        submit(sender, () -> apply(sender, request));
+        submit(sender, () -> apply(sender, pending));
         return true;
     }
 
-    private void apply(CommandSender sender, ExactSanctionChangeRequest request) {
+    private void apply(CommandSender sender, PendingChange pending) {
         SanctionChangeService service = changes.get();
         if (service == null) {
             responses.send(sender, Component.text("Sanction changes are unavailable while storage is offline."));
             return;
         }
+        ExactSanctionChangeRequest request = null;
         ExactSanctionChangeResult result;
         try {
+            java.util.OptionalLong revision = service.exactRevision(pending.parsed().sanctionId());
+            if (revision.isEmpty()) {
+                responses.send(sender, Component.text("Sanction change rejected: The sanction does not exist [SANCTION_NOT_FOUND]"));
+                return;
+            }
+            Parsed parsed = pending.parsed();
+            request = new ExactSanctionChangeRequest(
+                    idempotency(pending.actor(), pending.operation(), parsed),
+                    parsed.sanctionId(),
+                    revision.orElseThrow(),
+                    pending.actor(),
+                    pending.operation().action,
+                    parsed.expiration(),
+                    parsed.reason(),
+                    parsed.appealId(),
+                    parsed.punishmentRequestId(),
+                    originRuntime,
+                    pending.bypassHierarchy()
+            );
             ModerationFeatureSettings active = settings.get();
             result = service.applyExact(request, mode.get(), active.sanctionActionLimits());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(
                     Level.WARNING,
-                    "Sanitized exact sanction change failed for " + request.sanctionId(),
+                    "Sanitized exact sanction change failed for " + pending.parsed().sanctionId(),
                     exception
             );
             responses.send(sender, Component.text(
@@ -377,6 +391,14 @@ public final class SanctionLifecycleCommand {
                 case OVERTURN -> base + "[--appeal <appeal-id>] [--request <request-id>] <reason>";
             };
         }
+    }
+
+    private record PendingChange(
+            Actor actor,
+            Operation operation,
+            Parsed parsed,
+            boolean bypassHierarchy
+    ) {
     }
 
     private record Parsed(

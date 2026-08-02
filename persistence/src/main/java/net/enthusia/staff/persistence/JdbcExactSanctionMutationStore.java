@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
@@ -51,6 +52,24 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     }
 
     @Override
+    public OptionalLong exactRevision(UUID sanctionId) {
+        if (sanctionId == null) {
+            throw new IllegalArgumentException("sanctionId must be present");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT revision FROM sanctions WHERE sanction_id = ?"
+             )) {
+            statement.setBytes(1, UuidBytes.toBytes(sanctionId));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? OptionalLong.of(result.getLong(1)) : OptionalLong.empty();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read exact sanction revision", exception);
+        }
+    }
+
+    @Override
     public ExactSanctionChangeResult applyExact(
             ExactSanctionChangeRequest request,
             SanctionActionLimits limits
@@ -76,6 +95,13 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                     return new ExactSanctionChangeResult.Rejected(
                             "SANCTION_NOT_FOUND",
                             "The sanction does not exist"
+                    );
+                }
+                if (row.revision() != request.expectedRevision()) {
+                    connection.rollback();
+                    return new ExactSanctionChangeResult.Rejected(
+                            "STALE_SANCTION_STATE",
+                            "The sanction changed after command validation; review its current state and retry"
                     );
                 }
                 if (!StaffHierarchy.mayMutate(
@@ -385,17 +411,21 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     }
 
     private static void updateCaseOverturnState(Connection connection, CaseId caseId) throws SQLException {
-        long remaining;
+        int remaining = 0;
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT COUNT(*)
+                SELECT sanction_id, status
                 FROM sanctions
-                WHERE case_id = ? AND status <> 'OVERTURNED'
+                WHERE case_id = ?
+                ORDER BY sanction_id
                 FOR UPDATE
                 """)) {
             statement.setString(1, caseId.value());
             try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                remaining = result.getLong(1);
+                while (result.next()) {
+                    if (!"OVERTURNED".equals(result.getString("status"))) {
+                        remaining++;
+                    }
+                }
             }
         }
         if (remaining != 0) {
@@ -578,9 +608,23 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                         optionalInstant(result, "expiration_at"),
                         optionalInstant(result, "ended_at"),
                         result.getLong("revision"),
-                        StaffRank.valueOf(result.getString("actor_rank"))
+                        issuerRank(result.getString("actor_rank"))
                 );
             }
+        }
+    }
+
+    private static StaffRank issuerRank(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return StaffRank.SYSTEM;
+        }
+        if (stored.equalsIgnoreCase("OWNER")) {
+            return StaffRank.FOUNDER;
+        }
+        try {
+            return StaffRank.valueOf(stored.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            return StaffRank.SYSTEM;
         }
     }
 

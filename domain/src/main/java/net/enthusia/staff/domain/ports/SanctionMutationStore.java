@@ -5,9 +5,15 @@ import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
+import java.util.OptionalLong;
+import java.util.UUID;
 
 public interface SanctionMutationStore {
     SanctionChangeResult apply(SanctionChangeRequest request);
+
+    default OptionalLong exactRevision(UUID sanctionId) {
+        return OptionalLong.empty();
+    }
 
     default ExactSanctionChangeResult applyExact(
             ExactSanctionChangeRequest request,

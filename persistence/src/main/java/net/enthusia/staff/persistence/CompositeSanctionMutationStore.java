@@ -1,5 +1,8 @@
 package net.enthusia.staff.persistence;
 
+import java.util.OptionalLong;
+import java.util.UUID;
+
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
@@ -25,6 +28,11 @@ final class CompositeSanctionMutationStore implements SanctionMutationStore {
     @Override
     public SanctionChangeResult apply(SanctionChangeRequest request) {
         return caseWide.apply(request);
+    }
+
+    @Override
+    public OptionalLong exactRevision(UUID sanctionId) {
+        return exact.exactRevision(sanctionId);
     }
 
     @Override
