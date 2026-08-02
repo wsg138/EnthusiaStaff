@@ -5,16 +5,17 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
+import net.enthusia.staff.domain.report.ReportPolicy;
 
 final class JdbcReportEvidenceMaintenance {
-    private static final Duration CLIENT_EVIDENCE_RETENTION = Duration.ofDays(7);
     private static final int MAX_BATCH_LIMIT = 1_000;
     private static final String PUBLIC_CHAT_PURGE_SQL = """
             DELETE FROM report_chat_snapshots WHERE expires_at <= ? ORDER BY expires_at LIMIT ?
@@ -24,28 +25,36 @@ final class JdbcReportEvidenceMaintenance {
             """;
 
     private final DataSource dataSource;
+    private final Supplier<ReportPolicy> policy;
 
-    JdbcReportEvidenceMaintenance(DataSource dataSource) {
-        this.dataSource = dataSource;
+    JdbcReportEvidenceMaintenance(DataSource dataSource, Supplier<ReportPolicy> policy) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.policy = Objects.requireNonNull(policy, "policy");
     }
 
     ReportEvidencePurgeResult purgeExpired(Instant now, int batchLimit) {
         validateRequest(now, batchLimit);
+        ReportPolicy activePolicy = currentPolicy();
         return JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to purge expired report evidence",
-                connection -> purgeInTransaction(connection, now, batchLimit)
+                connection -> purgeInTransaction(connection, now, batchLimit, activePolicy)
         );
     }
 
     private static ReportEvidencePurgeResult purgeInTransaction(
             Connection connection,
             Instant now,
-            int batchLimit
+            int batchLimit,
+            ReportPolicy activePolicy
     ) throws SQLException {
         int publicChat = purgePublicChat(connection, now, batchLimit);
         int privateMessages = purgePrivateMessages(connection, now, batchLimit);
-        int clientEvidence = purgeClientEvidence(connection, now, batchLimit);
+        int clientEvidence = purgeClientEvidence(
+                connection,
+                now.minus(activePolicy.evidenceRetention()),
+                batchLimit
+        );
         return new ReportEvidencePurgeResult(publicChat, privateMessages, clientEvidence);
     }
 
@@ -81,14 +90,10 @@ final class JdbcReportEvidenceMaintenance {
 
     private static int purgeClientEvidence(
             Connection connection,
-            Instant now,
+            Instant cutoff,
             int batchLimit
     ) throws SQLException {
-        List<EvidenceLink> expired = lockExpiredClientEvidence(
-                connection,
-                now.minus(CLIENT_EVIDENCE_RETENTION),
-                batchLimit
-        );
+        List<EvidenceLink> expired = lockExpiredClientEvidence(connection, cutoff, batchLimit);
         if (expired.isEmpty()) {
             return 0;
         }
@@ -157,6 +162,10 @@ final class JdbcReportEvidenceMaintenance {
                     "expired report evidence cleanup returned an invalid update count"
             );
         }
+    }
+
+    private ReportPolicy currentPolicy() {
+        return Objects.requireNonNull(policy.get(), "active report policy");
     }
 
     private static void validateRequest(Instant now, int batchLimit) {
