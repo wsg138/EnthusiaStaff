@@ -35,6 +35,7 @@ import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
+import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
@@ -181,7 +182,13 @@ final class PaperCommandRegistrar {
                 storage(PaperStorageBindings::clientEvidenceStore), workers()
         );
         bindCompleting("client", client, client);
-        ReportGuiController reportGui = new ReportGuiController(plugin(), clock(), reportStore, workers());
+        ReportGuiController reportGui = new ReportGuiController(
+                plugin(),
+                clock(),
+                reportStore,
+                dependencies.environment().reportConfiguration(),
+                workers()
+        );
         plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
         ReportsCommand reports = new ReportsCommand(plugin(), clock(), reportStore, workers(), reportGui);
         bindCompleting("reports", reports, reports);
@@ -292,7 +299,8 @@ final class PaperCommandRegistrar {
             Clock clock,
             String serverId,
             ExecutorService workers,
-            Supplier<ModerationFeatureSettings> moderationFeatures
+            Supplier<ModerationFeatureSettings> moderationFeatures,
+            Supplier<ReportConfigurationSnapshot> reportConfiguration
     ) {
     }
 
