@@ -50,6 +50,26 @@ PR #37 is the only current implementation branch. Do not create a synchronizatio
 commit unless it actually becomes behind `main`; do not rebase or force-push it.
 Migrations V11, V12 and V13 are checksum-locked and may not be changed.
 
+## Related repositories
+
+| Repository | Expected role | Current coordinated status | Main blocker |
+| --- | --- | --- | --- |
+| `wsg138/enthusia-site` | Private punishment and appeal website | Root bridge exists; complete site branch not reconstructed or validated here | Auth/session/CSRF/media/rate-limit work, secrets and private staging |
+| `wsg138/EnthusiaCurrency` | Exact economy moderation snapshots and plans | Root integration contract/adapter exists; provider implementation not validated | Provider branch and cross-plugin staging |
+| `wsg138/EnthusiaCommend` | Persistent reputation restriction API | Root contract/adapter exists; provider implementation not validated | Provider branch and all write-entry enforcement tests |
+| `wsg138/EnthusiaAutoClicker` | Versioned bounded client evidence | Root contract/adapter exists; provider implementation not validated | Provider branch and handshake/offline evidence staging |
+| Intended `wsg138/Enthusia-RoseChat` | Moderation/staff channel and evidence bridge | Blocked; repository/API remains missing or inaccessible | Do not invent a remote or unsupported reflective/command integration |
+| `wsg138/EnthusiaMarket` | Supported stall moderation and escrow-safe behavior | Root adapter exists; provider implementation not validated | Provider branch and transaction-compatible staging |
+
+Each related project remains an independent Git repository. Histories must not be
+flattened into EnthusiaStaff, and provider-owned API classes must not leak into the
+Paper or Velocity runtime JARs.
+
+A cross-repository release candidate must use a release manifest containing one
+authenticated revision per repository, with matching artifact hashes,
+configuration checksums, environment versions and acceptance evidence. There is
+no single global commit that can identify independent provider and website state.
+
 ## Current development route
 
 The detailed path is maintained in:
