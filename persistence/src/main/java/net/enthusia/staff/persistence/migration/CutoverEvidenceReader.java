@@ -92,8 +92,7 @@ final class CutoverEvidenceReader {
                 FROM migration_runs r
                 WHERE r.mode = 'SHADOW' AND r.state = 'COMPLETED' AND r.mismatch_count = 0
                   AND r.completed_at <= ?
-                  AND (SELECT COUNT(DISTINCT s.comparison_type)
-                       FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
+                  AND (SELECT COUNT(*) FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
                   AND NOT EXISTS (
                        SELECT 1 FROM shadow_comparisons s
                        WHERE s.run_id = r.run_id AND s.matched = FALSE
@@ -104,8 +103,7 @@ final class CutoverEvidenceReader {
                 FROM migration_runs r
                 WHERE r.mode = 'SHADOW' AND r.state = 'COMPLETED' AND r.mismatch_count = 0
                   AND r.started_at >= ? AND r.completed_at <= ?
-                  AND (SELECT COUNT(DISTINCT s.comparison_type)
-                       FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
+                  AND (SELECT COUNT(*) FROM shadow_comparisons s WHERE s.run_id = r.run_id) = ?
                   AND NOT EXISTS (
                        SELECT 1 FROM shadow_comparisons s
                        WHERE s.run_id = r.run_id AND s.matched = FALSE
@@ -136,7 +134,16 @@ final class CutoverEvidenceReader {
                 if (runs.isEmpty()) {
                     return null;
                 }
+                validateShadowRuns(connection, runs);
                 return new ShadowWindow(runs.getFirst().startedAt(), runs);
+            }
+        }
+    }
+
+    private void validateShadowRuns(Connection connection, List<ShadowRun> runs) throws SQLException {
+        for (ShadowRun run : runs) {
+            if (readComparisons(connection, run.runId(), run.completedAt()) == null) {
+                throw new SQLException("shadow run is missing a complete comparison summary");
             }
         }
     }
@@ -224,17 +231,24 @@ final class CutoverEvidenceReader {
             throws SQLException {
         Map<ComparisonType, Comparison> comparisons = new EnumMap<>(ComparisonType.class);
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT comparison_type, matched, detail_json
+                SELECT comparison_type, matched, detail_json, compared_at
                 FROM shadow_comparisons WHERE run_id = ?
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(runId));
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     ComparisonType type = ComparisonType.valueOf(result.getString("comparison_type"));
+                    Timestamp comparedAt = result.getTimestamp("compared_at");
+                    if (comparedAt == null || comparedAt.toInstant().isAfter(completedAt)) {
+                        throw new SQLException("shadow comparison timestamp is inconsistent with its run");
+                    }
                     JsonNode detail = parseDetail(result.getString("detail_json"));
                     long compared = requiredNonNegativeLong(detail, "compared");
                     long mismatched = requiredNonNegativeLong(detail, "mismatched");
                     boolean matched = result.getBoolean("matched");
+                    if (result.wasNull()) {
+                        throw new SQLException("persisted shadow comparison match flag is missing");
+                    }
                     if (mismatched > compared || matched != (mismatched == 0)) {
                         throw new SQLException("inconsistent persisted shadow comparison detail");
                     }
@@ -256,6 +270,9 @@ final class CutoverEvidenceReader {
     }
 
     private JsonNode parseDetail(String detailJson) throws SQLException {
+        if (detailJson == null || detailJson.isBlank()) {
+            throw new SQLException("persisted shadow comparison detail is missing");
+        }
         try {
             JsonNode detail = json.readTree(detailJson);
             if (detail == null || !detail.isObject()) {
@@ -269,7 +286,8 @@ final class CutoverEvidenceReader {
 
     private static long requiredNonNegativeLong(JsonNode detail, String field) throws SQLException {
         JsonNode value = detail.get(field);
-        if (value == null || !value.canConvertToLong() || value.longValue() < 0) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong()
+                || value.longValue() < 0) {
             throw new SQLException("invalid persisted shadow comparison " + field);
         }
         return value.longValue();
