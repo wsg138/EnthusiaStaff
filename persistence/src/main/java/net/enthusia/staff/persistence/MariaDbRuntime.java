@@ -30,6 +30,7 @@ import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
 import net.enthusia.staff.persistence.migration.FencedModerationStore;
+import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
 import net.enthusia.staff.persistence.migration.FencedPunishmentRequestStore;
 import net.enthusia.staff.persistence.migration.FencedSanctionMutationStore;
 import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
@@ -83,7 +84,10 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.freezeStore = new JdbcFreezeStore(dataSource);
         this.staffSessionStore = new JdbcStaffSessionStore(dataSource);
         this.vanishStore = new JdbcVanishStore(dataSource);
-        this.networkIdentityStore = new JdbcNetworkIdentityStore(dataSource, json);
+        this.networkIdentityStore = new FencedNetworkIdentityStore(
+                dataSource,
+                new JdbcNetworkIdentityStore(dataSource, json)
+        );
         this.sanctionMutationStore = new FencedSanctionMutationStore(
                 dataSource,
                 new JdbcSanctionMutationStore(dataSource, json, Clock.systemUTC())
