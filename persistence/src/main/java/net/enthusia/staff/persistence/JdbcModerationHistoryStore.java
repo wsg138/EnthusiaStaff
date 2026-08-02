@@ -43,32 +43,42 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         if (subjectId == null || page < 1 || pageSize < 1 || pageSize > 100 || options == null) {
             throw new IllegalArgumentException("history page request is invalid");
         }
-        String union = subjectUnion(options);
+        UnionQuery union = subjectUnion(options);
         byte[] subject = UuidBytes.toBytes(subjectId);
         try (Connection connection = dataSource.getConnection()) {
-            long total = count(connection, union, subject);
-            int totalPages = total == 0 ? 0 : Math.toIntExact((total + pageSize - 1L) / pageSize);
-            if ((total == 0 && page != 1) || (total > 0 && page > totalPages)) {
-                throw new IllegalArgumentException("history page exceeds the available range");
+            connection.setAutoCommit(false);
+            try {
+                long total = count(connection, union, subject);
+                int totalPages = total == 0 ? 0 : Math.toIntExact((total + pageSize - 1L) / pageSize);
+                if ((total == 0 && page != 1) || (total > 0 && page > totalPages)) {
+                    throw new IllegalArgumentException("history page exceeds the available range");
+                }
+                List<ModerationHistoryEntry> entries = total == 0
+                        ? List.of()
+                        : readPage(
+                                connection,
+                                union,
+                                subject,
+                                pageSize,
+                                Math.multiplyExact((long) page - 1L, pageSize),
+                                options.includeSensitive()
+                        );
+                ModerationHistoryPage result = new ModerationHistoryPage(
+                        subjectId,
+                        page,
+                        pageSize,
+                        total,
+                        totalPages,
+                        entries
+                );
+                connection.commit();
+                return result;
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } finally {
+                restoreAutoCommit(connection);
             }
-            List<ModerationHistoryEntry> entries = total == 0
-                    ? List.of()
-                    : readPage(
-                            connection,
-                            union,
-                            subject,
-                            pageSize,
-                            Math.multiplyExact((long) page - 1L, pageSize),
-                            options.includeSensitive()
-                    );
-            return new ModerationHistoryPage(
-                    subjectId,
-                    page,
-                    pageSize,
-                    total,
-                    totalPages,
-                    entries
-            );
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to read moderation history", exception);
         }
@@ -86,12 +96,12 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         if (review.isEmpty()) {
             return Optional.empty();
         }
-        String union = caseUnion(options);
-        String query = "SELECT * FROM (" + union + ") history "
+        UnionQuery union = caseUnion(options);
+        String query = "SELECT * FROM (" + union.sql() + ") history "
                 + "ORDER BY occurred_at DESC, stable_key DESC";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(query)) {
-            bindRepeated(statement, caseId.value(), placeholderCount(union));
+            bindRepeated(statement, caseId.value(), union.segments());
             try (ResultSet result = statement.executeQuery()) {
                 List<ModerationHistoryEntry> timeline = new ArrayList<>();
                 while (result.next()) {
@@ -104,11 +114,11 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         }
     }
 
-    private static long count(Connection connection, String union, byte[] subject) throws SQLException {
+    private static long count(Connection connection, UnionQuery union, byte[] subject) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT COUNT(*) FROM (" + union + ") history"
+                "SELECT COUNT(*) FROM (" + union.sql() + ") history"
         )) {
-            bindRepeated(statement, subject, placeholderCount(union));
+            bindRepeated(statement, subject, union.segments());
             try (ResultSet result = statement.executeQuery()) {
                 result.next();
                 return result.getLong(1);
@@ -118,16 +128,16 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
 
     private static List<ModerationHistoryEntry> readPage(
             Connection connection,
-            String union,
+            UnionQuery union,
             byte[] subject,
             int limit,
             long offset,
             boolean includeSensitive
     ) throws SQLException {
-        String query = "SELECT * FROM (" + union + ") history "
+        String query = "SELECT * FROM (" + union.sql() + ") history "
                 + "ORDER BY occurred_at DESC, stable_key DESC LIMIT ? OFFSET ?";
         try (PreparedStatement statement = connection.prepareStatement(query)) {
-            int repeated = placeholderCount(union);
+            int repeated = union.segments();
             bindRepeated(statement, subject, repeated);
             statement.setInt(repeated + 1, limit);
             statement.setLong(repeated + 2, offset);
@@ -166,7 +176,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         );
     }
 
-    private static String subjectUnion(HistoryQueryOptions options) {
+    private static UnionQuery subjectUnion(HistoryQueryOptions options) {
         List<String> segments = new ArrayList<>();
         segments.add(caseSegment("c.target_id = ?"));
         segments.add(sanctionCreatedSegment("s.target_id = ?"));
@@ -185,10 +195,10 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         if (options.includeSensitive()) {
             segments.add(staffNoteSegment("note.target_id = ?"));
         }
-        return String.join(" UNION ALL ", segments);
+        return new UnionQuery(String.join(" UNION ALL ", segments), segments.size());
     }
 
-    private static String caseUnion(HistoryQueryOptions options) {
+    private static UnionQuery caseUnion(HistoryQueryOptions options) {
         List<String> segments = new ArrayList<>();
         segments.add(caseSegment("c.case_id = ?"));
         segments.add(sanctionCreatedSegment("s.case_id = ?"));
@@ -204,7 +214,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
             segments.add(overturnRequestedSegment("c.case_id = ?"));
             segments.add(overturnDecisionSegment("c.case_id = ?"));
         }
-        return String.join(" UNION ALL ", segments);
+        return new UnionQuery(String.join(" UNION ALL ", segments), segments.size());
     }
 
     private static String caseSegment(String filter) {
@@ -415,14 +425,31 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
         return value == null ? Optional.empty() : Optional.of(value.toInstant());
     }
 
-    private static int placeholderCount(String query) {
-        int count = 0;
-        for (int index = 0; index < query.length(); index++) {
-            if (query.charAt(index) == '?') {
-                count++;
+    private static void rollback(Connection connection, Exception failure) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
+        }
+    }
+
+    private static void restoreAutoCommit(Connection connection) {
+        try {
+            connection.setAutoCommit(true);
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException(
+                    "Unable to restore moderation history connection state",
+                    exception
+            );
+        }
+    }
+
+    private record UnionQuery(String sql, int segments) {
+        private UnionQuery {
+            if (sql == null || sql.isBlank() || segments < 1) {
+                throw new IllegalArgumentException("history union query must contain at least one segment");
             }
         }
-        return count;
     }
 
     private static void bindRepeated(PreparedStatement statement, byte[] value, int count)
