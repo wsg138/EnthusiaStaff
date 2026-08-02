@@ -1,39 +1,26 @@
 # Remaining Development Map
 
-This page answers one question: **which feature group should development work on
-next?**
+This page answers one question: **which feature group should development work on next?**
 
-Detailed feature percentages, descriptions, source files and remaining tasks live
-on the feature-group pages. This page keeps the cross-group order, current branch
-state and release dependencies.
+Detailed feature percentages, descriptions, source files and remaining tasks live on the feature-group pages. This page keeps the cross-group order, current branch state and release dependencies.
 
 - Completion overview: [[Feature Completion Status|Implementation-Status]]
 - Exact evidence: [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
 - Code ownership: [[Developer Code Guide]]
 - Validation: [[Build and Testing]]
 - Migration operations: [[LiteBans Migration]] and [[Shadow Mode and Cutover]]
-- Acceptance gate: [cutover acceptance](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/cutover-acceptance.md)
+- Production cutover acceptance: [cutover acceptance](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/cutover-acceptance.md)
 
 ## Repository checkpoint
 
-- PR #27 is merged at `main` commit
-  `14666c5b065571c227373ec9e13e82e978b689ca`.
-- PR #27's final reviewed source head was
-  `28dcd90f96b7a0c772acc378f73b18d9af62fe0b`.
-- PR #37 is the only current implementation pull request.
-- PR #37 remains an open draft on `section/plugin` at
-  `aa2d737a5f33f0337010932723f46ce1e356c867`.
-- PR #37 is 76 commits ahead and 0 behind the recorded `main` checkpoint.
-- Exact-head Coverage run `30734750010` passed with runtime packaging, migration
-  checksum tests, aggregate coverage and Codacy upload.
-- Pi source run `30731471656` and staging run `30731479127` passed on
-  runtime-equivalent source; later changes are tests, docs, analysis configuration
-  and temporary workflow cleanup, not production runtime source or migration bytes.
-- V11, V12 and V13 must retain the deployed checksum-locked bytes without
-  scanner-only comments; analysis suppression belongs in `.codacy.yml`.
-- Issue #43 is the remaining production-like acceptance blocker.
-- LiteBans remains authoritative.
-- Green CI does not by itself permit PR #37 to be marked ready or merged.
+- PR #27 is merged and remains the previous major implementation checkpoint.
+- PR #37 is the current cutover-coordination implementation pull request.
+- PR #37 contains dormant infrastructure for authority fencing, migration coordination, transactional activation, restart recovery, duplicate safety, emergency freeze persistence, and protected authoritative writers.
+- V11, V12 and V13 must retain the deployed checksum-locked bytes without scanner-only comments; analysis suppression belongs in `.codacy.yml`.
+- Automated shadow scheduling is disabled by default and requires explicit configuration.
+- LiteBans remains authoritative outside an explicitly validated and authorized `ACTIVE` transition.
+- Issue #43 is the remaining **production cutover acceptance** gate, not an implementation merge blocker.
+- Merging PR #37 does not deploy a JAR, start a production shadow window, disable LiteBans, or authorize a live cutover.
 
 ## Four development groups
 
@@ -46,35 +33,36 @@ state and release dependencies.
 
 ## Current development order
 
-### 1. Preserve the post-PR-27 checkpoint
+### 1. Finish and merge PR #37 as dormant infrastructure
 
-- Keep `main`, the final PR #27 source head and the post-merge workflow evidence
-  recorded exactly.
-- Do not reopen PR #27 or recreate its former branch unless a new verified defect
-  requires a separate correction.
-- Keep documentation evidence boundaries explicit: exact-main runtime evidence,
-  merge-ref Wiki evidence and staging evidence are different claims.
+Before merge:
 
-### 2. Keep PR #37 internally ready
+- complete code review and resolve material review findings;
+- pass exact-head Java 21 build, unit and MariaDB/Testcontainers tests, migration checksum checks, runtime-JAR inspection, provider API leak checks, static analysis, and configured coverage upload;
+- keep V11, V12 and V13 byte-compatible with their locked deployed checksums;
+- verify startup remains non-`ACTIVE`, missing or invalid activation evidence fails closed, and automatic shadow scheduling is disabled unless explicitly configured;
+- use a normal merge commit and do not deploy the merged JAR.
 
-- Review operational-state persistence, maintenance entry/abort, exact final-run
-  activation linkage, duplicate activation, emergency freeze and writer fencing.
-- Preserve cross-server database coordination, local transaction serialization,
-  restart recovery, migration-run abandonment handling, activation replay and
-  cutover audit persistence.
-- Keep the deployed V11, V12 and V13 bytes unchanged. Do not add scanner comments;
-  use analysis configuration for exclusions and new migration files for future SQL.
-- Merge current `main` into `section/plugin` only if the branch actually becomes
-  behind; use a normal merge commit, never a rebase or force-push.
+Issue #43 does not block this dormant implementation merge.
 
-### 3. Complete issue #43 against one release candidate
+### 2. Continue normal feature development
 
-Pin one exact PR #37 source SHA, Paper and Velocity JAR hashes, sanitized
-configuration revision and isolated staging environment. Any runtime-source, JAR,
-migration, schema, comparison or relevant configuration change invalidates the
-record.
+After PR #37 is merged, choose the next actual moderation or staff feature from the unfinished feature groups. Do not hold unrelated development work behind the later production cutover rehearsal.
 
-The record must cover:
+Prioritize work in this order:
+
+1. correctness or security defects that can corrupt state;
+2. recovery and idempotency gaps in destructive workflows;
+3. core moderation workflows that are already partially implemented;
+4. shared foundation work that blocks multiple user-facing features;
+5. one coherent feature category from a group page;
+6. documentation and evidence updates for the exact tested revision.
+
+### 3. Complete issue #43 when the plugin is closer to release
+
+Pin one exact release-candidate SHA, Paper and Velocity JAR hashes, sanitized configuration revision and isolated staging environment. Any runtime-source, JAR, migration, schema, comparison or relevant configuration change invalidates the record.
+
+The production cutover record must cover:
 
 - representative sanitized-backup migration, rerun and checksum comparison;
 - interrupted migration and restart recovery;
@@ -87,31 +75,22 @@ The record must cover:
 - provider-present/provider-missing behavior;
 - database, queue, dead-letter, process-kill, saturation and latency scenarios.
 
-### 4. Decide PR #37 readiness
+Only after that record is complete may the release candidate be deployed for production cutover, EnthusiaStaff authority be activated, LiteBans be disabled or removed, the final production migration be performed, or a live cutover be authorized.
 
-PR #37 may be marked ready only when one exact acceptance record satisfies
-`docs/cutover-acceptance.md`, issue #43 is complete, automated validation is clean,
-no major review thread remains and the final exact-head diff has been reviewed.
-
-Merging PR #37 still does not authorize a production LiteBans cutover.
-
-### 5. Finish shared foundation gaps
+### 4. Finish shared foundation gaps
 
 Prioritize the core gaps that block several feature groups:
 
-- complete operational modes and dependency-specific feature gates;
+- complete dependency-specific feature gates and actionable runtime verification;
 - finish modular configuration and atomic reload;
-- finish runtime health and actionable verification;
 - prove startup, shutdown, long-outage and process-kill recovery;
 - finish historical-name, Bedrock alias and bounded completion behavior.
 
 See [[Core Platform and Infrastructure]].
 
-### 6. Complete the remaining feature groups
+### 5. Complete the remaining feature groups
 
-Continue moderation history and appeals, player-state safety, provider integrations,
-the private site and the final release manifest only after the cutover branch and
-its acceptance evidence are stable.
+Continue moderation history and appeals, report UX, player-state safety, provider integrations, staff tools, the private site and the final release manifest in coherent, independently reviewable changes.
 
 ## How to choose the next task
 
@@ -119,14 +98,12 @@ Choose work in this order:
 
 1. correctness or security defects that can corrupt state;
 2. recovery and idempotency gaps in destructive workflows;
-3. acceptance evidence required by issue #43;
+3. core moderation workflows already close to usable;
 4. shared foundation work that blocks multiple features;
 5. one coherent feature category from a group page;
 6. documentation and evidence updates for the exact tested revision.
 
-Do not choose work merely because it is easy to demonstrate. A section is done
-only when its behavior, authority, persistence, failure handling, recovery, tests,
-staging and documentation agree.
+Do not choose work merely because it is easy to demonstrate. A section is done only when its behavior, authority, persistence, failure handling, recovery, tests, staging and documentation agree.
 
 ## Documentation ownership
 
@@ -141,4 +118,4 @@ staging and documentation agree.
 | Complete code map and feature traces | [[Developer Code Guide]] |
 | Validation procedure | [[Build and Testing]] |
 | Migration operator procedure | [[LiteBans Migration]] and [[Shadow Mode and Cutover]] |
-| PR #37 production-like acceptance | `docs/cutover-acceptance.md` and issue #43 |
+| Production cutover acceptance | `docs/cutover-acceptance.md` and issue #43 |
