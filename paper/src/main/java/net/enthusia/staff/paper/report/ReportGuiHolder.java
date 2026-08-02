@@ -5,17 +5,23 @@ import org.bukkit.inventory.InventoryHolder;
 
 final class ReportGuiHolder implements InventoryHolder {
     private final ReportGuiState state;
+    private final ReportGuiConfiguration configuration;
     private Inventory inventory;
 
-    ReportGuiHolder(ReportGuiState state) {
-        if (state == null) {
-            throw new IllegalArgumentException("report GUI state must be present");
+    ReportGuiHolder(ReportGuiState state, ReportGuiConfiguration configuration) {
+        if (state == null || configuration == null) {
+            throw new IllegalArgumentException("report GUI state and configuration must be present");
         }
         this.state = state;
+        this.configuration = configuration;
     }
 
     ReportGuiState state() {
         return state;
+    }
+
+    ReportGuiConfiguration configuration() {
+        return configuration;
     }
 
     void attach(Inventory inventory) {
