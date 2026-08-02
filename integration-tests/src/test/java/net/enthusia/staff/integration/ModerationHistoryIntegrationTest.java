@@ -598,7 +598,7 @@ class ModerationHistoryIntegrationTest {
     }
 
     private static CaseId caseId(int value) {
-        return new CaseId("HIST" + String.format(java.util.Locale.ROOT, "%012d", value));
+        return new CaseId("HST" + String.format(java.util.Locale.ROOT, "%013d", value));
     }
 
     private static String hex64(UUID value) {
