@@ -33,7 +33,7 @@ Then inspect live GitHub state:
 - the live highest Flyway migration;
 - recent merged work that may make the state file stale.
 
-Reconcile any discrepancy between live state and the recorded state. Live GitHub and code win.
+Reconcile every discrepancy. Live GitHub and code win over stale recorded state.
 
 ## Decide what to do
 
@@ -42,7 +42,7 @@ Follow the resume-first rules in `ai-agents/AGENTS.md`.
 In practical terms:
 
 1. If a relevant unfinished PR exists, resume and finish it instead of opening another PR.
-2. If the active work is blocked, resolve that blocker when it is within repository scope.
+2. If active work is blocked, resolve that blocker when it is within repository scope.
 3. If no unfinished work exists, select the recorded next work item from `WORKSPACE-STATE.md` after verifying its prerequisites and actual gaps.
 4. If that item is already complete or invalid, select the next highest-priority incomplete prerequisite-ready item from the goals, blueprint, requirements matrix, and current code.
 
@@ -109,9 +109,24 @@ Classify findings as merge blockers, confirmed defects, optional cleanup, or unr
 
 Fix every merge blocker and confirmed defect. Do not add endless speculative cleanup merely to delay completion.
 
+## Freeze tracked content before final validation
+
+Before exact-head validation:
+
+1. finish every code, test, migration, documentation, state, and handoff change;
+2. update `ai-agents/WORKSPACE-STATE.md` to the intended post-merge state;
+3. add a timestamped handoff under `ai-agents/reports/agent-handoffs/`;
+4. update `ai-agents/reports/agent-handoffs/latest.md` to point to that report and the PR;
+5. make the handoff point readers to the PR description or final PR comment for exact-head and merge evidence;
+6. stop changing tracked files unless review or validation finds a real defect.
+
+A committed file cannot safely contain its own PR's final SHA and final CI run IDs without changing the SHA again. Do not create that circular update loop.
+
+If another commit is required, repeat harsh review and exact-head validation for the new final head.
+
 ## Exact-head validation
 
-Run or verify the repository's full applicable validation on the final reviewed feature head.
+Run or verify the repository's full applicable validation on the final reviewed feature head after tracked content is frozen.
 
 Normally include:
 
@@ -136,22 +151,23 @@ Normally include:
 
 Never claim a check passed without direct evidence. Label skipped, superseded, merge-ref-only, runtime-equivalent, and different-revision results accurately.
 
+Record the exact final feature SHA, run and job IDs, hashes, analysis results, review status, and Pi status in the PR description or a final pre-merge PR comment. Updating PR text must not change the feature SHA.
+
 ## Merge and cleanup
 
 Merge only when every gate in `ai-agents/AGENTS.md` passes.
 
 Before merging:
 
-1. update the PR description with the final scope and exact-head evidence;
-2. update `ai-agents/WORKSPACE-STATE.md` for the intended post-merge state;
-3. add a timestamped handoff under `ai-agents/reports/agent-handoffs/`;
-4. update `ai-agents/reports/agent-handoffs/latest.md` to point to it;
-5. ensure those records are included in the reviewed PR;
-6. mark the PR ready only after it is actually ready.
+1. ensure the tracked state and handoff files are complete;
+2. ensure tracked content has been frozen before the exact-head checks;
+3. put final scope and exact-head evidence in the PR description or final pre-merge comment;
+4. resolve all valid review findings;
+5. mark the PR ready only after it is actually ready.
 
 Merge using a normal merge commit.
 
-Do not rebase, squash, force-push, push directly to `main`, or enable auto-merge.
+Do not rebase, squash, force-push, push directly to `main`, enable auto-merge, or merge a draft PR.
 
 After merging:
 
