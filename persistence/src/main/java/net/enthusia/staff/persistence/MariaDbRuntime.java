@@ -14,6 +14,7 @@ import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
@@ -52,6 +53,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final SanctionMutationStore sanctionMutationStore;
     private final CaseLookup caseLookup;
     private final CaseReviewStore caseReviewStore;
+    private final ModerationHistoryStore moderationHistoryStore;
     private final ReportStore reportStore;
     private final InventoryJournalStore inventoryJournalStore;
     private final EconomyJournalStore economyJournalStore;
@@ -61,6 +63,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     MariaDbRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
         ObjectMapper json = jsonMapper();
+        Clock clock = Clock.systemUTC();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
         this.moderationStore = new FencedModerationStore(
                 dataSource,
@@ -88,12 +91,14 @@ public final class MariaDbRuntime implements AutoCloseable {
                 dataSource,
                 new JdbcNetworkIdentityStore(dataSource, json)
         );
-        this.sanctionMutationStore = new FencedSanctionMutationStore(
-                dataSource,
-                new JdbcSanctionMutationStore(dataSource, json, Clock.systemUTC())
+        SanctionMutationStore mutationStore = new CompositeSanctionMutationStore(
+                new JdbcSanctionMutationStore(dataSource, json, clock),
+                new JdbcExactSanctionMutationStore(dataSource, json, clock)
         );
+        this.sanctionMutationStore = new FencedSanctionMutationStore(dataSource, mutationStore);
         this.caseLookup = new JdbcCaseLookup(dataSource);
-        this.caseReviewStore = new JdbcCaseReviewStore(dataSource, Clock.systemUTC());
+        this.caseReviewStore = new JdbcCaseReviewStore(dataSource, clock);
+        this.moderationHistoryStore = new JdbcModerationHistoryStore(dataSource, caseReviewStore);
         this.reportStore = new JdbcReportStore(dataSource, json);
         this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, json);
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
@@ -116,6 +121,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public SanctionMutationStore sanctionMutationStore() { return sanctionMutationStore; }
     public CaseLookup caseLookup() { return caseLookup; }
     public CaseReviewStore caseReviewStore() { return caseReviewStore; }
+    public ModerationHistoryStore moderationHistoryStore() { return moderationHistoryStore; }
     public ReportStore reportStore() { return reportStore; }
     public InventoryJournalStore inventoryJournalStore() { return inventoryJournalStore; }
     public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
