@@ -11,6 +11,7 @@ import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 
 public final class ReportEvidenceMaintenance implements Runnable {
     private static final Duration NORMAL_INTERVAL = Duration.ofHours(1);
@@ -24,7 +25,7 @@ public final class ReportEvidenceMaintenance implements Runnable {
     private final AtomicReference<Instant> nextRun = new AtomicReference<>(Instant.EPOCH);
 
     public ReportEvidenceMaintenance(Clock clock, Supplier<ReportStore> reports, Logger logger) {
-        this(clock, reports, ReportPolicy::defaults, logger);
+        this(clock, reports, ReportPolicyRuntime::current, logger);
     }
 
     public ReportEvidenceMaintenance(
