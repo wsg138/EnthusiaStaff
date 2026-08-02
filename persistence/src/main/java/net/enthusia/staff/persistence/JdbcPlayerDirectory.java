@@ -75,18 +75,21 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
     private PlayerResolution resolveUsername(String username) {
         String lower = username.toLowerCase(Locale.ROOT);
         String sql = """
-                SELECT DISTINCT p.player_id, p.current_username, p.platform,
+                SELECT p.player_id, p.current_username, p.platform,
                     p.first_seen_at, p.last_seen_at
                 FROM players p
-                LEFT JOIN player_names n ON n.player_id = p.player_id
-                WHERE p.lowercase_username = ? OR n.lowercase_username = ?
-                ORDER BY p.last_seen_at DESC, p.player_id ASC
-                LIMIT 3
+                WHERE p.lowercase_username = ? OR EXISTS (
+                    SELECT 1 FROM player_names n
+                    WHERE n.player_id = p.player_id AND n.lowercase_username = ?
+                )
+                ORDER BY (p.lowercase_username = ?) DESC, p.last_seen_at DESC, p.player_id ASC
+                LIMIT 4
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, lower);
             statement.setString(2, lower);
+            statement.setString(3, lower);
             try (ResultSet result = statement.executeQuery()) {
                 Map<UUID, PlayerIdentity> matches = new LinkedHashMap<>();
                 while (result.next()) {
