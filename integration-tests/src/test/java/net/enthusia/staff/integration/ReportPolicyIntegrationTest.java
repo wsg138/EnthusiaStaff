@@ -6,7 +6,6 @@ import static net.enthusia.staff.integration.ReportIntegrationFixtures.NOW;
 import static net.enthusia.staff.integration.ReportIntegrationFixtures.request;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.sql.SQLException;
 import java.time.Duration;
@@ -17,7 +16,6 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
-import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -69,11 +67,7 @@ class ReportPolicyIntegrationTest {
             );
 
             assertEquals("OPEN_REPORT_LIMIT", rejected.code());
-            assertEquals(1, store.list(ReportQueue.OPEN, reporterId, 1).size());
-            assertThrows(
-                    ModerationPersistenceException.class,
-                    () -> store.list(ReportQueue.OPEN, reporterId, 2)
-            );
+            assertEquals(1, store.list(ReportQueue.OPEN, reporterId, 2).size());
         }
     }
 }
