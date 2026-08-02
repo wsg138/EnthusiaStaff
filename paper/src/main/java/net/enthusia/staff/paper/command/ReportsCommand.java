@@ -63,6 +63,26 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             }
             return true;
         }
+        if (arguments[0].equalsIgnoreCase("note")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Component.text("Only a player can complete a GUI report note."));
+                return true;
+            }
+            if (arguments.length < 2) {
+                sender.sendMessage(Component.text("Usage: /reports note <private action note>"));
+                return true;
+            }
+            gui.acceptNote(player, String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)));
+            return true;
+        }
+        if (arguments[0].equalsIgnoreCase("cancel") && arguments.length == 1) {
+            if (sender instanceof Player player) {
+                gui.cancelNote(player);
+            } else {
+                sender.sendMessage(Component.text("Only a player can cancel a GUI report note."));
+            }
+            return true;
+        }
         ReportQueue queue = parseQueue(arguments[0]);
         if (queue != null && arguments.length == 1) {
             submit(sender, () -> list(sender, queue));
@@ -227,6 +247,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private static void usage(CommandSender sender) {
         sender.sendMessage(Component.text("Usage: /reports (opens the staff report GUI for players)"));
+        sender.sendMessage(Component.text("       /reports note <private action note> | /reports cancel"));
         sender.sendMessage(Component.text("       /reports <open|mine|claimed|review|closed>"));
         sender.sendMessage(Component.text("       /reports view <report-id>"));
         sender.sendMessage(Component.text(
@@ -237,7 +258,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
         return arguments.length == 1
-                ? List.of("open", "mine", "claimed", "review", "closed", "view", "claim",
+                ? List.of("note", "cancel", "open", "mine", "claimed", "review", "closed", "view", "claim",
                         "awaitreview", "close", "noviolation")
                 : List.of();
     }
