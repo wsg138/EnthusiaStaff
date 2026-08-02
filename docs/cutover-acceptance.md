@@ -2,6 +2,35 @@
 
 This plan produces the production-like evidence required before EnthusiaStaff may replace LiteBans as moderation authority. It is a staging procedure. It does not authorize a live cutover, production deployment, database repair, or deletion of legacy data.
 
+Merging reviewed cutover infrastructure into the development branch is separate from authorizing a production cutover. Issue #43 blocks production activation and cutover authorization. It does not block merging dormant, reviewed implementation code.
+
+## Implementation merge gate
+
+The implementation may be marked ready and merged when:
+
+- code review is complete and no material review thread remains unresolved;
+- automated tests pass for the exact final head;
+- the clean Java 21 build, runtime packaging, provider API leak inspection, static analysis, and configured coverage upload pass for that head;
+- deployed migrations remain checksum-compatible and V11 through V13 remain byte-compatible with their locked checksums;
+- the feature remains dormant and fails closed by default;
+- automatic shadow migration remains disabled unless explicitly configured;
+- merging does not automatically activate EnthusiaStaff authority, disable LiteBans, deploy an artifact, or start production acceptance.
+
+A green CI run is necessary but is not by itself production cutover approval.
+
+## Production cutover gate
+
+Issue #43 must be completed and reviewed before any of the following:
+
+- deploying this implementation as the production cutover release candidate;
+- entering a real production shadow window;
+- activating EnthusiaStaff as punishment authority;
+- disabling or removing LiteBans;
+- performing the final production migration;
+- authorizing a live cutover.
+
+The remainder of this document defines that production-like acceptance record. None of these phases begin merely because the implementation was merged.
+
 ## Evidence identity
 
 Create one acceptance record before starting and keep every artifact under that record.
@@ -135,11 +164,11 @@ Verify:
 - recovery queue draining and duplicate safety after restart;
 - sustained database latency and saturation limits.
 
-## Approval gate
+## Production cutover approval record
 
-The cutover PR may be marked ready and merged only when all of the following are attached to one acceptance record:
+Before production activation or live cutover authorization, one acceptance record must contain:
 
-- clean hosted build, tests, coverage, jar inspection, and static analysis for the exact head SHA;
+- clean hosted build, tests, coverage, jar inspection, and static analysis for the exact release-candidate SHA;
 - successful Paper boot and restart staging for the exact runtime SHA;
 - representative backup dry run, rerun, interruption, and restart evidence;
 - an uninterrupted 168-hour window with seven complete daily summaries;
@@ -150,4 +179,4 @@ The cutover PR may be marked ready and merged only when all of the following are
 - distributed Velocity/HUB/SMP, Java/Bedrock, provider, queue, dead-letter, and latency acceptance;
 - operator review confirming backups, restore procedure, prior jars, permissions, secrets, and rollback staffing.
 
-A green unit-test or CI run alone is not production cutover approval.
+Issue #43 remains open until this production cutover record is complete. Merged implementation code remains dormant, and LiteBans remains authoritative until a separate explicit production authorization is granted.
