@@ -15,7 +15,7 @@ jobs:
   report:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - name: Fetch current Codacy pull-request issues
         shell: bash
@@ -27,13 +27,30 @@ jobs:
           set -euo pipefail
           url="https://api.codacy.com/api/v3/analysis/organizations/gh/${ORGANIZATION}/repositories/${REPOSITORY}/pull-requests/${PULL_REQUEST}/issues?status=new&limit=100"
           response="$(mktemp)"
-          curl --fail --silent --show-error --location "${url}" --output "${response}"
-          python3 - "${response}" <<'PY'
+          for attempt in $(seq 1 20); do
+            curl --fail --silent --show-error --location "${url}" --output "${response}"
+            if python3 - "${response}" <<'PY'
           import json
           import sys
           from pathlib import Path
 
-          source = Path(sys.argv[1])
-          payload = json.loads(source.read_text(encoding="utf-8"))
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          raise SystemExit(0 if payload.get("analyzed") is True else 1)
+          PY
+            then
+              python3 - "${response}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           print(json.dumps(payload, indent=2, sort_keys=True))
           PY
+              exit 0
+            fi
+            echo "Codacy analysis is not available yet (attempt ${attempt}/20)."
+            sleep 15
+          done
+          echo "Codacy did not publish the current pull-request analysis within the diagnostic window." >&2
+          cat "${response}" >&2
+          exit 1
