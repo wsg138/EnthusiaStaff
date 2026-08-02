@@ -35,6 +35,7 @@ import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
+import net.enthusia.staff.paper.config.ReportConfigurationRuntime;
 import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
@@ -85,7 +86,8 @@ final class PaperCommandRegistrar {
             RuntimeHealth health,
             ConfigurationReloadAction reloadAction
     ) {
-        registerStatus(plugin, health, new EstaffCommand(plugin, health, reloadAction));
+        ConfigurationReloadAction reportAware = ReportConfigurationRuntime.initialize(plugin, reloadAction);
+        registerStatus(plugin, health, new EstaffCommand(plugin, health, reportAware));
     }
 
     private static void registerStatus(JavaPlugin plugin, RuntimeHealth health, EstaffCommand executor) {
@@ -302,6 +304,22 @@ final class PaperCommandRegistrar {
             Supplier<ModerationFeatureSettings> moderationFeatures,
             Supplier<ReportConfigurationSnapshot> reportConfiguration
     ) {
+        Environment(
+                JavaPlugin plugin,
+                Clock clock,
+                String serverId,
+                ExecutorService workers,
+                Supplier<ModerationFeatureSettings> moderationFeatures
+        ) {
+            this(
+                    plugin,
+                    clock,
+                    serverId,
+                    workers,
+                    moderationFeatures,
+                    ReportConfigurationRuntime::snapshot
+            );
+        }
     }
 
     record Policy(
