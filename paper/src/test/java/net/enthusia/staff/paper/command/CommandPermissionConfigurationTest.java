@@ -19,6 +19,7 @@ class CommandPermissionConfigurationTest {
     private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
+            Map.entry("history", HistoryCommand.VIEW_PERMISSION),
             Map.entry("punish", PUNISH_PERMISSION),
             Map.entry("ban", PUNISH_PERMISSION),
             Map.entry("mute", PUNISH_PERMISSION),
@@ -72,10 +73,13 @@ class CommandPermissionConfigurationTest {
     }
 
     @Test
-    void historyCaseAndExactSanctionCommandsUseSubcommandPermissions() throws IOException {
+    void historyUsesOuterPermissionWhileCaseAndExactSanctionsUseSubcommandPermissions() throws IOException {
         JsonNode metadata = pluginMetadata();
         JsonNode commands = metadata.path("commands");
-        assertTrue(commands.path("history").path("permission").isMissingNode());
+        assertEquals(
+                HistoryCommand.VIEW_PERMISSION,
+                commands.path("history").path("permission").asText()
+        );
         assertTrue(commands.path("case").path("permission").isMissingNode());
         assertTrue(commands.path("estaff").path("permission").isMissingNode());
 
