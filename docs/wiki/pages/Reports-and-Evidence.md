@@ -5,10 +5,11 @@ record the outcome. This page explains staff procedure. For implementation
 percentages, source files and remaining development, use
 [[Moderation, Punishments, and Reports]].
 
-> **Current deployment:** `/report` and text-based `/reports` queues exist in the
-> current implementation, but the complete GUI, RoseChat private-message bridge
-> and production-like multi-server staging are unfinished. Follow the live-server
-> procedure actually approved for deployment.
+> **Current deployment:** the repository contains `/report`, the staff report
+> inventory workflow and text-based `/reports` fallbacks. The RoseChat
+> private-message bridge and production-like multi-server staging remain
+> unfinished. Follow only the live-server procedure separately approved for
+> deployment.
 
 ## Quick navigation
 
@@ -40,33 +41,68 @@ Current safeguards include:
 A valid duplicate merge is considered before ordinary cooldown rejection so new
 evidence can be preserved without creating a second report/notification.
 
-## Staff queue commands
+## Staff report interface
+
+Running `/reports` as a player with `enthusiastaff.reports.manage` opens the staff
+inventory interface. It provides these queues:
+
+- open reports;
+- reports claimed by the viewer;
+- all claimed reports;
+- reports awaiting review;
+- reports closed or marked no-violation during the previous seven days.
+
+Queue reads are asynchronous and database-bounded. The interface displays up to
+100 current results across local pages, supports refresh and queue switching, and
+fences overlapping loads so a slower old request cannot replace a newer screen.
+
+Selecting a report shows its reason, state, revision, reporter and target IDs,
+server/location context, description and retained evidence counts. Raw public
+chat, private-message and client-evidence JSON is deliberately not copied into
+item lore. Sensitive evidence remains in staff storage for the dedicated evidence
+review surfaces and text/technical investigation tools.
+
+State-changing buttons require a private action note and a separate confirmation
+screen. The confirmation uses the exact revision shown on the detail screen. A
+concurrent change produces a stale-revision rejection and the interface reloads
+the current report instead of overwriting it. Inventory clicks and drags are
+cancelled, inventories are bound to one viewer and permission is checked again on
+interaction and before presentation.
+
+## Text command fallback
+
+The explicit command forms remain available for console operation and for staff
+who prefer or require a plain-text workflow, including Bedrock users:
 
 ```text
-/reports
 /reports <open|mine|claimed|review|closed>
 /reports view <report-id>
 /reports claim <report-id> <revision> <note>
+/reports awaitreview <report-id> <revision> <note> CONFIRM
 /reports close <report-id> <revision> <note> CONFIRM
+/reports noviolation <report-id> <revision> <note> CONFIRM
 ```
 
 The report ID and current revision identify the exact state staff reviewed.
-State changes use that revision so an older screen cannot overwrite newer work.
+State changes use that revision so an older command or screen cannot overwrite
+newer work.
 
 The exact uppercase `CONFIRM` is required for close, no-violation and
 awaiting-review transitions. Without it, the command displays a review-only
-result. Claiming is the exception.
+result. Claiming through the text command is the exception; the GUI still uses a
+review and confirmation screen.
 
 ## Practical workflow
 
-1. Read the report and captured context.
-2. Claim it with the current revision and a short note.
-3. Observe the player or inspect the relevant area before confronting them.
-4. Compare the claim with server evidence, logs, chat, CoreProtect, screenshots or clips.
-5. Freeze only when the player could change evidence or leave the investigation.
-6. Use `/punish <player>` when the violation is reasonably proven.
-7. Reopen details if the revision changed.
-8. Close with the latest revision, factual outcome note and `CONFIRM`.
+1. Open `/reports` and select the relevant queue.
+2. Read the report description, location context and retained-evidence counts.
+3. Claim the report with a short factual note.
+4. Observe the player or inspect the relevant area before confronting them.
+5. Compare the claim with server evidence, logs, chat, CoreProtect, screenshots or clips.
+6. Freeze only when the player could change evidence or leave the investigation.
+7. Use `/punish <player>` when the violation is reasonably proven.
+8. Reopen or refresh details when the revision changed.
+9. Close or mark no violation with the latest revision and a factual outcome note.
 
 A stale revision should be reviewed again, not retried blindly.
 
@@ -147,7 +183,8 @@ Keep these inside the staff system:
 - private appeal evidence;
 - inventory/balance/confiscation details not required by the public reason.
 
-Private-message snapshots must not be copied into report Discord payloads.
+Private-message snapshots must not be copied into report Discord payloads or
+ordinary inventory lore.
 
 ## Closing outcomes
 
