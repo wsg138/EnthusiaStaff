@@ -23,41 +23,29 @@ final class AuthoritativeWriteFence {
         if (operation == null || blockedResult == null) {
             throw new IllegalArgumentException("authoritative write fence callbacks must be present");
         }
-        MigrationDatabaseLock migrationLock = MigrationDatabaseLock.acquire(dataSource);
+        Connection connection = null;
         Throwable operationFailure = null;
-        try (Connection connection = dataSource.getConnection()) {
+        boolean authoritativeOperationCompleted = false;
+        try {
+            connection = dataSource.getConnection();
             connection.setAutoCommit(false);
-            try {
-                if (!authoritativeWritesAllowed(connection)) {
-                    connection.rollback();
-                    return blockedResult.get();
-                }
-                T result = operation.get();
-                connection.commit();
-                return result;
-            } catch (SQLException exception) {
-                operationFailure = exception;
-                rollback(connection, exception);
-                throw new ModerationPersistenceException(
-                        "Unable to enforce the authoritative moderation write fence",
-                        exception
-                );
-            } catch (RuntimeException | Error exception) {
-                operationFailure = exception;
-                rollback(connection, exception);
-                throw exception;
-            } finally {
-                restoreAutoCommit(connection, operationFailure);
+            if (!authoritativeWritesAllowed(connection)) {
+                return blockedResult.get();
             }
+            T result = operation.get();
+            authoritativeOperationCompleted = true;
+            return result;
         } catch (SQLException exception) {
-            ModerationPersistenceException failure = new ModerationPersistenceException(
-                    "Unable to open the authoritative moderation write fence",
+            operationFailure = exception;
+            throw new ModerationPersistenceException(
+                    "Unable to enforce the authoritative moderation write fence",
                     exception
             );
-            operationFailure = failure;
-            throw failure;
+        } catch (RuntimeException | Error exception) {
+            operationFailure = exception;
+            throw exception;
         } finally {
-            migrationLock.closeAfter(operationFailure);
+            releaseFence(connection, operationFailure, authoritativeOperationCompleted);
         }
     }
 
@@ -85,21 +73,52 @@ final class AuthoritativeWriteFence {
         }
     }
 
-    private static void rollback(Connection connection, Throwable original) {
+    private static void releaseFence(
+            Connection connection,
+            Throwable operationFailure,
+            boolean authoritativeOperationCompleted
+    ) {
+        if (connection == null) {
+            return;
+        }
+        SQLException cleanupFailure = null;
         try {
             connection.rollback();
-        } catch (SQLException rollbackFailure) {
-            original.addSuppressed(rollbackFailure);
+        } catch (SQLException exception) {
+            cleanupFailure = exception;
         }
-    }
-
-    private static void restoreAutoCommit(Connection connection, Throwable operationFailure) {
         try {
             connection.setAutoCommit(true);
-        } catch (SQLException resetFailure) {
-            if (operationFailure != null) {
-                operationFailure.addSuppressed(resetFailure);
-            }
+        } catch (SQLException exception) {
+            cleanupFailure = combine(cleanupFailure, exception);
         }
+        try {
+            connection.close();
+        } catch (SQLException exception) {
+            cleanupFailure = combine(cleanupFailure, exception);
+        }
+        if (cleanupFailure == null) {
+            return;
+        }
+        if (operationFailure != null) {
+            operationFailure.addSuppressed(cleanupFailure);
+            return;
+        }
+        if (!authoritativeOperationCompleted) {
+            throw new ModerationPersistenceException(
+                    "Unable to release the authoritative moderation write fence",
+                    cleanupFailure
+            );
+        }
+        // The delegated authoritative transaction already reported a committed outcome.
+        // Do not replace that result with an ambiguous cleanup error from this read-only fence.
+    }
+
+    private static SQLException combine(SQLException existing, SQLException additional) {
+        if (existing == null) {
+            return additional;
+        }
+        existing.addSuppressed(additional);
+        return existing;
     }
 }
