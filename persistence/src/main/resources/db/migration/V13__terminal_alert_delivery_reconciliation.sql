@@ -2,7 +2,7 @@ ALTER TABLE staff_alerts
     ADD COLUMN occurrence_key VARCHAR(160) NULL AFTER lifecycle_event,
     ADD COLUMN lifecycle_actor_id BINARY(16) NULL AFTER occurrence_key;
 
-UPDATE staff_alerts -- nosemgrep
+UPDATE staff_alerts
 SET occurrence_key = COALESCE(
         CONCAT('legacy-request-revision:', request_revision),
         CONCAT('legacy-alert-id:', LOWER(HEX(alert_id)))
