@@ -3,15 +3,30 @@
 This page answers one question: **which feature group should development work on
 next?**
 
-Detailed feature percentages, descriptions, source files and remaining tasks now
-live on the four feature-group pages. This page keeps only the cross-group order
-and dependencies.
+Detailed feature percentages, descriptions, source files and remaining tasks live
+on the feature-group pages. This page keeps the cross-group order, current branch
+state and release dependencies.
 
 - Completion overview: [[Feature Completion Status|Implementation-Status]]
 - Exact evidence: [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
 - Code ownership: [[Developer Code Guide]]
 - Validation: [[Build and Testing]]
 - Migration operations: [[LiteBans Migration]] and [[Shadow Mode and Cutover]]
+- Acceptance gate: [cutover acceptance](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/cutover-acceptance.md)
+
+## Repository checkpoint
+
+- PR #27 is merged at `main` commit
+  `14666c5b065571c227373ec9e13e82e978b689ca`.
+- PR #27's final reviewed source head was
+  `28dcd90f96b7a0c772acc378f73b18d9af62fe0b`.
+- PR #37 is the only current implementation pull request.
+- PR #37 remains an open draft on `section/plugin` at
+  `f4cf0c6f824296b8677272c248cc5bb689c25417`.
+- PR #37 is 70 commits ahead and 0 behind the recorded `main` checkpoint.
+- Issue #43 is the remaining production-like acceptance blocker.
+- LiteBans remains authoritative.
+- Green CI does not by itself permit PR #37 to be marked ready or merged.
 
 ## Four development groups
 
@@ -20,18 +35,59 @@ and dependencies.
 | [[Core Platform and Infrastructure]] | **About 72%** | Modes, configuration, lifecycle, identity and failure handling are shared prerequisites for many other features. | Open the group page for files, descriptions and remaining categories. |
 | [[Moderation, Punishments, and Reports]] | **About 56%** | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
 | [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, vanish, freeze, inventories and confiscation can lose or duplicate player state if recovery is incomplete. | Open the group page for safety boundaries, files and remaining categories. |
-| [[Integrations, Migration, and Release Readiness]] | **About 36%** | Providers, the site, migration, topology and acceptance evidence determine whether the platform can ever replace LiteBans safely. | Open the group page for providers, migration and release gates. |
+| [[Integrations, Migration, and Release Readiness]] | **About 36%** | Providers, the site, migration, topology and acceptance evidence determine whether the platform can replace LiteBans safely. | Open the group page for providers, migration and release gates. |
 
 ## Current development order
 
-### 1. Converge active branches
+### 1. Preserve the post-PR-27 checkpoint
 
-- Complete and review [PR #37](https://github.com/wsg138/EnthusiaStaff/pull/37).
-- Reconcile and review [PR #27](https://github.com/wsg138/EnthusiaStaff/pull/27).
-- Preserve current composition, persistence and scheduling boundaries.
-- Establish one clean `main` checkpoint before starting overlapping lifecycle work.
+- Keep `main`, the final PR #27 source head and the post-merge workflow evidence
+  recorded exactly.
+- Do not reopen PR #27 or recreate its former branch unless a new verified defect
+  requires a separate correction.
+- Keep documentation evidence boundaries explicit: exact-main runtime evidence,
+  merge-ref Wiki evidence and staging evidence are different claims.
 
-### 2. Finish shared foundation gaps
+### 2. Keep PR #37 internally ready
+
+- Review operational-state persistence, maintenance entry/abort, exact final-run
+  activation linkage, duplicate activation, emergency freeze and writer fencing.
+- Preserve cross-server database coordination, local transaction serialization,
+  restart recovery, migration-run abandonment handling, activation replay and
+  cutover audit persistence.
+- Keep V11, V12 and V13 unchanged.
+- Merge current `main` into `section/plugin` only if the branch actually becomes
+  behind; use a normal merge commit, never a rebase or force-push.
+
+### 3. Complete issue #43 against one release candidate
+
+Pin one exact PR #37 source SHA, Paper and Velocity JAR hashes, sanitized
+configuration revision and isolated staging environment. Any runtime-source, JAR,
+migration, schema, comparison or relevant configuration change invalidates the
+record.
+
+The record must cover:
+
+- representative sanitized-backup migration, rerun and checksum comparison;
+- interrupted migration and restart recovery;
+- an uninterrupted 168-hour shadow window with seven complete daily summaries;
+- maintenance fencing and final incremental migration;
+- ambiguous activation retry and duplicate safety;
+- emergency freeze and restart persistence;
+- rollback and idempotent reconciliation;
+- Velocity/HUB/SMP, Java and Bedrock/Geyser acceptance;
+- provider-present/provider-missing behavior;
+- database, queue, dead-letter, process-kill, saturation and latency scenarios.
+
+### 4. Decide PR #37 readiness
+
+PR #37 may be marked ready only when one exact acceptance record satisfies
+`docs/cutover-acceptance.md`, issue #43 is complete, automated validation is clean,
+no major review thread remains and the final exact-head diff has been reviewed.
+
+Merging PR #37 still does not authorize a production LiteBans cutover.
+
+### 5. Finish shared foundation gaps
 
 Prioritize the core gaps that block several feature groups:
 
@@ -43,53 +99,11 @@ Prioritize the core gaps that block several feature groups:
 
 See [[Core Platform and Infrastructure]].
 
-### 3. Complete the moderation lifecycle
+### 6. Complete the remaining feature groups
 
-- punishment history and full case timelines;
-- precise sanction reduction, ending, revocation and overturn;
-- appeal-linked decisions;
-- durable request lifecycle notifications;
-- complete escalation/version compatibility;
-- report GUI, RoseChat evidence and strict automod.
-
-See [[Moderation, Punishments, and Reports]].
-
-### 4. Complete player-state and investigation safety
-
-- staff-mode entry/restore/recovery;
-- complete freeze and vanish coverage;
-- online/offline inventory ownership and concurrency;
-- item/economy confiscation and restoration;
-- alt confidence, exceptions and inheritance;
-- inspector, staff tools, cheat testers and fake systems.
-
-See [[Staff Tools, Investigations, and Player-State Safety]].
-
-### 5. Complete external systems
-
-- Currency, Commend, AutoClicker, RoseChat and Market providers;
-- complete Discord routing and recovery;
-- private punishment/appeal site;
-- provider classloader and isolated degraded-mode staging.
-
-See [[Integrations, Migration, and Release Readiness]].
-
-### 6. Build one release candidate and prove it
-
-- finish LiteBans cutover coordination and migration recovery;
-- run real-data migration rehearsal;
-- run full Velocity/HUB/SMP topology;
-- run Java, Bedrock/Geyser and Folia acceptance;
-- run load, saturation and process-kill scenarios;
-- create one release manifest with every repository revision and artifact hash.
-
-### 7. Run shadow and rollback rehearsal
-
-- complete seven daily summaries across at least 168 continuous hours;
-- explain every mismatch;
-- run final incremental import;
-- rehearse emergency freeze, backup restore and authority rollback;
-- record explicit authorization before production authority changes.
+Continue moderation history and appeals, player-state safety, provider integrations,
+the private site and the final release manifest only after the cutover branch and
+its acceptance evidence are stable.
 
 ## How to choose the next task
 
@@ -97,14 +111,14 @@ Choose work in this order:
 
 1. correctness or security defects that can corrupt state;
 2. recovery and idempotency gaps in destructive workflows;
-3. shared foundation work that blocks multiple features;
-4. one coherent feature category from a group page;
-5. real staging that automated tests cannot prove;
+3. acceptance evidence required by issue #43;
+4. shared foundation work that blocks multiple features;
+5. one coherent feature category from a group page;
 6. documentation and evidence updates for the exact tested revision.
 
 Do not choose work merely because it is easy to demonstrate. A section is done
-only when its behavior, authority, persistence, failure handling, recovery,
-tests, staging and documentation agree.
+only when its behavior, authority, persistence, failure handling, recovery, tests,
+staging and documentation agree.
 
 ## Documentation ownership
 
@@ -119,3 +133,4 @@ tests, staging and documentation agree.
 | Complete code map and feature traces | [[Developer Code Guide]] |
 | Validation procedure | [[Build and Testing]] |
 | Migration operator procedure | [[LiteBans Migration]] and [[Shadow Mode and Cutover]] |
+| PR #37 production-like acceptance | `docs/cutover-acceptance.md` and issue #43 |
