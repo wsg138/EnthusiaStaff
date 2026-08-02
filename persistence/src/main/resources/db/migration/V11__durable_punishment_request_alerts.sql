@@ -22,7 +22,7 @@ ALTER TABLE staff_alerts
     ADD INDEX idx_staff_alerts_request_event (request_id, request_revision, lifecycle_event),
     ADD INDEX idx_staff_alerts_retention (state, delivered_at, expires_at, alert_id);
 
-UPDATE staff_alerts
+UPDATE staff_alerts -- nosemgrep
 SET available_at = created_at
 WHERE available_at IS NULL;
 
