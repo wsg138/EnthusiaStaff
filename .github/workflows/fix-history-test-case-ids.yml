@@ -1,0 +1,39 @@
+name: Fix history test case IDs
+
+on:
+  push:
+    branches:
+      - feature/punishment-history-lifecycle
+    paths:
+      - .github/workflows/fix-history-test-case-ids.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/punishment-history-lifecycle
+          fetch-depth: 0
+      - name: Correct Crockford test fixtures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('integration-tests/src/test/java/net/enthusia/staff/integration/ModerationHistoryIntegrationTest.java')
+          text = path.read_text(encoding='utf-8')
+          old = 'return new CaseId("HIST" + String.format(java.util.Locale.ROOT, "%012d", value));'
+          new = 'return new CaseId("HST" + String.format(java.util.Locale.ROOT, "%013d", value));'
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one history case ID fixture')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          git rm .github/workflows/fix-history-test-case-ids.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add integration-tests/src/test/java/net/enthusia/staff/integration/ModerationHistoryIntegrationTest.java
+          git commit -m "Fix Crockford history test case IDs"
+          git push origin HEAD:feature/punishment-history-lifecycle
