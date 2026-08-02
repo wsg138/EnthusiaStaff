@@ -20,8 +20,8 @@ public final class DatabaseConfig {
         if (username == null || username.isBlank() || password == null) {
             throw new IllegalArgumentException("database credentials must be present");
         }
-        if (maximumPoolSize < 1 || maximumPoolSize > 32) {
-            throw new IllegalArgumentException("maximumPoolSize must be between 1 and 32");
+        if (maximumPoolSize < 2 || maximumPoolSize > 32) {
+            throw new IllegalArgumentException("maximumPoolSize must be between 2 and 32");
         }
         if (connectionTimeoutMillis < 250 || connectionTimeoutMillis > 60_000) {
             throw new IllegalArgumentException("connection timeout must be between 250 and 60000 ms");

@@ -132,7 +132,7 @@ public record VelocityConfiguration(
                 integer(properties, "litebans.connection-timeout-millis", 250, 60_000),
                 required(properties, "litebans.table-prefix"),
                 integer(properties, "litebans.batch-size", 1, 5_000),
-                bool(properties, "litebans.shadow-schedule-enabled", true),
+                bool(properties, "litebans.shadow-schedule-enabled", false),
                 integer(properties, "litebans.shadow-interval-hours", 24, 1, 24)
         );
     }

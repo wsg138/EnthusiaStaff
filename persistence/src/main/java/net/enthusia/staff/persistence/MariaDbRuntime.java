@@ -29,6 +29,10 @@ import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
+import net.enthusia.staff.persistence.migration.FencedModerationStore;
+import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
+import net.enthusia.staff.persistence.migration.FencedPunishmentRequestStore;
+import net.enthusia.staff.persistence.migration.FencedSanctionMutationStore;
 import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
 
 public final class MariaDbRuntime implements AutoCloseable {
@@ -58,9 +62,15 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.dataSource = dataSource;
         ObjectMapper json = jsonMapper();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
-        this.moderationStore = new RetryingModerationStore(moderation);
-        this.punishmentRequestStore = new RetryingPunishmentRequestStore(
-                new JdbcPunishmentRequestStore(dataSource, json, moderation)
+        this.moderationStore = new FencedModerationStore(
+                dataSource,
+                new RetryingModerationStore(moderation)
+        );
+        this.punishmentRequestStore = new FencedPunishmentRequestStore(
+                dataSource,
+                new RetryingPunishmentRequestStore(
+                        new JdbcPunishmentRequestStore(dataSource, json, moderation)
+                )
         );
         this.punishmentRequestAlertStore = new RetryingPunishmentRequestAlertStore(
                 dataSource,
@@ -74,8 +84,14 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.freezeStore = new JdbcFreezeStore(dataSource);
         this.staffSessionStore = new JdbcStaffSessionStore(dataSource);
         this.vanishStore = new JdbcVanishStore(dataSource);
-        this.networkIdentityStore = new JdbcNetworkIdentityStore(dataSource, json);
-        this.sanctionMutationStore = new JdbcSanctionMutationStore(dataSource, json, Clock.systemUTC());
+        this.networkIdentityStore = new FencedNetworkIdentityStore(
+                dataSource,
+                new JdbcNetworkIdentityStore(dataSource, json)
+        );
+        this.sanctionMutationStore = new FencedSanctionMutationStore(
+                dataSource,
+                new JdbcSanctionMutationStore(dataSource, json, Clock.systemUTC())
+        );
         this.caseLookup = new JdbcCaseLookup(dataSource);
         this.caseReviewStore = new JdbcCaseReviewStore(dataSource, Clock.systemUTC());
         this.reportStore = new JdbcReportStore(dataSource, json);
