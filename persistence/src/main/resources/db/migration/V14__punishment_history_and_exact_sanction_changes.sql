@@ -16,8 +16,6 @@ SET event.case_id = sanction.case_id,
 WHERE event.case_id IS NULL OR event.subject_id IS NULL;
 
 ALTER TABLE sanction_events
-    MODIFY COLUMN case_id CHAR(16) NOT NULL,
-    MODIFY COLUMN subject_id BINARY(16) NOT NULL,
     ADD CONSTRAINT fk_sanction_events_case
         FOREIGN KEY (case_id) REFERENCES cases(case_id),
     ADD CONSTRAINT fk_sanction_events_subject
