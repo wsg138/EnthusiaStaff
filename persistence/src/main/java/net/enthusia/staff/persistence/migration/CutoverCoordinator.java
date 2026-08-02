@@ -122,7 +122,26 @@ public final class CutoverCoordinator {
         if (!assessment.allowed()) {
             return new CutoverOutcome(assessment, false, Optional.empty());
         }
+        return completeActivation(
+                connection,
+                current,
+                bundle,
+                assessment,
+                actorId,
+                override,
+                activatedAt
+        );
+    }
 
+    private CutoverOutcome completeActivation(
+            Connection connection,
+            OperationalStateSnapshot current,
+            CutoverEvidenceBundle bundle,
+            CutoverAssessment assessment,
+            UUID actorId,
+            Optional<FounderOverride> override,
+            Instant activatedAt
+    ) throws SQLException {
         UUID cutoverId = UUID.randomUUID();
         persistence.insertCutoverRecord(
                 connection,
