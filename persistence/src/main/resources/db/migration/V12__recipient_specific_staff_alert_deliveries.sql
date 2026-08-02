@@ -55,7 +55,7 @@ WHERE audience = 'DIRECT_RECIPIENT'
   AND recipient_id IS NOT NULL
 ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id);
 
-UPDATE staff_alerts -- nosemgrep
+UPDATE staff_alerts
 SET intent_state = CASE
         WHEN audience = 'DIRECT_RECIPIENT' AND state = 'DELIVERED' THEN 'CLOSED'
         WHEN expires_at <= CURRENT_TIMESTAMP(6) THEN 'EXPIRED'
