@@ -41,10 +41,11 @@ class AuthoritativeWriteFenceSmallPoolIntegrationTest {
 
     @Test
     void concurrentWritesCompleteWithMinimumSupportedPool() throws Exception {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource();
              ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             setMode(OperationalMode.ACTIVE);
+            assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             AtomicInteger calls = new AtomicInteger();
             ModerationStore store = new FencedModerationStore(dataSource, new ModerationStore() {
                 @Override
