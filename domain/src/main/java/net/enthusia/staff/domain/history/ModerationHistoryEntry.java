@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.Checks;
-import net.enthusia.staff.domain.sanction.SanctionType;
 
 public record ModerationHistoryEntry(
         String stableKey,
@@ -15,7 +14,7 @@ public record ModerationHistoryEntry(
         Optional<UUID> sanctionId,
         Optional<UUID> punishmentRequestId,
         Optional<UUID> appealId,
-        Optional<SanctionType> sanctionType,
+        Optional<String> punishmentType,
         String status,
         String publicReason,
         Optional<Instant> originalExpiration,
@@ -27,11 +26,12 @@ public record ModerationHistoryEntry(
     public ModerationHistoryEntry {
         stableKey = Checks.nonBlank(stableKey, "stableKey", 160);
         if (eventType == null || occurredAt == null || caseId == null || sanctionId == null
-                || punishmentRequestId == null || appealId == null || sanctionType == null
+                || punishmentRequestId == null || appealId == null || punishmentType == null
                 || originalExpiration == null || resultingExpiration == null || actorId == null
                 || actorName == null || sensitiveReason == null) {
             throw new IllegalArgumentException("history entry fields must be present");
         }
+        punishmentType = punishmentType.map(value -> Checks.nonBlank(value, "punishmentType", 96));
         status = Checks.nonBlank(status, "status", 64);
         if (publicReason == null) {
             throw new IllegalArgumentException("publicReason must be present");
