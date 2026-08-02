@@ -9,7 +9,7 @@ ALTER TABLE staff_alerts
         intent_state, closed_at, expires_at, alert_id
     );
 
-UPDATE staff_alerts -- nosemgrep
+UPDATE staff_alerts
 SET expires_at = created_at + INTERVAL 30 DAY
 WHERE expires_at IS NULL;
 
@@ -43,17 +43,17 @@ CREATE TABLE IF NOT EXISTS staff_alert_deliveries (
         FOREIGN KEY (alert_id) REFERENCES staff_alerts(alert_id)
 ) ENGINE=InnoDB;
 
-INSERT INTO staff_alert_deliveries( -- nosemgrep
+INSERT INTO staff_alert_deliveries(
     alert_id, recipient_id, state, attempt_count, available_at,
     lease_owner, lease_until, last_error_code, delivered_at, created_at, updated_at
 )
-SELECT alert_id, recipient_id, state, attempt_count, available_at, -- nosemgrep
+SELECT alert_id, recipient_id, state, attempt_count, available_at,
        lease_owner, lease_until, last_error_code, delivered_at, created_at,
        COALESCE(delivered_at, lease_until, available_at, created_at)
 FROM staff_alerts
 WHERE audience = 'DIRECT_RECIPIENT'
   AND recipient_id IS NOT NULL
-ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id); -- nosemgrep
+ON DUPLICATE KEY UPDATE alert_id = VALUES(alert_id);
 
 UPDATE staff_alerts -- nosemgrep
 SET intent_state = CASE
