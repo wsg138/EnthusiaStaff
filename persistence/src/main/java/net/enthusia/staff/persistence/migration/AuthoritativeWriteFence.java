@@ -1,0 +1,105 @@
+package net.enthusia.staff.persistence.migration;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.function.Supplier;
+import javax.sql.DataSource;
+import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.persistence.ModerationPersistenceException;
+
+final class AuthoritativeWriteFence {
+    private final DataSource dataSource;
+
+    AuthoritativeWriteFence(DataSource dataSource) {
+        if (dataSource == null) {
+            throw new IllegalArgumentException("authoritative write fence data source must be present");
+        }
+        this.dataSource = dataSource;
+    }
+
+    <T> T execute(Supplier<T> operation, Supplier<T> blockedResult) {
+        if (operation == null || blockedResult == null) {
+            throw new IllegalArgumentException("authoritative write fence callbacks must be present");
+        }
+        MigrationDatabaseLock migrationLock = MigrationDatabaseLock.acquire(dataSource);
+        Throwable operationFailure = null;
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                if (!authoritativeWritesAllowed(connection)) {
+                    connection.rollback();
+                    return blockedResult.get();
+                }
+                T result = operation.get();
+                connection.commit();
+                return result;
+            } catch (SQLException exception) {
+                operationFailure = exception;
+                rollback(connection, exception);
+                throw new ModerationPersistenceException(
+                        "Unable to enforce the authoritative moderation write fence",
+                        exception
+                );
+            } catch (RuntimeException | Error exception) {
+                operationFailure = exception;
+                rollback(connection, exception);
+                throw exception;
+            } finally {
+                restoreAutoCommit(connection, operationFailure);
+            }
+        } catch (SQLException exception) {
+            ModerationPersistenceException failure = new ModerationPersistenceException(
+                    "Unable to open the authoritative moderation write fence",
+                    exception
+            );
+            operationFailure = failure;
+            throw failure;
+        } finally {
+            migrationLock.closeAfter(operationFailure);
+        }
+    }
+
+    private static boolean authoritativeWritesAllowed(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT mode
+                FROM operational_state
+                WHERE singleton_id = 1
+                FOR UPDATE
+                """);
+             ResultSet result = statement.executeQuery()) {
+            if (!result.next()) {
+                throw new SQLException("operational state singleton missing while fencing authoritative write");
+            }
+            OperationalMode mode;
+            try {
+                mode = OperationalMode.valueOf(result.getString("mode"));
+            } catch (IllegalArgumentException | NullPointerException exception) {
+                throw new SQLException("unknown persisted operational mode while fencing authoritative write", exception);
+            }
+            if (result.next()) {
+                throw new SQLException("multiple operational state singleton rows found");
+            }
+            return mode.destructiveWritesAllowed();
+        }
+    }
+
+    private static void rollback(Connection connection, Throwable original) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            original.addSuppressed(rollbackFailure);
+        }
+    }
+
+    private static void restoreAutoCommit(Connection connection, Throwable operationFailure) {
+        try {
+            connection.setAutoCommit(true);
+        } catch (SQLException resetFailure) {
+            if (operationFailure != null) {
+                operationFailure.addSuppressed(resetFailure);
+            }
+        }
+    }
+}
