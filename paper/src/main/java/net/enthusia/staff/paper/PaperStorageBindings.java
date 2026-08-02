@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
@@ -45,6 +46,7 @@ record PaperStorageBindings(
                 runtime.sanctionLookup(),
                 runtime.caseLookup(),
                 runtime.caseReviewStore(),
+                runtime.moderationHistoryStore(),
                 runtime.reportStore(),
                 runtime.clientEvidenceStore(),
                 runtime.punishmentRequestAlertStore(),
@@ -112,6 +114,10 @@ record PaperStorageBindings(
         return moderation.caseReviewStore();
     }
 
+    ModerationHistoryStore moderationHistoryStore() {
+        return moderation.moderationHistoryStore();
+    }
+
     ReportStore reportStore() {
         return moderation.reportStore();
     }
@@ -170,6 +176,7 @@ record PaperStorageBindings(
             SanctionLookup sanctionLookup,
             CaseLookup caseLookup,
             CaseReviewStore caseReviewStore,
+            ModerationHistoryStore moderationHistoryStore,
             ReportStore reportStore,
             ClientEvidenceStore clientEvidenceStore,
             PunishmentRequestAlertStore punishmentRequestAlertStore,
