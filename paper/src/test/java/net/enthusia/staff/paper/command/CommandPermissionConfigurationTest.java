@@ -19,6 +19,7 @@ class CommandPermissionConfigurationTest {
     private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
+            Map.entry("history", HistoryCommand.VIEW_PERMISSION),
             Map.entry("punish", PUNISH_PERMISSION),
             Map.entry("ban", PUNISH_PERMISSION),
             Map.entry("mute", PUNISH_PERMISSION),
@@ -39,8 +40,7 @@ class CommandPermissionConfigurationTest {
             Map.entry("client", "enthusiastaff.client"),
             Map.entry("invsee", INVENTORY_VIEW_PERMISSION),
             Map.entry("endersee", INVENTORY_VIEW_PERMISSION),
-            Map.entry("inspect", "enthusiastaff.inspect"),
-            Map.entry("case", "enthusiastaff.case.restoreitems")
+            Map.entry("inspect", "enthusiastaff.inspect")
     );
 
     @Test
@@ -66,6 +66,34 @@ class CommandPermissionConfigurationTest {
                 "enthusiastaff.status",
                 "enthusiastaff.verify",
                 "enthusiastaff.reload"
+        )) {
+            assertTrue(permissions.has(permission), permission);
+            assertFalse(permissions.path(permission).path("default").asBoolean(), permission);
+        }
+    }
+
+    @Test
+    void historyUsesOuterPermissionWhileCaseAndExactSanctionsUseSubcommandPermissions() throws IOException {
+        JsonNode metadata = pluginMetadata();
+        JsonNode commands = metadata.path("commands");
+        assertEquals(
+                HistoryCommand.VIEW_PERMISSION,
+                commands.path("history").path("permission").asText()
+        );
+        assertTrue(commands.path("case").path("permission").isMissingNode());
+        assertTrue(commands.path("estaff").path("permission").isMissingNode());
+
+        JsonNode permissions = metadata.path("permissions");
+        for (String permission : List.of(
+                HistoryCommand.VIEW_PERMISSION,
+                HistoryCommand.SENSITIVE_PERMISSION,
+                SanctionLifecycleCommand.REDUCE_PERMISSION,
+                SanctionLifecycleCommand.END_PERMISSION,
+                SanctionLifecycleCommand.REVOKE_PERMISSION,
+                SanctionLifecycleCommand.OVERTURN_PERMISSION,
+                SanctionLifecycleCommand.APPEAL_PERMISSION,
+                SanctionLifecycleCommand.BYPASS_HIERARCHY_PERMISSION,
+                "enthusiastaff.case.restoreitems"
         )) {
             assertTrue(permissions.has(permission), permission);
             assertFalse(permissions.path(permission).path("default").asBoolean(), permission);

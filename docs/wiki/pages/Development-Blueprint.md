@@ -13,50 +13,38 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #27 is merged and remains the previous major implementation checkpoint.
-- PR #37 is the current cutover-coordination implementation pull request.
-- PR #37 contains dormant infrastructure for authority fencing, migration coordination, transactional activation, restart recovery, duplicate safety, emergency freeze persistence, and protected authoritative writers.
-- V11, V12 and V13 must retain the deployed checksum-locked bytes without scanner-only comments; analysis suppression belongs in `.codacy.yml`.
-- Automated shadow scheduling is disabled by default and requires explicit configuration.
-- LiteBans remains authoritative outside an explicitly validated and authorized `ACTIVE` transition.
-- Issue #43 is the remaining **production cutover acceptance** gate, not an implementation merge blocker.
-- Merging PR #37 does not deploy a JAR, start a production shadow window, disable LiteBans, or authorize a live cutover.
+- PR #27 and PR #37 are merged implementation checkpoints.
+- PR #46 is the current punishment-history and exact sanction-lifecycle pull request.
+- V11, V12 and V13 retain their checksum-locked bytes; V14 adds history/linkage indexes and exact mutation metadata.
+- LiteBans remains authoritative; this feature does not deploy a JAR, activate EnthusiaStaff authority or begin issue #43 acceptance.
+- Issue #43 remains the separate production-cutover acceptance gate.
 
 ## Four development groups
 
 | Group | Completion | Why it matters now | Detailed work |
 | --- | ---: | --- | --- |
 | [[Core Platform and Infrastructure]] | **About 72%** | Modes, configuration, lifecycle, identity and failure handling are shared prerequisites for many other features. | Open the group page for files, descriptions and remaining categories. |
-| [[Moderation, Punishments, and Reports]] | **About 56%** | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
+| [[Moderation, Punishments, and Reports]] | **About 63%** | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
 | [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, vanish, freeze, inventories and confiscation can lose or duplicate player state if recovery is incomplete. | Open the group page for safety boundaries, files and remaining categories. |
 | [[Integrations, Migration, and Release Readiness]] | **About 36%** | Providers, the site, migration, topology and acceptance evidence determine whether the platform can replace LiteBans safely. | Open the group page for providers, migration and release gates. |
 
 ## Current development order
 
-### 1. Finish and merge PR #37 as dormant infrastructure
+### 1. Finish and merge PR #46 as a normal feature
 
 Before merge:
 
-- complete code review and resolve material review findings;
-- pass exact-head Java 21 build, unit and MariaDB/Testcontainers tests, migration checksum checks, runtime-JAR inspection, provider API leak checks, static analysis, and configured coverage upload;
-- keep V11, V12 and V13 byte-compatible with their locked deployed checksums;
-- verify startup remains non-`ACTIVE`, missing or invalid activation evidence fails closed, and automatic shadow scheduling is disabled unless explicitly configured;
+- review the complete history, mutation, command, configuration and V14 diff;
+- pass exact-head Java 21 build, unit and MariaDB/Testcontainers tests, migration checksum checks, runtime-JAR inspection, static analysis, documentation validation and configured coverage upload;
+- resolve all valid automated and human review findings;
+- keep history database-paginated, mutation audit append-only and operational-mode fencing unchanged;
 - use a normal merge commit and do not deploy the merged JAR.
-
-Issue #43 does not block this dormant implementation merge.
 
 ### 2. Continue normal feature development
 
-After PR #37 is merged, choose the next actual moderation or staff feature from the unfinished feature groups. Do not hold unrelated development work behind the later production cutover rehearsal.
-
-Prioritize work in this order:
-
-1. correctness or security defects that can corrupt state;
-2. recovery and idempotency gaps in destructive workflows;
-3. core moderation workflows that are already partially implemented;
-4. shared foundation work that blocks multiple user-facing features;
-5. one coherent feature category from a group page;
-6. documentation and evidence updates for the exact tested revision.
+After PR #46 is merged, choose one coherent unfinished moderation or staff feature.
+Do not start it from this PR. Prioritize correctness and recovery gaps before
+broader feature expansion.
 
 ### 3. Complete issue #43 when the plugin is closer to release
 

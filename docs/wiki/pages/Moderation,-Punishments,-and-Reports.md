@@ -1,6 +1,6 @@
 # Moderation, Punishments, and Reports
 
-**Estimated group completion: about 56%.**
+**Estimated group completion: about 63%.**
 
 This group covers the moderation record model, punishment selection and approval,
 escalation policy, sanction changes, appeals, player reports, retained evidence,
@@ -25,7 +25,7 @@ client evidence and strict automod.
 | Rank authority and approval requests | **82%** | Prevents Helpers and Developers from bypassing required review. | [Authority](#rank-authority-and-approval-requests) |
 | Request notifications and recovery | **35%** | Notifies requesters and eligible reviewers without losing or duplicating delivery. | [Notifications](#request-notifications-and-recovery) |
 | Escalation policy | **52%** | Selects configured steps from reason families, history, recency and decay. | [Escalation](#escalation-policy) |
-| History and sanction changes | **34%** | Reads the full timeline and precisely ends, reduces, revokes or overturns one sanction. | [History and changes](#history-and-sanction-changes) |
+| History and sanction changes | **85%** | Reads the full timeline and precisely ends, reduces, revokes or overturns one sanction. | [History and changes](#history-and-sanction-changes) |
 | Appeals | **35%** | Connects player appeals and reviewer decisions to audited sanction state. | [Appeals](#appeals) |
 | Report submission and queues | **68%** | Accepts private player reports and coordinates staff claims and closure. | [Reports](#report-submission-and-queues) |
 | Evidence capture, privacy and retention | **56%** | Stores bounded chat/client context while keeping private evidence internal. | [Evidence](#evidence-capture-privacy-and-retention) |
@@ -188,34 +188,37 @@ recommendations.
 
 ## History and sanction changes
 
-### What it does
+### Implemented behavior
 
-History should show the complete case/sanction timeline without leaking private
-evidence. Mutation workflows select one exact sanction and distinguish reduction,
-ending, revocation, removal from escalation and full overturn while preserving
-the original record.
+`/history <player|uuid> [page]` resolves UUIDs, current usernames, historical usernames, offline players and stored Floodgate/Bedrock identities from the shared player directory. Ambiguous historical names are rejected with candidate UUIDs instead of guessing. MariaDB performs `COUNT`, `LIMIT` and `OFFSET`; ordering is newest-first with a stable event key for equal timestamps.
 
-### Commands
+`/case [view] <case-id>` is the single case-detail path. It shows subject identity, every sanction, request and appeal history, mutation timeline, original/current expiration and effective state. Plain-text IDs and next-page commands remain usable on Bedrock; Java click/hover features are not required.
 
-- `/removepunishment`
-- `/unban`
-- `/unmute`
-- `/removewarning` and `/unwarn`
-- required but not yet registered: `/history`
+Exact lifecycle commands are:
+
+- `/estaff sanction reduce <sanction-id> <expiration-or-duration> <reason>`
+- `/estaff sanction end <sanction-id> <reason>`
+- `/estaff sanction revoke <sanction-id> <reason>`
+- `/estaff sanction overturn <sanction-id> [--appeal <appeal-id>] <reason>`
+
+An optional `--request <request-id>` links a resolved punishment request. Reduction preserves original issue/decision data and only moves expiration earlier. Early ending records the actual stop time and differs from natural expiration. Revocation is administrative withdrawal. Overturn is reversal of the decision and may link one accepted appeal belonging to the same case and sanction. No action deletes the original sanction, case, request, appeal or audit trail.
+
+### Concurrency, authority and audit
+
+The command prevalidates one exact sanction revision, then the fenced MariaDB transaction locks that sanction, rechecks the revision and issuing-rank hierarchy, validates appeal/request ownership, changes state, appends one `sanction_events` row and one `audit_events` row, and queues network/Discord output in the same commit. Identical retries replay the committed result. Conflicting runtimes produce one commit and one stale/no-op/rejected result; terminal revocation and overturn cannot contradict one another. The durable operational-mode fence from PR #37 remains authoritative.
 
 ### Primary files
 
-- [Sanction change service](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/SanctionChangeService.java)
-- [Sanction command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/SanctionChangeCommand.java)
-- [Sanction UI package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/sanction)
-- [Sanction mutation store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcSanctionMutationStore.java)
-- [Case review store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcCaseReviewStore.java)
+- `domain/history/*` and `domain/ports/ModerationHistoryStore.java`
+- `domain/application/SanctionChangeService.java`
+- `paper/command/HistoryCommand.java`, `CaseCommand.java`, `SanctionLifecycleCommand.java`
+- `persistence/JdbcModerationHistoryStore.java`
+- `persistence/JdbcExactSanctionMutationStore.java`
+- Flyway `V14__punishment_history_and_exact_sanction_changes.sql`
 
 ### What remains
 
-Register and build `/history`; complete exact semantics for every change type;
-add durable overturn requests, expiry and reviewer alerts; prove combined-sanction
-safety, retries, notifications and end-to-end staging.
+Run representative non-production staff usability/staging, complete the separate authenticated website reviewer UI and provider enforcement work, and retain LiteBans authority until the unrelated production-cutover gate is completed.
 
 ## Appeals
 
@@ -236,8 +239,9 @@ sanction unchanged or invoke the central sanction-change service.
 ### What remains
 
 Complete authenticated site sessions, role controls, reviewer decisions,
-reopening, notifications, CSRF/rate limits and one audited path into sanction
-changes.
+reopening, notifications and CSRF/rate-limit hardening. Accepted website appeal
+records can now be linked to the exact audited overturn transaction; the separate
+reviewer UI and production provider flow remain unfinished.
 
 ## Report submission and queues
 

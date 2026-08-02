@@ -25,6 +25,24 @@ configuration shape, so this page distinguishes **what exists now** from the
 
 The full modular tree below is not yet implemented on `main`.
 
+## Current history and sanction-action settings
+
+The following values are implemented in `paper/src/main/resources/config.yml` and validated as part of the immutable Paper configuration snapshot:
+
+```yaml
+history:
+  page-size: 8
+  include-request-events: true
+  include-appeal-events: true
+  timezone: UTC
+sanction-actions:
+  minimum-reason-length: 3
+  maximum-reason-length: 500
+  allow-permanent-reduction: true
+```
+
+`history.page-size` accepts `1` through `100`; timezone must be an IANA zone. Reason limits must be between `1` and `512`, with maximum at least minimum. Invalid reload candidates leave the previous valid snapshot and command presentation settings active. These settings are reloadable and do not rebuild the MariaDB pool, rerun migrations, reset operational mode, activate authority, discard queued work or duplicate scheduled workers.
+
 ## Target layout
 
 ```text
@@ -136,8 +154,7 @@ The target reload transaction is:
 
 A reload must never partially apply only some files.
 
-Active PR #27 contains additional validated alert configuration/reload work. It is
-not current `main` behavior until merged.
+Punishment-request alert settings and the history/sanction-action settings above use the validated all-or-nothing reload path.
 
 ## Restart-required settings
 

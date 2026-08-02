@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -139,6 +140,57 @@ class PaperConfigurationLoaderTest {
                 "inventory.scope-id",
                 "channel.host"
         ), active.differencePaths(changed));
+    }
+
+    @Test
+    void loadsExplicitHistoryAndSanctionActionSettings() throws IOException {
+        String configuration = validConfiguration() + """
+                history:
+                  page-size: 12
+                  include-request-events: false
+                  include-appeal-events: true
+                  timezone: America/Chicago
+                sanction-actions:
+                  minimum-reason-length: 5
+                  maximum-reason-length: 250
+                  allow-permanent-reduction: false
+                """;
+
+        ModerationFeatureSettings settings = load(configuration).moderationFeatures();
+
+        assertEquals(12, settings.historyPageSize());
+        assertFalse(settings.includeRequestEvents());
+        assertTrue(settings.includeAppealEvents());
+        assertEquals(ZoneId.of("America/Chicago"), settings.historyTimezone());
+        assertEquals(5, settings.sanctionActionLimits().minimumReasonLength());
+        assertEquals(250, settings.sanctionActionLimits().maximumReasonLength());
+        assertFalse(settings.sanctionActionLimits().allowPermanentReduction());
+    }
+
+    @Test
+    void invalidHistoryAndReasonSettingsAreRejectedTogether() throws IOException {
+        String configuration = validConfiguration() + """
+                history:
+                  page-size: 0
+                  include-request-events: true
+                  include-appeal-events: true
+                  timezone: Not/AZone
+                sanction-actions:
+                  minimum-reason-length: 500
+                  maximum-reason-length: 10
+                  allow-permanent-reduction: true
+                """;
+
+        PaperConfigurationValidationException exception = assertThrows(
+                PaperConfigurationValidationException.class,
+                () -> load(configuration)
+        );
+
+        assertContains(exception.errors(), "history.page-size must be between 1 and 100");
+        assertContains(exception.errors(),
+                "history.timezone must be a valid IANA timezone such as UTC or America/Chicago");
+        assertContains(exception.errors(),
+                "sanction-actions.maximum-reason-length must be at least the minimum");
     }
 
     @Test

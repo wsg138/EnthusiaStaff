@@ -38,7 +38,7 @@ Each group has its own detailed page. Open one to see:
 | Feature group | Estimated completion | What belongs there | Largest unfinished areas |
 | --- | ---: | --- | --- |
 | [[Core Platform and Infrastructure]] | **About 72%** | Runtime jars, architecture, Paper/Velocity lifecycle, MariaDB, protocol, safe-write controls, modes, configuration, identity and CI. | Complete operational modes, modular configuration/reload, Bedrock aliases, production-volume and multi-backend failure testing. |
-| [[Moderation, Punishments, and Reports]] | **About 56%** | Cases, sanctions, punishment GUI/drafts, rank approval, escalation, history, appeals, reports, evidence and automod. | History/overturns, request notifications, complete escalation policy, report GUI, RoseChat PM evidence and automod integration. |
+| [[Moderation, Punishments, and Reports]] | **About 63%** | Cases, sanctions, punishment GUI/drafts, rank approval, escalation, history, appeals, reports, evidence and automod. | Request notifications, complete escalation policy, report GUI, authenticated appeal-review UI, RoseChat PM evidence and automod integration. |
 | [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, freeze, vanish, inventory/Ender access, confiscation, economy actions, alts, inspector, testers and fake systems. | Crash/reconnect recovery, integration hiding, concurrent/offline inventory safety, provider-backed economy, alt lifecycle and fake systems. |
 | [[Integrations, Migration, and Release Readiness]] | **About 36%** | Discord, website bridge/site, provider APIs, LiteBans migration, shadow/cutover, client/runtime acceptance and release evidence. | Provider reconstruction, private site, real-data migration rehearsal, 168-hour shadow, full topology/Bedrock/Folia/load/process-kill acceptance. |
 
@@ -89,23 +89,22 @@ work into the same four feature areas without repeating the full completion tabl
 
 ## Current development boundaries
 
-Two large workstreams are active outside current `main`:
-
-- [PR #27](https://github.com/wsg138/EnthusiaStaff/pull/27) — durable punishment-request notifications, recovery, modular alert configuration/reload and related staff/freeze lifecycle work;
-- [PR #37](https://github.com/wsg138/EnthusiaStaff/pull/37) — LiteBans cutover coordination and activation safety.
-
-Branch work is not counted as merged behavior merely because it has tests. Group
-pages may identify an active branch where it materially explains the remaining
-work.
+The current feature branch is [PR #46](https://github.com/wsg138/EnthusiaStaff/pull/46),
+which adds punishment history and the exact sanction-change lifecycle. PR #27 and
+PR #37 are merged implementation checkpoints. Branch work is not counted as
+merged behavior merely because it has tests; the percentages here describe the
+reviewed implementation while the requirements matrix records exact-head status.
 
 ## Current command gaps
 
-These required top-level commands are not currently registered on `main`:
+On the PR #46 feature branch, `/history` is implemented and the remaining required
+top-level command not registered there is:
 
 ```text
-/history
 /fakebase
 ```
+
+Until PR #46 merges, `main` is missing both `/history` and `/fakebase`.
 
 `/alts` and `/alt` are registered on Velocity, but the complete alt lifecycle,
 GUI, confidence, exception, inheritance and staging work remains unfinished.
@@ -133,3 +132,7 @@ When implementation changes:
 5. Keep commands in [[Commands and Permissions]], source traces in
    [[Developer Code Guide]], and validation procedure in [[Build and Testing]].
 6. Run `python scripts/wiki/validate_wiki.py` before publication.
+
+## Punishment history lifecycle update
+
+The history/sanction-change requirement group is implemented in PR #46 pending exact-head validation: database-bounded `/history`, complete `/case` detail, exact reduce/end/revoke/overturn, request/appeal linkage, append-only audit and concurrency tests. Production cutover and LiteBans authority are unchanged.

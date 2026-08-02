@@ -31,6 +31,7 @@ import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.config.PaperConfigurationLoader;
+import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.PaperConfigurationSnapshot;
 import net.enthusia.staff.paper.config.PaperConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
@@ -223,6 +224,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         for (String error : exception.errors()) {
             getLogger().severe("Configuration error: " + error);
         }
+    }
+
+    private ModerationFeatureSettings activeModerationFeatures() {
+        ConfigurationReloadCoordinator coordinator = reloadCoordinator;
+        return coordinator == null
+                ? configurationSnapshot.moderationFeatures()
+                : coordinator.activeSnapshot().moderationFeatures();
     }
 
     private ConfigurationReloadAction reloadAction() {
@@ -745,7 +753,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private void registerCommands() {
         PaperCommandRegistrar.registerStatus(this, health, reloadAction());
         new PaperCommandRegistrar(new PaperCommandRegistrar.Dependencies(
-                new PaperCommandRegistrar.Environment(this, Clock.systemUTC(), networkServerId(), workers),
+                new PaperCommandRegistrar.Environment(
+                        this, Clock.systemUTC(), networkServerId(), workers, this::activeModerationFeatures
+                ),
                 new PaperCommandRegistrar.Policy(mode::get, this::effectiveWriteMode, authorizationPolicy, reasonPolicies),
                 lifecycle::storage,
                 new PaperCommandRegistrar.PlayerComponents(

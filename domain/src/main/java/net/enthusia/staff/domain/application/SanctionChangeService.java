@@ -1,9 +1,14 @@
 package net.enthusia.staff.domain.application;
 
+import java.util.OptionalLong;
+import java.util.UUID;
+
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
-import net.enthusia.staff.domain.sanction.SanctionChangeAction;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 
@@ -32,4 +37,43 @@ public final class SanctionChangeService {
         return store.apply(request);
     }
 
+    public boolean supportsExactChanges() {
+        return store.supportsExactChanges();
+    }
+
+    public OptionalLong exactRevision(UUID sanctionId) {
+        if (sanctionId == null) {
+            throw new IllegalArgumentException("sanctionId must be present");
+        }
+        return store.exactRevision(sanctionId);
+    }
+
+    public ExactSanctionChangeResult applyExact(
+            ExactSanctionChangeRequest request,
+            OperationalMode mode,
+            SanctionActionLimits limits
+    ) {
+        if (request == null || mode == null || limits == null) {
+            throw new IllegalArgumentException("exact sanction change request, mode, and limits must be present");
+        }
+        if (mode != OperationalMode.ACTIVE) {
+            return new ExactSanctionChangeResult.Rejected(
+                    "MODE_BLOCKED",
+                    "Sanction changes are disabled in " + mode
+            );
+        }
+        if (!authorization.permits(request.actor(), request.action().requiredModerationAction())) {
+            return new ExactSanctionChangeResult.Rejected(
+                    "FORBIDDEN",
+                    "The actor is not permitted to perform this change"
+            );
+        }
+        if (!limits.accepts(request.reason())) {
+            return new ExactSanctionChangeResult.Rejected(
+                    "INVALID_REASON",
+                    "The reason length is outside the configured limits"
+            );
+        }
+        return store.applyExact(request, limits);
+    }
 }

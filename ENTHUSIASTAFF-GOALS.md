@@ -1110,3 +1110,7 @@ Scaffolding, placeholders, TODOs, unsupported branches, skipped tests, and unver
 Final report includes all PRs/branches/SHAs, tests/coverage/static/Codacy, limitations/secrets, jars to update/remove, install order, migration/shadow/cutover/rollback, and Cloudflare checklist.
 
 Nothing is merged, published, deployed, or applied to production by the autonomous implementation work.
+
+## Implemented milestone: punishment history and full sanction-change lifecycle
+
+The repository now contains the staff-usable `/history` and case-detail timeline, exact-sanction reduction, early ending, revocation and overturn, optional accepted-appeal/resolved-request linkage, append-only before/after mutation events, bounded SQL pagination, historical/Floodgate identity resolution, hierarchy and durable-authority fencing, and reloadable history/reason settings. This milestone does not activate EnthusiaStaff authority or alter the production-cutover roadmap.

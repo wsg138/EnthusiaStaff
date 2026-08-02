@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import net.enthusia.staff.paper.RuntimeHealth;
@@ -20,6 +21,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 public final class EstaffCommand implements CommandExecutor, TabCompleter {
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(
+            EstaffCommand.class.getName()
+    );
     private static final String STATUS_PERMISSION = "enthusiastaff.status";
     private static final String VERIFY_PERMISSION = "enthusiastaff.verify";
     private static final String RELOAD_PERMISSION = "enthusiastaff.reload";
@@ -28,6 +32,8 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private final RuntimeHealth health;
     private final ConfigurationReloadAction reloadAction;
     private final ReloadDispatcher reloadDispatcher;
+    private final CopyOnWriteArrayList<Runnable> successfulReloadHooks = new CopyOnWriteArrayList<>();
+    private volatile SanctionLifecycleCommand sanctionLifecycle;
 
     public EstaffCommand(RuntimeHealth health) {
         this(
@@ -63,6 +69,14 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         this.reloadDispatcher = Objects.requireNonNull(reloadDispatcher, "reloadDispatcher");
     }
 
+    public void configureSanctionLifecycle(SanctionLifecycleCommand lifecycle) {
+        sanctionLifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
+    }
+
+    public void addSuccessfulReloadHook(Runnable hook) {
+        successfulReloadHooks.add(Objects.requireNonNull(hook, "hook"));
+    }
+
     @Override
     public boolean onCommand(
             @NotNull CommandSender sender,
@@ -70,6 +84,11 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             @NotNull String label,
             @NotNull String[] args
     ) {
+        SanctionLifecycleCommand lifecycle = sanctionLifecycle;
+        if (args.length > 0 && args[0].equalsIgnoreCase("sanction") && lifecycle != null) {
+            return lifecycle.execute(sender, label, args);
+        }
+
         String operation = args.length == 0 ? "status" : args[0].toLowerCase(Locale.ROOT);
         String permission = permissionFor(operation);
         if (permission == null) {
@@ -78,7 +97,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                     STATUS_PERMISSION,
                     "You do not have permission to view EnthusiaStaff status."
             )) {
-                sender.sendMessage("Usage: /" + label + " <status|verify|reload>");
+                sender.sendMessage("Usage: /" + label + " <status|verify|reload|sanction>");
             }
             return true;
         }
@@ -100,6 +119,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             @NotNull String alias,
             @NotNull String[] args
     ) {
+        SanctionLifecycleCommand lifecycle = sanctionLifecycle;
+        if (args.length > 0 && args[0].equalsIgnoreCase("sanction") && lifecycle != null) {
+            return lifecycle.complete(sender, args);
+        }
         if (args.length != 1) {
             return List.of();
         }
@@ -108,6 +131,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         addCompletion(sender, matches, prefix, "status", STATUS_PERMISSION);
         addCompletion(sender, matches, prefix, "verify", VERIFY_PERMISSION);
         addCompletion(sender, matches, prefix, "reload", RELOAD_PERMISSION);
+        if (lifecycle != null && "sanction".startsWith(prefix) && hasAnySanctionPermission(sender)) {
+            matches.add("sanction");
+        }
         return List.copyOf(matches);
     }
 
@@ -143,7 +169,19 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private static void reportReload(CommandSender sender, ConfigurationReloadResult result) {
+    private void reportReload(CommandSender sender, ConfigurationReloadResult result) {
+        if (result.successful()) {
+            for (Runnable hook : successfulReloadHooks) {
+                try {
+                    hook.run();
+                } catch (RuntimeException exception) {
+                    LOGGER.log(Level.WARNING, "Successful reload hook failed", exception);
+                    sender.sendMessage(
+                            "Reload applied, but a presentation-settings hook failed; previous values remain active."
+                    );
+                }
+            }
+        }
         sender.sendMessage(result.message());
         int shown = Math.min(result.details().size(), MAX_RELOAD_DETAILS);
         for (int index = 0; index < shown; index++) {
@@ -171,6 +209,14 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
 
     private static boolean allowedWithoutMessage(CommandSender sender, String permission) {
         return sender instanceof ConsoleCommandSender || sender.hasPermission(permission);
+    }
+
+    private static boolean hasAnySanctionPermission(CommandSender sender) {
+        return sender instanceof ConsoleCommandSender
+                || sender.hasPermission(SanctionLifecycleCommand.REDUCE_PERMISSION)
+                || sender.hasPermission(SanctionLifecycleCommand.END_PERMISSION)
+                || sender.hasPermission(SanctionLifecycleCommand.REVOKE_PERMISSION)
+                || sender.hasPermission(SanctionLifecycleCommand.OVERTURN_PERMISSION);
     }
 
     private static String permissionFor(String operation) {

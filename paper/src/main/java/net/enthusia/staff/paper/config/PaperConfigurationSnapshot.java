@@ -6,7 +6,8 @@ import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 public record PaperConfigurationSnapshot(
         int version,
         RestartRequiredConfiguration restartRequired,
-        PunishmentRequestAlertWorkerSettings punishmentRequestAlerts
+        PunishmentRequestAlertWorkerSettings punishmentRequestAlerts,
+        ModerationFeatureSettings moderationFeatures
 ) {
     public PaperConfigurationSnapshot {
         if (version != PaperConfigurationLoader.SUPPORTED_VERSION) {
@@ -14,5 +15,19 @@ public record PaperConfigurationSnapshot(
         }
         Objects.requireNonNull(restartRequired, "restartRequired");
         Objects.requireNonNull(punishmentRequestAlerts, "punishmentRequestAlerts");
+        Objects.requireNonNull(moderationFeatures, "moderationFeatures");
+    }
+
+    public PaperConfigurationSnapshot(
+            int version,
+            RestartRequiredConfiguration restartRequired,
+            PunishmentRequestAlertWorkerSettings punishmentRequestAlerts
+    ) {
+        this(
+                version,
+                restartRequired,
+                punishmentRequestAlerts,
+                ModerationFeatureSettings.defaults()
+        );
     }
 }

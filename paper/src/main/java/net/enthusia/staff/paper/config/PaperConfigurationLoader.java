@@ -82,10 +82,12 @@ public final class PaperConfigurationLoader {
                         restart,
                         errors
                 );
+        ModerationFeatureSettings moderationFeatures =
+                new ModerationFeatureConfigurationParser().parse(root, errors);
         if (!errors.isEmpty()) {
             throw new PaperConfigurationValidationException(errors);
         }
-        return new PaperConfigurationSnapshot(version, restart, alerts);
+        return new PaperConfigurationSnapshot(version, restart, alerts, moderationFeatures);
     }
 
     private static void validateChannel(

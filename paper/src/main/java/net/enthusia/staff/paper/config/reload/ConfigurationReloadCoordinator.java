@@ -600,7 +600,8 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
         return new PaperConfigurationSnapshot(
                 previous.configuration().version(),
                 previous.configuration().restartRequired(),
-                settings
+                settings,
+                previous.configuration().moderationFeatures()
         );
     }
 

@@ -41,7 +41,7 @@ class PluginMetadataIntegrityTest {
     }
 
     @Test
-    void onlyEstaffAndPlayerReportOmitAnOuterPermission() throws IOException {
+    void onlySubcommandRoutedCommandsOmitAnOuterPermission() throws IOException {
         JsonNode commands = pluginMetadata().path("commands");
         Set<String> withoutOuterPermission = new HashSet<>();
 
@@ -51,7 +51,7 @@ class PluginMetadataIntegrityTest {
             }
         });
 
-        assertEquals(Set.of("estaff", "report"), withoutOuterPermission);
+        assertEquals(Set.of("estaff", "report", "case"), withoutOuterPermission);
     }
 
     @Test
