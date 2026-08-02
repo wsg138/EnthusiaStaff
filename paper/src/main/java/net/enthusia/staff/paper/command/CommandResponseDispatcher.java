@@ -39,7 +39,7 @@ final class CommandResponseDispatcher {
             }
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, delivery);
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.FINE, "Unable to deliver command response", exception);
+            plugin.getLogger().log(Level.WARNING, "Unable to deliver command response", exception);
         }
     }
 }
