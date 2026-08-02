@@ -32,6 +32,7 @@ import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
 import net.enthusia.staff.persistence.migration.FencedModerationStore;
 import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
@@ -64,7 +65,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final PunishmentDraftStore punishmentDraftStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
-        this(dataSource, ReportPolicy::defaults);
+        this(dataSource, ReportPolicyRuntime::current);
     }
 
     MariaDbRuntime(HikariDataSource dataSource, Supplier<ReportPolicy> reportPolicy) {
