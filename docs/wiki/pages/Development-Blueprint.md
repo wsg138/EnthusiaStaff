@@ -22,8 +22,15 @@ state and release dependencies.
   `28dcd90f96b7a0c772acc378f73b18d9af62fe0b`.
 - PR #37 is the only current implementation pull request.
 - PR #37 remains an open draft on `section/plugin` at
-  `f4cf0c6f824296b8677272c248cc5bb689c25417`.
-- PR #37 is 70 commits ahead and 0 behind the recorded `main` checkpoint.
+  `aa2d737a5f33f0337010932723f46ce1e356c867`.
+- PR #37 is 76 commits ahead and 0 behind the recorded `main` checkpoint.
+- Exact-head Coverage run `30734750010` passed with runtime packaging, migration
+  checksum tests, aggregate coverage and Codacy upload.
+- Pi source run `30731471656` and staging run `30731479127` passed on
+  runtime-equivalent source; later changes are tests, docs, analysis configuration
+  and temporary workflow cleanup, not production runtime source or migration bytes.
+- V11, V12 and V13 must retain the deployed checksum-locked bytes without
+  scanner-only comments; analysis suppression belongs in `.codacy.yml`.
 - Issue #43 is the remaining production-like acceptance blocker.
 - LiteBans remains authoritative.
 - Green CI does not by itself permit PR #37 to be marked ready or merged.
@@ -55,7 +62,8 @@ state and release dependencies.
 - Preserve cross-server database coordination, local transaction serialization,
   restart recovery, migration-run abandonment handling, activation replay and
   cutover audit persistence.
-- Keep V11, V12 and V13 unchanged.
+- Keep the deployed V11, V12 and V13 bytes unchanged. Do not add scanner comments;
+  use analysis configuration for exclusions and new migration files for future SQL.
 - Merge current `main` into `section/plugin` only if the branch actually becomes
   behind; use a normal merge commit, never a rebase or force-push.
 
