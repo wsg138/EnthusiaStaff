@@ -24,14 +24,14 @@ Live GitHub and code state take priority over this report. Read PR #48 for the e
 - Report details show the reason, state, revision, reporter and target IDs, server/location context, description and retained evidence counts.
 - Sensitive public-chat, private-message and client-evidence JSON is not copied into inventory item lore.
 - Available actions are derived from the durable report state and assignment.
-- Every GUI action collects a private audit note and opens a separate confirmation screen.
+- Every GUI action collects a private audit note through `/reports note <note>` and opens a separate confirmation screen; `/reports cancel` abandons the pending note.
+- Java players receive a clickable suggested note command, while the command path remains usable by Bedrock players and does not depend on normal chat events surviving a chat-provider replacement.
 - The confirmation submits the exact revision displayed to staff and uses a stable operation UUID for idempotent retry behavior.
 - Applied and rejected results reload current report state; a refresh failure cannot erase or misreport a known commit outcome.
 - Rapid overlapping queue/detail loads are fenced per viewer so an older database response cannot replace a newer screen.
-- Report note capture only consumes an uncancelled chat event after higher-priority moderation input, preventing one message from feeding both report and sanction workflows.
 - Inventory movement and drag events are cancelled, state is bound to one viewer, and report permission is rechecked on interaction and presentation.
 - Database work stays on the existing bounded worker executor; inventory and message operations return to the player entity scheduler.
-- Pending input, load and confirmation state is removed when the player disconnects.
+- Pending note, load and confirmation state is removed when the player disconnects; opening a fresh report GUI clears an older pending report note.
 
 ## Material architecture and files
 
@@ -68,7 +68,9 @@ The GUI reuses `ReportStore`, `JdbcReportQueryStore` and `JdbcReportStateStore`;
 ### Commands
 
 - `/reports` — opens the staff GUI for an authorized player; console retains text output.
-- Existing explicit queue, detail and state-change arguments remain unchanged as the plain-text fallback.
+- `/reports note <private action note>` — completes the note stage for a pending GUI action.
+- `/reports cancel` — abandons a pending GUI action note and returns to the report detail.
+- Existing explicit queue, detail and direct state-change arguments remain unchanged as the plain-text fallback.
 
 ### Permission
 
@@ -88,7 +90,7 @@ Confirmed defects fixed before final validation:
 1. **Out-of-order asynchronous navigation:** rapid queue/detail requests could complete in reverse order and reopen an older screen. Per-viewer load IDs now allow only the current request to present or report a load failure.
 2. **Off-thread player-state reads:** asynchronous report work used live `Player` UUID access. Actor/viewer UUIDs are now captured on the owning thread or read from immutable GUI state before worker execution.
 3. **Ambiguous post-commit refresh failure:** a committed report action followed by a failed detail reload could be presented as a failed mutation. Commit result and refresh result are now separated; unknown mutation failures explicitly say the outcome was not confirmed and require reopening before retry.
-4. **Cross-workflow private-input reuse:** report and sanction note capture could both consume the same chat message when both were pending. Report capture now runs after existing moderation capture and processes only an uncancelled event, so one message cannot advance both actions.
+4. **Private-input collision and chat-provider incompatibility:** raw chat note capture could overlap the existing punishment/sanction capture workflows, while cancellation-order filtering would fail on chat providers that cancel or replace normal chat events. Report notes now use the private `/reports note ...` command stage, eliminating both dependencies without changing the older workflows.
 
 Reviewed and preserved boundaries:
 
@@ -120,7 +122,7 @@ A cancelled, superseded, merge-ref-only or different-head run is not final evide
 
 ## Merge readiness or blocker
 
-This handoff does not itself assert merge readiness. PR #48 may be marked ready and merged with a normal merge commit only after the exact final feature head is green, the branch is synchronized with `main`, all valid review findings are resolved and the final evidence is posted on the PR.
+This handoff does not itself assert merge readiness. PR #48 may be merged with a normal merge commit only after the exact final feature head is green, the branch is synchronized with `main`, all valid review findings are resolved and the final evidence is posted on the PR.
 
 If any required gate remains unavailable or red, leave the PR unmerged and treat the live PR evidence as the blocker record.
 
