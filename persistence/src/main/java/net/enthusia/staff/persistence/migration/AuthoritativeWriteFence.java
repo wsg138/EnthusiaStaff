@@ -35,29 +35,18 @@ final class AuthoritativeWriteFence {
     }
 
     private <T> T executeSerialized(Supplier<T> operation, Supplier<T> blockedResult) {
-        Connection connection = null;
-        Throwable operationFailure = null;
-        boolean authoritativeOperationCompleted = false;
-        try {
-            connection = dataSource.getConnection();
-            connection.setAutoCommit(false);
-            if (!authoritativeWritesAllowed(connection)) {
+        try (FenceLease lease = new FenceLease(dataSource)) {
+            if (!authoritativeWritesAllowed(lease.connection())) {
                 return blockedResult.get();
             }
             T result = operation.get();
-            authoritativeOperationCompleted = true;
+            lease.markAuthoritativeOperationCompleted();
             return result;
         } catch (SQLException exception) {
-            operationFailure = exception;
             throw new ModerationPersistenceException(
                     "Unable to enforce the authoritative moderation write fence",
                     exception
             );
-        } catch (RuntimeException | Error exception) {
-            operationFailure = exception;
-            throw exception;
-        } finally {
-            releaseFence(connection, operationFailure, authoritativeOperationCompleted);
         }
     }
 
@@ -72,16 +61,7 @@ final class AuthoritativeWriteFence {
             if (!result.next()) {
                 throw new SQLException("operational state singleton missing while fencing authoritative write");
             }
-            String persistedMode = result.getString("mode");
-            if (persistedMode == null) {
-                throw new SQLException("persisted operational mode is missing while fencing authoritative write");
-            }
-            OperationalMode mode;
-            try {
-                mode = OperationalMode.valueOf(persistedMode);
-            } catch (IllegalArgumentException exception) {
-                throw new SQLException("unknown persisted operational mode while fencing authoritative write", exception);
-            }
+            OperationalMode mode = parseMode(result.getString("mode"));
             if (result.next()) {
                 throw new SQLException("multiple operational state singleton rows found");
             }
@@ -91,45 +71,71 @@ final class AuthoritativeWriteFence {
         }
     }
 
-    private static void releaseFence(
-            Connection connection,
-            Throwable operationFailure,
-            boolean authoritativeOperationCompleted
-    ) {
-        if (connection == null) {
-            return;
-        }
-        SQLException cleanupFailure = null;
-        try {
-            connection.rollback();
-        } catch (SQLException exception) {
-            cleanupFailure = exception;
+    private static OperationalMode parseMode(String persistedMode) throws SQLException {
+        if (persistedMode == null) {
+            throw new SQLException("persisted operational mode is missing while fencing authoritative write");
         }
         try {
-            connection.setAutoCommit(true);
-        } catch (SQLException exception) {
-            cleanupFailure = combine(cleanupFailure, exception);
+            return OperationalMode.valueOf(persistedMode);
+        } catch (IllegalArgumentException exception) {
+            throw new SQLException("unknown persisted operational mode while fencing authoritative write", exception);
         }
-        try {
-            connection.close();
-        } catch (SQLException exception) {
-            cleanupFailure = combine(cleanupFailure, exception);
+    }
+
+    private static final class FenceLease implements AutoCloseable {
+        private final Connection connection;
+        private boolean authoritativeOperationCompleted;
+
+        private FenceLease(DataSource dataSource) throws SQLException {
+            connection = dataSource.getConnection();
+            try {
+                connection.setAutoCommit(false);
+            } catch (SQLException exception) {
+                closeAfterSetupFailure(exception);
+                throw exception;
+            }
         }
-        if (cleanupFailure == null) {
-            return;
+
+        private Connection connection() {
+            return connection;
         }
-        if (operationFailure != null) {
-            operationFailure.addSuppressed(cleanupFailure);
-            return;
+
+        private void markAuthoritativeOperationCompleted() {
+            authoritativeOperationCompleted = true;
         }
-        if (!authoritativeOperationCompleted) {
-            throw new ModerationPersistenceException(
-                    "Unable to release the authoritative moderation write fence",
-                    cleanupFailure
-            );
+
+        @Override
+        public void close() throws SQLException {
+            SQLException cleanupFailure = null;
+            try {
+                connection.rollback();
+            } catch (SQLException exception) {
+                cleanupFailure = exception;
+            }
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException exception) {
+                cleanupFailure = combine(cleanupFailure, exception);
+            }
+            try {
+                connection.close();
+            } catch (SQLException exception) {
+                cleanupFailure = combine(cleanupFailure, exception);
+            }
+            if (cleanupFailure != null && !authoritativeOperationCompleted) {
+                throw cleanupFailure;
+            }
+            // Once the delegated authoritative transaction reports a committed outcome,
+            // do not replace it with an ambiguous cleanup error from this read-only fence.
         }
-        // The delegated authoritative transaction already reported a committed outcome.
-        // Do not replace that result with an ambiguous cleanup error from this read-only fence.
+
+        private void closeAfterSetupFailure(SQLException setupFailure) {
+            try {
+                connection.close();
+            } catch (SQLException closeFailure) {
+                setupFailure.addSuppressed(closeFailure);
+            }
+        }
     }
 
     private static SQLException combine(SQLException existing, SQLException additional) {
