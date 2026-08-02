@@ -65,7 +65,9 @@ final class AuthoritativeWriteFence {
             if (result.next()) {
                 throw new SQLException("multiple operational state singleton rows found");
             }
-            return mode.destructiveWritesAllowed();
+            // BOOTSTRAP is used only for internal persistence initialization and isolated store verification.
+            // External command bindings are registered after runtime promotion.
+            return mode == OperationalMode.BOOTSTRAP || mode.destructiveWritesAllowed();
         }
     }
 
