@@ -31,7 +31,6 @@ public final class PunishmentRequestService {
     private final AuthorizationPolicy authorization;
     private final PunishmentService punishments;
     private final PunishmentRequestStore requests;
-    private final Supplier<OperationalMode> operationalMode;
     private final int expirationBatchSize;
 
     public PunishmentRequestService(
@@ -51,7 +50,6 @@ public final class PunishmentRequestService {
                 authorization,
                 punishments,
                 requests,
-                () -> OperationalMode.ACTIVE,
                 DEFAULT_EXPIRATION_BATCH_SIZE
         );
     }
@@ -64,53 +62,6 @@ public final class PunishmentRequestService {
             AuthorizationPolicy authorization,
             PunishmentService punishments,
             PunishmentRequestStore requests,
-            int expirationBatchSize
-    ) {
-        this(
-                clock,
-                requestLifetime,
-                leaseLifetime,
-                caseIds,
-                authorization,
-                punishments,
-                requests,
-                () -> OperationalMode.ACTIVE,
-                expirationBatchSize
-        );
-    }
-
-    public PunishmentRequestService(
-            Clock clock,
-            Duration requestLifetime,
-            Duration leaseLifetime,
-            SecureIdentifiers caseIds,
-            AuthorizationPolicy authorization,
-            PunishmentService punishments,
-            PunishmentRequestStore requests,
-            Supplier<OperationalMode> operationalMode
-    ) {
-        this(
-                clock,
-                requestLifetime,
-                leaseLifetime,
-                caseIds,
-                authorization,
-                punishments,
-                requests,
-                operationalMode,
-                DEFAULT_EXPIRATION_BATCH_SIZE
-        );
-    }
-
-    public PunishmentRequestService(
-            Clock clock,
-            Duration requestLifetime,
-            Duration leaseLifetime,
-            SecureIdentifiers caseIds,
-            AuthorizationPolicy authorization,
-            PunishmentService punishments,
-            PunishmentRequestStore requests,
-            Supplier<OperationalMode> operationalMode,
             int expirationBatchSize
     ) {
         this(
@@ -122,7 +73,6 @@ public final class PunishmentRequestService {
                 authorization,
                 punishments,
                 requests,
-                operationalMode,
                 expirationBatchSize
         );
     }
@@ -137,18 +87,8 @@ public final class PunishmentRequestService {
             PunishmentService punishments,
             PunishmentRequestStore requests
     ) {
-        this(
-                clock,
-                requestLifetime,
-                leaseLifetime,
-                requestIds,
-                caseIds,
-                authorization,
-                punishments,
-                requests,
-                () -> OperationalMode.ACTIVE,
-                DEFAULT_EXPIRATION_BATCH_SIZE
-        );
+        this(clock, requestLifetime, leaseLifetime, requestIds, caseIds, authorization,
+                punishments, requests, DEFAULT_EXPIRATION_BATCH_SIZE);
     }
 
     PunishmentRequestService(
@@ -160,32 +100,6 @@ public final class PunishmentRequestService {
             AuthorizationPolicy authorization,
             PunishmentService punishments,
             PunishmentRequestStore requests,
-            int expirationBatchSize
-    ) {
-        this(
-                clock,
-                requestLifetime,
-                leaseLifetime,
-                requestIds,
-                caseIds,
-                authorization,
-                punishments,
-                requests,
-                () -> OperationalMode.ACTIVE,
-                expirationBatchSize
-        );
-    }
-
-    PunishmentRequestService(
-            Clock clock,
-            Duration requestLifetime,
-            Duration leaseLifetime,
-            Supplier<UUID> requestIds,
-            SecureIdentifiers caseIds,
-            AuthorizationPolicy authorization,
-            PunishmentService punishments,
-            PunishmentRequestStore requests,
-            Supplier<OperationalMode> operationalMode,
             int expirationBatchSize
     ) {
         this.clock = Objects.requireNonNull(clock);
@@ -204,7 +118,6 @@ public final class PunishmentRequestService {
         this.authorization = Objects.requireNonNull(authorization);
         this.punishments = Objects.requireNonNull(punishments);
         this.requests = Objects.requireNonNull(requests);
-        this.operationalMode = Objects.requireNonNull(operationalMode);
         if (expirationBatchSize < 1 || expirationBatchSize > MAXIMUM_QUERY_LIMIT) {
             throw new IllegalArgumentException("expiration batch size must be between 1 and 500");
         }
@@ -273,10 +186,6 @@ public final class PunishmentRequestService {
     public PunishmentRequestResult acquire(UUID requestId, Actor approver) {
         Objects.requireNonNull(requestId);
         Objects.requireNonNull(approver);
-        PunishmentRequestResult.Rejected modeIssue = writeModeRejection();
-        if (modeIssue != null) {
-            return modeIssue;
-        }
         Instant now = clock.instant();
         PunishmentApprovalRequest request = requests.find(requestId).orElse(null);
         PunishmentRequestResult.Rejected rejection = approvalRejection(request, approver, now);
@@ -294,10 +203,6 @@ public final class PunishmentRequestService {
     public PunishmentRequestResult approve(PunishmentApprovalLease lease, Actor approver) {
         Objects.requireNonNull(lease);
         Objects.requireNonNull(approver);
-        PunishmentRequestResult.Rejected modeIssue = writeModeRejection();
-        if (modeIssue != null) {
-            return modeIssue;
-        }
         Instant now = clock.instant();
         PunishmentRequestResult.Rejected rejection = leaseRejection(lease, approver, now);
         if (rejection != null) {
@@ -314,10 +219,6 @@ public final class PunishmentRequestService {
         Objects.requireNonNull(lease);
         Objects.requireNonNull(approver);
         String normalizedNote = Checks.nonBlank(note, "denialNote", 1_000);
-        PunishmentRequestResult.Rejected modeIssue = writeModeRejection();
-        if (modeIssue != null) {
-            return modeIssue;
-        }
         Instant now = clock.instant();
         PunishmentRequestResult.Rejected rejection = leaseRejection(lease, approver, now);
         if (rejection != null) {
@@ -327,9 +228,7 @@ public final class PunishmentRequestService {
     }
 
     public int expire() {
-        return writeModeRejection() == null
-                ? requests.expire(clock.instant(), expirationBatchSize)
-                : 0;
+        return requests.expire(clock.instant(), expirationBatchSize);
     }
 
     private PunishmentRequestResult submitEvaluated(
@@ -403,20 +302,6 @@ public final class PunishmentRequestService {
             );
         }
         return null;
-    }
-
-    private PunishmentRequestResult.Rejected writeModeRejection() {
-        OperationalMode mode = Objects.requireNonNull(
-                operationalMode.get(),
-                "current operational mode"
-        );
-        if (mode == OperationalMode.ACTIVE) {
-            return null;
-        }
-        return new PunishmentRequestResult.Rejected(
-                "MODE_BLOCKED",
-                "Punishment request changes are disabled in " + mode
-        );
     }
 
     private boolean hasApprovalAuthority(Actor approver) {
