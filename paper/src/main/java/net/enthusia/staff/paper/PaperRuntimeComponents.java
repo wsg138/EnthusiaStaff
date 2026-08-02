@@ -12,6 +12,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
+import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.paper.api.InventoryLockService;
 import net.enthusia.staff.paper.api.StaffModeQueryService;
 import net.enthusia.staff.paper.api.StaffSessionService;
@@ -40,6 +41,7 @@ record PaperRuntimeComponents(
         ReportEvidenceMaintenance evidence = new ReportEvidenceMaintenance(
                 dependencies.environment().clock(),
                 dependencies.stores().reportStore(),
+                dependencies.policy().reportPolicy(),
                 dependencies.environment().plugin().getLogger()
         );
         FreezeManager freeze = createFreezeManager(dependencies);
@@ -182,7 +184,10 @@ record PaperRuntimeComponents(
     ) {
     }
 
-    record Policy(Supplier<OperationalMode> writeMode) {
+    record Policy(
+            Supplier<OperationalMode> writeMode,
+            Supplier<ReportPolicy> reportPolicy
+    ) {
     }
 
     record Stores(
