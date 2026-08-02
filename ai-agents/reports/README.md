@@ -20,6 +20,19 @@ Examples:
 - `2026-08-03-pr47-report-workflow.md`
 - `2026-08-04-blocked-rosechat-provider.md`
 
+## Avoid self-referential evidence
+
+A report committed inside a PR cannot reliably contain that same PR's final SHA, final CI run IDs, or merge commit without changing the revision again.
+
+Therefore:
+
+- the tracked handoff contains the stable work summary, review summary, boundaries, next step, and PR link;
+- exact final-head validation evidence is recorded in the PR description or a final pre-merge PR comment after tracked files are frozen;
+- the exact merge commit and resulting `main` are recorded in the PR after merge;
+- the next agent must read both the handoff and the live PR evidence.
+
+Do not create a circular sequence where every attempt to record the final SHA creates another SHA requiring another validation run.
+
 ## Required handoff sections
 
 Every handoff should include:
@@ -30,8 +43,7 @@ Every handoff should include:
    - work item;
    - starting `main`;
    - branch;
-   - PR;
-   - original and final feature heads.
+   - PR and URL.
 2. **Baseline**
    - existing behavior;
    - confirmed gaps;
@@ -44,22 +56,14 @@ Every handoff should include:
    - merge blockers found;
    - confirmed defects fixed;
    - optional or deferred findings;
-   - unresolved review status.
-5. **Validation**
-   - exact final feature head;
-   - workflow run and job IDs;
-   - Java version;
-   - build and tests;
-   - migration checks;
-   - coverage;
-   - JAR and artifact hashes where relevant;
-   - static analysis;
-   - Pi evidence or an honest statement that it did not run.
-6. **Merge or blocker**
-   - intended or actual merge state;
-   - normal merge confirmation;
-   - resulting `main` when known live;
-   - branch cleanup result;
+   - unresolved-review status at the time tracked content was frozen.
+5. **Validation location**
+   - link to the PR description or comment where exact final-head evidence will be recorded;
+   - checks that must pass;
+   - known evidence limitations.
+6. **Intended merge or blocker state**
+   - intended normal merge state;
+   - branch-cleanup expectation;
    - or exact blocker and required input.
 7. **Boundaries**
    - production, authority, migration, credential, and data boundaries preserved.
@@ -68,17 +72,19 @@ Every handoff should include:
    - next recommended work item;
    - no implementation of that next item.
 
+A historical report may include exact final-head and merge evidence when those values were already known before the AI workspace was introduced.
+
 ## Latest pointer
 
 `agent-handoffs/latest.md` must point to the newest handoff and summarize:
 
 - work item;
 - PR;
-- final feature head;
-- state;
+- state expected after merge or blocker state;
+- validation-evidence location;
 - next work item.
 
-The next agent must still inspect live GitHub because the latest file may have been committed immediately before the PR merge and therefore may not contain the final merge commit.
+The next agent must inspect live GitHub because the latest file is normally committed before final validation and merge.
 
 ## Privacy
 
