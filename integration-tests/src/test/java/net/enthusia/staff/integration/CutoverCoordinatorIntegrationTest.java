@@ -33,6 +33,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class CutoverCoordinatorIntegrationTest {
+    private static final String RUN_MODE_CUTOVER = "CUTOVER";
     private static final String REJECTING_AUDIT_TRIGGER = "reject_cutover_activation_audit";
     private static final UUID ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000301");
     private static final List<String> COMPARISON_TYPES = List.of(
@@ -94,7 +95,7 @@ class CutoverCoordinatorIntegrationTest {
             insertCompleteShadowWindow(maintenanceStarted);
             assertFinalImportBlocksActivation(coordinator);
 
-            UUID finalRunId = insertCompletedRun("CUTOVER", maintenanceStarted, maintenanceStarted);
+            UUID finalRunId = insertCompletedRun(RUN_MODE_CUTOVER, maintenanceStarted, maintenanceStarted);
             insertMatchingComparisons(finalRunId, maintenanceStarted);
             CutoverEvidence evidence = coordinator.latestEvidence().orElseThrow();
             assertTrue(evidence.finalIncrementalImportComplete());
@@ -105,13 +106,13 @@ class CutoverCoordinatorIntegrationTest {
             assertTrue(activated.cutoverId().isPresent());
             assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             assertEquals(finalRunId, recordedFinalRunId());
-            assertEquals(1, tableCount("cutover_records"));
+            assertEquals(1, cutoverRecordCount());
             assertEquals(1, auditCount("LITEBANS_CUTOVER_ACTIVATED"));
 
             CutoverOutcome repeated = coordinator.activate(ACTOR_ID, Optional.empty());
             assertFalse(repeated.activated());
             assertEquals(List.of("MAINTENANCE_REQUIRED"), repeated.assessment().blockers());
-            assertEquals(1, tableCount("cutover_records"));
+            assertEquals(1, cutoverRecordCount());
         }
     }
 
@@ -160,16 +161,16 @@ class CutoverCoordinatorIntegrationTest {
             Instant maintenanceStarted = runtime.operationalStateStore().current().updatedAt();
             insertCompleteShadowWindow(maintenanceStarted);
 
-            UUID completedRun = insertCompletedRun("CUTOVER", maintenanceStarted, maintenanceStarted);
+            UUID completedRun = insertCompletedRun(RUN_MODE_CUTOVER, maintenanceStarted, maintenanceStarted);
             insertMatchingComparisons(completedRun, maintenanceStarted);
-            insertRunningRun("CUTOVER", maintenanceStarted.plusMillis(1));
+            insertRunningRun(RUN_MODE_CUTOVER, maintenanceStarted.plusMillis(1));
 
             List<String> blockers = coordinator.assess(Optional.empty()).blockers();
             assertTrue(blockers.contains("MIGRATION_OPERATION_IN_PROGRESS"));
             assertTrue(blockers.contains("FINAL_IMPORT_INCOMPLETE"));
             assertFalse(coordinator.activate(ACTOR_ID, Optional.empty()).activated());
             assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
-            assertEquals(0, tableCount("cutover_records"));
+            assertEquals(0, cutoverRecordCount());
         }
     }
 
@@ -182,7 +183,7 @@ class CutoverCoordinatorIntegrationTest {
             assertTrue(coordinator.enterMaintenance(ACTOR_ID, "Run final cutover gate"));
             Instant maintenanceStarted = runtime.operationalStateStore().current().updatedAt();
             insertCompleteShadowWindow(maintenanceStarted);
-            UUID finalRunId = insertCompletedRun("CUTOVER", maintenanceStarted, maintenanceStarted);
+            UUID finalRunId = insertCompletedRun(RUN_MODE_CUTOVER, maintenanceStarted, maintenanceStarted);
             insertMatchingComparisons(finalRunId, maintenanceStarted);
             installRejectingAuditTrigger();
 
@@ -192,7 +193,7 @@ class CutoverCoordinatorIntegrationTest {
                         () -> coordinator.activate(ACTOR_ID, Optional.empty())
                 );
                 assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
-                assertEquals(0, tableCount("cutover_records"));
+                assertEquals(0, cutoverRecordCount());
                 assertEquals(0, auditCount("LITEBANS_CUTOVER_ACTIVATED"));
             } finally {
                 dropRejectingAuditTrigger();
@@ -340,12 +341,11 @@ class CutoverCoordinatorIntegrationTest {
         }
     }
 
-    private static long tableCount(String table) throws SQLException {
-        if (!"cutover_records".equals(table)) {
-            throw new IllegalArgumentException("Unsupported test table: " + table);
-        }
+    private static long cutoverRecordCount() throws SQLException {
         try (Connection connection = sourceConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM cutover_records")) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM cutover_records"
+             )) {
             return count(statement);
         }
     }
