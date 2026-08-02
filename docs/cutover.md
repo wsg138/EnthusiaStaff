@@ -2,6 +2,8 @@
 
 Cutover changes network moderation authority and must be performed in a scheduled maintenance window. It does not remove old jars or delete LiteBans data.
 
+The complete production-like rehearsal and evidence gate is in [cutover-acceptance.md](cutover-acceptance.md). A green CI run does not replace that acceptance record.
+
 ## Preconditions
 
 - Verified backups and a tested restore procedure exist.
@@ -65,6 +67,8 @@ The abort is transactional and audited. It resets shadow continuity.
 
 MariaDB integration coverage verifies maintenance fencing, active pass-through, transition ordering against an in-flight write, operation with the minimum two-connection pool, network-observation preservation with inheritance suppression, corrupt evidence rejection, final-run selection, activation idempotency, and full rollback when audit persistence fails.
 
-This code does not authorize or perform a production cutover. Before release, the project still requires a real uninterrupted 168-hour shadow window, a final incremental import rehearsal from a production-like backup, restart/resume and ambiguous-outcome acceptance evidence, rollback rehearsal, and post-cutover reconciliation evidence.
+Restart-recovery coverage also verifies that an abandoned migration run fails closed before a replacement begins, a committed activation can be retried after restart without a duplicate cutover record or audit, and emergency freeze remains durable and non-duplicating across another restart.
+
+This code does not authorize or perform a production cutover. Before release, the project still requires a real uninterrupted 168-hour shadow window, a final incremental import rehearsal from a production-like backup, the complete acceptance record in [cutover-acceptance.md](cutover-acceptance.md), rollback rehearsal, and post-cutover reconciliation evidence.
 
 Do not remove `LiteBans.jar`, Staff++, Punishments, or TigerReports support jars during this procedure. Removal occurs only after the post-cutover acceptance period described in the upgrade manifest.
