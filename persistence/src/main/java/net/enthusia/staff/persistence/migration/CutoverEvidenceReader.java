@@ -294,9 +294,12 @@ final class CutoverEvidenceReader {
     }
 
     private static ComparisonType parseComparisonType(String persistedType) throws SQLException {
+        if (persistedType == null) {
+            throw new SQLException("persisted shadow comparison type is missing");
+        }
         try {
             return ComparisonType.valueOf(persistedType);
-        } catch (IllegalArgumentException | NullPointerException exception) {
+        } catch (IllegalArgumentException exception) {
             throw new SQLException("unknown persisted shadow comparison type", exception);
         }
     }
