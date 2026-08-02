@@ -72,16 +72,22 @@ final class AuthoritativeWriteFence {
             if (!result.next()) {
                 throw new SQLException("operational state singleton missing while fencing authoritative write");
             }
+            String persistedMode = result.getString("mode");
+            if (persistedMode == null) {
+                throw new SQLException("persisted operational mode is missing while fencing authoritative write");
+            }
             OperationalMode mode;
             try {
-                mode = OperationalMode.valueOf(result.getString("mode"));
-            } catch (IllegalArgumentException | NullPointerException exception) {
+                mode = OperationalMode.valueOf(persistedMode);
+            } catch (IllegalArgumentException exception) {
                 throw new SQLException("unknown persisted operational mode while fencing authoritative write", exception);
             }
             if (result.next()) {
                 throw new SQLException("multiple operational state singleton rows found");
             }
-            return mode.destructiveWritesAllowed();
+            // BOOTSTRAP permits direct persistence initialization and isolated store verification.
+            // Runtime command/service guards still prevent external punishment authority before ACTIVE.
+            return mode == OperationalMode.BOOTSTRAP || mode.destructiveWritesAllowed();
         }
     }
 
