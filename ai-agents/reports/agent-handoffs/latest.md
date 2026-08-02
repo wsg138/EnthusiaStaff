@@ -2,7 +2,7 @@
 
 Current handoff:
 
-[`2026-08-02-ai-agent-workspace.md`](2026-08-02-ai-agent-workspace.md)
+[`2026-08-02-pr47-ai-agent-workspace.md`](2026-08-02-pr47-ai-agent-workspace.md)
 
 Related PR:
 
