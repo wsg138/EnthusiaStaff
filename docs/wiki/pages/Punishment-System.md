@@ -154,9 +154,12 @@ Select the exact case/sanction when multiple actions exist. A change should
 preserve the original record and explain whether it is a reduction, early ending,
 revocation, correction, appeal result or full overturn.
 
-The required `/history` command and complete overturn workflow are not finished.
-See [[Moderation, Punishments, and Reports]] for current percentages and source
-files.
+Use `/history <player|uuid> [page]` for the newest-first moderation timeline and
+`/case [view] <case-id>` for complete case, sanction, request, appeal and mutation
+detail. Exact sanction changes use `/estaff sanction reduce|end|revoke|overturn`
+and always preserve the original decision and append audit history. See
+[[Moderation, Punishments, and Reports]] for source files and remaining staging
+work.
 
 ## Stop and ask for help when
 

@@ -1,6 +1,6 @@
 # Moderation, Punishments, and Reports
 
-**Estimated group completion: about 56%.**
+**Estimated group completion: about 63%.**
 
 This group covers the moderation record model, punishment selection and approval,
 escalation policy, sanction changes, appeals, player reports, retained evidence,
@@ -25,7 +25,7 @@ client evidence and strict automod.
 | Rank authority and approval requests | **82%** | Prevents Helpers and Developers from bypassing required review. | [Authority](#rank-authority-and-approval-requests) |
 | Request notifications and recovery | **35%** | Notifies requesters and eligible reviewers without losing or duplicating delivery. | [Notifications](#request-notifications-and-recovery) |
 | Escalation policy | **52%** | Selects configured steps from reason families, history, recency and decay. | [Escalation](#escalation-policy) |
-| History and sanction changes | **34%** | Reads the full timeline and precisely ends, reduces, revokes or overturns one sanction. | [History and changes](#history-and-sanction-changes) |
+| History and sanction changes | **85%** | Reads the full timeline and precisely ends, reduces, revokes or overturns one sanction. | [History and changes](#history-and-sanction-changes) |
 | Appeals | **35%** | Connects player appeals and reviewer decisions to audited sanction state. | [Appeals](#appeals) |
 | Report submission and queues | **68%** | Accepts private player reports and coordinates staff claims and closure. | [Reports](#report-submission-and-queues) |
 | Evidence capture, privacy and retention | **56%** | Stores bounded chat/client context while keeping private evidence internal. | [Evidence](#evidence-capture-privacy-and-retention) |
@@ -239,8 +239,9 @@ sanction unchanged or invoke the central sanction-change service.
 ### What remains
 
 Complete authenticated site sessions, role controls, reviewer decisions,
-reopening, notifications, CSRF/rate limits and one audited path into sanction
-changes.
+reopening, notifications and CSRF/rate-limit hardening. Accepted website appeal
+records can now be linked to the exact audited overturn transaction; the separate
+reviewer UI and production provider flow remain unfinished.
 
 ## Report submission and queues
 

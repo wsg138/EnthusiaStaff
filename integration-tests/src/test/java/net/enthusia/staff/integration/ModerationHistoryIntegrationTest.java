@@ -90,12 +90,21 @@ class ModerationHistoryIntegrationTest {
         UUID javaId = uuid(1);
         UUID bedrockId = uuid(2);
         UUID ambiguousId = uuid(3);
-        insertPlayer(javaId, "CurrentJava", PlayerPlatform.JAVA, BASE.plusSeconds(30));
+        UUID historicalCurrentOne = uuid(4);
+        UUID historicalCurrentTwo = uuid(5);
+        UUID historicalCurrentThree = uuid(6);
+        insertPlayer(javaId, "CurrentJava", PlayerPlatform.JAVA, BASE);
         insertName(javaId, "OldJava", BASE, BASE.plusSeconds(10));
         insertPlayer(bedrockId, "BedrockKnown", PlayerPlatform.BEDROCK, BASE.plusSeconds(20));
         insertName(bedrockId, "SharedOld", BASE, BASE.plusSeconds(5));
         insertPlayer(ambiguousId, "OtherCurrent", PlayerPlatform.JAVA, BASE.plusSeconds(15));
         insertName(ambiguousId, "SharedOld", BASE, BASE.plusSeconds(6));
+        insertPlayer(historicalCurrentOne, "HistoricalOne", PlayerPlatform.JAVA, BASE.plusSeconds(90));
+        insertName(historicalCurrentOne, "CurrentJava", BASE, BASE.plusSeconds(80));
+        insertPlayer(historicalCurrentTwo, "HistoricalTwo", PlayerPlatform.JAVA, BASE.plusSeconds(100));
+        insertName(historicalCurrentTwo, "CurrentJava", BASE, BASE.plusSeconds(85));
+        insertPlayer(historicalCurrentThree, "HistoricalThree", PlayerPlatform.BEDROCK, BASE.plusSeconds(110));
+        insertName(historicalCurrentThree, "CurrentJava", BASE, BASE.plusSeconds(88));
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             PlayerResolution.Resolved uuidResult = assertInstanceOf(
@@ -209,7 +218,19 @@ class ModerationHistoryIntegrationTest {
                 "BAN",
                 "EXPIRED",
                 BASE.plusSeconds(10),
-                BASE.plusSeconds(30)
+                BASE.plusSeconds(40)
+        );
+        insertSanctionEvent(
+                uuid(28),
+                sanctionId,
+                caseId,
+                subjectId,
+                "CREATED",
+                "ACTIVE",
+                "ACTIVE",
+                BASE.plusSeconds(50),
+                BASE.plusSeconds(50),
+                "Created by the punishment transaction"
         );
         insertSanctionEvent(
                 uuid(24),
@@ -250,6 +271,16 @@ class ModerationHistoryIntegrationTest {
                     HistoryEventType.APPEAL_SUBMITTED,
                     HistoryEventType.APPEAL_DECIDED
             )));
+            ModerationHistoryEntry creation = publicPage.entries().stream()
+                    .filter(entry -> entry.eventType() == HistoryEventType.SANCTION_CREATED)
+                    .findFirst()
+                    .orElseThrow();
+            assertEquals(BASE.plusSeconds(50), creation.originalExpiration().orElseThrow());
+            assertEquals(BASE.plusSeconds(40), creation.resultingExpiration().orElseThrow());
+            assertEquals(1, publicPage.entries().stream()
+                    .filter(entry -> entry.eventType() == HistoryEventType.SANCTION_CREATED)
+                    .count());
+            assertFalse(publicTypes.contains(HistoryEventType.SANCTION_CHANGED));
             assertFalse(publicTypes.contains(HistoryEventType.ADMINISTRATIVE_NOTE));
             assertTrue(publicPage.entries().stream().allMatch(entry -> entry.actorId().isEmpty()));
             assertTrue(publicPage.entries().stream().allMatch(entry -> entry.actorName().isEmpty()));

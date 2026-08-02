@@ -193,10 +193,14 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
         entry.appealId().ifPresent(value -> line.append(" | appeal ").append(value));
         entry.punishmentType().ifPresent(value -> line.append(" | ").append(human(value)));
         line.append(" | ").append(human(entry.status()));
-        if (entry.resultingExpiration().isPresent()) {
-            line.append(" | expires ").append(formatter.format(entry.resultingExpiration().orElseThrow()));
+        if (!entry.originalExpiration().equals(entry.resultingExpiration())) {
+            line.append(" | expiration ")
+                    .append(expiration(entry.originalExpiration(), formatter))
+                    .append(" -> ")
+                    .append(expiration(entry.resultingExpiration(), formatter));
         } else if (entry.sanctionId().isPresent()) {
-            line.append(" | permanent/no expiration");
+            line.append(" | expiration ")
+                    .append(expiration(entry.resultingExpiration(), formatter));
         }
         if (!entry.publicReason().isBlank()) {
             line.append(" | reason: ").append(entry.publicReason());
@@ -209,6 +213,13 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
         }
         return line.toString();
+    }
+
+    private static String expiration(
+            java.util.Optional<java.time.Instant> value,
+            DateTimeFormatter formatter
+    ) {
+        return value.map(formatter::format).orElse("permanent/no expiration");
     }
 
     private static String human(String value) {

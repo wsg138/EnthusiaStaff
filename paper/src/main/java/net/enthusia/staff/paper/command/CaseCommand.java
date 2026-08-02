@@ -180,9 +180,11 @@ public final class CaseCommand implements CommandExecutor {
                         "- " + sanction.sanctionId() + " | " + human(sanction.type().name())
                                 + " | " + human(effectiveStatus(sanction).name())
                                 + " | issued " + formatter.format(sanction.issuedAt())
-                                + " | expiration " + sanction.expirationAt()
-                                        .map(formatter::format)
-                                        .orElse("permanent/no expiration")
+                                + " | original expiration " + expiration(
+                                        originalExpiration(detail.timeline(), sanction),
+                                        formatter
+                                )
+                                + " | current expiration " + expiration(sanction.expirationAt(), formatter)
                                 + sanction.endedAt()
                                         .map(value -> " | ended " + formatter.format(value))
                                         .orElse("")
@@ -200,6 +202,12 @@ public final class CaseCommand implements CommandExecutor {
             entry.sanctionId().ifPresent(value -> line.append(" | sanction ").append(value));
             entry.punishmentRequestId().ifPresent(value -> line.append(" | request ").append(value));
             entry.appealId().ifPresent(value -> line.append(" | appeal ").append(value));
+            if (!entry.originalExpiration().equals(entry.resultingExpiration())) {
+                line.append(" | expiration ")
+                        .append(expiration(entry.originalExpiration(), formatter))
+                        .append(" -> ")
+                        .append(expiration(entry.resultingExpiration(), formatter));
+            }
             if (!entry.publicReason().isBlank()) {
                 line.append(" | reason: ").append(entry.publicReason());
             }
@@ -210,6 +218,25 @@ public final class CaseCommand implements CommandExecutor {
             lines.add(Component.text(line.toString()));
         }
         return List.copyOf(lines);
+    }
+
+    private static Optional<java.time.Instant> originalExpiration(
+            List<ModerationHistoryEntry> timeline,
+            SanctionReview sanction
+    ) {
+        return timeline.stream()
+                .filter(entry -> entry.eventType() == net.enthusia.staff.domain.history.HistoryEventType.SANCTION_CREATED)
+                .filter(entry -> entry.sanctionId().filter(sanction.sanctionId()::equals).isPresent())
+                .map(ModerationHistoryEntry::originalExpiration)
+                .findFirst()
+                .orElse(sanction.expirationAt());
+    }
+
+    private static String expiration(
+            Optional<java.time.Instant> value,
+            DateTimeFormatter formatter
+    ) {
+        return value.map(formatter::format).orElse("permanent/no expiration");
     }
 
     private static net.enthusia.staff.domain.sanction.SanctionStatus effectiveStatus(SanctionReview sanction) {

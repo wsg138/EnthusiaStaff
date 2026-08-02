@@ -227,7 +227,16 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 "s.sanction_type AS punishment_type,",
                 "CASE WHEN s.status IN ('PENDING', 'ACTIVE') AND s.expiration_at IS NOT NULL",
                 "AND s.expiration_at <= CURRENT_TIMESTAMP(6) THEN 'EXPIRED' ELSE s.status END AS status,",
-                "c.public_reason, s.expiration_at AS original_expiration,",
+                "c.public_reason, CASE WHEN EXISTS (SELECT 1 FROM sanction_events first_change",
+                "WHERE first_change.sanction_id = s.sanction_id",
+                "AND first_change.event_type IN ('REDUCE_DURATION', 'REPLACE_EXPIRATION')",
+                "AND first_change.previous_status IS NOT NULL) THEN (",
+                "SELECT first_change.previous_expiration FROM sanction_events first_change",
+                "WHERE first_change.sanction_id = s.sanction_id",
+                "AND first_change.event_type IN ('REDUCE_DURATION', 'REPLACE_EXPIRATION')",
+                "AND first_change.previous_status IS NOT NULL",
+                "ORDER BY first_change.occurred_at ASC, first_change.event_id ASC LIMIT 1",
+                ") ELSE s.expiration_at END AS original_expiration,",
                 "s.expiration_at AS resulting_expiration, c.actor_id, c.actor_name,",
                 "c.internal_explanation AS sensitive_reason",
                 "FROM sanctions s JOIN cases c ON c.case_id = s.case_id WHERE " + filter
@@ -286,7 +295,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 "JOIN sanctions sanction ON sanction.sanction_id = event.sanction_id",
                 "JOIN cases c ON c.case_id = sanction.case_id",
                 "LEFT JOIN players actor ON actor.player_id = event.actor_id",
-                "WHERE " + filter
+                "WHERE event.event_type <> 'CREATED' AND " + filter
         );
     }
 
