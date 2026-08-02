@@ -38,7 +38,7 @@ jobs:
               zlib.decompress(base64.b64decode(encoded))
           )
           PY
-          git apply -p3 --whitespace=fix /tmp/final-batch.patch
+          git apply -p4 --whitespace=fix /tmp/final-batch.patch
           rm -rf .github/patches/final-batch
           rm -f .github/workflows/apply-final-validation-batch.yml
       - name: Commit final source, tests, and documentation
