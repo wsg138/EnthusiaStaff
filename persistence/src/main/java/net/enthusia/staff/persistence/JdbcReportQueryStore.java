@@ -4,12 +4,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
 import net.enthusia.staff.domain.report.ReportSummary;
@@ -40,18 +46,27 @@ final class JdbcReportQueryStore {
             JOIN client_evidence_snapshots evidence
               ON evidence.snapshot_id = report_evidence.snapshot_id
             WHERE report_evidence.report_id = ?
-              AND report_evidence.captured_at > CURRENT_TIMESTAMP(6) - INTERVAL 7 DAY
+              AND report_evidence.captured_at > ?
             ORDER BY report_evidence.captured_at
             """;
 
     private final DataSource dataSource;
+    private final Supplier<ReportPolicy> policy;
+    private final Clock clock;
 
     JdbcReportQueryStore(DataSource dataSource) {
-        this.dataSource = dataSource;
+        this(dataSource, ReportPolicy::defaults, Clock.systemUTC());
+    }
+
+    JdbcReportQueryStore(DataSource dataSource, Supplier<ReportPolicy> policy, Clock clock) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.policy = Objects.requireNonNull(policy, "policy");
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     List<ReportSummary> list(ReportQueue queue, UUID actorId, int limit) {
-        validateListRequest(queue, actorId, limit);
+        ReportPolicy activePolicy = currentPolicy();
+        validateListRequest(queue, actorId, limit, activePolicy.queryLimit());
         QueueQuery query = queueQuery(queue);
         String sql = """
                 SELECT r.report_id, r.reporter_id, r.target_id, r.reason_id, r.state,
@@ -61,7 +76,13 @@ final class JdbcReportQueryStore {
                 """.formatted(query.condition());
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            bindListRequest(statement, query, actorId, limit);
+            bindListRequest(
+                    statement,
+                    query,
+                    actorId,
+                    clock.instant().minus(activePolicy.recentlyClosedWindow()),
+                    limit
+            );
             return readSummaries(statement);
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to list staff reports", exception);
@@ -72,6 +93,8 @@ final class JdbcReportQueryStore {
         if (reportId == null) {
             throw new IllegalArgumentException("reportId must be present");
         }
+        ReportPolicy activePolicy = currentPolicy();
+        Instant clientEvidenceCutoff = clock.instant().minus(activePolicy.evidenceRetention());
         try (Connection connection = dataSource.getConnection()) {
             ReportHeader header = reportHeader(connection, reportId);
             if (header == null) {
@@ -85,29 +108,40 @@ final class JdbcReportQueryStore {
                     header.targetCoordinates(),
                     publicChatSnapshots(connection, reportId),
                     privateMessageSnapshots(connection, reportId),
-                    clientEvidenceSnapshots(connection, reportId)
+                    clientEvidenceSnapshots(connection, reportId, clientEvidenceCutoff)
             ));
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to read report details", exception);
         }
     }
 
-    private static void validateListRequest(ReportQueue queue, UUID actorId, int limit) {
-        if (queue == null || actorId == null || limit < 1 || limit > 100) {
-            throw new IllegalArgumentException("valid report queue, actor, and bounded limit are required");
+    private static void validateListRequest(
+            ReportQueue queue,
+            UUID actorId,
+            int limit,
+            int configuredLimit
+    ) {
+        if (queue == null || actorId == null || limit < 1 || limit > configuredLimit) {
+            throw new IllegalArgumentException(
+                    "valid report queue, actor, and limit from 1 to " + configuredLimit + " are required"
+            );
         }
     }
 
     private static QueueQuery queueQuery(ReportQueue queue) {
         return switch (queue) {
-            case OPEN -> new QueueQuery("r.state = 'OPEN'", false);
-            case CLAIMED_BY_ME -> new QueueQuery("r.state = 'CLAIMED' AND r.assigned_to = ?", true);
-            case ALL_CLAIMED -> new QueueQuery("r.state = 'CLAIMED'", false);
-            case AWAITING_REVIEW -> new QueueQuery("r.state = 'AWAITING_REVIEW'", false);
-            case RECENTLY_CLOSED -> new QueueQuery(
-                    "r.state IN ('CLOSED', 'NO_VIOLATION') "
-                            + "AND r.updated_at >= CURRENT_TIMESTAMP(6) - INTERVAL 7 DAY",
+            case OPEN -> new QueueQuery("r.state = 'OPEN'", false, false);
+            case CLAIMED_BY_ME -> new QueueQuery(
+                    "r.state = 'CLAIMED' AND r.assigned_to = ?",
+                    true,
                     false
+            );
+            case ALL_CLAIMED -> new QueueQuery("r.state = 'CLAIMED'", false, false);
+            case AWAITING_REVIEW -> new QueueQuery("r.state = 'AWAITING_REVIEW'", false, false);
+            case RECENTLY_CLOSED -> new QueueQuery(
+                    "r.state IN ('CLOSED', 'NO_VIOLATION') AND r.updated_at >= ?",
+                    false,
+                    true
             );
         };
     }
@@ -116,14 +150,17 @@ final class JdbcReportQueryStore {
             PreparedStatement statement,
             QueueQuery query,
             UUID actorId,
+            Instant recentlyClosedCutoff,
             int limit
     ) throws SQLException {
-        int limitIndex = 1;
+        int index = 1;
         if (query.bindActor()) {
-            statement.setBytes(1, UuidBytes.toBytes(actorId));
-            limitIndex = 2;
+            statement.setBytes(index++, UuidBytes.toBytes(actorId));
         }
-        statement.setInt(limitIndex, limit);
+        if (query.bindCutoff()) {
+            statement.setTimestamp(index++, Timestamp.from(recentlyClosedCutoff));
+        }
+        statement.setInt(index, limit);
     }
 
     private static List<ReportSummary> readSummaries(PreparedStatement statement) throws SQLException {
@@ -182,14 +219,24 @@ final class JdbcReportQueryStore {
         }
     }
 
-    private static List<String> clientEvidenceSnapshots(Connection connection, UUID reportId) throws SQLException {
+    private static List<String> clientEvidenceSnapshots(
+            Connection connection,
+            UUID reportId,
+            Instant cutoff
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(CLIENT_EVIDENCE_SQL)) {
-            return readSnapshots(statement, reportId);
+            statement.setBytes(1, UuidBytes.toBytes(reportId));
+            statement.setTimestamp(2, Timestamp.from(cutoff));
+            return readSnapshots(statement);
         }
     }
 
     private static List<String> readSnapshots(PreparedStatement statement, UUID reportId) throws SQLException {
         statement.setBytes(1, UuidBytes.toBytes(reportId));
+        return readSnapshots(statement);
+    }
+
+    private static List<String> readSnapshots(PreparedStatement statement) throws SQLException {
         try (ResultSet result = statement.executeQuery()) {
             List<String> snapshots = new ArrayList<>();
             while (result.next()) {
@@ -199,7 +246,11 @@ final class JdbcReportQueryStore {
         }
     }
 
-    private record QueueQuery(String condition, boolean bindActor) {
+    private ReportPolicy currentPolicy() {
+        return Objects.requireNonNull(policy.get(), "active report policy");
+    }
+
+    private record QueueQuery(String condition, boolean bindActor, boolean bindCutoff) {
     }
 
     private record ReportHeader(
