@@ -111,11 +111,12 @@ public final class ReportGuiController implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onChat(AsyncChatEvent event) {
         Player viewer = event.getPlayer();
-        InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
-        if (capture == null) {
+        UUID viewerId = viewer.getUniqueId();
+        InputCapture capture = inputCaptures.get(viewerId);
+        if (capture == null || event.isCancelled() || !inputCaptures.remove(viewerId, capture)) {
             return;
         }
         event.setCancelled(true);
