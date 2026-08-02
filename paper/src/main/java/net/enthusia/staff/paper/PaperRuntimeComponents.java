@@ -13,6 +13,7 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.paper.api.InventoryLockService;
 import net.enthusia.staff.paper.api.StaffModeQueryService;
 import net.enthusia.staff.paper.api.StaffSessionService;
@@ -188,6 +189,9 @@ record PaperRuntimeComponents(
             Supplier<OperationalMode> writeMode,
             Supplier<ReportPolicy> reportPolicy
     ) {
+        Policy(Supplier<OperationalMode> writeMode) {
+            this(writeMode, ReportPolicyRuntime::current);
+        }
     }
 
     record Stores(
