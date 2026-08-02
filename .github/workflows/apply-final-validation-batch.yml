@@ -6,6 +6,12 @@ on:
       - feature/punishment-history-lifecycle
     paths:
       - .github/workflows/apply-final-validation-batch.yml
+  pull_request:
+    branches:
+      - main
+    types: [synchronize]
+    paths:
+      - .github/workflows/apply-final-validation-batch.yml
 
 permissions:
   contents: write
