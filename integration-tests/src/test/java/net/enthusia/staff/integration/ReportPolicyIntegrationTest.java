@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.UUID;
 import net.enthusia.staff.domain.ports.ReportStore;
@@ -31,7 +32,7 @@ class ReportPolicyIntegrationTest {
             .withPassword("enthusia_test_password");
 
     @Test
-    void activePolicyControlsOpenReportAndQueryLimits() {
+    void activePolicyControlsOpenReportAndQueryLimits() throws SQLException {
         UUID reporterId = UUID.randomUUID();
         UUID firstTarget = UUID.randomUUID();
         UUID secondTarget = UUID.randomUUID();
