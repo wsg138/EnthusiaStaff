@@ -25,8 +25,11 @@ softdepend:
   - EnthusiaServerAutoClicker
 commands:
   estaff:
-    description: EnthusiaStaff status, verification, and recovery commands
-    usage: /estaff <status|verify|reload>
+    description: EnthusiaStaff status, reload, and exact sanction lifecycle commands
+    usage: /estaff <status|verify|reload|sanction>
+  history:
+    description: View database-paginated punishment and moderation history
+    usage: /history <player|uuid> [page]
   punish:
     description: Open or execute the central punishment workflow
     usage: /punish <player> [reason-id] or /punish resume <player>
@@ -115,9 +118,8 @@ commands:
     usage: /inspect <player>
     permission: enthusiastaff.inspect
   case:
-    description: Manage case-linked recovery actions
-    usage: /case restoreitems <case-id>
-    permission: enthusiastaff.case.restoreitems
+    description: View case detail or perform case-linked recovery actions
+    usage: /case [view] <case-id> | /case restoreitems <case-id>
 permissions:
   enthusiastaff.status:
     default: false
@@ -126,6 +128,22 @@ permissions:
   enthusiastaff.reload:
     default: false
   enthusiastaff.diagnostics:
+    default: false
+  enthusiastaff.history.view:
+    default: false
+  enthusiastaff.history.view-sensitive:
+    default: false
+  enthusiastaff.sanction.reduce:
+    default: false
+  enthusiastaff.sanction.end:
+    default: false
+  enthusiastaff.sanction.revoke:
+    default: false
+  enthusiastaff.sanction.overturn:
+    default: false
+  enthusiastaff.sanction.overturn.appeal:
+    default: false
+  enthusiastaff.sanction.bypass-hierarchy:
     default: false
   enthusiastaff.punishment.read:
     default: false
@@ -200,6 +218,7 @@ permissions:
     children:
       enthusiastaff.status: true
       enthusiastaff.verify: true
+      enthusiastaff.history.view: true
       enthusiastaff.punishment.read: true
       enthusiastaff.case.read: true
       enthusiastaff.punish: true
@@ -220,6 +239,8 @@ permissions:
       enthusiastaff.verify: true
       enthusiastaff.reload: true
       enthusiastaff.diagnostics: true
+      enthusiastaff.history.view: true
+      enthusiastaff.history.view-sensitive: true
       enthusiastaff.punishment.read: true
       enthusiastaff.case.read: true
       enthusiastaff.punish: true
@@ -239,6 +260,7 @@ permissions:
     default: false
     children:
       enthusiastaff.rank.helper: true
+      enthusiastaff.history.view-sensitive: true
       enthusiastaff.punishment.requests.review: true
       enthusiastaff.punish.ip: true
       enthusiastaff.remove: true
@@ -246,6 +268,9 @@ permissions:
       enthusiastaff.remove.end: true
       enthusiastaff.remove.revoke: true
       enthusiastaff.remove.request-overturn: true
+      enthusiastaff.sanction.reduce: true
+      enthusiastaff.sanction.end: true
+      enthusiastaff.sanction.revoke: true
       enthusiastaff.inventory.edit: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
@@ -260,6 +285,8 @@ permissions:
       enthusiastaff.remove.custom-duration: true
       enthusiastaff.remove.full-overturn: true
       enthusiastaff.remove.approve-overturn: true
+      enthusiastaff.sanction.overturn: true
+      enthusiastaff.sanction.overturn.appeal: true
       enthusiastaff.market.restrict: true
       enthusiastaff.reputation.restrict: true
   enthusiastaff.rank.founder:
@@ -267,5 +294,6 @@ permissions:
     children:
       enthusiastaff.rank.admin: true
       enthusiastaff.punish.custom-combination: true
+      enthusiastaff.sanction.bypass-hierarchy: true
       enthusiastaff.case.restoreitems: true
       enthusiastaff.owner.recovery: true
