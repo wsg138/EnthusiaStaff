@@ -7,14 +7,17 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.player.PlayerPresence;
+import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 
 public final class JdbcPlayerDirectory implements PlayerDirectory {
@@ -29,36 +32,95 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
 
     @Override
     public Optional<PlayerIdentity> find(String uuidOrUsername) {
-        if (uuidOrUsername == null || uuidOrUsername.isBlank() || uuidOrUsername.length() > 36) {
-            return Optional.empty();
+        PlayerResolution resolution = resolve(uuidOrUsername);
+        if (resolution instanceof PlayerResolution.Resolved resolved) {
+            return Optional.of(resolved.identity());
         }
-        UUID parsed = parseUuid(uuidOrUsername.trim());
-        String sql = parsed == null ? """
-                SELECT p.player_id, p.current_username, p.platform, p.first_seen_at, p.last_seen_at
-                FROM players p
-                LEFT JOIN player_names n ON n.player_id = p.player_id
-                WHERE p.lowercase_username = ? OR n.lowercase_username = ?
-                ORDER BY (p.lowercase_username = ?) DESC, n.last_seen_at DESC, p.last_seen_at DESC
-                LIMIT 1
-                """ : """
+        return Optional.empty();
+    }
+
+    @Override
+    public PlayerResolution resolve(String uuidOrUsername) {
+        if (uuidOrUsername == null || uuidOrUsername.isBlank() || uuidOrUsername.length() > 36) {
+            return new PlayerResolution.Missing();
+        }
+        String input = uuidOrUsername.trim();
+        UUID parsed = parseUuid(input);
+        return parsed == null ? resolveUsername(input) : resolveUuid(parsed);
+    }
+
+    private PlayerResolution resolveUuid(UUID playerId) {
+        String sql = """
                 SELECT player_id, current_username, platform, first_seen_at, last_seen_at
-                FROM players WHERE player_id = ?
+                FROM players
+                WHERE player_id = ?
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (parsed == null) {
-                String lower = uuidOrUsername.trim().toLowerCase(Locale.ROOT);
-                statement.setString(1, lower);
-                statement.setString(2, lower);
-                statement.setString(3, lower);
-            } else {
-                statement.setBytes(1, UuidBytes.toBytes(parsed));
-            }
+            statement.setBytes(1, UuidBytes.toBytes(playerId));
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? Optional.of(read(result)) : Optional.empty();
+                if (!result.next()) {
+                    return new PlayerResolution.Missing();
+                }
+                return new PlayerResolution.Resolved(
+                        read(result),
+                        PlayerResolution.MatchKind.UUID
+                );
             }
         } catch (SQLException | IllegalArgumentException exception) {
-            throw new ModerationPersistenceException("Unable to resolve player directory entry", exception);
+            throw new ModerationPersistenceException("Unable to resolve player directory UUID", exception);
+        }
+    }
+
+    private PlayerResolution resolveUsername(String username) {
+        String lower = username.toLowerCase(Locale.ROOT);
+        String sql = """
+                SELECT DISTINCT p.player_id, p.current_username, p.platform,
+                    p.first_seen_at, p.last_seen_at
+                FROM players p
+                LEFT JOIN player_names n ON n.player_id = p.player_id
+                WHERE p.lowercase_username = ? OR n.lowercase_username = ?
+                ORDER BY p.last_seen_at DESC, p.player_id ASC
+                LIMIT 3
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, lower);
+            statement.setString(2, lower);
+            try (ResultSet result = statement.executeQuery()) {
+                Map<UUID, PlayerIdentity> matches = new LinkedHashMap<>();
+                while (result.next()) {
+                    PlayerIdentity identity = read(result);
+                    matches.putIfAbsent(identity.playerId(), identity);
+                }
+                if (matches.isEmpty()) {
+                    return new PlayerResolution.Missing();
+                }
+                List<PlayerIdentity> current = matches.values().stream()
+                        .filter(identity -> identity.currentUsername()
+                                .filter(value -> value.equalsIgnoreCase(username))
+                                .isPresent())
+                        .toList();
+                if (current.size() == 1) {
+                    return new PlayerResolution.Resolved(
+                            current.getFirst(),
+                            PlayerResolution.MatchKind.CURRENT_USERNAME
+                    );
+                }
+                if (current.size() > 1) {
+                    return new PlayerResolution.Ambiguous(current);
+                }
+                List<PlayerIdentity> historical = List.copyOf(matches.values());
+                if (historical.size() == 1) {
+                    return new PlayerResolution.Resolved(
+                            historical.getFirst(),
+                            PlayerResolution.MatchKind.HISTORICAL_USERNAME
+                    );
+                }
+                return new PlayerResolution.Ambiguous(historical);
+            }
+        } catch (SQLException | IllegalArgumentException exception) {
+            throw new ModerationPersistenceException("Unable to resolve player directory username", exception);
         }
     }
 
