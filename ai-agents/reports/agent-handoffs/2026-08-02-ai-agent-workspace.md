@@ -9,9 +9,9 @@
 | Work item | Add a shared AI-agent workflow, state file, universal prompt, and handoff-report location |
 | Starting `main` | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
 | Branch | `agent/add-ai-agent-workflow` |
-| PR | To be assigned after opening |
-| Final feature head | To be verified before merge |
+| PR | [`#47 — Add shared AI agent workflow`](https://github.com/wsg138/EnthusiaStaff/pull/47) |
 | Intended merge method | Normal merge commit |
+| Exact-head and merge evidence | Read PR #47 description and final comments live |
 
 ## Baseline
 
@@ -31,9 +31,9 @@ Added `ai-agents/` containing:
 
 - `README.md` — workspace purpose, precedence, and normal flow;
 - `AGENTS.md` — permanent resume-first, implementation, harsh-review, validation, merge, cleanup, migration, production-boundary, blocked-work, and handoff rules;
-- `WORKSPACE-STATE.md` — current repository checkpoint, active work, latest completed PR, next planned work, migration boundary, and production boundary;
+- `WORKSPACE-STATE.md` — current repository checkpoint, active work, latest repository-process update, last completed product feature, next planned work, migration boundary, and production boundary;
 - `UNIVERSAL-AGENT-PROMPT.md` — reusable opening prompt for future AI channels;
-- `reports/README.md` — handoff format and privacy rules;
+- `reports/README.md` — handoff format, exact-evidence location, and privacy rules;
 - `reports/agent-handoffs/latest.md` — latest-report pointer;
 - timestamped handoffs for PR #46 and this workspace setup.
 
@@ -46,42 +46,70 @@ Added `ai-agents/` containing:
 - Exact final-head evidence is required before merge.
 - Normal merge commits remain mandatory.
 - Auto-merge, rebase, squash, force-push, and direct `main` pushes remain prohibited.
-- The feature PR updates state and handoff files before merge so the records land through the reviewed PR.
-- The actual merge commit is verified live afterward and recorded in the PR description or final PR comment, avoiding a direct documentation commit to `main`.
+- State and handoff files land through the reviewed feature PR.
+- Tracked content is frozen before exact-head validation.
+- Exact final-head evidence is stored in the PR description or a final pre-merge comment, which does not alter the feature SHA.
+- The actual merge commit is verified live afterward and recorded in the PR, avoiding a direct documentation commit to `main`.
 - The next agent always reconciles the committed handoff against live GitHub.
 - Branch deletion occurs only after the branch is proven fully merged and tooling permits it.
 
-## Review focus
+## Harsh review
 
-Review this documentation for:
+The documentation review found one merge-blocking workflow defect:
 
-- contradictions with existing repository policy;
-- accidental weakening of production or migration boundaries;
-- impossible handoff requirements;
-- circular state updates;
-- unsafe automatic merge behavior;
-- stale assumptions being treated as authoritative;
-- private-data leakage;
-- broken repository links;
-- ambiguity about one-work-item stopping behavior.
+A handoff file committed inside a PR cannot reliably contain that same PR's final SHA and final CI run IDs without changing the SHA again and invalidating the evidence it just recorded.
 
-## Validation
+This was corrected by separating evidence locations:
 
-Required for this documentation-only work:
+- repository handoffs store stable summaries, boundaries, review context, next steps, and the PR link;
+- exact final-head evidence is recorded in the PR after tracked files are frozen;
+- exact merge evidence is recorded in the PR after merge;
+- the next agent reads both the committed handoff and live GitHub state.
+
+This avoids a circular commit-and-revalidate sequence without allowing direct pushes to `main`.
+
+The final review must also confirm:
+
+- no contradiction with existing repository policy;
+- no weakening of production or migration boundaries;
+- no unsafe automatic merge behavior;
+- no stale assumption treated as authoritative;
+- no private-data leakage;
+- valid repository paths and links;
+- clear one-work-item stopping behavior.
+
+## Validation location
+
+Exact final-head validation evidence will be recorded in PR #47 after tracked content is frozen.
+
+Required validation for this documentation-only work:
 
 - compare branch against current `main`;
 - confirm only intended `ai-agents/` files changed;
 - verify every referenced repository path exists;
-- inspect Markdown structure and internal relative links;
+- inspect Markdown structure and relative links;
 - inspect PR review threads and configured checks;
 - confirm no code, migration, configuration, workflow, or production boundary changed.
+
+## Intended merge state
+
+When the review and exact-head checks are clean:
+
+- mark PR #47 ready;
+- merge using a normal merge commit;
+- verify the merge commit and resulting `main` live;
+- verify the branch is fully contained in `main`;
+- delete the branch when available tooling permits;
+- record exact merge and cleanup evidence in PR #47;
+- stop without starting the report workflow.
 
 ## Boundaries
 
 - No plugin code changed.
 - No migration changed.
 - No build or runtime configuration changed.
-- No JAR was built or deployed as part of this documentation task.
+- No GitHub Actions workflow changed.
+- No JAR was deployed.
 - No production system, database, player data, credential, Discord route, or webhook was accessed.
 - EnthusiaStaff authority was not activated.
 - LiteBans remains authoritative.
