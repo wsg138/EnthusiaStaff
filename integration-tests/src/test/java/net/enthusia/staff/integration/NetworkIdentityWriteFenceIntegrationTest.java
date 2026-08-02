@@ -39,9 +39,10 @@ class NetworkIdentityWriteFenceIntegrationTest {
 
     @Test
     void maintenancePreservesObservationButForcesInheritanceSuppression() throws SQLException {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource()) {
             setMode(OperationalMode.MAINTENANCE);
+            assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
             TrackingNetworkIdentityStore delegate = new TrackingNetworkIdentityStore();
             NetworkIdentityStore store = new FencedNetworkIdentityStore(dataSource, delegate);
 
@@ -63,9 +64,10 @@ class NetworkIdentityWriteFenceIntegrationTest {
 
     @Test
     void activeModePreservesRequestedInheritanceBehavior() throws SQLException {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource()) {
             setMode(OperationalMode.ACTIVE);
+            assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             TrackingNetworkIdentityStore delegate = new TrackingNetworkIdentityStore();
             NetworkIdentityStore store = new FencedNetworkIdentityStore(dataSource, delegate);
 
