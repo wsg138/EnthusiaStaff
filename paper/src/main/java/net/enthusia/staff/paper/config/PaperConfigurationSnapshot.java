@@ -17,4 +17,17 @@ public record PaperConfigurationSnapshot(
         Objects.requireNonNull(punishmentRequestAlerts, "punishmentRequestAlerts");
         Objects.requireNonNull(moderationFeatures, "moderationFeatures");
     }
+
+    public PaperConfigurationSnapshot(
+            int version,
+            RestartRequiredConfiguration restartRequired,
+            PunishmentRequestAlertWorkerSettings punishmentRequestAlerts
+    ) {
+        this(
+                version,
+                restartRequired,
+                punishmentRequestAlerts,
+                ModerationFeatureSettings.defaults()
+        );
+    }
 }
