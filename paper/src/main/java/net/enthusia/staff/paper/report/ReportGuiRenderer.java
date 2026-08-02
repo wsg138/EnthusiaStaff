@@ -1,9 +1,7 @@
 package net.enthusia.staff.paper.report;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
@@ -19,42 +17,36 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 final class ReportGuiRenderer {
-    static final int CONTENT_SIZE = 36;
-    static final int OPEN_QUEUE_SLOT = 36;
-    static final int MINE_QUEUE_SLOT = 37;
-    static final int CLAIMED_QUEUE_SLOT = 38;
-    static final int REVIEW_QUEUE_SLOT = 39;
-    static final int CLOSED_QUEUE_SLOT = 40;
-    static final int REFRESH_SLOT = 41;
-    static final int BACK_SLOT = 42;
-    static final int CLOSE_SLOT = 44;
-    static final int PREVIOUS_SLOT = 45;
-    static final int CONFIRM_SLOT = 49;
-    static final int NEXT_SLOT = 53;
-    static final int ACTION_START = 45;
-    static final int ACTION_END = 47;
-
-    Inventory render(ReportGuiState state) {
-        ReportGuiHolder holder = new ReportGuiHolder(state);
-        Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
+    Inventory render(ReportGuiState state, ReportGuiConfiguration configuration) {
+        ReportGuiHolder holder = new ReportGuiHolder(state, configuration);
+        Inventory inventory = Bukkit.createInventory(
+                holder,
+                configuration.inventorySize(),
+                title(state, configuration)
+        );
         holder.attach(inventory);
-        fillControls(inventory);
+        fillControls(inventory, configuration);
         if (state instanceof ReportGuiState.Queue queue) {
-            renderQueue(inventory, queue);
+            renderQueue(inventory, queue, configuration);
         } else if (state instanceof ReportGuiState.Detail detail) {
-            renderDetail(inventory, detail);
+            renderDetail(inventory, detail, configuration);
         } else if (state instanceof ReportGuiState.Review review) {
-            renderReview(inventory, review);
+            renderReview(inventory, review, configuration);
         }
         return inventory;
     }
 
-    private static void renderQueue(Inventory inventory, ReportGuiState.Queue state) {
-        int offset = state.queuePage() * CONTENT_SIZE;
-        for (int slot = 0; slot < CONTENT_SIZE && offset + slot < state.reports().size(); slot++) {
-            ReportSummary summary = state.reports().get(offset + slot);
-            inventory.setItem(slot, item(
-                    stateMaterial(summary.state()),
+    private static void renderQueue(
+            Inventory inventory,
+            ReportGuiState.Queue state,
+            ReportGuiConfiguration configuration
+    ) {
+        int pageSize = configuration.pageSize();
+        int offset = state.queuePage() * pageSize;
+        for (int index = 0; index < pageSize && offset + index < state.reports().size(); index++) {
+            ReportSummary summary = state.reports().get(offset + index);
+            inventory.setItem(configuration.contentSlots().get(index), item(
+                    stateMaterial(summary.state(), configuration),
                     summary.reasonId(),
                     List.of(
                             Component.text("Target: " + summary.targetId(), NamedTextColor.WHITE),
@@ -64,33 +56,53 @@ final class ReportGuiRenderer {
                             Component.text("Server: " + summary.serverId(), NamedTextColor.DARK_GRAY),
                             Component.text("Updated: " + summary.updatedAt(), NamedTextColor.DARK_GRAY),
                             Component.text("Revision: " + summary.revision(), NamedTextColor.DARK_GRAY),
-                            Component.text("Click to inspect", NamedTextColor.YELLOW)
+                            Component.text(configuration.message("click-inspect"), NamedTextColor.YELLOW)
                     )
             ));
         }
-        renderQueueControls(inventory, state.queue());
-        inventory.setItem(REFRESH_SLOT, item(Material.COMPASS, "Refresh queue", List.of()));
-        inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
+        renderQueueControls(inventory, state.queue(), configuration);
+        inventory.setItem(configuration.slot("refresh"), item(
+                configuration.material("refresh"),
+                configuration.message("refresh-queue"),
+                List.of()
+        ));
+        inventory.setItem(configuration.slot("close"), item(
+                configuration.material("close"),
+                configuration.message("close"),
+                List.of()
+        ));
         if (state.queuePage() > 0) {
-            inventory.setItem(PREVIOUS_SLOT, item(Material.ARROW, "Previous page", List.of()));
+            inventory.setItem(configuration.slot("previous"), item(
+                    configuration.material("previous"),
+                    configuration.message("previous-page"),
+                    List.of()
+            ));
         }
-        if ((state.queuePage() + 1) * CONTENT_SIZE < state.reports().size()) {
-            inventory.setItem(NEXT_SLOT, item(Material.ARROW, "Next page", List.of()));
+        if ((state.queuePage() + 1) * pageSize < state.reports().size()) {
+            inventory.setItem(configuration.slot("next"), item(
+                    configuration.material("next"),
+                    configuration.message("next-page"),
+                    List.of()
+            ));
         }
         if (state.reports().isEmpty()) {
-            inventory.setItem(13, item(
-                    Material.LIGHT_GRAY_DYE,
-                    "No reports in this queue",
-                    List.of(Component.text("Use the queue buttons below to change filters", NamedTextColor.GRAY))
+            inventory.setItem(configuration.slot("empty"), item(
+                    configuration.material("empty"),
+                    configuration.message("empty-title"),
+                    List.of(Component.text(configuration.message("empty-lore"), NamedTextColor.GRAY))
             ));
         }
     }
 
-    private static void renderDetail(Inventory inventory, ReportGuiState.Detail state) {
+    private static void renderDetail(
+            Inventory inventory,
+            ReportGuiState.Detail state,
+            ReportGuiConfiguration configuration
+    ) {
         ReportDetails details = state.details();
         ReportSummary summary = details.summary();
-        inventory.setItem(4, item(
-                stateMaterial(summary.state()),
+        inventory.setItem(configuration.slot("detail-header"), item(
+                stateMaterial(summary.state(), configuration),
                 "Report " + summary.reportId(),
                 List.of(
                         Component.text(summary.reasonId(), NamedTextColor.WHITE),
@@ -100,19 +112,19 @@ final class ReportGuiRenderer {
                         Component.text("Updated: " + summary.updatedAt(), NamedTextColor.DARK_GRAY)
                 )
         ));
-        inventory.setItem(10, item(
-                Material.WRITABLE_BOOK,
-                "Reporter",
+        inventory.setItem(configuration.slot("detail-reporter"), item(
+                configuration.material("reporter"),
+                configuration.message("reporter"),
                 List.of(Component.text(summary.reporterId().toString(), NamedTextColor.GRAY))
         ));
-        inventory.setItem(12, item(
-                Material.PLAYER_HEAD,
-                "Target",
+        inventory.setItem(configuration.slot("detail-target"), item(
+                configuration.material("target"),
+                configuration.message("target"),
                 List.of(Component.text(summary.targetId().toString(), NamedTextColor.GRAY))
         ));
-        inventory.setItem(14, item(
-                Material.COMPASS,
-                "Location context",
+        inventory.setItem(configuration.slot("detail-location"), item(
+                configuration.material("location"),
+                configuration.message("location-context"),
                 List.of(
                         Component.text("Server: " + summary.serverId(), NamedTextColor.GRAY),
                         Component.text("World: " + details.worldId().orElse("unavailable"), NamedTextColor.GRAY),
@@ -122,56 +134,79 @@ final class ReportGuiRenderer {
                                 NamedTextColor.DARK_GRAY)
                 )
         ));
-        inventory.setItem(16, item(
-                Material.CHEST,
-                "Captured evidence",
+        inventory.setItem(configuration.slot("detail-evidence"), item(
+                configuration.material("evidence"),
+                configuration.message("captured-evidence"),
                 List.of(
                         Component.text("Public chat: " + details.publicChatSnapshots().size(), NamedTextColor.GRAY),
                         Component.text("Private messages: " + details.privateMessageSnapshots().size(),
                                 NamedTextColor.GRAY),
                         Component.text("Client snapshots: " + details.clientEvidenceSnapshots().size(),
                                 NamedTextColor.GRAY),
-                        Component.text("Sensitive contents remain inside staff storage", NamedTextColor.YELLOW)
+                        Component.text(configuration.message("sensitive-evidence"), NamedTextColor.YELLOW)
                 )
         ));
-        inventory.setItem(22, item(Material.PAPER, "Description", wrap(details.description())));
-        inventory.setItem(28, snapshotItem(
-                Material.BOOK,
-                "Public chat snapshots",
-                details.publicChatSnapshots()
+        inventory.setItem(configuration.slot("detail-description"), item(
+                configuration.material("description"),
+                configuration.message("description"),
+                wrap(details.description())
         ));
-        inventory.setItem(30, snapshotItem(
-                Material.ENDER_EYE,
-                "Private-message snapshots",
-                details.privateMessageSnapshots()
+        inventory.setItem(configuration.slot("detail-public-chat"), snapshotItem(
+                configuration.material("public-chat"),
+                configuration.message("public-chat-snapshots"),
+                details.publicChatSnapshots(),
+                configuration
         ));
-        inventory.setItem(32, snapshotItem(
-                Material.REDSTONE_TORCH,
-                "Client evidence snapshots",
-                details.clientEvidenceSnapshots()
+        inventory.setItem(configuration.slot("detail-private-message"), snapshotItem(
+                configuration.material("private-message"),
+                configuration.message("private-message-snapshots"),
+                details.privateMessageSnapshots(),
+                configuration
         ));
-        renderQueueControls(inventory, state.queue());
-        inventory.setItem(REFRESH_SLOT, item(Material.COMPASS, "Reload report", List.of()));
-        inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
-        inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
+        inventory.setItem(configuration.slot("detail-client-evidence"), snapshotItem(
+                configuration.material("client-evidence"),
+                configuration.message("client-evidence-snapshots"),
+                details.clientEvidenceSnapshots(),
+                configuration
+        ));
+        renderQueueControls(inventory, state.queue(), configuration);
+        inventory.setItem(configuration.slot("refresh"), item(
+                configuration.material("refresh"),
+                configuration.message("reload-report"),
+                List.of()
+        ));
+        inventory.setItem(configuration.slot("back"), item(
+                configuration.material("back"),
+                configuration.message("back-queue"),
+                List.of()
+        ));
+        inventory.setItem(configuration.slot("close"), item(
+                configuration.material("close"),
+                configuration.message("close"),
+                List.of()
+        ));
         List<ReportAction> actions = ReportGuiAccess.actions(summary, state.viewerId());
-        for (int index = 0; index < actions.size() && ACTION_START + index <= ACTION_END; index++) {
+        for (int index = 0; index < actions.size() && index < configuration.actionSlots().size(); index++) {
             ReportAction action = actions.get(index);
-            inventory.setItem(ACTION_START + index, item(
-                    actionMaterial(action),
-                    actionName(action),
+            inventory.setItem(configuration.actionSlots().get(index), item(
+                    actionMaterial(action, configuration),
+                    actionName(action, configuration),
                     List.of(
-                            Component.text(actionDescription(action), NamedTextColor.GRAY),
-                            Component.text("A private action note is required", NamedTextColor.YELLOW)
+                            Component.text(actionDescription(action, configuration), NamedTextColor.GRAY),
+                            Component.text(configuration.message("private-note-required"), NamedTextColor.YELLOW)
                     )
             ));
         }
     }
 
-    private static void renderReview(Inventory inventory, ReportGuiState.Review state) {
+    private static void renderReview(
+            Inventory inventory,
+            ReportGuiState.Review state,
+            ReportGuiConfiguration configuration
+    ) {
         ReportSummary summary = state.details().summary();
-        inventory.setItem(11, item(
-                stateMaterial(summary.state()),
+        inventory.setItem(configuration.slot("review-report"), item(
+                stateMaterial(summary.state(), configuration),
                 "Report " + summary.reportId(),
                 List.of(
                         Component.text(summary.reasonId(), NamedTextColor.WHITE),
@@ -179,122 +214,153 @@ final class ReportGuiRenderer {
                         Component.text("Current state: " + summary.state(), NamedTextColor.GRAY)
                 )
         ));
-        inventory.setItem(13, item(
-                actionMaterial(state.action()),
-                actionName(state.action()),
-                List.of(Component.text(actionDescription(state.action()), NamedTextColor.GRAY))
+        inventory.setItem(configuration.slot("review-action"), item(
+                actionMaterial(state.action(), configuration),
+                actionName(state.action(), configuration),
+                List.of(Component.text(actionDescription(state.action(), configuration), NamedTextColor.GRAY))
         ));
-        inventory.setItem(15, item(Material.NAME_TAG, "Private action note", wrap(state.note())));
-        inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back without changing", List.of()));
-        inventory.setItem(CONFIRM_SLOT, item(
-                Material.LIME_CONCRETE,
-                "Confirm report action",
+        inventory.setItem(configuration.slot("review-note"), item(
+                configuration.material("private-note"),
+                configuration.message("private-note"),
+                wrap(state.note())
+        ));
+        inventory.setItem(configuration.slot("back"), item(
+                configuration.material("back"),
+                configuration.message("back-no-change"),
+                List.of()
+        ));
+        inventory.setItem(configuration.slot("confirm"), item(
+                configuration.material("confirm"),
+                configuration.message("confirm-action"),
                 List.of(
-                        Component.text("The exact displayed revision will be checked", NamedTextColor.YELLOW),
-                        Component.text("Stale state is rejected and reloaded", NamedTextColor.GRAY)
+                        Component.text(configuration.message("confirm-revision"), NamedTextColor.YELLOW),
+                        Component.text(configuration.message("stale-rejected"), NamedTextColor.GRAY)
                 )
         ));
-        inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close without changing", List.of()));
+        inventory.setItem(configuration.slot("close"), item(
+                configuration.material("close"),
+                configuration.message("close-no-change"),
+                List.of()
+        ));
     }
 
-    private static ItemStack snapshotItem(Material material, String name, List<String> snapshots) {
+    private static ItemStack snapshotItem(
+            Material material,
+            String name,
+            List<String> snapshots,
+            ReportGuiConfiguration configuration
+    ) {
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text("Available snapshots: " + snapshots.size(), NamedTextColor.GRAY));
+        lore.add(Component.text(
+                configuration.message("snapshot-count").replace("{count}", Integer.toString(snapshots.size())),
+                NamedTextColor.GRAY
+        ));
         if (snapshots.isEmpty()) {
-            lore.add(Component.text("None retained or currently readable", NamedTextColor.DARK_GRAY));
+            lore.add(Component.text(configuration.message("snapshot-none"), NamedTextColor.DARK_GRAY));
         } else {
-            lore.add(Component.text("Contents are intentionally not copied into item lore", NamedTextColor.YELLOW));
+            lore.add(Component.text(configuration.message("snapshot-protected"), NamedTextColor.YELLOW));
         }
         return item(material, name, lore);
     }
 
-    private static void renderQueueControls(Inventory inventory, ReportQueue active) {
-        inventory.setItem(OPEN_QUEUE_SLOT, queueItem(Material.PAPER, "Open", ReportQueue.OPEN, active));
-        inventory.setItem(MINE_QUEUE_SLOT, queueItem(Material.NAME_TAG, "Mine", ReportQueue.CLAIMED_BY_ME, active));
-        inventory.setItem(CLAIMED_QUEUE_SLOT,
-                queueItem(Material.CHEST, "Claimed", ReportQueue.ALL_CLAIMED, active));
-        inventory.setItem(REVIEW_QUEUE_SLOT,
-                queueItem(Material.ENCHANTED_BOOK, "Awaiting review", ReportQueue.AWAITING_REVIEW, active));
-        inventory.setItem(CLOSED_QUEUE_SLOT,
-                queueItem(Material.GRAY_DYE, "Recently closed", ReportQueue.RECENTLY_CLOSED, active));
+    private static void renderQueueControls(
+            Inventory inventory,
+            ReportQueue active,
+            ReportGuiConfiguration configuration
+    ) {
+        for (ReportQueue queue : ReportQueue.values()) {
+            String key = queueKey(queue);
+            inventory.setItem(configuration.slot("queue-" + key), queueItem(
+                    configuration.material("queue-" + key),
+                    configuration.message("queue-" + key),
+                    queue,
+                    active,
+                    configuration
+            ));
+        }
     }
 
-    private static ItemStack queueItem(Material material, String name, ReportQueue queue, ReportQueue active) {
+    private static ItemStack queueItem(
+            Material material,
+            String name,
+            ReportQueue queue,
+            ReportQueue active,
+            ReportGuiConfiguration configuration
+    ) {
         return item(
-                queue == active ? Material.LIME_STAINED_GLASS_PANE : material,
+                queue == active ? configuration.material("active-queue") : material,
                 name,
-                List.of(Component.text(queue == active ? "Current queue" : "Click to open", NamedTextColor.GRAY))
+                List.of(Component.text(
+                        configuration.message(queue == active ? "current-queue" : "click-open"),
+                        NamedTextColor.GRAY
+                ))
         );
     }
 
-    private static void fillControls(Inventory inventory) {
-        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
-        for (int slot = CONTENT_SIZE; slot < inventory.getSize(); slot++) {
-            inventory.setItem(slot, filler);
+    private static void fillControls(Inventory inventory, ReportGuiConfiguration configuration) {
+        ItemStack filler = item(configuration.material("filler"), " ", List.of());
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            if (!configuration.contentSlots().contains(slot)) {
+                inventory.setItem(slot, filler);
+            }
         }
     }
 
-    private static Component title(ReportGuiState state) {
+    private static Component title(ReportGuiState state, ReportGuiConfiguration configuration) {
         if (state instanceof ReportGuiState.Detail detail) {
-            return Component.text("Report " + shortId(detail.details().summary().reportId()));
+            return Component.text(configuration.title("detail")
+                    .replace("{id}", shortId(detail.details().summary().reportId())));
         }
         if (state instanceof ReportGuiState.Review review) {
-            return Component.text("Confirm " + actionName(review.action()));
+            return Component.text(configuration.title("review")
+                    .replace("{action}", actionName(review.action(), configuration)));
         }
-        return Component.text("Reports: " + queueName(state.queue()));
+        return Component.text(configuration.title("queue")
+                .replace("{queue}", configuration.message("queue-" + queueKey(state.queue()))));
     }
 
     private static String shortId(UUID id) {
         return id.toString().substring(0, 8);
     }
 
-    private static String queueName(ReportQueue queue) {
+    private static String queueKey(ReportQueue queue) {
         return switch (queue) {
-            case OPEN -> "Open";
-            case CLAIMED_BY_ME -> "Mine";
-            case ALL_CLAIMED -> "Claimed";
-            case AWAITING_REVIEW -> "Awaiting Review";
-            case RECENTLY_CLOSED -> "Recently Closed";
+            case OPEN -> "open";
+            case CLAIMED_BY_ME -> "mine";
+            case ALL_CLAIMED -> "claimed";
+            case AWAITING_REVIEW -> "review";
+            case RECENTLY_CLOSED -> "closed";
         };
     }
 
-    private static Material stateMaterial(ReportState state) {
-        return switch (state) {
-            case OPEN -> Material.PAPER;
-            case CLAIMED -> Material.NAME_TAG;
-            case AWAITING_REVIEW -> Material.ENCHANTED_BOOK;
-            case CLOSED -> Material.LIME_DYE;
-            case NO_VIOLATION -> Material.GRAY_DYE;
-        };
+    private static Material stateMaterial(ReportState state, ReportGuiConfiguration configuration) {
+        return configuration.material(switch (state) {
+            case OPEN -> "state-open";
+            case CLAIMED -> "state-claimed";
+            case AWAITING_REVIEW -> "state-awaiting-review";
+            case CLOSED -> "state-closed";
+            case NO_VIOLATION -> "state-no-violation";
+        });
     }
 
-    private static Material actionMaterial(ReportAction action) {
+    private static Material actionMaterial(ReportAction action, ReportGuiConfiguration configuration) {
+        return configuration.material("action-" + actionKey(action));
+    }
+
+    private static String actionName(ReportAction action, ReportGuiConfiguration configuration) {
+        return configuration.message("action-" + actionKey(action));
+    }
+
+    private static String actionDescription(ReportAction action, ReportGuiConfiguration configuration) {
+        return configuration.message("action-" + actionKey(action) + "-description");
+    }
+
+    private static String actionKey(ReportAction action) {
         return switch (action) {
-            case CLAIM -> Material.NAME_TAG;
-            case AWAIT_REVIEW -> Material.ENCHANTED_BOOK;
-            case CLOSE -> Material.LIME_CONCRETE;
-            case NO_VIOLATION -> Material.LIGHT_GRAY_CONCRETE;
-        };
-    }
-
-    static String actionName(ReportAction action) {
-        String[] words = action.name().toLowerCase(Locale.ROOT).split("_");
-        StringBuilder result = new StringBuilder();
-        for (String word : words) {
-            if (!result.isEmpty()) {
-                result.append(' ');
-            }
-            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return result.toString();
-    }
-
-    private static String actionDescription(ReportAction action) {
-        return switch (action) {
-            case CLAIM -> "Assign this open report to yourself.";
-            case AWAIT_REVIEW -> "Send your claimed report for another staff review.";
-            case CLOSE -> "Resolve the report after a confirmed violation workflow.";
-            case NO_VIOLATION -> "Resolve the report without finding a rule violation.";
+            case CLAIM -> "claim";
+            case AWAIT_REVIEW -> "await-review";
+            case CLOSE -> "close";
+            case NO_VIOLATION -> "no-violation";
         };
     }
 
