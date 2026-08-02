@@ -16,6 +16,7 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
+import net.enthusia.staff.paper.report.ReportGuiController;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -29,17 +30,23 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private final Clock clock;
     private final Supplier<ReportStore> reports;
     private final ExecutorService workers;
+    private final ReportGuiController gui;
 
     public ReportsCommand(
             JavaPlugin plugin,
             Clock clock,
             Supplier<ReportStore> reports,
-            ExecutorService workers
+            ExecutorService workers,
+            ReportGuiController gui
     ) {
+        if (plugin == null || clock == null || reports == null || workers == null || gui == null) {
+            throw new IllegalArgumentException("report command dependencies must be present");
+        }
         this.plugin = plugin;
         this.clock = clock;
         this.reports = reports;
         this.workers = workers;
+        this.gui = gui;
     }
 
     @Override
@@ -49,7 +56,11 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (arguments.length == 0) {
-            submit(sender, () -> list(sender, ReportQueue.OPEN));
+            if (sender instanceof Player player) {
+                gui.openQueue(player, ReportQueue.OPEN);
+            } else {
+                submit(sender, () -> list(sender, ReportQueue.OPEN));
+            }
             return true;
         }
         ReportQueue queue = parseQueue(arguments[0]);
@@ -215,7 +226,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     }
 
     private static void usage(CommandSender sender) {
-        sender.sendMessage(Component.text("Usage: /reports <open|mine|claimed|review|closed>"));
+        sender.sendMessage(Component.text("Usage: /reports (opens the staff report GUI for players)"));
+        sender.sendMessage(Component.text("       /reports <open|mine|claimed|review|closed>"));
         sender.sendMessage(Component.text("       /reports view <report-id>"));
         sender.sendMessage(Component.text(
                 "       /reports <claim|awaitreview|close|noviolation> <report-id> <revision> <note> [CONFIRM]"
