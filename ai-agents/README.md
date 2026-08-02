@@ -39,10 +39,11 @@ An agent may not weaken review, migration, production, or merge safeguards merel
 3. Resume the active or unfinished PR before starting another feature.
 4. Complete exactly one logical work item.
 5. Perform a separate harsh-review phase over the full diff.
-6. Fix confirmed defects and rerun exact-head validation.
-7. Merge with a normal merge commit only when every merge gate passes.
-8. Delete the merged feature branch when it is fully contained in `main` and tooling permits deletion.
-9. Update `WORKSPACE-STATE.md` and add a handoff report before merging so the records land with the work.
-10. Verify the merge live, update the PR description or final PR comment with the exact merge result, and stop.
+6. Fix confirmed defects.
+7. Update `WORKSPACE-STATE.md` and add the handoff report.
+8. Freeze tracked content and run exact-head validation.
+9. Merge with a normal merge commit only when every merge gate passes.
+10. Delete the merged feature branch when it is fully contained in `main` and tooling permits deletion.
+11. Verify the merge live, update the PR description or final PR comment with the exact merge result, and stop.
 
 The next agent must always verify live GitHub state rather than blindly trusting a recorded SHA.
