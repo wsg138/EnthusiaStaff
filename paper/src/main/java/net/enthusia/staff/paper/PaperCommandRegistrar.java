@@ -46,6 +46,7 @@ import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.report.ReportGuiController;
 import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -162,11 +163,13 @@ final class PaperCommandRegistrar {
     }
 
     private void registerReportCommands() {
+        Supplier<net.enthusia.staff.domain.ports.ReportStore> reportStore =
+                storage(PaperStorageBindings::reportStore);
         ReportCommand report = new ReportCommand(
                 new ReportCommand.Dependencies(
                         plugin(), clock(), dependencies.environment().serverId(), authoritativeMode(),
                         storage(PaperStorageBindings::playerDirectory),
-                        storage(PaperStorageBindings::reportStore),
+                        reportStore,
                         storage(PaperStorageBindings::sanctionLookup),
                         reasons(), dependencies.evidence().chatContext(), dependencies.evidence().clientEvidence()
                 ),
@@ -178,9 +181,9 @@ final class PaperCommandRegistrar {
                 storage(PaperStorageBindings::clientEvidenceStore), workers()
         );
         bindCompleting("client", client, client);
-        ReportsCommand reports = new ReportsCommand(
-                plugin(), clock(), storage(PaperStorageBindings::reportStore), workers()
-        );
+        ReportGuiController reportGui = new ReportGuiController(plugin(), clock(), reportStore, workers());
+        plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
+        ReportsCommand reports = new ReportsCommand(plugin(), clock(), reportStore, workers(), reportGui);
         bindCompleting("reports", reports, reports);
     }
 

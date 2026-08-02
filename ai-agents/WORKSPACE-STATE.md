@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-02 18:18 America/Indiana/Indianapolis
+Last updated: 2026-08-02 19:24 America/Indiana/Indianapolis
 
 This file is a concise routing record for the next AI agent. It must be verified against live GitHub and repository state before use.
 
@@ -10,98 +10,103 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | **LIVE VERIFY FROM GITHUB** |
-| Checkpoint before AI-workspace PR | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
+| Current `main` SHA | `9d7f31945db37f9b2872ac57cb24de6b6b281198` at PR #48 start; live verify before acting |
+| Checkpoint before report-GUI work | `9d7f31945db37f9b2872ac57cb24de6b6b281198` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
 
-## Current work after PR #47 merges
+## Intended post-merge work state
 
 | Field | Value |
 | --- | --- |
-| State | `IDLE` |
-| Active PR | None expected; verify live |
-| Active branch | None expected; verify live |
-| Active work item | None |
-| Known blocker | None |
+| State | `IDLE` after PR #48 merges; otherwise resume PR #48 |
+| Active PR | `#48 — Add staff report queue and detail GUI` until live merge verification |
+| Active branch | `feature/report-queue-gui` until live merge and cleanup verification |
+| Active work item | None after PR #48 merges |
+| Known blocker | None recorded in tracked state; read PR #48 exact-head evidence live |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr48-report-queue-gui.md` |
 
-Before starting new work, inspect live open PRs and branches. Resume relevant unfinished work even when this table says `IDLE`.
+The next agent must inspect live pull requests, review threads, checks and branch state. Resume PR #48 if it remains open or blocked; do not start competing report-GUI work.
 
-## Latest repository-process update
+## Latest product work
 
 | Field | Value |
 | --- | --- |
-| PR | `#47 — Add shared AI agent workflow` |
-| Branch | `agent/add-ai-agent-workflow` |
-| Intended result | AI-agent rules, shared state, universal prompt, and handoff-report location merged into `main` |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr47-ai-agent-workspace.md` |
-| Exact validation and merge evidence | Read PR #47 live |
+| PR | `#48 — Add staff report queue and detail GUI` |
+| Branch | `feature/report-queue-gui` |
+| Intended result | Staff report inventory queues, report detail/review screens, exact-revision actions and text-command fallback |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr48-report-queue-gui.md` |
+| Exact validation and merge evidence | Read PR #48 live |
 
-The next agent must verify whether PR #47 merged successfully and reconcile this file if it did not.
+Implemented scope in PR #48:
 
-## Last completed product work
+- `/reports` inventory GUI for authorized Paper players;
+- open, mine, all-claimed, awaiting-review and recently-closed filters;
+- database work on the bounded executor and entity-thread inventory presentation;
+- per-viewer fencing against out-of-order asynchronous loads;
+- report detail, location and retained-evidence counts without raw sensitive JSON in lore;
+- private note and confirmation screens for claim, review and resolution actions;
+- exact displayed revisions and stable idempotency keys for mutations;
+- safe distinction between mutation outcome and follow-up refresh outcome;
+- inventory click/drag cancellation, viewer ownership, permission rechecks and disconnect cleanup;
+- explicit text command workflow retained for console and Bedrock use;
+- focused unit tests and updated staff documentation.
+
+## Previous completed product work
 
 | Field | Value |
 | --- | --- |
 | PR | `#46 — Add punishment history and sanction lifecycle workflow` |
 | Final feature head | `070cc5e0e7f65a33f8b57259f03324039d7a6369` |
 | Merge commit | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
-| Resulting `main` at that checkpoint | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr46-punishment-history.md` |
 
-Completed product capabilities include:
+## Next recommended work item
 
-- database-bounded `/history`;
-- complete `/case` timeline;
-- exact-sanction reduce, end, revoke, and overturn actions;
-- appeal and punishment-request linkage;
-- append-only mutation history;
-- offline, historical-name, UUID, Java, and Bedrock identity resolution;
-- transactional authorization, hierarchy, concurrency, and idempotency;
-- reloadable history and sanction-action settings.
-
-## Next planned work item
-
-### Staff report workflow
+### Modular report policy and GUI configuration
 
 Priority: High
 
-Status: Prerequisites complete; no feature branch or PR recorded.
+Start only after live verification that PR #48 is merged and no older relevant PR requires work.
 
-Objective:
+Expected scope:
 
-- player `/report` submission;
-- staff report queue and database-bounded filtering;
-- assignment, claiming, and reassignment;
-- report detail and append-only event timeline;
-- staff notes and evidence references;
-- escalation into cases and punishment requests;
-- resolution, dismissal, duplicate linking, and reopening;
-- durable staff and reporter notifications;
-- searchable report history;
-- Java and Bedrock command parity;
-- concurrency, idempotency, restart, permission, privacy, and reload coverage.
+- move report cooldowns, duplicate window, open-report limit, query limits and retention policy into validated report configuration;
+- move report inventory titles, materials, slots and messages into validated GUI/configuration files where the repository architecture permits;
+- support atomic safe reload with the previous valid configuration retained after invalid input;
+- preserve command/console/Bedrock fallback behavior;
+- document defaults, permissions and reload behavior;
+- add invalid-config, reload, concurrency and usability coverage.
 
-The agent must inspect existing report code and the goals documents before deciding the exact PR scope. It must not assume every listed item is absent.
+Do not silently combine this with the separate RoseChat callback bridge, Discord rendering or production staging.
 
 ## Migration state
 
 | Field | Value |
 | --- | --- |
-| Recorded highest migration | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration at PR #48 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
+| PR #48 schema result | No migration added or edited |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
+
+## Remaining report-system work
+
+- modular report and GUI configuration;
+- supported RoseChat private-message callback integration;
+- dedicated sensitive-evidence presentation and privacy review;
+- Discord report rendering and delivery validation;
+- production-like multi-server/Folia staging.
 
 ## Production and release boundary
 
 - LiteBans remains authoritative.
 - Issue #43 remains open.
 - No production deployment is authorized.
-- No production database or production-derived backup access is authorized.
+- No production database, credentials, production-derived backup or private player evidence was accessed.
 - No 168-hour production acceptance window is active.
 - Merging dormant development code does not authorize production cutover.
 - Staging controls are separate and must not be changed unless the current work item explicitly requires them.
@@ -119,16 +124,6 @@ Read before implementation:
 
 ## Update contract
 
-The current work PR must update this file before tracked content is frozen for exact-head validation.
+The next work PR must update this file before tracked content is frozen for exact-head validation.
 
-At minimum update:
-
-- active state, PR, branch, and work item;
-- latest completed repository work;
-- latest completed product work when applicable;
-- next planned work;
-- migration boundary;
-- blockers;
-- handoff link.
-
-Do not create a circular commit sequence by attempting to embed the current PR's final SHA, final CI run IDs, or merge commit in this tracked file. Put exact final-head and merge evidence in the PR description or comments. The next agent must always reconcile this file with live GitHub.
+Do not create a circular commit sequence by embedding the current PR's final SHA, final CI run IDs or merge commit in this tracked file. Exact live evidence belongs in the PR description or comments, and every next agent must reconcile this file with GitHub before acting.

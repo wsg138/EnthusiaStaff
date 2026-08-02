@@ -16,6 +16,7 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
+import net.enthusia.staff.paper.report.ReportGuiController;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -29,17 +30,23 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private final Clock clock;
     private final Supplier<ReportStore> reports;
     private final ExecutorService workers;
+    private final ReportGuiController gui;
 
     public ReportsCommand(
             JavaPlugin plugin,
             Clock clock,
             Supplier<ReportStore> reports,
-            ExecutorService workers
+            ExecutorService workers,
+            ReportGuiController gui
     ) {
+        if (plugin == null || clock == null || reports == null || workers == null || gui == null) {
+            throw new IllegalArgumentException("report command dependencies must be present");
+        }
         this.plugin = plugin;
         this.clock = clock;
         this.reports = reports;
         this.workers = workers;
+        this.gui = gui;
     }
 
     @Override
@@ -49,7 +56,31 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (arguments.length == 0) {
-            submit(sender, () -> list(sender, ReportQueue.OPEN));
+            if (sender instanceof Player player) {
+                gui.openQueue(player, ReportQueue.OPEN);
+            } else {
+                submit(sender, () -> list(sender, ReportQueue.OPEN));
+            }
+            return true;
+        }
+        if (arguments[0].equalsIgnoreCase("note")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Component.text("Only a player can complete a GUI report note."));
+                return true;
+            }
+            if (arguments.length < 2) {
+                sender.sendMessage(Component.text("Usage: /reports note <private action note>"));
+                return true;
+            }
+            gui.acceptNote(player, String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)));
+            return true;
+        }
+        if (arguments[0].equalsIgnoreCase("cancel") && arguments.length == 1) {
+            if (sender instanceof Player player) {
+                gui.cancelNote(player);
+            } else {
+                sender.sendMessage(Component.text("Only a player can cancel a GUI report note."));
+            }
             return true;
         }
         ReportQueue queue = parseQueue(arguments[0]);
@@ -215,7 +246,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     }
 
     private static void usage(CommandSender sender) {
-        sender.sendMessage(Component.text("Usage: /reports <open|mine|claimed|review|closed>"));
+        sender.sendMessage(Component.text("Usage: /reports (opens the staff report GUI for players)"));
+        sender.sendMessage(Component.text("       /reports note <private action note> | /reports cancel"));
+        sender.sendMessage(Component.text("       /reports <open|mine|claimed|review|closed>"));
         sender.sendMessage(Component.text("       /reports view <report-id>"));
         sender.sendMessage(Component.text(
                 "       /reports <claim|awaitreview|close|noviolation> <report-id> <revision> <note> [CONFIRM]"
@@ -225,7 +258,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
         return arguments.length == 1
-                ? List.of("open", "mine", "claimed", "review", "closed", "view", "claim",
+                ? List.of("note", "cancel", "open", "mine", "claimed", "review", "closed", "view", "claim",
                         "awaitreview", "close", "noviolation")
                 : List.of();
     }
