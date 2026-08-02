@@ -66,7 +66,7 @@ final class PunishmentRequestReviewVisibilityTest {
     }
 
     @Test
-    void requestLookupExpiresPendingRequestBeforePresentation() {
+    void requestLookupRemainsReadOnlyUntilBoundedExpirationRuns() {
         InMemoryStore store = new InMemoryStore();
         PunishmentApprovalRequest expired = pending(
                 4,
@@ -78,10 +78,14 @@ final class PunishmentRequestReviewVisibilityTest {
         PunishmentRequestService service = service(store);
 
         PunishmentApprovalRequest presented = service.find(expired.requestId()).orElseThrow();
+        assertEquals(PunishmentRequestStatus.PENDING, presented.status());
+        assertEquals(0, presented.revision());
 
-        assertEquals(PunishmentRequestStatus.EXPIRED, presented.status());
-        assertEquals(1, presented.revision());
-        assertEquals("Punishment request expired without a decision", presented.resolutionNote());
+        assertEquals(1, service.expire());
+        PunishmentApprovalRequest transitioned = service.find(expired.requestId()).orElseThrow();
+        assertEquals(PunishmentRequestStatus.EXPIRED, transitioned.status());
+        assertEquals(1, transitioned.revision());
+        assertEquals("Punishment request expired without a decision", transitioned.resolutionNote());
     }
 
     @Test

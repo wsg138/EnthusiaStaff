@@ -29,6 +29,13 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Record checked-out SHA
+        shell: bash
+        run: |
+          TESTED_SHA="$(git rev-parse HEAD)"
+          test -n "${TESTED_SHA}"
+          echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
+
       - name: Set up Java 21
         uses: actions/setup-java@v5
         with:
@@ -49,6 +56,9 @@ jobs:
 
       - name: Inspect runtime jars
         run: |
+          test "${TESTED_SHA}" = "$(git rev-parse HEAD)"
+          mkdir -p build/reports/runtime-jars
+          printf '%s\n' "${TESTED_SHA}" > build/reports/runtime-jars/tested-sha.txt
           python3 - <<'PY'
           import hashlib
           import os
@@ -191,7 +201,7 @@ jobs:
           name: java-21-validation
           path: |
             build/reports/jacoco/aggregate
-            build/reports/runtime-jars/inspection.txt
+            build/reports/runtime-jars
             paper/build/libs/EnthusiaStaff-Paper-*.jar
             !paper/build/libs/*-sources.jar
             velocity/build/libs/EnthusiaStaff-Velocity-*.jar
@@ -254,7 +264,7 @@ jobs:
           lines = [
               "# Java validation failure",
               "",
-              f"- Tested commit: `{os.environ.get('GITHUB_SHA', 'unknown')}`",
+              f"- Tested commit: `{os.environ.get('TESTED_SHA', 'unknown')}`",
               f"- JUnit XML reports found: **{len(xml_reports)}**",
               f"- Failed/error test cases found: **{len(failures)}**",
               "",

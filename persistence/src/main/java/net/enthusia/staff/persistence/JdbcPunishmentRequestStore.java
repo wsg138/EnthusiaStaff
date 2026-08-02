@@ -22,11 +22,14 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 
 public final class JdbcPunishmentRequestStore implements PunishmentRequestStore {
-    private static final int MAXIMUM_EXPIRATIONS_PER_RUN = 1_000;
+    private static final int DEFAULT_EXPIRATION_BATCH_SIZE = 100;
+    private static final int MAXIMUM_EXPIRATION_BATCH_SIZE = 500;
 
     private final DataSource dataSource;
     private final JdbcPunishmentRequestRepository repository;
     private final JdbcPunishmentRequestEvents events;
+    private final JdbcPunishmentRequestAlertWriter alertWriter;
+    private final JdbcPunishmentRequestNotifications notifications;
     private final JdbcModerationStore moderation;
 
     public JdbcPunishmentRequestStore(
@@ -43,6 +46,8 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 new JdbcPunishmentRequestCodec(json)
         );
         this.events = new JdbcPunishmentRequestEvents(json);
+        this.alertWriter = new JdbcPunishmentRequestAlertWriter();
+        this.notifications = new JdbcPunishmentRequestNotifications(json, alertWriter);
         this.moderation = moderation;
     }
 
@@ -58,6 +63,9 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                     connection -> submit(connection, request)
             );
         } catch (ModerationPersistenceException exception) {
+            if (!JdbcSqlErrors.isDuplicateKey(exception)) {
+                throw exception;
+            }
             PunishmentApprovalRequest existing = repository.replayAfterConflict(request);
             if (existing == null) {
                 throw exception;
@@ -138,29 +146,19 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
 
     @Override
     public int expire(Instant now) {
-        if (now == null) {
-            throw new IllegalArgumentException("current time must be present");
+        return expire(now, DEFAULT_EXPIRATION_BATCH_SIZE);
+    }
+
+    @Override
+    public int expire(Instant now, int limit) {
+        if (now == null || limit < 1 || limit > MAXIMUM_EXPIRATION_BATCH_SIZE) {
+            throw new IllegalArgumentException(
+                    "current time and an expiration limit between 1 and 500 are required");
         }
         return JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to expire punishment requests",
-                connection -> expire(connection, now)
-        );
-    }
-
-    static int fulfillMatching(
-            Connection connection,
-            PunishmentPlan plan,
-            CaseId caseId,
-            Instant now,
-            UUID excludedRequestId
-    ) throws SQLException {
-        return JdbcPunishmentRequestFulfillment.apply(
-                connection,
-                plan,
-                caseId,
-                now,
-                excludedRequestId
+                connection -> expire(connection, now, limit)
         );
     }
 
@@ -180,6 +178,7 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         }
         repository.insert(connection, request);
         events.submitted(connection, request);
+        notifications.submitted(connection, request);
         return new PunishmentRequestResult.Submitted(request, false);
     }
 
@@ -194,19 +193,33 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         if (request == null || !request.pendingAt(now)) {
             return Optional.empty();
         }
-        String resourceKey = JdbcPunishmentRequestFulfillment.resourceKey(requestId);
-        long fence = JdbcOperationLeaseSupport.acquire(
-                connection,
-                resourceKey,
-                ownerId,
-                leaseExpiresAt,
-                now
-        );
-        if (fence == JdbcOperationLeaseSupport.UNAVAILABLE) {
+        JdbcOperationLeaseSupport.LeaseAcquisition acquisition =
+                JdbcOperationLeaseSupport.acquireRepeatable(
+                        connection,
+                        JdbcPunishmentRequestFulfillment.resourceKey(requestId),
+                        ownerId,
+                        leaseExpiresAt,
+                        now
+                );
+        if (!acquisition.available()) {
             return Optional.empty();
         }
-        events.leaseAcquired(connection, requestId, ownerId, fence, now);
-        return Optional.of(new PunishmentApprovalLease(request, ownerId, fence, leaseExpiresAt));
+        if (!acquisition.replayed()) {
+            events.leaseAcquired(connection, requestId, ownerId, acquisition.fencingToken(), now);
+            notifications.claimed(
+                    connection,
+                    request,
+                    ownerId,
+                    acquisition.fencingToken(),
+                    now
+            );
+        }
+        return Optional.of(new PunishmentApprovalLease(
+                request,
+                ownerId,
+                acquisition.fencingToken(),
+                acquisition.leaseUntil()
+        ));
     }
 
     private PunishmentRequestResult approve(
@@ -275,6 +288,13 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 now
         );
         release(connection, current.requestId(), approver.id(), lease.fenceToken());
+        alertWriter.closeActiveReviewerWork(
+                connection,
+                current.requestId(),
+                "REQUEST_APPROVED",
+                now
+        );
+        notifications.approved(connection, approved, approver.id(), accepted.caseId(), now);
         fulfillMatching(connection, plan, accepted.caseId(), now, current.requestId());
         return new PunishmentRequestResult.Approved(approved, accepted.caseId(), accepted.replayed());
     }
@@ -320,15 +340,18 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
         );
         events.denied(connection, denied, approver.id(), lease.fenceToken(), note, now);
         release(connection, current.requestId(), approver.id(), lease.fenceToken());
+        alertWriter.closeActiveReviewerWork(
+                connection,
+                current.requestId(),
+                "REQUEST_DENIED",
+                now
+        );
+        notifications.denied(connection, denied, approver.id(), now);
         return new PunishmentRequestResult.Denied(denied, false);
     }
 
-    private int expire(Connection connection, Instant now) throws SQLException {
-        List<PunishmentApprovalRequest> expired = repository.expired(
-                connection,
-                now,
-                MAXIMUM_EXPIRATIONS_PER_RUN
-        );
+    private int expire(Connection connection, Instant now, int limit) throws SQLException {
+        List<PunishmentApprovalRequest> expired = repository.expired(connection, now, limit);
         for (PunishmentApprovalRequest request : expired) {
             PunishmentApprovalRequest resolved = repository.resolve(
                     connection,
@@ -340,9 +363,36 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                     now
             );
             events.expired(connection, resolved, now);
+            alertWriter.closeActiveReviewerWork(
+                    connection,
+                    resolved.requestId(),
+                    "REQUEST_EXPIRED",
+                    now
+            );
+            notifications.expired(connection, resolved, now);
             deleteLease(connection, request.requestId());
         }
         return expired.size();
+    }
+
+    private List<PunishmentApprovalRequest> fulfillMatching(
+            Connection connection,
+            PunishmentPlan plan,
+            CaseId caseId,
+            Instant now,
+            UUID excludedRequestId
+    ) throws SQLException {
+        return JdbcPunishmentRequestFulfillment.apply(
+                connection,
+                plan,
+                caseId,
+                now,
+                excludedRequestId,
+                repository,
+                events,
+                notifications,
+                alertWriter
+        );
     }
 
     private PunishmentRequestResult.Rejected decisionStateIssue(

@@ -21,6 +21,7 @@ public final class PunishmentRequestService {
     private static final Duration MAXIMUM_REQUEST_LIFETIME = Duration.ofDays(30);
     private static final Duration MAXIMUM_LEASE_LIFETIME = Duration.ofMinutes(10);
     private static final int MAXIMUM_QUERY_LIMIT = 500;
+    private static final int DEFAULT_EXPIRATION_BATCH_SIZE = 100;
 
     private final Clock clock;
     private final Duration requestLifetime;
@@ -30,6 +31,7 @@ public final class PunishmentRequestService {
     private final AuthorizationPolicy authorization;
     private final PunishmentService punishments;
     private final PunishmentRequestStore requests;
+    private final int expirationBatchSize;
 
     public PunishmentRequestService(
             Clock clock,
@@ -44,11 +46,34 @@ public final class PunishmentRequestService {
                 clock,
                 requestLifetime,
                 leaseLifetime,
+                caseIds,
+                authorization,
+                punishments,
+                requests,
+                DEFAULT_EXPIRATION_BATCH_SIZE
+        );
+    }
+
+    public PunishmentRequestService(
+            Clock clock,
+            Duration requestLifetime,
+            Duration leaseLifetime,
+            SecureIdentifiers caseIds,
+            AuthorizationPolicy authorization,
+            PunishmentService punishments,
+            PunishmentRequestStore requests,
+            int expirationBatchSize
+    ) {
+        this(
+                clock,
+                requestLifetime,
+                leaseLifetime,
                 UUID::randomUUID,
                 caseIds,
                 authorization,
                 punishments,
-                requests
+                requests,
+                expirationBatchSize
         );
     }
 
@@ -61,6 +86,21 @@ public final class PunishmentRequestService {
             AuthorizationPolicy authorization,
             PunishmentService punishments,
             PunishmentRequestStore requests
+    ) {
+        this(clock, requestLifetime, leaseLifetime, requestIds, caseIds, authorization,
+                punishments, requests, DEFAULT_EXPIRATION_BATCH_SIZE);
+    }
+
+    PunishmentRequestService(
+            Clock clock,
+            Duration requestLifetime,
+            Duration leaseLifetime,
+            Supplier<UUID> requestIds,
+            SecureIdentifiers caseIds,
+            AuthorizationPolicy authorization,
+            PunishmentService punishments,
+            PunishmentRequestStore requests,
+            int expirationBatchSize
     ) {
         this.clock = Objects.requireNonNull(clock);
         this.requestLifetime = validateLifetime(
@@ -78,6 +118,10 @@ public final class PunishmentRequestService {
         this.authorization = Objects.requireNonNull(authorization);
         this.punishments = Objects.requireNonNull(punishments);
         this.requests = Objects.requireNonNull(requests);
+        if (expirationBatchSize < 1 || expirationBatchSize > MAXIMUM_QUERY_LIMIT) {
+            throw new IllegalArgumentException("expiration batch size must be between 1 and 500");
+        }
+        this.expirationBatchSize = expirationBatchSize;
     }
 
     public PunishmentRequestResult submit(CreatePunishmentRequest request, OperationalMode mode) {
@@ -113,13 +157,11 @@ public final class PunishmentRequestService {
     public List<PunishmentApprovalRequest> pending(int limit) {
         validateQueryLimit(limit);
         Instant now = clock.instant();
-        requests.expire(now);
         return requests.pending(now, limit);
     }
 
     public Optional<PunishmentApprovalRequest> find(UUID requestId) {
         Objects.requireNonNull(requestId);
-        requests.expire(clock.instant());
         return requests.find(requestId);
     }
 
@@ -186,7 +228,7 @@ public final class PunishmentRequestService {
     }
 
     public int expire() {
-        return requests.expire(clock.instant());
+        return requests.expire(clock.instant(), expirationBatchSize);
     }
 
     private PunishmentRequestResult submitEvaluated(
@@ -242,7 +284,6 @@ public final class PunishmentRequestService {
             );
         }
         if (!request.pendingAt(now)) {
-            requests.expire(now);
             return new PunishmentRequestResult.Rejected(
                     "REQUEST_NOT_PENDING",
                     "The punishment request is resolved or expired"

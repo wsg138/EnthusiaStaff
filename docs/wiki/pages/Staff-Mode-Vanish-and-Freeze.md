@@ -1,139 +1,167 @@
 # Staff Mode, Vanish, and Freeze
 
-These tools serve different purposes:
+These are separate tools:
 
 - **Staff mode** separates staff work from normal gameplay.
-- **Vanish** hides a staff member when silent observation is needed.
+- **Vanish** hides a staff member when visible observation would interfere.
 - **Freeze** temporarily restricts a player during an active investigation.
 
-> **Current status:** The commands and persistence code exist, but some visibility,
-> recovery, external-plugin, and live-network behavior still require staging.
-> Continue following the currently approved production procedure.
+This page explains staff procedure. For percentages, known gaps and direct source
+links, use [[Staff Tools, Investigations, and Player-State Safety]]. For packet
+and visibility internals, use [[Vanish Internals]].
+
+> **Current deployment:** Commands and persistence foundations exist, but some
+> recovery, visibility, external-plugin and live-network behavior still requires
+> staging. Follow the live-server procedure actually approved for deployment.
+
+## Quick navigation
+
+- Ordinary investigation flow: [[Staff Quick Start|Moderator-Quick-Start]]
+- Rank limits: [[Roles and Permissions|Rank-Authority]]
+- Inventory safety: [[Inventory and Confiscation Safety]]
+- Incident response: [[Incident Playbooks]]
+- Feature status and files: [[Staff Tools, Investigations, and Player-State Safety]]
+- Vanish source behavior: [[Vanish Internals]]
 
 ## Staff mode
 
-Toggle staff mode with:
+Toggle with:
 
 ```text
 /staff
 ```
 
-Use staff mode when you are actively handling reports, investigating players, or
-using staff-only tools. Leave it when the work is finished.
+Use staff mode when actively handling reports, investigating players or using
+staff-only tools. Leave it when the work is finished.
 
 ### Before entering
 
 - Finish or leave normal combat first.
-- Store nothing by manually moving items around to “prepare.”
-- Make sure you are entering for a real staff reason.
+- Do not move normal items around to “prepare” for staff mode.
+- Enter only for a legitimate staff reason.
+- Confirm the server is not reporting storage/recovery failure.
 
-Staff mode is intended to save your normal state and restore it when you leave.
-Do not use it to avoid death, escape combat, travel for free, or protect normal
-items.
+Staff mode is intended to save normal state before applying a rank-specific staff
+profile. It must never be used to escape death, avoid combat, travel for free or
+protect ordinary items.
 
-### While in staff mode
+### While active
 
 - Do not move staff items into normal inventories or containers.
-- Do not gather resources, trade, or participate in normal gameplay.
-- Use inspection tools only for the report or investigation you are handling.
+- Do not gather resources, trade or participate in normal gameplay.
+- Use inspection tools only for the current report/investigation.
 - Keep private locations and player information confidential.
-
-The upcoming Helper role is intended to receive a limited staff-mode toolset.
-Helpers should be able to investigate and view relevant information, but not edit
-player inventories or use advanced staff tools.
+- Follow the restrictions of your actual rank even if another plugin exposes a
+  vanilla command accidentally.
 
 ### Leaving staff mode
 
-Run `/staff` again. Wait for the normal state to restore before disconnecting or
-switching servers.
+Run `/staff` again and wait for the normal state to restore before disconnecting
+or switching servers.
 
-If items, location, experience, effects, or game mode do not restore correctly:
+If inventory, location, XP, effects, health, hunger, flight or game mode does not
+restore correctly:
 
-1. stop using the affected inventory;
-2. do not try to rebuild it manually;
-3. record what is missing or unexpected;
+1. stop using the affected state;
+2. do not rebuild or move items manually;
+3. record exactly what is missing/unexpected;
 4. contact an Admin or Founder.
+
+The detailed snapshot, restore and crash-recovery gaps are listed in
+[[Staff Tools, Investigations, and Player-State Safety]].
 
 ## Vanish
 
-Toggle vanish with:
+Toggle with:
 
 ```text
 /vanish
 ```
 
-Use vanish when being visible would interfere with an investigation, such as
-watching suspected cheating, observing a reported interaction, or checking an
-active exploit.
+Use vanish for silent observation, such as watching suspected cheating,
+observing a reported interaction or checking an active exploit.
 
-Helpers, Mods, and Developers are intended to enter staff mode before vanishing.
-Leaving staff mode should also remove vanish for those roles. Admin and Founder
-behavior may differ according to the deployed configuration.
+Helpers, Mods and Developers are intended to enter staff mode before vanishing.
+Admin/Founder behavior may differ according to deployed policy.
 
-### What staff should expect
+### What vanish is intended to cover
 
-The current implementation:
+- unauthorized tab/player-info visibility;
+- entity spawn/tracking and spectator exposure;
+- join/quit messages;
+- command suggestions and player lists;
+- chat, voice and external-plugin recipient behavior;
+- sounds, particles and container side effects;
+- public API visibility.
 
-- hides the vanished player from viewers who are not allowed to see them;
-- suppresses the vanished player’s join and quit messages;
-- restores the saved vanish state after restart when storage is available;
-- applies the configured staff visibility hierarchy.
+The current implementation covers only part of that complete surface. Bukkit
+`hidePlayer` is one layer, not proof of full invisibility.
 
-Not every external plugin is automatically covered. Chat, voice, `/seen`,
-teleport suggestions, player counts, particles, sounds, and other integrations
-must use the shared visibility service or their own approved adapter. Do not
-promise that vanish is completely invisible until the deployed integration checks
-confirm it.
-
-For the exact events, API calls, packet limitations, and visibility matrix, see
-[[Vanish Internals]].
+Do not promise a player or staff member that vanish is undetectable until the
+exact deployed integrations and protocol versions have been verified.
 
 ### Vanish conduct
 
-Vanish does not give permission to browse unrelated bases, inventories, private
-conversations, or player activity. Information learned through vanish must not be
-used for normal gameplay or shared with friends or guild members.
+Vanish does not permit browsing unrelated bases, inventories or private activity.
+Information learned through staff observation must not be used for gameplay or
+shared with friends/guild members.
+
+See [[Vanish Internals]] for events, scheduling, Paper visibility calls, packet
+handling and known gaps.
 
 ## Freeze
 
-Apply and release a freeze with:
+Apply and release with:
 
 ```text
 /freeze <player> <reason>
 /unfreeze <player> <reason> CONFIRM
 ```
 
-Use freeze only when an active investigation requires the player to remain in
-place or prevents them from changing evidence. It is not a punishment duration.
+Freeze is an investigation control, not a punishment duration.
 
-### Freeze procedure
+### Procedure
 
-1. Confirm you are freezing the correct player.
+1. Confirm the correct target.
 2. Give a factual staff reason.
-3. Tell the staff team who is handling the investigation.
-4. Preserve the relevant evidence immediately.
-5. Continue the investigation without unnecessary delay.
-6. Unfreeze the player when the restriction is no longer needed.
-7. Apply any punishment separately through the normal punishment workflow.
+3. Tell staff who is handling the investigation.
+4. Preserve relevant evidence immediately.
+5. Continue without unnecessary delay.
+6. Unfreeze when the restriction is no longer needed.
+7. Apply any punishment separately through [[Punishment System]].
 
-A frozen player should not be left unattended. If you need to leave, hand the
-case to another staff member or release the freeze when safe.
+A frozen player should not be left unattended. Hand the investigation to another
+staff member or release the freeze when safe.
 
-### What freeze is intended to restrict
+### Intended restrictions
 
-Depending on the deployed version, freeze is intended to stop movement, item and
-inventory changes, block interaction, teleporting, server switching, commands,
-and other actions that could interfere with the investigation.
+The finished feature should block movement, damage, inventory/GUI changes, item
+use/drop/pickup, containers, block interaction, teleporting, backend switching and
+unauthorized commands. Chat should remain visible to the frozen player and staff
+but not ordinary players.
 
-If an action still works when it should be blocked, preserve the evidence and
-report the bypass instead of repeatedly testing it on a live player.
+If a bypass is discovered, preserve evidence and report it. Do not repeatedly test
+it on a live player.
 
-### Disconnects
+### Disconnects and recovery
 
-A disconnect does not automatically prove guilt. Record the disconnect and follow
-the configured reconnect procedure. The target design supports restoring an
-active freeze during the configured offline window, but live behavior must be
-verified before staff rely on an exact time limit.
+A disconnect does not automatically prove guilt. Record it and follow the deployed
+reconnect procedure. Freeze persistence, offline expiry, extension and restart
+behavior must be verified before staff rely on exact timing.
+
+Active development and remaining restrictions are listed in
+[[Staff Tools, Investigations, and Player-State Safety]].
+
+## Stop and ask for help when
+
+- staff mode fails to enter or exit cleanly;
+- normal state does not restore exactly;
+- a staff item appears in normal play;
+- a vanished player is exposed through tab, entity, command or integration behavior;
+- freeze does not block an expected action;
+- a player disconnects during a sensitive investigation;
+- a command reports conflict, recovery or partial state;
+- retry safety is uncertain.
 
 ## Related pages
 
@@ -141,5 +169,7 @@ verified before staff rely on an exact time limit.
 - [[Staff Quick Start|Moderator-Quick-Start]]
 - [[Helper Guide]]
 - [[Reports and Evidence]]
+- [[Inventory and Confiscation Safety]]
 - [[Incident Playbooks]]
 - [[Vanish Internals]]
+- [[Staff Tools, Investigations, and Player-State Safety]]

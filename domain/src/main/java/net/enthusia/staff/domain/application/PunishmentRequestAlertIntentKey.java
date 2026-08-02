@@ -1,0 +1,44 @@
+package net.enthusia.staff.domain.application;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.Locale;
+
+public final class PunishmentRequestAlertIntentKey {
+    private static final String PREFIX = "pra:v2:";
+
+    private PunishmentRequestAlertIntentKey() {
+    }
+
+    public static String forIntent(PunishmentRequestAlertIntent intent) {
+        if (intent == null) {
+            throw new IllegalArgumentException("alert intent must be present");
+        }
+        String canonical = String.join("|",
+                Integer.toString(intent.schemaVersion()),
+                intent.requestId().toString().toLowerCase(Locale.ROOT),
+                Long.toString(intent.requestRevision()),
+                intent.eventType().name(),
+                intent.occurrence().key(),
+                value(intent.occurrence().actorId()),
+                intent.audience().name(),
+                value(intent.recipientId()),
+                value(intent.excludedRecipientId()),
+                intent.minimumRank() == null ? "-" : intent.minimumRank().name(),
+                intent.visibility().name()
+        );
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8));
+            return PREFIX + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    private static String value(Object value) {
+        return value == null ? "-" : value.toString().toLowerCase(Locale.ROOT);
+    }
+}
