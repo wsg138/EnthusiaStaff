@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 final class SanctionExpirationParser {
     private static final Pattern COMPACT = Pattern.compile("^([1-9][0-9]{0,8})([smhdw])$");
+    private static final Duration MAX_FINITE_DURATION = Duration.ofDays(36_525);
 
     private final Clock clock;
 
@@ -26,8 +27,9 @@ final class SanctionExpirationParser {
             return Optional.empty();
         }
         String normalized = input.trim();
+        Instant now = clock.instant();
         try {
-            return Optional.of(Instant.parse(normalized));
+            return validFiniteExpiration(Instant.parse(normalized), now);
         } catch (DateTimeParseException ignored) {
             // Compact duration parsing follows.
         }
@@ -41,16 +43,34 @@ final class SanctionExpirationParser {
         } catch (NumberFormatException exception) {
             return Optional.empty();
         }
-        Duration duration = switch (matcher.group(2)) {
-            case "s" -> Duration.ofSeconds(amount);
-            case "m" -> Duration.ofMinutes(amount);
-            case "h" -> Duration.ofHours(amount);
-            case "d" -> Duration.ofDays(amount);
-            case "w" -> Duration.ofDays(Math.multiplyExact(amount, 7));
-            default -> throw new IllegalStateException("unreachable duration unit");
-        };
+        Duration duration;
         try {
-            return Optional.of(clock.instant().plus(duration));
+            duration = switch (matcher.group(2)) {
+                case "s" -> Duration.ofSeconds(amount);
+                case "m" -> Duration.ofMinutes(amount);
+                case "h" -> Duration.ofHours(amount);
+                case "d" -> Duration.ofDays(amount);
+                case "w" -> Duration.ofDays(Math.multiplyExact(amount, 7));
+                default -> throw new IllegalStateException("unreachable duration unit");
+            };
+        } catch (ArithmeticException exception) {
+            return Optional.empty();
+        }
+        if (duration.compareTo(MAX_FINITE_DURATION) > 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(now.plus(duration));
+        } catch (ArithmeticException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Instant> validFiniteExpiration(Instant expiration, Instant now) {
+        try {
+            return expiration.isAfter(now.plus(MAX_FINITE_DURATION))
+                    ? Optional.empty()
+                    : Optional.of(expiration);
         } catch (ArithmeticException exception) {
             return Optional.empty();
         }
