@@ -127,6 +127,12 @@ public final class CaseCommand implements CommandExecutor {
             return;
         }
         ModerationFeatureSettings active = settings.get();
+        if (active == null) {
+            responses.send(sender, Component.text(
+                    "Case history is unavailable because validated settings are not active."
+            ));
+            return;
+        }
         try {
             Optional<CaseHistoryDetail> loaded = store.caseDetail(
                     caseId,
@@ -333,8 +339,10 @@ public final class CaseCommand implements CommandExecutor {
     }
 
     private static String human(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT).replace('_', ' ');
-        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replace('_', ' ');
+        return normalized.isEmpty()
+                ? "Unknown"
+                : Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
     }
 
     private static String sanitized(String message) {

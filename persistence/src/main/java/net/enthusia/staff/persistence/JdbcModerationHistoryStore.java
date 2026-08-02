@@ -383,7 +383,8 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 "FROM punishment_overturn_requests request",
                 "JOIN cases c ON c.case_id = request.case_id",
                 "LEFT JOIN players actor ON actor.player_id = request.decided_by",
-                "WHERE request.state <> 'OPEN' AND " + filter
+                "WHERE request.state <> 'OPEN'",
+                "AND COALESCE(request.decided_at, request.expires_at) IS NOT NULL AND " + filter
         );
     }
 

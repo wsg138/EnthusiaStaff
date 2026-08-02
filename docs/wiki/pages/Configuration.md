@@ -41,7 +41,7 @@ sanction-actions:
   allow-permanent-reduction: true
 ```
 
-`history.page-size` accepts `1` through `100`; timezone must be an IANA zone. Reason limits must be between `1` and `2000`, with maximum at least minimum. Invalid reload candidates leave the previous valid snapshot and command presentation settings active. These settings are reloadable and do not rebuild the MariaDB pool, rerun migrations, reset operational mode, activate authority, discard queued work or duplicate scheduled workers.
+`history.page-size` accepts `1` through `100`; timezone must be an IANA zone. Reason limits must be between `1` and `512`, with maximum at least minimum. Invalid reload candidates leave the previous valid snapshot and command presentation settings active. These settings are reloadable and do not rebuild the MariaDB pool, rerun migrations, reset operational mode, activate authority, discard queued work or duplicate scheduled workers.
 
 ## Target layout
 

@@ -33,6 +33,7 @@ import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
+import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
@@ -66,7 +67,10 @@ final class PaperCommandRegistrar {
     PaperCommandRegistrar(Dependencies dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
         this.moderationSettings = new ReloadableModerationFeatureSettings(
-                ReloadableModerationFeatureSettings.read(plugin().getConfig())
+                Objects.requireNonNull(
+                        dependencies.environment().moderationFeatures().get(),
+                        "validated moderation features"
+                )
         );
     }
 
@@ -107,7 +111,9 @@ final class PaperCommandRegistrar {
         if (!(command.getExecutor() instanceof EstaffCommand estaff)) {
             throw new IllegalStateException("estaff command executor was not registered before feature commands");
         }
-        estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(plugin()));
+        estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(
+                dependencies.environment().moderationFeatures().get()
+        ));
         estaff.configureSanctionLifecycle(new SanctionLifecycleCommand(
                 plugin(),
                 clock(),
@@ -278,7 +284,13 @@ final class PaperCommandRegistrar {
     ) {
     }
 
-    record Environment(JavaPlugin plugin, Clock clock, String serverId, ExecutorService workers) {
+    record Environment(
+            JavaPlugin plugin,
+            Clock clock,
+            String serverId,
+            ExecutorService workers,
+            Supplier<ModerationFeatureSettings> moderationFeatures
+    ) {
     }
 
     record Policy(

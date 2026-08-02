@@ -35,6 +35,11 @@ public final class FencedSanctionMutationStore implements SanctionMutationStore 
     }
 
     @Override
+    public boolean supportsExactChanges() {
+        return delegate.supportsExactChanges();
+    }
+
+    @Override
     public OptionalLong exactRevision(UUID sanctionId) {
         return delegate.exactRevision(sanctionId);
     }

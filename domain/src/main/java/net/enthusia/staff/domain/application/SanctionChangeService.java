@@ -37,6 +37,10 @@ public final class SanctionChangeService {
         return store.apply(request);
     }
 
+    public boolean supportsExactChanges() {
+        return store.supportsExactChanges();
+    }
+
     public OptionalLong exactRevision(UUID sanctionId) {
         if (sanctionId == null) {
             throw new IllegalArgumentException("sanctionId must be present");

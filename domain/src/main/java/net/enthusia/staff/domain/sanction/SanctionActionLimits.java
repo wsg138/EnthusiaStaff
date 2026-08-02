@@ -7,7 +7,7 @@ public record SanctionActionLimits(
 ) {
     public SanctionActionLimits {
         if (minimumReasonLength < 1 || maximumReasonLength < minimumReasonLength
-                || maximumReasonLength > 2_000) {
+                || maximumReasonLength > 512) {
             throw new IllegalArgumentException("sanction action reason limits are invalid");
         }
     }

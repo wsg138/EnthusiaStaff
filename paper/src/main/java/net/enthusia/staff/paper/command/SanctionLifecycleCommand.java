@@ -119,6 +119,19 @@ public final class SanctionLifecycleCommand {
             responses.send(sender, Component.text("Sanction changes are unavailable while storage is offline."));
             return;
         }
+        if (!service.supportsExactChanges()) {
+            responses.send(sender, Component.text(
+                    "Sanction change rejected: Exact sanction changes are unavailable [UNSUPPORTED]"
+            ));
+            return;
+        }
+        ModerationFeatureSettings active = settings.get();
+        if (active == null) {
+            responses.send(sender, Component.text(
+                    "Sanction changes are unavailable because validated settings are not active."
+            ));
+            return;
+        }
         ExactSanctionChangeRequest request = null;
         ExactSanctionChangeResult result;
         try {
@@ -141,7 +154,6 @@ public final class SanctionLifecycleCommand {
                     originRuntime,
                     pending.bypassHierarchy()
             );
-            ModerationFeatureSettings active = settings.get();
             result = service.applyExact(request, mode.get(), active.sanctionActionLimits());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(
@@ -154,7 +166,7 @@ public final class SanctionLifecycleCommand {
             ));
             return;
         }
-        responses.send(sender, render(result, request, settings.get()));
+        responses.send(sender, render(result, request, active));
     }
 
     private static List<Component> render(
@@ -217,9 +229,8 @@ public final class SanctionLifecycleCommand {
         }
         int index = 3;
         Optional<Instant> expiration = Optional.empty();
-        String expirationToken = "";
         if (operation == Operation.REDUCE) {
-            expirationToken = args[index++];
+            String expirationToken = args[index++];
             expiration = expirations.parse(expirationToken);
             if (expiration.isEmpty()) {
                 return Parsed.error(
@@ -266,7 +277,8 @@ public final class SanctionLifecycleCommand {
         if (reason.isBlank()) {
             return Parsed.error("A staff reason is required.");
         }
-        String canonical = operation.name() + "|" + sanctionId + "|" + expirationToken + "|"
+        String canonical = operation.name() + "|" + sanctionId + "|"
+                + expiration.map(Instant::toString).orElse("") + "|"
                 + appealId.map(UUID::toString).orElse("") + "|"
                 + requestId.map(UUID::toString).orElse("") + "|" + reason;
         return new Parsed(

@@ -190,7 +190,7 @@ recommendations.
 
 ### Implemented behavior
 
-`/history <player> [page]` resolves UUIDs, current usernames, historical usernames, offline players and stored Floodgate/Bedrock identities from the shared player directory. Ambiguous historical names are rejected with candidate UUIDs instead of guessing. MariaDB performs `COUNT`, `LIMIT` and `OFFSET`; ordering is newest-first with a stable event key for equal timestamps.
+`/history <player|uuid> [page]` resolves UUIDs, current usernames, historical usernames, offline players and stored Floodgate/Bedrock identities from the shared player directory. Ambiguous historical names are rejected with candidate UUIDs instead of guessing. MariaDB performs `COUNT`, `LIMIT` and `OFFSET`; ordering is newest-first with a stable event key for equal timestamps.
 
 `/case [view] <case-id>` is the single case-detail path. It shows subject identity, every sanction, request and appeal history, mutation timeline, original/current expiration and effective state. Plain-text IDs and next-page commands remain usable on Bedrock; Java click/hover features are not required.
 

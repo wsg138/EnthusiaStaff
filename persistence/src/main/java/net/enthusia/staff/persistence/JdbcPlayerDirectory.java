@@ -83,7 +83,7 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
                     WHERE n.player_id = p.player_id AND n.lowercase_username = ?
                 )
                 ORDER BY (p.lowercase_username = ?) DESC, p.last_seen_at DESC, p.player_id ASC
-                LIMIT 4
+                LIMIT 26
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -113,14 +113,15 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
                 if (current.size() > 1) {
                     return new PlayerResolution.Ambiguous(current);
                 }
-                List<PlayerIdentity> historical = List.copyOf(matches.values());
+                boolean truncated = matches.size() > 25;
+                List<PlayerIdentity> historical = matches.values().stream().limit(25).toList();
                 if (historical.size() == 1) {
                     return new PlayerResolution.Resolved(
                             historical.getFirst(),
                             PlayerResolution.MatchKind.HISTORICAL_USERNAME
                     );
                 }
-                return new PlayerResolution.Ambiguous(historical);
+                return new PlayerResolution.Ambiguous(historical, truncated);
             }
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to resolve player directory username", exception);

@@ -31,6 +31,25 @@ final class SanctionChangeServiceExactTest {
     private static final UUID SUBJECT_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
     @Test
+    void exactMutationCapabilityIsExposed() {
+        SanctionChangeService supported = new SanctionChangeService(
+                (actor, action) -> true,
+                new StubStore(new AtomicBoolean())
+        );
+        SanctionChangeService unsupported = new SanctionChangeService(
+                (actor, action) -> true,
+                new SanctionMutationStore() {
+                    @Override
+                    public SanctionChangeResult apply(SanctionChangeRequest request) {
+                        throw new AssertionError("legacy mutation path was called");
+                    }
+                }
+        );
+        assertTrue(supported.supportsExactChanges());
+        assertFalse(unsupported.supportsExactChanges());
+    }
+
+    @Test
     void operationalModeBlocksBeforeStoreAccess() {
         AtomicBoolean called = new AtomicBoolean();
         SanctionChangeService service = new SanctionChangeService(
@@ -154,6 +173,11 @@ final class SanctionChangeServiceExactTest {
         @Override
         public SanctionChangeResult apply(SanctionChangeRequest request) {
             throw new AssertionError("legacy mutation path was called");
+        }
+
+        @Override
+        public boolean supportsExactChanges() {
+            return true;
         }
 
         @Override

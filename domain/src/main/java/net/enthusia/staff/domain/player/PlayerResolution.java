@@ -11,12 +11,16 @@ public sealed interface PlayerResolution {
         }
     }
 
-    record Ambiguous(List<PlayerIdentity> matches) implements PlayerResolution {
+    record Ambiguous(List<PlayerIdentity> matches, boolean truncated) implements PlayerResolution {
         public Ambiguous {
             if (matches == null || matches.size() < 2) {
                 throw new IllegalArgumentException("ambiguous resolution requires at least two matches");
             }
             matches = List.copyOf(matches);
+        }
+
+        public Ambiguous(List<PlayerIdentity> matches) {
+            this(matches, false);
         }
     }
 

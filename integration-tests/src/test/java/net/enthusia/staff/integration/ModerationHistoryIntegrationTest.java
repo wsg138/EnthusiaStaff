@@ -149,6 +149,23 @@ class ModerationHistoryIntegrationTest {
     }
 
     @Test
+    void crowdedHistoricalUsernameReportsTruncation() throws Exception {
+        for (int index = 0; index < 26; index++) {
+            UUID playerId = uuid(100 + index);
+            insertPlayer(playerId, "Crowded" + index, PlayerPlatform.JAVA, BASE.plusSeconds(index));
+            insertName(playerId, "CrowdedOld", BASE, BASE.plusSeconds(index));
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            PlayerResolution.Ambiguous result = assertInstanceOf(
+                    PlayerResolution.Ambiguous.class,
+                    runtime.playerDirectory().resolve("crowdedold")
+            );
+            assertEquals(25, result.matches().size());
+            assertTrue(result.truncated());
+        }
+    }
+
+    @Test
     void emptyHistoryAndDatabasePaginationHaveStableBoundaries() throws Exception {
         UUID subjectId = uuid(10);
         insertPlayer(subjectId, "EmptyThenPaged", PlayerPlatform.JAVA, BASE);

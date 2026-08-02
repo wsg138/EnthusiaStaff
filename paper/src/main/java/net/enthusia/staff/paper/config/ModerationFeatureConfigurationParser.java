@@ -73,7 +73,7 @@ final class ModerationFeatureConfigurationParser {
                 "sanction-actions.minimum-reason-length",
                 defaults.sanctionActionLimits().minimumReasonLength(),
                 1,
-                2_000,
+                512,
                 errors
         );
         int maximum = ConfigurationNodes.boundedInteger(
@@ -82,7 +82,7 @@ final class ModerationFeatureConfigurationParser {
                 "sanction-actions.maximum-reason-length",
                 defaults.sanctionActionLimits().maximumReasonLength(),
                 1,
-                2_000,
+                512,
                 errors
         );
         if (maximum < minimum) {

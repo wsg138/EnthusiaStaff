@@ -829,7 +829,20 @@ class SanctionLifecycleIntegrationTest {
     }
 
     private static int count(String table) throws SQLException {
-        return Math.toIntExact(longValue("SELECT COUNT(*) FROM " + table)); // nosemgrep
+        String sql = switch (table) {
+            case "sanction_events" -> "SELECT COUNT(*) FROM sanction_events";
+            case "audit_events" -> "SELECT COUNT(*) FROM audit_events";
+            case "network_outbox" -> "SELECT COUNT(*) FROM network_outbox";
+            case "discord_outbox" -> "SELECT COUNT(*) FROM discord_outbox";
+            default -> throw new IllegalArgumentException("unsupported count table");
+        };
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql); // nosemgrep
+             ResultSet result = statement.executeQuery()) {
+            assertTrue(result.next());
+            return Math.toIntExact(result.getLong(1));
+        }
     }
 
     private static long longValue(String sql, Object... parameters) throws SQLException {
@@ -837,7 +850,7 @@ class SanctionLifecycleIntegrationTest {
              Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             bind(statement, parameters);
-            try (ResultSet result = statement.executeQuery()) {
+            try (ResultSet result = statement.executeQuery()) { // nosemgrep
                 assertTrue(result.next());
                 return result.getLong(1);
             }

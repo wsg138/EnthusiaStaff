@@ -70,7 +70,7 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length < 1 || args.length > 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " <player> [page]"));
+            sender.sendMessage(Component.text("Usage: /" + label + " <player|uuid> [page]"));
             return true;
         }
         int page;
@@ -120,12 +120,23 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
                                 + match.playerId() + " | " + match.platform()
                 ));
             }
+            if (ambiguous.truncated()) {
+                lines.add(Component.text(
+                        "Additional matches exist; narrow the lookup with an exact UUID."
+                ));
+            }
             responses.send(sender, lines);
             return;
         }
         PlayerResolution.Resolved resolved = (PlayerResolution.Resolved) resolution;
         PlayerIdentity identity = resolved.identity();
         ModerationFeatureSettings active = settings.get();
+        if (active == null) {
+            responses.send(sender, Component.text(
+                    "Punishment history is unavailable because validated settings are not active."
+            ));
+            return;
+        }
         HistoryQueryOptions options = new HistoryQueryOptions(
                 active.includeRequestEvents(),
                 active.includeAppealEvents(),
@@ -223,8 +234,10 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
     }
 
     private static String human(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT).replace('_', ' ');
-        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replace('_', ' ');
+        return normalized.isEmpty()
+                ? "Unknown"
+                : Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
     }
 
     private void submit(CommandSender sender, Runnable task) {

@@ -21,6 +21,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 public final class EstaffCommand implements CommandExecutor, TabCompleter {
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(
+            EstaffCommand.class.getName()
+    );
     private static final String STATUS_PERMISSION = "enthusiastaff.status";
     private static final String VERIFY_PERMISSION = "enthusiastaff.verify";
     private static final String RELOAD_PERMISSION = "enthusiastaff.reload";
@@ -172,6 +175,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 try {
                     hook.run();
                 } catch (RuntimeException exception) {
+                    LOGGER.log(Level.WARNING, "Successful reload hook failed", exception);
                     sender.sendMessage(
                             "Reload applied, but a presentation-settings hook failed; previous values remain active."
                     );

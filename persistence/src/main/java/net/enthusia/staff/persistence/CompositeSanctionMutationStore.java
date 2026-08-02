@@ -31,6 +31,11 @@ final class CompositeSanctionMutationStore implements SanctionMutationStore {
     }
 
     @Override
+    public boolean supportsExactChanges() {
+        return exact.supportsExactChanges();
+    }
+
+    @Override
     public OptionalLong exactRevision(UUID sanctionId) {
         return exact.exactRevision(sanctionId);
     }

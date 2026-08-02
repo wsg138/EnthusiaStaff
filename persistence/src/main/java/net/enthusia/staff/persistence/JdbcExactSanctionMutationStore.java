@@ -52,6 +52,11 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     }
 
     @Override
+    public boolean supportsExactChanges() {
+        return true;
+    }
+
+    @Override
     public OptionalLong exactRevision(UUID sanctionId) {
         if (sanctionId == null) {
             throw new IllegalArgumentException("sanctionId must be present");
@@ -105,6 +110,12 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                 }
                 if (row.revision() != request.expectedRevision()) {
                     connection.rollback();
+                    ExactSanctionChangeResult.Applied committed = replayAfterConflict(
+                            request.idempotencyKey().value()
+                    );
+                    if (committed != null) {
+                        return committed;
+                    }
                     return new ExactSanctionChangeResult.Rejected(
                             "STALE_SANCTION_STATE",
                             "The sanction changed after command validation; review its current state and retry"
@@ -160,6 +171,9 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                         "Exact sanction change transaction failed",
                         exception
                 );
+            } catch (RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
             } finally {
                 restoreAutoCommit(connection);
             }
@@ -484,7 +498,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
             statement.setString(12, request.originRuntime());
             statement.setBytes(13, UuidBytes.toBytes(request.actor().id()));
             statement.setTimestamp(14, Timestamp.from(now));
-            statement.setString(15, truncate(request.reason(), 512));
+            statement.setString(15, request.reason());
             statement.setString(16, json.writeValueAsString(eventPayload(request, row, mutation)));
             statement.setString(17, request.idempotencyKey().value());
             statement.executeUpdate();
@@ -592,30 +606,47 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     }
 
     private static SanctionRow lockSanction(Connection connection, UUID sanctionId) throws SQLException {
+        String caseId;
+        try (PreparedStatement lookup = connection.prepareStatement(
+                "SELECT case_id FROM sanctions WHERE sanction_id = ?"
+        )) {
+            lookup.setBytes(1, UuidBytes.toBytes(sanctionId));
+            try (ResultSet result = lookup.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+                caseId = result.getString("case_id");
+            }
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT s.sanction_id, s.case_id, s.target_id, s.status, s.issued_at,
                     s.expiration_at, s.ended_at, s.revision, c.actor_rank
                 FROM sanctions s
                 JOIN cases c ON c.case_id = s.case_id
-                WHERE s.sanction_id = ?
+                WHERE s.case_id = ?
+                ORDER BY s.sanction_id
                 FOR UPDATE
                 """)) {
-            statement.setBytes(1, UuidBytes.toBytes(sanctionId));
+            statement.setString(1, caseId);
             try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return null;
+                SanctionRow target = null;
+                while (result.next()) {
+                    UUID currentId = UuidBytes.fromBytes(result.getBytes("sanction_id"));
+                    if (currentId.equals(sanctionId)) {
+                        target = new SanctionRow(
+                                currentId,
+                                new CaseId(result.getString("case_id")),
+                                UuidBytes.fromBytes(result.getBytes("target_id")),
+                                SanctionStatus.valueOf(result.getString("status")),
+                                result.getTimestamp("issued_at").toInstant(),
+                                optionalInstant(result, "expiration_at"),
+                                optionalInstant(result, "ended_at"),
+                                result.getLong("revision"),
+                                issuerRank(result.getString("actor_rank"))
+                        );
+                    }
                 }
-                return new SanctionRow(
-                        UuidBytes.fromBytes(result.getBytes("sanction_id")),
-                        new CaseId(result.getString("case_id")),
-                        UuidBytes.fromBytes(result.getBytes("target_id")),
-                        SanctionStatus.valueOf(result.getString("status")),
-                        result.getTimestamp("issued_at").toInstant(),
-                        optionalInstant(result, "expiration_at"),
-                        optionalInstant(result, "ended_at"),
-                        result.getLong("revision"),
-                        issuerRank(result.getString("actor_rank"))
-                );
+                return target;
             }
         }
     }

@@ -11,6 +11,10 @@ import java.util.UUID;
 public interface SanctionMutationStore {
     SanctionChangeResult apply(SanctionChangeRequest request);
 
+    default boolean supportsExactChanges() {
+        return false;
+    }
+
     default OptionalLong exactRevision(UUID sanctionId) {
         return OptionalLong.empty();
     }
