@@ -14,6 +14,7 @@ import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -27,7 +28,7 @@ public final class JdbcReportStore implements ReportStore {
     private final JdbcReportEvidenceMaintenance evidenceMaintenance;
 
     public JdbcReportStore(DataSource dataSource, ObjectMapper json) {
-        this(dataSource, json, ReportPolicy::defaults, Clock.systemUTC());
+        this(dataSource, json, ReportPolicyRuntime::current, Clock.systemUTC());
     }
 
     public JdbcReportStore(
