@@ -63,11 +63,14 @@ item lore. Sensitive evidence remains in staff storage for the dedicated evidenc
 review surfaces and text/technical investigation tools.
 
 State-changing buttons require a private action note and a separate confirmation
-screen. The confirmation uses the exact revision shown on the detail screen. A
-concurrent change produces a stale-revision rejection and the interface reloads
-the current report instead of overwriting it. Inventory clicks and drags are
-cancelled, inventories are bound to one viewer and permission is checked again on
-interaction and before presentation.
+screen. After selecting an action, run `/reports note <private action note>` or
+`/reports cancel`; Java players receive a clickable command suggestion. This is a
+command input rather than public chat, so the workflow remains reliable when a
+chat provider cancels or replaces normal chat events. The confirmation uses the
+exact revision shown on the detail screen. A concurrent change produces a
+stale-revision rejection and the interface reloads the current report instead of
+overwriting it. Inventory clicks and drags are cancelled, inventories are bound
+to one viewer and permission is checked again on interaction and presentation.
 
 ## Text command fallback
 
@@ -75,6 +78,8 @@ The explicit command forms remain available for console operation and for staff
 who prefer or require a plain-text workflow, including Bedrock users:
 
 ```text
+/reports note <private action note>
+/reports cancel
 /reports <open|mine|claimed|review|closed>
 /reports view <report-id>
 /reports claim <report-id> <revision> <note>
@@ -83,20 +88,23 @@ who prefer or require a plain-text workflow, including Bedrock users:
 /reports noviolation <report-id> <revision> <note> CONFIRM
 ```
 
+`note` and `cancel` complete or abandon a GUI action that is already waiting for
+input. The remaining explicit forms can be used without opening the GUI.
+
 The report ID and current revision identify the exact state staff reviewed.
 State changes use that revision so an older command or screen cannot overwrite
 newer work.
 
 The exact uppercase `CONFIRM` is required for close, no-violation and
 awaiting-review transitions. Without it, the command displays a review-only
-result. Claiming through the text command is the exception; the GUI still uses a
-review and confirmation screen.
+result. Claiming through the direct text command is the exception; the GUI still
+uses a review and confirmation screen.
 
 ## Practical workflow
 
 1. Open `/reports` and select the relevant queue.
 2. Read the report description, location context and retained-evidence counts.
-3. Claim the report with a short factual note.
+3. Select the action, enter a factual note with `/reports note ...` and review the confirmation screen.
 4. Observe the player or inspect the relevant area before confronting them.
 5. Compare the claim with server evidence, logs, chat, CoreProtect, screenshots or clips.
 6. Freeze only when the player could change evidence or leave the investigation.
