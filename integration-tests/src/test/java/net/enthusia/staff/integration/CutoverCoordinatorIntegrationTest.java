@@ -2,6 +2,7 @@ package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -21,6 +22,7 @@ import net.enthusia.staff.domain.migration.CutoverEvidence;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
+import net.enthusia.staff.persistence.ModerationPersistenceException;
 import net.enthusia.staff.persistence.UuidBytes;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
 import net.enthusia.staff.persistence.migration.CutoverOutcome;
@@ -31,6 +33,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class CutoverCoordinatorIntegrationTest {
+    private static final String REJECTING_AUDIT_TRIGGER = "reject_cutover_activation_audit";
     private static final UUID ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000301");
     private static final List<String> COMPARISON_TYPES = List.of(
             "COUNTS",
@@ -112,6 +115,91 @@ class CutoverCoordinatorIntegrationTest {
         }
     }
 
+    @Test
+    void maintenanceAbortResetsShadowContinuity() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            resetCutoverState();
+            enterShadowMode(runtime, Instant.now().minus(Duration.ofDays(8)));
+            CutoverCoordinator coordinator = runtime.cutoverCoordinator();
+            insertCompleteShadowWindow(Instant.now().minusSeconds(5));
+            assertTrue(coordinator.latestEvidence().isPresent());
+
+            assertTrue(coordinator.enterMaintenance(ACTOR_ID, "Inspect final import"));
+            assertTrue(coordinator.abortMaintenance(ACTOR_ID, "Restart shadow observation"));
+
+            assertTrue(coordinator.latestEvidence().isEmpty());
+            assertEquals(
+                    List.of("NO_COMPLETED_SHADOW_EVIDENCE"),
+                    coordinator.assess(Optional.empty()).blockers()
+            );
+        }
+    }
+
+    @Test
+    void rejectsInconsistentPersistedComparisonDetail() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            resetCutoverState();
+            enterShadowMode(runtime, Instant.now().minus(Duration.ofDays(8)));
+            Instant completedAt = Instant.now().minusSeconds(1);
+            UUID runId = insertCompletedRun("SHADOW", completedAt.minus(Duration.ofDays(1)), completedAt);
+            insertMatchingComparisons(runId, completedAt);
+            corruptComparisonDetail(runId);
+
+            CutoverCoordinator coordinator = runtime.cutoverCoordinator();
+            assertThrows(ModerationPersistenceException.class, coordinator::latestEvidence);
+        }
+    }
+
+    @Test
+    void latestIncompleteFinalRunBlocksEarlierCompletedEvidence() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            resetCutoverState();
+            enterShadowMode(runtime, Instant.now().minus(Duration.ofDays(8)));
+            CutoverCoordinator coordinator = runtime.cutoverCoordinator();
+            assertTrue(coordinator.enterMaintenance(ACTOR_ID, "Run final cutover gate"));
+            Instant maintenanceStarted = runtime.operationalStateStore().current().updatedAt();
+            insertCompleteShadowWindow(maintenanceStarted);
+
+            UUID completedRun = insertCompletedRun("CUTOVER", maintenanceStarted, maintenanceStarted);
+            insertMatchingComparisons(completedRun, maintenanceStarted);
+            insertRunningRun("CUTOVER", maintenanceStarted.plusMillis(1));
+
+            List<String> blockers = coordinator.assess(Optional.empty()).blockers();
+            assertTrue(blockers.contains("MIGRATION_OPERATION_IN_PROGRESS"));
+            assertTrue(blockers.contains("FINAL_IMPORT_INCOMPLETE"));
+            assertFalse(coordinator.activate(ACTOR_ID, Optional.empty()).activated());
+            assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
+            assertEquals(0, tableCount("cutover_records"));
+        }
+    }
+
+    @Test
+    void rollsBackActivationWhenAuditCannotPersist() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            resetCutoverState();
+            enterShadowMode(runtime, Instant.now().minus(Duration.ofDays(8)));
+            CutoverCoordinator coordinator = runtime.cutoverCoordinator();
+            assertTrue(coordinator.enterMaintenance(ACTOR_ID, "Run final cutover gate"));
+            Instant maintenanceStarted = runtime.operationalStateStore().current().updatedAt();
+            insertCompleteShadowWindow(maintenanceStarted);
+            UUID finalRunId = insertCompletedRun("CUTOVER", maintenanceStarted, maintenanceStarted);
+            insertMatchingComparisons(finalRunId, maintenanceStarted);
+            installRejectingAuditTrigger();
+
+            try {
+                assertThrows(
+                        ModerationPersistenceException.class,
+                        () -> coordinator.activate(ACTOR_ID, Optional.empty())
+                );
+                assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
+                assertEquals(0, tableCount("cutover_records"));
+                assertEquals(0, auditCount("LITEBANS_CUTOVER_ACTIVATED"));
+            } finally {
+                dropRejectingAuditTrigger();
+            }
+        }
+    }
+
     private static void assertFinalImportBlocksActivation(CutoverCoordinator coordinator) {
         CutoverEvidence evidence = coordinator.latestEvidence().orElseThrow();
         assertFalse(evidence.finalIncrementalImportComplete());
@@ -160,6 +248,23 @@ class CutoverCoordinatorIntegrationTest {
         return runId;
     }
 
+    private static UUID insertRunningRun(String mode, Instant startedAt) throws SQLException {
+        UUID runId = UUID.randomUUID();
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT INTO migration_runs(
+                         run_id, mode, state, source_schema_name, started_at, completed_at,
+                         source_high_watermark, counts_json, checksums_json, mismatch_count, report_json
+                     ) VALUES (?, ?, 'RUNNING', 'legacy_', ?, NULL, NULL, '{}', '{}', 0, '{}')
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(runId));
+            statement.setString(2, mode);
+            statement.setTimestamp(3, Timestamp.from(startedAt));
+            assertEquals(1, statement.executeUpdate());
+        }
+        return runId;
+    }
+
     private static void insertMatchingComparisons(UUID runId, Instant comparedAt) throws SQLException {
         try (Connection connection = sourceConnection();
              PreparedStatement statement = connection.prepareStatement("""
@@ -178,6 +283,37 @@ class CutoverCoordinatorIntegrationTest {
             }
             int[] results = statement.executeBatch();
             assertEquals(COMPARISON_TYPES.size(), results.length);
+        }
+    }
+
+    private static void corruptComparisonDetail(UUID runId) throws SQLException {
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE shadow_comparisons
+                     SET detail_json = '{"compared":0,"mismatched":1}'
+                     WHERE run_id = ? AND comparison_type = 'COUNTS'
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(runId));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void installRejectingAuditTrigger() throws SQLException {
+        try (Connection connection = sourceConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    CREATE TRIGGER reject_cutover_activation_audit
+                    BEFORE INSERT ON audit_events
+                    FOR EACH ROW
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced cutover audit failure'
+                    """);
+        }
+    }
+
+    private static void dropRejectingAuditTrigger() throws SQLException {
+        try (Connection connection = sourceConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TRIGGER IF EXISTS " + REJECTING_AUDIT_TRIGGER);
         }
     }
 
@@ -224,6 +360,7 @@ class CutoverCoordinatorIntegrationTest {
     }
 
     private static void resetCutoverState() throws SQLException {
+        dropRejectingAuditTrigger();
         try (Connection connection = sourceConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM cutover_records");
