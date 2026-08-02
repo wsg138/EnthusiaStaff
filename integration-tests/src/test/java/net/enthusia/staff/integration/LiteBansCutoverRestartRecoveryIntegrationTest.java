@@ -250,17 +250,25 @@ class LiteBansCutoverRestartRecoveryIntegrationTest {
     }
 
     private static String migrationRunState(UUID runId) throws SQLException {
-        return migrationRunString(runId, "state");
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT state FROM migration_runs WHERE run_id = ?"
+             )) {
+            statement.setBytes(1, UuidBytes.toBytes(runId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new AssertionError("Migration run was not found");
+                }
+                return result.getString(1);
+            }
+        }
     }
 
     private static String migrationRunReport(UUID runId) throws SQLException {
-        return migrationRunString(runId, "report_json");
-    }
-
-    private static String migrationRunString(UUID runId, String column) throws SQLException {
-        String query = "SELECT " + column + " FROM migration_runs WHERE run_id = ?";
         try (Connection connection = sourceConnection();
-             PreparedStatement statement = connection.prepareStatement(query)) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT report_json FROM migration_runs WHERE run_id = ?"
+             )) {
             statement.setBytes(1, UuidBytes.toBytes(runId));
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
