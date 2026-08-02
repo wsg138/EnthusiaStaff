@@ -2,18 +2,22 @@
 
 Current handoff:
 
-[`2026-08-02-pr46-punishment-history.md`](2026-08-02-pr46-punishment-history.md)
+[`2026-08-02-ai-agent-workspace.md`](2026-08-02-ai-agent-workspace.md)
+
+Related PR:
+
+[`#47 — Add shared AI agent workflow`](https://github.com/wsg138/EnthusiaStaff/pull/47)
 
 ## Summary
 
 | Field | Value |
 | --- | --- |
-| Work item | Punishment history and sanction lifecycle |
-| PR | `#46` |
-| Final feature head | `070cc5e0e7f65a33f8b57259f03324039d7a6369` |
-| Merge commit | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
-| State | `MERGED` |
-| Resulting `main` | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
-| Next recommended work | Staff report workflow |
+| Work item | Shared AI-agent workflow, state, universal prompt, and handoff location |
+| PR | `#47` |
+| Expected state after merge | `IDLE` |
+| Exact final-head evidence | Read PR #47 live |
+| Exact merge evidence | Read PR #47 live |
+| Last completed product feature | PR #46 — punishment history and sanction lifecycle |
+| Next recommended product work | Staff report workflow |
 
-The next agent must verify live GitHub state before acting. An open PR or newer merge may supersede this pointer even when this file has not yet been updated.
+The next agent must verify live GitHub state before acting. Confirm whether PR #47 merged, inspect newer open PRs, and reconcile `WORKSPACE-STATE.md` before starting a feature.
