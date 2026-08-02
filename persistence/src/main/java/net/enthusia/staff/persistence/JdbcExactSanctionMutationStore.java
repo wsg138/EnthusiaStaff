@@ -77,6 +77,12 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
         if (request == null || limits == null) {
             throw new IllegalArgumentException("exact sanction request and limits must be present");
         }
+        if (!limits.accepts(request.reason())) {
+            return new ExactSanctionChangeResult.Rejected(
+                    "INVALID_REASON",
+                    "The reason length is outside the configured limits"
+            );
+        }
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {

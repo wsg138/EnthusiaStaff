@@ -85,3 +85,14 @@ Each related project remains an independent Git repository. Histories must not b
 - Retain backups and legacy data through cutover; legacy removal is a later manual operation.
 - Do not represent hosted tests, isolated staging, Pi validation or merge-ref Wiki validation as production acceptance.
 - A merged pull request is a development checkpoint, not deployment or cutover authorization.
+
+## Punishment history lifecycle feature
+
+| Item | Location / rule |
+| --- | --- |
+| Player history | `domain/history`, `JdbcModerationHistoryStore`, `/history` |
+| Case detail | `ModerationHistoryStore.caseDetail`, `/case [view] <case-id>` |
+| Exact sanction changes | `ExactSanctionChangeRequest`, `JdbcExactSanctionMutationStore`, `/estaff sanction ...` |
+| Schema | Flyway V14 only; V1–V13 remain locked |
+| Authority | Existing durable operational-mode fence plus transaction-bound hierarchy/revision validation |
+| Production boundary | No deployment, no authority activation, LiteBans remains authoritative, issue #43 remains open |

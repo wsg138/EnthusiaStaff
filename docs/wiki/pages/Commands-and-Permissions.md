@@ -27,7 +27,7 @@ services recheck rank and action policy before a mutation.
 
 | Command | Usage | Purpose | Primary permission |
 | --- | --- | --- | --- |
-| `/estaff` | `/estaff <status\|verify\|reload>` | Runtime status, verification, reload and diagnostics | `enthusiastaff.status`; subcommands check their own nodes |
+| `/estaff` | `/estaff <status\|verify\|reload\|sanction>` | Runtime status, safe reload and exact-sanction lifecycle commands | Subcommands check independent permission nodes |
 
 ### Punishment creation and requests
 
@@ -40,15 +40,20 @@ services recheck rank and action policy before a mutation.
 | `/kick` | `/kick <player> [reason-id]` | Kick-filtered central workflow | `enthusiastaff.punish` |
 | `/ipban` | `/ipban <player> [reason-id]` | Network-ban-filtered central workflow | `enthusiastaff.punish.ip` |
 
-### Punishment changes
+### Punishment history and changes
 
 | Command | Usage | Purpose | Primary permission |
 | --- | --- | --- | --- |
-| `/removepunishment` | `/removepunishment <player\|case> <action> [expiration] <reason> [CONFIRM]` | Reduce, end, revoke or overturn while preserving audit | `enthusiastaff.remove` plus action node |
-| `/unban` | `/unban <player\|case> <reason> [CONFIRM]` | End the latest active ban | `enthusiastaff.remove` |
-| `/unmute` | `/unmute <player\|case> <reason> [CONFIRM]` | End the latest active mute | `enthusiastaff.remove` |
-| `/removewarning` | `/removewarning <player\|case> <reason> [CONFIRM]` | Revoke the latest warning | `enthusiastaff.remove` |
-| `/unwarn` | Same as `/removewarning` | Warning-removal alias | `enthusiastaff.remove` |
+| `/history` | `/history <player\|uuid> [page]` | Newest-first, database-paginated moderation timeline for current, historical, offline, Java and known Bedrock identities | `enthusiastaff.history.view`; staff actors/private notes require `enthusiastaff.history.view-sensitive` |
+| `/case` | `/case [view] <case-id>` | Complete case detail with every sanction, request, appeal and mutation event | `enthusiastaff.history.view` |
+| `/estaff sanction reduce` | `/estaff sanction reduce <sanction-id> <ISO-expiration\|duration> [--request <request-id>] <reason>` | Shorten one active sanction without replacing its original decision | `enthusiastaff.sanction.reduce` |
+| `/estaff sanction end` | `/estaff sanction end <sanction-id> [--request <request-id>] <reason>` | End one otherwise-valid sanction immediately | `enthusiastaff.sanction.end` |
+| `/estaff sanction revoke` | `/estaff sanction revoke <sanction-id> [--request <request-id>] <reason>` | Administratively withdraw one sanction without declaring the original decision wrong | `enthusiastaff.sanction.revoke` |
+| `/estaff sanction overturn` | `/estaff sanction overturn <sanction-id> [--appeal <appeal-id>] [--request <request-id>] <reason>` | Reverse one punishment decision and optionally link an accepted appeal | `enthusiastaff.sanction.overturn`; appeal linkage also requires `enthusiastaff.sanction.overturn.appeal` |
+| `/removepunishment` | `/removepunishment <player\|case> <action> [expiration] <reason> [CONFIRM]` | Existing case-oriented GUI workflow retained for compatibility | `enthusiastaff.remove` plus action node |
+| `/unban`, `/unmute`, `/removewarning`, `/unwarn` | Existing case/player aliases | Existing convenience paths through the central case-oriented workflow | `enthusiastaff.remove` |
+
+Exact-sanction commands never accept an ambiguous multi-sanction case. Database work runs asynchronously, then the locked transaction rechecks operational mode, action authority, issuing-rank hierarchy and the sanction revision. Console follows the existing explicit system/Founder identity model; it is not an implicit hierarchy bypass.
 
 ### Reports and evidence
 
@@ -70,7 +75,7 @@ services recheck rank and action policy before a mutation.
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
 | `/inspect` | `/inspect <player>` | Player inspector and case-linked actions | `enthusiastaff.inspect` |
-| `/case` | `/case restoreitems <case-id>` | Case-linked confiscated-item restoration | `enthusiastaff.case.restoreitems` |
+| `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
 
 ## Velocity commands
 
@@ -153,6 +158,21 @@ enthusiastaff.inventory.view
 enthusiastaff.inventory.edit
 enthusiastaff.inspect
 ```
+
+### History and exact-sanction authority
+
+```text
+enthusiastaff.history.view
+enthusiastaff.history.view-sensitive
+enthusiastaff.sanction.reduce
+enthusiastaff.sanction.end
+enthusiastaff.sanction.revoke
+enthusiastaff.sanction.overturn
+enthusiastaff.sanction.overturn.appeal
+enthusiastaff.sanction.bypass-hierarchy
+```
+
+Viewing history is independent from mutation authority. The bypass node is Founder-only and still cannot mutate system-issued sanctions.
 
 ### Asset, provider and recovery authority
 

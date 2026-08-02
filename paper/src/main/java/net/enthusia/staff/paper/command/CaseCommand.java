@@ -28,6 +28,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -109,7 +110,8 @@ public final class CaseCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Invalid case ID: " + sanitized(exception.getMessage())));
             return true;
         }
-        boolean sensitive = sender.hasPermission(HistoryCommand.SENSITIVE_PERMISSION);
+        boolean sensitive = sender instanceof ConsoleCommandSender
+                || sender.hasPermission(HistoryCommand.SENSITIVE_PERMISSION);
         submit(sender, () -> loadDetail(sender, caseId, sensitive));
         return true;
     }

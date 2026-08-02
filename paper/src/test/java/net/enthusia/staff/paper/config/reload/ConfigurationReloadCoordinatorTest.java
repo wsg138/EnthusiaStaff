@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,12 +20,14 @@ import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
+import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertManagedLifecycle;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
+import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.PaperConfigurationSnapshot;
 import net.enthusia.staff.paper.config.PaperConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
@@ -142,6 +145,46 @@ class ConfigurationReloadCoordinatorTest {
         assertFalse(result.reasonPoliciesReloaded());
         assertEquals(1, factory.created.get());
         assertEquals(0, factory.lifecycles.getFirst().closed.get());
+    }
+
+    @Test
+    void moderationPresentationOnlyChangeDoesNotRestartWorkerOrResetRuntimeServices() {
+        CountingFactory factory = new CountingFactory();
+        PaperConfigurationSnapshot active = snapshot(enabled(10), restart(4, 256, "SMP"));
+        PunishmentRequestAlertController controller = controller(active, factory);
+        controller.attachStorage(storage());
+        ModerationFeatureSettings changedSettings = new ModerationFeatureSettings(
+                12,
+                false,
+                true,
+                ZoneId.of("America/Chicago"),
+                new SanctionActionLimits(5, 250, false)
+        );
+        PaperConfigurationSnapshot candidate = new PaperConfigurationSnapshot(
+                1,
+                active.restartRequired(),
+                active.punishmentRequestAlerts(),
+                changedSettings
+        );
+        AtomicReasonPolicyRepository policies = policies("v1", "reason.one");
+        ConfigurationReloadCoordinator coordinator = new ConfigurationReloadCoordinator(
+                active,
+                () -> candidate,
+                () -> loaded("v1", "reason.one"),
+                policies,
+                controller,
+                ignored -> { },
+                ignored -> { }
+        );
+
+        ConfigurationReloadResult result = coordinator.reload();
+
+        assertEquals(ConfigurationReloadResult.Outcome.NO_CHANGES, result.outcome());
+        assertSame(candidate, coordinator.activeSnapshot());
+        assertEquals(changedSettings, coordinator.activeSnapshot().moderationFeatures());
+        assertEquals(1, factory.created.get());
+        assertEquals(0, factory.lifecycles.getFirst().closed.get());
+        assertEquals(active.punishmentRequestAlerts(), controller.currentSettings());
     }
 
     @Test

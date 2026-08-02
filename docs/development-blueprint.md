@@ -20,3 +20,9 @@ Related sources:
 
 Do not duplicate the roadmap in this file. Update the canonical Wiki source so
 the repository and published documentation remain synchronized.
+
+## Completed feature slice: punishment history and sanction lifecycle
+
+The punishment-history slice now provides bounded player timelines, one canonical case-detail view, exact sanction reduction/early-end/revocation/overturn, request and appeal linkage, transaction-bound hierarchy/authority rechecks, append-only audit, reloadable presentation/validation settings, and Java/Bedrock-readable output. It deliberately leaves production authority, LiteBans cutover and issue #43 acceptance unchanged.
+
+The next logical moderation slice is the staff report queue/detail GUI and action workflow; it must be started in a separate branch after this feature is merged.

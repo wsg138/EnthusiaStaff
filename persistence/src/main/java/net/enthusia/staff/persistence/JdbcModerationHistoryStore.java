@@ -145,7 +145,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
             throws SQLException {
         String caseId = result.getString("case_id");
         String punishmentType = result.getString("punishment_type");
-        String actorName = result.getString("actor_name");
+        String actorName = includeSensitive ? result.getString("actor_name") : null;
         String sensitive = includeSensitive ? result.getString("sensitive_reason") : null;
         return new ModerationHistoryEntry(
                 result.getString("stable_key"),
@@ -160,7 +160,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 Optional.ofNullable(result.getString("public_reason")).orElse(""),
                 optionalInstant(result, "original_expiration"),
                 optionalInstant(result, "resulting_expiration"),
-                optionalUuid(result, "actor_id"),
+                includeSensitive ? optionalUuid(result, "actor_id") : Optional.empty(),
                 actorName == null || actorName.isBlank() ? Optional.empty() : Optional.of(actorName),
                 sensitive == null || sensitive.isBlank() ? Optional.empty() : Optional.of(sensitive)
         );
@@ -256,8 +256,9 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 "s.expiration_at AS original_expiration, s.expiration_at AS resulting_expiration,",
                 "NULL AS actor_id, NULL AS actor_name, NULL AS sensitive_reason",
                 "FROM sanctions s JOIN cases c ON c.case_id = s.case_id",
-                "WHERE s.status IN ('PENDING', 'ACTIVE') AND s.expiration_at IS NOT NULL",
-                "AND s.expiration_at <= CURRENT_TIMESTAMP(6) AND " + filter
+                "WHERE s.expiration_at IS NOT NULL",
+                "AND (s.status = 'EXPIRED' OR (s.status IN ('PENDING', 'ACTIVE')",
+                "AND s.expiration_at <= CURRENT_TIMESTAMP(6))) AND " + filter
         );
     }
 

@@ -94,9 +94,9 @@ class SanctionLifecycleIntegrationTest {
 
     @Test
     void reductionPreservesOriginalRecordAndReplaysAcrossRestart() throws Exception {
-        Instant issued = Instant.now().minusSeconds(3_600);
-        Instant originalExpiration = Instant.now().plusSeconds(7_200);
-        Instant reducedExpiration = Instant.now().plusSeconds(3_600);
+        Instant issued = now().minusSeconds(3_600);
+        Instant originalExpiration = now().plusSeconds(7_200);
+        Instant reducedExpiration = now().plusSeconds(3_600);
         Fixture fixture = seed(1, "HELPER", SanctionStatus.ACTIVE, issued, Optional.of(originalExpiration));
         ExactSanctionChangeRequest request = request(
                 fixture,
@@ -144,8 +144,8 @@ class SanctionLifecycleIntegrationTest {
 
     @Test
     void reductionRejectsExtensionsAndIdenticalExpirationsWithoutAuditNoise() throws Exception {
-        Instant issued = Instant.now().minusSeconds(3_600);
-        Instant expiration = Instant.now().plusSeconds(3_600);
+        Instant issued = now().minusSeconds(3_600);
+        Instant expiration = now().plusSeconds(3_600);
         Fixture fixture = seed(2, "HELPER", SanctionStatus.ACTIVE, issued, Optional.of(expiration));
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
@@ -187,10 +187,10 @@ class SanctionLifecycleIntegrationTest {
                 3,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
+                now().minusSeconds(3_600),
                 Optional.empty()
         );
-        Instant replacement = Instant.now().plusSeconds(3_600);
+        Instant replacement = now().plusSeconds(3_600);
         ExactSanctionChangeRequest request = request(
                 fixture,
                 0,
@@ -225,8 +225,8 @@ class SanctionLifecycleIntegrationTest {
                 4,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
@@ -268,15 +268,15 @@ class SanctionLifecycleIntegrationTest {
                 5,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
         Fixture overturned = seed(
                 6,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
@@ -351,15 +351,15 @@ class SanctionLifecycleIntegrationTest {
                 7,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
         Fixture other = seed(
                 8,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
         UUID appealId = insertAppeal(other, "APPLIED");
 
@@ -418,8 +418,8 @@ class SanctionLifecycleIntegrationTest {
                 9,
                 "ADMIN",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             ExactSanctionChangeResult.Rejected hierarchy = assertInstanceOf(
@@ -462,8 +462,8 @@ class SanctionLifecycleIntegrationTest {
                 10,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(3_600))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
         );
         execute("""
                 CREATE TRIGGER fail_exact_sanction_audit
@@ -500,15 +500,15 @@ class SanctionLifecycleIntegrationTest {
                 11,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(7_200))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(7_200))
         );
         List<ExactSanctionChangeResult> results = race(
                 request(
                         fixture,
                         0,
                         SanctionChangeAction.REDUCE_DURATION,
-                        Optional.of(Instant.now().plusSeconds(3_600)),
+                        Optional.of(now().plusSeconds(3_600)),
                         "First concurrent reduction",
                         "concurrent-reduce-a",
                         Optional.empty()
@@ -517,7 +517,7 @@ class SanctionLifecycleIntegrationTest {
                         fixture,
                         0,
                         SanctionChangeAction.REDUCE_DURATION,
-                        Optional.of(Instant.now().plusSeconds(1_800)),
+                        Optional.of(now().plusSeconds(1_800)),
                         "Second concurrent reduction",
                         "concurrent-reduce-b",
                         Optional.empty()
@@ -534,15 +534,15 @@ class SanctionLifecycleIntegrationTest {
                 12,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(7_200))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(7_200))
         );
         List<ExactSanctionChangeResult> results = race(
                 request(
                         fixture,
                         0,
                         SanctionChangeAction.REDUCE_DURATION,
-                        Optional.of(Instant.now().plusSeconds(3_600)),
+                        Optional.of(now().plusSeconds(3_600)),
                         "Concurrent reduction",
                         "concurrent-reduce-end-a",
                         Optional.empty()
@@ -569,8 +569,8 @@ class SanctionLifecycleIntegrationTest {
                 13,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(7_200))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(7_200))
         );
         List<ExactSanctionChangeResult> results = race(
                 request(
@@ -606,8 +606,8 @@ class SanctionLifecycleIntegrationTest {
                 14,
                 "HELPER",
                 SanctionStatus.ACTIVE,
-                Instant.now().minusSeconds(3_600),
-                Optional.of(Instant.now().plusSeconds(7_200))
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(7_200))
         );
         ExactSanctionChangeRequest identical = request(
                 fixture,
@@ -898,6 +898,10 @@ class SanctionLifecycleIntegrationTest {
              PreparedStatement statement = connection.prepareStatement(sql)) { // nosemgrep
             statement.execute();
         }
+    }
+
+    private static Instant now() {
+        return Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
 
     private static net.enthusia.staff.persistence.DatabaseConfig databaseConfig() {

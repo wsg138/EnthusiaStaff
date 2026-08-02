@@ -133,3 +133,7 @@ When implementation changes:
 5. Keep commands in [[Commands and Permissions]], source traces in
    [[Developer Code Guide]], and validation procedure in [[Build and Testing]].
 6. Run `python scripts/wiki/validate_wiki.py` before publication.
+
+## Punishment history lifecycle update
+
+The history/sanction-change requirement group is implemented in PR #46 pending exact-head validation: database-bounded `/history`, complete `/case` detail, exact reduce/end/revoke/overturn, request/appeal linkage, append-only audit and concurrency tests. Production cutover and LiteBans authority are unchanged.
