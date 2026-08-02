@@ -4,12 +4,15 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 
 final class AuthoritativeWriteFence {
+    private static final ReentrantLock LOCAL_SERIALIZER = new ReentrantLock(true);
+
     private final DataSource dataSource;
 
     AuthoritativeWriteFence(DataSource dataSource) {
@@ -23,6 +26,15 @@ final class AuthoritativeWriteFence {
         if (operation == null || blockedResult == null) {
             throw new IllegalArgumentException("authoritative write fence callbacks must be present");
         }
+        LOCAL_SERIALIZER.lock();
+        try {
+            return executeSerialized(operation, blockedResult);
+        } finally {
+            LOCAL_SERIALIZER.unlock();
+        }
+    }
+
+    private <T> T executeSerialized(Supplier<T> operation, Supplier<T> blockedResult) {
         Connection connection = null;
         Throwable operationFailure = null;
         boolean authoritativeOperationCompleted = false;
