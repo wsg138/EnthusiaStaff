@@ -14,12 +14,14 @@ import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
 import net.enthusia.staff.paper.command.EstaffCommand;
 import net.enthusia.staff.paper.command.FreezeCommand;
+import net.enthusia.staff.paper.command.HistoryCommand;
 import net.enthusia.staff.paper.command.InspectCommand;
 import net.enthusia.staff.paper.command.InventoryCommand;
 import net.enthusia.staff.paper.command.PunishmentCommand;
@@ -27,9 +29,11 @@ import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
 import net.enthusia.staff.paper.command.ReportCommand;
 import net.enthusia.staff.paper.command.ReportsCommand;
 import net.enthusia.staff.paper.command.SanctionChangeCommand;
+import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
+import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
@@ -57,9 +61,13 @@ final class PaperCommandRegistrar {
     private static final List<String> INVENTORY_COMMANDS = List.of("invsee", "endersee");
 
     private final Dependencies dependencies;
+    private final ReloadableModerationFeatureSettings moderationSettings;
 
     PaperCommandRegistrar(Dependencies dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
+        this.moderationSettings = new ReloadableModerationFeatureSettings(
+                ReloadableModerationFeatureSettings.read(plugin().getConfig())
+        );
     }
 
     static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
@@ -85,12 +93,30 @@ final class PaperCommandRegistrar {
     }
 
     void register() {
+        configureEstaff();
         registerPunishmentCommands();
         registerSanctionChangeCommands();
         registerReportCommands();
         registerStaffCommands();
         registerInventoryCommands();
         registerInspectionCommands();
+    }
+
+    private void configureEstaff() {
+        PluginCommand command = requiredCommand("estaff");
+        if (!(command.getExecutor() instanceof EstaffCommand estaff)) {
+            throw new IllegalStateException("estaff command executor was not registered before feature commands");
+        }
+        estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(plugin()));
+        estaff.configureSanctionLifecycle(new SanctionLifecycleCommand(
+                plugin(),
+                clock(),
+                dependencies.environment().serverId(),
+                writeMode(),
+                storage(PaperStorageBindings::sanctionChangeService),
+                moderationSettings::current,
+                workers()
+        ));
     }
 
     private void registerPunishmentCommands() {
@@ -173,16 +199,23 @@ final class PaperCommandRegistrar {
     }
 
     private void registerInspectionCommands() {
+        Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
+        Supplier<ModerationHistoryStore> histories = storage(PaperStorageBindings::moderationHistoryStore);
         InspectCommand inspect = new InspectCommand(
-                plugin(), clock(), storage(PaperStorageBindings::playerDirectory), cases,
+                plugin(), clock(), players, cases,
                 dependencies.integrations().economy(), dependencies.integrations().confiscation(),
                 dependencies.players().inventory(), authorization(), dependencies.integrations().market(),
                 dependencies.integrations().reputation(), workers()
         );
         bindCompleting("inspect", inspect, inspect);
+        HistoryCommand history = new HistoryCommand(
+                plugin(), players, histories, moderationSettings::current, workers()
+        );
+        bindCompleting("history", history, history);
         bind("case", new CaseCommand(
-                plugin(), cases, dependencies.integrations().confiscation(), authorization(), workers()
+                plugin(), cases, dependencies.integrations().confiscation(), histories,
+                moderationSettings::current, authorization(), workers()
         ));
     }
 
