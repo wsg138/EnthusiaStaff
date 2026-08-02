@@ -212,7 +212,10 @@ public final class CaseCommand implements CommandExecutor {
                 line.append(" | reason: ").append(entry.publicReason());
             }
             if (sensitive) {
-                entry.actorName().ifPresent(value -> line.append(" | actor: ").append(value));
+                entry.actorName().ifPresentOrElse(
+              value -> line.append(" | actor: ").append(value),
+              () -> entry.actorId().ifPresent(value -> line.append(" | actor: ").append(value))
+      );
                 entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
             }
             lines.add(Component.text(line.toString()));

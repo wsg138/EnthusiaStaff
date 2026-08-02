@@ -289,7 +289,7 @@ public final class JdbcModerationHistoryStore implements ModerationHistoryStore 
                 "COALESCE(event.resulting_status, sanction.status) AS status, c.public_reason,",
                 "event.previous_expiration AS original_expiration,",
                 "COALESCE(event.resulting_expiration, sanction.expiration_at) AS resulting_expiration,",
-                "event.actor_id, COALESCE(actor.current_username, c.actor_name) AS actor_name,",
+                "event.actor_id, actor.current_username AS actor_name,",
                 "event.reason AS sensitive_reason",
                 "FROM sanction_events event",
                 "JOIN sanctions sanction ON sanction.sanction_id = event.sanction_id",
