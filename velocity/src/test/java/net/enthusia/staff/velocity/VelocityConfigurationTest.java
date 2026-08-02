@@ -49,7 +49,7 @@ final class VelocityConfigurationTest {
                 Set.of("punishments", "reports", "logs-staffmode", "alerts"),
                 configuration.discordWebhookEnvironments().keySet()
         );
-        assertTrue(configuration.liteBansShadowScheduleEnabled());
+        assertFalse(configuration.liteBansShadowScheduleEnabled());
         assertEquals(24, configuration.liteBansShadowIntervalHours());
         assertThrows(
                 UnsupportedOperationException.class,
@@ -80,8 +80,17 @@ final class VelocityConfigurationTest {
                 "ES_CHANNEL_TLS_KEYSTORE_PASSWORD",
                 configuration.channelTlsKeyStorePasswordEnvironment()
         );
-        assertTrue(configuration.liteBansShadowScheduleEnabled());
+        assertFalse(configuration.liteBansShadowScheduleEnabled());
         assertEquals(24, configuration.liteBansShadowIntervalHours());
+    }
+
+    @Test
+    void explicitShadowScheduleOptInIsAccepted(@TempDir Path directory) throws IOException {
+        Properties properties = copiedDefaults(directory);
+        properties.setProperty("litebans.shadow-schedule-enabled", "true");
+        store(directory, properties);
+
+        assertTrue(VelocityConfiguration.load(directory).liteBansShadowScheduleEnabled());
     }
 
     @Test
