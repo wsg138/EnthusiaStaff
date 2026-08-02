@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-02 18:18 America/Indiana/Indianapolis
+Last updated: 2026-08-02 18:56 America/Indiana/Indianapolis
 
 This file is a concise routing record for the next AI agent. It must be verified against live GitHub and repository state before use.
 
@@ -10,23 +10,23 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | **LIVE VERIFY FROM GITHUB** |
-| Checkpoint before AI-workspace PR | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
+| Current `main` SHA | `9d7f31945db37f9b2872ac57cb24de6b6b281198` at work-item start; live verify before acting |
+| Checkpoint before report-GUI work | `9d7f31945db37f9b2872ac57cb24de6b6b281198` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
 
-## Current work after PR #47 merges
+## Current work
 
 | Field | Value |
 | --- | --- |
-| State | `IDLE` |
-| Active PR | None expected; verify live |
-| Active branch | None expected; verify live |
-| Active work item | None |
+| State | `PLANNING` |
+| Active PR | Draft PR pending first branch commit |
+| Active branch | `feature/report-queue-gui` |
+| Active work item | Staff report queue and detail GUI with stale-state-safe actions and text-command fallback |
 | Known blocker | None |
 
-Before starting new work, inspect live open PRs and branches. Resume relevant unfinished work even when this table says `IDLE`.
+Before starting different work, inspect the live branch and pull requests. Resume this report-GUI work when it remains unfinished.
 
 ## Latest repository-process update
 
@@ -34,11 +34,10 @@ Before starting new work, inspect live open PRs and branches. Resume relevant un
 | --- | --- |
 | PR | `#47 — Add shared AI agent workflow` |
 | Branch | `agent/add-ai-agent-workflow` |
-| Intended result | AI-agent rules, shared state, universal prompt, and handoff-report location merged into `main` |
+| Merge commit | `9d7f31945db37f9b2872ac57cb24de6b6b281198` |
+| Result | AI-agent rules, shared state, universal prompt, and handoff-report location merged into `main` |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr47-ai-agent-workspace.md` |
 | Exact validation and merge evidence | Read PR #47 live |
-
-The next agent must verify whether PR #47 merged successfully and reconcile this file if it did not.
 
 ## Last completed product work
 
@@ -61,37 +60,38 @@ Completed product capabilities include:
 - transactional authorization, hierarchy, concurrency, and idempotency;
 - reloadable history and sanction-action settings.
 
-## Next planned work item
+## Current planned work item
 
-### Staff report workflow
+### Staff report queue and detail GUI
 
 Priority: High
 
-Status: Prerequisites complete; no feature branch or PR recorded.
+Status: Active on `feature/report-queue-gui`.
 
 Objective:
 
-- player `/report` submission;
-- staff report queue and database-bounded filtering;
-- assignment, claiming, and reassignment;
-- report detail and append-only event timeline;
-- staff notes and evidence references;
-- escalation into cases and punishment requests;
-- resolution, dismissal, duplicate linking, and reopening;
-- durable staff and reporter notifications;
-- searchable report history;
-- Java and Bedrock command parity;
-- concurrency, idempotency, restart, permission, privacy, and reload coverage.
+- staff inventory GUI for report queues and report details;
+- asynchronous database reads with entity-thread inventory opening;
+- exact-revision state changes so stale screens cannot overwrite newer work;
+- inventory-click/drag safety, viewer ownership, permission revalidation, and duplicate-submit protection;
+- existing `/reports` text commands retained as Java and Bedrock fallback;
+- focused tests, documentation, harsh review, exact-head validation, durable handoff, and normal merge when every gate passes.
 
-The agent must inspect existing report code and the goals documents before deciding the exact PR scope. It must not assume every listed item is absent.
+Explicitly deferred from this work item:
+
+- modular `reports.yml` and GUI-file configuration;
+- RoseChat private-message provider bridge;
+- Discord report rendering;
+- production-like multi-server staging and production deployment.
 
 ## Migration state
 
 | Field | Value |
 | --- | --- |
-| Recorded highest migration | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration at work-item start | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
+| This work item | No schema change expected |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
