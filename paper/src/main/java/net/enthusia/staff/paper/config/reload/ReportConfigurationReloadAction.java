@@ -30,7 +30,13 @@ public final class ReportConfigurationReloadAction implements ConfigurationReloa
     }
 
     @Override
-    public synchronized ConfigurationReloadResult reload() {
+    public ConfigurationReloadResult reload() {
+        synchronized (active) {
+            return reloadLocked();
+        }
+    }
+
+    private ConfigurationReloadResult reloadLocked() {
         ReportConfigurationSnapshot candidate;
         try {
             candidate = Objects.requireNonNull(candidates.get(), "report configuration candidate");
