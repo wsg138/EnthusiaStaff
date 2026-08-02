@@ -257,7 +257,7 @@ public final class ReportGuiController implements Listener {
                         new IdempotencyKey("report-gui:" + state.operationId()),
                         clock.instant()
                 ));
-                ReportDetails fresh = store.details(summary.reportId()).orElse(null);
+                ReportDetails fresh = loadFreshDetails(store, summary.reportId());
                 if (result instanceof ReportStateChangeResult.Applied applied) {
                     String replay = applied.replayed() ? " (idempotent replay)" : "";
                     showResult(viewer, state, fresh,
@@ -272,6 +272,19 @@ public final class ReportGuiController implements Listener {
         });
         if (!submitted) {
             confirmations.remove(actorId);
+        }
+    }
+
+    private ReportDetails loadFreshDetails(ReportStore store, UUID reportId) {
+        try {
+            return store.details(reportId).orElse(null);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(
+                    Level.WARNING,
+                    "Report state outcome is known, but refreshed details could not be loaded",
+                    exception
+            );
+            return null;
         }
     }
 
@@ -381,8 +394,8 @@ public final class ReportGuiController implements Listener {
                 try {
                     work.run();
                 } catch (RuntimeException exception) {
-                    plugin.getLogger().log(Level.SEVERE, "Report GUI operation failed", exception);
-                    message(viewer, "The report operation failed; reopen the report before retrying.");
+                    plugin.getLogger().log(Level.SEVERE, "Report GUI action outcome was not confirmed", exception);
+                    message(viewer, "The report action outcome was not confirmed. Reopen the report before retrying.");
                 }
             });
             return true;
