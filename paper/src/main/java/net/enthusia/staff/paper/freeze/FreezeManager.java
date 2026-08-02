@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.ports.FreezeStore;
@@ -73,31 +74,33 @@ public final class FreezeManager implements Listener {
     public void applyOnline(UUID playerId) {
         frozen.add(playerId);
         pendingVerification.remove(playerId);
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player != null) {
-            onEntity(player, () -> {
-                player.closeInventory();
-                player.sendMessage(Component.text("You have been frozen by network staff."));
-            });
-        }
+        onEntity(playerId, player -> {
+            player.closeInventory();
+            player.sendMessage(Component.text("You have been frozen by network staff."));
+        });
     }
 
     public void releaseOnline(UUID playerId) {
         frozen.remove(playerId);
         pendingVerification.remove(playerId);
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player != null) {
-            onEntity(player, () -> player.sendMessage(Component.text("Your staff freeze has been released.")));
-        }
+        onEntity(playerId, player ->
+                player.sendMessage(Component.text("Your staff freeze has been released.")));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
-        verify(event.getPlayer());
+        Player player = event.getPlayer();
+        verify(player.getUniqueId(), player.getName());
     }
 
     public void verify(Player player) {
-        UUID playerId = player.getUniqueId();
+        verify(player.getUniqueId(), player.getName());
+    }
+
+    public void verify(UUID playerId, String playerName) {
+        String displayName = playerName == null || playerName.isBlank()
+                ? playerId.toString()
+                : playerName;
         pendingVerification.add(playerId);
         submit(() -> {
             FreezeStore loaded = store.get();
@@ -109,7 +112,7 @@ public final class FreezeManager implements Listener {
                 boolean active = loaded.active(playerId, clock.instant()).isPresent();
                 if (active) {
                     applyOnline(playerId);
-                    alertStaff("Freeze restored for " + player.getName()
+                    alertStaff("Freeze restored for " + displayName
                             + ". Use /unfreeze or /freeze keep after review.");
                 } else {
                     frozen.remove(playerId);
@@ -295,11 +298,16 @@ public final class FreezeManager implements Listener {
     }
 
     private void relayFrozenChat(Player player, Component body) {
-        Component rendered = Component.text("<" + player.getName() + "> ").append(body);
+        UUID playerId = player.getUniqueId();
+        String playerName = player.getName();
+        Component rendered = Component.text("<" + playerName + "> ").append(body);
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            player.sendMessage(rendered);
+            Player current = plugin.getServer().getPlayer(playerId);
+            if (current != null) {
+                current.sendMessage(rendered);
+            }
             plugin.getServer().getOnlinePlayers().stream()
-                    .filter(staff -> !staff.getUniqueId().equals(player.getUniqueId()))
+                    .filter(staff -> !staff.getUniqueId().equals(playerId))
                     .filter(staff -> staff.hasPermission("enthusiastaff.freeze.chat"))
                     .forEach(staff -> staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered)));
         });
@@ -320,7 +328,12 @@ public final class FreezeManager implements Listener {
         }
     }
 
-    private void onEntity(Player player, Runnable operation) {
-        player.getScheduler().execute(plugin, operation, null, 1L);
+    private void onEntity(UUID playerId, Consumer<Player> operation) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            Player player = plugin.getServer().getPlayer(playerId);
+            if (player != null) {
+                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+            }
+        });
     }
 }

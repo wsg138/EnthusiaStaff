@@ -223,10 +223,37 @@ final class JdbcPunishmentRequestRepository {
             throws SQLException {
         String sql = SELECT_REQUESTS
                 + "WHERE status = 'PENDING' AND expires_at <= ? "
-                + "ORDER BY expires_at LIMIT ? FOR UPDATE";
+                + "ORDER BY expires_at, request_id LIMIT ? FOR UPDATE SKIP LOCKED";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setTimestamp(1, Timestamp.from(now));
             statement.setInt(2, limit);
+            try (ResultSet result = statement.executeQuery()) {
+                List<PunishmentApprovalRequest> values = new ArrayList<>();
+                while (result.next()) {
+                    values.add(codec.read(result));
+                }
+                return List.copyOf(values);
+            }
+        }
+    }
+
+    List<PunishmentApprovalRequest> matchingPending(
+            Connection connection,
+            PunishmentMatchKey matchKey,
+            Instant now,
+            UUID excludedRequestId
+    ) throws SQLException {
+        String sql = excludedRequestId == null
+                ? SELECT_REQUESTS + "WHERE status = 'PENDING' AND open_match_key = ? "
+                    + "AND expires_at > ? ORDER BY request_id FOR UPDATE"
+                : SELECT_REQUESTS + "WHERE status = 'PENDING' AND open_match_key = ? "
+                    + "AND expires_at > ? AND request_id <> ? ORDER BY request_id FOR UPDATE";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, matchKey.value());
+            statement.setTimestamp(2, Timestamp.from(now));
+            if (excludedRequestId != null) {
+                statement.setBytes(3, UuidBytes.toBytes(excludedRequestId));
+            }
             try (ResultSet result = statement.executeQuery()) {
                 List<PunishmentApprovalRequest> values = new ArrayList<>();
                 while (result.next()) {

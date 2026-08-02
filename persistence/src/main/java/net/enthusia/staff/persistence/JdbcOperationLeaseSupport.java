@@ -24,6 +24,42 @@ final class JdbcOperationLeaseSupport {
         return acquireAfter(connection, resourceKey, operationId, 0L, leaseUntil, now);
     }
 
+    static LeaseAcquisition acquireRepeatable(
+            Connection connection,
+            String resourceKey,
+            UUID operationId,
+            Instant requestedLeaseUntil,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT owner_id, fencing_token, lease_until
+                FROM operation_leases
+                WHERE resource_key = ?
+                FOR UPDATE
+                """)) {
+            select.setString(1, resourceKey);
+            try (ResultSet result = select.executeQuery()) {
+                if (!result.next()) {
+                    long fence = nextFencingToken(UNAVAILABLE);
+                    insert(connection, resourceKey, operationId, fence, requestedLeaseUntil, now);
+                    return new LeaseAcquisition(fence, requestedLeaseUntil, false);
+                }
+                String ownerId = operationId.toString();
+                String currentOwner = result.getString("owner_id");
+                long currentFence = result.getLong("fencing_token");
+                Instant currentExpiry = result.getTimestamp("lease_until").toInstant();
+                if (currentExpiry.isAfter(now)) {
+                    return currentOwner.equals(ownerId)
+                            ? new LeaseAcquisition(currentFence, currentExpiry, true)
+                            : LeaseAcquisition.unavailable();
+                }
+                long nextFence = nextFencingToken(currentFence);
+                replace(connection, resourceKey, ownerId, nextFence, requestedLeaseUntil, now);
+                return new LeaseAcquisition(nextFence, requestedLeaseUntil, false);
+            }
+        }
+    }
+
     static long acquireAfter(
             Connection connection,
             String resourceKey,
@@ -157,6 +193,22 @@ final class JdbcOperationLeaseSupport {
                     statement.executeUpdate(),
                     "Operation lease disappeared during acquisition"
             );
+        }
+    }
+
+    record LeaseAcquisition(long fencingToken, Instant leaseUntil, boolean replayed) {
+        LeaseAcquisition {
+            if (fencingToken < UNAVAILABLE || leaseUntil == null) {
+                throw new IllegalArgumentException("valid operation lease acquisition is required");
+            }
+        }
+
+        static LeaseAcquisition unavailable() {
+            return new LeaseAcquisition(UNAVAILABLE, Instant.EPOCH, false);
+        }
+
+        boolean available() {
+            return fencingToken > UNAVAILABLE;
         }
     }
 

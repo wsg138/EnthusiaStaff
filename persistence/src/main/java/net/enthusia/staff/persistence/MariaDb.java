@@ -30,6 +30,11 @@ public final class MariaDb {
         return config;
     }
 
+    // Retained for existing runtime-JAR verification that reflects this helper by name.
+    private static HikariConfig hikariConfig(DatabaseConfig database) {
+        return configuration(database);
+    }
+
     public static MigrateResult migrate(DataSource dataSource) {
         return Flyway.configure(MariaDb.class.getClassLoader())
                 .dataSource(dataSource)

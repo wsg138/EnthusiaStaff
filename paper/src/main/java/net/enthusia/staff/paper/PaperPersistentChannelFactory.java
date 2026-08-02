@@ -13,27 +13,61 @@ import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.protocol.PersistentChannelClient;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.enthusia.staff.protocol.TlsContextLoader;
+import net.enthusia.staff.paper.config.RestartRequiredConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class PaperPersistentChannelFactory {
     private PaperPersistentChannelFactory() {
     }
 
+    static Settings snapshot(JavaPlugin plugin) {
+        Objects.requireNonNull(plugin, "plugin");
+        return new Settings(
+                plugin.getConfig().getBoolean("channel.enabled", false),
+                plugin.getConfig().getString("network.server-id", "SMP"),
+                plugin.getConfig().getString("channel.host", "127.0.0.1"),
+                plugin.getConfig().getInt("channel.port", 28_765),
+                plugin.getConfig().getString("channel.proxy-id", "VELOCITY"),
+                plugin.getConfig().getString("channel.backend-secret-environment"),
+                plugin.getConfig().getString("channel.proxy-secret-environment"),
+                plugin.getConfig().getString("channel.tls.trust-store", "channel-trust.p12"),
+                plugin.getConfig().getString(
+                        "channel.tls.trust-store-password-environment",
+                        "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD"
+                ),
+                plugin.getDataFolder().toPath().toAbsolutePath().normalize()
+        );
+    }
+
+    static Settings snapshot(RestartRequiredConfiguration configuration, Path dataDirectory) {
+        Objects.requireNonNull(configuration, "configuration");
+        Objects.requireNonNull(dataDirectory, "dataDirectory");
+        return new Settings(
+                configuration.channelEnabled(),
+                configuration.networkServerId(),
+                configuration.channelHost(),
+                configuration.channelPort(),
+                configuration.channelProxyId(),
+                configuration.channelBackendSecretEnvironment(),
+                configuration.channelProxySecretEnvironment(),
+                configuration.channelTrustStore(),
+                configuration.channelTrustStorePasswordEnvironment(),
+                dataDirectory.toAbsolutePath().normalize()
+        );
+    }
+
     static Optional<PersistentChannelClient> start(
-            JavaPlugin plugin,
+            Settings settings,
             BiFunction<String, ProtocolEnvelope, Boolean> messageHandler,
             Consumer<String> connectionState
     ) {
-        Objects.requireNonNull(plugin, "plugin");
+        Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(messageHandler, "messageHandler");
         Objects.requireNonNull(connectionState, "connectionState");
-        if (!plugin.getConfig().getBoolean("channel.enabled", false)) {
-            plugin.getLogger().warning(
-                    "Persistent Velocity channel is disabled; new punishment writes remain disabled"
-            );
+        if (!settings.enabled()) {
             return Optional.empty();
         }
-        ChannelConfiguration loaded = loadConfiguration(plugin);
+        ChannelConfiguration loaded = loadConfiguration(settings);
         PersistentChannelClient client = new PersistentChannelClient(
                 loaded.client(),
                 Clock.systemUTC(),
@@ -53,30 +87,17 @@ final class PaperPersistentChannelFactory {
         }
     }
 
-    private static ChannelConfiguration loadConfiguration(JavaPlugin plugin) {
-        String backendId = plugin.getConfig().getString("network.server-id", "SMP");
-        String proxyId = plugin.getConfig().getString("channel.proxy-id", "VELOCITY");
-        String backendEnvironment = plugin.getConfig().getString("channel.backend-secret-environment");
-        String proxyEnvironment = plugin.getConfig().getString("channel.proxy-secret-environment");
-        String trustStore = plugin.getConfig().getString("channel.tls.trust-store", "channel-trust.p12");
-        String trustStorePasswordEnvironment = plugin.getConfig().getString(
-                "channel.tls.trust-store-password-environment",
-                "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD"
-        );
-        if (backendId == null || proxyId == null || backendEnvironment == null || proxyEnvironment == null
-                || trustStore == null || trustStorePasswordEnvironment == null) {
-            throw new IllegalArgumentException("Persistent channel identifiers and secret environments are required");
-        }
+    private static ChannelConfiguration loadConfiguration(Settings settings) {
         return new ChannelConfiguration(
-                backendId,
+                settings.backendId(),
                 new PersistentChannelClient.Configuration(
-                        backendId,
-                        plugin.getConfig().getString("channel.host", "127.0.0.1"),
-                        plugin.getConfig().getInt("channel.port", 28_765),
-                        secretFromEnvironment(backendEnvironment),
-                        proxyId,
-                        secretFromEnvironment(proxyEnvironment),
-                        clientTlsContext(plugin, trustStore, trustStorePasswordEnvironment)
+                        settings.backendId(),
+                        settings.host(),
+                        settings.port(),
+                        secretFromEnvironment(settings.backendSecretEnvironment()),
+                        settings.proxyId(),
+                        secretFromEnvironment(settings.proxySecretEnvironment()),
+                        clientTlsContext(settings)
                 )
         );
     }
@@ -85,25 +106,20 @@ final class PaperPersistentChannelFactory {
         return SecretKeyMaterial.hmacSha256FromBase64(System.getenv(environment));
     }
 
-    private static SSLContext clientTlsContext(
-            JavaPlugin plugin,
-            String configuredPath,
-            String passwordEnvironment
-    ) {
-        char[] password = passwordFromEnvironment(passwordEnvironment);
+    private static SSLContext clientTlsContext(Settings settings) {
+        char[] password = passwordFromEnvironment(settings.trustStorePasswordEnvironment());
         try {
-            Path resolved = resolveChannelTlsPath(plugin, Path.of(configuredPath));
+            Path resolved = resolveChannelTlsPath(settings.dataDirectory(), Path.of(settings.trustStore()));
             return TlsContextLoader.client(resolved, password);
         } finally {
             Arrays.fill(password, '\0');
         }
     }
 
-    private static Path resolveChannelTlsPath(JavaPlugin plugin, Path configured) {
+    private static Path resolveChannelTlsPath(Path dataDirectory, Path configured) {
         if (configured.isAbsolute()) {
             return configured.normalize();
         }
-        Path dataDirectory = plugin.getDataFolder().toPath().toAbsolutePath().normalize();
         Path resolved = dataDirectory.resolve(configured).normalize();
         if (!resolved.startsWith(dataDirectory)) {
             throw new IllegalArgumentException("A relative channel TLS path must remain in the plugin data directory");
@@ -117,6 +133,48 @@ final class PaperPersistentChannelFactory {
             throw new IllegalStateException("A required channel TLS store password environment variable is missing");
         }
         return value.toCharArray();
+    }
+
+    record Settings(
+            boolean enabled,
+            String backendId,
+            String host,
+            int port,
+            String proxyId,
+            String backendSecretEnvironment,
+            String proxySecretEnvironment,
+            String trustStore,
+            String trustStorePasswordEnvironment,
+            Path dataDirectory
+    ) {
+        Settings {
+            Objects.requireNonNull(dataDirectory, "dataDirectory");
+            if (enabled) {
+                backendId = requireText(backendId, "backendId");
+                host = requireText(host, "host");
+                proxyId = requireText(proxyId, "proxyId");
+                backendSecretEnvironment = requireText(
+                        backendSecretEnvironment,
+                        "backendSecretEnvironment"
+                );
+                proxySecretEnvironment = requireText(proxySecretEnvironment, "proxySecretEnvironment");
+                trustStore = requireText(trustStore, "trustStore");
+                trustStorePasswordEnvironment = requireText(
+                        trustStorePasswordEnvironment,
+                        "trustStorePasswordEnvironment"
+                );
+                if (port < 1 || port > 65_535) {
+                    throw new IllegalArgumentException("Persistent channel port must be between 1 and 65535");
+                }
+            }
+        }
+
+        private static String requireText(String value, String field) {
+            if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("Persistent channel " + field + " is required");
+            }
+            return value;
+        }
     }
 
     private record ChannelConfiguration(

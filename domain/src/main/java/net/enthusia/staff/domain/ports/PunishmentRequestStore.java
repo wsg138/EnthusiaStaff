@@ -39,4 +39,11 @@ public interface PunishmentRequestStore {
     );
 
     int expire(Instant now);
+
+    default int expire(Instant now, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("expiration limit must be positive");
+        }
+        return expire(now);
+    }
 }

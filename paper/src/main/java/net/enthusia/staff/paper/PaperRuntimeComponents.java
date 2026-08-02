@@ -1,10 +1,8 @@
 package net.enthusia.staff.paper;
 
 import java.time.Clock;
-import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
@@ -26,7 +24,6 @@ import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.event.Listener;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -85,22 +82,6 @@ record PaperRuntimeComponents(
                 plugin,
                 ServicePriority.Normal
         );
-    }
-
-    boolean recoverOnlinePlayers(Collection<? extends Player> players, BooleanSupplier running) {
-        if (!running.getAsBoolean()) {
-            return false;
-        }
-        players.forEach(freeze::verify);
-        if (!running.getAsBoolean()) {
-            return false;
-        }
-        players.forEach(staffMode::recover);
-        if (!running.getAsBoolean()) {
-            return false;
-        }
-        vanish.initialize();
-        return running.getAsBoolean();
     }
 
     private static FreezeManager createFreezeManager(Dependencies dependencies) {
