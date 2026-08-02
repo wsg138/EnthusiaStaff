@@ -19,6 +19,22 @@ workers:
   threads: 4
   queue-capacity: 256
 
+# Reloadable history presentation and event inclusion settings.
+history:
+  # Accepted range: 1-100. Pagination is performed by MariaDB.
+  page-size: 8
+  include-request-events: true
+  include-appeal-events: true
+  # Any valid IANA timezone is accepted, such as UTC or America/Chicago.
+  timezone: UTC
+
+# Reloadable validation settings for sanction lifecycle changes.
+sanction-actions:
+  minimum-reason-length: 3
+  maximum-reason-length: 500
+  # When false, a permanent sanction cannot be reduced to a finite expiration.
+  allow-permanent-reduction: true
+
 # This section is reloadable. Unknown keys inside this section are rejected.
 # The subsystem remains disabled unless explicitly enabled.
 punishment-request-alerts:
