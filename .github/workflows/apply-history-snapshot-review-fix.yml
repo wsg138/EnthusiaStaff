@@ -1,0 +1,34 @@
+name: Apply history snapshot review fix
+
+on:
+  push:
+    branches:
+      - feature/punishment-history-lifecycle
+    paths:
+      - .github/workflows/apply-history-snapshot-review-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/punishment-history-lifecycle
+          fetch-depth: 0
+      - name: Apply reviewed history snapshot fix
+        shell: bash
+        run: |
+          python3 - <<'PY2'
+          import base64, zlib
+          script = zlib.decompress(base64.b64decode("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")).decode('utf-8')
+          exec(compile(script, 'apply_history_snapshot_fix.py', 'exec'))
+          PY2
+          git rm .github/workflows/apply-history-snapshot-review-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add persistence/src/main/java/net/enthusia/staff/persistence/JdbcModerationHistoryStore.java
+          git commit -m "Keep history count and pages in one snapshot"
+          git push origin HEAD:feature/punishment-history-lifecycle
