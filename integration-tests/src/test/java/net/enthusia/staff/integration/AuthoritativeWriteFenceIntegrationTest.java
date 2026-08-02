@@ -60,9 +60,10 @@ class AuthoritativeWriteFenceIntegrationTest {
 
     @Test
     void maintenanceBlocksEveryAuthoritativeStoreWithoutCallingDelegates() throws SQLException {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource()) {
             setMode(OperationalMode.MAINTENANCE);
+            assertEquals(OperationalMode.MAINTENANCE, runtime.operationalStateStore().current().mode());
             AtomicInteger calls = new AtomicInteger();
 
             ModerationStore moderation = new FencedModerationStore(
@@ -95,9 +96,10 @@ class AuthoritativeWriteFenceIntegrationTest {
 
     @Test
     void activeModeAllowsAuthoritativeDelegates() throws SQLException {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource()) {
             setMode(OperationalMode.ACTIVE);
+            assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             AtomicInteger calls = new AtomicInteger();
             ModerationStore moderation = new FencedModerationStore(
                     dataSource,
@@ -119,10 +121,11 @@ class AuthoritativeWriteFenceIntegrationTest {
 
     @Test
     void operationalTransitionWaitsUntilGuardedWriteCompletes() throws Exception {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig());
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource();
              ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             setMode(OperationalMode.ACTIVE);
+            assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             CountDownLatch delegateEntered = new CountDownLatch(1);
             CountDownLatch releaseDelegate = new CountDownLatch(1);
             ModerationStore moderation = new FencedModerationStore(
