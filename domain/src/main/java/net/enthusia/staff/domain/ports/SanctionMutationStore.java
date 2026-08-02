@@ -9,8 +9,13 @@ import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 public interface SanctionMutationStore {
     SanctionChangeResult apply(SanctionChangeRequest request);
 
-    ExactSanctionChangeResult applyExact(
+    default ExactSanctionChangeResult applyExact(
             ExactSanctionChangeRequest request,
             SanctionActionLimits limits
-    );
+    ) {
+        return new ExactSanctionChangeResult.Rejected(
+                "UNSUPPORTED",
+                "Exact sanction changes are not available from this store"
+        );
+    }
 }
