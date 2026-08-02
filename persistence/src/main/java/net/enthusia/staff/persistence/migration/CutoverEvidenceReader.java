@@ -84,10 +84,33 @@ final class CutoverEvidenceReader {
 
     private ShadowWindow uninterruptedShadowWindow(Connection connection, Instant shadowEndedAt)
             throws SQLException {
-        Timestamp lastFailure = lastShadowFailure(connection, shadowEndedAt);
-        Timestamp lastMaintenanceAbort = lastMaintenanceAbort(connection, shadowEndedAt);
-        Timestamp resetAt = later(lastFailure, lastMaintenanceAbort);
-        String sql = resetAt == null ? """
+        Timestamp resetAt = later(
+                lastShadowFailure(connection, shadowEndedAt),
+                lastMaintenanceAbort(connection, shadowEndedAt)
+        );
+        List<ShadowRun> runs = readShadowRuns(connection, shadowEndedAt, resetAt);
+        if (runs.isEmpty()) {
+            return null;
+        }
+        validateShadowRuns(connection, runs);
+        return new ShadowWindow(runs.getFirst().startedAt(), runs);
+    }
+
+    private static List<ShadowRun> readShadowRuns(
+            Connection connection,
+            Instant shadowEndedAt,
+            Timestamp resetAt
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(shadowRunsSql(resetAt))) {
+            bindShadowWindow(statement, shadowEndedAt, resetAt);
+            try (ResultSet result = statement.executeQuery()) {
+                return collectShadowRuns(result);
+            }
+        }
+    }
+
+    private static String shadowRunsSql(Timestamp resetAt) {
+        return resetAt == null ? """
                 SELECT r.run_id, r.started_at, r.completed_at
                 FROM migration_runs r
                 WHERE r.mode = 'SHADOW' AND r.state = 'COMPLETED' AND r.mismatch_count = 0
@@ -110,34 +133,40 @@ final class CutoverEvidenceReader {
                   )
                 ORDER BY r.completed_at
                 """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            int index = 1;
-            if (resetAt != null) {
-                statement.setTimestamp(index++, resetAt);
-            }
-            statement.setTimestamp(index++, Timestamp.from(shadowEndedAt));
-            statement.setInt(index, ComparisonType.values().length);
-            try (ResultSet result = statement.executeQuery()) {
-                List<ShadowRun> runs = new ArrayList<>();
-                while (result.next()) {
-                    Timestamp startedAt = result.getTimestamp("started_at");
-                    Timestamp completedAt = result.getTimestamp("completed_at");
-                    if (startedAt == null || completedAt == null) {
-                        throw new SQLException("completed shadow run is missing timestamps");
-                    }
-                    runs.add(new ShadowRun(
-                            UuidBytes.fromBytes(result.getBytes("run_id")),
-                            startedAt.toInstant(),
-                            completedAt.toInstant()
-                    ));
-                }
-                if (runs.isEmpty()) {
-                    return null;
-                }
-                validateShadowRuns(connection, runs);
-                return new ShadowWindow(runs.getFirst().startedAt(), runs);
-            }
+    }
+
+    private static void bindShadowWindow(
+            PreparedStatement statement,
+            Instant shadowEndedAt,
+            Timestamp resetAt
+    ) throws SQLException {
+        int index = 1;
+        if (resetAt != null) {
+            statement.setTimestamp(index++, resetAt);
         }
+        statement.setTimestamp(index++, Timestamp.from(shadowEndedAt));
+        statement.setInt(index, ComparisonType.values().length);
+    }
+
+    private static List<ShadowRun> collectShadowRuns(ResultSet result) throws SQLException {
+        List<ShadowRun> runs = new ArrayList<>();
+        while (result.next()) {
+            runs.add(readShadowRun(result));
+        }
+        return runs;
+    }
+
+    private static ShadowRun readShadowRun(ResultSet result) throws SQLException {
+        Timestamp startedAt = result.getTimestamp("started_at");
+        Timestamp completedAt = result.getTimestamp("completed_at");
+        if (startedAt == null || completedAt == null) {
+            throw new SQLException("completed shadow run is missing timestamps");
+        }
+        return new ShadowRun(
+                UuidBytes.fromBytes(result.getBytes("run_id")),
+                startedAt.toInstant(),
+                completedAt.toInstant()
+        );
     }
 
     private void validateShadowRuns(Connection connection, List<ShadowRun> runs) throws SQLException {
@@ -237,36 +266,65 @@ final class CutoverEvidenceReader {
             statement.setBytes(1, UuidBytes.toBytes(runId));
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
-                    ComparisonType type = ComparisonType.valueOf(result.getString("comparison_type"));
-                    Timestamp comparedAt = result.getTimestamp("compared_at");
-                    if (comparedAt == null || comparedAt.toInstant().isAfter(completedAt)) {
-                        throw new SQLException("shadow comparison timestamp is inconsistent with its run");
-                    }
-                    JsonNode detail = parseDetail(result.getString("detail_json"));
-                    long compared = requiredNonNegativeLong(detail, "compared");
-                    long mismatched = requiredNonNegativeLong(detail, "mismatched");
-                    boolean matched = result.getBoolean("matched");
-                    if (result.wasNull()) {
-                        throw new SQLException("persisted shadow comparison match flag is missing");
-                    }
-                    if (mismatched > compared || matched != (mismatched == 0)) {
-                        throw new SQLException("inconsistent persisted shadow comparison detail");
-                    }
-                    Comparison previous = comparisons.put(
-                            type,
-                            new Comparison(matched, compared, mismatched)
-                    );
-                    if (previous != null) {
-                        throw new SQLException("duplicate persisted shadow comparison type");
-                    }
+                    putComparison(comparisons, result, completedAt);
                 }
-            } catch (IllegalArgumentException exception) {
-                throw new SQLException("unknown persisted shadow comparison type", exception);
             }
         }
         return comparisons.size() == ComparisonType.values().length
                 ? new ComparisonSummary(comparisons)
                 : null;
+    }
+
+    private void putComparison(
+            Map<ComparisonType, Comparison> comparisons,
+            ResultSet result,
+            Instant completedAt
+    ) throws SQLException {
+        ComparisonType type = parseComparisonType(result.getString("comparison_type"));
+        validateComparedAt(result.getTimestamp("compared_at"), completedAt);
+        JsonNode detail = parseDetail(result.getString("detail_json"));
+        long compared = requiredNonNegativeLong(detail, "compared");
+        long mismatched = requiredNonNegativeLong(detail, "mismatched");
+        boolean matched = requiredMatched(result);
+        validateComparisonCounts(compared, mismatched, matched);
+        Comparison previous = comparisons.put(type, comparison(matched, compared, mismatched));
+        if (previous != null) {
+            throw new SQLException("duplicate persisted shadow comparison type");
+        }
+    }
+
+    private static ComparisonType parseComparisonType(String persistedType) throws SQLException {
+        try {
+            return ComparisonType.valueOf(persistedType);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new SQLException("unknown persisted shadow comparison type", exception);
+        }
+    }
+
+    private static void validateComparedAt(Timestamp comparedAt, Instant completedAt)
+            throws SQLException {
+        if (comparedAt == null || comparedAt.toInstant().isAfter(completedAt)) {
+            throw new SQLException("shadow comparison timestamp is inconsistent with its run");
+        }
+    }
+
+    private static boolean requiredMatched(ResultSet result) throws SQLException {
+        boolean matched = result.getBoolean("matched");
+        if (result.wasNull()) {
+            throw new SQLException("persisted shadow comparison match flag is missing");
+        }
+        return matched;
+    }
+
+    private static void validateComparisonCounts(long compared, long mismatched, boolean matched)
+            throws SQLException {
+        if (mismatched > compared || matched != (mismatched == 0)) {
+            throw new SQLException("inconsistent persisted shadow comparison detail");
+        }
+    }
+
+    private static Comparison comparison(boolean matched, long compared, long mismatched) {
+        return new Comparison(matched, compared, mismatched);
     }
 
     private JsonNode parseDetail(String detailJson) throws SQLException {
