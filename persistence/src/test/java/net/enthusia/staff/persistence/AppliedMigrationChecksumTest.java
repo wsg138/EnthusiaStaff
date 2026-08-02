@@ -31,16 +31,17 @@ class AppliedMigrationChecksumTest {
 
     private static int flywayChecksum(String resourceName) throws IOException {
         CRC32 checksum = new CRC32();
-        try (InputStream stream = AppliedMigrationChecksumTest.class.getClassLoader()
-                .getResourceAsStream(resourceName)) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream stream = classLoader.getResourceAsStream(resourceName)) {
             if (stream == null) {
                 throw new IOException("Missing migration resource: " + resourceName);
             }
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
+                String line = reader.readLine();
+                while (line != null) {
                     checksum.update(line.getBytes(StandardCharsets.UTF_8));
+                    line = reader.readLine();
                 }
             }
         }
