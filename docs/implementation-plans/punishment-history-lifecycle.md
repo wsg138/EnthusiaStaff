@@ -35,7 +35,7 @@ Starting point: `main` at `e5823e109a59dc46de579d0e990ffd4954d7667e`.
 
 ## Current status
 
-Implementation, focused unit tests, MariaDB/Testcontainers integration tests, configuration/reload tests, and project documentation are complete on the feature branch. The remaining work is exact-head CI, full PR review, automated-review resolution, artifact verification, and the normal merge gate.
+Implementation, focused unit tests, MariaDB/Testcontainers integration tests, configuration/reload tests, and project documentation are complete on the feature branch. The first full review pass identified transaction, concurrency, reload-validation, identity-resolution, and documentation defects; those fixes are now committed. Remaining work is exact-head CI, review-thread resolution, artifact verification, and the normal merge gate.
 
 ## Boundaries
 
