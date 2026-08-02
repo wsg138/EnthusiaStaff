@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
 
@@ -49,7 +50,7 @@ public final class MariaDb {
     }
 
     public static MariaDbRuntime initialize(DatabaseConfig database) {
-        return initialize(database, ReportPolicy::defaults);
+        return initialize(database, ReportPolicyRuntime::current);
     }
 
     public static MariaDbRuntime initialize(
