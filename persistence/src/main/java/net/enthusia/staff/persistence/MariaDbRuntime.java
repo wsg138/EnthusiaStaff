@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
+import java.util.Objects;
+import java.util.function.Supplier;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.ports.CaseLookup;
@@ -29,6 +31,7 @@ import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
+import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
 import net.enthusia.staff.persistence.migration.FencedModerationStore;
 import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
@@ -61,7 +64,12 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final PunishmentDraftStore punishmentDraftStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
-        this.dataSource = dataSource;
+        this(dataSource, ReportPolicy::defaults);
+    }
+
+    MariaDbRuntime(HikariDataSource dataSource, Supplier<ReportPolicy> reportPolicy) {
+        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        Objects.requireNonNull(reportPolicy, "reportPolicy");
         ObjectMapper json = jsonMapper();
         Clock clock = Clock.systemUTC();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
@@ -99,7 +107,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.caseLookup = new JdbcCaseLookup(dataSource);
         this.caseReviewStore = new JdbcCaseReviewStore(dataSource, clock);
         this.moderationHistoryStore = new JdbcModerationHistoryStore(dataSource, caseReviewStore);
-        this.reportStore = new JdbcReportStore(dataSource, json);
+        this.reportStore = new JdbcReportStore(dataSource, json, reportPolicy, clock);
         this.inventoryJournalStore = new JdbcInventoryJournalStore(dataSource, json);
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
