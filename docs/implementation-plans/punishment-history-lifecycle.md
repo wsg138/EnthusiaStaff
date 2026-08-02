@@ -33,6 +33,10 @@ Starting point: `main` at `e5823e109a59dc46de579d0e990ffd4954d7667e`.
 8. Update command, permission, configuration, database, roadmap, manifest, blueprint, wiki, and requirements documentation.
 9. Review the complete diff and migrations, resolve valid review feedback, validate the exact final head through all configured checks, and merge with a normal merge commit only when clean.
 
+## Current status
+
+Implementation, focused unit tests, MariaDB/Testcontainers integration tests, configuration/reload tests, and project documentation are complete on the feature branch. The remaining work is exact-head CI, full PR review, automated-review resolution, artifact verification, and the normal merge gate.
+
 ## Boundaries
 
 No deployment, production database/player data, authority activation, LiteBans removal, issue #43 acceptance, Flyway repair, migration-history rewrite, direct main push, rebase, squash, force-push, or unrelated feature work.
