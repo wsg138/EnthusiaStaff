@@ -75,8 +75,7 @@ record PaperStorageBindings(
                 identifiers,
                 authorization,
                 punishment,
-                moderation.punishmentRequestStore(),
-                () -> runtime.operationalStateStore().current().mode()
+                moderation.punishmentRequestStore()
         );
         ApplicationServices services = new ApplicationServices(
                 punishment,
