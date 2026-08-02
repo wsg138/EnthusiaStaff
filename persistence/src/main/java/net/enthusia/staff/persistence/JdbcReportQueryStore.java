@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.report.ReportState;
 import net.enthusia.staff.domain.report.ReportSummary;
 
 final class JdbcReportQueryStore {
+    private static final int ABSOLUTE_QUERY_LIMIT = 100;
     private static final String ASSIGNED_TO = "assigned_to";
     private static final String REPORT_ID = "report_id";
     private static final String STATE = "state";
@@ -65,8 +66,9 @@ final class JdbcReportQueryStore {
     }
 
     List<ReportSummary> list(ReportQueue queue, UUID actorId, int limit) {
+        validateListRequest(queue, actorId, limit);
         ReportPolicy activePolicy = currentPolicy();
-        validateListRequest(queue, actorId, limit, activePolicy.queryLimit());
+        int effectiveLimit = Math.min(limit, activePolicy.queryLimit());
         QueueQuery query = queueQuery(queue);
         String sql = """
                 SELECT r.report_id, r.reporter_id, r.target_id, r.reason_id, r.state,
@@ -81,7 +83,7 @@ final class JdbcReportQueryStore {
                     query,
                     actorId,
                     clock.instant().minus(activePolicy.recentlyClosedWindow()),
-                    limit
+                    effectiveLimit
             );
             return readSummaries(statement);
         } catch (SQLException | IllegalArgumentException exception) {
@@ -115,15 +117,10 @@ final class JdbcReportQueryStore {
         }
     }
 
-    private static void validateListRequest(
-            ReportQueue queue,
-            UUID actorId,
-            int limit,
-            int configuredLimit
-    ) {
-        if (queue == null || actorId == null || limit < 1 || limit > configuredLimit) {
+    private static void validateListRequest(ReportQueue queue, UUID actorId, int limit) {
+        if (queue == null || actorId == null || limit < 1 || limit > ABSOLUTE_QUERY_LIMIT) {
             throw new IllegalArgumentException(
-                    "valid report queue, actor, and limit from 1 to " + configuredLimit + " are required"
+                    "valid report queue, actor, and limit from 1 to " + ABSOLUTE_QUERY_LIMIT + " are required"
             );
         }
     }
