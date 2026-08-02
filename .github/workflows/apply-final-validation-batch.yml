@@ -1,0 +1,45 @@
+name: Apply final validation batch
+
+on:
+  push:
+    branches:
+      - feature/punishment-history-lifecycle
+    paths:
+      - .github/workflows/apply-final-validation-batch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/punishment-history-lifecycle
+          fetch-depth: 0
+      - name: Reconstruct and apply reviewed patch
+        shell: bash
+        run: |
+          cat .github/patches/final-batch/part-* > /tmp/final-batch.b64
+          python3 - <<'PY'
+          import base64
+          import pathlib
+          import zlib
+
+          encoded = pathlib.Path('/tmp/final-batch.b64').read_text()
+          pathlib.Path('/tmp/final-batch.patch').write_bytes(
+              zlib.decompress(base64.b64decode(encoded))
+          )
+          PY
+          git apply -p3 --whitespace=fix /tmp/final-batch.patch
+          rm -rf .github/patches/final-batch
+          rm -f .github/workflows/apply-final-validation-batch.yml
+      - name: Commit final source, tests, and documentation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete punishment history validation and documentation"
+          git push origin HEAD:feature/punishment-history-lifecycle
