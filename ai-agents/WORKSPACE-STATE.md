@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-02 18:07 America/Indiana/Indianapolis
+Last updated: 2026-08-02 18:18 America/Indiana/Indianapolis
 
 This file is a concise routing record for the next AI agent. It must be verified against live GitHub and repository state before use.
 
@@ -10,34 +10,47 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Recorded `main` SHA | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
+| Current `main` SHA | **LIVE VERIFY FROM GITHUB** |
+| Checkpoint before AI-workspace PR | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
 
-## Current work
+## Current work after PR #47 merges
 
 | Field | Value |
 | --- | --- |
 | State | `IDLE` |
-| Active PR | None |
-| Active branch | None |
+| Active PR | None expected; verify live |
+| Active branch | None expected; verify live |
 | Active work item | None |
 | Known blocker | None |
 
-Before starting new work, inspect live open PRs and branches. Resume relevant unfinished work even when this table still says `IDLE`.
+Before starting new work, inspect live open PRs and branches. Resume relevant unfinished work even when this table says `IDLE`.
 
-## Last completed work
+## Latest repository-process update
+
+| Field | Value |
+| --- | --- |
+| PR | `#47 — Add shared AI agent workflow` |
+| Branch | `agent/add-ai-agent-workflow` |
+| Intended result | AI-agent rules, shared state, universal prompt, and handoff-report location merged into `main` |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-ai-agent-workspace.md` |
+| Exact validation and merge evidence | Read PR #47 live |
+
+The next agent must verify whether PR #47 merged successfully and reconcile this file if it did not.
+
+## Last completed product work
 
 | Field | Value |
 | --- | --- |
 | PR | `#46 — Add punishment history and sanction lifecycle workflow` |
 | Final feature head | `070cc5e0e7f65a33f8b57259f03324039d7a6369` |
 | Merge commit | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
-| Resulting `main` | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
+| Resulting `main` at that checkpoint | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr46-punishment-history.md` |
 
-Completed capabilities include:
+Completed product capabilities include:
 
 - database-bounded `/history`;
 - complete `/case` timeline;
@@ -54,7 +67,7 @@ Completed capabilities include:
 
 Priority: High
 
-Status: Prerequisites complete; no branch or PR recorded.
+Status: Prerequisites complete; no feature branch or PR recorded.
 
 Objective:
 
@@ -106,16 +119,16 @@ Read before implementation:
 
 ## Update contract
 
-The current work PR must update this file before merge.
+The current work PR must update this file before tracked content is frozen for exact-head validation.
 
 At minimum update:
 
-- recorded `main` or final feature head as appropriate;
 - active state, PR, branch, and work item;
-- completed work;
+- latest completed repository work;
+- latest completed product work when applicable;
 - next planned work;
 - migration boundary;
 - blockers;
 - handoff link.
 
-Because a merge commit does not exist until after the PR content is finalized, the handoff may record the final feature head and PR number before merge. The agent must verify the actual merge commit live after merging and record it in the PR description or final PR comment. The next agent must always reconcile this file with live GitHub.
+Do not create a circular commit sequence by attempting to embed the current PR's final SHA, final CI run IDs, or merge commit in this tracked file. Put exact final-head and merge evidence in the PR description or comments. The next agent must always reconcile this file with live GitHub.
