@@ -28,6 +28,7 @@ Live GitHub and code state take priority over this report. Read PR #48 for the e
 - The confirmation submits the exact revision displayed to staff and uses a stable operation UUID for idempotent retry behavior.
 - Applied and rejected results reload current report state; a refresh failure cannot erase or misreport a known commit outcome.
 - Rapid overlapping queue/detail loads are fenced per viewer so an older database response cannot replace a newer screen.
+- Report note capture only consumes an uncancelled chat event after higher-priority moderation input, preventing one message from feeding both report and sanction workflows.
 - Inventory movement and drag events are cancelled, state is bound to one viewer, and report permission is rechecked on interaction and presentation.
 - Database work stays on the existing bounded worker executor; inventory and message operations return to the player entity scheduler.
 - Pending input, load and confirmation state is removed when the player disconnects.
@@ -87,6 +88,7 @@ Confirmed defects fixed before final validation:
 1. **Out-of-order asynchronous navigation:** rapid queue/detail requests could complete in reverse order and reopen an older screen. Per-viewer load IDs now allow only the current request to present or report a load failure.
 2. **Off-thread player-state reads:** asynchronous report work used live `Player` UUID access. Actor/viewer UUIDs are now captured on the owning thread or read from immutable GUI state before worker execution.
 3. **Ambiguous post-commit refresh failure:** a committed report action followed by a failed detail reload could be presented as a failed mutation. Commit result and refresh result are now separated; unknown mutation failures explicitly say the outcome was not confirmed and require reopening before retry.
+4. **Cross-workflow private-input reuse:** report and sanction note capture could both consume the same chat message when both were pending. Report capture now runs after existing moderation capture and processes only an uncancelled event, so one message cannot advance both actions.
 
 Reviewed and preserved boundaries:
 
