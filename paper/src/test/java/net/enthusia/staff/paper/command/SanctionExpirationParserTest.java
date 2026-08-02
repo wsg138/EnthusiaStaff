@@ -33,7 +33,7 @@ final class SanctionExpirationParserTest {
 
     @Test
     void rejectsBlankMalformedZeroNegativeAndOverflowingValues() {
-        for (String value : new String[]{"", "0m", "-1h", "later", "1month", "999999999w"}) {
+        for (String value : new String[]{"", "0m", "-1h", "later", "1month", "999999999w", "2200-01-01T00:00:00Z"}) {
             assertTrue(parser.parse(value).isEmpty(), value);
         }
         assertTrue(parser.parse(null).isEmpty());

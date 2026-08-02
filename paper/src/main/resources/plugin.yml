@@ -30,6 +30,7 @@ commands:
   history:
     description: View database-paginated punishment and moderation history
     usage: /history <player|uuid> [page]
+    permission: enthusiastaff.history.view
   punish:
     description: Open or execute the central punishment workflow
     usage: /punish <player> [reason-id] or /punish resume <player>
