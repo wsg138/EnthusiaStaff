@@ -1,9 +1,9 @@
 name: Branch source export
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/punishment-history-lifecycle
+      - main
 
 permissions:
   contents: read
