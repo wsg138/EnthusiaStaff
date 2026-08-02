@@ -65,9 +65,7 @@ final class AuthoritativeWriteFence {
             if (result.next()) {
                 throw new SQLException("multiple operational state singleton rows found");
             }
-            // BOOTSTRAP permits direct persistence initialization and isolated store verification.
-            // Runtime command/service guards still prevent external punishment authority before ACTIVE.
-            return mode == OperationalMode.BOOTSTRAP || mode.destructiveWritesAllowed();
+            return mode.destructiveWritesAllowed();
         }
     }
 
