@@ -97,12 +97,14 @@ reviewed implementation while the requirements matrix records exact-head status.
 
 ## Current command gaps
 
-`/history` is implemented by PR #46. The remaining required top-level command
-not currently registered on `main` is:
+On the PR #46 feature branch, `/history` is implemented and the remaining required
+top-level command not registered there is:
 
 ```text
 /fakebase
 ```
+
+Until PR #46 merges, `main` is missing both `/history` and `/fakebase`.
 
 `/alts` and `/alt` are registered on Velocity, but the complete alt lifecycle,
 GUI, confidence, exception, inheritance and staging work remains unfinished.
