@@ -38,9 +38,14 @@ misrepresented as a separate runtime validation of another revision.
 | State | Open draft |
 | Branch | `section/plugin` |
 | Base | `main` at `14666c5b065571c227373ec9e13e82e978b689ca` |
-| Current source head | `f4cf0c6f824296b8677272c248cc5bb689c25417` |
-| Ahead/behind | 70 commits ahead and 0 behind current `main` |
-| Current automated validation | Coverage run `30733659455` succeeded on the exact head; CodeRabbit commit status is successful; no unresolved inline review threads are present |
+| Current source head | `aa2d737a5f33f0337010932723f46ce1e356c867` |
+| Ahead/behind | 76 commits ahead and 0 behind current `main` |
+| Current exact-head validation | Coverage run `30734750010`, job `91461410381`, success on Java `21.0.11+10`; `BUILD SUCCESSFUL in 4m 33s`; 49 actionable tasks, 40 executed and 9 up-to-date |
+| Current validation artifact | Artifact `8829206603`, 17,666,263 bytes, digest `sha256:a83c31584de98112dd26ea43a80f7f9f3d4b20bc25b1e031b94b24907196bde4` |
+| Current runtime JARs | Paper: 8,679,362 bytes, SHA-256 `d06715dc6513ce0ceb4ace1e70351a73c618269098529b9aa3da981b3919de61`; Velocity: 7,703,559 bytes, SHA-256 `cb484583b1c5c2ed78ec92fd78295978714c4b2e478a19b65fa8dc67d78a7f22` |
+| Current packaging and coverage | Exactly one ZIP-valid Paper and Velocity JAR; 24 provider API types checked; zero leaks; lines 46.05%, branches 36.65%, instructions 48.49%; Codacy upload/final notification succeeded |
+| Pi staging | Source run `30731471656`, job `91452542471`, and staging run `30731479127` succeeded for runtime source `8de1423f82380d9ccdd29143480409b5a53821dc`; changes from that SHA to the current tree are tests, docs, analysis configuration and temporary workflow cleanup, with no production runtime-source or migration-byte differences |
+| Review state | CodeRabbit status successful; no unresolved inline review threads; the six corrective commits after `f4cf0c6f824296b8677272c248cc5bb689c25417` net to zero file differences |
 | Current implementation scope | Durable cutover state, maintenance and abort, activation linkage, duplicate handling, emergency freeze, writer fencing, cross-server coordination, restart recovery, audit persistence and minimum pool behavior |
 | Remaining blocker | Issue #43 — `Complete LiteBans cutover production-like acceptance` |
 | Merge boundary | Green CI is necessary but not sufficient; PR #37 must remain draft until one exact acceptance record satisfies `docs/cutover-acceptance.md` and issue #43 |
@@ -48,7 +53,9 @@ misrepresented as a separate runtime validation of another revision.
 
 PR #37 is the only current implementation branch. Do not create a synchronization
 commit unless it actually becomes behind `main`; do not rebase or force-push it.
-Migrations V11, V12 and V13 are checksum-locked and may not be changed.
+V11, V12 and V13 contain the deployed checksum-locked bytes without scanner-only
+comments. Do not edit them again; scanner suppression belongs in `.codacy.yml`,
+and future schema changes require a new migration.
 
 ## Related repositories
 
