@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.report;
 
-import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +19,9 @@ import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -63,6 +64,7 @@ public final class ReportGuiController implements Listener {
             throw new IllegalArgumentException("report queue must be present");
         }
         if (authorized(viewer)) {
+            inputCaptures.remove(viewer.getUniqueId());
             loadQueue(viewer, queue, 0);
         }
     }
@@ -72,8 +74,49 @@ public final class ReportGuiController implements Listener {
             throw new IllegalArgumentException("reportId must be present");
         }
         if (authorized(viewer)) {
+            inputCaptures.remove(viewer.getUniqueId());
             loadDetails(viewer, ReportQueue.OPEN, 0, reportId);
         }
+    }
+
+    public void acceptNote(Player viewer, String input) {
+        if (!authorized(viewer)) {
+            inputCaptures.remove(viewer.getUniqueId());
+            return;
+        }
+        InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
+        if (capture == null) {
+            viewer.sendMessage(Component.text("No report action is waiting for a note."));
+            return;
+        }
+        String note = input == null ? "" : input.trim();
+        if (note.isBlank() || note.length() > 2_000) {
+            viewer.sendMessage(Component.text("The private action note must contain 1 to 2000 characters."));
+            openState(viewer, capture.state());
+            return;
+        }
+        openState(viewer, new ReportGuiState.Review(
+                viewer.getUniqueId(),
+                capture.state().queue(),
+                capture.state().queuePage(),
+                capture.state().details(),
+                capture.action(),
+                note,
+                UUID.randomUUID()
+        ));
+    }
+
+    public void cancelNote(Player viewer) {
+        if (!authorized(viewer)) {
+            inputCaptures.remove(viewer.getUniqueId());
+            return;
+        }
+        InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
+        if (capture == null) {
+            viewer.sendMessage(Component.text("No report action is waiting for a note."));
+            return;
+        }
+        openState(viewer, capture.state());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -109,19 +152,6 @@ public final class ReportGuiController implements Listener {
         if (event.getView().getTopInventory().getHolder(false) instanceof ReportGuiHolder) {
             event.setCancelled(true);
         }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onChat(AsyncChatEvent event) {
-        Player viewer = event.getPlayer();
-        UUID viewerId = viewer.getUniqueId();
-        InputCapture capture = inputCaptures.get(viewerId);
-        if (capture == null || event.isCancelled() || !inputCaptures.remove(viewerId, capture)) {
-            return;
-        }
-        event.setCancelled(true);
-        String input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-        onEntity(viewer, () -> completeInput(viewer, capture, input));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -209,30 +239,12 @@ public final class ReportGuiController implements Listener {
     private void beginInput(Player viewer, ReportGuiState.Detail state, ReportAction action) {
         inputCaptures.put(viewer.getUniqueId(), new InputCapture(state, action));
         viewer.closeInventory();
-        viewer.sendMessage(Component.text(
-                "Type the private report action note in chat, or type cancel. The message will not be broadcast."
-        ));
-    }
-
-    private void completeInput(Player viewer, InputCapture capture, String input) {
-        if (input.equalsIgnoreCase("cancel")) {
-            openState(viewer, capture.state());
-            return;
-        }
-        if (input.isBlank() || input.length() > 2_000) {
-            viewer.sendMessage(Component.text("The private action note must contain 1 to 2000 characters."));
-            openState(viewer, capture.state());
-            return;
-        }
-        openState(viewer, new ReportGuiState.Review(
-                viewer.getUniqueId(),
-                capture.state().queue(),
-                capture.state().queuePage(),
-                capture.state().details(),
-                capture.action(),
-                input,
-                UUID.randomUUID()
-        ));
+        Component command = Component.text("/reports note ", NamedTextColor.YELLOW)
+                .clickEvent(ClickEvent.suggestCommand("/reports note "))
+                .hoverEvent(HoverEvent.showText(Component.text("Click to prepare the private note command")));
+        viewer.sendMessage(Component.text("Enter the private report action note with ")
+                .append(command)
+                .append(Component.text("<note>, or run /reports cancel. The note is not public chat.")));
     }
 
     private void confirm(Player viewer, ReportGuiState.Review state) {
