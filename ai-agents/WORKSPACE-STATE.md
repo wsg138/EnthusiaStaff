@@ -35,7 +35,7 @@ Before starting new work, inspect live open PRs and branches. Resume relevant un
 | PR | `#47 — Add shared AI agent workflow` |
 | Branch | `agent/add-ai-agent-workflow` |
 | Intended result | AI-agent rules, shared state, universal prompt, and handoff-report location merged into `main` |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-ai-agent-workspace.md` |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr47-ai-agent-workspace.md` |
 | Exact validation and merge evidence | Read PR #47 live |
 
 The next agent must verify whether PR #47 merged successfully and reconcile this file if it did not.
