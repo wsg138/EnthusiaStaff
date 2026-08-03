@@ -39,11 +39,13 @@ class StaffModeAccessPolicyTest {
 
     @Test
     void adminEnderChestIsViewOnlyAndFounderRetainsOwnerAccess() {
+        assertFalse(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.ADMIN));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.ADMIN));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.ADMIN));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.ADMIN));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.ADMIN));
 
+        assertFalse(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.FOUNDER));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.FOUNDER));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.FOUNDER));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
