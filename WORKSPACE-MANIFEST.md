@@ -14,8 +14,7 @@ This manifest records repository, validation and authority boundaries for develo
 | Latest merged product PR | PR #49 — modular report configuration and safe reload |
 | Latest merged feature head | `1ad41be3eeca49370694916f386dda0484e3bfa3` |
 | Latest merge commit | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
-| Current coordination PR | PR #50 — post-PR #49 reconciliation and RoseChat provider blocker |
-| Current branch | `docs/record-rosechat-provider-blocker` |
+| Coordination record | PR #50 — post-PR #49 reconciliation and RoseChat provider blocker; verify live closure |
 | Migration boundary | V14 is latest; V1–V14 are immutable |
 | Dormant default | Startup remains non-`ACTIVE`; merging development code does not activate authority |
 | Production authority | **LiteBans remains authoritative** |
@@ -93,7 +92,7 @@ Each related project remains an independent Git repository. Histories must not b
 
 ## Current development route
 
-1. Finish PR #50 documentation review, exact-head validation and normal merge if all documentation gates pass.
+1. Verify PR #50's live merge or blocker state, resulting `main`, unresolved-thread count and branch cleanup.
 2. Obtain or publish the supported RoseChat provider contract before implementing the private-message callback.
 3. If that external input remains unavailable, re-check live GitHub and select the highest-priority prerequisite-complete feature from the goals, development map and requirements matrix.
 4. Keep one coherent item per PR and do not silently combine the blocked RoseChat work with another feature.
