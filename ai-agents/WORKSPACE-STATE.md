@@ -24,7 +24,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Feature branch to verify | `fix/staffmode-tool-transfer-bypasses` |
 | Completed work item | Close staff-mode number-key hotbar and inventory offhand transfer paths that could move protected staff tools without the clicked item or cursor containing the tool |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-staffmode-tool-transfer-bypasses.md` |
-| Exact validation/merge evidence | Read PR #56 live; exact SHA, Coverage, Wiki, Pi, Codacy, artifacts, reviews and merge evidence belong in PR metadata |
+| Exact validation/merge evidence | Read PR #56 live. Require one unchanged exact feature head synchronized with current `main`; terminal results for every configured Java 21, MariaDB/Testcontainers, migration immutability, runtime-JAR/provider-leak, coverage, Codacy/static-analysis, wiki/documentation, applicable public/private Pi and review gate; zero unresolved valid threads; exact run/job/artifact identities and hashes; normal merge commit; resulting `main`; feature-head containment; no unmerged branch commits; and branch cleanup. A Pi exception is valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for that exact head and the exception is recorded in PR metadata. |
 | External blocker | Supported RoseChat private-message provider contract remains unavailable; track it through a focused blocker issue and the normal handoff rather than issue #43 |
 
 ## Start-state reconciliation for PR #56
@@ -84,7 +84,7 @@ PR #56 is a bounded staff/player-visible leak-prevention correction under priori
 
 The public Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may show Coverage and Wiki while omitting the Pi wrapper. Agents must inspect the public wrapper and correlated private `wsg138/EnthusiaStaff-Staging` run directly rather than treating an omitted commit-scoped result as absent or non-applicable.
 
-Cancelled and superseded runs are not validation evidence. For PR #56, final exact-head Pi must reach a terminal successful result when configured and triggered before merge.
+Cancelled, superseded, skipped, different-revision and merge-ref-only runs are not exact-head validation evidence. For PR #56, a configured and triggered Pi gate requires a terminal successful public wrapper and correlated private staging run for the final exact feature head. A Pi exception is valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for that exact head and the exception is recorded in PR metadata.
 
 ## Blocked-work routing
 
@@ -111,7 +111,7 @@ LiteBans remains authoritative. Issue #43 remains open specifically for producti
 
 ## Next route
 
-1. Verify PR #56's frozen exact head, terminal Coverage/Wiki/Pi/Codacy and review state, normal merge result, resulting `main`, feature-head containment and branch cleanup.
+1. Apply the complete exact-head gate recorded above to PR #56: verify one unchanged feature head synchronized with current `main`, every configured terminal check or a documented valid Pi exception, exact artifacts/hashes, zero unresolved valid threads, normal merge evidence, resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup.
 2. After PR #56 is complete, select one separate bounded staff-mode lifecycle or restriction-enforcement item after fresh live reconciliation; rank-change correction or reload/disable recovery are candidate areas, not preselected work.
 3. Continue owner priority one before report notification work when prerequisites are comparable.
 4. Track unavailable RoseChat provider APIs through focused blocker routing rather than issue #43.
