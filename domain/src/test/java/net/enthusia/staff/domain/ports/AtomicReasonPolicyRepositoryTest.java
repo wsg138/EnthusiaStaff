@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 class AtomicReasonPolicyRepositoryTest {
     private static final String INITIAL_VERSION = "v1";
     private static final String CHAT_POLICY_ID = "chat.harassment";
+    private static final String ALIAS_ID = "chat.targeted-harassment";
     private static final String POLAR_TEMPLATE_ID = "cheating.polar.template";
     private static final String POLAR_SPEED_ID = "cheating.polar.speed";
 
@@ -68,17 +69,15 @@ class AtomicReasonPolicyRepositoryTest {
         AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
                 "v2",
                 List.of(canonical),
-                Map.of("chat.targeted-harassment", canonical.id()),
+                Map.of(ALIAS_ID, canonical.id()),
                 List.of()
         );
 
-        ReasonPolicy resolved = repository.resolve("chat.targeted-harassment").orElseThrow().policy();
-        ReasonPolicyRepository.ReasonDescriptor descriptor = repository
-                .describe("chat.targeted-harassment")
-                .orElseThrow();
+        ReasonPolicy resolved = repository.resolve(ALIAS_ID).orElseThrow().policy();
+        ReasonPolicyRepository.ReasonDescriptor descriptor = repository.describe(ALIAS_ID).orElseThrow();
 
         assertEquals(canonical, resolved);
-        assertEquals("v2", repository.resolve("chat.targeted-harassment").orElseThrow().version());
+        assertEquals("v2", repository.resolve(ALIAS_ID).orElseThrow().version());
         assertEquals(ReasonPolicyRepository.ReasonAvailability.ALIAS, descriptor.availability());
         assertEquals(canonical.id(), descriptor.canonicalId());
         assertTrue(descriptor.resolvesToActivePolicy());
