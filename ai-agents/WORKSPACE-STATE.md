@@ -10,7 +10,7 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | `4f7165adced48d98bce86730e89b92944afba063` at this work-item start; live verify before acting |
+| Current `main` SHA | `4f7165adced48d98bce86730e89b92944afba063` at PR #52 start; live verify before acting |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
@@ -19,15 +19,17 @@ This file is a concise routing record for the next AI agent. It must be verified
 
 | Field | Value |
 | --- | --- |
-| Work state | `PLANNING` |
-| Intended post-merge state | `IDLE` after the current PR is live-verified |
-| Active PR | Draft PR to be opened from `feature/escalation-policy-aliases` |
-| Active branch | `feature/escalation-policy-aliases` |
-| Active work item | Add explicit versioned reason aliases and readable-but-unselectable removed reason IDs |
-| Implementation state | Live state reconciled; implementation and focused tests pending |
+| Work state | `VALIDATING` |
+| Intended post-merge state | `IDLE` after PR #52 is live-verified |
+| Active PR | `#52 — Add versioned reason aliases and removed-ID presentation` until live merge verification |
+| Active branch | `feature/escalation-policy-aliases` until live merge and cleanup verification |
+| Active work item | Explicit reason aliases plus readable-but-unresolvable removed reason metadata |
+| Implementation state | Complete scoped code, focused tests, harsh-review fixes, documentation and handoff frozen before exact-head validation |
 | Known product blocker | Supported RoseChat private-message provider contract remains unavailable |
-| Handoff | Pending final immutable report under `ai-agents/reports/agent-handoffs/` |
-| Exact validation and merge evidence | Read the active PR live after it is opened |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr52-reason-policy-compatibility.md` |
+| Exact validation and merge evidence | Read PR #52 live |
+
+If PR #52 is merged, no implementation PR remains active. The broader escalation requirement remains partial, and RoseChat remains externally blocked.
 
 ## Live reconciliation at work-item start
 
@@ -39,29 +41,53 @@ This file is a concise routing record for the next AI agent. It must be verified
 - The live highest migration remained `V14__punishment_history_and_exact_sanction_changes.sql`.
 - The supported RoseChat callback/API contract remained unavailable and was not invented.
 
-## Selected work
+## PR #52 completed behavior
 
-The goals and current development map require explicit aliases for renamed stable reason IDs and readable historical metadata for removed IDs. Current code supports only active IDs, so a rename makes stored identifiers unresolved and adding a removed ID back to the active catalog would make it selectable again.
+- Optional `aliases` map old stable reason IDs directly to one active canonical policy.
+- Alias self-targets, chains, unknown targets, duplicate sources, malformed IDs and active/removed overlap are rejected.
+- Aliases resolve current policy behavior but never enter the active selection list.
+- New punishment plans evaluated through an alias commit the canonical reason ID, family, public reason and current configuration version.
+- Optional `removed-reasons` entries provide stable ID, family and display metadata without a ladder.
+- Removed IDs remain readable in historical/saved-review presentation but cannot resolve, enter selection or create a new punishment.
+- Removed dynamic `cheating.polar.*` identifiers block template expansion.
+- Version, active policies, aliases and removed metadata publish and restore as one atomic snapshot assembled from one repository read.
+- Existing policy files without compatibility sections remain valid.
+- Existing stored cases, sanctions, ordinals, expirations, drafts, requests and audit records are not rewritten.
+- No command, permission, provider contract, schema or migration changed.
 
-This work will keep selection and historical presentation separate:
+## Separate harsh review
 
-- active policies remain the only selectable policies;
-- aliases resolve historical renamed IDs to one active canonical policy;
-- removed IDs expose bounded display metadata without a punishment ladder;
-- aliases and removed metadata are validated and atomically reloaded with the active catalog;
-- no existing stored ordinal, sanction, case, draft, request or configuration snapshot will be rewritten.
+The complete PR was reviewed for active/historical separation, direct service behavior, dynamic Polar expansion, alias validation, removed-ID selection, startup degradation, reload rollback, concurrent snapshot consistency, immutable ownership, compatibility and stored-history preservation.
+
+Two confirmed defects were fixed before freeze:
+
+1. removed `cheating.polar.*` IDs could still resolve through dynamic template expansion;
+2. reload snapshots could mix metadata because they were assembled from separate atomic reads.
+
+Focused regression coverage was added. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
 
 ## Migration state
 
 | Field | Value |
 | --- | --- |
-| Live highest migration at work start | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration at PR #52 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
-| Current work schema expectation | No migration required |
+| PR #52 schema result | No migration added or edited |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
+
+## Remaining escalation work
+
+The alias/removed-ID compatibility slice is complete in PR #52, but the broader escalation requirement remains partial. Separate future work still includes:
+
+- explicit policy-snapshot behavior across ladder edits;
+- serious-offense decay metadata;
+- wider combined-recommendation and acceptance coverage;
+- the broader modular punishment and escalation configuration tree.
+
+Do not silently expand PR #52 into those separate feature slices.
 
 ## RoseChat provider blocker
 
@@ -71,10 +97,10 @@ Do not add reflection against unknown RoseChat internals, invent provider-owned 
 
 ## Next legitimate work
 
-1. Finish, harsh-review, freeze, validate and merge the current reason-alias/removed-ID compatibility slice if every gate passes.
+1. Verify PR #52's exact live head, checks, reviews, merge state, resulting `main` and branch cleanup.
 2. Resume RoseChat only if the required supported provider contract becomes available.
-3. Otherwise select one prerequisite-ready escalation-policy slice after fresh live reconciliation; policy snapshot behavior across ladder edits is the likely next escalation item.
-4. Do not begin the next feature inside the current PR.
+3. Otherwise select one prerequisite-ready escalation-policy slice after fresh goals, blueprint, matrix and code reconciliation; policy-snapshot behavior across ladder edits is the current likely candidate.
+4. Do not begin the next feature inside PR #52.
 
 ## Production and release boundary
 
