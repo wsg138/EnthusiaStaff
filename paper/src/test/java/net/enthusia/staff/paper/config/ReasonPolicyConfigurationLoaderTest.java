@@ -76,7 +76,7 @@ class ReasonPolicyConfigurationLoaderTest {
         assertEquals(Map.of("chat.old-harassment", CHAT_POLICY_ID), loaded.aliases());
         assertEquals(1, loaded.removedReasons().size());
         assertEquals("Retired abusive language", loaded.removedReasons().getFirst().publicReason());
-        assertFalse(loaded.policies().stream().anyMatch(policy -> policy.id().equals("chat.retired-abuse")));
+        assertFalse(loaded.policies().stream().anyMatch(policy -> "chat.retired-abuse".equals(policy.id())));
     }
 
     @Test
