@@ -51,4 +51,10 @@ class StaffModeAccessPolicyTest {
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.FOUNDER));
     }
+
+    @Test
+    void unresolvedRankFailsClosedForEnderChestAccess() {
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(null));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(null));
+    }
 }
