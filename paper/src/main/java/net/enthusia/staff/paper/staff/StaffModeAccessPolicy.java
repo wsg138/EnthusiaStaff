@@ -10,7 +10,7 @@ final class StaffModeAccessPolicy {
     }
 
     static boolean blocksAllInventoryMutation(StaffRank rank) {
-        return rank == StaffRank.HELPER;
+        return rank == null || rank == StaffRank.HELPER || rank == StaffRank.SYSTEM;
     }
 
     static boolean blocksEnderChestOpen(StaffRank rank) {
@@ -53,6 +53,6 @@ final class StaffModeAccessPolicy {
     }
 
     static boolean hasAdvancedStaffTools(StaffRank rank) {
-        return rank != StaffRank.HELPER;
+        return rank != null && rank != StaffRank.HELPER && rank != StaffRank.SYSTEM;
     }
 }
