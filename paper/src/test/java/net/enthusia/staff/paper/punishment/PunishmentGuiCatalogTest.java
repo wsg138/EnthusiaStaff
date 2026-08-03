@@ -109,7 +109,7 @@ class PunishmentGuiCatalogTest {
                 ReasonPolicyRepository.ReasonAvailability.REMOVED,
                 catalog.describe(removed.id()).orElseThrow().availability()
         );
-        assertFalse(catalog.describe(removed.id()).orElseThrow().selectable());
+        assertFalse(catalog.describe(removed.id()).orElseThrow().resolvesToActivePolicy());
     }
 
     private static PunishmentGuiCatalog catalog() {
