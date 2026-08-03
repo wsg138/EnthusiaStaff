@@ -20,7 +20,12 @@ final class PaperReasonPolicyBootstrap {
         try {
             ReasonPolicyConfigurationLoader.LoadedPolicies loaded =
                     new ReasonPolicyConfigurationLoader().load(file);
-            return Optional.of(new AtomicReasonPolicyRepository(loaded.version(), loaded.policies()));
+            return Optional.of(new AtomicReasonPolicyRepository(
+                    loaded.version(),
+                    loaded.policies(),
+                    loaded.aliases(),
+                    loaded.removedReasons()
+            ));
         } catch (ConfigurationValidationException exception) {
             degrade.accept(exception.getMessage());
             logger.log(
