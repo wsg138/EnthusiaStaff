@@ -18,7 +18,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import net.enthusia.staff.common.DurationParser;
 import net.enthusia.staff.common.ParsedDuration;
 import net.enthusia.staff.domain.report.ReportPolicy;
@@ -41,6 +43,15 @@ public final class ReportConfigurationLoader {
 
     private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
     private final DurationParser durations = new DurationParser();
+    private final Predicate<Material> itemMaterial;
+
+    public ReportConfigurationLoader() {
+        this(Material::isItem);
+    }
+
+    ReportConfigurationLoader(Predicate<Material> itemMaterial) {
+        this.itemMaterial = Objects.requireNonNull(itemMaterial, "itemMaterial");
+    }
 
     public ReportConfigurationSnapshot load(Path policyFile, Path guiFile) {
         try (Reader policy = Files.newBufferedReader(policyFile);
@@ -197,13 +208,13 @@ public final class ReportConfigurationLoader {
         return Map.copyOf(values);
     }
 
-    private static Map<String, Material> materialMap(JsonNode node, Set<String> keys, String path) {
+    private Map<String, Material> materialMap(JsonNode node, Set<String> keys, String path) {
         requireExactKeys(node, keys, path);
         Map<String, Material> values = new HashMap<>();
         for (String key : keys) {
             String raw = text(node, key, path);
             Material material = Material.matchMaterial(raw.toUpperCase(Locale.ROOT));
-            if (material == null || !material.isItem()) {
+            if (material == null || !itemMaterial.test(material)) {
                 throw invalid(path + "." + key + " is not a valid item material");
             }
             values.put(key, material);
