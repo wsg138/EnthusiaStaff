@@ -33,6 +33,28 @@ class AtomicReasonPolicyRepositoryTest {
     }
 
     @Test
+    void removedPolarIdentifiersBlockTemplateExpansion() {
+        RemovedReason removed = new RemovedReason(
+                "cheating.polar.speed",
+                "cheating.polar",
+                "Retired Polar speed detection"
+        );
+        AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
+                "v2",
+                List.of(policy("cheating.polar.template")),
+                Map.of(),
+                List.of(removed)
+        );
+
+        assertTrue(repository.find(removed.id()).isEmpty());
+        assertTrue(repository.resolve(removed.id()).isEmpty());
+        assertEquals(
+                ReasonPolicyRepository.ReasonAvailability.REMOVED,
+                repository.describe(removed.id()).orElseThrow().availability()
+        );
+    }
+
+    @Test
     void aliasesResolveToCanonicalPoliciesWithoutBecomingSelectableEntries() {
         ReasonPolicy canonical = policy("chat.harassment");
         AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
