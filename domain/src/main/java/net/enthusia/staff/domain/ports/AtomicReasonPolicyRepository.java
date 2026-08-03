@@ -44,6 +44,16 @@ public final class AtomicReasonPolicyRepository implements ReasonPolicyRepositor
         state.set(validated(version, policies, aliases, removedReasons));
     }
 
+    public PolicySnapshot snapshot() {
+        State snapshot = state.get();
+        return new PolicySnapshot(
+                snapshot.version(),
+                List.copyOf(snapshot.policies().values()),
+                snapshot.aliases(),
+                List.copyOf(snapshot.removedReasons().values())
+        );
+    }
+
     @Override
     public Optional<ReasonPolicy> find(String reasonId) {
         State snapshot = state.get();
@@ -223,6 +233,20 @@ public final class AtomicReasonPolicyRepository implements ReasonPolicyRepositor
             throw new IllegalArgumentException(name + " must be a stable lowercase identifier");
         }
         return value.trim();
+    }
+
+    public record PolicySnapshot(
+            String version,
+            List<ReasonPolicy> policies,
+            Map<String, String> aliases,
+            List<RemovedReason> removedReasons
+    ) {
+        public PolicySnapshot {
+            version = version.trim();
+            policies = List.copyOf(policies);
+            aliases = Map.copyOf(aliases);
+            removedReasons = List.copyOf(removedReasons);
+        }
     }
 
     private record State(
