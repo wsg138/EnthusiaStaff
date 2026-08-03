@@ -52,6 +52,8 @@ one existing report command/GUI/persistence workflow.
   rather than introducing a second report interface.
 - Each open report inventory now retains the configuration snapshot used to render
   it. A later reload cannot reinterpret an old slot click with a new layout.
+- Added value-based equality across every GUI configuration field so a semantically
+  unchanged reload remains a true no-op.
 - Console and Bedrock text-command fallbacks remain available through the existing
   `/reports` command workflow.
 
@@ -64,7 +66,8 @@ one existing report command/GUI/persistence workflow.
   configuration coordinator.
 - Invalid report input does not run the delegated reload and leaves the previous
   report snapshot active.
-- Successful candidates are published atomically after the existing reload succeeds.
+- Successful changed candidates are published atomically after the existing reload
+  succeeds; equivalent candidates retain the existing active snapshot.
 - Reload publication is serialized against the shared report configuration holder.
 - Active persistence stores receive the current policy through a supplier; no
   database reconnect or migration is required.
@@ -72,8 +75,8 @@ one existing report command/GUI/persistence workflow.
 ### Tests and documentation
 
 - Added loader tests for shipped defaults, unknown fields and overlapping slots.
-- Added reload tests proving invalid candidates preserve prior state and successful
-  candidates publish atomically.
+- Added reload tests proving invalid candidates preserve prior state, equivalent
+  candidates remain no-ops, and changed candidates publish atomically.
 - Added a MariaDB/Testcontainers scenario proving a configured one-report ceiling
   and query-result cap are enforced.
 - Added registry-independent Paper test fixtures while retaining live Paper
@@ -98,10 +101,18 @@ Confirmed findings and fixes:
    `Material.isItem()`.** The failed workflow was inspected directly. Fixed by
    injecting material validation into the loader: production uses the live Paper
    predicate and tests use a deterministic registry-independent predicate.
+5. **Equivalent GUI configurations compared by identity, so unchanged reloads were
+   reported and published as changes.** Fixed with value-based `equals`/`hashCode`
+   and a fresh-equivalent-candidate reload regression test.
 
-No unresolved implementation defect or merge blocker remains recorded in tracked
-content. Final live review threads and analyzer results still must be checked on the
-frozen head before merge.
+One analyzer thread claiming non-multiple-of-nine inventory sizes pass the loader
+was reviewed and rejected as not valid: `ReportGuiConfiguration` already performs
+that check during `parseGui` construction, before the loader returns a snapshot or
+any inventory can open.
+
+No unresolved valid implementation defect or merge blocker remains recorded in
+tracked content. Final live review threads and analyzer results still must be checked
+on the new frozen head before merge.
 
 ## Validation contract
 
