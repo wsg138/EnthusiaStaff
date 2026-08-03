@@ -8,8 +8,8 @@ Date: 2026-08-03
 - Work item: enforce the configured Admin staff-mode Ender chest boundary as view-only
 - Starting `main`: `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`
 - Branch: `fix/admin-staffmode-ender-view-only`
-- Pull request: draft PR to be assigned
-- Current state: `PLANNING`
+- Pull request: `#55 — Enforce Admin staff-mode Ender view-only access`
+- Current state: `IMPLEMENTING`
 
 ## Live baseline
 
@@ -21,17 +21,35 @@ Date: 2026-08-03
 
 ## Confirmed gap
 
-The authoritative rank contract says Admin staff mode may use creative mode but Ender chest access is view-only unless a separate destructive workflow authorizes mutation. The current Paper policy uses one predicate for both opening and mutation. It blocks Helper, Mod, and Developer from opening Ender chests, but permits Admin and Founder to open and mutate them. An Admin can therefore move items into, out of, or within an Ender chest while staff mode is active, bypassing the player-state safety boundary.
+The authoritative rank contract says Admin staff mode may use creative mode but Ender chest access is view-only unless a separate destructive workflow authorizes mutation. The previous Paper policy used one predicate for both opening and mutation. It blocked Helper, Mod, and Developer from opening Ender chests, but permitted Admin and Founder to open and mutate them. An Admin could therefore move items into, out of, or within an Ender chest while staff mode was active, bypassing the player-state safety boundary.
 
-## Scope
+## Implemented behavior
 
-- separate Ender chest open access from Ender chest mutation authority;
-- keep Helper, Mod, and Developer unable to open Ender chests in staff mode;
-- allow Admin to open an Ender chest while cancelling every inventory click or drag in that view;
-- preserve Founder owner-level configured access;
-- add focused policy tests covering every rank boundary;
-- update repository routing, requirements evidence, workspace state, manifest, and this canonical handoff;
-- perform a separate harsh review of the complete PR diff and exact-head validation before merge.
+- Ender chest open access and mutation authority are separate policy decisions.
+- Helper, Mod, and Developer remain unable to open an Ender chest while staff mode is active.
+- Admin may open the Ender chest, but every click and drag in that inventory view is cancelled, including transfer attempts involving the bottom inventory.
+- Founder retains normal configured owner access.
+- General Admin creative-inventory interaction outside an Ender chest view remains available.
+- Staff tools remain protected by the existing click/drag checks.
+
+## Tests
+
+`StaffModeAccessPolicyTest` now covers:
+
+- Helper full inventory restriction and Ender denial;
+- Mod Ender open and mutation denial;
+- Developer Ender denial while preserving technical staff tools and request-only punishment authority;
+- Admin creative mode with view-only Ender access;
+- Founder creative mode with owner-level Ender access.
+
+## Remaining work in this PR
+
+- update requirements and workspace routing records;
+- inspect hosted build/test/static-analysis results;
+- perform and record a separate harsh review of the complete diff;
+- fix every confirmed defect or merge blocker;
+- freeze the canonical handoff and expected post-merge state;
+- complete one unchanged exact-head validation cycle and merge only if every gate passes.
 
 ## Exclusions
 
@@ -40,6 +58,10 @@ This work does not implement a general inventory-inspection workflow, offline En
 ## Validation contract
 
 Before merge, the unchanged final feature head must satisfy the repository's configured Java 21 build and tests, Paper tests, runtime-JAR and provider-leak checks, static analysis, wiki/documentation validation, applicable exact-head Pi validation, and zero unresolved valid review threads. Exact SHA, workflow, job, artifact, hash, and merge evidence belongs in live PR metadata rather than this tracked file.
+
+## Harsh-review findings
+
+Not yet frozen. Findings will be classified here as merge blockers, confirmed defects, optional cleanup, or unrelated future work.
 
 ## Migration and production boundaries
 
