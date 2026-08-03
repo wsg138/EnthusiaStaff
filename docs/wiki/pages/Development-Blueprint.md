@@ -15,7 +15,7 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 - PR #49 is the latest merged product checkpoint.
 - Its feature head is `1ad41be3eeca49370694916f386dda0484e3bfa3` and normal merge commit is `d07cb888952fde575a4f8245571f8d1ebc858b63`.
-- PR #50 is the documentation-only reconciliation for the unavailable RoseChat provider contract.
+- PR #50 records the post-PR #49 reconciliation and unavailable RoseChat provider contract; verify its live closure before acting.
 - V14 remains the live highest Flyway migration; V1–V14 are immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
@@ -31,17 +31,16 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Finish PR #50 reconciliation
+### 1. Verify PR #50 closure
 
-PR #50 must:
+Before beginning implementation:
 
-- keep its scope documentation-only;
-- record the unavailable RoseChat repository/API without inventing implementation details;
-- reconcile workspace state, manifest, development routing and the latest handoff;
-- pass the exact-head documentation/wiki and static-analysis checks that actually run;
-- resolve every valid review finding;
-- use a normal merge commit if every documentation gate passes;
-- avoid deployment, production access, authority changes and migration edits.
+- verify PR #50's live merge or blocker state;
+- read its exact-head and merge evidence from GitHub;
+- confirm the resulting `main`, unresolved-thread count and branch cleanup;
+- reconcile any newer pull request, branch, migration or requirement change.
+
+Do not repeat the documentation reconciliation in a competing PR.
 
 ### 2. Resume RoseChat only when the provider contract exists
 
