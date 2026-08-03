@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 class EscalationEngineTest {
     private static final Instant NOW = Instant.parse("2026-07-22T12:00:00Z");
+    private static final String FAMILY = "chat.hate";
     private final EscalationEngine engine = new EscalationEngine();
 
     @Test
@@ -123,7 +124,7 @@ class EscalationEngineTest {
     void legacyUnknownEligibilityNeverInventsDecay() {
         ReasonPolicy policy = policy(true);
         PriorOffense prior = new PriorOffense(
-                "chat.hate",
+                FAMILY,
                 20,
                 0,
                 NOW.minus(Duration.ofDays(365)),
@@ -143,7 +144,7 @@ class EscalationEngineTest {
         ReasonPolicy policy = policy(false);
         List<PriorOffense> history = List.of(
                 new PriorOffense(
-                        "chat.hate",
+                        FAMILY,
                         90,
                         4,
                         NOW.minus(Duration.ofDays(1)),
@@ -167,7 +168,7 @@ class EscalationEngineTest {
 
     private static PriorOffense prior(int severity, long cleanDays, DecayEligibility eligibility) {
         return new PriorOffense(
-                "chat.hate",
+                FAMILY,
                 severity,
                 0,
                 NOW.minus(Duration.ofDays(cleanDays)),
@@ -185,6 +186,6 @@ class EscalationEngineTest {
                         List.of(new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(Duration.ofDays(index + 1L))))
                 ))
                 .toList();
-        return new ReasonPolicy("hate.full-slur-untargeted", "chat.hate", "Hate speech", 50, decay, steps);
+        return new ReasonPolicy("hate.full-slur-untargeted", FAMILY, "Hate speech", 50, decay, steps);
     }
 }
