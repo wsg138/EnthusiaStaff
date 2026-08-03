@@ -31,21 +31,22 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDbSupport {
     private static final String FAMILY = "decay-test";
-    private static final UUID TARGET = identifier("decay-eligibility-target");
 
     @Test
     void seriousIneligibleHistorySurvivesRestartAndNeverDecaysUnderLaterEligiblePolicy() {
         CaseId caseId = new CaseId("5400000000000001");
+        UUID target = identifier("decay-eligibility-serious-target");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(
                     caseId,
+                    target,
                     DecayEligibility.INELIGIBLE,
                     sevenDayBan()
             ));
         }
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            List<PriorOffense> history = runtime.moderationStore().relatedHistory(TARGET, FAMILY);
+            List<PriorOffense> history = runtime.moderationStore().relatedHistory(target, FAMILY);
             assertEquals(1, history.size());
             assertEquals(DecayEligibility.INELIGIBLE, history.getFirst().decayEligibility());
 
@@ -63,16 +64,18 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
     @Test
     void eligibleHistorySurvivesRestartAndDecaysUnderLaterIneligiblePolicy() {
         CaseId caseId = new CaseId("5400000000000002");
+        UUID target = identifier("decay-eligibility-minor-target");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(
                     caseId,
+                    target,
                     DecayEligibility.ELIGIBLE,
                     warning()
             ));
         }
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            List<PriorOffense> history = runtime.moderationStore().relatedHistory(TARGET, FAMILY);
+            List<PriorOffense> history = runtime.moderationStore().relatedHistory(target, FAMILY);
             assertEquals(1, history.size());
             assertEquals(DecayEligibility.ELIGIBLE, history.getFirst().decayEligibility());
 
@@ -90,9 +93,11 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
     @Test
     void legacyNullEligibilityLoadsAsUnknownAndDoesNotInventDecay() throws Exception {
         CaseId caseId = new CaseId("5400000000000003");
+        UUID target = identifier("decay-eligibility-legacy-target");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(
                     caseId,
+                    target,
                     DecayEligibility.ELIGIBLE,
                     warning()
             ));
@@ -100,7 +105,8 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
         }
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            List<PriorOffense> history = runtime.moderationStore().relatedHistory(TARGET, FAMILY);
+            List<PriorOffense> history = runtime.moderationStore().relatedHistory(target, FAMILY);
+            assertEquals(1, history.size());
             assertEquals(DecayEligibility.UNKNOWN, history.getFirst().decayEligibility());
 
             EscalationDecision decision = new EscalationEngine().decide(
@@ -116,9 +122,11 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
     @Test
     void databaseRejectsOutOfRangeDecayEligibility() {
         CaseId caseId = new CaseId("5400000000000004");
+        UUID target = identifier("decay-eligibility-constraint-target");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(
                     caseId,
+                    target,
                     DecayEligibility.ELIGIBLE,
                     warning()
             ));
@@ -129,6 +137,7 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
 
     private static PunishmentPlan plan(
             CaseId caseId,
+            UUID target,
             DecayEligibility eligibility,
             List<SanctionSpec> sanctions
     ) {
@@ -136,7 +145,7 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
         return new PunishmentPlan(
                 caseId,
                 new IdempotencyKey("decay-eligibility:" + caseId.value()),
-                TARGET,
+                target,
                 MOD,
                 "test.decay",
                 FAMILY,
