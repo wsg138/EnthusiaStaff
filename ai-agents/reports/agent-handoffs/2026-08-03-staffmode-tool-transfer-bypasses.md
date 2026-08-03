@@ -59,17 +59,20 @@ The listener is intentionally thin: it identifies the event sources and delegate
 
 The complete PR diff was reviewed for scope, architecture consistency, duplicate systems, Paper event ordering/thread safety, lifecycle and restart effects, persistence/migration impact, rank enforcement, inventory transfer paths, failure behavior, sensitive data, tests and documentation.
 
-### Confirmed defect fixed
+### Confirmed defects fixed
 
-The first implementation added the focused listener but left the manager's current-item/cursor staff-tool check as a parallel click guard. That duplicated authority and weakened the claim that one decision covered all click paths. The manager now handles only transition/rank mutation restrictions; the dedicated listener owns active-session staff-tool click transfer protection.
+1. The first implementation added the focused listener but left the manager's current-item/cursor staff-tool check as a parallel click guard. That duplicated authority and weakened the claim that one decision covered all click paths. The manager now handles only transition/rank mutation restrictions; the dedicated listener owns active-session staff-tool click transfer protection.
+2. CodeRabbit correctly found that three workspace-routing records did not define one complete exact-head gate or reject every invalid workflow class. `WORKSPACE-MANIFEST.md`, `ai-agents/WORKSPACE-STATE.md` and `latest.md` now require every configured exact-head check, exact artifact and review evidence, normal merge evidence, and successful applicable public/private Pi staging or a verified recorded exception. They explicitly reject cancelled, superseded, skipped, different-revision and merge-ref-only runs.
 
 ### Merge blockers
 
-None remain in tracked implementation before exact-head validation.
+None remain in tracked implementation before final exact-head validation.
 
 ### Optional cleanup
 
 A full Paper event-object staging test would add runtime confidence beyond the thin source-extraction adapter and directly tested policy. It is not a confirmed defect in this bounded change and does not replace the required exact-head Pi/runtime validation.
+
+CodeRabbit's docstring-coverage warning is optional repository-wide style tooling rather than a defect in this focused change. Its PMD execution error is a tool-ruleset compatibility/configuration failure under Java 17, while the repository's own configured Java 21 build, tests and Codacy coverage gate remain authoritative. Neither warning changes runtime behavior or justifies unrelated tool-configuration churn in PR #56.
 
 ### Unrelated future work
 
@@ -77,15 +80,15 @@ Rank-change lifecycle, plugin-disable recovery, general inventory editing, confi
 
 ## Validation and evidence routing
 
-Tracked content is frozen before final exact-head validation. Read live PR metadata for revision-specific evidence:
+Tracked content is frozen again after the valid CodeRabbit finding was fixed. Read live PR metadata for revision-specific evidence:
 
 - [PR #56 checks](https://github.com/wsg138/EnthusiaStaff/pull/56/checks)
 - [PR #56 review conversation](https://github.com/wsg138/EnthusiaStaff/pull/56)
 - [PR #56 commits](https://github.com/wsg138/EnthusiaStaff/pull/56/commits)
 
-The unchanged final feature head must pass the configured Java 21 build/tests, Paper tests, migration immutability/checksum checks, runtime-JAR/provider-leak checks, static analysis, documentation validation, terminal exact-head Pi when configured and triggered, and all valid review gates with zero unresolved threads.
+One unchanged final feature head must be synchronized with current `main` and receive terminal acceptable results for every configured Java 21 build/test, applicable MariaDB/Testcontainers and migration checksum/immutability check, runtime-JAR/provider-leak inspection, aggregate coverage, Codacy/static-analysis upload, wiki/documentation validation, applicable public/private Pi staging and review gate. Cancelled, superseded, skipped, different-revision and merge-ref-only runs are not exact-head evidence. A Pi exception is valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for the exact feature head and the exception is recorded in PR metadata. Zero unresolved valid threads may remain.
 
-Exact SHA, run/job IDs, artifact identities and hashes, review evidence, Pi evidence and merge evidence belong in PR metadata rather than this tracked report.
+Before merge, PR metadata must record the exact feature head, every run/job and artifact identity, hashes, synchronization evidence and review classification. After a normal merge commit, it must record the merge commit, resulting `main`, feature-head containment, absence of unmerged branch commits and branch cleanup.
 
 ## Migration, commands, permissions and configuration
 
