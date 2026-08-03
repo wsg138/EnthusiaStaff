@@ -12,6 +12,8 @@ class StaffModeAccessPolicyTest {
     @Test
     void helperCannotMoveItemsOrUseAdvancedTools() {
         assertTrue(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.HELPER));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.HELPER, false));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.HELPER, true));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.HELPER));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.HELPER));
@@ -22,6 +24,8 @@ class StaffModeAccessPolicyTest {
     @Test
     void developerIsNotTreatedAsModerationApprovalHierarchyButKeepsTechnicalStaffMode() {
         assertFalse(StaffRank.DEVELOPER.canApprovePunishmentRequests());
+        assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.DEVELOPER, false));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.DEVELOPER, true));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.DEVELOPER));
@@ -31,6 +35,8 @@ class StaffModeAccessPolicyTest {
 
     @Test
     void modCannotOpenOrMutateEnderChestInStaffMode() {
+        assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.MOD, false));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.MOD, true));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.MOD));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.MOD));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.MOD));
@@ -40,12 +46,16 @@ class StaffModeAccessPolicyTest {
     @Test
     void adminEnderChestIsViewOnlyAndFounderRetainsOwnerAccess() {
         assertFalse(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.ADMIN));
+        assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.ADMIN, false));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.ADMIN, true));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.ADMIN));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.ADMIN));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.ADMIN));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.ADMIN));
 
         assertFalse(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.FOUNDER));
+        assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.FOUNDER, false));
+        assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.FOUNDER, true));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.FOUNDER));
         assertFalse(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.FOUNDER));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
@@ -56,5 +66,6 @@ class StaffModeAccessPolicyTest {
     void unresolvedRankFailsClosedForEnderChestAccess() {
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(null));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(null));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(null, true));
     }
 }
