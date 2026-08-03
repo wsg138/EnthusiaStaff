@@ -13,7 +13,7 @@ This manifest records development coordination and authority boundaries. It does
 | `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
 | Latest merged product PR before current work | PR #52 — reason aliases and removed-ID presentation |
 | Active work | PR #53 — escalation recommendation snapshots across ladder edits |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-ci-final.md` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-review-final.md` |
 | Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
@@ -38,15 +38,18 @@ PR #53 implements one bounded escalation-policy compatibility slice:
 
 Exact final-head validation, review and merge evidence belong in PR #53 live metadata.
 
-## Harsh-review and CI checkpoint
+## Harsh-review, CI and external-review checkpoint
 
-Five confirmed defects were fixed:
+Eight confirmed defects were fixed:
 
 1. effective ordinal alone could not identify a clamped selected step, so `selected_ordinal` is stored separately;
 2. generic Jackson serialization did not use the established sanction schema, so `PunishmentDraftSanctionCodec` is reused;
 3. nullable snapshot fields allowed one-sided rows, so database, domain and JDBC invariants enforce a complete pair;
 4. an intermediate requirements-matrix rewrite omitted its final rows and execution order, which were restored;
-5. failed exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test IDs containing `O`; the fixtures now use valid 16-digit identifiers. That run is failure evidence only.
+5. failed exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not success evidence;
+6. external review found the restart test expected raw ordinal `2` although it persists raw ordinal `8`; the assertion now verifies `8` while selected ordinal remains `2`;
+7. external review found stale active PR #37 routing in the requirements matrix; PR #37 is now historical evidence only and active exact-head gates point to PR #53;
+8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; the superseding review-final report supplies them and documents older reports as unedited historical exceptions.
 
 Regression coverage targets ladder edits, out-of-range clamping, restart persistence, recommendation-versus-applied override separation, legacy null behavior, pair integrity, corrupt snapshots and V14-to-V15 upgrade preservation.
 
