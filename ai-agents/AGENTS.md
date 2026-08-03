@@ -17,6 +17,8 @@ A logical work item is one of:
 
 Do not begin a second feature after the first work item is merged. Record the next recommended work and stop.
 
+A review-only work item ends after the requested findings are reported. It does not authorize implementation, validation, merge, or branch cleanup unless the user separately asks for those actions.
+
 ## 2. Required reading order
 
 At the beginning of every session, read:
@@ -50,8 +52,8 @@ Live repository state overrides stale recorded state. Reconcile discrepancies ex
 - Live code and GitHub state determine what is actually implemented.
 - `ENTHUSIASTAFF-GOALS.md` defines the intended finished product.
 - This file defines the agent workflow and safety process.
-- `WORKSPACE-STATE.md` identifies the expected current step but may be stale.
-- Handoff reports provide context and route the next agent to the relevant PR evidence. They do not override code, tests, requirements, or current GitHub state.
+- `WORKSPACE-STATE.md` identifies the expected current step, owner priorities and selection guardrails, but may be stale.
+- Handoff reports provide context and route the next agent to the relevant PR evidence. They do not override code, tests, requirements, current owner instructions, or current GitHub state.
 
 Do not claim a feature exists because it appears in a plan, PR description, handoff, matrix, or class name. Verify behavior in code and tests.
 
@@ -63,20 +65,22 @@ Before creating a new branch, inspect:
 - draft pull requests;
 - active remote branches;
 - unresolved review threads;
-- failed, pending, skipped, or superseded checks;
-- `WORKSPACE-STATE.md` active-work fields.
+- failed, queued, pending, in-progress, skipped, cancelled, or superseded checks;
+- `WORKSPACE-STATE.md` active-work fields and owner-priority guardrails.
 
 Use this order:
 
 1. Resume an explicitly active PR recorded in `WORKSPACE-STATE.md` when it still exists.
 2. Otherwise finish the oldest relevant unfinished EnthusiaStaff PR that is part of the current roadmap.
 3. Otherwise address a recorded blocker that prevents the current work item.
-4. Otherwise select the next incomplete work item from `WORKSPACE-STATE.md`.
-5. If the state file has no valid next item, use the goals, development blueprint, requirements matrix, and current implementation to choose the highest-priority prerequisite-complete feature.
+4. Otherwise select the next incomplete work item from `WORKSPACE-STATE.md`, including the recorded owner priority order when prerequisites are comparable.
+5. If the state file has no valid next item, use the goals, development blueprint, requirements matrix, current implementation and current owner instructions to choose the highest-priority prerequisite-complete feature.
 
 Do not open a competing PR for work already active elsewhere.
 
 Do not start unrelated work merely because the current item is difficult.
+
+Direct owner instructions in the current conversation override a stale recorded priority order.
 
 ## 5. Work-state model
 
@@ -93,7 +97,7 @@ Classify the current work as one of:
 - `MERGED`
 - `BLOCKED`
 
-Update `WORKSPACE-STATE.md` when the state materially changes and ensure the final version included in the PR describes the intended post-merge state.
+Update `WORKSPACE-STATE.md` when the state materially changes and ensure the final version included in the PR describes the intended post-merge state. A final tracked state should normally be an expected state such as `IDLE — PR #N requires live merge verification`, not an indefinitely stale claim that the PR is still actively validating after merge.
 
 ## 6. Git and pull-request policy
 
@@ -113,7 +117,7 @@ Update `WORKSPACE-STATE.md` when the state materially changes and ensure the fin
 - Do not merge while the branch is behind `main` unless the repository's current documented workflow explicitly permits it and the final exact revision is retested.
 - Do not represent a merge-ref-only run as exact feature-head evidence unless the check is specifically defined to validate the merge result and this distinction is recorded.
 
-The universal agent prompt is explicit authorization to manually merge the single current work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge.
+The universal agent prompt is explicit authorization to manually merge the single current implementation work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge. Review-only work is not merge authorization.
 
 ## 7. Branch cleanup
 
@@ -122,9 +126,10 @@ After a successful merge:
 1. verify the merge commit is on `main`;
 2. verify the feature head is contained in the merged history;
 3. verify no unmerged commits remain on the branch;
-4. delete the remote feature branch when tooling and repository permissions permit;
-5. delete agent-created local branches, worktrees, and temporary files when applicable;
-6. record whether cleanup succeeded.
+4. verify whether GitHub automatically deleted the merged branch;
+5. delete the remote feature branch when it still exists and tooling and repository permissions permit;
+6. delete agent-created local branches, worktrees, and temporary files when applicable;
+7. record whether cleanup succeeded.
 
 Never delete a branch that contains unmerged work.
 
@@ -230,20 +235,28 @@ Classify findings as:
 
 Fix merge blockers and confirmed defects. Do not create endless speculative cleanup merely to postpone completion.
 
+After a final workflow-documentation batch or any other tracked change, inspect the complete PR diff again. Fix only real defects, then freeze the new head.
+
 ## 12. Freeze tracked content before exact-head validation
 
-A tracked file inside a PR cannot safely contain that same PR's final SHA, final CI run IDs, or merge commit without changing the revision again. Do not create a self-referential validation loop.
+A tracked file inside a PR cannot safely contain that same PR's final SHA, final CI run IDs, Pi result, artifact IDs, or merge commit without changing the revision again. Do not create a self-referential validation loop.
+
+Coverage and Pi may take roughly ten minutes. A newer commit may cancel or supersede the prior run. Batch all remaining tracked code, tests, migrations, workflow documentation, state, routing and handoff changes before final validation.
 
 Before starting final exact-head validation:
 
 1. finish all code, tests, migrations, documentation, state, and handoff-file changes;
-2. update `ai-agents/WORKSPACE-STATE.md` to the intended post-merge state without embedding a not-yet-existing merge SHA;
-3. add the timestamped handoff report;
-4. update `ai-agents/reports/agent-handoffs/latest.md` to point to it and the PR;
-5. ensure the handoff explains where exact-head and merge evidence will be recorded;
-6. stop changing tracked files unless validation or review finds a real defect.
+2. perform the separate harsh review and fix every confirmed defect;
+3. update `ai-agents/WORKSPACE-STATE.md` to the intended post-merge state without embedding a not-yet-existing merge SHA;
+4. maintain one canonical timestamped handoff file for the PR and edit it during implementation and review;
+5. update `ai-agents/reports/agent-handoffs/latest.md` to point to that one canonical report and the PR;
+6. ensure the handoff explains where exact-head and merge evidence will be recorded;
+7. make the final tracked changes in one batch when practical;
+8. stop changing tracked files unless validation or review finds a real defect.
 
-If a real defect requires another commit, repeat the harsh review and exact-head validation for the new final head.
+Do not create repeated `final`, `review-final`, or `validation-final` handoff variants merely because the head moved. Create a superseding handoff only when an earlier handoff was genuinely frozen and an immutable correction is required; explain the exception.
+
+Once final exact-head Coverage/Pi validation starts, make no more commits unless it exposes a real defect. If a real defect requires another commit, repeat the full-diff harsh review and exact-head validation for the new head.
 
 ## 13. Exact-head validation
 
@@ -274,6 +287,16 @@ Use the repository's actual configured checks. Normally verify:
 
 Run safe Pi boot/restart validation when the existing workflow supports the exact current head.
 
+Before saying Pi did not run, inspect queued, pending, in-progress, completed, cancelled, and superseded workflows plus current PR evidence. A Pi run may be queued or may begin after another workflow completes.
+
+If an exact-head Pi workflow is configured for an implementation PR but has not been triggered, trigger or re-run it when the available tooling supports that action. If the workflow cannot be triggered or cannot apply to the exact head, block merge unless a verified exception documents the concrete reason. A missing trigger alone is not non-applicability.
+
+Cancelled and superseded Coverage or Pi runs are not failures, but they are not validation evidence. Skipped, different-revision, merge-ref-only, or merely runtime-equivalent runs must also be labeled accurately.
+
+For an implementation PR, every configured applicable exact-head Pi workflow must reach a successful terminal result before merging. Do not merge while that Pi result is queued, pending, or in progress. A verified documented exception is required when the workflow cannot be triggered or applied.
+
+Documentation-only work may omit Pi when the workflow is not applicable or not configured for that change. Record the documentation-only distinction and the reason Pi was not required.
+
 Never claim a check passed without direct evidence.
 
 Record exact-head evidence in the PR description or a final pre-merge PR comment, because editing those does not change the feature SHA.
@@ -291,9 +314,7 @@ Record at minimum:
 - migration result;
 - static-analysis result;
 - review-thread count;
-- Pi result or an explicit statement that no exact-head Pi result exists.
-
-A skipped, cancelled, superseded, different-revision, merge-ref-only, or merely runtime-equivalent run must be labeled accurately.
+- Pi result, or a verified documented exception establishing that no applicable exact-head Pi workflow can be triggered. A merely missing trigger is not an exception.
 
 ## 14. Merge gate
 
@@ -304,12 +325,13 @@ Merge only when all of the following are true:
 - every merge blocker and confirmed defect was addressed;
 - the branch is synchronized appropriately with `main`;
 - exact final-head validation is green;
+- every configured applicable exact-head Pi workflow for an implementation PR reached a successful terminal result, or a verified documented exception proves it cannot be triggered or applied;
 - migrations are safe and old migrations are unchanged;
 - permissions and configuration are documented;
 - no unresolved review thread remains;
 - the PR description or final pre-merge comment contains the exact final-head evidence;
 - `WORKSPACE-STATE.md` is updated for the intended post-merge state;
-- a durable handoff report and latest pointer are included;
+- one canonical durable handoff report and the latest pointer are included;
 - no known release blocker remains for this specific PR.
 
 Production acceptance requirements block a development merge only when the PR is itself a production deployment or cutover action. They do not automatically block dormant, reviewed implementation code.
@@ -322,14 +344,16 @@ Before final validation, update `ai-agents/WORKSPACE-STATE.md` with:
 - branch;
 - intended post-merge status;
 - completed-work summary;
-- next recommended work item;
+- next recommended work item and current owner priorities;
 - current migration boundary;
-- remaining blockers;
+- remaining blockers and their focused issue routing;
 - handoff link.
 
-Do not require the state file to contain the final feature SHA, final CI run IDs, or merge commit. Those values are live evidence and belong in the PR description or comments.
+Do not require the state file to contain the final feature SHA, final CI run IDs, Pi run ID, artifact IDs, or merge commit. Those values are live evidence and belong in the PR description or comments.
 
-The timestamped handoff report must include:
+Maintain one canonical timestamped handoff report per PR. Edit it during implementation and review, then freeze it immediately before final exact-head validation. Do not create repeated final-name variants unless an already-frozen historical file genuinely requires a superseding correction.
+
+The canonical handoff report must include:
 
 - repository and work item;
 - starting `main`;
@@ -343,9 +367,9 @@ The timestamped handoff report must include:
 - merge readiness or blocker;
 - production boundary;
 - remaining work;
-- next recommended work item.
+- next recommended work item and owner-priority route.
 
-`latest.md` must point to the report and PR and state that exact-head and merge evidence must be read live from GitHub.
+`latest.md` must point to the canonical report and PR and state that exact-head and merge evidence must be read live from GitHub.
 
 Do not include secrets, raw production data, private player information, credentials, or sensitive evidence.
 
@@ -355,15 +379,18 @@ After merging:
 
 - verify the actual merge commit and resulting `main` SHA;
 - verify the final feature head is contained in `main`;
+- verify whether GitHub automatically deleted the feature branch and safely delete it if it remains and tooling permits;
 - put the exact merge result in the PR description or a final PR comment;
 - include the exact result in the final user response;
-- perform safe branch cleanup;
+- perform safe local cleanup where applicable;
 - do not make a direct follow-up commit to `main` merely to insert the merge SHA into the handoff;
 - the next agent must reconcile the committed state and handoff with live GitHub before acting.
 
 This keeps the handoff in the reviewed PR while preserving exact live evidence without a circular commit sequence.
 
 ## 17. Blocked work
+
+Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue.
 
 When work cannot proceed because of a genuine blocker:
 
@@ -372,8 +399,11 @@ When work cannot proceed because of a genuine blocker:
 - record the precise blocker;
 - record what was verified;
 - record the exact human or external input required;
+- normally create or update a focused GitHub blocker issue for an external dependency such as an unavailable provider API and record it in the normal handoff;
+- do not use issue #43 for unrelated blockers;
+- do not open a standalone documentation PR solely to record a blocker unless repository routing would otherwise be materially incorrect or unsafe;
 - update `WORKSPACE-STATE.md` to `BLOCKED` on the active branch when appropriate;
-- add a handoff report;
+- update the canonical handoff report;
 - leave the PR draft when the work is not mergeable;
 - stop.
 
@@ -396,10 +426,12 @@ Editing a checklist does not prove the underlying requirement is satisfied.
 
 ## 19. Stop condition
 
-After the single work item is merged or accurately recorded as blocked:
+After the single implementation work item is merged or accurately recorded as blocked:
 
 - verify and report the final state;
-- recommend the next logical item briefly;
+- recommend the next owner-priority item briefly;
 - do not create the next branch;
 - do not begin implementation of the next feature;
 - stop.
+
+After a review-only work item, report findings and stop without implementation, merge, or cleanup unless the user separately requested those actions.

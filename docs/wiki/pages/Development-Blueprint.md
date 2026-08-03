@@ -13,12 +13,12 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #52 was merged by normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` after exact-head validation and zero unresolved review threads.
-- PR #53 is the current escalation recommendation-snapshot work; verify its live head, validation, review and merge state before acting.
-- PR #49 remains the latest merged report-system product checkpoint; PR #50 remains the RoseChat blocker coordination checkpoint.
-- PR #53 adds V15; V1–V14 remain immutable.
+- PR #53 merged by normal merge commit `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` from exact feature head `d766dfcd849c25df37df47962a0aab9bc6975304` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
+- PR #54 is the serious-offense decay metadata work requiring live validation and merge verification.
+- PR #49 remains the latest merged report-system product checkpoint; PR #50 records historical RoseChat blocker coordination.
+- PR #54 adds V16; V1–V15 remain immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
-- Issue #43 remains the separate production-cutover acceptance gate.
+- Issue #43 is specifically the LiteBans production-cutover acceptance gate and remains open; it is not the general blocker queue.
 
 ## Four development groups
 
@@ -31,22 +31,30 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Verify PR #53 closure
+### 1. Verify PR #54 closure
 
 Before beginning implementation:
 
-- verify PR #53's exact live head, base and ahead/behind relation;
-- read its exact-head build, test, migration, coverage, analyzer, runtime-JAR and review evidence from GitHub;
-- confirm the normal merge result, resulting `main`, feature-head containment and branch cleanup;
+- verify PR #54's exact live head, base and ahead/behind relation;
+- read its exact-head Coverage, Wiki, Pi, Codacy, build, test, migration, artifact, runtime-JAR and review evidence from GitHub;
+- confirm the normal merge result, resulting `main`, feature-head containment and automatic branch cleanup;
 - reconcile any newer pull request, branch, migration or requirement change.
 
-PR #53 preserves the configuration version, raw/effective ordinal, selected ladder ordinal, selected step label and exact configured sanctions for each new policy-created case. It keeps that recommendation distinct from the actual sanction, reports legacy snapshots as unavailable rather than inventing them, and leaves V1–V14 unchanged. Do not repeat it in a competing PR.
+PR #54 stores each new punishment step's configured decay eligibility as immutable history. The shared clean-period clock still resets from the latest contributing related offense, but each interval reduces only prior contributions explicitly stored as decay-eligible. Explicitly non-decaying serious history remains effective under later minor policies, eligible minor history can still decay under a later non-decaying policy, and pre-V16 rows remain `UNKNOWN` without invented backfill. Do not repeat it in a competing PR.
 
-### 2. Resume RoseChat only when the provider contract exists
+### 2. Prioritize staff mode, vanish, and freeze
 
-The supported private-message callback and privacy presentation boundary remains the preferred report-system item, but it is externally blocked.
+After PR #54 is verified, the current owner priority is staff/player-visible safety work:
 
-Implementation may begin only after an accessible supported provider repository or artifact defines:
+1. staff mode;
+2. vanish;
+3. freeze.
+
+Select exactly one bounded prerequisite-ready item after live reconciliation. Prefer correctness, recovery, idempotency, state-restoration, restriction-enforcement, visibility, lifecycle or multi-runtime defects that make the selected feature unsafe or unusable. Do not combine all three systems in one oversized PR unless one coherent defect genuinely crosses their shared boundary.
+
+### 3. Complete report notifications
+
+Report notification completion is the second owner priority. Resume the supported RoseChat private-message callback and privacy presentation boundary only after an accessible provider contract defines:
 
 - the callback/event type and supported version;
 - before-cancel, accepted-delivery and failed-delivery timing;
@@ -55,24 +63,17 @@ Implementation may begin only after an accessible supported provider repository 
 - threading and Paper/Folia scheduling guarantees;
 - privacy-safe evidence fields and retention boundaries.
 
-Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known.
+Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known. Track unavailable provider APIs in focused blocker issues and the normal handoff. Do not open a standalone documentation PR solely to record a blocker unless routing would otherwise become materially incorrect or unsafe.
 
-### 3. Select an implementable item when the blocker remains
+### 4. Continue escalation policy only after higher priorities
 
-If the RoseChat contract is still unavailable after live reconciliation, choose one coherent prerequisite-complete feature using this order:
+Escalation-policy completion is the third owner priority. The remaining work includes wider combined-recommendation coverage, explicit family-relationship expansion, broader modular punishment/escalation configuration, decayed-history GUI presentation and representative multi-runtime staff acceptance.
 
-1. correctness or security defects that can corrupt state;
-2. recovery and idempotency gaps in destructive workflows;
-3. core moderation workflows already close to usable;
-4. shared foundation work that blocks multiple features;
-5. one coherent category from a detailed feature-group page;
-6. documentation and evidence for the exact tested revision.
+Do not begin another escalation-policy or internal infrastructure PR immediately after PR #54 unless it fixes a confirmed correctness, security, concurrency, migration or data-integrity defect; directly unblocks a higher-priority feature; or the owner explicitly approves it.
 
-After PR #53, the likely next prerequisite-ready escalation slice is serious-offense decay metadata and explicit non-decaying behavior. That work must remain separate from broader modular configuration and combined-recommendation expansion, and it must be selected only after fresh live reconciliation.
+### 5. Complete issue #43 when the plugin is closer to release
 
-Do not treat the blocked RoseChat feature or the broader escalation requirement as complete, and do not silently combine them in one PR.
-
-### 4. Complete issue #43 when the plugin is closer to release
+Issue #43 is specifically the LiteBans production-cutover acceptance issue. It is not the general defect or blocker queue.
 
 Pin one exact release-candidate SHA, Paper and Velocity JAR hashes, sanitized configuration revision and isolated staging environment. Any runtime-source, JAR, migration, schema, comparison or relevant configuration change invalidates the record.
 

@@ -6,6 +6,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentMatchKey;
 import net.enthusia.staff.domain.application.PunishmentProposal;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
+import net.enthusia.staff.domain.escalation.DecayEligibility;
 
 final class JdbcPunishmentRequestRepository {
     private static final String COLUMNS = """
@@ -24,7 +26,7 @@ final class JdbcPunishmentRequestRepository {
             requester_rank, reason_id, sanction_family, public_reason, internal_explanation,
             configuration_version, visibility, required_rank, raw_ordinal, effective_ordinal,
             selected_ordinal, recency_bonus, step_label, contribution_json, sanctions_json,
-            status, revision, resolved_by, resolution_note, resulting_case_id,
+            decay_eligible, status, revision, resolved_by, resolution_note, resulting_case_id,
             created_at, updated_at, expires_at, resolved_at
             """;
     private static final String SELECT_REQUESTS = "SELECT " + COLUMNS + " FROM punishment_requests ";
@@ -132,9 +134,9 @@ final class JdbcPunishmentRequestRepository {
                     reason_id, sanction_family, public_reason, internal_explanation,
                     configuration_version, visibility, required_rank, raw_ordinal,
                     effective_ordinal, selected_ordinal, recency_bonus, step_label,
-                    contribution_json, sanctions_json, status, revision,
+                    contribution_json, sanctions_json, decay_eligible, status, revision,
                     created_at, updated_at, expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             int index = 1;
             statement.setBytes(index++, UuidBytes.toBytes(request.requestId()));
@@ -159,6 +161,12 @@ final class JdbcPunishmentRequestRepository {
             statement.setString(index++, proposal.escalation().selectedStep().label());
             statement.setString(index++, encodeContributions(proposal));
             statement.setString(index++, encodeSanctions(proposal));
+            writeDecayEligibility(
+                    statement,
+                    index,
+                    proposal.escalation().resultingOffenseDecayEligibility()
+            );
+            index++;
             statement.setString(index++, request.status().name());
             statement.setLong(index++, request.revision());
             statement.setTimestamp(index++, Timestamp.from(request.createdAt()));
@@ -191,7 +199,7 @@ final class JdbcPunishmentRequestRepository {
             setUuid(statement, 2, resolvedBy);
             statement.setString(3, note);
             if (caseId == null) {
-                statement.setNull(4, java.sql.Types.CHAR);
+                statement.setNull(4, Types.CHAR);
             } else {
                 statement.setString(4, caseId.value());
             }
@@ -293,9 +301,21 @@ final class JdbcPunishmentRequestRepository {
         }
     }
 
+    private static void writeDecayEligibility(
+            PreparedStatement statement,
+            int index,
+            DecayEligibility eligibility
+    ) throws SQLException {
+        if (eligibility == DecayEligibility.UNKNOWN) {
+            statement.setNull(index, Types.BOOLEAN);
+            return;
+        }
+        statement.setBoolean(index, eligibility == DecayEligibility.ELIGIBLE);
+    }
+
     private static void setUuid(PreparedStatement statement, int index, UUID value) throws SQLException {
         if (value == null) {
-            statement.setNull(index, java.sql.Types.BINARY);
+            statement.setNull(index, Types.BINARY);
         } else {
             statement.setBytes(index, UuidBytes.toBytes(value));
         }

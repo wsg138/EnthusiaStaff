@@ -16,6 +16,7 @@ import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.domain.escalation.DecayEligibility;
 import net.enthusia.staff.domain.escalation.EscalationDecision;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 
@@ -81,6 +82,7 @@ final class JdbcPunishmentRequestCodec {
                 result.getInt("effective_ordinal"),
                 result.getInt("recency_bonus"),
                 json.readValue(result.getString("contribution_json"), CONTRIBUTIONS),
+                readDecayEligibility(result),
                 selected
         );
         UUID requesterId = UuidBytes.fromBytes(result.getBytes("requester_id"));
@@ -98,5 +100,13 @@ final class JdbcPunishmentRequestCodec {
                 escalation,
                 decodedSanctions
         );
+    }
+
+    private static DecayEligibility readDecayEligibility(ResultSet result) throws SQLException {
+        Boolean stored = result.getObject("decay_eligible", Boolean.class);
+        if (stored == null) {
+            return DecayEligibility.UNKNOWN;
+        }
+        return stored ? DecayEligibility.ELIGIBLE : DecayEligibility.INELIGIBLE;
     }
 }

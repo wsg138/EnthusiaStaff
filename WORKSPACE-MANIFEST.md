@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-08-02 (America/Indiana/Indianapolis)
+Last updated: 2026-08-03 (America/Indiana/Indianapolis)
 
 This manifest records development coordination and authority boundaries. It does not authorize deployment, production-data access, LiteBans cutover or a change in punishment authority.
 
@@ -10,66 +10,67 @@ This manifest records development coordination and authority boundaries. It does
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
-| Latest merged product PR before current work | PR #52 — reason aliases and removed-ID presentation |
-| Active work | PR #53 — escalation recommendation snapshots across ladder edits |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-validation-final.md` |
-| Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
+| `main` at PR #54 start | `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` |
+| Latest merged product PR before current work | PR #53 — escalation recommendation snapshots |
+| Work requiring live verification | PR #54 — serious-offense decay eligibility metadata |
+| Expected committed state | `IDLE — PR #54 requires live merge verification` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-pr54-serious-offense-decay-metadata.md` |
+| Migration boundary | PR #54 adds V16; V1–V15 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #53 start there were no open pull requests and every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
+At PR #54 start there were no open pull requests and every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
 
 ## Implementation checkpoint
 
-PR #53 implements one bounded escalation-policy compatibility slice:
+PR #54 implements one bounded escalation-history compatibility slice:
 
-- new policy-created cases persist the exact configured recommendation independently from sanctions actually applied;
-- raw, effective and selected ladder ordinals remain separate so finite-ladder clamping is historically unambiguous;
-- V15 requires selected ordinal and recommendation JSON to be both null for legacy rows or both populated for new rows;
-- recommendation snapshots use the established strict sanction codec;
-- configuration version, selected label and recommendation survive restart and later ladder edits;
-- authorized overrides do not replace historical recommendations, while actual sanction rows remain authoritative;
-- legacy V14 and older cases remain explicitly snapshot-unavailable rather than reconstructed;
-- malformed or incomplete snapshots fail closed;
-- `/case` displays the frozen policy snapshot before actual sanctions and formats temporary recommendation durations as readable days, hours, minutes and seconds;
-- current policies still use the current ladder and clamp out-of-range ordinals to the current final step;
-- V1–V14 and existing case, sanction, request, appeal, expiration and audit history are not rewritten.
+- `DecayEligibility` records `ELIGIBLE`, `INELIGIBLE`, or legacy `UNKNOWN` behavior on each prior offense;
+- the central escalation decision captures the creating reason policy's explicit decay setting;
+- V16 stores nullable `decay_eligible` in `punishment_steps` in the same transaction as the case, recommendation snapshot, applied sanctions, audit and outboxes;
+- related-history loading evaluates each prior offense from its stored value instead of reinterpreting it through a later reason policy;
+- the latest contributing, non-overturned related offense still resets the shared clean-period clock;
+- each 90-day interval reduces only contributions stored as eligible;
+- explicitly non-decaying serious history does not decay under a later minor policy;
+- eligible minor history still decays under a later non-decaying policy;
+- pre-V16 rows remain nullable/`UNKNOWN` and are not inferred or rewritten;
+- V1–V15 and existing case, sanction, request, appeal, expiration and audit history remain unchanged.
 
-Exact final-head validation, review and merge evidence belong in PR #53 live metadata.
+Exact final-head validation, review and merge evidence belong in PR #54 live metadata.
 
-## Harsh-review, CI and external-review checkpoint
+## Harsh-review checkpoint
 
-Ten confirmed defects or valid review findings were fixed:
+The separate full-PR review found and fixed one confirmed coverage defect: direct persistence fixtures did not prove that `PunishmentService` copied the creating policy's decay setting into the committed plan. A focused service test now verifies both eligible and ineligible policies through the authoritative application path.
 
-1. effective ordinal alone could not identify a clamped selected step, so `selected_ordinal` is stored separately;
-2. generic Jackson serialization did not use the established sanction schema, so `PunishmentDraftSanctionCodec` is reused;
-3. nullable snapshot fields allowed one-sided rows, so database, domain and JDBC invariants enforce a complete pair;
-4. an intermediate requirements-matrix rewrite omitted its final rows and execution order, which were restored;
-5. failed exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not success evidence;
-6. external review found the restart test expected raw ordinal `2` although it persists raw ordinal `8`; the assertion now verifies `8` while selected ordinal remains `2`;
-7. external review found stale active PR #37 routing in the requirements matrix; PR #37 is now historical evidence only and active exact-head gates point to PR #53;
-8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; superseding reports supply them and document older reports as unedited historical exceptions;
-9. CodeRabbit's review body identified ISO duration text in staff-facing case history; temporary recommendation durations now use a tested human-readable formatter;
-10. CodeRabbit's review body identified incomplete constructor-test coverage; valid snapshot pairs and empty recommendation lists are now explicitly tested.
+Regression coverage targets clean-period boundaries, reset behavior, mixed eligibility, later-policy changes, legacy unknown rows, restart persistence, database constraints, V15-to-V16 upgrade preservation and default policy configuration values.
 
-Regression coverage targets ladder edits, out-of-range clamping, restart persistence, recommendation-versus-applied override separation, staff-readable duration formatting, legacy null behavior, pair integrity, corrupt snapshots and V14-to-V15 upgrade preservation.
+## Owner priority checkpoint
+
+When prerequisites are comparable, use this order:
+
+1. staff mode, vanish, and freeze;
+2. report notification completion;
+3. escalation-policy completion.
+
+PR #54 may finish because it fixes a confirmed historical-correctness and data-integrity defect. Do not begin another escalation-policy slice immediately after it unless the owner approves it or a qualifying correctness, security, concurrency, migration, data-integrity or direct-unblock exception applies.
 
 ## Prior verified evidence
 
-PR #52 exact head `ac08bcce7281caf6425393213c5ef4d48cd99b3e` passed Coverage `30780118437` and Validate Wiki `30780118455`, had zero unresolved review threads, and merged normally as `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052`. Do not attribute prior-head evidence to PR #53.
+PR #53 exact head `d766dfcd849c25df37df47962a0aab9bc6975304` passed Coverage `30783188447` and Validate Wiki `30783188443`, had zero unresolved review threads, and merged normally as `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e`. Do not attribute prior-head evidence to PR #54.
 
-## Provider blocker
+## Provider and blocked-work routing
 
 The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, identity, cancellation/delivery semantics, threading, duplicate behavior, versions and privacy-safe evidence fields. Do not invent an API, reflect against unknown classes, copy provider-owned classes or scrape logs as a substitute callback.
 
+Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue. External blockers such as an unavailable provider API should normally be tracked in a focused issue and the normal handoff. Do not open a standalone documentation PR solely to record a blocker unless routing would otherwise be materially incorrect or unsafe.
+
 ## Development merge gate
 
-Merge PR #53 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, MariaDB/Testcontainers clean-install and V14-to-V15 upgrade checks, migration checksums, runtime-JAR inspection, aggregate coverage, configured static analysis, wiki validation and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
+Merge PR #54 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, MariaDB/Testcontainers clean-install and V15-to-V16 upgrade checks, migration checksums, runtime-JAR inspection, provider-leak checks, aggregate coverage, configured static analysis, wiki validation, terminal exact-head Pi when configured and triggered, and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
 
 ## Production cutover gate
 
-Issue #43 remains open. Before it is complete, do not deploy a production cutover candidate, begin a real shadow window, activate EnthusiaStaff authority, disable/remove LiteBans, perform final production migration or authorize live cutover.
+Issue #43 remains open specifically for production-cutover acceptance. Before it is complete, do not deploy a production cutover candidate, begin a real shadow window, activate EnthusiaStaff authority, disable/remove LiteBans, perform final production migration or authorize live cutover.
 
 ## Related repositories
 
@@ -77,10 +78,11 @@ Provider and website repositories remain independent. Their histories must not b
 
 ## Current route
 
-1. Verify PR #53's exact live head, checks, reviews, normal merge result, resulting `main` and branch cleanup.
-2. Resume RoseChat only after a supported contract exists.
-3. Otherwise select exactly one prerequisite-ready escalation slice after fresh reconciliation; serious-offense decay metadata is the current likely candidate.
-4. Stop after PR #53 and do not combine the next slice with it.
+1. Verify PR #54's exact live head, terminal Coverage/Wiki/Pi/Codacy and review state, normal merge result, resulting `main`, feature-head containment and automatic branch cleanup.
+2. Select one bounded staff mode, vanish, or freeze work item after fresh reconciliation unless a newer direct owner instruction supersedes the recorded order.
+3. Prioritize report notification completion second and track unavailable provider APIs through focused blocker issues plus the normal handoff.
+4. Treat escalation-policy completion as third priority; do not immediately start another escalation-policy slice after PR #54.
+5. Stop after PR #54 verification and do not combine the next feature with it.
 
 ## Release boundaries
 
