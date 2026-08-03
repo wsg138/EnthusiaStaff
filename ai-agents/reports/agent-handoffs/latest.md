@@ -20,8 +20,9 @@ Related PR:
 | Implementation | Focused listener identifies current, cursor, exact hotbar and offhand sources; one tested policy blocks staff-tool transfers while manager retains transition/rank restrictions |
 | Harsh-review fix | Removed parallel current-item/cursor click authority from `StaffModeManager`; the dedicated listener is the active-session staff-tool click guard |
 | Tests | `StaffModeAccessPolicyTest` proves every click type's direct protection, exact number-key/offhand decisions, negative cases and all prior rank/Ender boundaries |
-| Exact final-head evidence | Read PR #56 live after tracked-content freeze |
-| Exact merge evidence | Read PR #56 live after merge |
+| Exact final-head evidence | Read PR #56 live. Require one unchanged feature head synchronized with current `main`; terminal results for every configured Java 21, MariaDB/Testcontainers, migration immutability, runtime-JAR/provider-leak, coverage, Codacy/static-analysis, wiki/documentation, applicable public/private Pi and review gate; exact run/job/artifact identities and hashes; and zero unresolved valid threads. Reject cancelled, superseded, skipped, different-revision and merge-ref-only results. |
+| Exact merge evidence | Read PR #56 live after normal merge. Require the merge commit and resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup. |
+| Pi exception | Valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for the exact feature head and the exception is recorded in PR metadata. |
 | Migration boundary | V16 is highest; PR #56 adds no migration; V1–V16 remain immutable |
 | Configuration changes | None |
 | Production boundary | No deployment, authority activation, LiteBans change, production Discord use or production access |
@@ -30,6 +31,6 @@ Related PR:
 
 PR #55 merged normally as `d71759aa4f121c82f984e57d6fd0968a80c502ba`; its feature branch was removed before PR #56 started. Do not attribute PR #55 workflow evidence to PR #56.
 
-The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and its correlated private `wsg138/EnthusiaStaff-Staging` run directly before merge. A missing commit-scoped Pi listing is not proof of non-applicability.
+The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and its correlated private `wsg138/EnthusiaStaff-Staging` run directly before merge. A missing commit-scoped Pi listing is not proof of non-applicability. Cancelled, superseded, skipped, different-revision and merge-ref-only runs are not exact-head evidence.
 
-The next agent must reconcile live GitHub state before acting, verify PR #56 rather than opening another branch, read the canonical handoff, inspect pending/superseded/terminal workflows and review threads, and continue only this work item. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, start issue #43 acceptance, or combine vanish/freeze/general inventory work into PR #56.
+The next agent must reconcile live GitHub state before acting, verify PR #56 rather than opening another branch, read the canonical handoff, apply the complete exact-head gate above, classify every workflow result accurately, require successful applicable terminal Pi or a verified recorded exception, resolve every valid review thread, record complete normal-merge evidence, and continue only this work item. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, start issue #43 acceptance, or combine vanish/freeze/general inventory work into PR #56.
