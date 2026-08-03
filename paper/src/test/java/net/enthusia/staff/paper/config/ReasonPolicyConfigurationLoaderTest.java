@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
@@ -16,6 +17,9 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 class ReasonPolicyConfigurationLoaderTest {
+    private static final String POLICY_RESOURCE = "reason-policies.yml";
+    private static final String CHAT_POLICY_ID = "chat.harassment";
+
     @Test
     void loadsTheCompleteDefaultCatalogAndCriticalPolicyShapes() {
         ReasonPolicyConfigurationLoader.LoadedPolicies loaded = loadDefaults();
@@ -69,7 +73,7 @@ class ReasonPolicyConfigurationLoaderTest {
                             duration: instant
                 """);
 
-        assertEquals(Map.of("chat.old-harassment", "chat.harassment"), loaded.aliases());
+        assertEquals(Map.of("chat.old-harassment", CHAT_POLICY_ID), loaded.aliases());
         assertEquals(1, loaded.removedReasons().size());
         assertEquals("Retired abusive language", loaded.removedReasons().getFirst().publicReason());
         assertFalse(loaded.policies().stream().anyMatch(policy -> policy.id().equals("chat.retired-abuse")));
@@ -129,8 +133,7 @@ class ReasonPolicyConfigurationLoaderTest {
     @Test
     void rejectsConfigurationThatMakesPunishmentsPrivateWithoutStaffReview() throws Exception {
         String source;
-        try (InputStream input = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream("reason-policies.yml")) {
+        try (InputStream input = policyResource()) {
             source = new String(input.readAllBytes(), StandardCharsets.UTF_8)
                     .replaceFirst("public-default: true", "public-default: false");
         }
@@ -177,8 +180,13 @@ class ReasonPolicyConfigurationLoaderTest {
     }
 
     private static ReasonPolicyConfigurationLoader.LoadedPolicies loadDefaults() {
-        InputStream input = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream("reason-policies.yml");
-        return new ReasonPolicyConfigurationLoader().load(input, "reason-policies.yml");
+        return new ReasonPolicyConfigurationLoader().load(policyResource(), POLICY_RESOURCE);
+    }
+
+    private static InputStream policyResource() {
+        return Objects.requireNonNull(
+                Thread.currentThread().getContextClassLoader().getResourceAsStream(POLICY_RESOURCE),
+                POLICY_RESOURCE + " must exist on the test classpath"
+        );
     }
 }
