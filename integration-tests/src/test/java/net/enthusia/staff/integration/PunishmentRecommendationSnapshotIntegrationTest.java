@@ -70,8 +70,22 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
     }
 
     @Test
-    void corruptStoredSnapshotFailsClosed() throws Exception {
+    void incompleteStoredSnapshotFailsClosed() throws Exception {
         CaseId caseId = new CaseId("SNAPSHOT00000003");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
+            clearSelectedOrdinal(caseId);
+
+            assertThrows(
+                    ModerationPersistenceException.class,
+                    () -> runtime.caseReviewStore().find(caseId)
+            );
+        }
+    }
+
+    @Test
+    void corruptStoredSnapshotFailsClosed() throws Exception {
+        CaseId caseId = new CaseId("SNAPSHOT00000004");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
             setRecommendation(caseId, "[]");
@@ -112,6 +126,16 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
                      UPDATE punishment_steps
                      SET selected_ordinal = NULL, recommended_sanctions_json = NULL
                      WHERE case_id = ?
+                     """)) {
+            statement.setString(1, caseId.value());
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void clearSelectedOrdinal(CaseId caseId) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE punishment_steps SET selected_ordinal = NULL WHERE case_id = ?
                      """)) {
             statement.setString(1, caseId.value());
             assertEquals(1, statement.executeUpdate());
