@@ -24,20 +24,28 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
             Map<String, String> aliases,
             Collection<RemovedReason> removedReasons
     ) {
-        AtomicReasonPolicyRepository validated = new AtomicReasonPolicyRepository(
+        AtomicReasonPolicyRepository.PolicySnapshot snapshot = new AtomicReasonPolicyRepository(
                 version,
                 policies,
                 aliases,
                 removedReasons
-        );
-        this.version = validated.activeVersion();
-        Map<String, ReasonPolicy> policyIndex = new LinkedHashMap<>();
-        validated.all().forEach(policy -> policyIndex.put(policy.id(), policy));
-        this.policies = Map.copyOf(policyIndex);
-        this.aliases = Map.copyOf(validated.aliases());
-        Map<String, RemovedReason> removedIndex = new LinkedHashMap<>();
-        validated.removedReasons().forEach(reason -> removedIndex.put(reason.id(), reason));
-        this.removedReasons = Map.copyOf(removedIndex);
+        ).snapshot();
+        this.version = snapshot.version();
+        this.policies = indexPolicies(snapshot.policies());
+        this.aliases = snapshot.aliases();
+        this.removedReasons = indexRemovedReasons(snapshot.removedReasons());
+    }
+
+    private static Map<String, ReasonPolicy> indexPolicies(Collection<ReasonPolicy> policies) {
+        Map<String, ReasonPolicy> indexed = new LinkedHashMap<>();
+        policies.forEach(policy -> indexed.put(policy.id(), policy));
+        return Map.copyOf(indexed);
+    }
+
+    private static Map<String, RemovedReason> indexRemovedReasons(Collection<RemovedReason> removedReasons) {
+        Map<String, RemovedReason> indexed = new LinkedHashMap<>();
+        removedReasons.forEach(reason -> indexed.put(reason.id(), reason));
+        return Map.copyOf(indexed);
     }
 
     @Override
@@ -67,16 +75,7 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
             return Optional.of(descriptor(reasonId, policies.get(canonical), ReasonAvailability.ALIAS));
         }
         RemovedReason removed = removedReasons.get(reasonId);
-        if (removed == null) {
-            return Optional.empty();
-        }
-        return Optional.of(new ReasonDescriptor(
-                removed.id(),
-                removed.id(),
-                removed.family(),
-                removed.publicReason(),
-                ReasonAvailability.REMOVED
-        ));
+        return removed == null ? Optional.empty() : Optional.of(removedDescriptor(removed));
     }
 
     private static ReasonDescriptor descriptor(
@@ -90,6 +89,16 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
                 policy.family(),
                 policy.publicReason(),
                 availability
+        );
+    }
+
+    private static ReasonDescriptor removedDescriptor(RemovedReason removed) {
+        return new ReasonDescriptor(
+                removed.id(),
+                removed.id(),
+                removed.family(),
+                removed.publicReason(),
+                ReasonAvailability.REMOVED
         );
     }
 
