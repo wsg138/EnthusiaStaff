@@ -17,9 +17,9 @@ Related PR:
 | Branch | `fix/admin-staffmode-ender-view-only` |
 | Starting main | `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` |
 | Expected committed state | `IDLE — PR #55 requires live merge verification` |
-| Implementation | Helper/Mod/Developer cannot open; Admin can open but shared click/drag mutation policy cancels Ender changes; Founder retains owner access; unresolved ranks fail closed |
-| Harsh-review fixes | Closed unresolved-rank fail-open behavior and centralized/directly tested the mutation decision used by both inventory handlers |
-| Tests | `StaffModeAccessPolicyTest` proves ordinary-versus-Ender mutation behavior for all five ranks and the unresolved-rank boundary |
+| Implementation | Helper/Mod/Developer cannot open; Admin can open but shared click/drag mutation policy cancels Ender changes; Founder retains owner access; `SYSTEM` and unresolved ranks fail closed |
+| Harsh-review fixes | Closed unresolved-rank fail-open behavior, centralized/directly tested the mutation decision used by both inventory handlers, and covered the non-player `SYSTEM` enum boundary |
+| Tests | `StaffModeAccessPolicyTest` proves ordinary-versus-Ender mutation behavior for every player-assigned rank, `SYSTEM`, and the unresolved-rank boundary |
 | Exact final-head evidence | Read PR #55 live after tracked-content freeze |
 | Exact merge evidence | Read PR #55 live after merge |
 | Migration boundary | V16 is highest; PR #55 adds no migration; V1–V16 remain immutable |
