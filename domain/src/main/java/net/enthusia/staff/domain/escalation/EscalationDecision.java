@@ -16,9 +16,15 @@ public record EscalationDecision(
         }
     }
 
-    public record Contribution(int priorSeverity, int base, int decayedBy, int effective) {
+    public record Contribution(
+            int priorSeverity,
+            int base,
+            DecayEligibility decayEligibility,
+            int decayedBy,
+            int effective
+    ) {
         public Contribution {
-            if (priorSeverity < 0 || base < 0 || decayedBy < 0 || effective < 0) {
+            if (priorSeverity < 0 || base < 0 || decayEligibility == null || decayedBy < 0 || effective < 0) {
                 throw new IllegalArgumentException("invalid escalation contribution");
             }
         }
