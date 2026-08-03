@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -70,16 +71,12 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
     }
 
     @Test
-    void incompleteStoredSnapshotFailsClosed() throws Exception {
+    void databaseRejectsIncompleteStoredSnapshot() {
         CaseId caseId = new CaseId("SNAPSHOT00000003");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
-            clearSelectedOrdinal(caseId);
 
-            assertThrows(
-                    ModerationPersistenceException.class,
-                    () -> runtime.caseReviewStore().find(caseId)
-            );
+            assertThrows(SQLException.class, () -> clearSelectedOrdinal(caseId));
         }
     }
 
@@ -138,7 +135,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
                      UPDATE punishment_steps SET selected_ordinal = NULL WHERE case_id = ?
                      """)) {
             statement.setString(1, caseId.value());
-            assertEquals(1, statement.executeUpdate());
+            statement.executeUpdate();
         }
     }
 
