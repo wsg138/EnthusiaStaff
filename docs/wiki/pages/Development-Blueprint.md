@@ -13,40 +13,64 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #27 and PR #37 are merged implementation checkpoints.
-- PR #46 is the current punishment-history and exact sanction-lifecycle pull request.
-- V11, V12 and V13 retain their checksum-locked bytes; V14 adds history/linkage indexes and exact mutation metadata.
-- LiteBans remains authoritative; this feature does not deploy a JAR, activate EnthusiaStaff authority or begin issue #43 acceptance.
+- PR #49 is the latest merged product checkpoint.
+- Its feature head is `1ad41be3eeca49370694916f386dda0484e3bfa3` and normal merge commit is `d07cb888952fde575a4f8245571f8d1ebc858b63`.
+- PR #50 records the post-PR #49 reconciliation and unavailable RoseChat provider contract; verify its live closure before acting.
+- V14 remains the live highest Flyway migration; V1–V14 are immutable.
+- LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
 
 ## Four development groups
 
-| Group | Completion | Why it matters now | Detailed work |
-| --- | ---: | --- | --- |
-| [[Core Platform and Infrastructure]] | **About 72%** | Modes, configuration, lifecycle, identity and failure handling are shared prerequisites for many other features. | Open the group page for files, descriptions and remaining categories. |
-| [[Moderation, Punishments, and Reports]] | **About 63%** | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
-| [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, vanish, freeze, inventories and confiscation can lose or duplicate player state if recovery is incomplete. | Open the group page for safety boundaries, files and remaining categories. |
-| [[Integrations, Migration, and Release Readiness]] | **About 36%** | Providers, the site, migration, topology and acceptance evidence determine whether the platform can replace LiteBans safely. | Open the group page for providers, migration and release gates. |
+| Group | Why it matters now | Detailed work |
+| --- | --- | --- |
+| [[Core Platform and Infrastructure]] | Modes, configuration, lifecycle, identity and failure handling are shared prerequisites for many other features. | Open the group page for files, descriptions and remaining categories. |
+| [[Moderation, Punishments, and Reports]] | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
+| [[Staff Tools, Investigations, and Player-State Safety]] | Staff mode, vanish, freeze, inventories and confiscation can lose or duplicate player state if recovery is incomplete. | Open the group page for safety boundaries, files and remaining categories. |
+| [[Integrations, Migration, and Release Readiness]] | Providers, the site, migration, topology and acceptance evidence determine whether the platform can replace LiteBans safely. | Open the group page for providers, migration and release gates. |
 
 ## Current development order
 
-### 1. Finish and merge PR #46 as a normal feature
+### 1. Verify PR #50 closure
 
-Before merge:
+Before beginning implementation:
 
-- review the complete history, mutation, command, configuration and V14 diff;
-- pass exact-head Java 21 build, unit and MariaDB/Testcontainers tests, migration checksum checks, runtime-JAR inspection, static analysis, documentation validation and configured coverage upload;
-- resolve all valid automated and human review findings;
-- keep history database-paginated, mutation audit append-only and operational-mode fencing unchanged;
-- use a normal merge commit and do not deploy the merged JAR.
+- verify PR #50's live merge or blocker state;
+- read its exact-head and merge evidence from GitHub;
+- confirm the resulting `main`, unresolved-thread count and branch cleanup;
+- reconcile any newer pull request, branch, migration or requirement change.
 
-### 2. Continue normal feature development
+Do not repeat the documentation reconciliation in a competing PR.
 
-After PR #46 is merged, choose one coherent unfinished moderation or staff feature.
-Do not start it from this PR. Prioritize correctness and recovery gaps before
-broader feature expansion.
+### 2. Resume RoseChat only when the provider contract exists
 
-### 3. Complete issue #43 when the plugin is closer to release
+The supported private-message callback and privacy presentation boundary remains the preferred next report-system item, but it is externally blocked.
+
+Implementation may begin only after an accessible supported provider repository or artifact defines:
+
+- the callback/event type and supported version;
+- before-cancel, accepted-delivery and failed-delivery timing;
+- sender and recipient identity semantics;
+- cancellation, filtering, ignore, spy and duplicate behavior;
+- threading and Paper/Folia scheduling guarantees;
+- privacy-safe evidence fields and retention boundaries.
+
+Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known.
+
+### 3. Select an implementable item when the blocker remains
+
+If the RoseChat contract is still unavailable after live reconciliation, choose one coherent prerequisite-complete feature using this order:
+
+1. correctness or security defects that can corrupt state;
+2. recovery and idempotency gaps in destructive workflows;
+3. core moderation workflows already close to usable;
+4. shared foundation work that blocks multiple features;
+5. one coherent category from a detailed feature-group page;
+6. documentation and evidence for the exact tested revision.
+
+Do not treat the blocked RoseChat feature as complete, and do not silently combine it with another implementation PR.
+
+### 4. Complete issue #43 when the plugin is closer to release
 
 Pin one exact release-candidate SHA, Paper and Velocity JAR hashes, sanitized configuration revision and isolated staging environment. Any runtime-source, JAR, migration, schema, comparison or relevant configuration change invalidates the record.
 
@@ -65,34 +89,6 @@ The production cutover record must cover:
 
 Only after that record is complete may the release candidate be deployed for production cutover, EnthusiaStaff authority be activated, LiteBans be disabled or removed, the final production migration be performed, or a live cutover be authorized.
 
-### 4. Finish shared foundation gaps
-
-Prioritize the core gaps that block several feature groups:
-
-- complete dependency-specific feature gates and actionable runtime verification;
-- finish modular configuration and atomic reload;
-- prove startup, shutdown, long-outage and process-kill recovery;
-- finish historical-name, Bedrock alias and bounded completion behavior.
-
-See [[Core Platform and Infrastructure]].
-
-### 5. Complete the remaining feature groups
-
-Continue moderation history and appeals, report UX, player-state safety, provider integrations, staff tools, the private site and the final release manifest in coherent, independently reviewable changes.
-
-## How to choose the next task
-
-Choose work in this order:
-
-1. correctness or security defects that can corrupt state;
-2. recovery and idempotency gaps in destructive workflows;
-3. core moderation workflows already close to usable;
-4. shared foundation work that blocks multiple features;
-5. one coherent feature category from a group page;
-6. documentation and evidence updates for the exact tested revision.
-
-Do not choose work merely because it is easy to demonstrate. A section is done only when its behavior, authority, persistence, failure handling, recovery, tests, staging and documentation agree.
-
 ## Documentation ownership
 
 | Information | Primary page |
@@ -102,7 +98,7 @@ Do not choose work merely because it is easy to demonstrate. A section is done o
 | Moderation feature descriptions and files | [[Moderation, Punishments, and Reports]] |
 | Staff-tool feature descriptions and files | [[Staff Tools, Investigations, and Player-State Safety]] |
 | Integration/release descriptions and files | [[Integrations, Migration, and Release Readiness]] |
-| Exact evidence and blockers | `reports/REQUIREMENTS-MATRIX.md` |
+| Exact evidence and blockers | `reports/REQUIREMENTS-MATRIX.md` and the current agent handoff |
 | Complete code map and feature traces | [[Developer Code Guide]] |
 | Validation procedure | [[Build and Testing]] |
 | Migration operator procedure | [[LiteBans Migration]] and [[Shadow Mode and Cutover]] |
