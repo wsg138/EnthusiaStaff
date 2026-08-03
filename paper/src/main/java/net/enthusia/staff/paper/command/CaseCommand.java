@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -256,8 +257,26 @@ public final class CaseCommand implements CommandExecutor {
         return switch (length.kind()) {
             case INSTANT -> "instant";
             case PERMANENT -> "permanent";
-            case TEMPORARY -> length.temporary().orElseThrow().toString();
+            case TEMPORARY -> humanDuration(length.temporary().orElseThrow());
         };
+    }
+
+    static String humanDuration(Duration duration) {
+        if (duration == null || duration.isNegative()) {
+            throw new IllegalArgumentException("duration must be non-negative");
+        }
+        List<String> parts = new ArrayList<>();
+        appendDurationPart(parts, duration.toDaysPart(), "day");
+        appendDurationPart(parts, duration.toHoursPart(), "hour");
+        appendDurationPart(parts, duration.toMinutesPart(), "minute");
+        appendDurationPart(parts, duration.toSecondsPart(), "second");
+        return parts.isEmpty() ? "0 seconds" : String.join(" ", parts);
+    }
+
+    private static void appendDurationPart(List<String> parts, long value, String unit) {
+        if (value > 0) {
+            parts.add(value + " " + unit + (value == 1 ? "" : "s"));
+        }
     }
 
     private static Optional<java.time.Instant> originalExpiration(
