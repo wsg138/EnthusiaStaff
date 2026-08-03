@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.casefile.OverturnRequestReview;
 import net.enthusia.staff.domain.casefile.PunishmentStepReview;
 import net.enthusia.staff.domain.casefile.SanctionReview;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
@@ -126,13 +127,19 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
         if (raw == null) {
             return Optional.empty();
         }
+        Optional<Integer> selected = Optional.ofNullable(result.getObject("selected_ordinal", Integer.class));
+        Optional<List<SanctionSpec>> recommendation =
+                recommendations.read(result.getString("recommended_sanctions_json"));
+        if (selected.isPresent() != recommendation.isPresent()) {
+            throw new ModerationPersistenceException("Stored punishment recommendation snapshot is incomplete");
+        }
         return Optional.of(new PunishmentStepReview(
                 raw,
                 result.getInt("effective_ordinal"),
-                Optional.ofNullable(result.getObject("selected_ordinal", Integer.class)),
+                selected,
                 result.getInt("recency_bonus"),
                 result.getString("step_label"),
-                recommendations.read(result.getString("recommended_sanctions_json")),
+                recommendation,
                 result.getBoolean("escalation_contributes")
         ));
     }
