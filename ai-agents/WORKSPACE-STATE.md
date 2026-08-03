@@ -19,6 +19,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Field | Value |
 | --- | --- |
 | State | `IDLE — PR #55 requires live merge verification` |
+| Intended post-merge state | PR #55 merged normally into `main`; resulting `main` contains the reviewed feature head; the feature branch is deleted or otherwise confirmed clean; LiteBans remains authoritative and no deployment, production access, authority activation, shadow window, or cutover occurs |
 | Pull request to verify | `#55 — Enforce Admin staff-mode Ender view-only access` |
 | Feature branch to verify | `fix/admin-staffmode-ender-view-only` |
 | Completed work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only, Founder retains configured owner access, and non-player/unresolved ranks fail closed |
