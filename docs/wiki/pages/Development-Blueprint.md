@@ -13,10 +13,10 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #52 was merged by normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` after exact-head validation and zero unresolved review threads.
-- PR #53 is the current escalation recommendation-snapshot work; verify its live head, validation, review and merge state before acting.
+- PR #53 merged by normal merge commit `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` from exact feature head `d766dfcd849c25df37df47962a0aab9bc6975304` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
+- PR #54 is the current serious-offense decay metadata work; verify its live head, validation, review and merge state before acting.
 - PR #49 remains the latest merged report-system product checkpoint; PR #50 remains the RoseChat blocker coordination checkpoint.
-- PR #53 adds V15; V1–V14 remain immutable.
+- PR #54 adds V16; V1–V15 remain immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
 
@@ -31,16 +31,16 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Verify PR #53 closure
+### 1. Verify PR #54 closure
 
 Before beginning implementation:
 
-- verify PR #53's exact live head, base and ahead/behind relation;
+- verify PR #54's exact live head, base and ahead/behind relation;
 - read its exact-head build, test, migration, coverage, analyzer, runtime-JAR and review evidence from GitHub;
 - confirm the normal merge result, resulting `main`, feature-head containment and branch cleanup;
 - reconcile any newer pull request, branch, migration or requirement change.
 
-PR #53 preserves the configuration version, raw/effective ordinal, selected ladder ordinal, selected step label and exact configured sanctions for each new policy-created case. It keeps that recommendation distinct from the actual sanction, reports legacy snapshots as unavailable rather than inventing them, and leaves V1–V14 unchanged. Do not repeat it in a competing PR.
+PR #54 stores each new punishment step's configured decay eligibility as immutable history. The shared clean-period clock still resets from the latest contributing related offense, but each interval reduces only prior contributions explicitly stored as decay-eligible. Explicitly non-decaying serious history remains effective under later minor policies, eligible minor history can still decay under a later non-decaying policy, and pre-V16 rows remain `UNKNOWN` without invented backfill. Do not repeat it in a competing PR.
 
 ### 2. Resume RoseChat only when the provider contract exists
 
@@ -57,7 +57,7 @@ Implementation may begin only after an accessible supported provider repository 
 
 Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known.
 
-### 3. Select an implementable item when the blocker remains
+### 3. Select one implementable item when the blocker remains
 
 If the RoseChat contract is still unavailable after live reconciliation, choose one coherent prerequisite-complete feature using this order:
 
@@ -68,9 +68,7 @@ If the RoseChat contract is still unavailable after live reconciliation, choose 
 5. one coherent category from a detailed feature-group page;
 6. documentation and evidence for the exact tested revision.
 
-After PR #53, the likely next prerequisite-ready escalation slice is serious-offense decay metadata and explicit non-decaying behavior. That work must remain separate from broader modular configuration and combined-recommendation expansion, and it must be selected only after fresh live reconciliation.
-
-Do not treat the blocked RoseChat feature or the broader escalation requirement as complete, and do not silently combine them in one PR.
+After PR #54, the broader escalation requirement remains partial. Separate future work includes wider combined-recommendation coverage, explicit family-relationship expansion, broader modular punishment/escalation configuration and representative multi-runtime staff acceptance. Select only one after fresh live reconciliation; do not silently combine them.
 
 ### 4. Complete issue #43 when the plugin is closer to release
 
