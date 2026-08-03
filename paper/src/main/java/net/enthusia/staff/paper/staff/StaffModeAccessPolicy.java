@@ -19,11 +19,6 @@ final class StaffModeAccessPolicy {
         return rank != StaffRank.FOUNDER;
     }
 
-    static boolean blocksInventoryMutation(StaffRank rank, boolean enderChestView) {
-        return blocksAllInventoryMutation(rank)
-                || (enderChestView && blocksEnderChestMutation(rank));
-    }
-
     static boolean usesCreativeMode(StaffRank rank) {
         return rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER;
     }
