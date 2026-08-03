@@ -12,7 +12,8 @@ class StaffModeAccessPolicyTest {
     @Test
     void helperCannotMoveItemsOrUseAdvancedTools() {
         assertTrue(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.HELPER));
-        assertTrue(StaffModeAccessPolicy.blocksEnderChest(StaffRank.HELPER));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.HELPER));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.HELPER));
         assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.HELPER));
@@ -22,17 +23,30 @@ class StaffModeAccessPolicyTest {
     void developerIsNotTreatedAsModerationApprovalHierarchyButKeepsTechnicalStaffMode() {
         assertFalse(StaffRank.DEVELOPER.canApprovePunishmentRequests());
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.DEVELOPER));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.DEVELOPER));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.DEVELOPER));
         assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.DEVELOPER));
     }
 
     @Test
-    void onlyAdministrativeRanksUseCreativeStaffMode() {
+    void modCannotOpenOrMutateEnderChestInStaffMode() {
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.MOD));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.MOD));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.MOD));
-        assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.ADMIN));
-        assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
         assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.requiredGameMode(StaffRank.MOD));
+    }
+
+    @Test
+    void adminEnderChestIsViewOnlyAndFounderRetainsOwnerAccess() {
+        assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.ADMIN));
+        assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.ADMIN));
+        assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.ADMIN));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.ADMIN));
+
+        assertFalse(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.FOUNDER));
+        assertFalse(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.FOUNDER));
+        assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.FOUNDER));
     }
 }
