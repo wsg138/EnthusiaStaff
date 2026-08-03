@@ -12,6 +12,11 @@ Starting `main`: `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e`
 
 This is the one canonical handoff for PR #54. Verify the live feature SHA, terminal workflow and Pi results, artifacts, review state, merge result, resulting `main` and branch cleanup directly on GitHub.
 
+For Pi evidence, inspect both repositories. The public wrapper uses `pull_request_target` and may not appear in commit-scoped workflow listings:
+
+- public repository: `https://github.com/wsg138/EnthusiaStaff`;
+- private staging repository: `https://github.com/wsg138/EnthusiaStaff-Staging`.
+
 ## Start-state reconciliation
 
 - PR #53 had already merged normally as `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` from exact feature head `d766dfcd849c25df37df47962a0aab9bc6975304`.
@@ -57,7 +62,7 @@ PR #54 preserves each new punishment step's configured decay eligibility and eva
 
 ## Separate harsh review findings
 
-Eleven confirmed defects, workflow defects, or analyzer findings were fixed:
+Thirteen confirmed defects, workflow defects, analyzer findings, or validation-control defects were fixed:
 
 1. Initial persistence tests constructed `PunishmentPlan` directly and did not prove that `PunishmentService` copied the creating policy's decay setting into the accepted plan. `PunishmentDecayMetadataServiceTest` now verifies both values through the authoritative service path.
 2. The requirements matrix still routed the next agent to RoseChat or another escalation slice after the owner changed priorities. It now routes staff mode/vanish/freeze first, report notifications second, and escalation third.
@@ -70,8 +75,33 @@ Eleven confirmed defects, workflow defects, or analyzer findings were fixed:
 9. Static analysis reported the repeated escalation-family test literal. `EscalationEngineTest` now uses one shared fixture constant without changing behavior.
 10. CodeRabbit found that the universal workflow directive placed the canonical handoff after merge. It now completes the handoff and freezes tracked content before exact-head validation and merge.
 11. CodeRabbit found incomplete workflow-state inventories and an overbroad no-Pi exception. The prompt now includes skipped states, states that skipped results are not evidence, and limits the verified no-result exception to implementation PRs with configured applicable Pi workflows while preserving the documentation-only distinction.
+12. Exact-head Pi wrapper run `30794945133` exposed that the disposable Paper profile reused MariaDB migration history across mutable PR heads. The private staging database contained an earlier V16 checksum and Flyway correctly rejected the final exact-head V16. `EnthusiaStaff-Staging` PR #7 now clears only a guarded dedicated staging/test/Pi database before and after each two-boot run, without `repair` or selective history rewriting.
+13. The first staging reset wrapper relied on Bash `errexit` inside a function invoked from an `if`, allowing a failed Java reset to be masked by the following command. The wrapper now captures and returns the resetter status explicitly, and failure-path fixtures cover pre-reset, post-reset, harness failure and secret redaction.
 
 The complete diff must be reviewed once more at the resulting exact head before merge. All valid review threads must be resolved and any later tracked change requires a fresh exact-head validation cycle.
+
+## Pi failure evidence and staging correction
+
+The first directly identified exact-head Pi cycle used:
+
+- public wrapper run: `https://github.com/wsg138/EnthusiaStaff/actions/runs/30794945133`;
+- public failure artifact: `https://github.com/wsg138/EnthusiaStaff/actions/runs/30794945133/artifacts/8848768264`;
+- private staging run: `https://github.com/wsg138/EnthusiaStaff-Staging/actions/runs/30794966760`;
+- source SHA: `8cd259415862f017ee038efc7e0615bf9ab0b311`;
+- staging-control SHA: `988b1388baa59f8f3ca73506e1f53d7cadbc07b0`.
+
+The hosted build job succeeded. The Lincoln-PI-4 boot job failed before storage readiness because Flyway found V16 applied checksum `-1973590227` while the final source resolved V16 as `-782756421`. This proved staging-state contamination from an earlier mutable PR head; it did not justify changing V16 or weakening Flyway validation.
+
+Private staging PR #7 — `https://github.com/wsg138/EnthusiaStaff-Staging/pull/7` — merged normally as `635423c64a2254d137002fce32652eb20770db34`. The corrected workflow:
+
+- verifies that MariaDB selected a database explicitly recognizable as staging, test or Pi scoped;
+- clears all tables/views before the first boot;
+- preserves the clean migrated database between the first and second boots to test restart persistence;
+- clears it again after success, harness failure, signal or wrapper exit;
+- records sanitized reset evidence; and
+- never calls Flyway `repair`, edits migrations or selectively rewrites `flyway_schema_history`.
+
+Future agents should open the public wrapper artifact first when Pi fails because it records the private run ID, failed jobs, sanitized logs and nested Pi evidence. Then inspect `wsg138/EnthusiaStaff-Staging` directly with the GitHub connector.
 
 ## Workflow documentation and routing
 
@@ -86,6 +116,7 @@ The tracked workflow documentation:
 - orders canonical handoff completion and tracked-content freeze before exact-head validation and merge;
 - documents Coverage/Pi timing, queued/pending/in-progress/completed/failed/skipped/cancelled/superseded inspection, supersession, final-head freezing, trigger-or-block handling, terminal Pi requirements for implementation PRs and the docs-only distinction;
 - states that skipped, cancelled, superseded, different-revision, merge-ref-only and runtime-equivalent runs are not exact-head validation evidence;
+- records the public wrapper, failure-artifact and private staging repository navigation needed when commit-scoped listings omit `pull_request_target`; and
 - separates implementation workflows from explicitly requested review-only work.
 
 ## Validation contract
@@ -101,7 +132,7 @@ chmod +x gradlew
   --console=plain
 ```
 
-Coverage and Pi may take roughly ten minutes. A newer commit can cancel or supersede an earlier run; cancelled and superseded runs are neither failures nor validation evidence, and skipped runs are not evidence. After this final workflow-documentation correction, make no further commits unless exact-head validation exposes another real defect.
+Coverage and Pi may take roughly ten minutes. A newer commit can cancel or supersede an earlier run; cancelled and superseded runs are neither failures nor validation evidence, and skipped runs are not evidence. After the owner-requested evidence-routing correction, make no further commits unless exact-head validation exposes another real defect.
 
 Final exact-head evidence must be recorded in PR #54, not in this tracked file. It must include the final feature SHA, Coverage and Wiki run/job IDs, Java/build/test/migration results, coverage, runtime-JAR hashes and artifact identity, provider-leak checks, Codacy state, review-thread count, and the terminal exact-head Pi result. For an implementation PR with a configured applicable Pi workflow, a missing result blocks merge unless a verified documented exception proves the workflow cannot be triggered or applied; a missing trigger alone is not an exception. Documentation-only work may record why Pi was not required when no applicable workflow exists.
 
