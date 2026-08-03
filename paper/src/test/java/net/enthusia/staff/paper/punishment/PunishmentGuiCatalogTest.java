@@ -1,10 +1,12 @@
 package net.enthusia.staff.paper.punishment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
@@ -12,7 +14,9 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.AltInheritanceMode;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
+import net.enthusia.staff.domain.escalation.RemovedReason;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
+import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -77,6 +81,35 @@ class PunishmentGuiCatalogTest {
                         .toList()
         );
         assertTrue(catalog.reasons(actor(StaffRank.ADMIN), MUTE_COMMAND, SAFETY).isEmpty());
+    }
+
+    @Test
+    void renamedAndRemovedReasonsAreDescribedWithoutEnteringSelectionLists() {
+        ReasonPolicy canonical = policy(CHAT_MOD, CHAT, StaffRank.MOD, SanctionType.MUTE);
+        RemovedReason removed = new RemovedReason("chat.retired", CHAT, "Retired reason");
+        PunishmentGuiCatalog catalog = new PunishmentGuiCatalog(
+                new AtomicReasonPolicyRepository(
+                        "v2",
+                        List.of(canonical),
+                        Map.of("chat.old", canonical.id()),
+                        List.of(removed)
+                ),
+                new DefaultAuthorizationPolicy()
+        );
+
+        assertEquals(
+                List.of(canonical.id()),
+                catalog.reasons(actor(StaffRank.MOD), MUTE_COMMAND, CHAT).stream().map(ReasonPolicy::id).toList()
+        );
+        assertEquals(
+                ReasonPolicyRepository.ReasonAvailability.ALIAS,
+                catalog.describe("chat.old").orElseThrow().availability()
+        );
+        assertEquals(
+                ReasonPolicyRepository.ReasonAvailability.REMOVED,
+                catalog.describe(removed.id()).orElseThrow().availability()
+        );
+        assertFalse(catalog.describe(removed.id()).orElseThrow().resolvesToActivePolicy());
     }
 
     private static PunishmentGuiCatalog catalog() {

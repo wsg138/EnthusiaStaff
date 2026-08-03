@@ -10,41 +10,55 @@ This manifest records repository, validation and authority boundaries for develo
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current verified `main` at PR #51 start | `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727` |
-| Latest merged product PR before current work | PR #49 — modular report configuration and safe reload |
+| Current verified `main` at PR #52 start | `4f7165adced48d98bce86730e89b92944afba063` |
+| Latest merged product PR before current work | PR #51 — escalation clean-period decay correctness |
 | Latest merged coordination PR | PR #50 — RoseChat provider blocker reconciliation |
-| Active work | PR #51 — escalation clean-period decay correctness fix; verify live closure |
+| Active work | PR #52 — reason aliases and removed-ID presentation; verify live closure |
 | Migration boundary | V14 is latest; V1–V14 are immutable |
 | Dormant default | Startup remains non-`ACTIVE`; merging development code does not activate authority |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #51 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
+At PR #52 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
 
 ## Current implementation checkpoint
 
-PR #51 fixes one bounded escalation defect:
+PR #52 implements one bounded escalation-policy compatibility slice:
 
-- decay intervals are measured from the newest contributing, non-overturned related offense;
-- a recent related reoffense resets the clean-period clock for older related history;
-- 89-day, 90-day and 180-day boundaries are covered;
-- shared clean-period decay and non-decaying policy behavior are covered;
-- severity weighting, recency, filtering and finite-ladder clamping are preserved;
-- no command, permission, configuration, provider contract, schema or migration changes.
+- old stable reason IDs can be declared as explicit aliases to one active canonical reason;
+- aliases resolve current policy behavior but never become duplicate entries in the selectable reason catalog;
+- newly committed punishment records use the canonical reason ID and current configuration version;
+- removed reason IDs expose bounded display metadata without a ladder and cannot resolve for new punishment creation;
+- removed IDs in the dynamic `cheating.polar.*` namespace block template expansion rather than becoming selectable accidentally;
+- active policies, aliases, removed metadata and version are published and restored as one atomic reload snapshot;
+- saved punishment review presentation distinguishes active, renamed, removed and unknown reason IDs;
+- the requirements matrix now records the implemented compatibility slice without overstating the broader escalation requirement;
+- no existing case, sanction, ordinal, expiration, draft, request or audit record is rewritten;
+- no schema or Flyway migration changed.
 
-Exact final-head validation, review and merge evidence must be read live from PR #51.
+Exact final-head validation, review and merge evidence must be read live from PR #52.
+
+## Harsh-review checkpoint
+
+The separate full-PR review confirmed and fixed three defects before the final tracked-content freeze:
+
+1. removed `cheating.polar.*` identifiers could still resolve through dynamic template expansion;
+2. reload snapshots were assembled through separate atomic reads and could theoretically mix metadata from concurrent versions;
+3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the code and focused tests supplied that slice.
+
+Regression tests cover the runtime boundaries, configuration rejection, atomic publication/restore, selection exclusion and canonical committed identity. The documentation fix preserves conservative `PARTIAL` status and leaves policy snapshots, serious-offense decay metadata, combined recommendations and broader modular configuration as separate future work.
 
 ## Prior verified evidence
 
-PR #50 exact feature head `e5d72a9809b7aabec39e95705e6e0a82f4a3f663` recorded:
+PR #51 exact feature head `e8b70154dc07a38c4ee9f8e63a0c670ebf21102f` recorded:
 
-- `Validate Wiki` workflow run `30775061520`: success;
-- `Coverage` workflow run `30775061525`: success;
+- `Coverage` workflow run `30776087520`: success;
+- `Validate Wiki` workflow run `30776087528`: success;
 - zero unresolved review threads;
-- normal merge commit `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727`.
+- normal merge commit `4f7165adced48d98bce86730e89b92944afba063`.
 
 PR #49 exact feature head `1ad41be3eeca49370694916f386dda0484e3bfa3` recorded Java 21 clean build, unit and MariaDB/Testcontainers suites, Flyway through V14, runtime-JAR checks, coverage/static analysis and zero unresolved review threads in its live PR evidence.
 
-Do not attribute those prior-head results to PR #51.
+Do not attribute those prior-head results to PR #52.
 
 ## Current provider blocker
 
@@ -54,7 +68,7 @@ Do not invent an API, reflect against unknown implementation classes, copy provi
 
 ## Development merge gate
 
-For PR #51 and later implementation PRs, merge only when:
+For PR #52 and later implementation PRs, merge only when:
 
 - the complete scoped behavior is implemented and harsh-reviewed;
 - every confirmed defect and merge blocker is fixed;
@@ -94,10 +108,10 @@ Each related project remains an independent Git repository. Histories must not b
 
 ## Current development route
 
-1. Verify PR #51's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
+1. Verify PR #52's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
 2. Obtain or publish the supported RoseChat provider contract before implementing the private-message callback.
-3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; versioned aliases and removed-ID readability are the current recommendation.
-4. Keep one coherent item per PR and do not silently combine RoseChat or broader escalation work with PR #51.
+3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; explicit policy-snapshot behavior across ladder edits is the current likely candidate.
+4. Keep one coherent item per PR and do not silently combine RoseChat, serious-offense decay metadata or broader modular configuration with PR #52.
 5. Complete issue #43 only after the plugin is closer to release and one exact release candidate is pinned.
 
 ## Release boundaries

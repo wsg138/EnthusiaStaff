@@ -108,13 +108,11 @@ final class PunishmentGuiRenderer {
                         Component.text("Last seen: " + state.target().lastSeenAt(), NamedTextColor.GRAY)
                 )
         ));
+        var reason = catalog.describe(draft.reasonId());
         inventory.setItem(12, item(
                 Material.WRITABLE_BOOK,
-                "Reason",
-                List.of(
-                        Component.text(draft.reasonId(), NamedTextColor.WHITE),
-                        Component.text("This exact reason ID will be audited", NamedTextColor.GRAY)
-                )
+                PunishmentReasonPresentation.name(reason),
+                PunishmentReasonPresentation.lore(draft.reasonId(), reason)
         ));
         List<Component> recommendation = new ArrayList<>();
         recommendation.add(Component.text(

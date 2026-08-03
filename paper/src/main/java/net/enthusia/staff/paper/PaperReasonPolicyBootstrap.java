@@ -6,7 +6,6 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
-import net.enthusia.staff.paper.config.ConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
 
 final class PaperReasonPolicyBootstrap {
@@ -20,8 +19,13 @@ final class PaperReasonPolicyBootstrap {
         try {
             ReasonPolicyConfigurationLoader.LoadedPolicies loaded =
                     new ReasonPolicyConfigurationLoader().load(file);
-            return Optional.of(new AtomicReasonPolicyRepository(loaded.version(), loaded.policies()));
-        } catch (ConfigurationValidationException exception) {
+            return Optional.of(new AtomicReasonPolicyRepository(
+                    loaded.version(),
+                    loaded.policies(),
+                    loaded.aliases(),
+                    loaded.removedReasons()
+            ));
+        } catch (IllegalArgumentException exception) {
             degrade.accept(exception.getMessage());
             logger.log(
                     Level.SEVERE,

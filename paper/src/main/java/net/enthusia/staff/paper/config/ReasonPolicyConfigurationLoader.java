@@ -13,25 +13,34 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import net.enthusia.staff.common.DurationParser;
 import net.enthusia.staff.common.ParsedDuration;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.AltInheritanceMode;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
+import net.enthusia.staff.domain.escalation.RemovedReason;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class ReasonPolicyConfigurationLoader {
-    private static final Set<String> ROOT_FIELDS = Set.of("version", "defaults", "reasons");
+    private static final Pattern STABLE_ID = Pattern.compile("[a-z0-9]+(?:[.-][a-z0-9]+)*");
+    private static final Set<String> ROOT_FIELDS = Set.of(
+            "version", "defaults", "aliases", "removed-reasons", "reasons"
+    );
     private static final Set<String> DEFAULT_FIELDS = Set.of(
             "decay-eligible", "public-default", "reportable", "confiscation-options",
             "required-rank", "automatic-detection-eligible", "alt-inheritance"
     );
+    private static final Set<String> ALIAS_FIELDS = Set.of("id", "target");
+    private static final Set<String> REMOVED_REASON_FIELDS = Set.of("id", "family", "display-name");
     private static final Set<String> REASON_FIELDS = Set.of(
             "id", "family", "display-name", "examples", "severity", "decay-eligible",
             "public-default", "reportable", "confiscation-options", "required-rank",
@@ -69,26 +78,141 @@ public final class ReasonPolicyConfigurationLoader {
             rejectUnknown(root, ROOT_FIELDS, "root");
             String version = text(root, "version", "root");
             Defaults defaults = parseDefaults(required(root, "defaults", "root"));
-            JsonNode reasons = required(root, "reasons", "root");
-            if (!reasons.isArray() || reasons.isEmpty()) {
-                throw invalid("root.reasons must be a non-empty array");
-            }
-            List<ReasonPolicy> policies = new ArrayList<>();
-            Set<String> identifiers = new HashSet<>();
-            for (int index = 0; index < reasons.size(); index++) {
-                ReasonPolicy policy = parseReason(reasons.get(index), "reasons[" + index + "]", defaults);
-                if (!identifiers.add(policy.id())) {
-                    throw invalid("duplicate reason policy: " + policy.id());
-                }
-                policies.add(policy);
-            }
-            return new LoadedPolicies(version, policies);
+            ParsedPolicies active = parsePolicies(required(root, "reasons", "root"), defaults);
+            List<RemovedReason> removedReasons = parseRemovedReasons(
+                    root.get("removed-reasons"),
+                    active.identifiers()
+            );
+            Map<String, String> aliases = parseAliases(
+                    root.get("aliases"),
+                    active.identifiers(),
+                    removedReasons
+            );
+            return new LoadedPolicies(version, active.policies(), aliases, removedReasons);
         } catch (IOException exception) {
             throw new ConfigurationValidationException("Unable to read " + sourceName, exception);
         } catch (ConfigurationValidationException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
             throw new ConfigurationValidationException("Invalid punishment policy: " + exception.getMessage(), exception);
+        }
+    }
+
+    private ParsedPolicies parsePolicies(JsonNode reasons, Defaults defaults) {
+        if (!reasons.isArray() || reasons.isEmpty()) {
+            throw invalid("root.reasons must be a non-empty array");
+        }
+        List<ReasonPolicy> policies = new ArrayList<>();
+        Set<String> identifiers = new HashSet<>();
+        for (int index = 0; index < reasons.size(); index++) {
+            ReasonPolicy policy = parseReason(reasons.get(index), "reasons[" + index + "]", defaults);
+            if (!identifiers.add(policy.id())) {
+                throw invalid("duplicate reason policy: " + policy.id());
+            }
+            policies.add(policy);
+        }
+        return new ParsedPolicies(policies, identifiers);
+    }
+
+    private List<RemovedReason> parseRemovedReasons(JsonNode node, Set<String> activeIds) {
+        if (node == null) {
+            return List.of();
+        }
+        if (!node.isArray()) {
+            throw invalid("root.removed-reasons must be an array");
+        }
+        List<RemovedReason> removed = new ArrayList<>();
+        Set<String> identifiers = new HashSet<>();
+        for (int index = 0; index < node.size(); index++) {
+            String path = "removed-reasons[" + index + "]";
+            RemovedReason reason = parseRemovedReason(node.get(index), path);
+            addRemovedReason(removed, identifiers, activeIds, reason, path);
+        }
+        return List.copyOf(removed);
+    }
+
+    private static RemovedReason parseRemovedReason(JsonNode node, String path) {
+        requireObject(node, path);
+        rejectUnknown(node, REMOVED_REASON_FIELDS, path);
+        return new RemovedReason(
+                text(node, "id", path),
+                text(node, "family", path),
+                text(node, "display-name", path)
+        );
+    }
+
+    private static void addRemovedReason(
+            List<RemovedReason> removed,
+            Set<String> identifiers,
+            Set<String> activeIds,
+            RemovedReason reason,
+            String path
+    ) {
+        if (activeIds.contains(reason.id())) {
+            throw invalid(path + ".id overlaps active reason policy " + reason.id());
+        }
+        if (!identifiers.add(reason.id())) {
+            throw invalid(path + ".id duplicates removed reason " + reason.id());
+        }
+        removed.add(reason);
+    }
+
+    private Map<String, String> parseAliases(
+            JsonNode node,
+            Set<String> activeIds,
+            List<RemovedReason> removedReasons
+    ) {
+        if (node == null) {
+            return Map.of();
+        }
+        if (!node.isArray()) {
+            throw invalid("root.aliases must be an array");
+        }
+        Set<String> removedIds = removedIdentifiers(removedReasons);
+        Map<String, String> aliases = new LinkedHashMap<>();
+        for (int index = 0; index < node.size(); index++) {
+            String path = "aliases[" + index + "]";
+            Alias alias = parseAlias(node.get(index), path);
+            validateAlias(alias, activeIds, removedIds, path);
+            if (aliases.putIfAbsent(alias.id(), alias.target()) != null) {
+                throw invalid(path + ".id duplicates reason alias " + alias.id());
+            }
+        }
+        return Map.copyOf(aliases);
+    }
+
+    private static Set<String> removedIdentifiers(List<RemovedReason> removedReasons) {
+        Set<String> identifiers = new HashSet<>();
+        removedReasons.forEach(reason -> identifiers.add(reason.id()));
+        return identifiers;
+    }
+
+    private static Alias parseAlias(JsonNode node, String path) {
+        requireObject(node, path);
+        rejectUnknown(node, ALIAS_FIELDS, path);
+        return new Alias(
+                stableText(node, "id", path),
+                stableText(node, "target", path)
+        );
+    }
+
+    private static void validateAlias(
+            Alias alias,
+            Set<String> activeIds,
+            Set<String> removedIds,
+            String path
+    ) {
+        if (alias.id().equals(alias.target())) {
+            throw invalid(path + " cannot target itself");
+        }
+        if (activeIds.contains(alias.id())) {
+            throw invalid(path + ".id overlaps active reason policy " + alias.id());
+        }
+        if (removedIds.contains(alias.id())) {
+            throw invalid(path + ".id overlaps removed reason " + alias.id());
+        }
+        if (!activeIds.contains(alias.target())) {
+            throw invalid(path + ".target must reference an active reason policy: " + alias.target());
         }
     }
 
@@ -201,6 +325,14 @@ public final class ReasonPolicyConfigurationLoader {
         return value.textValue().trim();
     }
 
+    private static String stableText(JsonNode parent, String field, String path) {
+        String value = text(parent, field, path);
+        if (!STABLE_ID.matcher(value).matches()) {
+            throw invalid(path + "." + field + " must be a stable lowercase identifier");
+        }
+        return value;
+    }
+
     private static String optionalText(JsonNode parent, String field, String fallback) {
         JsonNode value = parent.get(field);
         if (value == null) {
@@ -273,9 +405,34 @@ public final class ReasonPolicyConfigurationLoader {
         }
     }
 
-    public record LoadedPolicies(String version, List<ReasonPolicy> policies) {
+    public record LoadedPolicies(
+            String version,
+            List<ReasonPolicy> policies,
+            Map<String, String> aliases,
+            List<RemovedReason> removedReasons
+    ) {
         public LoadedPolicies {
+            if (version == null || version.isBlank() || policies == null || aliases == null || removedReasons == null) {
+                throw new IllegalArgumentException("reason policy metadata must be present");
+            }
+            version = version.trim();
             policies = List.copyOf(policies);
+            aliases = Map.copyOf(aliases);
+            removedReasons = List.copyOf(removedReasons);
+        }
+
+        public LoadedPolicies(String version, List<ReasonPolicy> policies) {
+            this(version, policies, Map.of(), List.of());
+        }
+    }
+
+    private record Alias(String id, String target) {
+    }
+
+    private record ParsedPolicies(List<ReasonPolicy> policies, Set<String> identifiers) {
+        private ParsedPolicies {
+            policies = List.copyOf(policies);
+            identifiers = Set.copyOf(identifiers);
         }
     }
 

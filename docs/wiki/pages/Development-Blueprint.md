@@ -13,9 +13,9 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #50 is the latest merged coordination checkpoint; its normal merge commit is `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727`.
-- PR #49 remains the latest merged report-system product checkpoint before current work.
-- PR #51 fixes escalation clean-period decay; verify its live head, validation, review and merge state before acting.
+- PR #51 was merged by normal merge commit `4f7165adced48d98bce86730e89b92944afba063` after exact-head validation and zero unresolved review threads.
+- PR #52 is the current reason-policy compatibility work; verify its live head, validation, review and merge state before acting.
+- PR #49 remains the latest merged report-system product checkpoint; PR #50 remains the RoseChat blocker coordination checkpoint.
 - V14 remains the live highest Flyway migration; V1–V14 are immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
@@ -31,20 +31,20 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Verify PR #51 closure
+### 1. Verify PR #52 closure
 
 Before beginning implementation:
 
-- verify PR #51's exact live head, base and ahead/behind relation;
+- verify PR #52's exact live head, base and ahead/behind relation;
 - read its exact-head build, test, migration, coverage, analyzer, runtime-JAR and review evidence from GitHub;
 - confirm the normal merge result, resulting `main`, feature-head containment and branch cleanup;
 - reconcile any newer pull request, branch, migration or requirement change.
 
-Do not repeat the clean-period decay fix in a competing PR.
+PR #52 adds explicit aliases for renamed reason IDs, readable presentation-only metadata for removed IDs, atomic reload/rollback of the complete compatibility model, and selection boundaries that keep removed IDs inactive. Do not repeat it in a competing PR.
 
 ### 2. Resume RoseChat only when the provider contract exists
 
-The supported private-message callback and privacy presentation boundary remains the preferred next report-system item, but it is externally blocked.
+The supported private-message callback and privacy presentation boundary remains the preferred report-system item, but it is externally blocked.
 
 Implementation may begin only after an accessible supported provider repository or artifact defines:
 
@@ -68,7 +68,7 @@ If the RoseChat contract is still unavailable after live reconciliation, choose 
 5. one coherent category from a detailed feature-group page;
 6. documentation and evidence for the exact tested revision.
 
-After PR #51, the current recommended implementable slice is versioned escalation aliases and readable-but-unselectable removed reason IDs. That work must preserve existing stored ordinals and policy snapshots and remain separate from the RoseChat blocker.
+After PR #52, the likely next prerequisite-ready escalation slice is explicit policy-snapshot behavior across ladder edits. That work must preserve historical interpretation and stored ordinals, remain separate from serious-offense decay metadata and broader modular configuration, and be selected only after fresh live reconciliation.
 
 Do not treat the blocked RoseChat feature or the broader escalation requirement as complete, and do not silently combine them in one PR.
 

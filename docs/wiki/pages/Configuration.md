@@ -17,13 +17,36 @@ configuration shape, so this page distinguishes **what exists now** from the
 | [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Current Paper runtime settings |
 | [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | Current reason, ladder and escalation policy |
 | [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | Commands, permissions and soft dependencies |
-| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Parses and validates reason policies |
+| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Parses and validates reason policies, aliases and removed-ID metadata |
 | [`PaperReasonPolicyBootstrap.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperReasonPolicyBootstrap.java) | Publishes the valid reason-policy model |
 | [`PaperDatabaseConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperDatabaseConfiguration.java) | Resolves database settings and environment-variable names |
-| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy boundary |
+| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy, alias and removed-ID boundary |
 | [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Velocity settings and environment-backed secret references |
 
 The full modular tree below is not yet implemented on `main`.
+
+## Reason aliases and removed IDs
+
+`reason-policies.yml` supports two optional versioned compatibility sections at the root:
+
+```yaml
+version: "2026-08-02.1"
+
+aliases:
+  - id: chat.old-harassment
+    target: chat.harassment
+
+removed-reasons:
+  - id: chat.retired-abuse
+    family: chat
+    display-name: Retired abusive language
+```
+
+An alias is an old stable ID mapped directly to one active canonical reason. Alias targets must be active reasons; alias chains, cycles, self-targets, duplicate aliases, unknown targets, and overlap with active or removed IDs are rejected. A stored draft or compatible caller using an alias is evaluated against the current canonical policy and the canonical ID is used for a newly committed case.
+
+A removed reason contains presentation metadata only. It has no ladder and never appears in the category or reason selection catalog. Saved review state can still show its ID, family, and display name, but authoritative confirmation rejects it because removed IDs do not resolve to active policies. Existing case, sanction, ordinal, expiration, and audit records are not rewritten.
+
+Aliases, removed-ID metadata, active reasons, and the configuration version are one atomic reload snapshot. A failed publication or later reload component failure restores the previous complete snapshot rather than mixing versions.
 
 ## Current history and sanction-action settings
 
@@ -154,7 +177,7 @@ The target reload transaction is:
 
 A reload must never partially apply only some files.
 
-Punishment-request alert settings and the history/sanction-action settings above use the validated all-or-nothing reload path.
+Punishment-request alert settings, history/sanction-action settings, and the reason policy compatibility metadata above use the validated all-or-nothing reload path.
 
 ## Restart-required settings
 
@@ -189,7 +212,8 @@ not switch authority merely to make a command available.
 Before approving a configuration change, confirm:
 
 - IDs are unique and stable;
-- aliases resolve exactly once;
+- aliases resolve exactly once to an active reason;
+- removed IDs are presentation-only and absent from selection;
 - every reason has family, severity, ladder, decay, visibility, reportability,
   rank, automation eligibility, confiscation options and alt inheritance;
 - every GUI reference exists and slots do not conflict;
@@ -202,9 +226,7 @@ Before approving a configuration change, confirm:
 
 ## Current completion
 
-Modular configuration is roughly **30%** complete and full atomic reload roughly
-**40%** complete. The detailed breakdown and primary files are maintained in
-[[Core Platform and Infrastructure]].
+The current policy file now has versioned alias and removed-ID compatibility, but the broader modular file tree remains incomplete. Modular configuration is still roughly **30%** complete and full atomic reload roughly **40%** complete. The detailed breakdown and primary files are maintained in [[Core Platform and Infrastructure]].
 
 ## Related pages
 
