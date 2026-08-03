@@ -18,10 +18,11 @@ Related PR:
 | Starting main | `8c63f29923cf6c01624371adffcfceb3ddf71a0c` |
 | Expected committed state | `IDLE — PR #57 requires live merge verification` |
 | Implementation | Action-time live-rank checks plus one bounded periodic entity check; serialized profile replacement for promotions/demotions; existing durable exit and exact restoration for rank removal |
-| Harsh-review fixes | Verify required game mode before publishing the new cached profile; bound pending periodic checks to one per active player |
-| Tests | `StaffModeRankReconciliationPolicyTest` covers unchanged, every player-rank transition, missing cached state, rank removal and `SYSTEM`; `StaffModeAccessPolicyTest` preserves prior boundaries and proves unresolved/`SYSTEM` fail closed |
+| Harsh-review fixes | Verify required game mode before publishing the new cached profile; bound pending periodic checks; reject unresolved and `SYSTEM` ranks in recovery before profile activation |
+| Tests | `StaffModeRankReconciliationPolicyTest` covers unchanged, every player-rank transition, missing cached state, recovery rejection of `SYSTEM`, and rank removal; `StaffModeAccessPolicyTest` preserves prior boundaries and proves unresolved/`SYSTEM` fail closed |
 | Migration boundary | V16 is highest; PR #57 adds no migration; V1–V16 remain immutable |
 | Configuration changes | None |
+| External provider blocker | RoseChat private-message evidence remains blocked pending the supported provider callback/event contract, delivery lifecycle, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. See `2026-08-02-pr50-rosechat-provider-blocker.md`; do not route it through issue #43. |
 | Production boundary | No deployment, authority activation, LiteBans change, production Discord use or production access |
 | Next owner-priority workstream | Freshly select one separate staff mode, vanish or freeze item after PR #57; do not begin it in this PR |
 

@@ -224,7 +224,8 @@ public final class StaffModeManager implements Listener {
                     restoreAndVerify(playerId, session, loaded);
                     return;
                 }
-                if (rankSnapshot == null) {
+                if (StaffModeRankReconciliationPolicy.decide(null, rankSnapshot)
+                        == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
                     message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
                     restoreAndVerify(playerId, exiting, loaded);
@@ -245,7 +246,8 @@ public final class StaffModeManager implements Listener {
             Player player
     ) {
         StaffRank currentRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
-        if (currentRank == null) {
+        if (StaffModeRankReconciliationPolicy.decide(null, currentRank)
+                == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
             player.sendMessage(Component.text(
                     "Your explicit staff rank is no longer assigned; restoring your saved state."
             ));

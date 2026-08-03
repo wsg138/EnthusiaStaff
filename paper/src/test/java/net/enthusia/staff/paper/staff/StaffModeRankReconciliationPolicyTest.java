@@ -42,6 +42,14 @@ class StaffModeRankReconciliationPolicyTest {
     }
 
     @Test
+    void systemRankIsRejectedBeforeRecoveryProfileActivation() {
+        assertEquals(
+                StaffModeRankReconciliationPolicy.Action.EXIT_SESSION,
+                StaffModeRankReconciliationPolicy.decide(null, StaffRank.SYSTEM)
+        );
+    }
+
+    @Test
     void missingOrSystemLiveRankExitsThePlayerSession() {
         for (StaffRank cachedRank : StaffRank.values()) {
             assertEquals(

@@ -25,7 +25,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Completed work item | Reconcile active staff-mode inventory, game-mode and tool profiles with the player's current explicit rank, and durably restore the original snapshot when rank authority is removed |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-staffmode-live-rank-reconciliation.md` |
 | Exact validation/merge evidence | Read PR #57 live. Require one unchanged exact feature head synchronized with current `main`; terminal results for every configured Java 21, MariaDB/Testcontainers, migration immutability, runtime-JAR/provider-leak, coverage, Codacy/static-analysis, wiki/documentation, applicable public/private Pi and review gate; zero unresolved valid threads; exact run/job/artifact identities and hashes; normal merge commit; resulting `main`; feature-head containment; no unmerged branch commits; and branch cleanup. |
-| External blocker | Supported RoseChat private-message provider contract remains unavailable; track it through a focused blocker issue and the normal handoff rather than issue #43 |
+| External blocker | Supported RoseChat private-message provider contract remains unavailable. See `ai-agents/reports/agent-handoffs/2026-08-02-pr50-rosechat-provider-blocker.md`; implementation requires the supported callback/event API, lifecycle and delivery semantics, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. Route it through a focused blocker issue or handoff, never issue #43. |
 
 ## Start-state reconciliation for PR #57
 
@@ -48,16 +48,17 @@ PR #57 now enforces:
 - promotions and demotions replace the temporary staff inventory, required game mode and rank-specific tool set without recapturing or overwriting the original durable snapshot;
 - rejected game-mode application is treated as activation failure rather than publishing an incorrect profile;
 - removal of the explicit player rank enters the existing durable exit and exact restore workflow;
-- unresolved and `SYSTEM` ranks fail closed for ordinary inventory mutation, Ender access and advanced staff tools;
+- unresolved and `SYSTEM` ranks fail closed during live enforcement and recovery before profile activation;
 - existing entry, reconnect recovery, transition fencing, staff-tool transfer, Helper, Mod, Developer, Admin and Founder boundaries remain intact;
 - no command, permission, configuration, provider, database or migration behavior changes.
 
 ## Harsh-review result
 
-The complete diff received a separate harsh review. It found and fixed two confirmed defects:
+The complete diff received a separate harsh review. It found and fixed three confirmed defects:
 
 1. a cancelled or rejected game-mode mutation could otherwise leave the new cached rank published with the wrong live mode; profile application now verifies the required mode before completing;
-2. the one-second reconciler could enqueue duplicate entity checks during scheduler lag; one bounded pending-check marker per active player now prevents queue growth.
+2. the one-second reconciler could enqueue duplicate entity checks during scheduler lag; one bounded pending-check marker per active player now prevents queue growth;
+3. the public recovery entry point could accept `SYSTEM` and begin player-profile activation before periodic reconciliation; both recovery checks now apply the same fail-closed reconciliation policy before activation.
 
 No tracked merge blocker remains before exact-head validation. Full Paper event-object staging remains useful optional runtime confidence beyond the directly tested decision policies and configured Pi boot/restart gate.
 
@@ -98,4 +99,5 @@ LiteBans remains authoritative. Issue #43 remains open specifically for producti
 1. Apply the complete exact-head gate to PR #57 and merge normally only after every applicable check and review gate succeeds for one unchanged synchronized head.
 2. Record the merge commit, resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup in one post-merge PR comment.
 3. After PR #57 is complete, freshly reconcile the remaining priority-one staff mode, vanish and freeze gaps; reload/disable recovery is a candidate, not preselected work.
-4. Do not begin the next work item in the PR #57 session.
+4. The RoseChat private-message evidence item remains externally blocked until the supported provider contract described above becomes available.
+5. Do not begin the next work item in the PR #57 session.

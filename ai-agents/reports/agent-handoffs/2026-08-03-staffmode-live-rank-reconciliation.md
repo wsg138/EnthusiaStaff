@@ -33,7 +33,7 @@ Date: 2026-08-03
 - The original durable snapshot and session identity are preserved; profile correction does not begin a second staff session.
 - The required game mode is verified after mutation. Rejection or cancellation is treated as a profile-application failure and routes to durable restoration.
 - Rank removal and profile-application failure use the existing bounded-worker `beginExit` plus exact restore/checksum workflow.
-- Unresolved and `SYSTEM` ranks fail closed for ordinary inventory mutation, Ender access and advanced tools.
+- Unresolved and `SYSTEM` ranks fail closed during action enforcement and recovery before player-profile activation.
 - The reconciliation scheduler is start-once and plugin-owned, so reload does not duplicate it and Paper cancels it with plugin lifecycle.
 - No command, permission, configuration, persistence, protocol, provider or database schema changes.
 
@@ -53,6 +53,7 @@ Date: 2026-08-03
 - unchanged explicit player ranks keep the current profile;
 - every promotion and demotion among Helper, Mod, Developer, Admin and Founder replaces the profile;
 - a missing cached rank with a valid live player rank applies the live profile;
+- recovery rejects `SYSTEM` before player-profile activation;
 - a missing live rank or `SYSTEM` exits the player session.
 
 `StaffModeAccessPolicyTest` preserves all prior rank, game-mode, Ender and staff-tool transfer assertions and adds fail-closed ordinary inventory and advanced-tool coverage for unresolved and `SYSTEM` ranks.
@@ -61,10 +62,11 @@ Date: 2026-08-03
 
 The complete PR diff was separately reviewed against current `main`, including startup, reload, shutdown, restart/recovery, Folia/Paper scheduling, bounded work, asynchronous persistence, idempotency, partial failures, rank hierarchy, console/system boundaries, inventory paths, Bedrock usability, provider boundaries, sensitive data, tests and documentation.
 
-Two confirmed defects were fixed:
+Three confirmed defects were fixed:
 
 1. **Profile publication after rejected game-mode change.** The first implementation could update the cached rank after another listener cancelled the required game-mode mutation. `applyStaffState` now verifies the live mode and throws into the durable recovery path when it was rejected.
 2. **Duplicate pending periodic checks.** The first implementation could enqueue repeated entity tasks during scheduler lag because the transition fence was acquired only after execution. A separate bounded pending-check set now limits each active player to one queued periodic check and clears on every retirement path.
+3. **`SYSTEM` recovery activation.** The public recovery entry point checked only for `null`, so a supplied non-player `SYSTEM` actor could reach profile activation before the periodic guard corrected it. Both recovery checks now apply `StaffModeRankReconciliationPolicy` and exit before activation.
 
 No tracked merge blocker or confirmed defect remains before exact-head validation.
 
@@ -74,11 +76,17 @@ Optional cleanup deferred:
 - broader staff-mode reload/disable restoration, which is a separate work item;
 - remaining vanish, freeze, inventory and tool-action work.
 
+## External provider blocker preserved
+
+The separate RoseChat private-message evidence item remains externally blocked. See `ai-agents/reports/agent-handoffs/2026-08-02-pr50-rosechat-provider-blocker.md`.
+
+Implementation must wait for an accessible supported provider repository or artifact defining the callback/event type, accepted-delivery and cancellation lifecycle, sender/recipient and Bedrock identity semantics, duplicate identity, threading guarantees, supported version coordinates, permitted privacy/evidence fields, and provider-present/missing/reload behavior. Route this through a focused blocker issue or handoff and never issue #43. Do not invent or reflect against an unknown API.
+
 ## Commit checkpoint
 
 - `1bdc87e97cf9d9ddd7621ff700b2ef84f9784c79` — implementation and focused tests.
 - `cebfa81b7e32dd517a1cab779c77d2c0e1f83381` — harsh-review corrections for verified game-mode application and bounded periodic checks.
-- Final tracked-state commit and exact frozen head must be read from PR #57 live metadata.
+- The final review-repair commit and exact frozen head must be read from PR #57 live metadata.
 
 ## Validation contract
 
@@ -100,4 +108,4 @@ V16 remains the highest migration. V1–V16 are immutable; no Flyway repair or h
 
 ## Next route
 
-Complete PR #57 only. After normal merge, verify the merge commit, resulting `main`, feature-head containment, absence of unmerged branch commits and branch cleanup, then stop. The next recommended priority-one candidate is staff-mode reload/disable recovery after fresh reconciliation; it is not part of this PR.
+Complete PR #57 only. After normal merge, verify the merge commit, resulting `main`, feature-head containment, absence of unmerged branch commits and branch cleanup, then stop. The next recommended priority-one candidate is staff-mode reload/disable recovery after fresh reconciliation; it is not part of this PR. The RoseChat item remains separately blocked until its supported provider contract is supplied.
