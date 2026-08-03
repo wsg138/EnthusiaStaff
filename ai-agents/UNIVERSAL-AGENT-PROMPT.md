@@ -6,7 +6,7 @@ Copy the text below into a new ChatGPT or coding-agent channel.
 
 Work on `wsg138/EnthusiaStaff` as the next repository agent.
 
-For implementation work, determine the current legitimate next step from the repository itself, complete exactly one logical work item, review it harshly, validate the exact final revision, merge it when every gate passes, leave one canonical durable handoff, clean up the merged branch when safe, and stop.
+For implementation work, determine the current legitimate next step from the repository itself, complete exactly one logical work item, review it harshly, leave one canonical durable handoff, freeze tracked content, validate the exact final revision, merge it when every gate passes, clean up the merged branch when safe, and stop.
 
 For an explicitly requested review-only work item, review the requested revision, report the findings, and stop without implementation, validation, merge, or branch cleanup unless the user separately asks for those actions.
 
@@ -32,7 +32,7 @@ Then inspect live GitHub state:
 - PR head/base and ahead/behind relations;
 - unresolved review threads;
 - current CI and exact-head evidence;
-- queued, pending, in-progress, cancelled and superseded Coverage/Pi runs;
+- queued, pending, in-progress, completed, failed, skipped, cancelled and superseded Coverage/Pi runs;
 - the live highest Flyway migration;
 - recent merged work that may make the state file stale.
 
@@ -76,7 +76,7 @@ When resuming a PR:
 
 1. verify its exact current head and base;
 2. determine whether another worker or process is still changing the branch;
-3. inspect all queued, pending, in-progress, failed, cancelled, superseded and successful checks for the current head;
+3. inspect all queued, pending, in-progress, completed, failed, skipped, cancelled, superseded and successful checks for the current head;
 4. synchronize it with `main` using the repository's normal merge-commit workflow when required;
 5. inspect the complete diff and current PR description;
 6. inspect unresolved review threads and incomplete checks;
@@ -84,7 +84,7 @@ When resuming a PR:
 8. complete the existing scope without broadening it unnecessarily;
 9. do not replace the PR with a new branch unless the current branch is irrecoverably invalid and that conclusion is documented.
 
-A cancelled or superseded run is not failure evidence, but it is not validation evidence either.
+Cancelled and superseded runs are not failure evidence, but they are not validation evidence either. Skipped runs are also not validation evidence and must be labeled accurately.
 
 ## Required harsh review
 
@@ -165,11 +165,11 @@ Normally include:
 - zero unresolved review threads;
 - safe exact-head Pi boot/restart testing when the existing workflow supports it.
 
-Inspect queued, pending, in-progress, completed, cancelled, and superseded workflows before saying Pi did not run. Pi may be queued or may start after Coverage completes.
+Inspect queued, pending, in-progress, completed, failed, skipped, cancelled and superseded workflows before saying Pi did not run. Pi may be queued or may start after Coverage completes. Skipped results are not validation evidence.
 
 If an exact-head Pi workflow is configured for an implementation PR but has not been triggered, trigger or re-run it when the available tooling supports that action. If it cannot be triggered or cannot apply to the exact head, block merge unless a verified exception records the concrete reason. A missing trigger alone is not non-applicability.
 
-Cancelled and superseded Coverage/Pi runs are neither failures nor evidence. Label skipped, different-revision, merge-ref-only and runtime-equivalent results accurately.
+Cancelled and superseded Coverage/Pi runs are neither failures nor evidence. Label skipped, different-revision, merge-ref-only and runtime-equivalent results accurately; none of those substitute for successful exact-head evidence.
 
 For implementation PRs, every configured applicable exact-head Pi workflow must reach a successful terminal result before merge. Do not merge while it is queued, pending or in progress. A verified documented exception is required when the workflow cannot be triggered or applied.
 
@@ -177,7 +177,7 @@ Documentation-only work may omit Pi when the workflow is not applicable or not c
 
 Never claim a check passed without direct evidence.
 
-Record the exact final feature SHA, workflow run and job IDs, Java version, build/test/migration results, coverage, JAR hashes, artifact identity, provider-leak result, static-analysis result, review-thread count and Pi result in the PR description or a final pre-merge PR comment. When no exact-head Pi result exists, record a verified exception proving the workflow cannot be triggered or applied; a missing trigger alone is not an exception. Updating PR text must not change the feature SHA.
+Record the exact final feature SHA, workflow run and job IDs, Java version, build/test/migration results, coverage, JAR hashes, artifact identity, provider-leak result, static-analysis result, review-thread count and Pi result in the PR description or a final pre-merge PR comment. For an implementation PR with a configured applicable Pi workflow, when no exact-head Pi result exists, record a verified exception proving the workflow cannot be triggered or applied; a missing trigger alone is not an exception. For documentation-only work or non-applicable workflows, record why Pi was not required. Updating PR text must not change the feature SHA.
 
 ## Merge and cleanup
 

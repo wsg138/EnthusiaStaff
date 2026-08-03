@@ -57,7 +57,7 @@ PR #54 preserves each new punishment step's configured decay eligibility and eva
 
 ## Separate harsh review findings
 
-Eight confirmed defects, workflow defects, or analyzer findings were fixed:
+Eleven confirmed defects, workflow defects, or analyzer findings were fixed:
 
 1. Initial persistence tests constructed `PunishmentPlan` directly and did not prove that `PunishmentService` copied the creating policy's decay setting into the accepted plan. `PunishmentDecayMetadataServiceTest` now verifies both values through the authoritative service path.
 2. The requirements matrix still routed the next agent to RoseChat or another escalation slice after the owner changed priorities. It now routes staff mode/vanish/freeze first, report notifications second, and escalation third.
@@ -67,6 +67,9 @@ Eight confirmed defects, workflow defects, or analyzer findings were fixed:
 6. Static analysis rejected the eligibility persistence switches. Both database write paths now use explicit `UNKNOWN` handling followed by a boolean write for known values.
 7. Static analysis rejected the side-effecting `index++` argument in the punishment-request insert binding. The parameter is now written first and incremented on the next statement.
 8. Static analysis required direct assertions in each JUnit test. Eligible and ineligible policy behavior are now separate test methods with direct assertions.
+9. Static analysis reported the repeated escalation-family test literal. `EscalationEngineTest` now uses one shared fixture constant without changing behavior.
+10. CodeRabbit found that the universal workflow directive placed the canonical handoff after merge. It now completes the handoff and freezes tracked content before exact-head validation and merge.
+11. CodeRabbit found incomplete workflow-state inventories and an overbroad no-Pi exception. The prompt now includes skipped states, states that skipped results are not evidence, and limits the verified no-result exception to implementation PRs with configured applicable Pi workflows while preserving the documentation-only distinction.
 
 The complete diff must be reviewed once more at the resulting exact head before merge. All valid review threads must be resolved and any later tracked change requires a fresh exact-head validation cycle.
 
@@ -80,7 +83,9 @@ The tracked workflow documentation:
 - records the two-consecutive-internal-PR guardrail and the allowed correctness/data-integrity exception for PR #54;
 - states that issue #43 is specifically the LiteBans production-cutover acceptance issue, not a general blocker queue;
 - routes unavailable provider APIs to focused blocker issues and the normal handoff rather than standalone documentation PRs;
-- documents Coverage/Pi timing, supersession, final-head freezing, trigger-or-block handling, terminal Pi requirements for implementation PRs and the docs-only distinction;
+- orders canonical handoff completion and tracked-content freeze before exact-head validation and merge;
+- documents Coverage/Pi timing, queued/pending/in-progress/completed/failed/skipped/cancelled/superseded inspection, supersession, final-head freezing, trigger-or-block handling, terminal Pi requirements for implementation PRs and the docs-only distinction;
+- states that skipped, cancelled, superseded, different-revision, merge-ref-only and runtime-equivalent runs are not exact-head validation evidence;
 - separates implementation workflows from explicitly requested review-only work.
 
 ## Validation contract
@@ -96,9 +101,9 @@ chmod +x gradlew
   --console=plain
 ```
 
-Coverage and Pi may take roughly ten minutes. A newer commit can cancel or supersede an earlier run; cancelled and superseded runs are neither failures nor validation evidence. After the final analyzer-fix commit, make no further commits unless final validation exposes another real defect.
+Coverage and Pi may take roughly ten minutes. A newer commit can cancel or supersede an earlier run; cancelled and superseded runs are neither failures nor validation evidence, and skipped runs are not evidence. After this final workflow-documentation correction, make no further commits unless exact-head validation exposes another real defect.
 
-Final exact-head evidence must be recorded in PR #54, not in this tracked file. It must include the final feature SHA, Coverage and Wiki run/job IDs, Java/build/test/migration results, coverage, runtime-JAR hashes and artifact identity, provider-leak checks, Codacy state, review-thread count, and the terminal exact-head Pi result or a verified documented exception proving an applicable workflow cannot be triggered or applied.
+Final exact-head evidence must be recorded in PR #54, not in this tracked file. It must include the final feature SHA, Coverage and Wiki run/job IDs, Java/build/test/migration results, coverage, runtime-JAR hashes and artifact identity, provider-leak checks, Codacy state, review-thread count, and the terminal exact-head Pi result. For an implementation PR with a configured applicable Pi workflow, a missing result blocks merge unless a verified documented exception proves the workflow cannot be triggered or applied; a missing trigger alone is not an exception. Documentation-only work may record why Pi was not required when no applicable workflow exists.
 
 ## Blocked-work and production boundaries
 
