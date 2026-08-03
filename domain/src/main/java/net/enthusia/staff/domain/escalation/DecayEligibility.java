@@ -11,13 +11,13 @@ public enum DecayEligibility {
     INELIGIBLE(false),
     UNKNOWN(false);
 
-    private final boolean permitsDecay;
+    private final boolean decayPermitted;
 
-    DecayEligibility(boolean permitsDecay) {
-        this.permitsDecay = permitsDecay;
+    DecayEligibility(boolean decayPermitted) {
+        this.decayPermitted = decayPermitted;
     }
 
     public boolean permitsDecay() {
-        return permitsDecay;
+        return decayPermitted;
     }
 }

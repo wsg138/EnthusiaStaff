@@ -17,6 +17,8 @@ A logical work item is one of:
 
 Do not begin a second feature after the first work item is merged. Record the next recommended work and stop.
 
+A review-only work item ends after the requested findings are reported. It does not authorize implementation, validation, merge, or branch cleanup unless the user separately asks for those actions.
+
 ## 2. Required reading order
 
 At the beginning of every session, read:
@@ -63,7 +65,7 @@ Before creating a new branch, inspect:
 - draft pull requests;
 - active remote branches;
 - unresolved review threads;
-- failed, pending, skipped, cancelled, or superseded checks;
+- failed, queued, pending, in-progress, skipped, cancelled, or superseded checks;
 - `WORKSPACE-STATE.md` active-work fields and owner-priority guardrails.
 
 Use this order:
@@ -115,7 +117,7 @@ Update `WORKSPACE-STATE.md` when the state materially changes and ensure the fin
 - Do not merge while the branch is behind `main` unless the repository's current documented workflow explicitly permits it and the final exact revision is retested.
 - Do not represent a merge-ref-only run as exact feature-head evidence unless the check is specifically defined to validate the merge result and this distinction is recorded.
 
-The universal agent prompt is explicit authorization to manually merge the single current work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge.
+The universal agent prompt is explicit authorization to manually merge the single current implementation work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge. Review-only work is not merge authorization.
 
 ## 7. Branch cleanup
 
@@ -285,11 +287,13 @@ Use the repository's actual configured checks. Normally verify:
 
 Run safe Pi boot/restart validation when the existing workflow supports the exact current head.
 
-Before saying Pi did not run, inspect all pending and in-progress workflows and any current PR evidence. A Pi run may be queued or may begin after another workflow completes.
+Before saying Pi did not run, inspect queued, pending, in-progress, completed, cancelled, and superseded workflows plus current PR evidence. A Pi run may be queued or may begin after another workflow completes.
+
+If an exact-head Pi workflow is configured for an implementation PR but has not been triggered, trigger or re-run it when the available tooling supports that action. If the workflow cannot be triggered or cannot apply to the exact head, block merge unless a verified exception documents the concrete reason. A missing trigger alone is not non-applicability.
 
 Cancelled and superseded Coverage or Pi runs are not failures, but they are not validation evidence. Skipped, different-revision, merge-ref-only, or merely runtime-equivalent runs must also be labeled accurately.
 
-For an implementation PR, when an exact-head Pi workflow is configured and triggered, wait for its terminal result before merging. Do not merge while that Pi result is pending or in progress.
+For an implementation PR, every configured applicable exact-head Pi workflow must reach a successful terminal result before merging. Do not merge while that Pi result is queued, pending, or in progress. A verified documented exception is required when the workflow cannot be triggered or applied.
 
 Documentation-only work may omit Pi when the workflow is not applicable or not configured for that change. Record the documentation-only distinction and the reason Pi was not required.
 
@@ -310,7 +314,7 @@ Record at minimum:
 - migration result;
 - static-analysis result;
 - review-thread count;
-- Pi result or an explicit, verified statement that no applicable exact-head Pi result exists.
+- Pi result, or a verified documented exception establishing that no applicable exact-head Pi workflow can be triggered. A merely missing trigger is not an exception.
 
 ## 14. Merge gate
 
@@ -321,7 +325,7 @@ Merge only when all of the following are true:
 - every merge blocker and confirmed defect was addressed;
 - the branch is synchronized appropriately with `main`;
 - exact final-head validation is green;
-- every configured and triggered exact-head Pi workflow for an implementation PR reached a successful terminal result;
+- every configured applicable exact-head Pi workflow for an implementation PR reached a successful terminal result, or a verified documented exception proves it cannot be triggered or applied;
 - migrations are safe and old migrations are unchanged;
 - permissions and configuration are documented;
 - no unresolved review thread remains;
@@ -422,10 +426,12 @@ Editing a checklist does not prove the underlying requirement is satisfied.
 
 ## 19. Stop condition
 
-After the single work item is merged or accurately recorded as blocked:
+After the single implementation work item is merged or accurately recorded as blocked:
 
 - verify and report the final state;
 - recommend the next owner-priority item briefly;
 - do not create the next branch;
 - do not begin implementation of the next feature;
 - stop.
+
+After a review-only work item, report findings and stop without implementation, merge, or cleanup unless the user separately requested those actions.

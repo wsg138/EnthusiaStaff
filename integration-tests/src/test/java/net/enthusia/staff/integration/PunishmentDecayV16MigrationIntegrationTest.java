@@ -42,6 +42,7 @@ class PunishmentDecayV16MigrationIntegrationTest {
             migrate(dataSource, null);
 
             assertTrue(columnExists(dataSource, "punishment_steps", "decay_eligible"));
+            assertTrue(columnExists(dataSource, "punishment_requests", "decay_eligible"));
             try (Connection connection = dataSource.getConnection();
                  PreparedStatement statement = connection.prepareStatement("""
                          SELECT selected_ordinal, recommended_sanctions_json, decay_eligible

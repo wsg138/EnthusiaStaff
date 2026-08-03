@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.sql.Connection;
@@ -8,11 +9,16 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
+import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentPlan;
+import net.enthusia.staff.domain.application.PunishmentProposal;
+import net.enthusia.staff.domain.application.PunishmentRequestResult;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.escalation.DecayEligibility;
 import net.enthusia.staff.domain.escalation.EscalationDecision;
@@ -91,6 +97,72 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
     }
 
     @Test
+    void pendingRequestPreservesEligibilityAcrossRestartAndApproval() {
+        UUID requestId = identifier("decay-eligibility-request");
+        UUID target = identifier("decay-eligibility-request-target");
+        CaseId caseId = new CaseId("5400000000000005");
+        PunishmentApprovalRequest request = pendingRequest(
+                requestId,
+                target,
+                DecayEligibility.INELIGIBLE
+        );
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            assertInstanceOf(
+                    PunishmentRequestResult.Submitted.class,
+                    runtime.punishmentRequestStore().submit(request)
+            );
+        }
+
+        Instant reviewAt = NOW.plus(Duration.ofMinutes(1));
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            PunishmentApprovalRequest restored = runtime.punishmentRequestStore()
+                    .find(requestId)
+                    .orElseThrow();
+            assertEquals(
+                    DecayEligibility.INELIGIBLE,
+                    restored.proposal().escalation().resultingOffenseDecayEligibility()
+            );
+            var lease = runtime.punishmentRequestStore().acquire(
+                    requestId,
+                    ADMIN.id(),
+                    reviewAt,
+                    reviewAt.plus(Duration.ofMinutes(2))
+            ).orElseThrow();
+            assertInstanceOf(
+                    PunishmentRequestResult.Approved.class,
+                    runtime.punishmentRequestStore().approve(lease, ADMIN, caseId, reviewAt)
+            );
+            List<PriorOffense> history = runtime.moderationStore().relatedHistory(target, FAMILY);
+            assertEquals(1, history.size());
+            assertEquals(DecayEligibility.INELIGIBLE, history.getFirst().decayEligibility());
+        }
+    }
+
+    @Test
+    void legacyNullRequestEligibilityLoadsAsUnknown() throws Exception {
+        UUID requestId = identifier("decay-eligibility-legacy-request");
+        UUID target = identifier("decay-eligibility-legacy-request-target");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            runtime.punishmentRequestStore().submit(pendingRequest(
+                    requestId,
+                    target,
+                    DecayEligibility.ELIGIBLE
+            ));
+            clearRequestEligibility(requestId);
+        }
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            PunishmentApprovalRequest restored = runtime.punishmentRequestStore()
+                    .find(requestId)
+                    .orElseThrow();
+            assertEquals(
+                    DecayEligibility.UNKNOWN,
+                    restored.proposal().escalation().resultingOffenseDecayEligibility()
+            );
+        }
+    }
+
+    @Test
     void legacyNullEligibilityLoadsAsUnknownAndDoesNotInventDecay() throws Exception {
         CaseId caseId = new CaseId("5400000000000003");
         UUID target = identifier("decay-eligibility-legacy-target");
@@ -123,6 +195,7 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
     void databaseRejectsOutOfRangeDecayEligibility() {
         CaseId caseId = new CaseId("5400000000000004");
         UUID target = identifier("decay-eligibility-constraint-target");
+        UUID requestId = identifier("decay-eligibility-request-constraint");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(
                     caseId,
@@ -130,8 +203,14 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
                     DecayEligibility.ELIGIBLE,
                     warning()
             ));
+            runtime.punishmentRequestStore().submit(pendingRequest(
+                    requestId,
+                    identifier("decay-eligibility-request-constraint-target"),
+                    DecayEligibility.ELIGIBLE
+            ));
 
             assertThrows(SQLException.class, () -> setRawEligibility(caseId, 2));
+            assertThrows(SQLException.class, () -> setRawRequestEligibility(requestId, 2));
         }
     }
 
@@ -156,6 +235,35 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
                 NOW,
                 new EscalationDecision(0, 0, 0, List.of(), eligibility, selected),
                 sanctions
+        );
+    }
+
+    private static PunishmentApprovalRequest pendingRequest(
+            UUID requestId,
+            UUID target,
+            DecayEligibility eligibility
+    ) {
+        List<SanctionSpec> sanctions = warning();
+        PunishmentStep selected = new PunishmentStep(0, "Decay request snapshot", sanctions);
+        PunishmentProposal proposal = new PunishmentProposal(
+                target,
+                DEVELOPER,
+                "test.decay-request",
+                FAMILY,
+                "Decay request test",
+                "Persist request decay metadata",
+                "decay-request-v1",
+                CaseVisibility.PUBLIC,
+                StaffRank.MOD,
+                new EscalationDecision(0, 0, 0, List.of(), eligibility, selected),
+                sanctions
+        );
+        return PunishmentApprovalRequest.pending(
+                requestId,
+                new IdempotencyKey("decay-request:" + requestId),
+                proposal,
+                NOW,
+                NOW.plus(Duration.ofDays(7))
         );
     }
 
@@ -196,6 +304,16 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
         }
     }
 
+    private static void clearRequestEligibility(UUID requestId) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE punishment_requests SET decay_eligible = NULL WHERE request_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(requestId));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
     private static void setRawEligibility(CaseId caseId, int value) throws Exception {
         try (Connection connection = connection();
              PreparedStatement statement = connection.prepareStatement("""
@@ -205,6 +323,24 @@ class PunishmentDecayEligibilityIntegrationTest extends PunishmentRequestMariaDb
             statement.setString(2, caseId.value());
             statement.executeUpdate();
         }
+    }
+
+    private static void setRawRequestEligibility(UUID requestId, int value) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE punishment_requests SET decay_eligible = ? WHERE request_id = ?
+                     """)) {
+            statement.setInt(1, value);
+            statement.setBytes(2, uuidBytes(requestId));
+            statement.executeUpdate();
+        }
+    }
+
+    private static byte[] uuidBytes(UUID value) {
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(16);
+        buffer.putLong(value.getMostSignificantBits());
+        buffer.putLong(value.getLeastSignificantBits());
+        return buffer.array();
     }
 
     private static Connection connection() throws Exception {
