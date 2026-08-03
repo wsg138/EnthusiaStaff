@@ -24,7 +24,7 @@ This file is a concise routing record for the next AI agent. It must be verified
 | Active PR | `#52 — Add versioned reason aliases and removed-ID presentation` until live merge verification |
 | Active branch | `feature/escalation-policy-aliases` until live merge and cleanup verification |
 | Active work item | Explicit reason aliases plus readable-but-unresolvable removed reason metadata |
-| Implementation state | Complete scoped code, focused tests, harsh-review fixes, documentation and handoff frozen before exact-head validation |
+| Implementation state | Complete scoped code, focused tests, harsh-review fixes, documentation, requirements matrix and handoff frozen before exact-head validation |
 | Known product blocker | Supported RoseChat private-message provider contract remains unavailable |
 | Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr52-reason-policy-compatibility.md` |
 | Exact validation and merge evidence | Read PR #52 live |
@@ -52,19 +52,21 @@ If PR #52 is merged, no implementation PR remains active. The broader escalation
 - Removed dynamic `cheating.polar.*` identifiers block template expansion.
 - Version, active policies, aliases and removed metadata publish and restore as one atomic snapshot assembled from one repository read.
 - Existing policy files without compatibility sections remain valid.
+- The requirements matrix records this compatibility slice while retaining conservative `PARTIAL` status for the broader escalation and modular-configuration requirements.
 - Existing stored cases, sanctions, ordinals, expirations, drafts, requests and audit records are not rewritten.
 - No command, permission, provider contract, schema or migration changed.
 
 ## Separate harsh review
 
-The complete PR was reviewed for active/historical separation, direct service behavior, dynamic Polar expansion, alias validation, removed-ID selection, startup degradation, reload rollback, concurrent snapshot consistency, immutable ownership, compatibility and stored-history preservation.
+The complete PR was reviewed for active/historical separation, direct service behavior, dynamic Polar expansion, alias validation, removed-ID selection, startup degradation, reload rollback, concurrent snapshot consistency, immutable ownership, compatibility, stored-history preservation and documentation accuracy.
 
-Two confirmed defects were fixed before freeze:
+Three confirmed defects were fixed before the final freeze:
 
 1. removed `cheating.polar.*` IDs could still resolve through dynamic template expansion;
-2. reload snapshots could mix metadata because they were assembled from separate atomic reads.
+2. reload snapshots could mix metadata because they were assembled from separate atomic reads;
+3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the scoped code and tests supplied them.
 
-Focused regression coverage was added. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
+Focused regression coverage was added for the runtime defects. The matrix now narrows remaining work to policy snapshots across ladder edits, serious-offense decay metadata, broader combined recommendations and full modular configuration. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
 
 ## Migration state
 
