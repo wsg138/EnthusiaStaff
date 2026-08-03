@@ -41,12 +41,13 @@ PR #49 includes:
 - strict cross-file parsing, exact-key checks, item-material validation and per-screen slot-overlap validation;
 - startup validation and `/estaff reload` rejection that retains the previous valid report configuration;
 - atomic publication after the existing reload coordinator succeeds;
+- value-based GUI configuration equality so equivalent reloads remain no-ops;
 - one policy snapshot per persistence operation and one GUI snapshot per open inventory;
 - configured queue-result capping and evidence retention without new main-thread database work;
 - focused loader, reload and MariaDB/Testcontainers policy tests;
 - operator documentation in `docs/wiki/pages/Report-Configuration.md`.
 
-The separate harsh review fixed stale-inventory slot reinterpretation, a lowered-query-limit reload race, concurrent reload publication and registry-dependent pure unit tests.
+The separate harsh review fixed stale-inventory slot reinterpretation, a lowered-query-limit reload race, concurrent reload publication, registry-dependent pure unit tests, and identity-based equality for equivalent GUI reload candidates. An analyzer claim that non-multiple-of-nine inventory sizes pass the loader was rejected because the constructed GUI model already validates that invariant before loading succeeds.
 
 ## Latest completed product work
 
