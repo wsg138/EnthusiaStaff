@@ -163,9 +163,10 @@ final class JdbcPunishmentRequestRepository {
             statement.setString(index++, encodeSanctions(proposal));
             writeDecayEligibility(
                     statement,
-                    index++,
+                    index,
                     proposal.escalation().resultingOffenseDecayEligibility()
             );
+            index++;
             statement.setString(index++, request.status().name());
             statement.setLong(index++, request.revision());
             statement.setTimestamp(index++, Timestamp.from(request.createdAt()));
@@ -305,11 +306,11 @@ final class JdbcPunishmentRequestRepository {
             int index,
             DecayEligibility eligibility
     ) throws SQLException {
-        switch (eligibility) {
-            case ELIGIBLE -> statement.setBoolean(index, true);
-            case INELIGIBLE -> statement.setBoolean(index, false);
-            case UNKNOWN -> statement.setNull(index, Types.BOOLEAN);
+        if (eligibility == DecayEligibility.UNKNOWN) {
+            statement.setNull(index, Types.BOOLEAN);
+            return;
         }
+        statement.setBoolean(index, eligibility == DecayEligibility.ELIGIBLE);
     }
 
     private static void setUuid(PreparedStatement statement, int index, UUID value) throws SQLException {

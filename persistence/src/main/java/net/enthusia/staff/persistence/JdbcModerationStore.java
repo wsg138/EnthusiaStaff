@@ -235,11 +235,11 @@ public final class JdbcModerationStore implements ModerationStore {
             int parameter,
             DecayEligibility eligibility
     ) throws SQLException {
-        switch (eligibility) {
-            case ELIGIBLE -> statement.setBoolean(parameter, true);
-            case INELIGIBLE -> statement.setBoolean(parameter, false);
-            case UNKNOWN -> statement.setNull(parameter, Types.BOOLEAN);
+        if (eligibility == DecayEligibility.UNKNOWN) {
+            statement.setNull(parameter, Types.BOOLEAN);
+            return;
         }
+        statement.setBoolean(parameter, eligibility == DecayEligibility.ELIGIBLE);
     }
 
     private List<UUID> insertSanctions(Connection connection, PunishmentPlan plan)
