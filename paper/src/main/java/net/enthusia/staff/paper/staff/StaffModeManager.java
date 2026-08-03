@@ -1,7 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +8,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -18,7 +18,6 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
@@ -56,7 +55,10 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffSessionSnapshot> active = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
     private final StaffModeActivationCoordinator activation;
+    private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private volatile Consumer<UUID> exitListener = ignored -> {
     };
 
@@ -94,6 +96,30 @@ public final class StaffModeManager implements Listener {
 
     public void setExitListener(Consumer<UUID> exitListener) {
         this.exitListener = java.util.Objects.requireNonNull(exitListener);
+    }
+
+    public void startRankReconciliation() {
+        if (!rankReconciliationStarted.compareAndSet(false, true)) {
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
+            for (UUID playerId : active.keySet()) {
+                if (!pendingRankChecks.add(playerId)) {
+                    continue;
+                }
+                onEntity(
+                        playerId,
+                        player -> {
+                            try {
+                                reconcileActiveRank(player);
+                            } finally {
+                                pendingRankChecks.remove(playerId);
+                            }
+                        },
+                        () -> pendingRankChecks.remove(playerId)
+                );
+            }
+        }, 20L, 20L);
     }
 
     public void enter(Player player, StaffRank rank) {
@@ -158,32 +184,7 @@ public final class StaffModeManager implements Listener {
             player.sendMessage(Component.text("A staff-mode transition is already in progress."));
             return;
         }
-        if (!submit(() -> {
-            StaffSessionStore loaded = store.get();
-            if (loaded == null) {
-                transitions.remove(playerId);
-                message(playerId, "Staff session storage is unavailable; exit failed safely.");
-                return;
-            }
-            StaffSessionSnapshot session;
-            try {
-                session = loaded.beginExit(playerId, clock.instant()).orElse(null);
-            } catch (RuntimeException exception) {
-                transitions.remove(playerId);
-                plugin.getLogger().log(Level.SEVERE, "Staff session exit transition failed", exception);
-                message(playerId, "Staff mode exit could not begin safely.");
-                return;
-            }
-            if (session == null) {
-                transitions.remove(playerId);
-                message(playerId, "No active staff session was found.");
-                return;
-            }
-            restoreAndVerify(playerId, session, loaded);
-        })) {
-            transitions.remove(playerId);
-            player.sendMessage(Component.text("The bounded work queue is full; staff mode exit did not start."));
-        }
+        beginDurableExit(playerId, "Staff mode exit");
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -223,7 +224,8 @@ public final class StaffModeManager implements Listener {
                     restoreAndVerify(playerId, session, loaded);
                     return;
                 }
-                if (rankSnapshot == null) {
+                if (StaffModeRankReconciliationPolicy.decide(null, rankSnapshot)
+                        == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
                     message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
                     restoreAndVerify(playerId, exiting, loaded);
@@ -244,7 +246,8 @@ public final class StaffModeManager implements Listener {
             Player player
     ) {
         StaffRank currentRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
-        if (currentRank == null) {
+        if (StaffModeRankReconciliationPolicy.decide(null, currentRank)
+                == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
             player.sendMessage(Component.text(
                     "Your explicit staff rank is no longer assigned; restoring your saved state."
             ));
@@ -304,19 +307,25 @@ public final class StaffModeManager implements Listener {
         active.remove(playerId);
         ranks.remove(playerId);
         transitions.remove(playerId);
+        profileApplications.remove(playerId);
+        pendingRankChecks.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onGameModeChange(PlayerGameModeChangeEvent event) {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
-        if (!active(playerId) || transitions.contains(playerId)) {
+        if (!active(playerId) || profileApplications.contains(playerId)) {
             return;
         }
-        StaffRank rank = ranks.get(playerId);
+        StaffRank rank = rankForAction(player);
         if (rank == null || event.getNewGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("Your staff rank cannot use that game mode while staff mode is active."));
+            if (!transitions.contains(playerId)) {
+                player.sendMessage(Component.text(
+                        "Your staff rank cannot use that game mode while staff mode is active."
+                ));
+            }
         }
     }
 
@@ -363,10 +372,9 @@ public final class StaffModeManager implements Listener {
         if (!(event.getWhoClicked() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        StaffRank rank = currentRank(player);
+        StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
-        if (transitions.contains(player.getUniqueId())
-                || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
+        if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
         }
     }
@@ -376,11 +384,11 @@ public final class StaffModeManager implements Listener {
         if (!(event.getWhoClicked() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        StaffRank rank = currentRank(player);
+        StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
-        if (StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
-                || isStaffTool(event.getOldCursor())
-                || transitions.contains(player.getUniqueId())) {
+        if (rank == null
+                || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
+                || isStaffTool(event.getOldCursor())) {
             event.setCancelled(true);
         }
     }
@@ -391,16 +399,122 @@ public final class StaffModeManager implements Listener {
                 || event.getInventory().getType() != InventoryType.ENDER_CHEST) {
             return;
         }
-        StaffRank rank = currentRank(player);
-        if (StaffModeAccessPolicy.blocksEnderChestOpen(rank)) {
+        StaffRank rank = rankForAction(player);
+        if (rank == null || StaffModeAccessPolicy.blocksEnderChestOpen(rank)) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("Ender chest access is unavailable at your staff rank while in staff mode."));
+            if (rank != null) {
+                player.sendMessage(Component.text(
+                        "Ender chest access is unavailable at your staff rank while in staff mode."
+                ));
+            }
         }
     }
 
-    private StaffRank currentRank(Player player) {
-        StaffRank cached = ranks.get(player.getUniqueId());
-        return cached == null ? rank(player) : cached;
+    private StaffRank rankForAction(Player player) {
+        UUID playerId = player.getUniqueId();
+        if (transitions.contains(playerId)) {
+            return null;
+        }
+        StaffRank cachedRank = ranks.get(playerId);
+        StaffRank liveRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        StaffModeRankReconciliationPolicy.Action action =
+                StaffModeRankReconciliationPolicy.decide(cachedRank, liveRank);
+        if (action == StaffModeRankReconciliationPolicy.Action.NONE) {
+            return liveRank;
+        }
+        beginRankReconciliation(playerId, action);
+        return null;
+    }
+
+    private void reconcileActiveRank(Player player) {
+        UUID playerId = player.getUniqueId();
+        if (!active(playerId) || transitions.contains(playerId)) {
+            return;
+        }
+        StaffRank cachedRank = ranks.get(playerId);
+        StaffRank liveRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        StaffModeRankReconciliationPolicy.Action action =
+                StaffModeRankReconciliationPolicy.decide(cachedRank, liveRank);
+        if (action != StaffModeRankReconciliationPolicy.Action.NONE) {
+            beginRankReconciliation(playerId, action);
+        }
+    }
+
+    private void beginRankReconciliation(
+            UUID playerId,
+            StaffModeRankReconciliationPolicy.Action action
+    ) {
+        if (action == StaffModeRankReconciliationPolicy.Action.NONE
+                || !active(playerId)
+                || !transitions.add(playerId)) {
+            return;
+        }
+        if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
+            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            beginDurableExit(playerId, "Staff rank removal");
+            return;
+        }
+        onEntity(playerId, this::applyLiveRankProfile);
+    }
+
+    private void applyLiveRankProfile(Player player) {
+        UUID playerId = player.getUniqueId();
+        if (!active(playerId)) {
+            transitions.remove(playerId);
+            return;
+        }
+        StaffRank cachedRank = ranks.get(playerId);
+        StaffRank liveRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        StaffModeRankReconciliationPolicy.Action action =
+                StaffModeRankReconciliationPolicy.decide(cachedRank, liveRank);
+        if (action == StaffModeRankReconciliationPolicy.Action.NONE) {
+            transitions.remove(playerId);
+            return;
+        }
+        if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
+            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            beginDurableExit(playerId, "Staff rank removal");
+            return;
+        }
+        try {
+            applyStaffState(player, liveRank);
+            ranks.put(playerId, liveRank);
+            transitions.remove(playerId);
+            player.sendMessage(Component.text("Your active staff-mode profile was updated for your current rank."));
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Staff rank profile reconciliation failed", exception);
+            message(playerId, "Your staff rank changed, but the new profile could not be applied; restoring your saved state.");
+            beginDurableExit(playerId, "Staff rank profile reconciliation failure");
+        }
+    }
+
+    private void beginDurableExit(UUID playerId, String operation) {
+        if (!submit(() -> {
+            StaffSessionStore loaded = store.get();
+            if (loaded == null) {
+                transitions.remove(playerId);
+                message(playerId, "Staff session storage is unavailable; exit failed safely.");
+                return;
+            }
+            StaffSessionSnapshot session;
+            try {
+                session = loaded.beginExit(playerId, clock.instant()).orElse(null);
+            } catch (RuntimeException exception) {
+                transitions.remove(playerId);
+                plugin.getLogger().log(Level.SEVERE, operation + " transition failed", exception);
+                message(playerId, "Staff mode exit could not begin safely.");
+                return;
+            }
+            if (session == null) {
+                transitions.remove(playerId);
+                message(playerId, "No active staff session was found.");
+                return;
+            }
+            restoreAndVerify(playerId, session, loaded);
+        })) {
+            transitions.remove(playerId);
+            message(playerId, "The bounded work queue is full; staff mode exit did not start.");
+        }
     }
 
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
@@ -440,45 +554,54 @@ public final class StaffModeManager implements Listener {
     }
 
     private void applyStaffState(Player player, StaffRank rank) {
-        player.closeInventory();
-        player.getInventory().clear();
-        player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
-        player.setLevel(0);
-        player.setExp(0);
-        player.setTotalExperience(0);
-        player.setFoodLevel(20);
-        player.setSaturation(20);
-        player.setExhaustion(0);
-        org.bukkit.attribute.AttributeInstance maximumHealth = player.getAttribute(Attribute.MAX_HEALTH);
-        if (maximumHealth == null) {
-            throw new IllegalStateException("player maximum-health attribute is unavailable");
+        UUID playerId = player.getUniqueId();
+        profileApplications.add(playerId);
+        try {
+            player.closeInventory();
+            player.getInventory().clear();
+            player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
+            player.setLevel(0);
+            player.setExp(0);
+            player.setTotalExperience(0);
+            player.setFoodLevel(20);
+            player.setSaturation(20);
+            player.setExhaustion(0);
+            org.bukkit.attribute.AttributeInstance maximumHealth = player.getAttribute(Attribute.MAX_HEALTH);
+            if (maximumHealth == null) {
+                throw new IllegalStateException("player maximum-health attribute is unavailable");
+            }
+            player.setHealth(maximumHealth.getValue());
+            player.setFireTicks(0);
+            player.setFallDistance(0);
+            player.setInvulnerable(true);
+            player.setCollidable(false);
+            player.setCanPickupItems(false);
+            player.setGameMode(StaffModeAccessPolicy.requiredGameMode(rank));
+            if (player.getGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
+                throw new IllegalStateException("required staff game mode was rejected");
+            }
+            player.setAllowFlight(true);
+            player.setFlying(true);
+            List<Tool> tools = new ArrayList<>(List.of(
+                    new Tool(Material.COMPASS, "random-teleport", "Random Player Teleport"),
+                    new Tool(Material.PLAYER_HEAD, "player-inspector", "Player Inspector"),
+                    new Tool(Material.PACKED_ICE, "freeze", "Freeze"),
+                    new Tool(Material.BOOK, "reports", "Reports"),
+                    new Tool(Material.SPYGLASS, "spectate", "Follow or Spectate"),
+                    new Tool(Material.ENDER_EYE, "vanish", "Vanish"),
+                    new Tool(Material.ECHO_SHARD, "staff-chat", "Staff Chat")
+            ));
+            if (StaffModeAccessPolicy.hasAdvancedStaffTools(rank)) {
+                tools.add(new Tool(Material.BLAZE_ROD, "cheat-tester", "Cheat Tester"));
+                tools.add(new Tool(Material.NETHER_STAR, "staff-tools", "Staff Tools Menu"));
+            }
+            for (int slot = 0; slot < tools.size(); slot++) {
+                player.getInventory().setItem(slot, item(tools.get(slot)));
+            }
+            player.updateInventory();
+        } finally {
+            profileApplications.remove(playerId);
         }
-        player.setHealth(maximumHealth.getValue());
-        player.setFireTicks(0);
-        player.setFallDistance(0);
-        player.setInvulnerable(true);
-        player.setCollidable(false);
-        player.setCanPickupItems(false);
-        player.setGameMode(StaffModeAccessPolicy.requiredGameMode(rank));
-        player.setAllowFlight(true);
-        player.setFlying(true);
-        List<Tool> tools = new ArrayList<>(List.of(
-                new Tool(Material.COMPASS, "random-teleport", "Random Player Teleport"),
-                new Tool(Material.PLAYER_HEAD, "player-inspector", "Player Inspector"),
-                new Tool(Material.PACKED_ICE, "freeze", "Freeze"),
-                new Tool(Material.BOOK, "reports", "Reports"),
-                new Tool(Material.SPYGLASS, "spectate", "Follow or Spectate"),
-                new Tool(Material.ENDER_EYE, "vanish", "Vanish"),
-                new Tool(Material.ECHO_SHARD, "staff-chat", "Staff Chat")
-        ));
-        if (StaffModeAccessPolicy.hasAdvancedStaffTools(rank)) {
-            tools.add(new Tool(Material.BLAZE_ROD, "cheat-tester", "Cheat Tester"));
-            tools.add(new Tool(Material.NETHER_STAR, "staff-tools", "Staff Tools Menu"));
-        }
-        for (int slot = 0; slot < tools.size(); slot++) {
-            player.getInventory().setItem(slot, item(tools.get(slot)));
-        }
-        player.updateInventory();
     }
 
     private boolean protectedMode(UUID playerId) {
@@ -528,10 +651,25 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
+        onEntity(playerId, operation, () -> {
+        });
+    }
+
+    private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+            if (player == null) {
+                retired.run();
+                return;
+            }
+            boolean scheduled = player.getScheduler().execute(
+                    plugin,
+                    () -> operation.accept(player),
+                    retired,
+                    1L
+            );
+            if (!scheduled) {
+                retired.run();
             }
         });
     }

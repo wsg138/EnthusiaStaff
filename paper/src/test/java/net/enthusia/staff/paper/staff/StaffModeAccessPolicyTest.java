@@ -98,17 +98,23 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
-    void systemRankDoesNotReceivePlayerEnderAccess() {
+    void systemRankDoesNotReceivePlayerInventoryOrEnderAccess() {
+        assertTrue(StaffModeAccessPolicy.blocksAllInventoryMutation(StaffRank.SYSTEM));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.SYSTEM, false));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.SYSTEM));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.SYSTEM));
         assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.SYSTEM, true));
         assertFalse(StaffModeAccessPolicy.usesCreativeMode(StaffRank.SYSTEM));
+        assertFalse(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.SYSTEM));
     }
 
     @Test
-    void unresolvedRankFailsClosedForEnderChestAccess() {
+    void unresolvedRankFailsClosedForInventoryAndEnderAccess() {
+        assertTrue(StaffModeAccessPolicy.blocksAllInventoryMutation(null));
+        assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(null, false));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(null));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(null));
         assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(null, true));
+        assertFalse(StaffModeAccessPolicy.hasAdvancedStaffTools(null));
     }
 }
