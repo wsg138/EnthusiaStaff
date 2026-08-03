@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-02
+Last updated: 2026-08-03
 
 This is a routing record, not a substitute for live GitHub reconciliation.
 
@@ -10,7 +10,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
+| `main` at PR #54 start | `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
@@ -18,67 +18,59 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `VALIDATING` until PR #53 is live-verified |
-| Active PR | `#53 — Preserve escalation recommendation snapshots across ladder edits` |
-| Active branch | `feature/escalation-policy-snapshots` |
-| Work item | Preserve exact configured recommendations and selected ladder ordinals without rewriting legacy history |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-validation-final.md` |
-| Exact validation/merge evidence | Read PR #53 live |
+| State | `FROZEN_PENDING_EXACT_HEAD_VALIDATION` after the final coordination commit |
+| Active PR | `#54 — Preserve serious-offense decay eligibility in escalation history` |
+| Active branch | `feature/serious-offense-decay-metadata` |
+| Work item | Persist each new punishment step's configured decay eligibility and evaluate later history from that immutable value |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-pr54-serious-offense-decay-metadata-validation-final.md` |
+| Exact validation/merge evidence | Read PR #54 live; evidence comments must identify one unchanged exact head |
 | External blocker | Supported RoseChat private-message provider contract remains unavailable |
 
 ## Start-state reconciliation
 
-- PR #52 was already merged by normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` from exact head `ac08bcce7281caf6425393213c5ef4d48cd99b3e`.
-- PR #52 Coverage `30780118437` and Validate Wiki `30780118455` succeeded; zero review threads remained.
-- No PR was open or draft.
-- Every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
-- V14 was the live highest migration.
+- PR #53 was already merged by normal merge commit `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` from exact feature head `d766dfcd849c25df37df47962a0aab9bc6975304`.
+- PR #53 Coverage `30783188447` and Validate Wiki `30783188443` succeeded, with zero unresolved review threads.
+- No pull request was open or draft at PR #54 start.
+- Every pre-existing non-main branch was `ahead_by: 0` relative to `main`; no unfinished branch was displaced.
+- V15 was the live highest migration.
 - No supported RoseChat callback/API contract was available.
 
-## PR #53 behavior
+## PR #54 behavior
 
-- V15 adds nullable `selected_ordinal` and `recommended_sanctions_json` to `punishment_steps`; V1–V14 remain immutable.
-- A check constraint requires both snapshot fields to be null together for legacy rows or populated together for new rows.
-- New policy-created cases persist raw, effective and selected ordinals, configuration version, selected label, contribution details and exact recommendation in the same transaction as actual sanctions, audit and outboxes.
-- Recommendation snapshots use the established strict sanction codec.
-- Applied sanctions remain separate and authoritative for type, issue time, expiration and lifecycle.
-- Legacy rows remain explicitly snapshot-unavailable; no recommendation is inferred.
-- Domain and JDBC review paths reject malformed or incomplete snapshots.
-- `/case` shows the frozen policy snapshot before actual sanctions and renders temporary recommendation durations as readable days, hours, minutes and seconds.
-- Current policies continue using the current ladder; out-of-range ordinals select the current final step.
+- `DecayEligibility` distinguishes `ELIGIBLE`, `INELIGIBLE`, and legacy `UNKNOWN` history.
+- V16 adds nullable `punishment_steps.decay_eligible`; V1–V15 remain immutable.
+- New central-policy decisions carry the creating reason's explicit decay setting into the durable punishment transaction.
+- Related-history reads use the stored value from each prior offense rather than the newly selected reason policy.
+- The clean-period clock remains shared and starts after the latest contributing, non-overturned related offense ends.
+- Each 90-day interval reduces only prior contributions stored as eligible.
+- Explicitly non-decaying serious history remains effective under later eligible/minor policies.
+- Eligible minor history can still decay under a later non-decaying/serious policy.
+- Pre-V16 `NULL` values load as `UNKNOWN` and do not decay; no historical policy is inferred or backfilled.
+- Recommendation snapshots, actual sanctions, lifecycle state, visibility and active sanction authority remain unchanged.
 
-## Harsh review, CI and external review findings
+## Harsh-review findings
 
-Ten confirmed defects or valid review findings were fixed:
+One confirmed gap was fixed during the separate full-PR review:
 
-1. effective ordinal alone left finite-ladder clamping ambiguous, so selected ordinal is stored separately;
-2. generic Jackson serialization did not use the established sanction schema, so the strict existing codec is reused;
-3. independently nullable fields allowed incomplete snapshots, so database, domain and JDBC invariants enforce a complete pair;
-4. an intermediate requirements-matrix rewrite omitted its tail, which was restored;
-5. exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test fixture IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not validation-success evidence;
-6. external review found the restart test expected raw ordinal `2` despite persisting raw ordinal `8`; the assertion now verifies `8`, with selected ordinal remaining `2`;
-7. external review found stale active PR #37 instructions in the requirements matrix; those directions now identify PR #37 only as historical evidence and route active validation solely to PR #53;
-8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; superseding handoffs supply them and leave earlier reports unedited as historical exceptions;
-9. CodeRabbit's review body identified ISO duration text in staff-facing case history; temporary recommendation durations now use a tested human-readable formatter;
-10. CodeRabbit's review body identified incomplete constructor-test coverage; valid snapshot pairs and empty recommendation lists are now explicitly tested.
+1. Persistence tests constructed `PunishmentPlan` directly and therefore did not prove the central `PunishmentService` copied the creating policy's decay setting into the committed plan. `PunishmentDecayMetadataServiceTest` now verifies both eligible and ineligible policies through the authoritative service path.
 
-Focused coverage includes ladder edits, final-step clamping, pair integrity, restart persistence, recommendation-versus-override separation, staff-readable duration formatting, legacy null behavior, corrupt snapshots and V14-to-V15 upgrade preservation.
+Focused coverage also includes 89/90/180-day boundaries, latest-related-offense reset, mixed eligibility, serious/minor policy changes, legacy unknown behavior, restart persistence, database constraint enforcement, V15-to-V16 upgrade preservation, and explicit default-catalog values.
 
 ## Migration boundary
 
 | Field | Value |
 | --- | --- |
-| Highest migration at start | V14 |
-| PR #53 migration | `V15__punishment_recommendation_snapshots.sql` |
-| Immutable history | V1–V14 |
-| Next expected number | V16 unless live state is newer |
+| Highest migration at start | V15 |
+| PR #54 migration | `V16__punishment_decay_eligibility_snapshots.sql` |
+| Immutable history | V1–V15 |
+| Next expected number | V17 unless live state is newer |
 | Locked checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an applied migration or use Flyway repair.
 
-## Remaining work after PR #53
+## Remaining work after PR #54
 
-The broader escalation requirement remains partial. Separate future slices include serious-offense decay metadata, wider combined-recommendation coverage, broader modular configuration and representative multi-runtime/staff acceptance. Do not expand PR #53 into them.
+The broader escalation requirement remains partial. Separate future slices include wider combined-recommendation coverage, explicit family relationships, broader modular punishment/escalation configuration, decayed-history GUI presentation, and representative multi-runtime/staff acceptance. Do not expand PR #54 into them.
 
 ## Production boundary
 
@@ -86,7 +78,7 @@ LiteBans remains authoritative. Issue #43 remains open. No deployment, productio
 
 ## Next route
 
-1. Verify PR #53's exact live head, checks, reviews, merge result, resulting `main` and branch cleanup.
+1. Verify PR #54's exact live head, checks, reviews, normal merge result, resulting `main`, feature-head containment and branch cleanup.
 2. Resume RoseChat only if a supported contract becomes available.
-3. Otherwise reconcile live goals/code and select exactly one bounded follow-up; serious-offense decay metadata is the current likely candidate.
-4. Stop after PR #53; do not begin the next feature in it.
+3. Otherwise reconcile live goals/code and select exactly one bounded follow-up from the remaining escalation or higher-priority correctness work.
+4. Stop after PR #54; do not begin the next feature in it.
