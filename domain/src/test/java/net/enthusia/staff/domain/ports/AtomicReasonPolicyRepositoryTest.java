@@ -73,7 +73,7 @@ class AtomicReasonPolicyRepositoryTest {
         assertEquals("v2", repository.resolve("chat.targeted-harassment").orElseThrow().version());
         assertEquals(ReasonPolicyRepository.ReasonAvailability.ALIAS, descriptor.availability());
         assertEquals(canonical.id(), descriptor.canonicalId());
-        assertTrue(descriptor.selectable());
+        assertTrue(descriptor.resolvesToActivePolicy());
         assertEquals(List.of(canonical.id()), repository.all().stream().map(ReasonPolicy::id).toList());
     }
 
@@ -91,7 +91,7 @@ class AtomicReasonPolicyRepositoryTest {
 
         assertEquals(ReasonPolicyRepository.ReasonAvailability.REMOVED, descriptor.availability());
         assertEquals(removed.publicReason(), descriptor.publicReason());
-        assertFalse(descriptor.selectable());
+        assertFalse(descriptor.resolvesToActivePolicy());
         assertTrue(repository.find(removed.id()).isEmpty());
         assertTrue(repository.resolve(removed.id()).isEmpty());
         assertFalse(repository.all().stream().anyMatch(policy -> policy.id().equals(removed.id())));
