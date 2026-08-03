@@ -364,14 +364,13 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = currentRank(player);
+        boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (transitions.contains(player.getUniqueId())
-                || StaffModeAccessPolicy.blocksAllInventoryMutation(rank)) {
+                || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
             return;
         }
-        boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
-        if ((ender && StaffModeAccessPolicy.blocksEnderChestMutation(rank))
-                || isStaffTool(event.getCurrentItem()) || isStaffTool(event.getCursor())) {
+        if (isStaffTool(event.getCurrentItem()) || isStaffTool(event.getCursor())) {
             event.setCancelled(true);
         }
     }
@@ -383,9 +382,8 @@ public final class StaffModeManager implements Listener {
         }
         StaffRank rank = currentRank(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
-        if (StaffModeAccessPolicy.blocksAllInventoryMutation(rank)
+        if (StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
                 || isStaffTool(event.getOldCursor())
-                || (ender && StaffModeAccessPolicy.blocksEnderChestMutation(rank))
                 || transitions.contains(player.getUniqueId())) {
             event.setCancelled(true);
         }
