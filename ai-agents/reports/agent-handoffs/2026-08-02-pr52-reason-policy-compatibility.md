@@ -39,6 +39,7 @@ This work was selected because it was the recorded prerequisite-ready escalation
 - Active policies, aliases, removed metadata and version are captured through one atomic repository read and published/restored as one reload snapshot.
 - Existing compatibility constructors preserve callers that provide only version and active policies.
 - Invalid startup metadata degrades punishment availability safely instead of escaping as an uncaught repository validation error.
+- The requirements matrix records the completed compatibility slice while retaining conservative `PARTIAL` status for broader escalation and modular configuration.
 
 ## Material files
 
@@ -55,6 +56,7 @@ This work was selected because it was the recorded prerequisite-ready escalation
 - focused domain, loader, reload, service and GUI-catalog tests
 - `docs/wiki/pages/Configuration.md`
 - `docs/wiki/pages/Development-Blueprint.md`
+- `reports/REQUIREMENTS-MATRIX.md`
 - `WORKSPACE-MANIFEST.md`
 - `ai-agents/WORKSPACE-STATE.md`
 - this immutable handoff and `latest.md`
@@ -103,14 +105,16 @@ The complete PR diff was reviewed independently for:
 - immutable collection ownership;
 - compatibility with existing repository constructors and tests;
 - stored ordinal, policy-version and historical presentation preservation;
+- documentation and requirements-matrix accuracy;
 - Java 21 compatibility, migration immutability and production boundaries.
 
-The review found and fixed two confirmed defects:
+The review found and fixed three confirmed defects:
 
 1. a removed ID matching `cheating.polar.*` could still resolve through template expansion;
-2. reload snapshots were assembled from separate atomic reads and could theoretically mix metadata from different versions.
+2. reload snapshots were assembled from separate atomic reads and could theoretically mix metadata from different versions;
+3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the code and focused tests supplied that slice.
 
-Regression coverage was added for both. No additional confirmed merge blocker remained before tracked-content freeze. Any later analyzer, human-review or CI finding must be resolved before merge and exact-head validation repeated if tracked files change.
+Regression coverage was added for the two runtime defects. The matrix now preserves conservative partial status while narrowing remaining escalation work to policy snapshots across ladder edits, serious-offense decay metadata, combined recommendations and broader modular configuration. No additional confirmed merge blocker remained before the final tracked-content freeze. Any later analyzer, human-review or CI finding must be resolved before merge and exact-head validation repeated if tracked files change.
 
 ## Validation contract
 
