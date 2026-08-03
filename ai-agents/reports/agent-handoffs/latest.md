@@ -2,35 +2,34 @@
 
 Current handoff:
 
-[`2026-08-03-pr54-serious-offense-decay-metadata.md`](2026-08-03-pr54-serious-offense-decay-metadata.md)
+[`2026-08-03-admin-staffmode-ender-view-only.md`](2026-08-03-admin-staffmode-ender-view-only.md)
 
 Related PR:
 
-[`#54 — Preserve serious-offense decay eligibility in escalation history`](https://github.com/wsg138/EnthusiaStaff/pull/54)
+[`#55 — Enforce Admin staff-mode Ender view-only access`](https://github.com/wsg138/EnthusiaStaff/pull/55)
 
 ## Summary
 
 | Field | Value |
 | --- | --- |
-| Work item | Persist each new punishment step's configured decay eligibility and evaluate later history from that immutable value |
-| PR | `#54` |
-| Branch | `feature/serious-offense-decay-metadata` |
-| Starting main | `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` |
-| Expected committed state | `IDLE — PR #54 requires live merge verification` |
-| Harsh-review fix | Added authoritative service-path proof that both eligible and ineligible policy values reach the committed punishment plan |
-| Exact final-head evidence | Read PR #54 live |
-| Exact merge evidence | Read PR #54 live |
-| Pi wrapper evidence | `https://github.com/wsg138/EnthusiaStaff/actions/runs/30794945133` |
-| Pi failure artifact | `https://github.com/wsg138/EnthusiaStaff/actions/runs/30794945133/artifacts/8848768264` |
-| Private Pi staging repository | `https://github.com/wsg138/EnthusiaStaff-Staging` |
-| Failed private staging run | `https://github.com/wsg138/EnthusiaStaff-Staging/actions/runs/30794966760` |
-| Staging isolation fix | Private PR #7 merged normally as `635423c64a2254d137002fce32652eb20770db34` |
-| Migration boundary | PR #54 adds V16; V1–V15 remain immutable |
-| Configuration changes | V16 schema only; no new runtime keys, permissions, environment variables or provider dependencies |
-| Production boundary | No deployment, authority activation, LiteBans change or production access |
-| Remaining external blocker | Supported RoseChat private-message provider contract remains unavailable; use a focused blocker issue and the normal handoff, not issue #43 |
-| Next owner-priority workstream | Staff mode, vanish, and freeze; report notification completion is second and escalation-policy completion is third |
+| Work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only and Founder retains configured owner access |
+| PR | `#55` |
+| Branch | `fix/admin-staffmode-ender-view-only` |
+| Starting main | `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` |
+| Expected committed state | `IDLE — PR #55 requires live merge verification` |
+| Implementation | Helper/Mod/Developer cannot open; Admin can open but shared click/drag mutation policy cancels Ender changes; Founder retains owner access; `SYSTEM` and unresolved ranks fail closed |
+| Harsh-review fixes | Closed unresolved-rank fail-open behavior, centralized/directly tested the mutation decision used by both inventory handlers, and covered the non-player `SYSTEM` enum boundary |
+| Tests | `StaffModeAccessPolicyTest` proves ordinary-versus-Ender mutation behavior for every player-assigned rank, `SYSTEM`, and the unresolved-rank boundary |
+| Exact final-head evidence | Read PR #55 live after tracked-content freeze |
+| Exact merge evidence | Read PR #55 live after merge |
+| Migration boundary | V16 is highest; PR #55 adds no migration; V1–V16 remain immutable |
+| Configuration changes | None |
+| Production boundary | No deployment, authority activation, LiteBans change, production Discord use or production access |
+| Remaining external blocker | Supported RoseChat private-message provider contract remains unavailable; use focused blocker routing, not issue #43 |
+| Next owner-priority workstream | One separate bounded staff-mode lifecycle or restriction-enforcement item after PR #55; do not begin it in this PR |
 
-The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. The failed wrapper artifact records the dispatched private run, job state, sanitized logs and nested Pi evidence. The failure was caused by reused disposable staging-database history from an earlier mutable V16, not by a reason to edit V16 or use Flyway repair. The private staging fix now clears only a guarded staging/test/Pi database before and after each two-boot cycle while preserving it between boots for restart testing.
+PR #54 merged normally as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`; its feature branch was removed before PR #55 started. Do not attribute PR #54 workflow evidence to PR #55.
 
-The next agent must verify live GitHub state before acting. Confirm whether PR #54 merged, inspect newer open PRs and review threads, verify current `main`, migration state, exact-head Coverage/Wiki/Pi/Codacy evidence and branch cleanup, then read the canonical handoff. For Pi, inspect both the public wrapper and `wsg138/EnthusiaStaff-Staging` directly. Do not reinterpret pre-V16 null eligibility, edit V1–V15, use Flyway repair, treat issue #43 as a general blocker queue, or begin another escalation-policy slice immediately after PR #54 without a recorded exception or direct owner approval.
+The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and its correlated private `wsg138/EnthusiaStaff-Staging` run directly before merge. A missing commit-scoped Pi listing is not proof of non-applicability.
+
+The next agent must reconcile live GitHub state before acting, verify PR #55 rather than opening another branch, read the canonical handoff, inspect pending/superseded/terminal workflows and review threads, and continue only this work item. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, start issue #43 acceptance, or combine vanish/freeze/general inventory work into PR #55.

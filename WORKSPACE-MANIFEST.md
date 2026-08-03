@@ -10,39 +10,45 @@ This manifest records development coordination and authority boundaries. It does
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| `main` at PR #54 start | `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` |
-| Latest merged product PR before current work | PR #53 — escalation recommendation snapshots |
-| Work requiring live verification | PR #54 — serious-offense decay eligibility metadata |
-| Expected committed state | `IDLE — PR #54 requires live merge verification` |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-pr54-serious-offense-decay-metadata.md` |
-| Migration boundary | PR #54 adds V16; V1–V15 remain immutable |
+| `main` at PR #55 start | `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` |
+| Latest merged product PR | PR #54 — serious-offense decay eligibility metadata |
+| Work requiring live verification | PR #55 — Admin staff-mode Ender view-only enforcement |
+| Expected committed state | `IDLE — PR #55 requires live merge verification` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-admin-staffmode-ender-view-only.md` |
+| Migration boundary | V16 is highest; PR #55 adds no migration; V1–V16 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #54 start there were no open pull requests and every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
+At PR #55 start there were no open pull requests and no non-main branch remained active. PR #54 had merged normally and its feature branch had been removed.
 
 ## Implementation checkpoint
 
-PR #54 implements one bounded escalation-history compatibility slice:
+PR #55 is one bounded staff-mode asset-safety correction:
 
-- `DecayEligibility` records `ELIGIBLE`, `INELIGIBLE`, or legacy `UNKNOWN` behavior on each prior offense;
-- the central escalation decision captures the creating reason policy's explicit decay setting;
-- V16 stores nullable `decay_eligible` in `punishment_steps` in the same transaction as the case, recommendation snapshot, applied sanctions, audit and outboxes;
-- related-history loading evaluates each prior offense from its stored value instead of reinterpreting it through a later reason policy;
-- the latest contributing, non-overturned related offense still resets the shared clean-period clock;
-- each 90-day interval reduces only contributions stored as eligible;
-- explicitly non-decaying serious history does not decay under a later minor policy;
-- eligible minor history still decays under a later non-decaying policy;
-- pre-V16 rows remain nullable/`UNKNOWN` and are not inferred or rewritten;
-- V1–V15 and existing case, sanction, request, appeal, expiration and audit history remain unchanged.
+- the previous shared Ender predicate permitted both opening and mutation for Admin and Founder;
+- opening and mutation authority are separate policy decisions;
+- Helper, Mod, and Developer remain unable to open Ender chests during staff mode;
+- Admin may open an Ender chest, but clicks and drags in that view are cancelled so access is view-only;
+- Founder retains configured owner-level Ender access;
+- Admin creative inventory interaction outside an Ender chest view remains available;
+- click and drag use one shared mutation decision;
+- `SYSTEM` and unresolved ranks fail closed for Ender opening and mutation;
+- existing staff-tool protections remain unchanged;
+- focused tests cover the exact combined mutation behavior for every player-assigned rank, the `SYSTEM` boundary, and an unresolved rank.
 
-Exact final-head validation, review and merge evidence belong in PR #54 live metadata.
+No database, protocol, provider, command, permission, configuration, vanish, freeze, confiscation or production-authority behavior is part of this PR.
 
 ## Harsh-review checkpoint
 
-The separate full-PR review found and fixed one confirmed coverage defect: direct persistence fixtures did not prove that `PunishmentService` copied the creating policy's decay setting into the committed plan. A focused service test now verifies both eligible and ineligible policies through the authoritative application path.
+The complete diff received a separate harsh review. It found and fixed three confirmed defects:
 
-Regression coverage targets clean-period boundaries, reset behavior, mixed eligibility, later-policy changes, legacy unknown rows, restart persistence, database constraints, V15-to-V16 upgrade preservation and default policy configuration values.
+1. the initial open predicate failed open for an unresolved or future rank; only explicit Admin or Founder now open Ender chests, and only Founder may mutate;
+2. click and drag duplicated policy conditions while tests proved only leaf predicates; both handlers now share one directly tested combined decision;
+3. the non-player `StaffRank.SYSTEM` enum boundary was omitted from the test claim; it is now explicitly denied player Ender access.
+
+No tracked merge blocker remains before exact-head validation. Full Paper event-object staging is useful optional runtime confidence but is not a confirmed defect in the thin handlers.
+
+Exact final-head validation, review and merge evidence belongs in PR #55 live metadata.
 
 ## Owner priority checkpoint
 
@@ -52,21 +58,23 @@ When prerequisites are comparable, use this order:
 2. report notification completion;
 3. escalation-policy completion.
 
-PR #54 may finish because it fixes a confirmed historical-correctness and data-integrity defect. Do not begin another escalation-policy slice immediately after it unless the owner approves it or a qualifying correctness, security, concurrency, migration, data-integrity or direct-unblock exception applies.
+PR #55 is staff/player-visible safety work under priority one. Do not expand it into another staff-mode lifecycle slice or combine vanish/freeze work.
 
 ## Prior verified evidence
 
-PR #53 exact head `d766dfcd849c25df37df47962a0aab9bc6975304` passed Coverage `30783188447` and Validate Wiki `30783188443`, had zero unresolved review threads, and merged normally as `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e`. Do not attribute prior-head evidence to PR #54.
+PR #54 exact head `b0b5bef5807da7d60d64ad7c59319ec15c53955f` passed exact-head Coverage `30800091453` and Validate Wiki `30800091459`, had zero unresolved review threads, and merged normally as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`. Do not attribute that evidence to PR #55.
+
+The historical PR #54 Pi failure came from disposable staging database isolation, not feature migration correctness. Private `EnthusiaStaff-Staging` PR #7 fixed the harness and merged as `635423c64a2254d137002fce32652eb20770db34`; V16 was not edited and Flyway repair was not used.
 
 ## Provider and blocked-work routing
 
 The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, identity, cancellation/delivery semantics, threading, duplicate behavior, versions and privacy-safe evidence fields. Do not invent an API, reflect against unknown classes, copy provider-owned classes or scrape logs as a substitute callback.
 
-Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue. External blockers such as an unavailable provider API should normally be tracked in a focused issue and the normal handoff. Do not open a standalone documentation PR solely to record a blocker unless routing would otherwise be materially incorrect or unsafe.
+Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue. External blockers should normally be tracked in a focused issue and the normal handoff.
 
 ## Development merge gate
 
-Merge PR #54 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, MariaDB/Testcontainers clean-install and V15-to-V16 upgrade checks, migration checksums, runtime-JAR inspection, provider-leak checks, aggregate coverage, configured static analysis, wiki validation, terminal exact-head Pi when configured and triggered, and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
+Merge PR #55 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, applicable migration checksum/immutability checks, runtime-JAR inspection, provider-leak checks, aggregate coverage, configured static analysis, wiki validation, terminal exact-head Pi when configured and applicable, and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
 
 ## Production cutover gate
 
@@ -78,11 +86,11 @@ Provider and website repositories remain independent. Their histories must not b
 
 ## Current route
 
-1. Verify PR #54's exact live head, terminal Coverage/Wiki/Pi/Codacy and review state, normal merge result, resulting `main`, feature-head containment and automatic branch cleanup.
-2. Select one bounded staff mode, vanish, or freeze work item after fresh reconciliation unless a newer direct owner instruction supersedes the recorded order.
-3. Prioritize report notification completion second and track unavailable provider APIs through focused blocker issues plus the normal handoff.
-4. Treat escalation-policy completion as third priority; do not immediately start another escalation-policy slice after PR #54.
-5. Stop after PR #54 verification and do not combine the next feature with it.
+1. Verify PR #55's frozen exact head, terminal validation and review state, normal merge result, resulting `main`, feature-head containment and branch cleanup.
+2. After PR #55, select one separate bounded staff-mode lifecycle or restriction-enforcement item after fresh reconciliation.
+3. Continue owner priority one before report notifications when prerequisites are comparable.
+4. Treat escalation-policy completion as third priority.
+5. Stop after PR #55 and do not begin the next feature in the same session.
 
 ## Release boundaries
 
