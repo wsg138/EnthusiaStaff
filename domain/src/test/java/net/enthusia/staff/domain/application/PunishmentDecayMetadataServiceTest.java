@@ -38,12 +38,22 @@ class PunishmentDecayMetadataServiceTest {
     );
 
     @Test
-    void committedPlanCapturesTheCreatingPolicyDecayEligibility() {
-        assertCaptured(true, DecayEligibility.ELIGIBLE);
-        assertCaptured(false, DecayEligibility.INELIGIBLE);
+    void committedPlanCapturesEligiblePolicyMetadata() {
+        assertEquals(
+                DecayEligibility.ELIGIBLE,
+                committedPlan(true).escalation().resultingOffenseDecayEligibility()
+        );
     }
 
-    private static void assertCaptured(boolean decayEnabled, DecayEligibility expected) {
+    @Test
+    void committedPlanCapturesIneligiblePolicyMetadata() {
+        assertEquals(
+                DecayEligibility.INELIGIBLE,
+                committedPlan(false).escalation().resultingOffenseDecayEligibility()
+        );
+    }
+
+    private static PunishmentPlan committedPlan(boolean decayEnabled) {
         CapturingStore store = new CapturingStore();
         AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
                 "decay-policy-v1",
@@ -71,7 +81,7 @@ class PunishmentDecayMetadataServiceTest {
                 PunishmentResult.Accepted.class,
                 service.create(request, OperationalMode.ACTIVE)
         );
-        assertEquals(expected, store.plan.escalation().resultingOffenseDecayEligibility());
+        return store.plan;
     }
 
     private static ReasonPolicy policy(boolean decayEnabled) {
