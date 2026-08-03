@@ -18,13 +18,13 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `FROZEN_PENDING_EXACT_HEAD_VALIDATION` after the final coordination commit |
-| Active PR | `#54 — Preserve serious-offense decay eligibility in escalation history` |
-| Active branch | `feature/serious-offense-decay-metadata` |
-| Work item | Persist each new punishment step's configured decay eligibility and evaluate later history from that immutable value |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-pr54-serious-offense-decay-metadata-validation-final.md` |
-| Exact validation/merge evidence | Read PR #54 live; evidence comments must identify one unchanged exact head |
-| External blocker | Supported RoseChat private-message provider contract remains unavailable |
+| State | `IDLE — PR #54 requires live merge verification` |
+| Pull request to verify | `#54 — Preserve serious-offense decay eligibility in escalation history` |
+| Feature branch to verify | `feature/serious-offense-decay-metadata` |
+| Completed work item | Persist each new punishment step's configured decay eligibility and evaluate later history from that immutable value |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-pr54-serious-offense-decay-metadata.md` |
+| Exact validation/merge evidence | Read PR #54 live; exact SHA, Coverage, Wiki, Pi, Codacy, artifacts, reviews and merge evidence belong in PR metadata |
+| External blocker | Supported RoseChat private-message provider contract remains unavailable; track it through a focused blocker issue and the normal handoff rather than issue #43 |
 
 ## Start-state reconciliation
 
@@ -56,6 +56,33 @@ One confirmed gap was fixed during the separate full-PR review:
 
 Focused coverage also includes 89/90/180-day boundaries, latest-related-offense reset, mixed eligibility, serious/minor policy changes, legacy unknown behavior, restart persistence, database constraint enforcement, V15-to-V16 upgrade preservation, and explicit default-catalog values.
 
+## Owner priorities and selection guardrails
+
+Current owner priority order:
+
+1. Staff mode, vanish, and freeze.
+2. Report notification completion.
+3. Escalation-policy completion.
+
+When prerequisites are comparable, prefer owner-prioritized staff/player-visible work over another internal policy or infrastructure slice.
+
+Do not perform more than two consecutive internal infrastructure or policy PRs unless the work:
+
+- fixes a confirmed correctness, security, concurrency, migration, or data-integrity defect;
+- directly unblocks a higher-priority feature; or
+- is explicitly approved by the owner.
+
+Direct owner instructions in the current conversation override this recorded order.
+
+PR #54 is allowed to finish because it fixes a confirmed historical-correctness and data-integrity defect. Do not start another escalation-policy slice immediately after PR #54.
+
+## Blocked-work routing
+
+- Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open.
+- Issue #43 is not the general bug-report or blocker queue.
+- External blockers such as an unavailable provider API should normally be tracked in a focused issue and the normal handoff.
+- Do not open a standalone documentation PR solely to record a blocker unless routing would otherwise be materially incorrect or unsafe.
+
 ## Migration boundary
 
 | Field | Value |
@@ -70,15 +97,16 @@ Never edit an applied migration or use Flyway repair.
 
 ## Remaining work after PR #54
 
-The broader escalation requirement remains partial. Separate future slices include wider combined-recommendation coverage, explicit family relationships, broader modular punishment/escalation configuration, decayed-history GUI presentation, and representative multi-runtime/staff acceptance. Do not expand PR #54 into them.
+The broader escalation requirement remains partial, but it is third in the current owner priority order. Separate future slices include wider combined-recommendation coverage, explicit family relationships, broader modular punishment/escalation configuration, decayed-history GUI presentation, and representative multi-runtime/staff acceptance.
 
 ## Production boundary
 
-LiteBans remains authoritative. Issue #43 remains open. No deployment, production access, authority activation, production shadow window or cutover is authorized by this development PR.
+LiteBans remains authoritative. Issue #43 remains open specifically for production-cutover acceptance. No deployment, production access, authority activation, production shadow window or cutover is authorized by PR #54.
 
 ## Next route
 
-1. Verify PR #54's exact live head, checks, reviews, normal merge result, resulting `main`, feature-head containment and branch cleanup.
-2. Resume RoseChat only if a supported contract becomes available.
-3. Otherwise reconcile live goals/code and select exactly one bounded follow-up from the remaining escalation or higher-priority correctness work.
-4. Stop after PR #54; do not begin the next feature in it.
+1. Verify PR #54's exact live head, terminal checks, review state, normal merge result, resulting `main`, feature-head containment and automatic branch cleanup.
+2. When no newer direct owner instruction supersedes this record, select one bounded staff mode, vanish, or freeze work item after fresh live reconciliation.
+3. Then prioritize report notification completion; track unavailable provider APIs in focused blocker issues and the normal handoff.
+4. Treat escalation-policy completion as the third owner priority and do not begin another escalation slice immediately after PR #54.
+5. Stop after verifying PR #54; do not begin the next feature in the same session.
