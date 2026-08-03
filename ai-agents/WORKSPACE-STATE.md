@@ -10,8 +10,8 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | `39e616bbdcd61f540d77406155f3b579b4fc57ab` at PR #49 start; live verify before acting |
-| Checkpoint before report-configuration work | `39e616bbdcd61f540d77406155f3b579b4fc57ab` |
+| Current `main` SHA | `d07cb888952fde575a4f8245571f8d1ebc858b63` at this work-item start; live verify before acting |
+| Checkpoint after report-configuration work | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
@@ -20,74 +20,60 @@ This file is a concise routing record for the next AI agent. It must be verified
 
 | Field | Value |
 | --- | --- |
-| State | `VALIDATION` |
-| Active PR | `#49 — Add modular report configuration and safe reload` |
-| Active branch | `feature/report-configuration-reload` |
-| Active work item | Modular report policy and GUI configuration with validated reload behavior |
-| Implementation state | Complete and harsh-reviewed; tracked content frozen for exact-head validation |
-| Known blocker | None recorded in tracked content; live checks, review threads, Pi evidence and merge gates must be verified |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr49-report-configuration.md` |
-| Exact validation and merge evidence | Read PR #49 live |
+| State | `PLANNING` |
+| Active PR | Pending creation after this initial branch commit |
+| Active branch | `docs/record-rosechat-provider-blocker` |
+| Active work item | Reconcile post-PR #49 state and formally record the RoseChat private-message provider blocker |
+| Implementation state | Live repository and provider availability reconciliation in progress |
+| Known blocker | The intended `wsg138/Enthusia-RoseChat` repository and a supported private-message callback API are not available; do not invent an integration contract |
+| Handoff | Pending on the active branch |
+| Exact validation and merge evidence | Record live in the active PR |
 
-Live GitHub showed no open pull requests at work-item start. Every remaining remote branch was fully contained in `main`, so no unfinished branch work was displaced.
+## Live reconciliation at work-item start
 
-## Active implementation summary
-
-PR #49 includes:
-
-- immutable report policy for cooldowns, duplicate window, open-report limit, query limits, recently-closed window, evidence retention and cleanup batch size;
-- bundled, operator-editable `reports.yml` preserving prior defaults;
-- bundled `gui/reports.yml` for inventory size, slots, materials, titles and messages;
-- strict cross-file parsing, exact-key checks, item-material validation and per-screen slot-overlap validation;
-- startup validation and `/estaff reload` rejection that retains the previous valid report configuration;
-- atomic publication after the existing reload coordinator succeeds;
-- value-based GUI configuration equality so equivalent reloads remain no-ops;
-- one policy snapshot per persistence operation and one GUI snapshot per open inventory;
-- configured queue-result capping and evidence retention without new main-thread database work;
-- focused loader, reload and MariaDB/Testcontainers policy tests;
-- operator documentation in `docs/wiki/pages/Report-Configuration.md`.
-
-The separate harsh review fixed stale-inventory slot reinterpretation, a lowered-query-limit reload race, concurrent reload publication, registry-dependent pure unit tests, and identity-based equality for equivalent GUI reload candidates. An analyzer claim that non-multiple-of-nine inventory sizes pass the loader was rejected because the constructed GUI model already validates that invariant before loading succeeds.
+- PR #49 was already merged with normal merge commit `d07cb888952fde575a4f8245571f8d1ebc858b63`.
+- No pull request was open or in draft.
+- Every remaining remote branch was `ahead_by: 0` relative to `main`; no unfinished work was displaced.
+- PR #49 had zero unresolved review threads.
+- The exact PR #49 feature-head validation recorded run `30774370125`, job `91566952409`, Java 21.0.9 and a successful full Gradle build through Flyway V14.
+- The live highest migration remains `V14__punishment_history_and_exact_sanction_changes.sql`.
+- Repository search found no accessible `wsg138/Enthusia-RoseChat` repository and no supported provider contract was supplied.
 
 ## Latest completed product work
 
 | Field | Value |
 | --- | --- |
-| PR | `#48 — Add staff report queue and detail GUI` |
-| Branch | `feature/report-queue-gui` |
-| Merge commit | `39e616bbdcd61f540d77406155f3b579b4fc57ab` |
-| Result | Staff report inventory queues, report detail/review screens, exact-revision actions and text-command fallback |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr48-report-queue-gui.md` |
-| Exact validation and merge evidence | Read PR #48 live |
-
-## Previous completed product work
-
-| Field | Value |
-| --- | --- |
-| PR | `#46 — Add punishment history and sanction lifecycle workflow` |
-| Merge commit | `f53143132db29b9cd75e7caa6589f979d99af8c4` |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr46-punishment-history.md` |
+| PR | `#49 — Add modular report configuration and safe reload` |
+| Branch | `feature/report-configuration-reload` |
+| Final feature head | `1ad41be3eeca49370694916f386dda0484e3bfa3` |
+| Merge commit | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
+| Result | Validated report policy and GUI configuration with atomic safe reload |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr49-report-configuration.md` |
+| Exact validation and merge evidence | Read PR #49 live |
 
 ## Migration state
 
 | Field | Value |
 | --- | --- |
-| Live highest migration at PR #49 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
-| PR #49 schema result | No migration added or edited |
+| Current work schema result | No migration planned or permitted for this documentation-only reconciliation |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
 
-## Remaining report-system work outside PR #49
+## RoseChat provider blocker
 
-- supported RoseChat private-message callback integration;
-- dedicated sensitive-evidence presentation and privacy review;
-- Discord report rendering and delivery validation;
-- production-like multi-server/Folia staging.
+The next recorded report-system item is a supported RoseChat private-message callback and privacy presentation boundary. It cannot be implemented honestly until all of the following are available:
 
-Do not begin those items until PR #49 is closed and live repository state is reconciled.
+- an accessible provider repository or published supported API artifact;
+- the exact callback/event contract and lifecycle timing;
+- sender, recipient, cancellation and delivery semantics;
+- supported version and dependency coordinates;
+- the privacy and retention fields that the provider can supply without reflection or private implementation access.
+
+Do not add reflection against unknown RoseChat internals, invent provider-owned API classes, scrape logs as a substitute callback, or claim private-message evidence support without the provider contract.
 
 ## Production and release boundary
 
@@ -96,7 +82,7 @@ Do not begin those items until PR #49 is closed and live repository state is rec
 - No production deployment is authorized.
 - No production database, credentials, production-derived backup or private player evidence may be accessed.
 - No 168-hour production acceptance window is active.
-- Merging dormant development code does not authorize production cutover.
+- Merging dormant development or documentation does not authorize production cutover.
 - Staging controls are separate and must not be changed unless the current work item explicitly requires them.
 
 ## Required references
