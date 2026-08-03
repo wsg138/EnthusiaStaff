@@ -48,12 +48,16 @@ class ReportConfigurationLoaderTest {
     }
 
     private static ReportConfigurationSnapshot load(String policy, String gui) {
-        return new ReportConfigurationLoader().load(
+        return new ReportConfigurationLoader(ReportConfigurationLoaderTest::testItemMaterial).load(
                 new ByteArrayInputStream(policy.getBytes(StandardCharsets.UTF_8)),
                 "reports.yml",
                 new ByteArrayInputStream(gui.getBytes(StandardCharsets.UTF_8)),
                 "gui/reports.yml"
         );
+    }
+
+    private static boolean testItemMaterial(Material material) {
+        return material != Material.AIR && material != Material.CAVE_AIR && material != Material.VOID_AIR;
     }
 
     private static String resource(String name) {
