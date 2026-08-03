@@ -9,67 +9,100 @@ Date: 2026-08-03
 - Starting `main`: `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`
 - Branch: `fix/admin-staffmode-ender-view-only`
 - Pull request: `#55 — Enforce Admin staff-mode Ender view-only access`
-- Current state: `IMPLEMENTING`
+- Expected committed state: `IDLE — PR #55 requires live merge verification`
 
 ## Live baseline
 
-- PR #54 merged normally into current `main` as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`.
+- PR #54 merged normally into `main` as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`.
 - No pull request was open or draft when this branch was created.
-- No non-main branch remained active.
+- No non-main branch remained active at start.
 - V16 is the live highest Flyway migration; V1–V16 are immutable for this work.
 - LiteBans remains authoritative and startup remains non-`ACTIVE` by default.
 
 ## Confirmed gap
 
-The authoritative rank contract says Admin staff mode may use creative mode but Ender chest access is view-only unless a separate destructive workflow authorizes mutation. The previous Paper policy used one predicate for both opening and mutation. It blocked Helper, Mod, and Developer from opening Ender chests, but permitted Admin and Founder to open and mutate them. An Admin could therefore move items into, out of, or within an Ender chest while staff mode was active, bypassing the player-state safety boundary.
+The authoritative rank contract permits Admin creative staff mode but requires Ender chest access to remain view-only unless a separate destructive workflow authorizes mutation. The previous Paper policy used one predicate for both opening and mutation. It blocked Helper, Mod, and Developer from opening Ender chests, but permitted Admin and Founder to open and mutate them. An Admin could therefore transfer, rearrange, or remove player assets through an ordinary staff-mode Ender view.
 
 ## Implemented behavior
 
 - Ender chest open access and mutation authority are separate policy decisions.
 - Helper, Mod, and Developer remain unable to open an Ender chest while staff mode is active.
-- Admin may open the Ender chest, but every click and drag in that inventory view is cancelled, including transfer attempts involving the bottom inventory.
+- Admin may open an Ender chest, but every click and drag in that inventory view is cancelled, including interactions involving the bottom inventory.
 - Founder retains normal configured owner access.
 - General Admin creative-inventory interaction outside an Ender chest view remains available.
-- Staff tools remain protected by the existing click/drag checks.
+- The click and drag handlers use one shared `blocksInventoryMutation` decision so their rank behavior cannot drift independently.
+- Ender opening and mutation fail closed for an unresolved rank.
+- Existing staff-tool protections remain unchanged.
+
+## Material files changed
+
+- `paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeAccessPolicy.java`
+- `paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java`
+- `paper/src/test/java/net/enthusia/staff/paper/staff/StaffModeAccessPolicyTest.java`
+- `ai-agents/WORKSPACE-STATE.md`
+- `ai-agents/reports/agent-handoffs/latest.md`
+- `WORKSPACE-MANIFEST.md`
+- `docs/wiki/pages/Development-Blueprint.md`
+- `reports/REQUIREMENTS-MATRIX.md`
+
+## Commands, permissions, configuration, and migrations
+
+- No command or permission changes.
+- No configuration keys or reload behavior changes.
+- No provider dependency changes.
+- No migration was added.
+- V1–V16 must remain byte-identical; the next migration remains V17 unless live state is newer.
 
 ## Tests
 
-`StaffModeAccessPolicyTest` now covers:
+`StaffModeAccessPolicyTest` covers:
 
-- Helper full inventory restriction and Ender denial;
-- Mod Ender open and mutation denial;
-- Developer Ender denial while preserving technical staff tools and request-only punishment authority;
-- Admin creative mode with view-only Ender access;
-- Founder creative mode with owner-level Ender access.
+- Helper mutation blocking in ordinary and Ender views;
+- Mod and Developer ordinary staff inventory access with Ender open/mutation denial;
+- Admin ordinary creative inventory access with Ender mutation denial;
+- Founder ordinary and Ender mutation access;
+- unresolved-rank fail-closed Ender behavior;
+- the exact combined mutation predicate used by both inventory event handlers.
 
-## Remaining work in this PR
+## Separate harsh review
 
-- update requirements and workspace routing records;
-- inspect hosted build/test/static-analysis results;
-- perform and record a separate harsh review of the complete diff;
-- fix every confirmed defect or merge blocker;
-- freeze the canonical handoff and expected post-merge state;
-- complete one unchanged exact-head validation cycle and merge only if every gate passes.
+The complete PR diff was reviewed separately for scope, architecture consistency, lifecycle effects, Paper event behavior, thread safety, persistence and migration impact, rank enforcement, inventory-event bypasses, configuration, sensitive data, test claims, documentation, and hosted review findings.
 
-## Exclusions
+### Confirmed defects fixed
 
-This work does not implement a general inventory-inspection workflow, offline Ender editing, confiscation, new staff tools, vanish, freeze, modular staff-mode configuration, database schema changes, production deployment, punishment authority, LiteBans changes, or issue #43 acceptance.
+1. **Fail-open unresolved rank:** the initial split open predicate denied only the three known lower ranks, which would allow an unresolved or future rank to open an Ender chest. It now permits only explicit Admin or Founder ranks; mutation permits only Founder.
+2. **Duplicated event decision and incomplete proof:** click and drag initially repeated related conditions while tests asserted only the leaf predicates. Both handlers now call the same combined mutation decision, and focused tests prove ordinary-versus-Ender behavior for every current rank.
 
-## Validation contract
+### Merge blockers
 
-Before merge, the unchanged final feature head must satisfy the repository's configured Java 21 build and tests, Paper tests, runtime-JAR and provider-leak checks, static analysis, wiki/documentation validation, applicable exact-head Pi validation, and zero unresolved valid review threads. Exact SHA, workflow, job, artifact, hash, and merge evidence belongs in live PR metadata rather than this tracked file.
+- None remain in the reviewed tracked diff before exact-head validation.
 
-## Harsh-review findings
+### Optional cleanup
 
-Not yet frozen. Findings will be classified here as merge blockers, confirmed defects, optional cleanup, or unrelated future work.
+- Full Bukkit/Paper event-object staging would add runtime confidence beyond the pure policy tests. The handlers are intentionally thin and both delegate to the directly tested combined decision, so this is not a confirmed merge defect.
 
-## Migration and production boundaries
+### Unrelated future work
 
-- No migration is expected.
-- V1–V16 must remain byte-identical.
+- General staff-session lifecycle, rank-change recovery, reload/disable behavior, vanish, freeze, inventory inspection, confiscation, and production acceptance remain separate bounded work.
+
+## Validation and evidence routing
+
+Tracked content is intended to remain frozen after the final state batch. Before normal merge, the unchanged final feature head must pass the repository's configured Java 21 build/tests, Paper tests, migration checksum and immutability checks, runtime-JAR/provider-leak inspection, static analysis, wiki/documentation validation, applicable exact-head Pi boot/restart validation, Codacy/CodeRabbit review, and zero unresolved valid review threads.
+
+Exact feature SHA, workflow and job IDs, artifacts, hashes, Pi evidence, review state, merge commit, resulting `main`, containment, and branch cleanup belong in live PR #55 metadata rather than this self-referential tracked file.
+
+## Merge readiness
+
+The scoped implementation and tracked documentation are complete. PR #55 remains unmerged until the frozen exact head is synchronized with `main`, receives terminal successful validation, has zero unresolved valid review threads, and contains exact evidence in live PR metadata.
+
+## Production boundary
+
+- Do not deploy or access production data, credentials, Discord routes, or player evidence.
+- Do not activate EnthusiaStaff punishment authority.
+- Do not disable or remove LiteBans.
+- Do not begin issue #43 acceptance, a production shadow window, final migration, or cutover.
 - Do not use Flyway repair or rewrite migration history.
-- Do not deploy, access production data or credentials, contact production Discord routes, activate EnthusiaStaff authority, disable LiteBans, or start issue #43 acceptance.
 
 ## Next recommended work
 
-After this item is complete, select one separate bounded staff-mode lifecycle or restriction-enforcement gap after fresh live reconciliation. Do not begin it in this PR.
+After PR #55 is merged and verified, select one separate bounded staff-mode lifecycle or restriction-enforcement gap after fresh live reconciliation. Do not begin it as part of PR #55.
