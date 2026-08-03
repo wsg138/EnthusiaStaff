@@ -26,10 +26,11 @@ PR #53 implements one bounded escalation-policy compatibility slice:
 
 - new policy-created cases persist the exact configured recommendation in `punishment_steps` independently from the sanctions actually applied;
 - raw ordinal, effective ordinal and selected ladder ordinal are preserved separately so finite-ladder clamping remains historically unambiguous;
+- V15 requires selected ordinal and recommendation JSON to be both null for legacy rows or both present for new rows;
 - configuration version, selected step label and recommendation sanctions survive restart and later ladder edits;
 - an authorized override does not replace the stored recommendation, while actual sanction type and expiration remain authoritative;
 - legacy V14 and older cases retain null snapshot fields and are shown as unavailable rather than reconstructed from potentially overridden sanctions;
-- malformed stored snapshots fail closed;
+- malformed or incomplete stored snapshots fail closed;
 - `/case` history shows the frozen policy snapshot before the actual sanction list;
 - current policies still interpret future recommendations using the current ladder, with out-of-range ordinals selecting the current final step;
 - V15 is append-only and V1–V14 are not edited;
@@ -39,12 +40,14 @@ Exact final-head validation, review and merge evidence must be read live from PR
 
 ## Harsh-review checkpoint
 
-The separate full-PR review confirmed and fixed two defects before the final tracked-content freeze:
+The separate full-PR review confirmed and fixed four defects before the final tracked-content freeze:
 
 1. effective ordinal alone could not identify the selected recommendation when a finite ladder clamped an out-of-range value to its last configured step, so V15 and the review model now preserve `selected_ordinal` separately;
-2. generic Jackson serialization did not follow the established sanction snapshot schema and risked incompatible optional-duration handling, so the implementation now reuses the strict `PunishmentDraftSanctionCodec` format.
+2. generic Jackson serialization did not follow the established sanction snapshot schema and risked incompatible optional-duration handling, so the implementation now reuses the strict `PunishmentDraftSanctionCodec` format;
+3. nullable snapshot fields initially allowed one-sided rows, so V15 now enforces a database pair constraint while the domain model and JDBC reader also reject incomplete snapshots;
+4. the first requirements-matrix rewrite accidentally omitted its final three rows and immediate execution order, so the original tail was restored and the resulting matrix diff is limited to the intended seven line replacements.
 
-Regression coverage proves out-of-range clamping, restart persistence, an applied duration override distinct from the recommendation, legacy null behavior, corrupt-snapshot failure and V14-to-V15 upgrade preservation. The broader escalation requirement remains conservative and separate.
+Regression coverage proves out-of-range clamping, restart persistence, an applied duration override distinct from the recommendation, legacy null behavior, database and domain pair integrity, corrupt-snapshot failure and V14-to-V15 upgrade preservation. The broader escalation requirement remains conservative and separate.
 
 ## Prior verified evidence
 
