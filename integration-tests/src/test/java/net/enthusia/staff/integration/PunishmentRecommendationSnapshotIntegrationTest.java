@@ -9,6 +9,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentPlan;
@@ -27,19 +28,22 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestMariaDbSupport {
     @Test
-    void storesConfiguredRecommendationSeparatelyFromAppliedOverride() {
+    void storesConfiguredRecommendationSeparatelyFromAppliedOverrideAcrossRestart() {
         CaseId caseId = new CaseId("SNAPSHOT00000001");
         List<SanctionSpec> recommendation = sevenDayBan();
         List<SanctionSpec> applied = thirtyDayBan();
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, recommendation, applied));
+        }
 
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             CaseReview review = runtime.caseReviewStore().find(caseId).orElseThrow();
             PunishmentStepReview step = review.punishmentStep().orElseThrow();
             assertEquals("snapshot-v1", review.configurationVersion());
             assertEquals(2, step.rawOrdinal());
-            assertEquals(2, step.effectiveOrdinal());
+            assertEquals(8, step.effectiveOrdinal());
+            assertEquals(Optional.of(2), step.selectedOrdinal());
             assertEquals("Seven day recommendation", step.label());
             assertEquals(recommendation, step.recommendedSanctions().orElseThrow());
             assertEquals(
@@ -54,12 +58,13 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
         CaseId caseId = new CaseId("SNAPSHOT00000002");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
-            setSnapshot(caseId, null);
+            clearSnapshot(caseId);
 
             PunishmentStepReview step = runtime.caseReviewStore().find(caseId)
                     .orElseThrow()
                     .punishmentStep()
                     .orElseThrow();
+            assertFalse(step.selectedOrdinal().isPresent());
             assertFalse(step.recommendedSanctions().isPresent());
         }
     }
@@ -69,7 +74,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
         CaseId caseId = new CaseId("SNAPSHOT00000003");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
-            setSnapshot(caseId, "[]");
+            setRecommendation(caseId, "[]");
 
             assertThrows(
                     ModerationPersistenceException.class,
@@ -96,22 +101,39 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
                 "snapshot-v1",
                 CaseVisibility.PUBLIC,
                 NOW,
-                new EscalationDecision(2, 2, 0, List.of(), selected),
+                new EscalationDecision(8, 8, 0, List.of(), selected),
                 applied
         );
     }
 
-    private static void setSnapshot(CaseId caseId, String value) throws Exception {
-        try (Connection connection = DriverManager.getConnection(
-                DATABASE.getJdbcUrl(),
-                DATABASE.getUsername(),
-                DATABASE.getPassword()
-        ); PreparedStatement statement = connection.prepareStatement("""
-                UPDATE punishment_steps SET recommended_sanctions_json = ? WHERE case_id = ?
-                """)) {
+    private static void clearSnapshot(CaseId caseId) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE punishment_steps
+                     SET selected_ordinal = NULL, recommended_sanctions_json = NULL
+                     WHERE case_id = ?
+                     """)) {
+            statement.setString(1, caseId.value());
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void setRecommendation(CaseId caseId, String value) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE punishment_steps SET recommended_sanctions_json = ? WHERE case_id = ?
+                     """)) {
             statement.setString(1, value);
             statement.setString(2, caseId.value());
             assertEquals(1, statement.executeUpdate());
         }
+    }
+
+    private static Connection connection() throws Exception {
+        return DriverManager.getConnection(
+                DATABASE.getJdbcUrl(),
+                DATABASE.getUsername(),
+                DATABASE.getPassword()
+        );
     }
 }
