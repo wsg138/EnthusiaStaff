@@ -126,6 +126,36 @@ public final class ReportGuiConfiguration {
         return value;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof ReportGuiConfiguration that)) {
+            return false;
+        }
+        return inventorySize == that.inventorySize
+                && contentSlots.equals(that.contentSlots)
+                && actionSlots.equals(that.actionSlots)
+                && slots.equals(that.slots)
+                && materials.equals(that.materials)
+                && titles.equals(that.titles)
+                && messages.equals(that.messages);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                inventorySize,
+                contentSlots,
+                actionSlots,
+                slots,
+                materials,
+                titles,
+                messages
+        );
+    }
+
     private void validateNamedSlots() {
         for (Map.Entry<String, Integer> entry : slots.entrySet()) {
             int slot = entry.getValue();
