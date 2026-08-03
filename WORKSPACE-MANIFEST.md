@@ -12,8 +12,8 @@ This manifest records development coordination and authority boundaries. It does
 | Default branch | `main` |
 | `main` at PR #55 start | `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` |
 | Latest merged product PR | PR #54 — serious-offense decay eligibility metadata |
-| Current work | PR #55 — Admin staff-mode Ender view-only enforcement |
-| Current committed state | `IMPLEMENTING — PR #55` |
+| Work requiring live verification | PR #55 — Admin staff-mode Ender view-only enforcement |
+| Expected committed state | `IDLE — PR #55 requires live merge verification` |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-admin-staffmode-ender-view-only.md` |
 | Migration boundary | V16 is highest; PR #55 adds no migration; V1–V16 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
@@ -26,15 +26,26 @@ At PR #55 start there were no open pull requests and no non-main branch remained
 PR #55 is one bounded staff-mode asset-safety correction:
 
 - the previous shared Ender predicate permitted both opening and mutation for Admin and Founder;
-- opening and mutation authority are now separate policy decisions;
+- opening and mutation authority are separate policy decisions;
 - Helper, Mod, and Developer remain unable to open Ender chests during staff mode;
 - Admin may open an Ender chest, but clicks and drags in that view are cancelled so access is view-only;
 - Founder retains configured owner-level Ender access;
 - Admin creative inventory interaction outside an Ender chest view remains available;
+- click and drag use one shared mutation decision;
+- unresolved ranks fail closed for Ender opening and mutation;
 - existing staff-tool protections remain unchanged;
-- focused policy tests cover all five ranks.
+- focused tests cover the exact combined mutation behavior for every current rank.
 
 No database, protocol, provider, command, permission, configuration, vanish, freeze, confiscation or production-authority behavior is part of this PR.
+
+## Harsh-review checkpoint
+
+The complete diff received a separate harsh review. It found and fixed two confirmed defects:
+
+1. the initial open predicate failed open for an unresolved or future rank; only explicit Admin or Founder now open Ender chests, and only Founder may mutate;
+2. click and drag duplicated policy conditions while tests proved only leaf predicates; both handlers now share one directly tested combined decision.
+
+No tracked merge blocker remains before exact-head validation. Full Paper event-object staging is useful optional runtime confidence but is not a confirmed defect in the thin handlers.
 
 Exact final-head validation, review and merge evidence belongs in PR #55 live metadata.
 
@@ -74,7 +85,7 @@ Provider and website repositories remain independent. Their histories must not b
 
 ## Current route
 
-1. Complete PR #55 only: documentation, harsh review, corrections, final tracked-content freeze, exact-head validation, normal merge verification and branch cleanup.
+1. Verify PR #55's frozen exact head, terminal validation and review state, normal merge result, resulting `main`, feature-head containment and branch cleanup.
 2. After PR #55, select one separate bounded staff-mode lifecycle or restriction-enforcement item after fresh reconciliation.
 3. Continue owner priority one before report notifications when prerequisites are comparable.
 4. Treat escalation-policy completion as third priority.
