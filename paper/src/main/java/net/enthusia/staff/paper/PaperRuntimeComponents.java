@@ -23,6 +23,7 @@ import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
+import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.event.Listener;
@@ -99,14 +100,16 @@ record PaperRuntimeComponents(
     }
 
     private static StaffModeManager createStaffModeManager(Dependencies dependencies) {
+        JavaPlugin plugin = dependencies.environment().plugin();
         StaffModeManager staffMode = new StaffModeManager(
-                dependencies.environment().plugin(),
+                plugin,
                 dependencies.environment().clock(),
                 dependencies.environment().serverId(),
                 dependencies.stores().staffSessionStore(),
                 dependencies.environment().workers()
         );
-        registerListener(dependencies.environment().plugin(), staffMode);
+        registerListener(plugin, new StaffToolTransferListener(plugin, staffMode));
+        registerListener(plugin, staffMode);
         return staffMode;
     }
 
