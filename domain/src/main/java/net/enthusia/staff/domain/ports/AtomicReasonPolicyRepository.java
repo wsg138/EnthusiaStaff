@@ -112,6 +112,9 @@ public final class AtomicReasonPolicyRepository implements ReasonPolicyRepositor
         if (target != null) {
             return Optional.of(state.policies().get(target));
         }
+        if (state.removedReasons().containsKey(reasonId)) {
+            return Optional.empty();
+        }
         return polarPolicy(state.policies(), reasonId);
     }
 
