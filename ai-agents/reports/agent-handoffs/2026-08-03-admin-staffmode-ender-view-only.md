@@ -31,7 +31,7 @@ The authoritative rank contract permits Admin creative staff mode but requires E
 - Founder retains normal configured owner access.
 - General Admin creative-inventory interaction outside an Ender chest view remains available.
 - The click and drag handlers use one shared `blocksInventoryMutation` decision so their rank behavior cannot drift independently.
-- Ender opening and mutation fail closed for an unresolved rank.
+- Ender opening and mutation fail closed for `SYSTEM` and an unresolved rank.
 - Existing staff-tool protections remain unchanged.
 
 ## Material files changed
@@ -61,6 +61,7 @@ The authoritative rank contract permits Admin creative staff mode but requires E
 - Mod and Developer ordinary staff inventory access with Ender open/mutation denial;
 - Admin ordinary creative inventory access with Ender mutation denial;
 - Founder ordinary and Ender mutation access;
+- non-player `SYSTEM` rank Ender denial;
 - unresolved-rank fail-closed Ender behavior;
 - the exact combined mutation predicate used by both inventory event handlers.
 
@@ -71,7 +72,8 @@ The complete PR diff was reviewed separately for scope, architecture consistency
 ### Confirmed defects fixed
 
 1. **Fail-open unresolved rank:** the initial split open predicate denied only the three known lower ranks, which would allow an unresolved or future rank to open an Ender chest. It now permits only explicit Admin or Founder ranks; mutation permits only Founder.
-2. **Duplicated event decision and incomplete proof:** click and drag initially repeated related conditions while tests asserted only the leaf predicates. Both handlers now call the same combined mutation decision, and focused tests prove ordinary-versus-Ender behavior for every current rank.
+2. **Duplicated event decision and incomplete proof:** click and drag initially repeated related conditions while tests asserted only the leaf predicates. Both handlers now call the same combined mutation decision, and focused tests prove ordinary-versus-Ender behavior.
+3. **Uncovered enum boundary:** `StaffRank.SYSTEM` is not player-assigned, but it is a current enum value accepted by the policy. Focused coverage now proves that it receives no player Ender access, keeping the policy fail closed if it is passed accidentally.
 
 ### Merge blockers
 
