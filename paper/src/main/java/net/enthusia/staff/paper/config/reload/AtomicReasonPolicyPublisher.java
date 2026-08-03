@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.config.reload;
 
-import java.util.List;
 import java.util.Objects;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
@@ -14,11 +13,12 @@ public final class AtomicReasonPolicyPublisher implements ReasonPolicyPublisher 
 
     @Override
     public Snapshot snapshot() {
+        AtomicReasonPolicyRepository.PolicySnapshot snapshot = repository.snapshot();
         return new Snapshot(
-                repository.activeVersion(),
-                List.copyOf(repository.all()),
-                repository.aliases(),
-                List.copyOf(repository.removedReasons())
+                snapshot.version(),
+                snapshot.policies(),
+                snapshot.aliases(),
+                snapshot.removedReasons()
         );
     }
 
