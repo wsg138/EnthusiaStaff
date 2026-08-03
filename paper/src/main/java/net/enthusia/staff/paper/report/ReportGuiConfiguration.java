@@ -75,7 +75,6 @@ public final class ReportGuiConfiguration {
         this.titles = immutableRequiredTextMap(titles, TITLE_KEYS, "titles");
         this.messages = immutableRequiredTextMap(messages, MESSAGE_KEYS, "messages");
         validateNamedSlots();
-        validateMaterials();
         validateLayouts();
     }
 
@@ -138,14 +137,6 @@ public final class ReportGuiConfiguration {
         }
         if (!contentSlots.contains(slot("empty"))) {
             throw new IllegalArgumentException("report GUI empty slot must be one of the content slots");
-        }
-    }
-
-    private void validateMaterials() {
-        for (Map.Entry<String, Material> entry : materials.entrySet()) {
-            if (!entry.getValue().isItem()) {
-                throw new IllegalArgumentException("report GUI material " + entry.getKey() + " is not an item");
-            }
         }
     }
 
