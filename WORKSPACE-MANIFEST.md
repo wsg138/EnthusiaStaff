@@ -59,7 +59,7 @@ PR #56 is staff/player-visible leak prevention under priority one. Do not expand
 
 PR #55 exact head `c6380aae35cf8c56044faf6dea96c471b14634f3` passed exact-head Coverage `30812589989` and Validate Wiki `30812589424`, had zero unresolved review threads, and merged normally as `d71759aa4f121c82f984e57d6fd0968a80c502ba`. Do not attribute that evidence to PR #56.
 
-The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and correlated private `wsg138/EnthusiaStaff-Staging` run directly. Cancelled or superseded runs are not evidence.
+The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and correlated private `wsg138/EnthusiaStaff-Staging` run directly. Cancelled, superseded, skipped, different-revision and merge-ref-only runs are not exact-head evidence. When Pi is configured and triggered, require a terminal successful public wrapper and correlated private run for the exact feature head; accept an exception only when live workflow configuration proves Pi is not applicable or cannot be triggered for that exact head, and record that verified exception in PR metadata.
 
 ## Provider and blocked-work routing
 
@@ -69,7 +69,7 @@ Issue #43 is specifically the LiteBans production-cutover acceptance issue and r
 
 ## Development merge gate
 
-Merge PR #56 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, applicable migration checksum/immutability checks, runtime-JAR inspection, provider-leak checks, aggregate coverage, configured static analysis, wiki validation, terminal exact-head Pi when configured and triggered, and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
+Merge PR #56 only after one unchanged exact feature head is synchronized with current `main` and every configured check for that head has a terminal acceptable result: Java 21 build/tests, applicable MariaDB/Testcontainers and migration checksum/immutability checks, runtime-JAR and provider-leak inspection, aggregate coverage, configured static analysis and coverage upload, wiki/documentation validation, applicable public and private Pi staging, and all human/CodeRabbit/Codacy review gates. Reject cancelled, superseded, skipped, different-revision and merge-ref-only results. A Pi exception is valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for the exact feature head and the exception is recorded in PR metadata. Zero unresolved valid threads must remain. Before merge, record the exact head, every run/job and artifact identity, hashes, review classification and synchronization evidence in the PR without changing the feature SHA. Use a normal merge commit, then record the merge commit, resulting `main`, feature-head containment, absence of unmerged branch commits and branch cleanup.
 
 ## Production cutover gate
 
@@ -81,7 +81,7 @@ Provider and website repositories remain independent. Their histories must not b
 
 ## Current route
 
-1. Verify PR #56's frozen exact head, terminal validation and review state, normal merge result, resulting `main`, feature-head containment and branch cleanup.
+1. Apply the complete development merge gate above to PR #56's final unchanged exact head; verify all terminal checks or a documented valid Pi exception, zero unresolved threads, normal merge evidence, resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup.
 2. After PR #56, select one separate bounded staff-mode lifecycle or restriction-enforcement item after fresh reconciliation.
 3. Continue owner priority one before report notifications when prerequisites are comparable.
 4. Treat escalation-policy completion as third priority.
