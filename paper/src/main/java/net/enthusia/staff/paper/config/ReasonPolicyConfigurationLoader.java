@@ -13,8 +13,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import net.enthusia.staff.common.DurationParser;
 import net.enthusia.staff.common.ParsedDuration;
@@ -22,16 +24,21 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.AltInheritanceMode;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
+import net.enthusia.staff.domain.escalation.RemovedReason;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class ReasonPolicyConfigurationLoader {
-    private static final Set<String> ROOT_FIELDS = Set.of("version", "defaults", "reasons");
+    private static final Set<String> ROOT_FIELDS = Set.of(
+            "version", "defaults", "aliases", "removed-reasons", "reasons"
+    );
     private static final Set<String> DEFAULT_FIELDS = Set.of(
             "decay-eligible", "public-default", "reportable", "confiscation-options",
             "required-rank", "automatic-detection-eligible", "alt-inheritance"
     );
+    private static final Set<String> ALIAS_FIELDS = Set.of("id", "target");
+    private static final Set<String> REMOVED_REASON_FIELDS = Set.of("id", "family", "display-name");
     private static final Set<String> REASON_FIELDS = Set.of(
             "id", "family", "display-name", "examples", "severity", "decay-eligible",
             "public-default", "reportable", "confiscation-options", "required-rank",
@@ -82,7 +89,9 @@ public final class ReasonPolicyConfigurationLoader {
                 }
                 policies.add(policy);
             }
-            return new LoadedPolicies(version, policies);
+            List<RemovedReason> removedReasons = parseRemovedReasons(root.get("removed-reasons"), identifiers);
+            Map<String, String> aliases = parseAliases(root.get("aliases"), identifiers, removedReasons);
+            return new LoadedPolicies(version, policies, aliases, removedReasons);
         } catch (IOException exception) {
             throw new ConfigurationValidationException("Unable to read " + sourceName, exception);
         } catch (ConfigurationValidationException exception) {
@@ -90,6 +99,76 @@ public final class ReasonPolicyConfigurationLoader {
         } catch (IllegalArgumentException exception) {
             throw new ConfigurationValidationException("Invalid punishment policy: " + exception.getMessage(), exception);
         }
+    }
+
+    private List<RemovedReason> parseRemovedReasons(JsonNode node, Set<String> activeIds) {
+        if (node == null) {
+            return List.of();
+        }
+        if (!node.isArray()) {
+            throw invalid("root.removed-reasons must be an array");
+        }
+        List<RemovedReason> removed = new ArrayList<>();
+        Set<String> identifiers = new HashSet<>();
+        for (int index = 0; index < node.size(); index++) {
+            String path = "removed-reasons[" + index + "]";
+            JsonNode value = node.get(index);
+            requireObject(value, path);
+            rejectUnknown(value, REMOVED_REASON_FIELDS, path);
+            RemovedReason reason = new RemovedReason(
+                    text(value, "id", path),
+                    text(value, "family", path),
+                    text(value, "display-name", path)
+            );
+            if (activeIds.contains(reason.id())) {
+                throw invalid(path + ".id overlaps active reason policy " + reason.id());
+            }
+            if (!identifiers.add(reason.id())) {
+                throw invalid(path + ".id duplicates removed reason " + reason.id());
+            }
+            removed.add(reason);
+        }
+        return List.copyOf(removed);
+    }
+
+    private Map<String, String> parseAliases(
+            JsonNode node,
+            Set<String> activeIds,
+            List<RemovedReason> removedReasons
+    ) {
+        if (node == null) {
+            return Map.of();
+        }
+        if (!node.isArray()) {
+            throw invalid("root.aliases must be an array");
+        }
+        Set<String> removedIds = new HashSet<>();
+        removedReasons.forEach(reason -> removedIds.add(reason.id()));
+        Map<String, String> aliases = new LinkedHashMap<>();
+        for (int index = 0; index < node.size(); index++) {
+            String path = "aliases[" + index + "]";
+            JsonNode value = node.get(index);
+            requireObject(value, path);
+            rejectUnknown(value, ALIAS_FIELDS, path);
+            String id = text(value, "id", path);
+            String target = text(value, "target", path);
+            if (id.equals(target)) {
+                throw invalid(path + " cannot target itself");
+            }
+            if (activeIds.contains(id)) {
+                throw invalid(path + ".id overlaps active reason policy " + id);
+            }
+            if (removedIds.contains(id)) {
+                throw invalid(path + ".id overlaps removed reason " + id);
+            }
+            if (!activeIds.contains(target)) {
+                throw invalid(path + ".target must reference an active reason policy: " + target);
+            }
+            if (aliases.putIfAbsent(id, target) != null) {
+                throw invalid(path + ".id duplicates reason alias " + id);
+            }
+        }
+        return Map.copyOf(aliases);
     }
 
     private Defaults parseDefaults(JsonNode node) {
@@ -273,9 +352,24 @@ public final class ReasonPolicyConfigurationLoader {
         }
     }
 
-    public record LoadedPolicies(String version, List<ReasonPolicy> policies) {
+    public record LoadedPolicies(
+            String version,
+            List<ReasonPolicy> policies,
+            Map<String, String> aliases,
+            List<RemovedReason> removedReasons
+    ) {
         public LoadedPolicies {
+            if (version == null || version.isBlank()) {
+                throw new IllegalArgumentException("reason policy version must be present");
+            }
+            version = version.trim();
             policies = List.copyOf(policies);
+            aliases = Map.copyOf(aliases);
+            removedReasons = List.copyOf(removedReasons);
+        }
+
+        public LoadedPolicies(String version, List<ReasonPolicy> policies) {
+            this(version, policies, Map.of(), List.of());
         }
     }
 
