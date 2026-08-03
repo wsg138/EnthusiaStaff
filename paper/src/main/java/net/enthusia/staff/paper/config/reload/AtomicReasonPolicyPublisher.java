@@ -14,18 +14,33 @@ public final class AtomicReasonPolicyPublisher implements ReasonPolicyPublisher 
 
     @Override
     public Snapshot snapshot() {
-        return new Snapshot(repository.activeVersion(), List.copyOf(repository.all()));
+        return new Snapshot(
+                repository.activeVersion(),
+                List.copyOf(repository.all()),
+                repository.aliases(),
+                List.copyOf(repository.removedReasons())
+        );
     }
 
     @Override
     public void publish(ReasonPolicyConfigurationLoader.LoadedPolicies policies) {
         Objects.requireNonNull(policies, "policies");
-        repository.replace(policies.version(), policies.policies());
+        repository.replace(
+                policies.version(),
+                policies.policies(),
+                policies.aliases(),
+                policies.removedReasons()
+        );
     }
 
     @Override
     public void restore(Snapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
-        repository.replace(snapshot.version(), snapshot.policies());
+        repository.replace(
+                snapshot.version(),
+                snapshot.policies(),
+                snapshot.aliases(),
+                snapshot.removedReasons()
+        );
     }
 }
