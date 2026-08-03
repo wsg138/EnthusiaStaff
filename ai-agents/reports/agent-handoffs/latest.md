@@ -2,7 +2,7 @@
 
 Current handoff:
 
-[`2026-08-02-pr53-escalation-policy-snapshots-final.md`](2026-08-02-pr53-escalation-policy-snapshots-final.md)
+[`2026-08-02-pr53-escalation-policy-snapshots-ci-final.md`](2026-08-02-pr53-escalation-policy-snapshots-ci-final.md)
 
 Related PR:
 
@@ -15,7 +15,8 @@ Related PR:
 | Work item | Persist the exact configured escalation recommendation and selected ladder ordinal for new cases |
 | PR | `#53` |
 | Branch | `feature/escalation-policy-snapshots` |
-| Recorded state | Scoped implementation, V15 constraints, four harsh-review fixes, focused tests and routing records frozen before exact-head validation |
+| Recorded state | Scoped implementation, V15 constraints, five harsh-review/CI fixes, focused tests and routing records frozen before renewed exact-head validation |
+| Failed historical validation | Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` exposed invalid Crockford test fixtures and is not success evidence |
 | Exact final-head evidence | Read PR #53 live |
 | Exact merge evidence | Read PR #53 live |
 | Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
