@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.GameMode;
+import org.bukkit.event.inventory.ClickType;
 import org.junit.jupiter.api.Test;
 
 class StaffModeAccessPolicyTest {
@@ -60,6 +61,40 @@ class StaffModeAccessPolicyTest {
         assertFalse(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.FOUNDER));
         assertTrue(StaffModeAccessPolicy.usesCreativeMode(StaffRank.FOUNDER));
         assertEquals(GameMode.CREATIVE, StaffModeAccessPolicy.requiredGameMode(StaffRank.FOUNDER));
+    }
+
+    @Test
+    void currentItemAndCursorStaffToolsAlwaysBlockInventoryTransfer() {
+        for (ClickType click : ClickType.values()) {
+            assertTrue(StaffModeAccessPolicy.blocksStaffToolTransfer(click, true, false, false, false));
+            assertTrue(StaffModeAccessPolicy.blocksStaffToolTransfer(click, false, true, false, false));
+        }
+    }
+
+    @Test
+    void numberKeyBlocksOnlyWhenReferencedHotbarItemIsStaffTool() {
+        assertTrue(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.NUMBER_KEY, false, false, true, false));
+        assertFalse(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.NUMBER_KEY, false, false, false, true));
+        assertFalse(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.NUMBER_KEY, false, false, false, false));
+    }
+
+    @Test
+    void inventoryOffhandSwapBlocksOnlyWhenOffhandItemIsStaffTool() {
+        assertTrue(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.SWAP_OFFHAND, false, false, false, true));
+        assertFalse(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.SWAP_OFFHAND, false, false, true, false));
+        assertFalse(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.SWAP_OFFHAND, false, false, false, false));
+    }
+
+    @Test
+    void unrelatedClickDoesNotBlockBecauseUnreferencedHotbarOrOffhandContainsStaffTool() {
+        assertFalse(StaffModeAccessPolicy.blocksStaffToolTransfer(
+                ClickType.LEFT, false, false, true, true));
     }
 
     @Test
