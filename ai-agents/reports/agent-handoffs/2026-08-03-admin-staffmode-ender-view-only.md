@@ -91,6 +91,12 @@ The complete PR diff was reviewed separately for scope, architecture consistency
 
 Tracked content is intended to remain frozen after the final state batch. Before normal merge, the unchanged final feature head must pass the repository's configured Java 21 build/tests, Paper tests, migration checksum and immutability checks, runtime-JAR/provider-leak inspection, static analysis, wiki/documentation validation, applicable exact-head Pi boot/restart validation, Codacy/CodeRabbit review, and zero unresolved valid review threads.
 
+Stable live validation pages:
+
+- [PR #55 checks](https://github.com/wsg138/EnthusiaStaff/pull/55/checks)
+- [PR #55 changed files and review threads](https://github.com/wsg138/EnthusiaStaff/pull/55/files)
+- [PR #55 conversation and exact evidence](https://github.com/wsg138/EnthusiaStaff/pull/55)
+
 Exact feature SHA, workflow and job IDs, artifacts, hashes, Pi evidence, review state, merge commit, resulting `main`, containment, and branch cleanup belong in live PR #55 metadata rather than this self-referential tracked file.
 
 ## Merge readiness
