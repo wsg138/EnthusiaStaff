@@ -43,6 +43,9 @@ final class PunishmentReasonPresentation {
             case ACTIVE -> addActive(lore);
             case ALIAS -> addAlias(lore, descriptor.canonicalId());
             case REMOVED -> addRemoved(lore);
+            default -> throw new IllegalStateException(
+                    "Unsupported reason availability: " + descriptor.availability()
+            );
         }
     }
 
