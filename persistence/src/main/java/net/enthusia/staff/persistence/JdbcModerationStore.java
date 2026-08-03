@@ -18,6 +18,7 @@ import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
+import net.enthusia.staff.domain.escalation.DecayEligibility;
 import net.enthusia.staff.domain.escalation.PriorOffense;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
@@ -57,7 +58,7 @@ public final class JdbcModerationStore implements ModerationStore {
         String sql = """
                 SELECT c.sanction_family, ps.effective_ordinal, c.issued_at,
                        COALESCE(MAX(s.ended_at), MAX(s.expiration_at), c.issued_at) ended_at,
-                       ps.escalation_contributes, c.state,
+                       ps.escalation_contributes, ps.decay_eligible, c.state,
                        COALESCE(MAX(CASE WHEN s.sanction_type IN (
                                                     'BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN'
                                                 ) THEN 80
@@ -68,7 +69,7 @@ public final class JdbcModerationStore implements ModerationStore {
                 LEFT JOIN sanctions s ON s.case_id = c.case_id
                 WHERE c.target_id = ? AND c.sanction_family = ?
                 GROUP BY c.case_id, c.sanction_family, ps.effective_ordinal, c.issued_at,
-                         ps.escalation_contributes, c.state
+                         ps.escalation_contributes, ps.decay_eligible, c.state
                 ORDER BY c.issued_at
                 """;
         try (Connection connection = dataSource.getConnection();
@@ -84,7 +85,8 @@ public final class JdbcModerationStore implements ModerationStore {
                             results.getInt("effective_ordinal"),
                             results.getTimestamp("ended_at").toInstant(),
                             results.getBoolean("escalation_contributes"),
-                            "FULLY_OVERTURNED".equals(results.getString("state"))
+                            "FULLY_OVERTURNED".equals(results.getString("state")),
+                            readDecayEligibility(results)
                     ));
                 }
                 return List.copyOf(history);
@@ -203,8 +205,8 @@ public final class JdbcModerationStore implements ModerationStore {
         String sql = """
                 INSERT INTO punishment_steps(case_id, raw_ordinal, effective_ordinal, selected_ordinal,
                     recency_bonus, step_label, contribution_json, recommended_sanctions_json,
-                    escalation_contributes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+                    decay_eligible, escalation_contributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, plan.caseId().value());
@@ -215,7 +217,28 @@ public final class JdbcModerationStore implements ModerationStore {
             statement.setString(6, plan.escalation().selectedStep().label());
             statement.setString(7, json.writeValueAsString(plan.escalation().contributions()));
             statement.setString(8, recommendations.write(plan.escalation().selectedStep().sanctions()));
+            writeDecayEligibility(statement, 9, plan.escalation().resultingOffenseDecayEligibility());
             statement.executeUpdate();
+        }
+    }
+
+    private static DecayEligibility readDecayEligibility(ResultSet results) throws SQLException {
+        Boolean stored = results.getObject("decay_eligible", Boolean.class);
+        if (stored == null) {
+            return DecayEligibility.UNKNOWN;
+        }
+        return stored ? DecayEligibility.ELIGIBLE : DecayEligibility.INELIGIBLE;
+    }
+
+    private static void writeDecayEligibility(
+            PreparedStatement statement,
+            int parameter,
+            DecayEligibility eligibility
+    ) throws SQLException {
+        switch (eligibility) {
+            case ELIGIBLE -> statement.setBoolean(parameter, true);
+            case INELIGIBLE -> statement.setBoolean(parameter, false);
+            case UNKNOWN -> statement.setNull(parameter, Types.BOOLEAN);
         }
     }
 
