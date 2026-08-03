@@ -18,15 +18,23 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 class AtomicReasonPolicyRepositoryTest {
+    private static final String INITIAL_VERSION = "v1";
+    private static final String CHAT_POLICY_ID = "chat.harassment";
+    private static final String POLAR_TEMPLATE_ID = "cheating.polar.template";
+    private static final String POLAR_SPEED_ID = "cheating.polar.speed";
+
     @Test
     void createsIndependentPolarFamiliesFromTheValidatedTemplate() {
-        ReasonPolicy template = policy("cheating.polar.template");
-        AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository("v1", List.of(template));
+        ReasonPolicy template = policy(POLAR_TEMPLATE_ID);
+        AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
+                INITIAL_VERSION,
+                List.of(template)
+        );
 
-        ReasonPolicy speed = repository.find("cheating.polar.speed").orElseThrow();
+        ReasonPolicy speed = repository.find(POLAR_SPEED_ID).orElseThrow();
         ReasonPolicy reach = repository.find("cheating.polar.reach").orElseThrow();
 
-        assertEquals("cheating.polar.speed", speed.family());
+        assertEquals(POLAR_SPEED_ID, speed.family());
         assertEquals("cheating.polar.reach", reach.family());
         assertNotEquals(speed.family(), reach.family());
         assertTrue(repository.find("cheating.polar.Invalid Family").isEmpty());
@@ -35,13 +43,13 @@ class AtomicReasonPolicyRepositoryTest {
     @Test
     void removedPolarIdentifiersBlockTemplateExpansion() {
         RemovedReason removed = new RemovedReason(
-                "cheating.polar.speed",
+                POLAR_SPEED_ID,
                 "cheating.polar",
                 "Retired Polar speed detection"
         );
         AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
                 "v2",
-                List.of(policy("cheating.polar.template")),
+                List.of(policy(POLAR_TEMPLATE_ID)),
                 Map.of(),
                 List.of(removed)
         );
@@ -56,7 +64,7 @@ class AtomicReasonPolicyRepositoryTest {
 
     @Test
     void aliasesResolveToCanonicalPoliciesWithoutBecomingSelectableEntries() {
-        ReasonPolicy canonical = policy("chat.harassment");
+        ReasonPolicy canonical = policy(CHAT_POLICY_ID);
         AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
                 "v2",
                 List.of(canonical),
@@ -82,7 +90,7 @@ class AtomicReasonPolicyRepositoryTest {
         RemovedReason removed = new RemovedReason("chat.legacy-abuse", "chat", "Legacy abusive language");
         AtomicReasonPolicyRepository repository = new AtomicReasonPolicyRepository(
                 "v3",
-                List.of(policy("chat.harassment")),
+                List.of(policy(CHAT_POLICY_ID)),
                 Map.of(),
                 List.of(removed)
         );
@@ -99,20 +107,23 @@ class AtomicReasonPolicyRepositoryTest {
 
     @Test
     void rejectsAliasesThatOverlapOrDoNotTargetAnActivePolicy() {
-        ReasonPolicy canonical = policy("chat.harassment");
+        ReasonPolicy canonical = policy(CHAT_POLICY_ID);
         RemovedReason removed = new RemovedReason("chat.retired", "chat", "Retired reason");
 
         assertThrows(IllegalArgumentException.class, () -> new AtomicReasonPolicyRepository(
-                "v1", List.of(canonical), Map.of(canonical.id(), canonical.id()), List.of()
+                INITIAL_VERSION, List.of(canonical), Map.of(canonical.id(), canonical.id()), List.of()
         ));
         assertThrows(IllegalArgumentException.class, () -> new AtomicReasonPolicyRepository(
-                "v1", List.of(canonical), Map.of(removed.id(), canonical.id()), List.of(removed)
+                INITIAL_VERSION, List.of(canonical), Map.of(removed.id(), canonical.id()), List.of(removed)
         ));
         assertThrows(IllegalArgumentException.class, () -> new AtomicReasonPolicyRepository(
-                "v1", List.of(canonical), Map.of("chat.old", "chat.missing"), List.of()
+                INITIAL_VERSION, List.of(canonical), Map.of("chat.old", "chat.missing"), List.of()
         ));
         assertThrows(IllegalArgumentException.class, () -> new AtomicReasonPolicyRepository(
-                "v1", List.of(canonical), Map.of("chat.old", "chat.older", "chat.older", canonical.id()), List.of()
+                INITIAL_VERSION,
+                List.of(canonical),
+                Map.of("chat.old", "chat.older", "chat.older", canonical.id()),
+                List.of()
         ));
     }
 
