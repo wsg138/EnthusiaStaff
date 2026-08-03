@@ -2,34 +2,34 @@
 
 Current handoff:
 
-[`2026-08-03-admin-staffmode-ender-view-only.md`](2026-08-03-admin-staffmode-ender-view-only.md)
+[`2026-08-03-staffmode-tool-transfer-bypasses.md`](2026-08-03-staffmode-tool-transfer-bypasses.md)
 
 Related PR:
 
-[`#55 — Enforce Admin staff-mode Ender view-only access`](https://github.com/wsg138/EnthusiaStaff/pull/55)
+[`#56 — Block staff-tool hotbar and offhand transfer bypasses`](https://github.com/wsg138/EnthusiaStaff/pull/56)
 
 ## Summary
 
 | Field | Value |
 | --- | --- |
-| Work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only and Founder retains configured owner access |
-| PR | `#55` |
-| Branch | `fix/admin-staffmode-ender-view-only` |
-| Starting main | `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` |
-| Expected committed state | `IDLE — PR #55 requires live merge verification` |
-| Implementation | Helper/Mod/Developer cannot open; Admin can open but shared click/drag mutation policy cancels Ender changes; Founder retains owner access; `SYSTEM` and unresolved ranks fail closed |
-| Harsh-review fixes | Closed unresolved-rank fail-open behavior, centralized/directly tested the mutation decision used by both inventory handlers, and covered the non-player `SYSTEM` enum boundary |
-| Tests | `StaffModeAccessPolicyTest` proves ordinary-versus-Ender mutation behavior for every player-assigned rank, `SYSTEM`, and the unresolved-rank boundary |
-| Exact final-head evidence | Read PR #55 live after tracked-content freeze |
-| Exact merge evidence | Read PR #55 live after merge |
-| Migration boundary | V16 is highest; PR #55 adds no migration; V1–V16 remain immutable |
+| Work item | Close number-key hotbar and inventory offhand transfer paths that could move protected staff tools without the clicked item or cursor containing the tool |
+| PR | `#56` |
+| Branch | `fix/staffmode-tool-transfer-bypasses` |
+| Starting main | `d71759aa4f121c82f984e57d6fd0968a80c502ba` |
+| Expected committed state | `IDLE — PR #56 requires live merge verification` |
+| Implementation | Focused listener identifies current, cursor, exact hotbar and offhand sources; one tested policy blocks staff-tool transfers while manager retains transition/rank restrictions |
+| Harsh-review fix | Removed parallel current-item/cursor click authority from `StaffModeManager`; the dedicated listener is the active-session staff-tool click guard |
+| Tests | `StaffModeAccessPolicyTest` proves every click type's direct protection, exact number-key/offhand decisions, negative cases and all prior rank/Ender boundaries |
+| Exact final-head evidence | Read PR #56 live after tracked-content freeze |
+| Exact merge evidence | Read PR #56 live after merge |
+| Migration boundary | V16 is highest; PR #56 adds no migration; V1–V16 remain immutable |
 | Configuration changes | None |
 | Production boundary | No deployment, authority activation, LiteBans change, production Discord use or production access |
 | Remaining external blocker | Supported RoseChat private-message provider contract remains unavailable; use focused blocker routing, not issue #43 |
-| Next owner-priority workstream | One separate bounded staff-mode lifecycle or restriction-enforcement item after PR #55; do not begin it in this PR |
+| Next owner-priority workstream | One separate bounded staff-mode lifecycle or restriction-enforcement item after PR #56; do not begin it in this PR |
 
-PR #54 merged normally as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04`; its feature branch was removed before PR #55 started. Do not attribute PR #54 workflow evidence to PR #55.
+PR #55 merged normally as `d71759aa4f121c82f984e57d6fd0968a80c502ba`; its feature branch was removed before PR #56 started. Do not attribute PR #55 workflow evidence to PR #56.
 
 The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and its correlated private `wsg138/EnthusiaStaff-Staging` run directly before merge. A missing commit-scoped Pi listing is not proof of non-applicability.
 
-The next agent must reconcile live GitHub state before acting, verify PR #55 rather than opening another branch, read the canonical handoff, inspect pending/superseded/terminal workflows and review threads, and continue only this work item. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, start issue #43 acceptance, or combine vanish/freeze/general inventory work into PR #55.
+The next agent must reconcile live GitHub state before acting, verify PR #56 rather than opening another branch, read the canonical handoff, inspect pending/superseded/terminal workflows and review threads, and continue only this work item. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, start issue #43 acceptance, or combine vanish/freeze/general inventory work into PR #56.
