@@ -10,55 +10,54 @@ This manifest records repository, validation and authority boundaries for develo
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current verified `main` at PR #52 start | `4f7165adced48d98bce86730e89b92944afba063` |
-| Latest merged product PR before current work | PR #51 — escalation clean-period decay correctness |
+| `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
+| Latest merged product PR before current work | PR #52 — reason aliases and removed-ID presentation |
 | Latest merged coordination PR | PR #50 — RoseChat provider blocker reconciliation |
-| Active work | PR #52 — reason aliases and removed-ID presentation; verify live closure |
-| Migration boundary | V14 is latest; V1–V14 are immutable |
+| Active work | PR #53 — escalation recommendation snapshots across ladder edits; verify live closure |
+| Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE`; merging development code does not activate authority |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #52 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
+At PR #53 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
 
 ## Current implementation checkpoint
 
-PR #52 implements one bounded escalation-policy compatibility slice:
+PR #53 implements one bounded escalation-policy compatibility slice:
 
-- old stable reason IDs can be declared as explicit aliases to one active canonical reason;
-- aliases resolve current policy behavior but never become duplicate entries in the selectable reason catalog;
-- newly committed punishment records use the canonical reason ID and current configuration version;
-- removed reason IDs expose bounded display metadata without a ladder and cannot resolve for new punishment creation;
-- removed IDs in the dynamic `cheating.polar.*` namespace block template expansion rather than becoming selectable accidentally;
-- active policies, aliases, removed metadata and version are published and restored as one atomic reload snapshot;
-- saved punishment review presentation distinguishes active, renamed, removed and unknown reason IDs;
-- the requirements matrix now records the implemented compatibility slice without overstating the broader escalation requirement;
-- no existing case, sanction, ordinal, expiration, draft, request or audit record is rewritten;
-- no schema or Flyway migration changed.
+- new policy-created cases persist the exact configured recommendation in `punishment_steps` independently from the sanctions actually applied;
+- raw ordinal, effective ordinal and selected ladder ordinal are preserved separately so finite-ladder clamping remains historically unambiguous;
+- configuration version, selected step label and recommendation sanctions survive restart and later ladder edits;
+- an authorized override does not replace the stored recommendation, while actual sanction type and expiration remain authoritative;
+- legacy V14 and older cases retain null snapshot fields and are shown as unavailable rather than reconstructed from potentially overridden sanctions;
+- malformed stored snapshots fail closed;
+- `/case` history shows the frozen policy snapshot before the actual sanction list;
+- current policies still interpret future recommendations using the current ladder, with out-of-range ordinals selecting the current final step;
+- V15 is append-only and V1–V14 are not edited;
+- no existing case, sanction, request, appeal, expiration or audit row is rewritten.
 
-Exact final-head validation, review and merge evidence must be read live from PR #52.
+Exact final-head validation, review and merge evidence must be read live from PR #53.
 
 ## Harsh-review checkpoint
 
-The separate full-PR review confirmed and fixed three defects before the final tracked-content freeze:
+The separate full-PR review confirmed and fixed two defects before the final tracked-content freeze:
 
-1. removed `cheating.polar.*` identifiers could still resolve through dynamic template expansion;
-2. reload snapshots were assembled through separate atomic reads and could theoretically mix metadata from concurrent versions;
-3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the code and focused tests supplied that slice.
+1. effective ordinal alone could not identify the selected recommendation when a finite ladder clamped an out-of-range value to its last configured step, so V15 and the review model now preserve `selected_ordinal` separately;
+2. generic Jackson serialization did not follow the established sanction snapshot schema and risked incompatible optional-duration handling, so the implementation now reuses the strict `PunishmentDraftSanctionCodec` format.
 
-Regression tests cover the runtime boundaries, configuration rejection, atomic publication/restore, selection exclusion and canonical committed identity. The documentation fix preserves conservative `PARTIAL` status and leaves policy snapshots, serious-offense decay metadata, combined recommendations and broader modular configuration as separate future work.
+Regression coverage proves out-of-range clamping, restart persistence, an applied duration override distinct from the recommendation, legacy null behavior, corrupt-snapshot failure and V14-to-V15 upgrade preservation. The broader escalation requirement remains conservative and separate.
 
 ## Prior verified evidence
 
-PR #51 exact feature head `e8b70154dc07a38c4ee9f8e63a0c670ebf21102f` recorded:
+PR #52 exact feature head `ac08bcce7281caf6425393213c5ef4d48cd99b3e` recorded:
 
-- `Coverage` workflow run `30776087520`: success;
-- `Validate Wiki` workflow run `30776087528`: success;
+- `Coverage` workflow run `30780118437`: success;
+- `Validate Wiki` workflow run `30780118455`: success;
 - zero unresolved review threads;
-- normal merge commit `4f7165adced48d98bce86730e89b92944afba063`.
+- normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052`.
 
 PR #49 exact feature head `1ad41be3eeca49370694916f386dda0484e3bfa3` recorded Java 21 clean build, unit and MariaDB/Testcontainers suites, Flyway through V14, runtime-JAR checks, coverage/static analysis and zero unresolved review threads in its live PR evidence.
 
-Do not attribute those prior-head results to PR #52.
+Do not attribute those prior-head results to PR #53.
 
 ## Current provider blocker
 
@@ -68,7 +67,7 @@ Do not invent an API, reflect against unknown implementation classes, copy provi
 
 ## Development merge gate
 
-For PR #52 and later implementation PRs, merge only when:
+For PR #53 and later implementation PRs, merge only when:
 
 - the complete scoped behavior is implemented and harsh-reviewed;
 - every confirmed defect and merge blocker is fixed;
@@ -108,10 +107,10 @@ Each related project remains an independent Git repository. Histories must not b
 
 ## Current development route
 
-1. Verify PR #52's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
+1. Verify PR #53's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
 2. Obtain or publish the supported RoseChat provider contract before implementing the private-message callback.
-3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; explicit policy-snapshot behavior across ladder edits is the current likely candidate.
-4. Keep one coherent item per PR and do not silently combine RoseChat, serious-offense decay metadata or broader modular configuration with PR #52.
+3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; serious-offense decay metadata is the current likely candidate.
+4. Keep one coherent item per PR and do not silently combine RoseChat, broader modular configuration or the next escalation slice with PR #53.
 5. Complete issue #43 only after the plugin is closer to release and one exact release candidate is pinned.
 
 ## Release boundaries
