@@ -24,9 +24,9 @@ This file is a concise routing record for the next AI agent. It must be verified
 | Active PR | `#53 — Preserve escalation recommendation snapshots across ladder edits` until live merge verification |
 | Active branch | `feature/escalation-policy-snapshots` until live merge and cleanup verification |
 | Active work item | Preserve the exact configured recommendation and selected ladder step for new cases without rewriting historical cases |
-| Implementation state | Scoped code, migration, focused tests, harsh-review fixes and documentation are being frozen before exact-head validation |
+| Implementation state | Scoped code, migration, focused tests, full-PR harsh-review fixes, documentation and final handoff are frozen before exact-head validation |
 | Known product blocker | Supported RoseChat private-message provider contract remains unavailable |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots.md` |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-final.md` |
 | Exact validation and merge evidence | Read PR #53 live |
 
 If PR #53 is merged, no implementation PR remains active. The broader escalation requirement remains partial, and RoseChat remains externally blocked.
@@ -44,26 +44,29 @@ If PR #53 is merged, no implementation PR remains active. The broader escalation
 ## PR #53 implemented behavior
 
 - `V15__punishment_recommendation_snapshots.sql` adds nullable `selected_ordinal` and `recommended_sanctions_json` fields to `punishment_steps` without editing V1–V14.
+- A V15 check constraint requires those snapshot fields to be either both null for legacy rows or both populated for new rows.
 - Every new policy-created case writes the selected configured ladder ordinal and exact recommended sanction specifications in the same transaction as the case and the sanctions actually applied.
 - Raw ordinal, effective ordinal and selected ordinal remain separate because a finite ladder may clamp an out-of-range effective ordinal to its final configured step.
 - The configured recommendation remains separate from an authorized applied override; actual sanction type, issue time and expiration remain authoritative and unchanged.
 - V14 and older rows retain null snapshot fields. Case review reports those historical snapshots as unavailable instead of inventing a recommendation from applied sanctions.
-- Corrupt stored recommendation JSON fails closed rather than silently presenting false history.
+- Corrupt or incomplete stored recommendation snapshots fail closed rather than silently presenting false history.
 - `/case` history presentation shows configuration version, raw/effective ordinal, selected ordinal, step label and frozen recommendation before listing the actual sanctions.
 - Current reason policies continue interpreting future recommendations against the current ladder; an out-of-range ordinal selects the current final step.
-- Focused unit and MariaDB/Testcontainers coverage exercises ladder edits, final-step clamping, restart persistence, overrides, corrupt snapshots and V14-to-V15 upgrade compatibility.
+- Focused unit and MariaDB/Testcontainers coverage exercises ladder edits, final-step clamping, restart persistence, overrides, corrupt snapshots, snapshot-pair integrity and V14-to-V15 upgrade compatibility.
 - Existing case, sanction, ordinal, expiration, request, appeal and audit rows are not rewritten.
 
 ## Separate harsh review
 
-The complete PR is being reviewed for migration safety, historical truthfulness, transaction atomicity, request-approval reuse, override separation, malformed JSON, restart behavior, finite-ladder clamping, staff presentation, provider boundaries and documentation accuracy.
+The complete PR was reviewed for migration safety, historical truthfulness, transaction atomicity, request-approval reuse, override separation, malformed and partial JSON snapshots, restart behavior, finite-ladder clamping, staff presentation, provider boundaries, test adequacy and documentation integrity.
 
-Two confirmed defects were fixed before the final tracked-content freeze:
+Four confirmed defects were fixed before the final tracked-content freeze:
 
 1. persisting only the effective ordinal left finite-ladder cases ambiguous because an out-of-range effective ordinal can select a lower final-step ordinal; V15, persistence, review presentation and tests now preserve `selected_ordinal` separately;
-2. the first snapshot codec used generic Jackson record serialization, which did not follow the repository's established sanction snapshot schema and risked incompatible `Optional<Duration>` handling; the implementation now reuses the strict `PunishmentDraftSanctionCodec` format.
+2. the first snapshot codec used generic Jackson record serialization, which did not follow the repository's established sanction snapshot schema and risked incompatible `Optional<Duration>` handling; the implementation now reuses the strict `PunishmentDraftSanctionCodec` format;
+3. the first nullable design permitted one-sided snapshot rows, which could expose a selected ordinal without its recommendation or vice versa; V15 now enforces a pair constraint, the domain model and JDBC reader reject mismatches, and focused tests cover the invariant;
+4. the first requirements-matrix rewrite accidentally omitted its final three rows and execution-order section; the original tail was restored and the final diff is limited to seven intended line replacements.
 
-Regression coverage includes an effective ordinal of eight selecting stored step ordinal two, an applied duration override that remains separate from the seven-day recommendation, restart persistence, legacy null behavior and corrupt-snapshot failure. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
+Regression coverage includes an effective ordinal of eight selecting stored step ordinal two, an applied duration override that remains separate from the seven-day recommendation, restart persistence, legacy null behavior, database rejection of incomplete snapshots, domain pair validation, corrupt-snapshot failure and V14-to-V15 upgrade preservation. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
 
 ## Migration state
 
