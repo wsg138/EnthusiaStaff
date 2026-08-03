@@ -1,5 +1,6 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -26,13 +27,15 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 public final class JdbcCaseReviewStore implements CaseReviewStore {
     private final DataSource dataSource;
     private final Clock clock;
+    private final JdbcPunishmentRecommendationCodec recommendations;
 
-    public JdbcCaseReviewStore(DataSource dataSource, Clock clock) {
-        if (dataSource == null || clock == null) {
+    public JdbcCaseReviewStore(DataSource dataSource, Clock clock, ObjectMapper json) {
+        if (dataSource == null || clock == null || json == null) {
             throw new IllegalArgumentException("case review dependencies must be present");
         }
         this.dataSource = dataSource;
         this.clock = clock;
+        this.recommendations = new JdbcPunishmentRecommendationCodec(json);
     }
 
     @Override
@@ -84,7 +87,8 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                     c.public_reason, c.exact_reason_id, c.sanction_family,
                     c.internal_explanation, c.configuration_version, c.visibility,
                     c.state, c.issued_at, c.revision, p.raw_ordinal, p.effective_ordinal,
-                    p.recency_bonus, p.step_label, p.escalation_contributes
+                    p.recency_bonus, p.step_label, p.recommended_sanctions_json,
+                    p.escalation_contributes
                 FROM cases c
                 LEFT JOIN punishment_steps p ON p.case_id = c.case_id
                 WHERE c.case_id = ?
@@ -117,7 +121,7 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
         }
     }
 
-    private static Optional<PunishmentStepReview> step(ResultSet result) throws SQLException {
+    private Optional<PunishmentStepReview> step(ResultSet result) throws SQLException {
         Integer raw = result.getObject("raw_ordinal", Integer.class);
         if (raw == null) {
             return Optional.empty();
@@ -127,6 +131,7 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                 result.getInt("effective_ordinal"),
                 result.getInt("recency_bonus"),
                 result.getString("step_label"),
+                recommendations.read(result.getString("recommended_sanctions_json")),
                 result.getBoolean("escalation_contributes")
         ));
     }
