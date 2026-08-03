@@ -201,18 +201,20 @@ public final class JdbcModerationStore implements ModerationStore {
     private void insertStep(Connection connection, PunishmentPlan plan)
             throws SQLException, JsonProcessingException {
         String sql = """
-                INSERT INTO punishment_steps(case_id, raw_ordinal, effective_ordinal, recency_bonus,
-                    step_label, contribution_json, recommended_sanctions_json, escalation_contributes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+                INSERT INTO punishment_steps(case_id, raw_ordinal, effective_ordinal, selected_ordinal,
+                    recency_bonus, step_label, contribution_json, recommended_sanctions_json,
+                    escalation_contributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, plan.caseId().value());
             statement.setInt(2, plan.escalation().rawOrdinal());
             statement.setInt(3, plan.escalation().effectiveOrdinal());
-            statement.setInt(4, plan.escalation().recencyBonus());
-            statement.setString(5, plan.escalation().selectedStep().label());
-            statement.setString(6, json.writeValueAsString(plan.escalation().contributions()));
-            statement.setString(7, recommendations.write(plan.escalation().selectedStep().sanctions()));
+            statement.setInt(4, plan.escalation().selectedStep().ordinal());
+            statement.setInt(5, plan.escalation().recencyBonus());
+            statement.setString(6, plan.escalation().selectedStep().label());
+            statement.setString(7, json.writeValueAsString(plan.escalation().contributions()));
+            statement.setString(8, recommendations.write(plan.escalation().selectedStep().sanctions()));
             statement.executeUpdate();
         }
     }
