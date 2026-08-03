@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.casefile.PunishmentStepReview;
+import net.enthusia.staff.domain.escalation.DecayEligibility;
 import net.enthusia.staff.domain.escalation.EscalationDecision;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
@@ -112,7 +113,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
                 "snapshot-v1",
                 CaseVisibility.PUBLIC,
                 NOW,
-                new EscalationDecision(8, 8, 0, List.of(), selected),
+                new EscalationDecision(8, 8, 0, List.of(), DecayEligibility.ELIGIBLE, selected),
                 applied
         );
     }
