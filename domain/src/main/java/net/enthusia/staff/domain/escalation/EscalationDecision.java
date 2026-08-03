@@ -7,13 +7,36 @@ public record EscalationDecision(
         int effectiveOrdinal,
         int recencyBonus,
         List<Contribution> contributions,
+        DecayEligibility resultingOffenseDecayEligibility,
         PunishmentStep selectedStep
 ) {
     public EscalationDecision {
         contributions = List.copyOf(contributions);
-        if (rawOrdinal < 0 || effectiveOrdinal < 0 || recencyBonus < 0 || selectedStep == null) {
+        if (rawOrdinal < 0 || effectiveOrdinal < 0 || recencyBonus < 0
+                || resultingOffenseDecayEligibility == null || selectedStep == null) {
             throw new IllegalArgumentException("invalid escalation decision");
         }
+    }
+
+    /**
+     * Compatibility constructor for pre-snapshot callers. Production policy evaluation always supplies
+     * an explicit value; callers without one remain UNKNOWN and are persisted as legacy-unspecified.
+     */
+    public EscalationDecision(
+            int rawOrdinal,
+            int effectiveOrdinal,
+            int recencyBonus,
+            List<Contribution> contributions,
+            PunishmentStep selectedStep
+    ) {
+        this(
+                rawOrdinal,
+                effectiveOrdinal,
+                recencyBonus,
+                contributions,
+                DecayEligibility.UNKNOWN,
+                selectedStep
+        );
     }
 
     public record Contribution(
