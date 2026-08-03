@@ -32,18 +32,19 @@ PR #55 is one bounded staff-mode asset-safety correction:
 - Founder retains configured owner-level Ender access;
 - Admin creative inventory interaction outside an Ender chest view remains available;
 - click and drag use one shared mutation decision;
-- unresolved ranks fail closed for Ender opening and mutation;
+- `SYSTEM` and unresolved ranks fail closed for Ender opening and mutation;
 - existing staff-tool protections remain unchanged;
-- focused tests cover the exact combined mutation behavior for every current rank.
+- focused tests cover the exact combined mutation behavior for every player-assigned rank, the `SYSTEM` boundary, and an unresolved rank.
 
 No database, protocol, provider, command, permission, configuration, vanish, freeze, confiscation or production-authority behavior is part of this PR.
 
 ## Harsh-review checkpoint
 
-The complete diff received a separate harsh review. It found and fixed two confirmed defects:
+The complete diff received a separate harsh review. It found and fixed three confirmed defects:
 
 1. the initial open predicate failed open for an unresolved or future rank; only explicit Admin or Founder now open Ender chests, and only Founder may mutate;
-2. click and drag duplicated policy conditions while tests proved only leaf predicates; both handlers now share one directly tested combined decision.
+2. click and drag duplicated policy conditions while tests proved only leaf predicates; both handlers now share one directly tested combined decision;
+3. the non-player `StaffRank.SYSTEM` enum boundary was omitted from the test claim; it is now explicitly denied player Ender access.
 
 No tracked merge blocker remains before exact-head validation. Full Paper event-object staging is useful optional runtime confidence but is not a confirmed defect in the thin handlers.
 
