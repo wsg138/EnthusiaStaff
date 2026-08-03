@@ -64,7 +64,7 @@ public interface ReasonPolicyRepository {
             publicReason = publicReason.trim();
         }
 
-        public boolean selectable() {
+        public boolean resolvesToActivePolicy() {
             return availability != ReasonAvailability.REMOVED;
         }
     }
