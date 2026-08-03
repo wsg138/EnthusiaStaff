@@ -87,8 +87,8 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                     c.public_reason, c.exact_reason_id, c.sanction_family,
                     c.internal_explanation, c.configuration_version, c.visibility,
                     c.state, c.issued_at, c.revision, p.raw_ordinal, p.effective_ordinal,
-                    p.recency_bonus, p.step_label, p.recommended_sanctions_json,
-                    p.escalation_contributes
+                    p.selected_ordinal, p.recency_bonus, p.step_label,
+                    p.recommended_sanctions_json, p.escalation_contributes
                 FROM cases c
                 LEFT JOIN punishment_steps p ON p.case_id = c.case_id
                 WHERE c.case_id = ?
@@ -129,6 +129,7 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
         return Optional.of(new PunishmentStepReview(
                 raw,
                 result.getInt("effective_ordinal"),
+                Optional.ofNullable(result.getObject("selected_ordinal", Integer.class)),
                 result.getInt("recency_bonus"),
                 result.getString("step_label"),
                 recommendations.read(result.getString("recommended_sanctions_json")),
