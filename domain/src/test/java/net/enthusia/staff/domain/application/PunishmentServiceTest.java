@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
@@ -69,6 +70,39 @@ class PunishmentServiceTest {
                 PunishmentEvaluation.Allowed.class,
                 service.evaluate(request(StaffRank.ADMIN, List.of()), OperationalMode.ACTIVE)
         );
+    }
+
+    @Test
+    void aliasEvaluationAndCommitUseTheCanonicalReasonIdentity() {
+        ReasonPolicy canonical = policy(StaffRank.MOD, standardSteps());
+        AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
+                "v2",
+                List.of(canonical),
+                Map.of("chat.old-toxicity", canonical.id()),
+                List.of()
+        );
+        CapturingStore store = new CapturingStore(List.of());
+        PunishmentService service = service(policies, store);
+        CreatePunishmentRequest aliasRequest = request(StaffRank.MOD, List.of(), "chat.old-toxicity");
+        PunishmentAssessment assessment = assertInstanceOf(
+                PunishmentEvaluation.Allowed.class,
+                service.evaluate(aliasRequest, OperationalMode.ACTIVE)
+        ).assessment();
+
+        assertInstanceOf(
+                PunishmentResult.Accepted.class,
+                service.createConfirmed(
+                        aliasRequest,
+                        OperationalMode.ACTIVE,
+                        PunishmentExpectation.from(assessment)
+                )
+        );
+
+        PunishmentPlan committed = store.plans.getFirst();
+        assertEquals(canonical.id(), committed.reasonId());
+        assertEquals(canonical.family(), committed.family());
+        assertEquals(canonical.publicReason(), committed.publicReason());
+        assertEquals("v2", committed.configurationVersion());
     }
 
     @Test
@@ -186,11 +220,19 @@ class PunishmentServiceTest {
     }
 
     private static CreatePunishmentRequest request(StaffRank rank, List<SanctionSpec> override) {
+        return request(rank, override, "chat.toxicity");
+    }
+
+    private static CreatePunishmentRequest request(
+            StaffRank rank,
+            List<SanctionSpec> override,
+            String reasonId
+    ) {
         return new CreatePunishmentRequest(
                 new IdempotencyKey("test:" + UUID.randomUUID()),
                 TARGET,
                 new Actor(UUID.randomUUID(), rank.name(), rank),
-                "chat.toxicity",
+                reasonId,
                 "Test explanation",
                 CaseVisibility.PUBLIC,
                 override
