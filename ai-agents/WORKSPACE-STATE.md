@@ -18,10 +18,10 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `IMPLEMENTING — PR #55` |
-| Pull request | `#55 — Enforce Admin staff-mode Ender view-only access` |
-| Feature branch | `fix/admin-staffmode-ender-view-only` |
-| Selected work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only and Founder retains configured owner access |
+| State | `IDLE — PR #55 requires live merge verification` |
+| Pull request to verify | `#55 — Enforce Admin staff-mode Ender view-only access` |
+| Feature branch to verify | `fix/admin-staffmode-ender-view-only` |
+| Completed work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only, Founder retains configured owner access, and unresolved ranks fail closed |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-admin-staffmode-ender-view-only.md` |
 | Exact validation/merge evidence | Read PR #55 live; exact SHA, Coverage, Wiki, Pi, Codacy, artifacts, reviews and merge evidence belong in PR metadata |
 | External blocker | Supported RoseChat private-message provider contract remains unavailable; track it through a focused blocker issue and the normal handoff rather than issue #43 |
@@ -35,19 +35,30 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 - V16 was the live highest migration.
 - No supported RoseChat callback/API contract was available.
 
-## PR #55 confirmed gap and behavior
+## PR #55 completed behavior
 
 The authoritative rank contract permits Admin creative staff mode but requires Ender chest access to remain view-only unless a separate destructive workflow authorizes mutation. The previous shared predicate allowed both Admin and Founder to open and mutate Ender contents.
 
-PR #55 now separates the two decisions:
+PR #55 now enforces:
 
 - Helper, Mod, and Developer cannot open Ender chests in staff mode;
 - Admin may open an Ender chest, but clicks and drags in that view are cancelled;
 - Founder retains configured owner-level Ender access;
 - Admin creative inventory interaction outside an Ender chest view remains available;
+- click and drag use one shared mutation decision;
+- unresolved ranks fail closed for Ender opening and mutation;
 - existing staff-tool item protections remain unchanged.
 
-Focused `StaffModeAccessPolicyTest` coverage records the Helper, Mod, Developer, Admin, and Founder boundaries. Hosted exact-head validation is not complete until the final tracked-content freeze.
+`StaffModeAccessPolicyTest` covers the exact ordinary-versus-Ender mutation decision used by both inventory event handlers for every current rank and the unresolved-rank boundary.
+
+## Harsh-review result
+
+The complete PR diff received a separate harsh review. Two confirmed defects were fixed:
+
+1. The initial split open predicate denied only known lower ranks and therefore failed open for an unresolved or future rank. Ender opening now permits only explicit Admin or Founder ranks, and mutation permits only Founder.
+2. Click and drag repeated related policy conditions while tests covered only the leaf predicates. Both handlers now share `blocksInventoryMutation`, and focused tests prove that exact combined decision.
+
+No merge blocker remains in tracked content. Full Paper event-object staging remains useful optional runtime confidence, not a confirmed defect in the thin handlers.
 
 ## Owner priorities and selection guardrails
 
@@ -94,7 +105,7 @@ That prior failure came from a disposable Pi database retaining a mutable-head V
 | Field | Value |
 | --- | --- |
 | Highest live migration | V16 |
-| PR #55 migration | None expected |
+| PR #55 migration | None |
 | Immutable history | V1–V16 |
 | Next expected number | V17 unless live state is newer |
 | Locked checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
@@ -107,7 +118,7 @@ LiteBans remains authoritative. Issue #43 remains open specifically for producti
 
 ## Next route
 
-1. Complete PR #55 only: finish documentation, harsh review, corrections, tracked-content freeze, exact-head validation, normal merge verification and branch cleanup.
+1. Verify PR #55's frozen exact head, terminal Coverage/Wiki/Pi/Codacy and review state, normal merge result, resulting `main`, feature-head containment and branch cleanup.
 2. After PR #55 is complete, select one separate bounded staff-mode lifecycle or restriction-enforcement gap after fresh live reconciliation.
 3. Continue owner priority one before report notification work when prerequisites are comparable.
 4. Track unavailable RoseChat provider APIs through focused blocker routing rather than issue #43.
