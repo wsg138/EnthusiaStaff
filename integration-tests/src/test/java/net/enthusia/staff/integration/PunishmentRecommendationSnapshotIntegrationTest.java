@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestMariaDbSupport {
     @Test
     void storesConfiguredRecommendationSeparatelyFromAppliedOverrideAcrossRestart() {
-        CaseId caseId = new CaseId("SNAPSHOT00000001");
+        CaseId caseId = new CaseId("5300000000000001");
         List<SanctionSpec> recommendation = sevenDayBan();
         List<SanctionSpec> applied = thirtyDayBan();
 
@@ -56,7 +56,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
 
     @Test
     void legacyNullSnapshotRemainsExplicitlyUnavailable() throws Exception {
-        CaseId caseId = new CaseId("SNAPSHOT00000002");
+        CaseId caseId = new CaseId("5300000000000002");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
             clearSnapshot(caseId);
@@ -72,7 +72,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
 
     @Test
     void databaseRejectsIncompleteStoredSnapshot() {
-        CaseId caseId = new CaseId("SNAPSHOT00000003");
+        CaseId caseId = new CaseId("5300000000000003");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
 
@@ -82,7 +82,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
 
     @Test
     void corruptStoredSnapshotFailsClosed() throws Exception {
-        CaseId caseId = new CaseId("SNAPSHOT00000004");
+        CaseId caseId = new CaseId("5300000000000004");
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             runtime.moderationStore().createPunishment(plan(caseId, sevenDayBan(), sevenDayBan()));
             setRecommendation(caseId, "[]");
