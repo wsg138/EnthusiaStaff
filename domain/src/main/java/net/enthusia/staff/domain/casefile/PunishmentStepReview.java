@@ -30,5 +30,8 @@ public record PunishmentStepReview(
         if (recommendedSanctions.filter(List::isEmpty).isPresent()) {
             throw new IllegalArgumentException("stored punishment recommendation cannot be empty");
         }
+        if (selectedOrdinal.isPresent() != recommendedSanctions.isPresent()) {
+            throw new IllegalArgumentException("stored punishment recommendation snapshot is incomplete");
+        }
     }
 }
