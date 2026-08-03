@@ -36,6 +36,9 @@ class ReasonPolicyConfigurationLoaderTest {
         assertTrue(policies.get("hate.full-slur-untargeted").automaticDetectionAllowed());
         assertTrue(policies.values().stream().allMatch(ReasonPolicy::publicByDefault));
         assertTrue(policies.get("exploit.illegal-duplication").confiscationAllowed());
+        assertTrue(policies.get("hate.general-toxicity").decayEnabled());
+        assertFalse(policies.get("safety.credible-threat").decayEnabled());
+        assertFalse(policies.get("privacy.doxxing").decayEnabled());
         assertEquals(
                 SanctionType.MARKET_BLACKLIST,
                 policies.get("market.compliance-failure").steps().get(3).sanctions().get(1).type()
