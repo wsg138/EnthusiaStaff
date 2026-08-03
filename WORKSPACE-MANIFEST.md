@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-02 (America/Indiana/Indianapolis)
 
-This manifest records repository, validation and authority boundaries for development coordination. Nothing here authorizes production deployment, production-data access, a LiteBans cutover or a change in punishment authority.
+This manifest records development coordination and authority boundaries. It does not authorize deployment, production-data access, LiteBans cutover or a change in punishment authority.
 
 ## Repository checkpoint
 
@@ -10,115 +10,82 @@ This manifest records repository, validation and authority boundaries for develo
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current verified `main` at PR #52 start | `4f7165adced48d98bce86730e89b92944afba063` |
-| Latest merged product PR before current work | PR #51 — escalation clean-period decay correctness |
-| Latest merged coordination PR | PR #50 — RoseChat provider blocker reconciliation |
-| Active work | PR #52 — reason aliases and removed-ID presentation; verify live closure |
-| Migration boundary | V14 is latest; V1–V14 are immutable |
-| Dormant default | Startup remains non-`ACTIVE`; merging development code does not activate authority |
+| `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
+| Latest merged product PR before current work | PR #52 — reason aliases and removed-ID presentation |
+| Active work | PR #53 — escalation recommendation snapshots across ladder edits |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-validation-final.md` |
+| Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
+| Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #52 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
+At PR #53 start there were no open pull requests and every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
 
-## Current implementation checkpoint
+## Implementation checkpoint
 
-PR #52 implements one bounded escalation-policy compatibility slice:
+PR #53 implements one bounded escalation-policy compatibility slice:
 
-- old stable reason IDs can be declared as explicit aliases to one active canonical reason;
-- aliases resolve current policy behavior but never become duplicate entries in the selectable reason catalog;
-- newly committed punishment records use the canonical reason ID and current configuration version;
-- removed reason IDs expose bounded display metadata without a ladder and cannot resolve for new punishment creation;
-- removed IDs in the dynamic `cheating.polar.*` namespace block template expansion rather than becoming selectable accidentally;
-- active policies, aliases, removed metadata and version are published and restored as one atomic reload snapshot;
-- saved punishment review presentation distinguishes active, renamed, removed and unknown reason IDs;
-- the requirements matrix now records the implemented compatibility slice without overstating the broader escalation requirement;
-- no existing case, sanction, ordinal, expiration, draft, request or audit record is rewritten;
-- no schema or Flyway migration changed.
+- new policy-created cases persist the exact configured recommendation independently from sanctions actually applied;
+- raw, effective and selected ladder ordinals remain separate so finite-ladder clamping is historically unambiguous;
+- V15 requires selected ordinal and recommendation JSON to be both null for legacy rows or both populated for new rows;
+- recommendation snapshots use the established strict sanction codec;
+- configuration version, selected label and recommendation survive restart and later ladder edits;
+- authorized overrides do not replace historical recommendations, while actual sanction rows remain authoritative;
+- legacy V14 and older cases remain explicitly snapshot-unavailable rather than reconstructed;
+- malformed or incomplete snapshots fail closed;
+- `/case` displays the frozen policy snapshot before actual sanctions and formats temporary recommendation durations as readable days, hours, minutes and seconds;
+- current policies still use the current ladder and clamp out-of-range ordinals to the current final step;
+- V1–V14 and existing case, sanction, request, appeal, expiration and audit history are not rewritten.
 
-Exact final-head validation, review and merge evidence must be read live from PR #52.
+Exact final-head validation, review and merge evidence belong in PR #53 live metadata.
 
-## Harsh-review checkpoint
+## Harsh-review, CI and external-review checkpoint
 
-The separate full-PR review confirmed and fixed three defects before the final tracked-content freeze:
+Ten confirmed defects or valid review findings were fixed:
 
-1. removed `cheating.polar.*` identifiers could still resolve through dynamic template expansion;
-2. reload snapshots were assembled through separate atomic reads and could theoretically mix metadata from concurrent versions;
-3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the code and focused tests supplied that slice.
+1. effective ordinal alone could not identify a clamped selected step, so `selected_ordinal` is stored separately;
+2. generic Jackson serialization did not use the established sanction schema, so `PunishmentDraftSanctionCodec` is reused;
+3. nullable snapshot fields allowed one-sided rows, so database, domain and JDBC invariants enforce a complete pair;
+4. an intermediate requirements-matrix rewrite omitted its final rows and execution order, which were restored;
+5. failed exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not success evidence;
+6. external review found the restart test expected raw ordinal `2` although it persists raw ordinal `8`; the assertion now verifies `8` while selected ordinal remains `2`;
+7. external review found stale active PR #37 routing in the requirements matrix; PR #37 is now historical evidence only and active exact-head gates point to PR #53;
+8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; superseding reports supply them and document older reports as unedited historical exceptions;
+9. CodeRabbit's review body identified ISO duration text in staff-facing case history; temporary recommendation durations now use a tested human-readable formatter;
+10. CodeRabbit's review body identified incomplete constructor-test coverage; valid snapshot pairs and empty recommendation lists are now explicitly tested.
 
-Regression tests cover the runtime boundaries, configuration rejection, atomic publication/restore, selection exclusion and canonical committed identity. The documentation fix preserves conservative `PARTIAL` status and leaves policy snapshots, serious-offense decay metadata, combined recommendations and broader modular configuration as separate future work.
+Regression coverage targets ladder edits, out-of-range clamping, restart persistence, recommendation-versus-applied override separation, staff-readable duration formatting, legacy null behavior, pair integrity, corrupt snapshots and V14-to-V15 upgrade preservation.
 
 ## Prior verified evidence
 
-PR #51 exact feature head `e8b70154dc07a38c4ee9f8e63a0c670ebf21102f` recorded:
+PR #52 exact head `ac08bcce7281caf6425393213c5ef4d48cd99b3e` passed Coverage `30780118437` and Validate Wiki `30780118455`, had zero unresolved review threads, and merged normally as `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052`. Do not attribute prior-head evidence to PR #53.
 
-- `Coverage` workflow run `30776087520`: success;
-- `Validate Wiki` workflow run `30776087528`: success;
-- zero unresolved review threads;
-- normal merge commit `4f7165adced48d98bce86730e89b92944afba063`.
+## Provider blocker
 
-PR #49 exact feature head `1ad41be3eeca49370694916f386dda0484e3bfa3` recorded Java 21 clean build, unit and MariaDB/Testcontainers suites, Flyway through V14, runtime-JAR checks, coverage/static analysis and zero unresolved review threads in its live PR evidence.
-
-Do not attribute those prior-head results to PR #52.
-
-## Current provider blocker
-
-The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, sender/recipient identity, cancellation and delivery semantics, threading, duplicate identity, version coordinates and privacy-safe evidence fields.
-
-Do not invent an API, reflect against unknown implementation classes, copy provider-owned classes into EnthusiaStaff, or scrape logs as a substitute for a delivery callback.
+The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, identity, cancellation/delivery semantics, threading, duplicate behavior, versions and privacy-safe evidence fields. Do not invent an API, reflect against unknown classes, copy provider-owned classes or scrape logs as a substitute callback.
 
 ## Development merge gate
 
-For PR #52 and later implementation PRs, merge only when:
-
-- the complete scoped behavior is implemented and harsh-reviewed;
-- every confirmed defect and merge blocker is fixed;
-- the final branch is synchronized appropriately with `main`;
-- exact final-head Java 21 build, tests, migration checks, runtime-JAR inspection, static analysis, coverage and documentation checks pass as configured;
-- no unresolved valid review thread remains;
-- workspace state and an immutable handoff are included;
-- exact evidence is recorded in the PR without changing the feature SHA;
-- a normal merge commit is used.
+Merge PR #53 only after one unchanged exact head is synchronized with `main` and passes Java 21 build/tests, MariaDB/Testcontainers clean-install and V14-to-V15 upgrade checks, migration checksums, runtime-JAR inspection, aggregate coverage, configured static analysis, wiki validation and all review gates. Zero unresolved valid threads must remain. Record exact evidence in the PR without changing the feature SHA and use a normal merge commit.
 
 ## Production cutover gate
 
-Issue #43 remains the separate production activation and cutover gate. It must stay open until one exact release candidate completes the required sanitized migration, interruption, shadow-window, maintenance, activation, rollback, topology, provider, saturation and operator acceptance record.
-
-Before issue #43 is complete, do not:
-
-- deploy the current implementation as the production cutover candidate;
-- begin a real production shadow window;
-- activate EnthusiaStaff punishment authority;
-- disable or remove LiteBans;
-- perform the final production migration;
-- authorize a live cutover.
+Issue #43 remains open. Before it is complete, do not deploy a production cutover candidate, begin a real shadow window, activate EnthusiaStaff authority, disable/remove LiteBans, perform final production migration or authorize live cutover.
 
 ## Related repositories
 
-| Repository | Role | Current boundary |
-| --- | --- | --- |
-| `wsg138/EnthusiaStaff-Staging` | Reusable staging controls and evidence validation | Separate repository; no workflow dispatch or production testing is implied |
-| `wsg138/enthusia-site` | Private punishment and appeal website | Auth/session/CSRF/media/rate-limit work and private staging remain separate |
-| `wsg138/EnthusiaCurrency` | Economy moderation snapshots and plans | Provider implementation and cross-plugin staging remain separate |
-| `wsg138/EnthusiaCommend` | Persistent reputation restrictions | Provider implementation and enforcement staging remain separate |
-| `wsg138/EnthusiaAutoClicker` | Versioned bounded client evidence | Provider implementation and handshake staging remain separate |
-| `wsg138/EnthusiaMarket` | Stall moderation and escrow-safe behavior | Provider implementation and transaction-compatible staging remain separate |
-| Intended `wsg138/Enthusia-RoseChat` | Private-message and moderation/staff-channel provider bridge | Repository/API is unavailable; implementation is blocked and must not be invented |
+Provider and website repositories remain independent. Their histories must not be flattened into EnthusiaStaff, and provider API classes must not leak into Paper or Velocity runtime JARs. The intended RoseChat provider repository/API remains unavailable.
 
-Each related project remains an independent Git repository. Histories must not be flattened into EnthusiaStaff, and provider-owned API classes must not leak into Paper or Velocity runtime JARs.
+## Current route
 
-## Current development route
-
-1. Verify PR #52's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
-2. Obtain or publish the supported RoseChat provider contract before implementing the private-message callback.
-3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; explicit policy-snapshot behavior across ladder edits is the current likely candidate.
-4. Keep one coherent item per PR and do not silently combine RoseChat, serious-offense decay metadata or broader modular configuration with PR #52.
-5. Complete issue #43 only after the plugin is closer to release and one exact release candidate is pinned.
+1. Verify PR #53's exact live head, checks, reviews, normal merge result, resulting `main` and branch cleanup.
+2. Resume RoseChat only after a supported contract exists.
+3. Otherwise select exactly one prerequisite-ready escalation slice after fresh reconciliation; serious-offense decay metadata is the current likely candidate.
+4. Stop after PR #53 and do not combine the next slice with it.
 
 ## Release boundaries
 
-- Never combine evidence from undeclared revisions into one release candidate.
-- Keep production credentials, private JARs, databases, logs, evidence and runtime folders out of Git.
-- Do not repair Flyway history, rewrite migration history, edit deployed migration bytes or delete legacy LiteBans data.
-- Retain backups and legacy data through cutover; legacy removal is a later manual operation.
-- Do not represent hosted tests, isolated staging, Pi validation or merge-ref-only validation as production acceptance.
-- A merged pull request is a development checkpoint, not deployment or cutover authorization.
+- Never combine evidence from different revisions.
+- Keep credentials, private JARs, databases, logs and evidence out of Git.
+- Never repair Flyway history or edit deployed migration bytes.
+- Do not represent hosted tests or isolated staging as production acceptance.
+- A merged pull request is a development checkpoint, not deployment authorization.

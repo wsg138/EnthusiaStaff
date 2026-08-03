@@ -1,5 +1,6 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -20,19 +21,22 @@ import net.enthusia.staff.domain.casefile.OverturnRequestReview;
 import net.enthusia.staff.domain.casefile.PunishmentStepReview;
 import net.enthusia.staff.domain.casefile.SanctionReview;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class JdbcCaseReviewStore implements CaseReviewStore {
     private final DataSource dataSource;
     private final Clock clock;
+    private final JdbcPunishmentRecommendationCodec recommendations;
 
-    public JdbcCaseReviewStore(DataSource dataSource, Clock clock) {
-        if (dataSource == null || clock == null) {
+    public JdbcCaseReviewStore(DataSource dataSource, Clock clock, ObjectMapper json) {
+        if (dataSource == null || clock == null || json == null) {
             throw new IllegalArgumentException("case review dependencies must be present");
         }
         this.dataSource = dataSource;
         this.clock = clock;
+        this.recommendations = new JdbcPunishmentRecommendationCodec(json);
     }
 
     @Override
@@ -84,7 +88,8 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                     c.public_reason, c.exact_reason_id, c.sanction_family,
                     c.internal_explanation, c.configuration_version, c.visibility,
                     c.state, c.issued_at, c.revision, p.raw_ordinal, p.effective_ordinal,
-                    p.recency_bonus, p.step_label, p.escalation_contributes
+                    p.selected_ordinal, p.recency_bonus, p.step_label,
+                    p.recommended_sanctions_json, p.escalation_contributes
                 FROM cases c
                 LEFT JOIN punishment_steps p ON p.case_id = c.case_id
                 WHERE c.case_id = ?
@@ -117,16 +122,24 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
         }
     }
 
-    private static Optional<PunishmentStepReview> step(ResultSet result) throws SQLException {
+    private Optional<PunishmentStepReview> step(ResultSet result) throws SQLException {
         Integer raw = result.getObject("raw_ordinal", Integer.class);
         if (raw == null) {
             return Optional.empty();
         }
+        Optional<Integer> selected = Optional.ofNullable(result.getObject("selected_ordinal", Integer.class));
+        Optional<List<SanctionSpec>> recommendation =
+                recommendations.read(result.getString("recommended_sanctions_json"));
+        if (selected.isPresent() != recommendation.isPresent()) {
+            throw new ModerationPersistenceException("Stored punishment recommendation snapshot is incomplete");
+        }
         return Optional.of(new PunishmentStepReview(
                 raw,
                 result.getInt("effective_ordinal"),
+                selected,
                 result.getInt("recency_bonus"),
                 result.getString("step_label"),
+                recommendation,
                 result.getBoolean("escalation_contributes")
         ));
     }

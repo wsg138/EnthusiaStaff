@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,8 @@ import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
+import net.enthusia.staff.domain.sanction.SanctionLength;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
@@ -169,6 +172,17 @@ public final class CaseCommand implements CommandExecutor {
         lines.add(Component.text(
                 "Created " + formatter.format(review.issuedAt()) + " | public reason: " + review.publicReason()
         ));
+        review.punishmentStep().ifPresent(step -> lines.add(Component.text(
+                "Policy snapshot: version " + review.configurationVersion()
+                        + " | raw/effective ordinal " + step.rawOrdinal() + "/" + step.effectiveOrdinal()
+                        + " | selected ordinal " + step.selectedOrdinal()
+                                .map(Object::toString)
+                                .orElse("unavailable")
+                        + " | step " + step.label()
+                        + " | recommendation " + step.recommendedSanctions()
+                                .map(CaseCommand::recommendation)
+                                .orElse("unavailable for this legacy case")
+        )));
         if (sensitive) {
             lines.add(Component.text(
                     "Actor: " + review.actorName() + " (" + review.actorRank() + ", " + review.actorId() + ")"
@@ -227,6 +241,42 @@ public final class CaseCommand implements CommandExecutor {
             lines.add(Component.text(line.toString()));
         }
         return List.copyOf(lines);
+    }
+
+    private static String recommendation(List<SanctionSpec> sanctions) {
+        return sanctions.stream()
+                .map(CaseCommand::recommendationPart)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    private static String recommendationPart(SanctionSpec sanction) {
+        return human(sanction.type().name()) + " (" + sanctionLength(sanction.length()) + ")";
+    }
+
+    private static String sanctionLength(SanctionLength length) {
+        return switch (length.kind()) {
+            case INSTANT -> "instant";
+            case PERMANENT -> "permanent";
+            case TEMPORARY -> humanDuration(length.temporary().orElseThrow());
+        };
+    }
+
+    static String humanDuration(Duration duration) {
+        if (duration == null || duration.isNegative()) {
+            throw new IllegalArgumentException("duration must be non-negative");
+        }
+        List<String> parts = new ArrayList<>();
+        appendDurationPart(parts, duration.toDaysPart(), "day");
+        appendDurationPart(parts, duration.toHoursPart(), "hour");
+        appendDurationPart(parts, duration.toMinutesPart(), "minute");
+        appendDurationPart(parts, duration.toSecondsPart(), "second");
+        return parts.isEmpty() ? "0 seconds" : String.join(" ", parts);
+    }
+
+    private static void appendDurationPart(List<String> parts, long value, String unit) {
+        if (value > 0) {
+            parts.add(value + " " + unit + (value == 1 ? "" : "s"));
+        }
     }
 
     private static Optional<java.time.Instant> originalExpiration(

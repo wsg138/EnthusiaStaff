@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-02
 
-This file is a concise routing record for the next AI agent. It must be verified against live GitHub and repository state before use.
+This is a routing record, not a substitute for live GitHub reconciliation.
 
 ## Repository
 
@@ -10,121 +10,83 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | `4f7165adced48d98bce86730e89b92944afba063` at PR #52 start; live verify before acting |
+| `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
 | Plugin version | `0.1.0-SNAPSHOT` |
-| Java | 21 |
-| Runtime | Paper-compatible backends, Velocity, MariaDB |
+| Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
 ## Current work
 
 | Field | Value |
 | --- | --- |
-| Work state | `VALIDATING` |
-| Intended post-merge state | `IDLE` after PR #52 is live-verified |
-| Active PR | `#52 — Add versioned reason aliases and removed-ID presentation` until live merge verification |
-| Active branch | `feature/escalation-policy-aliases` until live merge and cleanup verification |
-| Active work item | Explicit reason aliases plus readable-but-unresolvable removed reason metadata |
-| Implementation state | Complete scoped code, focused tests, harsh-review fixes, documentation, requirements matrix and handoff frozen before exact-head validation |
-| Known product blocker | Supported RoseChat private-message provider contract remains unavailable |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr52-reason-policy-compatibility.md` |
-| Exact validation and merge evidence | Read PR #52 live |
+| State | `VALIDATING` until PR #53 is live-verified |
+| Active PR | `#53 — Preserve escalation recommendation snapshots across ladder edits` |
+| Active branch | `feature/escalation-policy-snapshots` |
+| Work item | Preserve exact configured recommendations and selected ladder ordinals without rewriting legacy history |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-validation-final.md` |
+| Exact validation/merge evidence | Read PR #53 live |
+| External blocker | Supported RoseChat private-message provider contract remains unavailable |
 
-If PR #52 is merged, no implementation PR remains active. The broader escalation requirement remains partial, and RoseChat remains externally blocked.
+## Start-state reconciliation
 
-## Live reconciliation at work-item start
+- PR #52 was already merged by normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` from exact head `ac08bcce7281caf6425393213c5ef4d48cd99b3e`.
+- PR #52 Coverage `30780118437` and Validate Wiki `30780118455` succeeded; zero review threads remained.
+- No PR was open or draft.
+- Every pre-existing non-main branch was `ahead_by: 0` relative to `main`.
+- V14 was the live highest migration.
+- No supported RoseChat callback/API contract was available.
 
-- PR #51 was merged with normal merge commit `4f7165adced48d98bce86730e89b92944afba063` from exact feature head `e8b70154dc07a38c4ee9f8e63a0c670ebf21102f`.
-- PR #51 exact-head workflows `30776087520` (`Coverage`) and `30776087528` (`Validate Wiki`) succeeded.
-- PR #51 had zero unresolved review threads.
-- No pull request was open or in draft.
-- Every pre-existing remote branch was `ahead_by: 0` relative to `main`; no unfinished work was displaced.
-- The live highest migration remained `V14__punishment_history_and_exact_sanction_changes.sql`.
-- The supported RoseChat callback/API contract remained unavailable and was not invented.
+## PR #53 behavior
 
-## PR #52 completed behavior
+- V15 adds nullable `selected_ordinal` and `recommended_sanctions_json` to `punishment_steps`; V1–V14 remain immutable.
+- A check constraint requires both snapshot fields to be null together for legacy rows or populated together for new rows.
+- New policy-created cases persist raw, effective and selected ordinals, configuration version, selected label, contribution details and exact recommendation in the same transaction as actual sanctions, audit and outboxes.
+- Recommendation snapshots use the established strict sanction codec.
+- Applied sanctions remain separate and authoritative for type, issue time, expiration and lifecycle.
+- Legacy rows remain explicitly snapshot-unavailable; no recommendation is inferred.
+- Domain and JDBC review paths reject malformed or incomplete snapshots.
+- `/case` shows the frozen policy snapshot before actual sanctions and renders temporary recommendation durations as readable days, hours, minutes and seconds.
+- Current policies continue using the current ladder; out-of-range ordinals select the current final step.
 
-- Optional `aliases` map old stable reason IDs directly to one active canonical policy.
-- Alias self-targets, chains, unknown targets, duplicate sources, malformed IDs and active/removed overlap are rejected.
-- Aliases resolve current policy behavior but never enter the active selection list.
-- New punishment plans evaluated through an alias commit the canonical reason ID, family, public reason and current configuration version.
-- Optional `removed-reasons` entries provide stable ID, family and display metadata without a ladder.
-- Removed IDs remain readable in historical/saved-review presentation but cannot resolve, enter selection or create a new punishment.
-- Removed dynamic `cheating.polar.*` identifiers block template expansion.
-- Version, active policies, aliases and removed metadata publish and restore as one atomic snapshot assembled from one repository read.
-- Existing policy files without compatibility sections remain valid.
-- The requirements matrix records this compatibility slice while retaining conservative `PARTIAL` status for the broader escalation and modular-configuration requirements.
-- Existing stored cases, sanctions, ordinals, expirations, drafts, requests and audit records are not rewritten.
-- No command, permission, provider contract, schema or migration changed.
+## Harsh review, CI and external review findings
 
-## Separate harsh review
+Ten confirmed defects or valid review findings were fixed:
 
-The complete PR was reviewed for active/historical separation, direct service behavior, dynamic Polar expansion, alias validation, removed-ID selection, startup degradation, reload rollback, concurrent snapshot consistency, immutable ownership, compatibility, stored-history preservation and documentation accuracy.
+1. effective ordinal alone left finite-ladder clamping ambiguous, so selected ordinal is stored separately;
+2. generic Jackson serialization did not use the established sanction schema, so the strict existing codec is reused;
+3. independently nullable fields allowed incomplete snapshots, so database, domain and JDBC invariants enforce a complete pair;
+4. an intermediate requirements-matrix rewrite omitted its tail, which was restored;
+5. exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test fixture IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not validation-success evidence;
+6. external review found the restart test expected raw ordinal `2` despite persisting raw ordinal `8`; the assertion now verifies `8`, with selected ordinal remaining `2`;
+7. external review found stale active PR #37 instructions in the requirements matrix; those directions now identify PR #37 only as historical evidence and route active validation solely to PR #53;
+8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; superseding handoffs supply them and leave earlier reports unedited as historical exceptions;
+9. CodeRabbit's review body identified ISO duration text in staff-facing case history; temporary recommendation durations now use a tested human-readable formatter;
+10. CodeRabbit's review body identified incomplete constructor-test coverage; valid snapshot pairs and empty recommendation lists are now explicitly tested.
 
-Three confirmed defects were fixed before the final freeze:
+Focused coverage includes ladder edits, final-step clamping, pair integrity, restart persistence, recommendation-versus-override separation, staff-readable duration formatting, legacy null behavior, corrupt snapshots and V14-to-V15 upgrade preservation.
 
-1. removed `cheating.polar.*` IDs could still resolve through dynamic template expansion;
-2. reload snapshots could mix metadata because they were assembled from separate atomic reads;
-3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the scoped code and tests supplied them.
-
-Focused regression coverage was added for the runtime defects. The matrix now narrows remaining work to policy snapshots across ladder edits, serious-offense decay metadata, broader combined recommendations and full modular configuration. Any later CI, analyzer or review finding must be resolved before merge and exact-head validation repeated after tracked changes.
-
-## Migration state
+## Migration boundary
 
 | Field | Value |
 | --- | --- |
-| Live highest migration at PR #52 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
-| Immutable migrations | `V1` through `V14` |
-| Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
-| PR #52 schema result | No migration added or edited |
-| Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
+| Highest migration at start | V14 |
+| PR #53 migration | `V15__punishment_recommendation_snapshots.sql` |
+| Immutable history | V1–V14 |
+| Next expected number | V16 unless live state is newer |
+| Locked checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
-Never edit an existing migration. Verify the live migration directory before adding a new migration.
+Never edit an applied migration or use Flyway repair.
 
-## Remaining escalation work
+## Remaining work after PR #53
 
-The alias/removed-ID compatibility slice is complete in PR #52, but the broader escalation requirement remains partial. Separate future work still includes:
+The broader escalation requirement remains partial. Separate future slices include serious-offense decay metadata, wider combined-recommendation coverage, broader modular configuration and representative multi-runtime/staff acceptance. Do not expand PR #53 into them.
 
-- explicit policy-snapshot behavior across ladder edits;
-- serious-offense decay metadata;
-- wider combined-recommendation and acceptance coverage;
-- the broader modular punishment and escalation configuration tree.
+## Production boundary
 
-Do not silently expand PR #52 into those separate feature slices.
+LiteBans remains authoritative. Issue #43 remains open. No deployment, production access, authority activation, production shadow window or cutover is authorized by this development PR.
 
-## RoseChat provider blocker
+## Next route
 
-The supported private-message callback and privacy presentation boundary remains blocked until an accessible provider repository or published API artifact defines callback timing, identity, cancellation/delivery semantics, threading, duplicate identity, supported versions and privacy-safe evidence fields.
-
-Do not add reflection against unknown RoseChat internals, invent provider-owned API classes, scrape logs as a substitute callback, or claim support from an unverified stub.
-
-## Next legitimate work
-
-1. Verify PR #52's exact live head, checks, reviews, merge state, resulting `main` and branch cleanup.
-2. Resume RoseChat only if the required supported provider contract becomes available.
-3. Otherwise select one prerequisite-ready escalation-policy slice after fresh goals, blueprint, matrix and code reconciliation; policy-snapshot behavior across ladder edits is the current likely candidate.
-4. Do not begin the next feature inside PR #52.
-
-## Production and release boundary
-
-- LiteBans remains authoritative.
-- Issue #43 remains open.
-- No production deployment is authorized.
-- No production database, credentials, production-derived backup or private player evidence may be accessed.
-- No 168-hour production acceptance window is active.
-- Merging dormant development code does not authorize production cutover.
-- Staging controls are separate and must not be changed unless the selected work item explicitly requires them.
-
-## Required references
-
-Read before implementation:
-
-- `ai-agents/AGENTS.md`
-- `ai-agents/reports/agent-handoffs/latest.md`
-- `ENTHUSIASTAFF-GOALS.md`
-- `WORKSPACE-MANIFEST.md`
-- `docs/wiki/pages/Development-Blueprint.md`
-- `reports/REQUIREMENTS-MATRIX.md`
-
-## Update contract
-
-Do not create a circular commit sequence by embedding the current PR's final SHA, final CI run IDs or merge commit in this tracked file. Exact live evidence belongs in the PR description or comments, and every next agent must reconcile this file with GitHub before acting.
+1. Verify PR #53's exact live head, checks, reviews, merge result, resulting `main` and branch cleanup.
+2. Resume RoseChat only if a supported contract becomes available.
+3. Otherwise reconcile live goals/code and select exactly one bounded follow-up; serious-offense decay metadata is the current likely candidate.
+4. Stop after PR #53; do not begin the next feature in it.
