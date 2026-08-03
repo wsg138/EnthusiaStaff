@@ -56,6 +56,7 @@ public final class EscalationEngine {
                 effectiveOrdinal,
                 recencyBonus,
                 contributions,
+                policy.decayEnabled() ? DecayEligibility.ELIGIBLE : DecayEligibility.INELIGIBLE,
                 policy.stepAt(effectiveOrdinal)
         );
     }
