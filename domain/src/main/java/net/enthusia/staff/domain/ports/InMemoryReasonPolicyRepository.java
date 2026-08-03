@@ -10,9 +10,9 @@ import net.enthusia.staff.domain.escalation.RemovedReason;
 
 public final class InMemoryReasonPolicyRepository implements ReasonPolicyRepository {
     private final String version;
-    private final Map<String, ReasonPolicy> policies;
-    private final Map<String, String> aliases;
-    private final Map<String, RemovedReason> removedReasons;
+    private final Map<String, ReasonPolicy> policyIndex;
+    private final Map<String, String> aliasIndex;
+    private final Map<String, RemovedReason> removedReasonIndex;
 
     public InMemoryReasonPolicyRepository(String version, Collection<ReasonPolicy> policies) {
         this(version, policies, Map.of(), List.of());
@@ -31,9 +31,9 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
                 removedReasons
         ).snapshot();
         this.version = snapshot.version();
-        this.policies = indexPolicies(snapshot.policies());
-        this.aliases = snapshot.aliases();
-        this.removedReasons = indexRemovedReasons(snapshot.removedReasons());
+        this.policyIndex = indexPolicies(snapshot.policies());
+        this.aliasIndex = snapshot.aliases();
+        this.removedReasonIndex = indexRemovedReasons(snapshot.removedReasons());
     }
 
     private static Map<String, ReasonPolicy> indexPolicies(Collection<ReasonPolicy> policies) {
@@ -53,12 +53,12 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
         if (reasonId == null) {
             return Optional.empty();
         }
-        ReasonPolicy direct = policies.get(reasonId);
+        ReasonPolicy direct = policyIndex.get(reasonId);
         if (direct != null) {
             return Optional.of(direct);
         }
-        String canonical = aliases.get(reasonId);
-        return canonical == null ? Optional.empty() : Optional.of(policies.get(canonical));
+        String canonical = aliasIndex.get(reasonId);
+        return canonical == null ? Optional.empty() : Optional.of(policyIndex.get(canonical));
     }
 
     @Override
@@ -66,15 +66,15 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
         if (reasonId == null) {
             return Optional.empty();
         }
-        ReasonPolicy direct = policies.get(reasonId);
+        ReasonPolicy direct = policyIndex.get(reasonId);
         if (direct != null) {
             return Optional.of(descriptor(reasonId, direct, ReasonAvailability.ACTIVE));
         }
-        String canonical = aliases.get(reasonId);
+        String canonical = aliasIndex.get(reasonId);
         if (canonical != null) {
-            return Optional.of(descriptor(reasonId, policies.get(canonical), ReasonAvailability.ALIAS));
+            return Optional.of(descriptor(reasonId, policyIndex.get(canonical), ReasonAvailability.ALIAS));
         }
-        RemovedReason removed = removedReasons.get(reasonId);
+        RemovedReason removed = removedReasonIndex.get(reasonId);
         return removed == null ? Optional.empty() : Optional.of(removedDescriptor(removed));
     }
 
@@ -104,17 +104,17 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
 
     @Override
     public Collection<ReasonPolicy> all() {
-        return policies.values();
+        return policyIndex.values();
     }
 
     @Override
     public Map<String, String> aliases() {
-        return aliases;
+        return aliasIndex;
     }
 
     @Override
     public Collection<RemovedReason> removedReasons() {
-        return removedReasons.values();
+        return removedReasonIndex.values();
     }
 
     @Override
