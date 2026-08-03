@@ -31,6 +31,7 @@ PR #52 implements one bounded escalation-policy compatibility slice:
 - removed IDs in the dynamic `cheating.polar.*` namespace block template expansion rather than becoming selectable accidentally;
 - active policies, aliases, removed metadata and version are published and restored as one atomic reload snapshot;
 - saved punishment review presentation distinguishes active, renamed, removed and unknown reason IDs;
+- the requirements matrix now records the implemented compatibility slice without overstating the broader escalation requirement;
 - no existing case, sanction, ordinal, expiration, draft, request or audit record is rewritten;
 - no schema or Flyway migration changed.
 
@@ -38,12 +39,13 @@ Exact final-head validation, review and merge evidence must be read live from PR
 
 ## Harsh-review checkpoint
 
-The separate full-PR review confirmed and fixed two defects before tracked-content freeze:
+The separate full-PR review confirmed and fixed three defects before the final tracked-content freeze:
 
 1. removed `cheating.polar.*` identifiers could still resolve through dynamic template expansion;
-2. reload snapshots were assembled through separate atomic reads and could theoretically mix metadata from concurrent versions.
+2. reload snapshots were assembled through separate atomic reads and could theoretically mix metadata from concurrent versions;
+3. the requirements matrix still described aliases and removed IDs as entirely unimplemented after the code and focused tests supplied that slice.
 
-Regression tests cover both boundaries, configuration rejection, atomic publication/restore, selection exclusion and canonical committed identity.
+Regression tests cover the runtime boundaries, configuration rejection, atomic publication/restore, selection exclusion and canonical committed identity. The documentation fix preserves conservative `PARTIAL` status and leaves policy snapshots, serious-offense decay metadata, combined recommendations and broader modular configuration as separate future work.
 
 ## Prior verified evidence
 
