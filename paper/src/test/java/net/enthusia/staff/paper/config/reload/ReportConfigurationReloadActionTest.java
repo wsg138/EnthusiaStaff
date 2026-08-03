@@ -40,6 +40,24 @@ class ReportConfigurationReloadActionTest {
     }
 
     @Test
+    void equivalentCandidateKeepsActiveSnapshotAndNoChangeOutcome() {
+        ReportConfigurationSnapshot initial = ReportConfigurationTestFixtures.defaults();
+        ReportConfigurationSnapshot equivalentCandidate = ReportConfigurationTestFixtures.defaults();
+        AtomicReportConfiguration active = new AtomicReportConfiguration(initial);
+        ReportConfigurationReloadAction action = new ReportConfigurationReloadAction(
+                ReportConfigurationReloadActionTest::unchanged,
+                () -> equivalentCandidate,
+                active,
+                ignored -> { }
+        );
+
+        ConfigurationReloadResult result = action.reload();
+
+        assertEquals(ConfigurationReloadResult.Outcome.NO_CHANGES, result.outcome());
+        assertSame(initial, active.snapshot());
+    }
+
+    @Test
     void successfulDelegatePublishesCandidateAtomically() {
         ReportConfigurationSnapshot initial = ReportConfigurationTestFixtures.defaults();
         ReportPolicy original = initial.policy();
