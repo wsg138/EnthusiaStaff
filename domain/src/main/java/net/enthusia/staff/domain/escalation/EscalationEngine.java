@@ -24,18 +24,21 @@ public final class EscalationEngine {
                 .sorted(Comparator.comparing(PriorOffense::endedAt))
                 .toList();
 
+        int cleanPeriodDecay = cleanPeriodDecay(policy, related, now);
         List<EscalationDecision.Contribution> contributions = new ArrayList<>();
         int rawOrdinal = 0;
         int effectiveOrdinal = 0;
         for (PriorOffense offense : related) {
             int base = offense.severity() > policy.severity() ? 2 : 1;
-            int decayedBy = policy.decayEnabled()
-                    ? Math.toIntExact(ChronoUnit.DAYS.between(offense.endedAt(), now) / DECAY_DAYS)
-                    : 0;
-            int effective = Math.max(0, base - decayedBy);
+            int effective = Math.max(0, base - cleanPeriodDecay);
             rawOrdinal = Math.addExact(rawOrdinal, base);
             effectiveOrdinal = Math.addExact(effectiveOrdinal, effective);
-            contributions.add(new EscalationDecision.Contribution(offense.severity(), base, decayedBy, effective));
+            contributions.add(new EscalationDecision.Contribution(
+                    offense.severity(),
+                    base,
+                    cleanPeriodDecay,
+                    effective
+            ));
         }
 
         int recencyBonus = related.stream()
@@ -53,5 +56,18 @@ public final class EscalationEngine {
                 contributions,
                 policy.stepAt(effectiveOrdinal)
         );
+    }
+
+    private static int cleanPeriodDecay(
+            ReasonPolicy policy,
+            List<PriorOffense> related,
+            Instant now
+    ) {
+        if (!policy.decayEnabled() || related.isEmpty()) {
+            return 0;
+        }
+        Instant cleanPeriodStarted = related.getLast().endedAt();
+        long cleanDays = ChronoUnit.DAYS.between(cleanPeriodStarted, now);
+        return Math.toIntExact(cleanDays / DECAY_DAYS);
     }
 }

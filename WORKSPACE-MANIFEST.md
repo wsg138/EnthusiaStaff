@@ -10,47 +10,51 @@ This manifest records repository, validation and authority boundaries for develo
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current verified `main` at PR #50 start | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
-| Latest merged product PR | PR #49 — modular report configuration and safe reload |
-| Latest merged feature head | `1ad41be3eeca49370694916f386dda0484e3bfa3` |
-| Latest merge commit | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
-| Coordination record | PR #50 — post-PR #49 reconciliation and RoseChat provider blocker; verify live closure |
+| Current verified `main` at PR #51 start | `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727` |
+| Latest merged product PR before current work | PR #49 — modular report configuration and safe reload |
+| Latest merged coordination PR | PR #50 — RoseChat provider blocker reconciliation |
+| Active work | PR #51 — escalation clean-period decay correctness fix; verify live closure |
 | Migration boundary | V14 is latest; V1–V14 are immutable |
 | Dormant default | Startup remains non-`ACTIVE`; merging development code does not activate authority |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #50 start there were no open pull requests. Every remaining remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
+At PR #51 start there were no open pull requests. Every pre-existing remote branch was verified `ahead_by: 0` relative to `main`, so no unfinished work was displaced.
 
-## Latest verified implementation evidence
+## Current implementation checkpoint
 
-PR #49 recorded exact feature-head evidence for `1ad41be3eeca49370694916f386dda0484e3bfa3`:
+PR #51 fixes one bounded escalation defect:
 
-- Coverage workflow run `30774370125`, job `91566952409`: success;
-- exact checkout assertion matched the frozen head;
-- Temurin/OpenJDK 21.0.9;
-- `./gradlew clean build test jacocoTestReport jacocoRootReport checkRuntimeJars --no-daemon`;
-- successful full build and unit/MariaDB/Testcontainers suites;
-- Flyway validated 14 migrations through V14;
-- no migration was added or edited by PR #49;
-- PR #49 had zero unresolved review threads before merge.
+- decay intervals are measured from the newest contributing, non-overturned related offense;
+- a recent related reoffense resets the clean-period clock for older related history;
+- 89-day, 90-day and 180-day boundaries are covered;
+- shared clean-period decay and non-decaying policy behavior are covered;
+- severity weighting, recency, filtering and finite-ladder clamping are preserved;
+- no command, permission, configuration, provider contract, schema or migration changes.
 
-No pull-request-triggered workflow run was returned for merge commit `d07cb888952fde575a4f8245571f8d1ebc858b63`. Do not convert that absence into a success or failure claim.
+Exact final-head validation, review and merge evidence must be read live from PR #51.
+
+## Prior verified evidence
+
+PR #50 exact feature head `e5d72a9809b7aabec39e95705e6e0a82f4a3f663` recorded:
+
+- `Validate Wiki` workflow run `30775061520`: success;
+- `Coverage` workflow run `30775061525`: success;
+- zero unresolved review threads;
+- normal merge commit `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727`.
+
+PR #49 exact feature head `1ad41be3eeca49370694916f386dda0484e3bfa3` recorded Java 21 clean build, unit and MariaDB/Testcontainers suites, Flyway through V14, runtime-JAR checks, coverage/static analysis and zero unresolved review threads in its live PR evidence.
+
+Do not attribute those prior-head results to PR #51.
 
 ## Current provider blocker
 
-The next recorded report-system feature is a supported RoseChat private-message callback and privacy presentation boundary. It is blocked because the intended provider repository/API is not available:
-
-- installed-repository search returned no `Enthusia-RoseChat` repository;
-- public repository search under `wsg138` returned no repository with that name;
-- no supported callback artifact, version or lifecycle contract is present in this workspace.
+The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, sender/recipient identity, cancellation and delivery semantics, threading, duplicate identity, version coordinates and privacy-safe evidence fields.
 
 Do not invent an API, reflect against unknown implementation classes, copy provider-owned classes into EnthusiaStaff, or scrape logs as a substitute for a delivery callback.
 
-Required input is an accessible supported provider repository or artifact defining callback timing, sender/recipient identity, cancellation and delivery semantics, threading, version coordinates, duplicate identity and privacy-safe evidence fields.
-
 ## Development merge gate
 
-For normal implementation PRs, merge only when:
+For PR #51 and later implementation PRs, merge only when:
 
 - the complete scoped behavior is implemented and harsh-reviewed;
 - every confirmed defect and merge blocker is fixed;
@@ -60,8 +64,6 @@ For normal implementation PRs, merge only when:
 - workspace state and an immutable handoff are included;
 - exact evidence is recorded in the PR without changing the feature SHA;
 - a normal merge commit is used.
-
-For documentation-only PR #50, validate the exact final head with the repository's available documentation/wiki and static-analysis workflows, record checks that actually ran, and do not imply that unavailable implementation or production evidence exists.
 
 ## Production cutover gate
 
@@ -92,10 +94,10 @@ Each related project remains an independent Git repository. Histories must not b
 
 ## Current development route
 
-1. Verify PR #50's live merge or blocker state, resulting `main`, unresolved-thread count and branch cleanup.
+1. Verify PR #51's live head, checks, review state, normal merge result, resulting `main` and branch cleanup.
 2. Obtain or publish the supported RoseChat provider contract before implementing the private-message callback.
-3. If that external input remains unavailable, re-check live GitHub and select the highest-priority prerequisite-complete feature from the goals, development map and requirements matrix.
-4. Keep one coherent item per PR and do not silently combine the blocked RoseChat work with another feature.
+3. If that external input remains unavailable, select one prerequisite-ready escalation-policy slice after fresh goals, development-map, requirements-matrix and code reconciliation; versioned aliases and removed-ID readability are the current recommendation.
+4. Keep one coherent item per PR and do not silently combine RoseChat or broader escalation work with PR #51.
 5. Complete issue #43 only after the plugin is closer to release and one exact release candidate is pinned.
 
 ## Release boundaries

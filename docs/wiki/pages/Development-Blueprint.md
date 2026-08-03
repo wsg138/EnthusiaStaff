@@ -13,9 +13,9 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #49 is the latest merged product checkpoint.
-- Its feature head is `1ad41be3eeca49370694916f386dda0484e3bfa3` and normal merge commit is `d07cb888952fde575a4f8245571f8d1ebc858b63`.
-- PR #50 records the post-PR #49 reconciliation and unavailable RoseChat provider contract; verify its live closure before acting.
+- PR #50 is the latest merged coordination checkpoint; its normal merge commit is `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727`.
+- PR #49 remains the latest merged report-system product checkpoint before current work.
+- PR #51 fixes escalation clean-period decay; verify its live head, validation, review and merge state before acting.
 - V14 remains the live highest Flyway migration; V1–V14 are immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
@@ -25,22 +25,22 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 | Group | Why it matters now | Detailed work |
 | --- | --- | --- |
 | [[Core Platform and Infrastructure]] | Modes, configuration, lifecycle, identity and failure handling are shared prerequisites for many other features. | Open the group page for files, descriptions and remaining categories. |
-| [[Moderation, Punishments, and Reports]] | History, sanction changes, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
+| [[Moderation, Punishments, and Reports]] | History, sanction changes, escalation, request notifications, reports and evidence form the main moderation workflow. | Open the group page for files, commands and remaining categories. |
 | [[Staff Tools, Investigations, and Player-State Safety]] | Staff mode, vanish, freeze, inventories and confiscation can lose or duplicate player state if recovery is incomplete. | Open the group page for safety boundaries, files and remaining categories. |
 | [[Integrations, Migration, and Release Readiness]] | Providers, the site, migration, topology and acceptance evidence determine whether the platform can replace LiteBans safely. | Open the group page for providers, migration and release gates. |
 
 ## Current development order
 
-### 1. Verify PR #50 closure
+### 1. Verify PR #51 closure
 
 Before beginning implementation:
 
-- verify PR #50's live merge or blocker state;
-- read its exact-head and merge evidence from GitHub;
-- confirm the resulting `main`, unresolved-thread count and branch cleanup;
+- verify PR #51's exact live head, base and ahead/behind relation;
+- read its exact-head build, test, migration, coverage, analyzer, runtime-JAR and review evidence from GitHub;
+- confirm the normal merge result, resulting `main`, feature-head containment and branch cleanup;
 - reconcile any newer pull request, branch, migration or requirement change.
 
-Do not repeat the documentation reconciliation in a competing PR.
+Do not repeat the clean-period decay fix in a competing PR.
 
 ### 2. Resume RoseChat only when the provider contract exists
 
@@ -68,7 +68,9 @@ If the RoseChat contract is still unavailable after live reconciliation, choose 
 5. one coherent category from a detailed feature-group page;
 6. documentation and evidence for the exact tested revision.
 
-Do not treat the blocked RoseChat feature as complete, and do not silently combine it with another implementation PR.
+After PR #51, the current recommended implementable slice is versioned escalation aliases and readable-but-unselectable removed reason IDs. That work must preserve existing stored ordinals and policy snapshots and remain separate from the RoseChat blocker.
+
+Do not treat the blocked RoseChat feature or the broader escalation requirement as complete, and do not silently combine them in one PR.
 
 ### 4. Complete issue #43 when the plugin is closer to release
 

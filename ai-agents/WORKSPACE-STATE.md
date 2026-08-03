@@ -10,8 +10,7 @@ This file is a concise routing record for the next AI agent. It must be verified
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current `main` SHA | `d07cb888952fde575a4f8245571f8d1ebc858b63` at PR #50 start; live verify before acting |
-| Checkpoint after report-configuration work | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
+| Current `main` SHA | `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727` at PR #51 start; live verify before acting |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java | 21 |
 | Runtime | Paper-compatible backends, Velocity, MariaDB |
@@ -20,72 +19,72 @@ This file is a concise routing record for the next AI agent. It must be verified
 
 | Field | Value |
 | --- | --- |
-| State | `BLOCKED` |
-| Active PR | `#50 — Record RoseChat provider blocker after PR 49` until live merge verification |
-| Active branch | `docs/record-rosechat-provider-blocker` until live merge and cleanup verification |
-| Active work item | Reconcile post-PR #49 state and formally record the RoseChat private-message provider blocker |
-| Implementation state | Documentation reconciliation complete; no speculative integration code was added |
-| Known blocker | The intended `wsg138/Enthusia-RoseChat` repository and a supported private-message callback API are unavailable |
-| Required input | Accessible supported provider repository or artifact with callback lifecycle, identity, delivery, threading, version and privacy semantics |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr50-rosechat-provider-blocker.md` |
-| Exact validation and merge evidence | Read PR #50 live |
+| Intended post-merge state | `IDLE` after PR #51 is live-verified |
+| Active PR | `#51 — Fix escalation clean-period decay` until live merge verification |
+| Active branch | `fix/escalation-clean-period-decay` until live merge and cleanup verification |
+| Active work item | Correct escalation decay so recent related reoffending resets the clean-period clock |
+| Implementation state | Code, focused tests, routing records and immutable handoff frozen before exact-head validation |
+| Known product blocker | Supported RoseChat private-message provider contract remains unavailable |
+| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr51-escalation-clean-period-decay.md` |
+| Exact validation and merge evidence | Read PR #51 live |
 
-If PR #50 is merged, no implementation PR remains active. The RoseChat feature itself remains blocked until the required provider contract exists.
+If PR #51 is merged, no implementation PR remains active. The broader escalation requirement remains partial, and RoseChat remains externally blocked.
 
 ## Live reconciliation at work-item start
 
-- PR #49 was already merged with normal merge commit `d07cb888952fde575a4f8245571f8d1ebc858b63`.
+- PR #50 was merged with normal merge commit `ead1b5a02d3e8dc71eeb5ceb3c9505da1843e727`.
 - No pull request was open or in draft.
-- Every remaining remote branch was `ahead_by: 0` relative to `main`; no unfinished work was displaced.
-- PR #49 had zero unresolved review threads.
-- The exact PR #49 feature-head validation recorded run `30774370125`, job `91566952409`, Java 21.0.9 and a successful full Gradle build through Flyway V14.
-- No pull-request-triggered workflow run was returned for the PR #49 merge commit; no post-merge CI result is claimed.
-- The live highest migration remains `V14__punishment_history_and_exact_sanction_changes.sql`.
-- Installed and public repository search found no accessible `wsg138/Enthusia-RoseChat` repository.
+- Every pre-existing remote branch was `ahead_by: 0` relative to `main`; no unfinished work was displaced.
+- PR #50 had zero unresolved review threads.
+- PR #50 exact-head workflows `30775061520` (`Validate Wiki`) and `30775061525` (`Coverage`) succeeded for `e5d72a9809b7aabec39e95705e6e0a82f4a3f663`.
+- The live highest migration remained `V14__punishment_history_and_exact_sanction_changes.sql`.
+- The supported RoseChat callback/API contract remained unavailable and was not invented.
 
-## Latest completed product work
+## PR #51 completed behavior
 
-| Field | Value |
-| --- | --- |
-| PR | `#49 — Add modular report configuration and safe reload` |
-| Branch | `feature/report-configuration-reload` |
-| Final feature head | `1ad41be3eeca49370694916f386dda0484e3bfa3` |
-| Merge commit | `d07cb888952fde575a4f8245571f8d1ebc858b63` |
-| Result | Validated report policy and GUI configuration with atomic safe reload |
-| Handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr49-report-configuration.md` |
-| Exact validation and merge evidence | Read PR #49 live |
+- Decay intervals are calculated from the most recent contributing, non-overturned related offense instead of independently from every historical offense.
+- A recent related reoffense resets the clean-period clock for older related contributions.
+- Existing severity weighting, family filtering, contribution/overturn filtering, future-end filtering, 30-day recency bonus, non-decaying policies and finite-ladder clamping are preserved.
+- Focused tests cover 89-day, 90-day and 180-day boundaries, reset behavior, shared clean-period decay and non-decaying policy behavior.
+- No command, permission, configuration key, provider contract, schema or migration changed.
 
 ## Migration state
 
 | Field | Value |
 | --- | --- |
-| Live highest migration | `V14__punishment_history_and_exact_sanction_changes.sql` |
+| Live highest migration at PR #51 start | `V14__punishment_history_and_exact_sanction_changes.sql` |
 | Immutable migrations | `V1` through `V14` |
 | Expected next number | `V15`, unless live repository state shows a newer legitimate migration |
-| PR #50 schema result | No migration added or edited |
+| PR #51 schema result | No migration added or edited |
 | Locked deployed checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
 
 Never edit an existing migration. Verify the live migration directory before adding a new migration.
 
+## Remaining escalation work
+
+The clean-period correctness defect is fixed by PR #51, but the complete escalation requirement remains partial. Separate future work still includes:
+
+- modular/versioned escalation configuration;
+- explicit aliases for renamed stable IDs;
+- readable but unselectable removed IDs;
+- policy snapshot behavior across ladder edits;
+- serious-offense decay metadata;
+- broader combined-recommendation and acceptance coverage.
+
+Do not silently expand PR #51 into those separate feature slices.
+
 ## RoseChat provider blocker
 
-The next recorded report-system item is a supported RoseChat private-message callback and privacy presentation boundary. It cannot be implemented honestly until all of the following are available:
+The supported private-message callback and privacy presentation boundary remains blocked until an accessible provider repository or published API artifact defines callback timing, identity, cancellation/delivery semantics, threading, duplicate identity, supported versions and privacy-safe evidence fields.
 
-- an accessible provider repository or published supported API artifact;
-- the exact callback/event contract and lifecycle timing;
-- sender, recipient, cancellation and delivery semantics;
-- supported version and dependency coordinates;
-- threading and Paper/Folia scheduling guarantees;
-- message identity or sequence semantics needed for duplicate safety;
-- the privacy and retention fields the provider can supply without reflection or private implementation access.
-
-Do not add reflection against unknown RoseChat internals, invent provider-owned API classes, scrape logs as a substitute callback, capture before delivery semantics are known, or claim support based only on an unverified stub.
+Do not add reflection against unknown RoseChat internals, invent provider-owned API classes, scrape logs as a substitute callback, or claim support from an unverified stub.
 
 ## Next legitimate work
 
-1. Resume the RoseChat private-message callback only after the required supported provider contract becomes available.
-2. If it remains unavailable, reconcile live GitHub again and select the highest-priority prerequisite-complete item from the goals, development map and requirements matrix.
-3. Do not begin that second item inside PR #50.
+1. Verify PR #51's exact live head, checks, reviews, merge state, resulting `main` and branch cleanup.
+2. Resume RoseChat only if the required supported provider contract is available.
+3. Otherwise select one prerequisite-ready escalation-policy slice after fresh goals, blueprint, matrix and code reconciliation; versioned aliases and removed-ID readability are the current recommendation.
+4. Do not begin the next feature inside PR #51.
 
 ## Production and release boundary
 
@@ -94,8 +93,8 @@ Do not add reflection against unknown RoseChat internals, invent provider-owned 
 - No production deployment is authorized.
 - No production database, credentials, production-derived backup or private player evidence may be accessed.
 - No 168-hour production acceptance window is active.
-- Merging dormant development or documentation does not authorize production cutover.
-- Staging controls are separate and must not be changed unless the current work item explicitly requires them.
+- Merging dormant development code does not authorize production cutover.
+- Staging controls are separate and must not be changed unless the selected work item explicitly requires them.
 
 ## Required references
 
