@@ -13,10 +13,10 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #53 merged by normal merge commit `fc1e94bd7317d59a33d297a049a94fd2eb3f1c5e` from exact feature head `d766dfcd849c25df37df47962a0aab9bc6975304` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
-- PR #54 is the serious-offense decay metadata work requiring live validation and merge verification.
+- PR #54 merged normally as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` from exact feature head `b0b5bef5807da7d60d64ad7c59319ec15c53955f` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
+- PR #55 is the active bounded staff-mode work item: Admin Ender chest access is being corrected from full mutation access to view-only while Founder owner access remains available.
 - PR #49 remains the latest merged report-system product checkpoint; PR #50 records historical RoseChat blocker coordination.
-- PR #54 adds V16; V1–V15 remain immutable.
+- V16 is the live highest Flyway migration; PR #55 adds no migration and V1–V16 remain immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 is specifically the LiteBans production-cutover acceptance gate and remains open; it is not the general blocker queue.
 
@@ -31,28 +31,41 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Verify PR #54 closure
+### 1. Complete PR #55
 
-Before beginning implementation:
+PR #55 fixes one confirmed staff-mode asset-safety defect:
 
-- verify PR #54's exact live head, base and ahead/behind relation;
-- read its exact-head Coverage, Wiki, Pi, Codacy, build, test, migration, artifact, runtime-JAR and review evidence from GitHub;
-- confirm the normal merge result, resulting `main`, feature-head containment and automatic branch cleanup;
-- reconcile any newer pull request, branch, migration or requirement change.
+- Helper, Mod, and Developer remain unable to open Ender chests during staff mode;
+- Admin may open an Ender chest but clicks and drags in that view are cancelled;
+- Founder retains configured owner-level Ender access;
+- Admin creative inventory interaction outside the Ender view remains available;
+- no vanish, freeze, general inventory-editing, confiscation, provider, migration or production scope is included.
 
-PR #54 stores each new punishment step's configured decay eligibility as immutable history. The shared clean-period clock still resets from the latest contributing related offense, but each interval reduces only prior contributions explicitly stored as decay-eligible. Explicitly non-decaying serious history remains effective under later minor policies, eligible minor history can still decay under a later non-decaying policy, and pre-V16 rows remain `UNKNOWN` without invented backfill. Do not repeat it in a competing PR.
+Before merge:
 
-### 2. Prioritize staff mode, vanish, and freeze
+- complete the one canonical PR handoff and expected post-merge routing records;
+- harsh-review the full diff separately and fix every confirmed defect or merge blocker;
+- synchronize with current `main`;
+- freeze tracked content;
+- verify one unchanged exact head through build/tests, migration immutability, runtime-JAR/provider-leak checks, static analysis, wiki validation, applicable Pi staging and all review gates;
+- merge normally only with zero unresolved valid threads;
+- verify resulting `main`, feature-head containment and branch cleanup;
+- stop without starting another item.
 
-After PR #54 is verified, the current owner priority is staff/player-visible safety work:
+### 2. Continue bounded staff-mode safety work
 
-1. staff mode;
-2. vanish;
-3. freeze.
+After PR #55 is complete, staff mode remains the first owner-priority feature. Select exactly one prerequisite-ready lifecycle or restriction-enforcement gap after fresh live reconciliation. Prefer correctness, recovery, idempotency, state restoration, reload/disable safety, rank enforcement or leak prevention. Do not combine a separate staff-mode slice with vanish or freeze unless one confirmed defect genuinely crosses the shared boundary.
 
-Select exactly one bounded prerequisite-ready item after live reconciliation. Prefer correctness, recovery, idempotency, state-restoration, restriction-enforcement, visibility, lifecycle or multi-runtime defects that make the selected feature unsafe or unusable. Do not combine all three systems in one oversized PR unless one coherent defect genuinely crosses their shared boundary.
+### 3. Continue vanish, then freeze
 
-### 3. Complete report notifications
+After prerequisite-ready staff-mode work, continue owner priority one with bounded vanish and freeze items:
+
+- vanish still needs complete entity/tracker suppression, integration exposure coverage, live Folia owner-scheduling verification and Java/Bedrock staging;
+- freeze still needs complete interaction, command and backend-switch restriction coverage, reconnect/offline semantics and supported RoseChat staff-only chat behavior.
+
+Do not invent unavailable provider APIs or represent hosted tests as full multi-runtime acceptance.
+
+### 4. Complete report notifications
 
 Report notification completion is the second owner priority. Resume the supported RoseChat private-message callback and privacy presentation boundary only after an accessible provider contract defines:
 
@@ -63,34 +76,23 @@ Report notification completion is the second owner priority. Resume the supporte
 - threading and Paper/Folia scheduling guarantees;
 - privacy-safe evidence fields and retention boundaries.
 
-Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known. Track unavailable provider APIs in focused blocker issues and the normal handoff. Do not open a standalone documentation PR solely to record a blocker unless routing would otherwise become materially incorrect or unsafe.
+Do not use reflection against unknown implementation classes, copy provider-owned API classes, scrape logs as a fake callback, or store messages before delivery semantics are known. Track unavailable provider APIs in focused blocker issues and the normal handoff. Do not use issue #43 as a general blocker issue.
 
-### 4. Continue escalation policy only after higher priorities
+### 5. Continue escalation policy only after higher priorities
 
-Escalation-policy completion is the third owner priority. The remaining work includes wider combined-recommendation coverage, explicit family-relationship expansion, broader modular punishment/escalation configuration, decayed-history GUI presentation and representative multi-runtime staff acceptance.
+Escalation-policy completion is the third owner priority. Remaining work includes wider combined-recommendation coverage, explicit family-relationship expansion, broader modular punishment/escalation configuration, decayed-history GUI presentation and representative multi-runtime staff acceptance.
 
-Do not begin another escalation-policy or internal infrastructure PR immediately after PR #54 unless it fixes a confirmed correctness, security, concurrency, migration or data-integrity defect; directly unblocks a higher-priority feature; or the owner explicitly approves it.
+Do not begin another escalation-policy or internal infrastructure PR while higher-priority prerequisite-ready staff/player-visible work exists unless it fixes a confirmed correctness, security, concurrency, migration or data-integrity defect; directly unblocks a higher-priority feature; or the owner explicitly approves it.
 
-### 5. Complete issue #43 when the plugin is closer to release
+### 6. Complete issue #43 when the plugin is closer to release
 
 Issue #43 is specifically the LiteBans production-cutover acceptance issue. It is not the general defect or blocker queue.
 
 Pin one exact release-candidate SHA, Paper and Velocity JAR hashes, sanitized configuration revision and isolated staging environment. Any runtime-source, JAR, migration, schema, comparison or relevant configuration change invalidates the record.
 
-The production cutover record must cover:
+The production cutover record must cover representative migration, interrupted recovery, an uninterrupted 168-hour shadow window, maintenance fencing, final incremental migration, ambiguous activation retries, emergency freeze persistence, rollback, reconciliation, Java/Bedrock topology and provider/dependency failures.
 
-- representative sanitized-backup migration, rerun and checksum comparison;
-- interrupted migration and restart recovery;
-- an uninterrupted 168-hour shadow window with seven complete daily summaries;
-- maintenance fencing and final incremental migration;
-- ambiguous activation retry and duplicate safety;
-- emergency freeze and restart persistence;
-- rollback and idempotent reconciliation;
-- Velocity/HUB/SMP, Java and Bedrock/Geyser acceptance;
-- provider-present/provider-missing behavior;
-- database, queue, dead-letter, process-kill, saturation and latency scenarios.
-
-Only after that record is complete may the release candidate be deployed for production cutover, EnthusiaStaff authority be activated, LiteBans be disabled or removed, the final production migration be performed, or a live cutover be authorized.
+Only after that record is complete may a release candidate be deployed for production cutover, EnthusiaStaff authority be activated, LiteBans be disabled or removed, the final production migration be performed, or a live cutover be authorized.
 
 ## Documentation ownership
 
