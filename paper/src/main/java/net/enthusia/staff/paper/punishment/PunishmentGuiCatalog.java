@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.punishment;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -34,6 +35,10 @@ final class PunishmentGuiCatalog {
                 .filter(policy -> policy.family().equals(family))
                 .sorted(Comparator.comparing(ReasonPolicy::publicReason).thenComparing(ReasonPolicy::id))
                 .toList();
+    }
+
+    Optional<ReasonPolicyRepository.ReasonDescriptor> describe(String reasonId) {
+        return policies.describe(reasonId);
     }
 
     private List<ReasonPolicy> available(Actor actor, String commandName) {
