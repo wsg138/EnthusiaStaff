@@ -21,7 +21,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | State | `IDLE — PR #55 requires live merge verification` |
 | Pull request to verify | `#55 — Enforce Admin staff-mode Ender view-only access` |
 | Feature branch to verify | `fix/admin-staffmode-ender-view-only` |
-| Completed work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only, Founder retains configured owner access, and unresolved ranks fail closed |
+| Completed work item | Separate staff-mode Ender open access from mutation authority so Admin is view-only, Founder retains configured owner access, and non-player/unresolved ranks fail closed |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-admin-staffmode-ender-view-only.md` |
 | Exact validation/merge evidence | Read PR #55 live; exact SHA, Coverage, Wiki, Pi, Codacy, artifacts, reviews and merge evidence belong in PR metadata |
 | External blocker | Supported RoseChat private-message provider contract remains unavailable; track it through a focused blocker issue and the normal handoff rather than issue #43 |
@@ -46,17 +46,18 @@ PR #55 now enforces:
 - Founder retains configured owner-level Ender access;
 - Admin creative inventory interaction outside an Ender chest view remains available;
 - click and drag use one shared mutation decision;
-- unresolved ranks fail closed for Ender opening and mutation;
+- `SYSTEM` and unresolved ranks fail closed for Ender opening and mutation;
 - existing staff-tool item protections remain unchanged.
 
-`StaffModeAccessPolicyTest` covers the exact ordinary-versus-Ender mutation decision used by both inventory event handlers for every current rank and the unresolved-rank boundary.
+`StaffModeAccessPolicyTest` covers the exact ordinary-versus-Ender mutation decision used by both inventory event handlers for every player-assigned rank, the non-player `SYSTEM` boundary, and the unresolved-rank boundary.
 
 ## Harsh-review result
 
-The complete PR diff received a separate harsh review. Two confirmed defects were fixed:
+The complete PR diff received a separate harsh review. Three confirmed defects were fixed:
 
 1. The initial split open predicate denied only known lower ranks and therefore failed open for an unresolved or future rank. Ender opening now permits only explicit Admin or Founder ranks, and mutation permits only Founder.
 2. Click and drag repeated related policy conditions while tests covered only the leaf predicates. Both handlers now share `blocksInventoryMutation`, and focused tests prove that exact combined decision.
+3. `StaffRank.SYSTEM` was a current enum boundary missing from the test claim. Coverage now proves that this non-player rank receives no player Ender access.
 
 No merge blocker remains in tracked content. Full Paper event-object staging remains useful optional runtime confidence, not a confirmed defect in the thin handlers.
 
