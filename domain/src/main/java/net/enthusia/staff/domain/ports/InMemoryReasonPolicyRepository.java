@@ -5,8 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.escalation.RemovedReason;
 
@@ -33,19 +31,13 @@ public final class InMemoryReasonPolicyRepository implements ReasonPolicyReposit
                 removedReasons
         );
         this.version = validated.activeVersion();
-        this.policies = validated.all().stream().collect(Collectors.toUnmodifiableMap(
-                ReasonPolicy::id,
-                Function.identity(),
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
+        Map<String, ReasonPolicy> policyIndex = new LinkedHashMap<>();
+        validated.all().forEach(policy -> policyIndex.put(policy.id(), policy));
+        this.policies = Map.copyOf(policyIndex);
         this.aliases = Map.copyOf(validated.aliases());
-        this.removedReasons = validated.removedReasons().stream().collect(Collectors.toUnmodifiableMap(
-                RemovedReason::id,
-                Function.identity(),
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
+        Map<String, RemovedReason> removedIndex = new LinkedHashMap<>();
+        validated.removedReasons().forEach(reason -> removedIndex.put(reason.id(), reason));
+        this.removedReasons = Map.copyOf(removedIndex);
     }
 
     @Override
