@@ -13,10 +13,10 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #54 merged normally as `717d716d34f3e4e524d9b7c744cb5ece3cacaf04` from exact feature head `b0b5bef5807da7d60d64ad7c59319ec15c53955f` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
-- PR #55 is the active bounded staff-mode work item: Admin Ender chest access is being corrected from full mutation access to view-only while Founder owner access remains available.
+- PR #55 merged normally as `d71759aa4f121c82f984e57d6fd0968a80c502ba` from exact feature head `c6380aae35cf8c56044faf6dea96c471b14634f3` after successful exact-head Coverage and Validate Wiki workflows and zero unresolved review threads.
+- PR #56 is the active bounded staff-mode work item: protected staff tools are being guarded against number-key hotbar and inventory offhand transfer paths that do not expose the source through the clicked item or cursor.
 - PR #49 remains the latest merged report-system product checkpoint; PR #50 records historical RoseChat blocker coordination.
-- V16 is the live highest Flyway migration; PR #55 adds no migration and V1–V16 remain immutable.
+- V16 is the live highest Flyway migration; PR #56 adds no migration and V1–V16 remain immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 is specifically the LiteBans production-cutover acceptance gate and remains open; it is not the general blocker queue.
 
@@ -31,15 +31,17 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Complete PR #55
+### 1. Complete PR #56
 
-PR #55 fixes one confirmed staff-mode asset-safety defect:
+PR #56 fixes one confirmed staff-mode item-leak path:
 
-- Helper, Mod, and Developer remain unable to open Ender chests during staff mode;
-- Admin may open an Ender chest but clicks and drags in that view are cancelled;
-- Founder retains configured owner-level Ender access;
-- Admin creative inventory interaction outside the Ender view remains available;
-- no vanish, freeze, general inventory-editing, confiscation, provider, migration or production scope is included.
+- the prior click guard inspected only the clicked item and cursor;
+- Bukkit number-key clicks can move an item from the referenced hotbar slot;
+- inventory offhand-swap clicks can move the offhand item;
+- a focused listener identifies every relevant source and delegates to one tested transfer policy;
+- ordinary non-tool transfers remain available where the rank profile permits them;
+- transition and rank/Ender restrictions remain separately enforced;
+- no rank-change lifecycle, disable recovery, vanish, freeze, general inventory editing, confiscation, provider, migration or production scope is included.
 
 Before merge:
 
@@ -54,7 +56,7 @@ Before merge:
 
 ### 2. Continue bounded staff-mode safety work
 
-After PR #55 is complete, staff mode remains the first owner-priority feature. Select exactly one prerequisite-ready lifecycle or restriction-enforcement gap after fresh live reconciliation. Prefer correctness, recovery, idempotency, state restoration, reload/disable safety, rank enforcement or leak prevention. Do not combine a separate staff-mode slice with vanish or freeze unless one confirmed defect genuinely crosses the shared boundary.
+After PR #56 is complete, staff mode remains the first owner-priority feature. Select exactly one prerequisite-ready lifecycle or restriction-enforcement gap after fresh live reconciliation. Prefer correctness, recovery, idempotency, state restoration, reload/disable safety, rank enforcement or leak prevention. Rank-change correction and reload/disable recovery are candidate areas, not preselected work. Do not combine a separate staff-mode slice with vanish or freeze unless one confirmed defect genuinely crosses the shared boundary.
 
 ### 3. Continue vanish, then freeze
 

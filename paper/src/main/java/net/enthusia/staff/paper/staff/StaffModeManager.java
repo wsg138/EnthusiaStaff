@@ -368,10 +368,6 @@ public final class StaffModeManager implements Listener {
         if (transitions.contains(player.getUniqueId())
                 || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
-            return;
-        }
-        if (isStaffTool(event.getCurrentItem()) || isStaffTool(event.getCursor())) {
-            event.setCancelled(true);
         }
     }
 

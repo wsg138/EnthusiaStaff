@@ -1,7 +1,9 @@
 package net.enthusia.staff.paper.staff;
 
+import java.util.Objects;
 import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.GameMode;
+import org.bukkit.event.inventory.ClickType;
 
 final class StaffModeAccessPolicy {
     private StaffModeAccessPolicy() {
@@ -22,6 +24,24 @@ final class StaffModeAccessPolicy {
     static boolean blocksInventoryMutation(StaffRank rank, boolean enderChestView) {
         return blocksAllInventoryMutation(rank)
                 || (enderChestView && blocksEnderChestMutation(rank));
+    }
+
+    static boolean blocksStaffToolTransfer(
+            ClickType click,
+            boolean currentItemIsStaffTool,
+            boolean cursorIsStaffTool,
+            boolean referencedHotbarItemIsStaffTool,
+            boolean offhandItemIsStaffTool
+    ) {
+        Objects.requireNonNull(click, "click");
+        if (currentItemIsStaffTool || cursorIsStaffTool) {
+            return true;
+        }
+        return switch (click) {
+            case NUMBER_KEY -> referencedHotbarItemIsStaffTool;
+            case SWAP_OFFHAND -> offhandItemIsStaffTool;
+            default -> false;
+        };
     }
 
     static boolean usesCreativeMode(StaffRank rank) {
