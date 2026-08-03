@@ -10,6 +10,7 @@ import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.kyori.adventure.text.Component;
@@ -108,13 +109,11 @@ final class PunishmentGuiRenderer {
                         Component.text("Last seen: " + state.target().lastSeenAt(), NamedTextColor.GRAY)
                 )
         ));
+        Optional<ReasonPolicyRepository.ReasonDescriptor> reason = catalog.describe(draft.reasonId());
         inventory.setItem(12, item(
                 Material.WRITABLE_BOOK,
-                "Reason",
-                List.of(
-                        Component.text(draft.reasonId(), NamedTextColor.WHITE),
-                        Component.text("This exact reason ID will be audited", NamedTextColor.GRAY)
-                )
+                reason.map(ReasonPolicyRepository.ReasonDescriptor::publicReason).orElse("Unknown reason"),
+                reasonLore(draft.reasonId(), reason)
         ));
         List<Component> recommendation = new ArrayList<>();
         recommendation.add(Component.text(
@@ -176,6 +175,30 @@ final class PunishmentGuiRenderer {
                 "Save and close",
                 List.of(Component.text("Resume within 24 hours with /punish resume <player>", NamedTextColor.GRAY))
         ));
+    }
+
+    private static List<Component> reasonLore(
+            String reasonId,
+            Optional<ReasonPolicyRepository.ReasonDescriptor> descriptor
+    ) {
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text(reasonId, NamedTextColor.DARK_GRAY));
+        if (descriptor.isEmpty()) {
+            lore.add(Component.text("No current policy metadata exists for this ID", NamedTextColor.RED));
+            lore.add(Component.text("Confirmation will fail safely", NamedTextColor.YELLOW));
+            return List.copyOf(lore);
+        }
+        ReasonPolicyRepository.ReasonDescriptor value = descriptor.orElseThrow();
+        if (value.availability() == ReasonPolicyRepository.ReasonAvailability.ALIAS) {
+            lore.add(Component.text("Renamed to " + value.canonicalId(), NamedTextColor.AQUA));
+            lore.add(Component.text("Confirmation uses the current canonical policy", NamedTextColor.GRAY));
+        } else if (value.availability() == ReasonPolicyRepository.ReasonAvailability.REMOVED) {
+            lore.add(Component.text("Removed from the active policy catalog", NamedTextColor.RED));
+            lore.add(Component.text("Readable for history; cannot be selected or confirmed", NamedTextColor.YELLOW));
+        } else {
+            lore.add(Component.text("This exact reason ID will be audited", NamedTextColor.GRAY));
+        }
+        return List.copyOf(lore);
     }
 
     private static void fillFooter(Inventory inventory) {
