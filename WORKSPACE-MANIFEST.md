@@ -13,7 +13,7 @@ This manifest records development coordination and authority boundaries. It does
 | `main` at PR #53 start | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
 | Latest merged product PR before current work | PR #52 — reason aliases and removed-ID presentation |
 | Active work | PR #53 — escalation recommendation snapshots across ladder edits |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-review-final.md` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-validation-final.md` |
 | Migration boundary | PR #53 adds V15; V1–V14 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
@@ -32,7 +32,7 @@ PR #53 implements one bounded escalation-policy compatibility slice:
 - authorized overrides do not replace historical recommendations, while actual sanction rows remain authoritative;
 - legacy V14 and older cases remain explicitly snapshot-unavailable rather than reconstructed;
 - malformed or incomplete snapshots fail closed;
-- `/case` displays the frozen policy snapshot before actual sanctions;
+- `/case` displays the frozen policy snapshot before actual sanctions and formats temporary recommendation durations as readable days, hours, minutes and seconds;
 - current policies still use the current ladder and clamp out-of-range ordinals to the current final step;
 - V1–V14 and existing case, sanction, request, appeal, expiration and audit history are not rewritten.
 
@@ -40,7 +40,7 @@ Exact final-head validation, review and merge evidence belong in PR #53 live met
 
 ## Harsh-review, CI and external-review checkpoint
 
-Eight confirmed defects were fixed:
+Ten confirmed defects or valid review findings were fixed:
 
 1. effective ordinal alone could not identify a clamped selected step, so `selected_ordinal` is stored separately;
 2. generic Jackson serialization did not use the established sanction schema, so `PunishmentDraftSanctionCodec` is reused;
@@ -49,9 +49,11 @@ Eight confirmed defects were fixed:
 5. failed exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not success evidence;
 6. external review found the restart test expected raw ordinal `2` although it persists raw ordinal `8`; the assertion now verifies `8` while selected ordinal remains `2`;
 7. external review found stale active PR #37 routing in the requirements matrix; PR #37 is now historical evidence only and active exact-head gates point to PR #53;
-8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; the superseding review-final report supplies them and documents older reports as unedited historical exceptions.
+8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; superseding reports supply them and document older reports as unedited historical exceptions;
+9. CodeRabbit's review body identified ISO duration text in staff-facing case history; temporary recommendation durations now use a tested human-readable formatter;
+10. CodeRabbit's review body identified incomplete constructor-test coverage; valid snapshot pairs and empty recommendation lists are now explicitly tested.
 
-Regression coverage targets ladder edits, out-of-range clamping, restart persistence, recommendation-versus-applied override separation, legacy null behavior, pair integrity, corrupt snapshots and V14-to-V15 upgrade preservation.
+Regression coverage targets ladder edits, out-of-range clamping, restart persistence, recommendation-versus-applied override separation, staff-readable duration formatting, legacy null behavior, pair integrity, corrupt snapshots and V14-to-V15 upgrade preservation.
 
 ## Prior verified evidence
 
