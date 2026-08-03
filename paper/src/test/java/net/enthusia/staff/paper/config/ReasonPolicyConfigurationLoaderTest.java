@@ -116,6 +116,17 @@ class ReasonPolicyConfigurationLoaderTest {
     }
 
     @Test
+    void rejectsMalformedAliasIdentifiersDuringLoad() {
+        String malformed = minimalConfiguration("""
+                aliases:
+                  - id: Chat.Old
+                    target: chat.harassment
+                """);
+
+        assertThrows(ConfigurationValidationException.class, () -> load(malformed));
+    }
+
+    @Test
     void rejectsConfigurationThatMakesPunishmentsPrivateWithoutStaffReview() throws Exception {
         String source;
         try (InputStream input = Thread.currentThread().getContextClassLoader()
