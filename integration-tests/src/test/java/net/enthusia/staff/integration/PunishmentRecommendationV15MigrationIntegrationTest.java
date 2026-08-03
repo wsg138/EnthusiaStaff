@@ -41,10 +41,11 @@ class PunishmentRecommendationV15MigrationIntegrationTest {
 
             migrate(dataSource, null);
 
+            assertTrue(columnExists(dataSource, "punishment_steps", "selected_ordinal"));
             assertTrue(columnExists(dataSource, "punishment_steps", "recommended_sanctions_json"));
             try (Connection connection = dataSource.getConnection();
                  PreparedStatement statement = connection.prepareStatement("""
-                         SELECT raw_ordinal, effective_ordinal, step_label,
+                         SELECT raw_ordinal, effective_ordinal, selected_ordinal, step_label,
                              contribution_json, recommended_sanctions_json,
                              escalation_contributes
                          FROM punishment_steps WHERE case_id = ?
@@ -54,6 +55,7 @@ class PunishmentRecommendationV15MigrationIntegrationTest {
                     assertTrue(result.next());
                     assertEquals(4, result.getInt("raw_ordinal"));
                     assertEquals(3, result.getInt("effective_ordinal"));
+                    assertNull(result.getObject("selected_ordinal"));
                     assertEquals("Legacy recommendation", result.getString("step_label"));
                     assertEquals("[]", result.getString("contribution_json"));
                     assertNull(result.getString("recommended_sanctions_json"));
