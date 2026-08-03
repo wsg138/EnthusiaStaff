@@ -18,7 +18,6 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
@@ -57,6 +56,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
     private final StaffModeActivationCoordinator activation;
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private volatile Consumer<UUID> exitListener = ignored -> {
@@ -104,7 +104,20 @@ public final class StaffModeManager implements Listener {
         }
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
             for (UUID playerId : active.keySet()) {
-                onEntity(playerId, this::reconcileActiveRank);
+                if (!pendingRankChecks.add(playerId)) {
+                    continue;
+                }
+                onEntity(
+                        playerId,
+                        player -> {
+                            try {
+                                reconcileActiveRank(player);
+                            } finally {
+                                pendingRankChecks.remove(playerId);
+                            }
+                        },
+                        () -> pendingRankChecks.remove(playerId)
+                );
             }
         }, 20L, 20L);
     }
@@ -293,6 +306,7 @@ public final class StaffModeManager implements Listener {
         ranks.remove(playerId);
         transitions.remove(playerId);
         profileApplications.remove(playerId);
+        pendingRankChecks.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -561,6 +575,9 @@ public final class StaffModeManager implements Listener {
             player.setCollidable(false);
             player.setCanPickupItems(false);
             player.setGameMode(StaffModeAccessPolicy.requiredGameMode(rank));
+            if (player.getGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
+                throw new IllegalStateException("required staff game mode was rejected");
+            }
             player.setAllowFlight(true);
             player.setFlying(true);
             List<Tool> tools = new ArrayList<>(List.of(
@@ -632,10 +649,25 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
+        onEntity(playerId, operation, () -> {
+        });
+    }
+
+    private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+            if (player == null) {
+                retired.run();
+                return;
+            }
+            boolean scheduled = player.getScheduler().execute(
+                    plugin,
+                    () -> operation.accept(player),
+                    retired,
+                    1L
+            );
+            if (!scheduled) {
+                retired.run();
             }
         });
     }
