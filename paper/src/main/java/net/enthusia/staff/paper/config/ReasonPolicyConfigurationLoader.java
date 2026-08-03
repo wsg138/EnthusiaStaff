@@ -25,6 +25,7 @@ import net.enthusia.staff.domain.escalation.AltInheritanceMode;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.escalation.RemovedReason;
+import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -91,6 +92,7 @@ public final class ReasonPolicyConfigurationLoader {
             }
             List<RemovedReason> removedReasons = parseRemovedReasons(root.get("removed-reasons"), identifiers);
             Map<String, String> aliases = parseAliases(root.get("aliases"), identifiers, removedReasons);
+            new AtomicReasonPolicyRepository(version, policies, aliases, removedReasons);
             return new LoadedPolicies(version, policies, aliases, removedReasons);
         } catch (IOException exception) {
             throw new ConfigurationValidationException("Unable to read " + sourceName, exception);
