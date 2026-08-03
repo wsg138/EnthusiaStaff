@@ -370,7 +370,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
-        if ((ender && StaffModeAccessPolicy.blocksEnderChest(rank))
+        if ((ender && StaffModeAccessPolicy.blocksEnderChestMutation(rank))
                 || isStaffTool(event.getCurrentItem()) || isStaffTool(event.getCursor())) {
             event.setCancelled(true);
         }
@@ -385,7 +385,7 @@ public final class StaffModeManager implements Listener {
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (StaffModeAccessPolicy.blocksAllInventoryMutation(rank)
                 || isStaffTool(event.getOldCursor())
-                || (ender && StaffModeAccessPolicy.blocksEnderChest(rank))
+                || (ender && StaffModeAccessPolicy.blocksEnderChestMutation(rank))
                 || transitions.contains(player.getUniqueId())) {
             event.setCancelled(true);
         }
@@ -398,7 +398,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = currentRank(player);
-        if (StaffModeAccessPolicy.blocksEnderChest(rank)) {
+        if (StaffModeAccessPolicy.blocksEnderChestOpen(rank)) {
             event.setCancelled(true);
             player.sendMessage(Component.text("Ender chest access is unavailable at your staff rank while in staff mode."));
         }
