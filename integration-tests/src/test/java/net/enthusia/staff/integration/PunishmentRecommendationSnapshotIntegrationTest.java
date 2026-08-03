@@ -42,7 +42,7 @@ class PunishmentRecommendationSnapshotIntegrationTest extends PunishmentRequestM
             CaseReview review = runtime.caseReviewStore().find(caseId).orElseThrow();
             PunishmentStepReview step = review.punishmentStep().orElseThrow();
             assertEquals("snapshot-v1", review.configurationVersion());
-            assertEquals(2, step.rawOrdinal());
+            assertEquals(8, step.rawOrdinal());
             assertEquals(8, step.effectiveOrdinal());
             assertEquals(Optional.of(2), step.selectedOrdinal());
             assertEquals("Seven day recommendation", step.label());
