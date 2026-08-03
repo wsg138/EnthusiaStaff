@@ -174,6 +174,9 @@ public final class CaseCommand implements CommandExecutor {
         review.punishmentStep().ifPresent(step -> lines.add(Component.text(
                 "Policy snapshot: version " + review.configurationVersion()
                         + " | raw/effective ordinal " + step.rawOrdinal() + "/" + step.effectiveOrdinal()
+                        + " | selected ordinal " + step.selectedOrdinal()
+                                .map(Object::toString)
+                                .orElse("unavailable")
                         + " | step " + step.label()
                         + " | recommendation " + step.recommendedSanctions()
                                 .map(CaseCommand::recommendation)
