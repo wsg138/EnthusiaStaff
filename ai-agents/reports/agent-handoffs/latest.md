@@ -2,7 +2,7 @@
 
 Current handoff:
 
-[`2026-08-02-pr53-escalation-policy-snapshots-review-final.md`](2026-08-02-pr53-escalation-policy-snapshots-review-final.md)
+[`2026-08-02-pr53-escalation-policy-snapshots-validation-final.md`](2026-08-02-pr53-escalation-policy-snapshots-validation-final.md)
 
 Related PR:
 
@@ -16,7 +16,7 @@ Related PR:
 | PR | `#53` |
 | Branch | `feature/escalation-policy-snapshots` |
 | Starting main | `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` |
-| Recorded state | Scoped implementation, V15 constraints, eight harsh-review/CI/external-review fixes, focused tests and routing records frozen before renewed exact-head validation |
+| Recorded state | Scoped implementation, V15 constraints, ten harsh-review/CI/external-review fixes, focused tests and routing records frozen before renewed exact-head validation |
 | Failed historical validation | Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` exposed invalid Crockford test fixtures and is not success evidence |
 | Exact final-head evidence | Read PR #53 live |
 | Exact merge evidence | Read PR #53 live |
