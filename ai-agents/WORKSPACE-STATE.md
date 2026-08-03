@@ -22,7 +22,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Active PR | `#53 — Preserve escalation recommendation snapshots across ladder edits` |
 | Active branch | `feature/escalation-policy-snapshots` |
 | Work item | Preserve exact configured recommendations and selected ladder ordinals without rewriting legacy history |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-ci-final.md` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-02-pr53-escalation-policy-snapshots-review-final.md` |
 | Exact validation/merge evidence | Read PR #53 live |
 | External blocker | Supported RoseChat private-message provider contract remains unavailable |
 
@@ -39,23 +39,26 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 - V15 adds nullable `selected_ordinal` and `recommended_sanctions_json` to `punishment_steps`; V1–V14 remain immutable.
 - A check constraint requires both snapshot fields to be null together for legacy rows or populated together for new rows.
-- New policy-created cases persist raw, effective and selected ordinals, configuration version, selected label, contribution details and exact recommendation in the same transaction as the actual sanctions, audit and outboxes.
+- New policy-created cases persist raw, effective and selected ordinals, configuration version, selected label, contribution details and exact recommendation in the same transaction as actual sanctions, audit and outboxes.
 - Recommendation snapshots use the established strict sanction codec.
 - Applied sanctions remain separate and authoritative for type, issue time, expiration and lifecycle.
 - Legacy rows remain explicitly snapshot-unavailable; no recommendation is inferred.
 - Domain and JDBC review paths reject malformed or incomplete snapshots.
-- `/case` shows the frozen policy snapshot before the actual sanctions.
+- `/case` shows the frozen policy snapshot before actual sanctions.
 - Current policies continue using the current ladder; out-of-range ordinals select the current final step.
 
-## Harsh review and CI findings
+## Harsh review, CI and external review findings
 
-Five confirmed defects were fixed:
+Eight confirmed defects were fixed:
 
 1. effective ordinal alone left finite-ladder clamping ambiguous, so selected ordinal is stored separately;
 2. generic Jackson serialization did not use the established sanction schema, so the strict existing codec is reused;
 3. independently nullable fields allowed incomplete snapshots, so database, domain and JDBC invariants enforce a complete pair;
 4. an intermediate requirements-matrix rewrite omitted its tail, which was restored;
-5. exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test fixture IDs containing `O`; the fixtures now use valid 16-digit identifiers. That failed run is not validation-success evidence.
+5. exact-head Coverage run `30782286201` on `7a01745d747aa52778d6ee723a2401de0ab9967d` found four invalid Crockford test fixture IDs containing `O`; fixtures now use valid 16-digit identifiers and the failed run is not validation-success evidence;
+6. external review found the restart test expected raw ordinal `2` despite persisting raw ordinal `8`; the assertion now verifies `8`, with selected ordinal remaining `2`;
+7. external review found stale active PR #37 instructions in the requirements matrix; those directions now identify PR #37 only as historical evidence and route active validation solely to PR #53;
+8. external review found earlier immutable handoffs omitted the starting SHA, exact validation command and configuration-change section; the superseding review-final handoff supplies them and leaves earlier reports unedited as historical exceptions.
 
 Focused coverage includes ladder edits, final-step clamping, pair integrity, restart persistence, recommendation-versus-override separation, legacy null behavior, corrupt snapshots and V14-to-V15 upgrade preservation.
 
