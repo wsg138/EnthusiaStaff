@@ -13,10 +13,10 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Repository checkpoint
 
-- PR #51 was merged by normal merge commit `4f7165adced48d98bce86730e89b92944afba063` after exact-head validation and zero unresolved review threads.
-- PR #52 is the current reason-policy compatibility work; verify its live head, validation, review and merge state before acting.
+- PR #52 was merged by normal merge commit `49ee42c142ccd9e66b7b5fed2c30fc5b4094a052` after exact-head validation and zero unresolved review threads.
+- PR #53 is the current escalation recommendation-snapshot work; verify its live head, validation, review and merge state before acting.
 - PR #49 remains the latest merged report-system product checkpoint; PR #50 remains the RoseChat blocker coordination checkpoint.
-- V14 remains the live highest Flyway migration; V1–V14 are immutable.
+- PR #53 adds V15; V1–V14 remain immutable.
 - LiteBans remains authoritative; no merged development work deploys a JAR or activates EnthusiaStaff authority.
 - Issue #43 remains the separate production-cutover acceptance gate.
 
@@ -31,16 +31,16 @@ Detailed feature percentages, descriptions, source files and remaining tasks liv
 
 ## Current development order
 
-### 1. Verify PR #52 closure
+### 1. Verify PR #53 closure
 
 Before beginning implementation:
 
-- verify PR #52's exact live head, base and ahead/behind relation;
+- verify PR #53's exact live head, base and ahead/behind relation;
 - read its exact-head build, test, migration, coverage, analyzer, runtime-JAR and review evidence from GitHub;
 - confirm the normal merge result, resulting `main`, feature-head containment and branch cleanup;
 - reconcile any newer pull request, branch, migration or requirement change.
 
-PR #52 adds explicit aliases for renamed reason IDs, readable presentation-only metadata for removed IDs, atomic reload/rollback of the complete compatibility model, and selection boundaries that keep removed IDs inactive. Do not repeat it in a competing PR.
+PR #53 preserves the configuration version, raw/effective ordinal, selected ladder ordinal, selected step label and exact configured sanctions for each new policy-created case. It keeps that recommendation distinct from the actual sanction, reports legacy snapshots as unavailable rather than inventing them, and leaves V1–V14 unchanged. Do not repeat it in a competing PR.
 
 ### 2. Resume RoseChat only when the provider contract exists
 
@@ -68,7 +68,7 @@ If the RoseChat contract is still unavailable after live reconciliation, choose 
 5. one coherent category from a detailed feature-group page;
 6. documentation and evidence for the exact tested revision.
 
-After PR #52, the likely next prerequisite-ready escalation slice is explicit policy-snapshot behavior across ladder edits. That work must preserve historical interpretation and stored ordinals, remain separate from serious-offense decay metadata and broader modular configuration, and be selected only after fresh live reconciliation.
+After PR #53, the likely next prerequisite-ready escalation slice is serious-offense decay metadata and explicit non-decaying behavior. That work must remain separate from broader modular configuration and combined-recommendation expansion, and it must be selected only after fresh live reconciliation.
 
 Do not treat the blocked RoseChat feature or the broader escalation requirement as complete, and do not silently combine them in one PR.
 
