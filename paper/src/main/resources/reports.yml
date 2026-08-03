@@ -1,0 +1,17 @@
+# Report submission, queue, and retained-evidence policy.
+# Durations accept combinations such as 2m, 2h, or 7d.
+version: "2026-08-02.1"
+
+submission:
+  any-cooldown: 2m
+  target-cooldown: 30m
+  duplicate-window: 2h
+  max-open-reports: 5
+
+queries:
+  max-results: 100
+  recently-closed-window: 7d
+
+evidence:
+  retention: 7d
+  purge-batch-limit: 500

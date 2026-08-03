@@ -2,7 +2,11 @@ package net.enthusia.staff.persistence;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.util.Objects;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
 
@@ -46,10 +50,18 @@ public final class MariaDb {
     }
 
     public static MariaDbRuntime initialize(DatabaseConfig database) {
+        return initialize(database, ReportPolicyRuntime::current);
+    }
+
+    public static MariaDbRuntime initialize(
+            DatabaseConfig database,
+            Supplier<ReportPolicy> reportPolicy
+    ) {
+        Objects.requireNonNull(reportPolicy, "reportPolicy");
         HikariDataSource dataSource = open(database);
         try {
             migrate(dataSource);
-            return new MariaDbRuntime(dataSource);
+            return new MariaDbRuntime(dataSource, reportPolicy);
         } catch (RuntimeException exception) {
             dataSource.close();
             throw exception;

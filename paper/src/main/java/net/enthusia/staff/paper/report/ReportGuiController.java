@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.report;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,6 +19,7 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
+import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -33,11 +35,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ReportGuiController implements Listener {
     private static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
-    private static final int QUERY_LIMIT = 100;
 
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<ReportStore> reports;
+    private final Supplier<ReportConfigurationSnapshot> configuration;
     private final ExecutorService workers;
     private final ReportGuiRenderer renderer = new ReportGuiRenderer();
     private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
@@ -48,14 +50,16 @@ public final class ReportGuiController implements Listener {
             JavaPlugin plugin,
             Clock clock,
             Supplier<ReportStore> reports,
+            Supplier<ReportConfigurationSnapshot> configuration,
             ExecutorService workers
     ) {
-        if (plugin == null || clock == null || reports == null || workers == null) {
+        if (plugin == null || clock == null || reports == null || configuration == null || workers == null) {
             throw new IllegalArgumentException("report GUI dependencies must be present");
         }
         this.plugin = plugin;
         this.clock = clock;
         this.reports = reports;
+        this.configuration = configuration;
         this.workers = workers;
     }
 
@@ -92,7 +96,7 @@ public final class ReportGuiController implements Listener {
         String note = input == null ? "" : input.trim();
         if (note.isBlank() || note.length() > 2_000) {
             viewer.sendMessage(Component.text("The private action note must contain 1 to 2000 characters."));
-            openState(viewer, capture.state());
+            openState(viewer, capture.state(), capture.configuration());
             return;
         }
         openState(viewer, new ReportGuiState.Review(
@@ -103,7 +107,7 @@ public final class ReportGuiController implements Listener {
                 capture.action(),
                 note,
                 UUID.randomUUID()
-        ));
+        ), capture.configuration());
     }
 
     public void cancelNote(Player viewer) {
@@ -116,7 +120,7 @@ public final class ReportGuiController implements Listener {
             viewer.sendMessage(Component.text("No report action is waiting for a note."));
             return;
         }
-        openState(viewer, capture.state());
+        openState(viewer, capture.state(), capture.configuration());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -138,12 +142,13 @@ public final class ReportGuiController implements Listener {
             viewer.closeInventory();
             return;
         }
+        ReportGuiConfiguration gui = holder.configuration();
         if (state instanceof ReportGuiState.Queue queue) {
-            queueClick(viewer, queue, slot);
+            queueClick(viewer, queue, gui, slot);
         } else if (state instanceof ReportGuiState.Detail detail) {
-            detailClick(viewer, detail, slot);
+            detailClick(viewer, detail, gui, slot);
         } else if (state instanceof ReportGuiState.Review review) {
-            reviewClick(viewer, review, slot);
+            reviewClick(viewer, review, gui, slot);
         }
     }
 
@@ -162,82 +167,101 @@ public final class ReportGuiController implements Listener {
         confirmations.remove(viewerId);
     }
 
-    private void queueClick(Player viewer, ReportGuiState.Queue state, int slot) {
-        ReportQueue selected = queueForSlot(slot);
+    private void queueClick(
+            Player viewer,
+            ReportGuiState.Queue state,
+            ReportGuiConfiguration gui,
+            int slot
+    ) {
+        ReportQueue selected = queueForSlot(slot, gui);
         if (selected != null) {
             loadQueue(viewer, selected, 0);
             return;
         }
-        if (slot == ReportGuiRenderer.REFRESH_SLOT) {
+        if (slot == gui.slot("refresh")) {
             loadQueue(viewer, state.queue(), state.queuePage());
             return;
         }
-        if (slot == ReportGuiRenderer.CLOSE_SLOT) {
+        if (slot == gui.slot("close")) {
             viewer.closeInventory();
             return;
         }
-        if (slot == ReportGuiRenderer.PREVIOUS_SLOT && state.queuePage() > 0) {
+        if (slot == gui.slot("previous") && state.queuePage() > 0) {
             openState(viewer, new ReportGuiState.Queue(
                     state.viewerId(), state.queue(), state.reports(), state.queuePage() - 1
-            ));
+            ), gui);
             return;
         }
-        if (slot == ReportGuiRenderer.NEXT_SLOT
-                && (state.queuePage() + 1) * ReportGuiRenderer.CONTENT_SIZE < state.reports().size()) {
+        if (slot == gui.slot("next")
+                && (state.queuePage() + 1) * gui.pageSize() < state.reports().size()) {
             openState(viewer, new ReportGuiState.Queue(
                     state.viewerId(), state.queue(), state.reports(), state.queuePage() + 1
-            ));
+            ), gui);
             return;
         }
-        int index = state.queuePage() * ReportGuiRenderer.CONTENT_SIZE + slot;
-        if (slot < ReportGuiRenderer.CONTENT_SIZE && index < state.reports().size()) {
+        int slotIndex = gui.contentSlots().indexOf(slot);
+        int index = state.queuePage() * gui.pageSize() + slotIndex;
+        if (slotIndex >= 0 && index < state.reports().size()) {
             loadDetails(viewer, state.queue(), state.queuePage(), state.reports().get(index).reportId());
         }
     }
 
-    private void detailClick(Player viewer, ReportGuiState.Detail state, int slot) {
-        ReportQueue selected = queueForSlot(slot);
+    private void detailClick(
+            Player viewer,
+            ReportGuiState.Detail state,
+            ReportGuiConfiguration gui,
+            int slot
+    ) {
+        ReportQueue selected = queueForSlot(slot, gui);
         if (selected != null) {
             loadQueue(viewer, selected, 0);
             return;
         }
-        if (slot == ReportGuiRenderer.REFRESH_SLOT) {
+        if (slot == gui.slot("refresh")) {
             loadDetails(viewer, state.queue(), state.queuePage(), state.details().summary().reportId());
             return;
         }
-        if (slot == ReportGuiRenderer.BACK_SLOT) {
+        if (slot == gui.slot("back")) {
             loadQueue(viewer, state.queue(), state.queuePage());
             return;
         }
-        if (slot == ReportGuiRenderer.CLOSE_SLOT) {
+        if (slot == gui.slot("close")) {
             viewer.closeInventory();
             return;
         }
         List<ReportAction> actions = ReportGuiAccess.actions(state.details().summary(), viewer.getUniqueId());
-        int actionIndex = slot - ReportGuiRenderer.ACTION_START;
-        if (slot >= ReportGuiRenderer.ACTION_START
-                && slot <= ReportGuiRenderer.ACTION_END
-                && actionIndex < actions.size()) {
-            beginInput(viewer, state, actions.get(actionIndex));
+        int actionIndex = gui.actionSlots().indexOf(slot);
+        if (actionIndex >= 0 && actionIndex < actions.size()) {
+            beginInput(viewer, state, actions.get(actionIndex), gui);
         }
     }
 
-    private void reviewClick(Player viewer, ReportGuiState.Review state, int slot) {
-        if (slot == ReportGuiRenderer.BACK_SLOT) {
-            openState(viewer, detailState(state));
+    private void reviewClick(
+            Player viewer,
+            ReportGuiState.Review state,
+            ReportGuiConfiguration gui,
+            int slot
+    ) {
+        if (slot == gui.slot("back")) {
+            openState(viewer, detailState(state), gui);
             return;
         }
-        if (slot == ReportGuiRenderer.CLOSE_SLOT) {
+        if (slot == gui.slot("close")) {
             viewer.closeInventory();
             return;
         }
-        if (slot == ReportGuiRenderer.CONFIRM_SLOT) {
-            confirm(viewer, state);
+        if (slot == gui.slot("confirm")) {
+            confirm(viewer, state, gui);
         }
     }
 
-    private void beginInput(Player viewer, ReportGuiState.Detail state, ReportAction action) {
-        inputCaptures.put(viewer.getUniqueId(), new InputCapture(state, action));
+    private void beginInput(
+            Player viewer,
+            ReportGuiState.Detail state,
+            ReportAction action,
+            ReportGuiConfiguration gui
+    ) {
+        inputCaptures.put(viewer.getUniqueId(), new InputCapture(state, action, gui));
         viewer.closeInventory();
         Component command = Component.text("/reports note ", NamedTextColor.YELLOW)
                 .clickEvent(ClickEvent.suggestCommand("/reports note "))
@@ -247,7 +271,11 @@ public final class ReportGuiController implements Listener {
                 .append(Component.text("<note>, or run /reports cancel. The note is not public chat.")));
     }
 
-    private void confirm(Player viewer, ReportGuiState.Review state) {
+    private void confirm(
+            Player viewer,
+            ReportGuiState.Review state,
+            ReportGuiConfiguration gui
+    ) {
         UUID actorId = state.viewerId();
         if (!confirmations.add(actorId)) {
             viewer.sendMessage(Component.text("That report action is already being confirmed."));
@@ -273,12 +301,12 @@ public final class ReportGuiController implements Listener {
                 ReportDetails fresh = loadFreshDetails(store, summary.reportId());
                 if (result instanceof ReportStateChangeResult.Applied applied) {
                     String replay = applied.replayed() ? " (idempotent replay)" : "";
-                    showResult(viewer, state, fresh,
+                    showResult(viewer, state, gui, fresh,
                             "Report is now " + applied.state() + " at revision " + applied.revision() + replay + '.');
                     return;
                 }
                 ReportStateChangeResult.Rejected rejected = (ReportStateChangeResult.Rejected) result;
-                showResult(viewer, state, fresh, rejected.code() + ": " + rejected.message());
+                showResult(viewer, state, gui, fresh, rejected.code() + ": " + rejected.message());
             } finally {
                 confirmations.remove(actorId);
             }
@@ -301,7 +329,13 @@ public final class ReportGuiController implements Listener {
         }
     }
 
-    private void showResult(Player viewer, ReportGuiState.Review state, ReportDetails fresh, String message) {
+    private void showResult(
+            Player viewer,
+            ReportGuiState.Review state,
+            ReportGuiConfiguration gui,
+            ReportDetails fresh,
+            String message
+    ) {
         onEntity(viewer, () -> {
             viewer.sendMessage(Component.text(message));
             if (fresh == null) {
@@ -309,7 +343,7 @@ public final class ReportGuiController implements Listener {
             } else {
                 openState(viewer, new ReportGuiState.Detail(
                         state.viewerId(), state.queue(), state.queuePage(), fresh
-                ));
+                ), gui);
             }
         });
     }
@@ -317,22 +351,30 @@ public final class ReportGuiController implements Listener {
     private void loadQueue(Player viewer, ReportQueue queue, int requestedPage) {
         UUID viewerId = viewer.getUniqueId();
         UUID loadId = beginLoad(viewerId);
+        ReportConfigurationSnapshot snapshot = currentConfiguration();
         submitLoad(viewer, viewerId, loadId, () -> {
             ReportStore store = reports.get();
             if (store == null) {
                 failLoad(viewer, viewerId, loadId, "Report storage is not ready.");
                 return;
             }
-            List<ReportSummary> summaries = store.list(queue, viewerId, QUERY_LIMIT);
-            int lastPage = summaries.isEmpty() ? 0 : (summaries.size() - 1) / ReportGuiRenderer.CONTENT_SIZE;
+            List<ReportSummary> summaries = store.list(queue, viewerId, snapshot.policy().queryLimit());
+            int pageSize = snapshot.gui().pageSize();
+            int lastPage = summaries.isEmpty() ? 0 : (summaries.size() - 1) / pageSize;
             int page = Math.min(requestedPage, lastPage);
-            openLoadedState(viewer, loadId, new ReportGuiState.Queue(viewerId, queue, summaries, page));
+            openLoadedState(
+                    viewer,
+                    loadId,
+                    new ReportGuiState.Queue(viewerId, queue, summaries, page),
+                    snapshot.gui()
+            );
         });
     }
 
     private void loadDetails(Player viewer, ReportQueue queue, int queuePage, UUID reportId) {
         UUID viewerId = viewer.getUniqueId();
         UUID loadId = beginLoad(viewerId);
+        ReportGuiConfiguration gui = currentConfiguration().gui();
         submitLoad(viewer, viewerId, loadId, () -> {
             ReportStore store = reports.get();
             if (store == null) {
@@ -347,9 +389,12 @@ public final class ReportGuiController implements Listener {
                 });
                 return;
             }
-            openLoadedState(viewer, loadId, new ReportGuiState.Detail(
-                    viewerId, queue, queuePage, details
-            ));
+            openLoadedState(
+                    viewer,
+                    loadId,
+                    new ReportGuiState.Detail(viewerId, queue, queuePage, details),
+                    gui
+            );
         });
     }
 
@@ -363,8 +408,13 @@ public final class ReportGuiController implements Listener {
         onCurrentLoad(viewer, viewerId, loadId, () -> viewer.sendMessage(Component.text(body)));
     }
 
-    private void openLoadedState(Player viewer, UUID loadId, ReportGuiState state) {
-        onCurrentLoad(viewer, state.viewerId(), loadId, () -> renderState(viewer, state));
+    private void openLoadedState(
+            Player viewer,
+            UUID loadId,
+            ReportGuiState state,
+            ReportGuiConfiguration gui
+    ) {
+        onCurrentLoad(viewer, state.viewerId(), loadId, () -> renderState(viewer, state, gui));
     }
 
     private void onCurrentLoad(
@@ -380,14 +430,18 @@ public final class ReportGuiController implements Listener {
         });
     }
 
-    private void openState(Player viewer, ReportGuiState state) {
+    private void openState(Player viewer, ReportGuiState state, ReportGuiConfiguration gui) {
         pendingLoads.remove(state.viewerId());
-        onEntity(viewer, () -> renderState(viewer, state));
+        onEntity(viewer, () -> renderState(viewer, state, gui));
     }
 
-    private void renderState(Player viewer, ReportGuiState state) {
+    private void renderState(
+            Player viewer,
+            ReportGuiState state,
+            ReportGuiConfiguration gui
+    ) {
         if (authorized(viewer)) {
-            viewer.openInventory(renderer.render(state));
+            viewer.openInventory(renderer.render(state, gui));
         }
     }
 
@@ -448,26 +502,42 @@ public final class ReportGuiController implements Listener {
         viewer.getScheduler().execute(plugin, task, null, 1L);
     }
 
+    private ReportConfigurationSnapshot currentConfiguration() {
+        return Objects.requireNonNull(configuration.get(), "active report configuration");
+    }
+
     private static ReportGuiState.Detail detailState(ReportGuiState.Review state) {
         return new ReportGuiState.Detail(
                 state.viewerId(), state.queue(), state.queuePage(), state.details()
         );
     }
 
-    private static ReportQueue queueForSlot(int slot) {
-        return switch (slot) {
-            case ReportGuiRenderer.OPEN_QUEUE_SLOT -> ReportQueue.OPEN;
-            case ReportGuiRenderer.MINE_QUEUE_SLOT -> ReportQueue.CLAIMED_BY_ME;
-            case ReportGuiRenderer.CLAIMED_QUEUE_SLOT -> ReportQueue.ALL_CLAIMED;
-            case ReportGuiRenderer.REVIEW_QUEUE_SLOT -> ReportQueue.AWAITING_REVIEW;
-            case ReportGuiRenderer.CLOSED_QUEUE_SLOT -> ReportQueue.RECENTLY_CLOSED;
-            default -> null;
-        };
+    private static ReportQueue queueForSlot(int slot, ReportGuiConfiguration gui) {
+        if (slot == gui.slot("queue-open")) {
+            return ReportQueue.OPEN;
+        }
+        if (slot == gui.slot("queue-mine")) {
+            return ReportQueue.CLAIMED_BY_ME;
+        }
+        if (slot == gui.slot("queue-claimed")) {
+            return ReportQueue.ALL_CLAIMED;
+        }
+        if (slot == gui.slot("queue-review")) {
+            return ReportQueue.AWAITING_REVIEW;
+        }
+        if (slot == gui.slot("queue-closed")) {
+            return ReportQueue.RECENTLY_CLOSED;
+        }
+        return null;
     }
 
-    private record InputCapture(ReportGuiState.Detail state, ReportAction action) {
+    private record InputCapture(
+            ReportGuiState.Detail state,
+            ReportAction action,
+            ReportGuiConfiguration configuration
+    ) {
         private InputCapture {
-            if (state == null || action == null) {
+            if (state == null || action == null || configuration == null) {
                 throw new IllegalArgumentException("report GUI input capture fields must be present");
             }
         }

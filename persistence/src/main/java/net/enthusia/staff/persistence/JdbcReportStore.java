@@ -1,15 +1,20 @@
 package net.enthusia.staff.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
+import net.enthusia.staff.domain.report.ReportPolicy;
+import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -23,10 +28,21 @@ public final class JdbcReportStore implements ReportStore {
     private final JdbcReportEvidenceMaintenance evidenceMaintenance;
 
     public JdbcReportStore(DataSource dataSource, ObjectMapper json) {
-        this.submissions = new JdbcReportSubmissionStore(dataSource, json);
-        this.queries = new JdbcReportQueryStore(dataSource);
+        this(dataSource, json, ReportPolicyRuntime::current, Clock.systemUTC());
+    }
+
+    public JdbcReportStore(
+            DataSource dataSource,
+            ObjectMapper json,
+            Supplier<ReportPolicy> policy,
+            Clock clock
+    ) {
+        Objects.requireNonNull(policy, "policy");
+        Objects.requireNonNull(clock, "clock");
+        this.submissions = new JdbcReportSubmissionStore(dataSource, json, policy);
+        this.queries = new JdbcReportQueryStore(dataSource, policy, clock);
         this.states = new JdbcReportStateStore(dataSource, json);
-        this.evidenceMaintenance = new JdbcReportEvidenceMaintenance(dataSource);
+        this.evidenceMaintenance = new JdbcReportEvidenceMaintenance(dataSource, policy);
     }
 
     @Override

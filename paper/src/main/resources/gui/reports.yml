@@ -1,0 +1,116 @@
+# Staff report inventory layout and presentation.
+# Every configured slot must remain inside inventory-size. Each screen is validated for overlaps.
+version: "2026-08-02.1"
+inventory-size: 54
+content-slots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
+action-slots: [45, 46, 47]
+
+slots:
+  queue-open: 36
+  queue-mine: 37
+  queue-claimed: 38
+  queue-review: 39
+  queue-closed: 40
+  refresh: 41
+  back: 42
+  close: 44
+  previous: 45
+  next: 53
+  confirm: 49
+  empty: 13
+  detail-header: 4
+  detail-reporter: 10
+  detail-target: 12
+  detail-location: 14
+  detail-evidence: 16
+  detail-description: 22
+  detail-public-chat: 28
+  detail-private-message: 30
+  detail-client-evidence: 32
+  review-report: 11
+  review-action: 13
+  review-note: 15
+
+materials:
+  filler: GRAY_STAINED_GLASS_PANE
+  empty: LIGHT_GRAY_DYE
+  refresh: COMPASS
+  back: ARROW
+  close: BARRIER
+  previous: ARROW
+  next: ARROW
+  confirm: LIME_CONCRETE
+  active-queue: LIME_STAINED_GLASS_PANE
+  queue-open: PAPER
+  queue-mine: NAME_TAG
+  queue-claimed: CHEST
+  queue-review: ENCHANTED_BOOK
+  queue-closed: GRAY_DYE
+  reporter: WRITABLE_BOOK
+  target: PLAYER_HEAD
+  location: COMPASS
+  evidence: CHEST
+  description: PAPER
+  public-chat: BOOK
+  private-message: ENDER_EYE
+  client-evidence: REDSTONE_TORCH
+  private-note: NAME_TAG
+  state-open: PAPER
+  state-claimed: NAME_TAG
+  state-awaiting-review: ENCHANTED_BOOK
+  state-closed: LIME_DYE
+  state-no-violation: GRAY_DYE
+  action-claim: NAME_TAG
+  action-await-review: ENCHANTED_BOOK
+  action-close: LIME_CONCRETE
+  action-no-violation: LIGHT_GRAY_CONCRETE
+
+titles:
+  queue: "Reports: {queue}"
+  detail: "Report {id}"
+  review: "Confirm {action}"
+
+messages:
+  queue-open: "Open"
+  queue-mine: "Mine"
+  queue-claimed: "Claimed"
+  queue-review: "Awaiting Review"
+  queue-closed: "Recently Closed"
+  refresh-queue: "Refresh queue"
+  reload-report: "Reload report"
+  back-queue: "Back to queue"
+  close: "Close"
+  previous-page: "Previous page"
+  next-page: "Next page"
+  empty-title: "No reports in this queue"
+  empty-lore: "Use the queue buttons below to change filters"
+  click-inspect: "Click to inspect"
+  current-queue: "Current queue"
+  click-open: "Click to open"
+  reporter: "Reporter"
+  target: "Target"
+  location-context: "Location context"
+  captured-evidence: "Captured evidence"
+  sensitive-evidence: "Sensitive contents remain inside staff storage"
+  description: "Description"
+  public-chat-snapshots: "Public chat snapshots"
+  private-message-snapshots: "Private-message snapshots"
+  client-evidence-snapshots: "Client evidence snapshots"
+  private-note: "Private action note"
+  private-note-required: "A private action note is required"
+  back-no-change: "Back without changing"
+  confirm-action: "Confirm report action"
+  confirm-revision: "The exact displayed revision will be checked"
+  stale-rejected: "Stale state is rejected and reloaded"
+  close-no-change: "Close without changing"
+  snapshot-count: "Available snapshots: {count}"
+  snapshot-none: "None retained or currently readable"
+  snapshot-protected: "Contents are intentionally not copied into item lore"
+  action-claim: "Claim"
+  action-claim-description: "Assign this open report to yourself."
+  action-await-review: "Await Review"
+  action-await-review-description: "Send your claimed report for another staff review."
+  action-close: "Close"
+  action-close-description: "Resolve the report after a confirmed violation workflow."
+  action-no-violation: "No Violation"
+  action-no-violation-description: "Resolve the report without finding a rule violation."
