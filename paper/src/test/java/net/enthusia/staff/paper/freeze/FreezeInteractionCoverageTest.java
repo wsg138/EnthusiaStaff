@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
@@ -23,6 +24,7 @@ import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
@@ -38,6 +40,7 @@ class FreezeInteractionCoverageTest {
 
     @Test
     void declaresExplicitHandlersForPreciseAndResourceInteractions() {
+        assertHighestPriorityCancellationHandler(EntityMountEvent.class);
         assertHighestPriorityCancellationHandler(PlayerInteractAtEntityEvent.class);
         assertHighestPriorityCancellationHandler(PlayerArmorStandManipulateEvent.class);
         assertHighestPriorityCancellationHandler(PlayerHarvestBlockEvent.class);
@@ -68,6 +71,35 @@ class FreezeInteractionCoverageTest {
         }
     }
 
+    @Test
+    void immediateRestrictionLeavesVehicleAndClosesInventory() {
+        AtomicInteger vehicleExits = new AtomicInteger();
+        AtomicInteger inventoryClosures = new AtomicInteger();
+        AtomicInteger messages = new AtomicInteger();
+        Player player = proxy(Player.class, (method, arguments) -> switch (method.getName()) {
+            case "getUniqueId" -> PLAYER_ID;
+            case "leaveVehicle" -> {
+                vehicleExits.incrementAndGet();
+                yield true;
+            }
+            case "closeInventory" -> {
+                inventoryClosures.incrementAndGet();
+                yield null;
+            }
+            case "sendMessage" -> {
+                messages.incrementAndGet();
+                yield null;
+            }
+            default -> defaultValue(method.getReturnType());
+        });
+
+        manager().securePlayer(player);
+
+        assertEquals(1, vehicleExits.get());
+        assertEquals(1, inventoryClosures.get());
+        assertEquals(1, messages.get());
+    }
+
     private static FreezeManager manager() {
         return new FreezeManager(null, Clock.systemUTC(), () -> null, proxy(ExecutorService.class));
     }
@@ -78,12 +110,18 @@ class FreezeInteractionCoverageTest {
 
     private static List<InteractionCase> interactions(Player player) {
         return List.of(
+                mountInteraction(player),
                 preciseInteraction(player),
                 armorStandInteraction(player),
                 harvestInteraction(player),
                 shearInteraction(player),
                 fishInteraction(player)
         );
+    }
+
+    private static InteractionCase mountInteraction(Player player) {
+        EntityMountEvent event = new EntityMountEvent(player, proxy(Entity.class));
+        return new InteractionCase("entity mounting", event, manager -> manager.onMount(event));
     }
 
     private static InteractionCase preciseInteraction(Player player) {
@@ -161,14 +199,18 @@ class FreezeInteractionCoverageTest {
         assertTrue(handler.ignoreCancelled());
     }
 
-    @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type) {
+        return proxy(type, (method, arguments) -> "getUniqueId".equals(method.getName())
+                ? PLAYER_ID
+                : defaultValue(method.getReturnType()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type, Invocation invocation) {
         return (T) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
-                (instance, method, arguments) -> "getUniqueId".equals(method.getName())
-                        ? PLAYER_ID
-                        : defaultValue(method.getReturnType())
+                (instance, method, arguments) -> invocation.invoke(method, arguments)
         );
     }
 
@@ -184,6 +226,11 @@ class FreezeInteractionCoverageTest {
             Cancellable event,
             Consumer<FreezeManager> dispatch
     ) {
+    }
+
+    @FunctionalInterface
+    private interface Invocation {
+        Object invoke(Method method, Object[] arguments);
     }
 
     private static final class ServerFreeItemStack extends ItemStack {
