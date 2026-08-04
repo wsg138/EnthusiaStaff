@@ -48,6 +48,7 @@ Focused coverage includes:
   - proves worker drain precedes staff-session recovery and MariaDB close;
   - proves later cleanup stages still run when earlier stages throw.
 - `StaffSessionShutdownRecoveryIntegrationTest`
+  - registers valid player-directory fixtures before creating foreign-key-constrained staff sessions;
   - proves `ACTIVE` and `EXITING` transition to `RECOVERY_REQUIRED`;
   - proves existing recovery rows are not duplicated;
   - proves backend isolation and repeated-call idempotency;
@@ -69,7 +70,8 @@ The separate whole-diff review found and fixed these confirmed defects:
 3. recovery initially acquired no transition fence while asynchronous work was queued; the fence now covers database lookup, entity restoration and durable verification;
 4. scheduler retirement, queue rejection, persistence failure, restore failure and checksum mismatch previously released the fence while recovery remained unresolved; those paths now remain fail-closed until disconnect or verified closure;
 5. the shared activation coordinator had the same fail-open behavior when recovery could not be queued or persisted; it now preserves the fence with direct unit coverage;
-6. the new integration test used a boolean equality assertion reported by static analysis; it now uses the direct boolean assertion.
+6. the new integration test used a boolean equality assertion reported by static analysis; it now uses the direct boolean assertion;
+7. exact-head CI exposed that the new staff-session integration fixture violated the existing player foreign key; the fixture now registers each test staff identity through the real player directory before opening a session.
 
 No confirmed merge blocker is intentionally deferred. Remaining broader staff-mode command/world-interaction restrictions, full vanish completion and full freeze completion remain separate owner-priority work rather than being expanded into this bounded recovery PR.
 

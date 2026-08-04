@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.UUID;
+import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
@@ -37,16 +38,16 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             StaffSessionStore store = runtime.staffSessionStore();
-            StaffSessionSnapshot active = begin(store, activeStaff, SCOPED_SERVER, 1);
-            StaffSessionSnapshot exiting = begin(store, exitingStaff, SCOPED_SERVER, 2);
+            StaffSessionSnapshot active = begin(runtime, activeStaff, SCOPED_SERVER, 1);
+            StaffSessionSnapshot exiting = begin(runtime, exitingStaff, SCOPED_SERVER, 2);
             store.beginExit(exitingStaff, NOW.plusSeconds(1)).orElseThrow();
-            StaffSessionSnapshot existingRecovery = begin(store, existingRecoveryStaff, SCOPED_SERVER, 3);
+            StaffSessionSnapshot existingRecovery = begin(runtime, existingRecoveryStaff, SCOPED_SERVER, 3);
             store.recoveryRequired(
                     existingRecovery.sessionId(),
                     "Pre-existing recovery condition",
                     NOW.plusSeconds(2)
             );
-            begin(store, otherServerStaff, OTHER_SERVER, 4);
+            begin(runtime, otherServerStaff, OTHER_SERVER, 4);
 
             assertEquals(2, store.recoveryRequiredForServer(
                     SCOPED_SERVER,
@@ -92,8 +93,8 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             StaffSessionStore store = runtime.staffSessionStore();
-            begin(store, firstStaff, ROLLBACK_SERVER, 5);
-            begin(store, secondStaff, ROLLBACK_SERVER, 6);
+            begin(runtime, firstStaff, ROLLBACK_SERVER, 5);
+            begin(runtime, secondStaff, ROLLBACK_SERVER, 6);
             installAuditFailureTrigger();
             try {
                 assertThrows(ModerationPersistenceException.class, () ->
@@ -112,12 +113,19 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
     }
 
     private static StaffSessionSnapshot begin(
-            StaffSessionStore store,
+            MariaDbRuntime runtime,
             UUID staffId,
             String serverId,
             int marker
     ) {
-        return store.begin(
+        runtime.playerDirectory().recordSeen(
+                staffId,
+                "Staff" + marker,
+                PlayerPlatform.JAVA,
+                serverId,
+                NOW
+        );
+        return runtime.staffSessionStore().begin(
                 staffId,
                 serverId,
                 1,
