@@ -44,11 +44,15 @@ public final class VanishManager implements Listener {
     private final ExecutorService workers;
     private final Map<UUID, StaffRank> onlineStaffRanks = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> durableVanishedRanks = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> durableStaffSessionPresence = new ConcurrentHashMap<>();
     private final Map<UUID, Instant> reconciliationRetryAfter = new ConcurrentHashMap<>();
+    private final Map<UUID, Instant> staffSessionCheckRetryAfter = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> pendingStaffSessionChecks = new ConcurrentHashMap<>();
     private final Set<UUID> hiddenSpectators = ConcurrentHashMap.newKeySet();
     private final Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
     private final Set<UUID> stateWrites = ConcurrentHashMap.newKeySet();
     private final Set<UUID> reconciliationFailureNotified = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> staffSessionCheckFailureNotified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> pendingStaffModeExitDisables = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private final VanishAudienceCoordinator<Player> audiences;
@@ -194,6 +198,7 @@ public final class VanishManager implements Listener {
     }
 
     private void disableAfterStaffModeExit(UUID playerId, Player player) {
+        durableStaffSessionPresence.put(playerId, false);
         StaffRank rank = resolveAndPublishRank(player);
         if (rank == null || !requiresStaffMode(rank)) {
             pendingStaffModeExitDisables.remove(playerId);
@@ -291,14 +296,13 @@ public final class VanishManager implements Listener {
         }
         StaffRank durableRank = durableVanishedRanks.get(playerId);
         boolean vanished = visibility.isVanished(playerId);
-        boolean exitPending = pendingStaffModeExitDisables.contains(playerId);
+        VanishRankReconciliationPolicy.StaffModeState staffModeState = staffModeState(playerId);
         VanishRankReconciliationPolicy.VanishAction vanishAction =
                 VanishRankReconciliationPolicy.vanishAction(
                         vanished,
                         durableRank,
                         liveRank,
-                        staffMode.active(playerId),
-                        exitPending
+                        staffModeState
                 );
         if (vanishAction == VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK) {
             applyReconciledMemoryState(player, liveRank, true);
@@ -308,6 +312,11 @@ public final class VanishManager implements Listener {
                     true,
                     "Your vanish visibility was updated for your current staff rank."
             );
+        } else if (vanishAction == VanishRankReconciliationPolicy.VanishAction.VERIFY_SESSION) {
+            if (liveRank != null && visibility.vanishedRank(playerId) != liveRank) {
+                applyReconciledMemoryState(player, liveRank, true);
+            }
+            verifyStaffSession(playerId);
         } else if (vanishAction == VanishRankReconciliationPolicy.VanishAction.DISABLE) {
             StaffRank writeRank = firstPlayerRank(durableRank, visibility.vanishedRank(playerId), cachedRank, liveRank);
             applyReconciledMemoryState(player, writeRank, false);
@@ -319,8 +328,90 @@ public final class VanishManager implements Listener {
                         "Vanish was disabled because your current staff rank or staff-mode state no longer permits it."
                 );
             }
-        } else if (exitPending && (!requiresStaffMode(liveRank) || (!vanished && durableRank == null))) {
+        } else if (pendingStaffModeExitDisables.contains(playerId)
+                && (!vanished && durableRank == null || staffModeState == VanishRankReconciliationPolicy.StaffModeState.ACTIVE)) {
             pendingStaffModeExitDisables.remove(playerId);
+        }
+    }
+
+    private VanishRankReconciliationPolicy.StaffModeState staffModeState(UUID playerId) {
+        if (staffMode.active(playerId)) {
+            durableStaffSessionPresence.put(playerId, true);
+            pendingStaffModeExitDisables.remove(playerId);
+            return VanishRankReconciliationPolicy.StaffModeState.ACTIVE;
+        }
+        if (pendingStaffModeExitDisables.contains(playerId)) {
+            return VanishRankReconciliationPolicy.StaffModeState.EXITED;
+        }
+        Boolean durablePresence = durableStaffSessionPresence.get(playerId);
+        if (durablePresence == null) {
+            return VanishRankReconciliationPolicy.StaffModeState.UNKNOWN;
+        }
+        return durablePresence
+                ? VanishRankReconciliationPolicy.StaffModeState.ACTIVE
+                : VanishRankReconciliationPolicy.StaffModeState.INACTIVE;
+    }
+
+    private void verifyStaffSession(UUID playerId) {
+        Instant retryAfter = staffSessionCheckRetryAfter.get(playerId);
+        if (retryAfter != null && clock.instant().isBefore(retryAfter)) {
+            return;
+        }
+        UUID token = UUID.randomUUID();
+        if (pendingStaffSessionChecks.putIfAbsent(playerId, token) != null) {
+            return;
+        }
+        if (!submit(() -> {
+            try {
+                StaffSessionStore loaded = sessions.get();
+                if (loaded == null) {
+                    throw new IllegalStateException("staff session storage is not ready");
+                }
+                boolean present = loaded.active(playerId).isPresent();
+                audiences.onOwner(
+                        playerId,
+                        player -> completeStaffSessionCheck(playerId, token, present, player),
+                        () -> retireStaffSessionCheck(playerId, token)
+                );
+            } catch (RuntimeException exception) {
+                staffSessionCheckFailed(playerId, token, exception);
+            }
+        })) {
+            staffSessionCheckFailed(
+                    playerId,
+                    token,
+                    new RejectedExecutionException("bounded staff-session verification queue is full")
+            );
+        }
+    }
+
+    private void completeStaffSessionCheck(UUID playerId, UUID token, boolean present, Player player) {
+        if (!pendingStaffSessionChecks.remove(playerId, token)) {
+            return;
+        }
+        durableStaffSessionPresence.put(playerId, present);
+        staffSessionCheckRetryAfter.remove(playerId);
+        staffSessionCheckFailureNotified.remove(playerId);
+        reconcileLiveRank(player);
+    }
+
+    private void retireStaffSessionCheck(UUID playerId, UUID token) {
+        if (pendingStaffSessionChecks.remove(playerId, token)) {
+            durableStaffSessionPresence.remove(playerId);
+        }
+    }
+
+    private void staffSessionCheckFailed(UUID playerId, UUID token, RuntimeException exception) {
+        if (!pendingStaffSessionChecks.remove(playerId, token)) {
+            return;
+        }
+        staffSessionCheckRetryAfter.put(playerId, clock.instant().plusSeconds(RECONCILIATION_RETRY_SECONDS));
+        plugin.getLogger().log(Level.SEVERE, "Vanish staff-session verification failed; retry remains pending", exception);
+        if (staffSessionCheckFailureNotified.add(playerId)) {
+            message(
+                    playerId,
+                    "Vanish could not verify your staff session; visibility remains unchanged and will retry."
+            );
         }
     }
 
@@ -449,6 +540,10 @@ public final class VanishManager implements Listener {
         audiences.remove(playerId);
         visibility.removeViewer(playerId);
         onlineStaffRanks.remove(playerId);
+        durableStaffSessionPresence.remove(playerId);
+        pendingStaffSessionChecks.remove(playerId);
+        staffSessionCheckRetryAfter.remove(playerId);
+        staffSessionCheckFailureNotified.remove(playerId);
         hiddenSpectators.remove(playerId);
         pendingRankChecks.remove(playerId);
         reconciliationRetryAfter.remove(playerId);
