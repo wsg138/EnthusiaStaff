@@ -28,21 +28,21 @@ Live GitHub state overrides this handoff. Final feature SHA, workflow/job/artifa
 
 ## Confirmed defect
 
-`FreezeManager` tracked pending durable verification and confirmed frozen state in separate concurrent sets. A durable lookup could finish after quit/reconnect, a newer verification, `/freeze`, or `/unfreeze` and overwrite newer runtime state. Even after the first state fix, delayed entity-scheduler and global-scheduler callbacks could still close inventory or send a restored-freeze alert after the state had changed again.
+`FreezeManager` tracked pending durable verification and confirmed frozen state in separate concurrent sets. A durable lookup could finish after quit/reconnect, a newer verification, `/freeze`, or `/unfreeze` and overwrite newer runtime state. Delayed entity/global scheduler callbacks could also close inventory or deliver stale freeze or release messages after the state changed again.
 
 ## Implemented behavior
 
 PR #60 now:
 
-- owns pending and confirmed freeze state in one per-player concurrent runtime state machine;
-- assigns each verification or manual freeze a monotonic generation;
+- owns pending verification, confirmed freeze, and released state in one per-player concurrent runtime state machine;
+- assigns each verification, manual freeze, and manual release a monotonic generation;
 - atomically applies a durable lookup result only when its verification generation is still current;
 - ignores stale active and inactive results after quit, reconnect, a newer verification, manual freeze, or manual release;
 - keeps the current verification fail-closed when durable lookup fails or storage is unavailable;
 - exposes pending verification as restricted to the RoseChat moderation bridge so public and private chat remain staff-only until recovery resolves;
-- guards delayed inventory-close, player-message, and staff-alert callbacks against the exact frozen generation;
+- guards delayed inventory-close, freeze-message, release-message, and staff-alert callbacks against the exact current generation;
 - retires all runtime state on quit;
-- persists the offline timeout only when the departed session was confirmed frozen, not merely pending verification;
+- persists the offline timeout only when the departed session was confirmed frozen, not merely pending verification or released;
 - preserves existing restriction listeners, command behavior, permissions, storage schema, and offline-expiry policy.
 
 ## Files and architecture
@@ -59,7 +59,8 @@ PR #60 now:
 - old-session result rejection after reconnect;
 - manual release fencing a stale active result;
 - manual apply fencing a stale inactive result;
-- delayed callback generations becoming stale after later state changes;
+- delayed frozen callback generations becoming stale after later state changes;
+- rapid re-freeze invalidating a delayed release notification generation;
 - pending and confirmed quit retirement;
 - fail-closed unresolved verification, including the restriction state consumed by provider paths.
 
@@ -68,7 +69,9 @@ PR #60 now:
 1. **Confirmed defect:** state-token fencing alone did not stop already-scheduled recovery messages and inventory closure from running after release. Fixed by generation-checking every delayed recovered-state side effect at execution time.
 2. **Confirmed defect:** a later manual freeze could make an older recovered `FROZEN` state indistinguishable if confirmed entries had no generation. Fixed by retaining a generation for every confirmed frozen state.
 3. **Confirmed defect:** pending verification remained fail-closed for Bukkit listeners but `FreezeManager.isFrozen` returned false to RoseChat, allowing provider-handled public/private chat before durable recovery completed. Fixed by exposing the unified restricted state and retaining pending state when storage is unavailable.
-4. The complete diff must be reviewed again after this final tracked correction and before exact-head validation.
+4. **Confirmed defect:** a delayed manual-release message could execute after a rapid re-freeze and falsely tell the player the freeze was released. Fixed by representing released state with a generation, checking that generation at callback execution, and covering re-freeze invalidation.
+5. **Confirmed defect:** the first frozen exact head did not compile because static factories and instance predicates had colliding Java signatures. Fixed by using distinct factory and predicate names, then rerunning exact-head validation.
+6. The complete diff must be reviewed again after the final release-fencing repair and before exact-head validation and merge.
 
 ## Validation requirements
 
@@ -79,7 +82,7 @@ Before merge, require one unchanged head synchronized with current `main` and di
 - exactly one valid Paper and one valid Velocity runtime JAR, identities, SHA-256 hashes, integrity, and provider-leak inspection;
 - aggregate and diff coverage with meaningful changed behavior proved;
 - configured PMD/Codacy/static analysis;
-- Wiki/documentation validation;
+- Wiki/documentation validation when applicable;
 - CodeRabbit, Codacy, human review, and zero valid unresolved threads;
 - exact-head public Pi wrapper and correlated staging run when GitHub Actions executes normally, or direct quota/platform-unavailability evidence when it cannot execute;
 - one consolidated exact-head evidence comment.
@@ -92,7 +95,7 @@ This is dormant development work only. It does not authorize deployment, product
 
 ## Remaining work and next route
 
-1. Finish PR #60 only: complete full-diff review, exact-head validation, review resolution, and normal merge when every gate passes.
+1. Finish PR #60 only: complete final full-diff review, exact-head validation, review resolution, and normal merge when every gate passes.
 2. Record merge and cleanup evidence in PR #60 live metadata rather than another commit.
 3. After PR #60 completes, freshly select one bounded remaining priority-one staff mode, vanish, or freeze item.
 4. Keep the RoseChat provider blocker separate; do not route it through issue #43.
