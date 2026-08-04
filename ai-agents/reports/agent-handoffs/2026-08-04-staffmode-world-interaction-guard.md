@@ -1,6 +1,6 @@
 # PR #62 handoff — staff-mode world interaction guard
 
-Date: 2026-08-04
+Created: 2026-08-04T06:17:42-04:00 (`America/Indiana/Indianapolis`)
 
 ## Repository and work item
 
@@ -40,6 +40,7 @@ The listener is a thin Bukkit adapter. The directly tested policy owns the activ
 1. Replaced a custom per-event cancellation callback with Bukkit's shared `Cancellable` contract.
 2. Added an explicit `PlayerInteractAtEntityEvent` handler rather than assuming superclass dispatch covers precise hitbox interactions.
 3. Kept transition/recovery fencing outside this PR because the public staff-mode query currently exposes confirmed active state only; widening that lifecycle contract requires a separate bounded state-model change.
+4. CodeRabbit suggested another `EntityDamageByEntityEvent` handler. That finding is already resolved by `StaffModeManager.onDamageByEntity`, which blocks direct player and player-shot projectile damage using the stronger active-or-transition `protectedMode` predicate; no duplicate handler was added.
 
 ## Tests and coverage expectations
 
@@ -50,7 +51,7 @@ The listener is a thin Bukkit adapter. The directly tested policy owns the activ
 - active staff mode allows left/right air clicks;
 - active staff mode blocks left/right block clicks and physical interactions.
 
-The event listener is thin platform wiring and may have low direct line coverage. Its underlying decisions are directly tested, and exact-head build/Paper compilation plus Pi staging, when available, must prove the Bukkit event types and registration.
+The event listener is thin platform wiring and may have low direct line coverage. Its underlying decisions are directly tested. Before merge, exact-head build/Paper compilation and terminal successful exact-head Pi staging must prove the Bukkit event types and registration, unless direct evidence establishes the permitted GitHub Actions quota, billing, disabled-Actions, or equivalent platform-unavailability exception. Cancelled, skipped, superseded, stale-head, different-revision, merge-ref-only, or executed-but-inconclusive results are not passing evidence.
 
 ## Migrations and compatibility
 
@@ -61,7 +62,9 @@ The event listener is thin platform wiring and may have low direct line coverage
 
 ## Validation and merge gate
 
-Read exact-head build, test, coverage, static-analysis, CodeRabbit, Codacy, review-thread, Pi and artifact evidence live on PR #62. Do not reuse evidence from an earlier head. Merge only after current `main` is included, the complete diff is reviewed, all applicable available checks are terminal and acceptable, and zero valid unresolved review threads remain.
+Read exact-head build, test, coverage, static-analysis, CodeRabbit, Codacy, review-thread, Pi and artifact evidence live on PR #62. Do not reuse evidence from an earlier head. Merge only after current `main` is included, the complete diff is reviewed, all applicable configured checks are terminal and acceptable, zero valid unresolved review threads remain, and Pi has either succeeded on the exact head or direct evidence proves the permitted Actions quota/platform-unavailability exception. Do not treat any other unavailable or non-success Pi result as passing.
+
+Readiness: **NOT READY — review corrections changed the head; exact-head validation and Pi evidence must be completed again.**
 
 ## Production boundary
 
