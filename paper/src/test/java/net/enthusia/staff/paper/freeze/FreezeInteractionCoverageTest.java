@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
@@ -13,24 +14,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
+import org.bukkit.event.player.PlayerEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
-import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.util.Vector;
 import org.junit.jupiter.api.Test;
 
 class FreezeInteractionCoverageTest {
@@ -76,43 +70,12 @@ class FreezeInteractionCoverageTest {
         return proxy(Player.class);
     }
 
-    @SuppressWarnings("removal")
     private static List<InteractionCase> interactions(Player player) {
-        Entity entity = proxy(Entity.class);
-        PlayerInteractAtEntityEvent precise = new PlayerInteractAtEntityEvent(
-                player,
-                entity,
-                new Vector(),
-                EquipmentSlot.HAND
-        );
-        PlayerArmorStandManipulateEvent armorStand = new PlayerArmorStandManipulateEvent(
-                player,
-                proxy(ArmorStand.class),
-                new ItemStack(Material.SHEARS),
-                new ItemStack(Material.AIR),
-                EquipmentSlot.HAND,
-                EquipmentSlot.HAND
-        );
-        PlayerHarvestBlockEvent harvest = new PlayerHarvestBlockEvent(
-                player,
-                proxy(Block.class),
-                EquipmentSlot.HAND,
-                List.of()
-        );
-        PlayerShearEntityEvent shear = new PlayerShearEntityEvent(
-                player,
-                entity,
-                new ItemStack(Material.SHEARS),
-                EquipmentSlot.HAND,
-                List.of()
-        );
-        PlayerFishEvent fish = new PlayerFishEvent(
-                player,
-                null,
-                proxy(FishHook.class),
-                EquipmentSlot.HAND,
-                PlayerFishEvent.State.FISHING
-        );
+        PlayerInteractAtEntityEvent precise = event(PlayerInteractAtEntityEvent.class, player);
+        PlayerArmorStandManipulateEvent armorStand = event(PlayerArmorStandManipulateEvent.class, player);
+        PlayerHarvestBlockEvent harvest = event(PlayerHarvestBlockEvent.class, player);
+        PlayerShearEntityEvent shear = event(PlayerShearEntityEvent.class, player);
+        PlayerFishEvent fish = event(PlayerFishEvent.class, player);
         return List.of(
                 new InteractionCase("precise entity interaction", precise, manager -> manager.onInteractAtEntity(precise)),
                 new InteractionCase("armor-stand manipulation", armorStand, manager -> manager.onArmorStandManipulate(armorStand)),
@@ -120,6 +83,22 @@ class FreezeInteractionCoverageTest {
                 new InteractionCase("entity shearing", shear, manager -> manager.onShear(shear)),
                 new InteractionCase("fishing", fish, manager -> manager.onFish(fish))
         );
+    }
+
+    private static <T extends PlayerEvent> T event(Class<T> type, Player player) {
+        try {
+            Class<?> unsafeType = Class.forName("sun.misc.Unsafe");
+            Field instanceField = unsafeType.getDeclaredField("theUnsafe");
+            instanceField.setAccessible(true);
+            Object unsafe = instanceField.get(null);
+            T event = type.cast(unsafeType.getMethod("allocateInstance", Class.class).invoke(unsafe, type));
+            Field playerField = PlayerEvent.class.getDeclaredField("player");
+            playerField.setAccessible(true);
+            playerField.set(event, player);
+            return event;
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Unable to create event fixture for " + type.getSimpleName(), exception);
+        }
     }
 
     private static void assertHighestPriorityCancellationHandler(Class<? extends Event> eventType) {
