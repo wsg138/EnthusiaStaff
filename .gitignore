@@ -10,3 +10,16 @@ libs/private/
 .env
 .env.*
 !.env.example
+
+# Database exports and private migration inputs must never be committed.
+*.sql
+*.sql.gz
+*.dump
+*.dump.gz
+private-data/
+private-input/
+migration-evidence/private/
+
+# Repository-owned Flyway migrations remain tracked.
+!persistence/src/main/resources/db/migration/*.sql
+!persistence/src/main/resources/db/migration/**/*.sql
