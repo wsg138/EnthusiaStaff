@@ -15,10 +15,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
-import net.enthusia.staff.paper.api.StaffVisibilityService;
 import org.bukkit.plugin.ServicesManager;
 
 public final class RoseChatIntegration implements AutoCloseable {
@@ -168,14 +168,14 @@ public final class RoseChatIntegration implements AutoCloseable {
 
         @Override
         public ModerationDecision beforeBroadcast(BroadcastContext context) {
-            return freezes.isFrozen(context.senderId())
+            return freezes.isRestricted(context.senderId())
                     ? ModerationDecision.staffOnly()
                     : ModerationDecision.allow();
         }
 
         @Override
         public ModerationDecision beforePrivateMessage(PrivateMessageContext context) {
-            return freezes.isFrozen(context.senderId())
+            return freezes.isRestricted(context.senderId())
                     ? ModerationDecision.staffOnly()
                     : ModerationDecision.allow();
         }
