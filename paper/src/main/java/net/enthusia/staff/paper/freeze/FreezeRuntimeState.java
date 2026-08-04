@@ -16,7 +16,7 @@ final class FreezeRuntimeState {
     long beginVerification(UUID playerId) {
         Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         long token = nextGeneration.incrementAndGet();
-        states.put(playerId, Entry.pending(token));
+        states.put(playerId, Entry.pendingState(token));
         return token;
     }
 
@@ -24,24 +24,24 @@ final class FreezeRuntimeState {
         Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         AtomicBoolean resolved = new AtomicBoolean();
         states.compute(playerId, (ignored, current) -> {
-            if (current == null || !current.pending(token)) {
+            if (current == null || !current.matchesPending(token)) {
                 return current;
             }
             resolved.set(true);
-            return active ? Entry.frozen(token) : null;
+            return active ? Entry.frozenState(token) : null;
         });
         return resolved.get();
     }
 
     boolean isVerificationCurrent(UUID playerId, long token) {
         Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
-        return current != null && current.pending(token);
+        return current != null && current.matchesPending(token);
     }
 
     long apply(UUID playerId) {
         Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         long generation = nextGeneration.incrementAndGet();
-        states.put(playerId, Entry.frozen(generation));
+        states.put(playerId, Entry.frozenState(generation));
         return generation;
     }
 
@@ -65,7 +65,7 @@ final class FreezeRuntimeState {
 
     boolean isCurrentFrozen(UUID playerId, long generation) {
         Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
-        return current != null && current.frozen(generation);
+        return current != null && current.matchesFrozen(generation);
     }
 
     private enum Status {
@@ -74,19 +74,19 @@ final class FreezeRuntimeState {
     }
 
     private record Entry(Status status, long generation) {
-        private static Entry pending(long token) {
+        private static Entry pendingState(long token) {
             return new Entry(Status.PENDING_VERIFICATION, token);
         }
 
-        private static Entry frozen(long generation) {
+        private static Entry frozenState(long generation) {
             return new Entry(Status.FROZEN, generation);
         }
 
-        private boolean pending(long token) {
+        private boolean matchesPending(long token) {
             return status == Status.PENDING_VERIFICATION && generation == token;
         }
 
-        private boolean frozen(long expectedGeneration) {
+        private boolean matchesFrozen(long expectedGeneration) {
             return status == Status.FROZEN && generation == expectedGeneration;
         }
     }
