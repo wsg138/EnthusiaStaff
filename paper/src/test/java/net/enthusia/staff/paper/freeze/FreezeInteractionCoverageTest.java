@@ -76,6 +76,7 @@ class FreezeInteractionCoverageTest {
         return proxy(Player.class);
     }
 
+    @SuppressWarnings("removal")
     private static List<InteractionCase> interactions(Player player) {
         Entity entity = proxy(Entity.class);
         PlayerInteractAtEntityEvent precise = new PlayerInteractAtEntityEvent(
