@@ -21,8 +21,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMariaDbSupport {
-    private static final String SMP = "smp";
-    private static final String HUB = "hub";
+    private static final String SCOPED_SERVER = "smp_shutdown_scope";
+    private static final String OTHER_SERVER = "hub_shutdown_scope";
+    private static final String ROLLBACK_SERVER = "smp_shutdown_rollback";
     private static final String SHUTDOWN_REASON =
             "Paper runtime disabled before normal staff-mode exit";
 
@@ -35,19 +36,19 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             StaffSessionStore store = runtime.staffSessionStore();
-            StaffSessionSnapshot active = begin(store, activeStaff, SMP, 1);
-            StaffSessionSnapshot exiting = begin(store, exitingStaff, SMP, 2);
+            StaffSessionSnapshot active = begin(store, activeStaff, SCOPED_SERVER, 1);
+            StaffSessionSnapshot exiting = begin(store, exitingStaff, SCOPED_SERVER, 2);
             store.beginExit(exitingStaff, NOW.plusSeconds(1)).orElseThrow();
-            StaffSessionSnapshot existingRecovery = begin(store, existingRecoveryStaff, SMP, 3);
+            StaffSessionSnapshot existingRecovery = begin(store, existingRecoveryStaff, SCOPED_SERVER, 3);
             store.recoveryRequired(
                     existingRecovery.sessionId(),
                     "Pre-existing recovery condition",
                     NOW.plusSeconds(2)
             );
-            begin(store, otherServerStaff, HUB, 4);
+            begin(store, otherServerStaff, OTHER_SERVER, 4);
 
             assertEquals(2, store.recoveryRequiredForServer(
-                    SMP,
+                    SCOPED_SERVER,
                     SHUTDOWN_REASON,
                     NOW.plusSeconds(3)
             ));
@@ -64,7 +65,7 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
             assertEquals(1, recoveryAuditCount(existingRecovery.sessionId()));
 
             assertEquals(0, store.recoveryRequiredForServer(
-                    SMP,
+                    SCOPED_SERVER,
                     SHUTDOWN_REASON,
                     NOW.plusSeconds(4)
             ));
@@ -81,13 +82,13 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             StaffSessionStore store = runtime.staffSessionStore();
-            begin(store, firstStaff, SMP, 5);
-            begin(store, secondStaff, SMP, 6);
+            begin(store, firstStaff, ROLLBACK_SERVER, 5);
+            begin(store, secondStaff, ROLLBACK_SERVER, 6);
             installAuditFailureTrigger();
             try {
                 assertThrows(ModerationPersistenceException.class, () ->
                         store.recoveryRequiredForServer(
-                                SMP,
+                                ROLLBACK_SERVER,
                                 SHUTDOWN_REASON,
                                 NOW.plusSeconds(5)
                         ));
