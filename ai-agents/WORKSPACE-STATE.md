@@ -34,6 +34,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 - PR #59 merged normally as `a5cf73568310ee1d12bd961ed192945b1859884a`.
 - Its feature head is contained in `main`, its branch was removed, and no pull request or non-`main` branch was active before PR #60.
 - PR #60 began from exact `main` `a5cf73568310ee1d12bd961ed192945b1859884a`.
+- During PR #60 validation, `main` advanced to `be8d696a090e1fa27523916babcb2ced8de6974d`; the branch was synchronized by a two-parent merge without opening or inspecting the unrelated uploaded file.
 - V16 remains the live highest migration; PR #60 changes no schema or migration bytes.
 - Owner priority remains staff mode, vanish, and freeze before report notifications and escalation policy.
 
@@ -50,15 +51,17 @@ PR #60 now:
 - applies durable lookup results atomically only when their verification generation is still current;
 - ignores stale active/inactive results after quit, reconnect, newer verification, manual freeze, or manual release;
 - keeps a failed or storage-unavailable current verification fail-closed;
-- exposes pending verification as restricted to RoseChat so provider-handled public/private chat remains staff-only;
+- detects a rejected verification submission, logs the affected player, and alerts staff while the exact pending generation remains current;
+- exposes pending verification through the accurately named `isRestricted` API so provider-handled public/private chat remains staff-only;
 - generation-fences delayed inventory closure, freeze messages, release messages, and staff alerts;
+- retires an apply/release runtime entry when its target is already offline, without clearing a newer generation;
 - retires all runtime state on quit;
 - persists offline timeout only for a confirmed frozen session;
 - preserves existing restrictions, commands, permissions, persistence schema, and offline expiry.
 
 ## Focused tests
 
-`FreezeRuntimeStateTest` covers current active/inactive results, reconnect fencing, manual release/apply races, delayed frozen callback fencing, re-freeze suppression of delayed release notifications, pending and confirmed quit retirement, and fail-closed unresolved verification, including the provider-consumed restricted state.
+`FreezeRuntimeStateTest` covers unknown-player defaults, current active/inactive results, reconnect fencing, manual release/apply races, delayed frozen callback fencing, re-freeze suppression of delayed release notifications, generation-specific offline cleanup, pending and confirmed quit retirement, and fail-closed unresolved verification.
 
 ## Harsh-review corrections already applied
 
@@ -69,6 +72,9 @@ PR #60 now:
 5. Kept storage-unavailable verification and the RoseChat moderation bridge fail-closed while verification is pending.
 6. Added generated released state so a later freeze invalidates a delayed release message.
 7. Corrected the initial exact-head Java method-signature collision before restarting validation.
+8. Detected bounded-queue rejection so pending verification cannot remain silently stuck.
+9. Retired offline apply/release generations without disturbing a newer lifecycle state.
+10. Renamed the public restriction API and added default-state and offline-cleanup tests.
 
 ## Exact-head completion gate
 
@@ -82,10 +88,12 @@ Before merge, require one unchanged head synchronized with current `main` and di
 - configured Codacy/static analysis;
 - Wiki/documentation validation when applicable;
 - CodeRabbit, Codacy, and human review with zero valid unresolved threads;
-- exact-head public Pi wrapper and correlated staging run when applicable, or direct Actions quota/platform evidence when it cannot execute;
+- exact-head public Pi wrapper and correlated staging run when applicable;
+- if Actions cannot execute, direct quota/platform evidence, precise blocker ownership, and an explicit verified exception before dormant merge;
+- if Pi wrapper or staging executes but cannot produce valid runtime evidence, keep it non-passing, record exact run/job/runner/step/artifact evidence and the precise blocker, route it to the repository owner, and require an explicit verified exception before dormant merge;
 - one consolidated exact-head evidence comment.
 
-Cancelled, superseded, skipped, stale-head, different-revision, and merge-ref-only results are not acceptable evidence.
+No check may be described as passed without direct evidence. Cancelled, superseded, skipped, stale-head, different-revision, merge-ref-only, and executed-but-inconclusive results are not passing evidence.
 
 ## Production boundary
 
