@@ -144,7 +144,7 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
                      """)) {
             statement.setBytes(1, uuidBytes(sessionId));
             try (ResultSet result = statement.executeQuery()) {
-                result.next();
+                assertTrue(result.next(), "Expected a recovery audit count row");
                 return result.getInt(1);
             }
         }
