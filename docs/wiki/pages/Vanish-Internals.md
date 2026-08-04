@@ -9,11 +9,11 @@ one `hidePlayer` call covers every plugin, packet, command, and visual effect.
 - [[Main files|Vanish-Internals#main-files]]
 - [[State and startup|Vanish-Internals#state-and-startup]]
 - [[Toggle flow|Vanish-Internals#toggle-flow]]
+- [[Live rank reconciliation|Vanish-Internals#live-rank-reconciliation]]
 - [[Events handled directly|Vanish-Internals#events-handled-directly]]
 - [[Visibility decisions|Vanish-Internals#visibility-decisions]]
 - [[Packets and Paper visibility|Vanish-Internals#packets-and-paper-visibility]]
 - [[What is not currently intercepted|Vanish-Internals#what-is-not-currently-intercepted]]
-- [[Helper behavior|Vanish-Internals#helper-behavior]]
 - [[Performance and threading|Vanish-Internals#performance-and-threading]]
 - [[Review and staging checklist|Vanish-Internals#review-and-staging-checklist]]
 
@@ -22,6 +22,7 @@ one `hidePlayer` call covers every plugin, packet, command, and visual effect.
 ```text
 paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/VanishAudienceCoordinator.java
+paper/src/main/java/net/enthusia/staff/paper/visibility/VanishRankReconciliationPolicy.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/DefaultStaffVisibilityService.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/ProtocolLibSpectatorTabPacketAdapter.java
 paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java
@@ -30,15 +31,16 @@ paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java
 paper/src/main/java/net/enthusia/staff/paper/auth/PaperStaffRankResolver.java
 ```
 
-`VanishManager` owns lifecycle and Bukkit application. The visibility service owns
-the current in-memory decision. `JdbcVanishStore` persists whether a staff member
-should remain vanished across restart.
+`VanishManager` owns lifecycle, persistence coordination, live rank
+reconciliation, and Bukkit application. `DefaultStaffVisibilityService` owns the
+current in-memory visibility decision. `JdbcVanishStore` persists whether a staff
+member should remain vanished and the rank used for visibility hierarchy.
 
 ## State and startup
 
 During initialization, `VanishManager` performs database work on the bounded
 worker executor. It loads up to 10,000 active vanish records and copies their UUID
-and recorded rank into `DefaultStaffVisibilityService`.
+and recorded rank into the in-memory visibility service and durable-rank cache.
 
 It then uses the global-region scheduler only to discover the current online
 players. Each player is handed to that player's entity scheduler before the
@@ -46,18 +48,15 @@ manager reads live permissions or game mode and registers the player with the
 audience coordinator. Incremental viewer and target refreshes eventually rebuild
 every online relationship without mutating a player from another region.
 
-Each registration receives a monotonically increasing session identifier. A
-queued callback verifies that identifier before running, so a disconnect and
+Each audience registration receives a monotonically increasing session identifier.
+Queued owner callbacks verify that identifier before running, so a disconnect and
 reconnect cannot apply work through the retired `Player` handle.
 
-Startup recovery therefore:
-
-1. records the current rank of every online staff viewer;
-2. records the player's current game mode on its owning entity thread;
-3. schedules each visibility decision on the viewer's owning entity thread.
-
-If storage is unavailable, the initialization does not invent vanish state. The
-feature remains incomplete or degraded until the store is ready.
+Startup staff-mode recovery is asynchronous. Helper, Mod, and Developer vanish is
+therefore not disabled merely because the in-memory staff-mode cache is not ready.
+When required, vanish checks the durable `StaffSessionStore` on the bounded worker
+executor. An open durable staff session preserves the vanish state while recovery
+continues; a confirmed missing session disables it.
 
 ## Toggle flow
 
@@ -69,60 +68,94 @@ The current flow is:
 2. Reject the request when no supported rank can be resolved.
 3. Require active staff mode for Helper, Mod, and Developer.
 4. Calculate the opposite of the current vanish state.
-5. Persist the new state asynchronously in `VanishStore`.
-6. When staff mode is active, update the staff-session record too.
-7. Update the concurrent viewer-rank and vanished-state maps.
-8. Return to the current player's entity scheduler through the session-fenced
+5. Permit only one state write for that player.
+6. Persist the new state asynchronously in `VanishStore`.
+7. When staff mode is active, update the staff-session vanish mirror too.
+8. Update the concurrent viewer-rank and vanished-state maps.
+9. Return to the current player's entity scheduler through the session-fenced
    audience coordinator.
-9. Refresh that player as a target for every current viewer.
-10. Send the player the enabled or disabled confirmation on its owning thread.
+10. Refresh that player as a target and refresh them as a viewer if their rank
+    changed.
+11. Send the enabled or disabled confirmation on the owning thread.
 
-The visible state is changed only after persistence succeeds. A storage failure
-leaves the existing visibility decision in place and reports an error rather than
-pretending the toggle succeeded.
+The visible state is changed only after ordinary toggle persistence succeeds. A
+storage failure leaves the existing visibility decision in place and reports an
+error rather than pretending the toggle succeeded.
+
+## Live rank reconciliation
+
+One plugin-owned global task runs every second. It snapshots current audience UUIDs
+and permits only one queued entity check per player. The entity check:
+
+1. resolves the live explicit EnthusiaStaff rank;
+2. compares it with the cached viewer rank;
+3. updates or removes viewer authority immediately;
+4. refreshes only that viewer's current relationships;
+5. compares the vanished target's live rank with the durable rank;
+6. updates target classification and persists a changed rank;
+7. disables vanish after rank removal or invalid `SYSTEM` resolution;
+8. verifies lower-rank staff-session authority durably when in-memory recovery is
+   not yet established.
+
+Durable staff-session checks are bounded to one in-flight check per player. Each
+check has a unique token; disconnect invalidates that token, so an old result
+cannot mutate a replacement session. Failed checks back off before retrying.
+
+Helper, Mod, and Developer normally leave vanish when staff mode exits. If that
+cleanup collides with another state write or fails, a pending cleanup marker keeps
+the disable operation eligible for retry. A later restart also detects the closed
+staff session through durable verification, covering the crash window between
+staff-session closure and vanish disable.
+
+Viewer authority and target classification are separate:
+
+- a viewer promotion or demotion changes what that viewer may see;
+- a vanished target promotion or demotion changes which viewers may see that
+  target;
+- both are refreshed incrementally rather than through a full online matrix scan.
 
 ## Staff-mode exit
 
-`StaffModeManager` calls `VanishManager.staffModeExited(UUID)` through its exit
-listener. If the player is online, currently vanished, and their rank requires
-staff mode, vanish is disabled through the normal persisted `set` flow.
-
-Helper, Mod, and Developer require staff mode. Admin and Founder may remain
+`StaffModeManager` calls `VanishManager.staffModeExited(UUID)` only after verified
+durable staff-session closure. If the current live rank requires staff mode,
+vanish is disabled through the normal persisted path. Admin and Founder may remain
 vanished independently.
 
 ## Events handled directly
-
-The current class directly listens to three Bukkit/Paper player events:
 
 ### `PlayerJoinEvent`
 
 Registered at `EventPriority.HIGHEST`.
 
-- Records the joining player's staff rank for visibility decisions.
 - Registers the current player handle and game mode with a new session.
-- Suppresses the join message when that joining player is already marked vanished.
-- Refreshes the joining player as both viewer and target. Existing relationships
-  are left unchanged.
+- Records the joining player's live viewer rank.
+- Reconciles persisted target rank and lower-rank session authority.
+- Suppresses the join message when the player remains vanished.
+- Refreshes the joining player as both viewer and target.
 
 ### `PlayerQuitEvent`
 
 Registered at `EventPriority.HIGHEST`.
 
-- Suppresses the quit message when the leaving player is vanished.
-- Removes that player's audience session, viewer rank, and spectator-tab state.
+- Suppresses the quit message before retiring runtime state when the player is
+  vanished.
+- Removes that audience session, viewer rank, spectator-tab state, queued rank
+  marker, and transient session-verification caches.
+- Does not clear durable vanish state.
 
 ### `PlayerGameModeChangeEvent`
 
 Registered at `EventPriority.MONITOR` with cancelled changes ignored.
 
-- Re-evaluates the staff spectator-tab policy from the event's new game mode.
+- Re-resolves live viewer rank.
+- Re-evaluates spectator-tab policy from the event's new game mode.
 - Updates the coordinator's cached game mode.
-- Refreshes the changed player as a target on every viewer's owning entity
-  scheduler.
+- Refreshes the changed viewer when rank authority changed.
+- Refreshes the changed player as a target.
 
-The current `VanishManager` does not directly listen for chat, command completion,
-teleport, entity-tracking, sound, particle, inventory, damage, pickup, advancement,
-scoreboard, or voice events.
+The current manager does not directly listen for chat, command completion,
+teleport, entity-tracking, sound, particle, inventory, damage, pickup,
+advancement, scoreboard, or voice events.
 
 ## Visibility decisions
 
@@ -139,8 +172,7 @@ viewer UUID           -> viewer's staff rank
 - the viewer is the target; or
 - the viewer has a staff rank whose configured matrix includes the target's rank.
 
-A non-staff viewer has no entry in the viewer map and therefore cannot see a
-vanished target.
+A non-staff viewer has no viewer entry and therefore cannot see a vanished target.
 
 ### Current default matrix
 
@@ -152,62 +184,49 @@ vanished target.
 | Admin | Helper, Mod, Developer, Admin |
 | Founder | Helper, Mod, Developer, Admin, Founder |
 
-The player can always see themselves. The matrix is loaded from configuration and
-must define every supported staff viewer rank.
+The player can always see themselves. Configuration must define every supported
+viewer rank. Supervising ranks cannot lose visibility of vanished Helpers through
+a legacy configuration migration.
 
 ## Applying visibility
 
 `VanishAudienceCoordinator` owns online player handles, cached game modes, and
-session identifiers. A full refresh schedules the conceptual nested loop below,
-but each inner visibility operation executes on the viewer's entity scheduler:
+session identifiers. Visibility operations execute on the viewer's entity
+scheduler:
 
 ```text
-for each viewer
-  for each target
-    canSee(viewer, target)
-      -> viewer.showPlayer(plugin, target)
-      or viewer.hidePlayer(plugin, target)
+for each changed viewer/target pair
+  canSee(viewer, target)
+    -> viewer.showPlayer(plugin, target)
+    or viewer.hidePlayer(plugin, target)
 ```
 
-Normal join, toggle, game-mode, and packet-failure paths use incremental viewer or
-target refreshes. `refreshAll()` remains available for an explicit full
-reconciliation.
+Normal join, toggle, rank reconciliation, game-mode, and packet-failure paths use
+incremental viewer or target refreshes. `refreshAll()` remains available for
+explicit startup or recovery fallback.
 
 ## Packets and Paper visibility
 
-Entity visibility uses the Paper/Bukkit APIs:
+Entity visibility uses Paper/Bukkit APIs:
 
 ```text
 Player#hidePlayer(plugin, target)
 Player#showPlayer(plugin, target)
 ```
 
-Paper is responsible for translating those API calls into its internal player
-tracking and client updates. The exact packet sequence is an implementation detail
-of the supported Paper build and should not be documented as a stable
-EnthusiaStaff contract.
+Paper translates those calls into version-specific client tracking updates. The
+exact packet sequence is not an EnthusiaStaff contract.
 
-When ProtocolLib is available, EnthusiaStaff also registers one narrowly scoped
-`PLAYER_INFO` adapter. It removes entries the viewer is not allowed to see and
-masks visible staff spectator entries as creative while preserving the remaining
-player-info fields. A packet rewrite failure disables the adapter and schedules a
-fail-closed spectator-tab recalculation on each online player's owning entity
-thread. Without a healthy adapter, affected spectator staff remain unlisted.
+When ProtocolLib is available, EnthusiaStaff registers one narrowly scoped
+`PLAYER_INFO` adapter. It removes unauthorized entries and masks visible staff
+spectator entries as creative while preserving remaining player-info fields. A
+packet rewrite failure disables the adapter and recalculates spectator tab state
+fail-closed on owning entity threads. Without a healthy adapter, affected
+spectator staff remain unlisted.
 
-A reviewer should therefore distinguish:
-
-- **What EnthusiaStaff requests:** hide or show one player to one viewer through
-  the Paper API.
-- **What Paper sends:** the version-specific client tracking updates necessary to
-  apply that request.
-- **What other plugins expose:** their own tab lists, chat recipients, command
-  suggestions, voice channels, APIs, or cached player lists unless they consult
-  the shared visibility service.
-
-Do not extend that claim to entity-destroy, spawn-player, metadata, or other
-packets. The direct packet handling is limited to the player-info path and still
-requires live client compatibility testing on supported Paper and ProtocolLib
-versions.
+Do not extend that claim to entity-destroy, spawn-player, metadata, equipment, or
+other packets. Direct packet handling is limited to player-info and still requires
+live compatibility testing on supported Paper and ProtocolLib versions.
 
 ## What is not currently intercepted
 
@@ -221,65 +240,50 @@ The current vanish manager does not itself guarantee hiding from:
   plugins;
 - scoreboard teams, boss bars, advancements, death messages, or custom joins;
 - external web APIs, Discord messages, analytics, or playtime systems;
-- plugins that ignore Bukkit `canSee` and the EnthusiaStaff visibility service.
+- plugins that ignore Bukkit `canSee` and `StaffVisibilityService`.
 
-These require integration adapters or consumers of `StaffVisibilityService`.
-The requirements matrix correctly treats full visibility coverage as partial until
-those integrations and staging checks exist.
+These require integration adapters or consumers of the public visibility service.
+The requirements matrix therefore remains `PARTIAL` for complete visibility
+coverage.
 
 ## Public visibility service
 
 `StaffVisibilityService` is the stable in-process boundary other plugins should
-use instead of reading vanish storage or duplicating rank rules.
+use instead of reading vanish storage or duplicating rank rules. Consumers should
+ask whether a viewer may see a target before listing, completing, messaging,
+notifying, or publishing online state.
 
-Consumers should ask whether a viewer may see a target before:
-
-- including the target in a player list or completion result;
-- delivering chat or voice presence;
-- rendering staff-sensitive notifications;
-- exposing online status through an API;
-- showing teleport, message, or payment suggestions.
-
-Adapters must fail conservatively when they cannot obtain a trustworthy visibility
-decision.
-
-## Helper behavior
-
-Current behavior:
-
-- Helpers may enter staff mode and use vanish.
-- Helpers must be in staff mode before vanishing.
-- Leaving staff mode removes their vanish state.
-- Helpers can see vanished Helpers under the current default matrix.
-- Higher ranks see Helpers according to the matrix above.
+Adapters must fail conservatively when they cannot obtain a trustworthy decision.
 
 ## Performance and threading
 
-Database reads and writes run on the bounded worker executor. The global-region
-scheduler is used only to enumerate online players during startup recovery. Live
-permissions, game modes, messages, and viewer visibility/tab mutations run through
-the relevant player's entity scheduler.
+Database reads and writes run on the bounded worker executor. Permission reads,
+game-mode reads, messages, and viewer visibility/tab mutations run on the relevant
+player's entity scheduler.
 
-`refreshAll()` is O(n^2) because it evaluates every online viewer-target pair.
-Normal changes refresh one viewer or one target, but reviewers should still watch
-for:
+Bounds include:
 
-- explicit or integration-driven full refreshes at high player counts;
-- supported-Paper and Folia behavior of viewer-owned visibility calls;
-- integrations triggering additional full scans;
-- stale viewer ranks after permission changes without reconnect or refresh;
-- the 10,000-record startup bound and whether old records are cleaned correctly.
+- one periodic entity rank check per online player;
+- one vanish state write per player;
+- one durable staff-session verification per player;
+- retry backoff after failed persistence or session verification;
+- reconnect fencing for queued owner callbacks and session-check results.
 
-Any optimization must preserve rank changes, self-visibility, newly joined players,
-removal of stale hidden state, and session fencing across reconnects.
+`refreshAll()` is O(n²), but ordinary changes refresh one viewer or one target.
+Reviewers should still watch explicit full refreshes, supported Paper/Folia
+ownership behavior, worker saturation, the 10,000-record startup bound, and
+provider integrations that trigger additional scans.
 
 ## Failure behavior
 
-- Missing storage prevents a new toggle from being applied.
-- Database exceptions leave the previous in-memory decision unchanged.
-- A full worker queue skips the requested asynchronous operation and logs a warning.
-- The current implementation does not automatically prove that every external
-  visibility provider is healthy.
+- Missing vanish storage prevents a new toggle from being applied.
+- Database exceptions leave ordinary toggle memory unchanged.
+- Rank-removal and unauthorized lower-rank decisions fail safe in memory and retry
+  durable correction.
+- A full worker queue skips the operation, logs the condition, and leaves retryable
+  reconciliation state where applicable.
+- Failed durable session verification leaves current visibility unchanged and
+  retries after backoff.
 - A persisted vanish record can be restored after restart, but complete visual and
   integration coverage still requires staging.
 
@@ -287,23 +291,24 @@ removal of stale hidden state, and session fencing across reconnects.
 
 Reviewers should verify:
 
-- rank resolution and permission changes;
-- staff-mode requirement for each role;
-- persisted enable, disable, restart, reconnect, and staff-mode exit;
+- every viewer and target promotion/demotion combination;
+- rank removal and `SYSTEM` handling;
+- staff-mode exit, collided writes, restart, reconnect, and crash-window cleanup;
+- durable staff-session active, absent, exiting, and recovery-required states;
 - join and quit message suppression;
 - viewer hierarchy in every pairwise combination;
 - normal players never seeing vanished staff;
 - self-visibility;
 - tab list and entity visibility on each supported Paper version;
+- ProtocolLib present, absent, incompatible, and runtime failure paths;
 - RoseChat, voice, `/seen`, commands, player counts, and public APIs;
 - sounds, particles, containers, damage, pickup, and other observable effects;
 - Java and Bedrock clients;
 - reload and plugin-disable behavior;
-- queued visibility work racing with disconnect and reconnect;
+- queued work racing with disconnect and reconnect;
 - Folia/entity-region ownership using a real compatible server build;
 - multiple backend servers and server switching;
-- performance with realistic player counts;
-- whether any direct packet claim is backed by actual packet code and tests.
+- performance with realistic player counts.
 
 Related staff instructions are in
 [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
