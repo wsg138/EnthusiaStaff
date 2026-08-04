@@ -9,11 +9,11 @@ import java.util.concurrent.atomic.AtomicLong;
 
 final class FreezeRuntimeState {
     private final Map<UUID, Entry> states = new ConcurrentHashMap<>();
-    private final AtomicLong nextVerificationToken = new AtomicLong();
+    private final AtomicLong nextGeneration = new AtomicLong();
 
     long beginVerification(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
-        long token = nextVerificationToken.incrementAndGet();
+        long token = nextGeneration.incrementAndGet();
         states.put(playerId, Entry.pending(token));
         return token;
     }
@@ -26,7 +26,7 @@ final class FreezeRuntimeState {
                 return current;
             }
             resolved.set(true);
-            return active ? Entry.frozen() : null;
+            return active ? Entry.frozen(token) : null;
         });
         return resolved.get();
     }
@@ -36,8 +36,11 @@ final class FreezeRuntimeState {
         return current != null && current.pending(token);
     }
 
-    void apply(UUID playerId) {
-        states.put(Objects.requireNonNull(playerId, "playerId"), Entry.frozen());
+    long apply(UUID playerId) {
+        Objects.requireNonNull(playerId, "playerId");
+        long generation = nextGeneration.incrementAndGet();
+        states.put(playerId, Entry.frozen(generation));
+        return generation;
     }
 
     void release(UUID playerId) {
@@ -58,22 +61,31 @@ final class FreezeRuntimeState {
         return current != null && current.status() == Status.FROZEN;
     }
 
+    boolean isCurrentFrozen(UUID playerId, long generation) {
+        Entry current = states.get(Objects.requireNonNull(playerId, "playerId"));
+        return current != null && current.frozen(generation);
+    }
+
     private enum Status {
         PENDING_VERIFICATION,
         FROZEN
     }
 
-    private record Entry(Status status, long verificationToken) {
+    private record Entry(Status status, long generation) {
         private static Entry pending(long token) {
             return new Entry(Status.PENDING_VERIFICATION, token);
         }
 
-        private static Entry frozen() {
-            return new Entry(Status.FROZEN, 0L);
+        private static Entry frozen(long generation) {
+            return new Entry(Status.FROZEN, generation);
         }
 
         private boolean pending(long token) {
-            return status == Status.PENDING_VERIFICATION && verificationToken == token;
+            return status == Status.PENDING_VERIFICATION && generation == token;
+        }
+
+        private boolean frozen(long expectedGeneration) {
+            return status == Status.FROZEN && generation == expectedGeneration;
         }
     }
 }
