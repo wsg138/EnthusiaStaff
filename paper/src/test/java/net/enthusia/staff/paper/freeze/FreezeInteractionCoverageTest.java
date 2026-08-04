@@ -9,13 +9,19 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Supplier;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
+import net.enthusia.staff.domain.ports.FreezeStore;
 import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
@@ -38,6 +44,13 @@ import org.junit.jupiter.api.Test;
 
 class FreezeInteractionCoverageTest {
     private static final UUID PLAYER_ID = UUID.fromString("66702d67-a72e-4485-aa83-14ce402878e6");
+    private static final UUID ACTOR_ID = UUID.fromString("9734b6cd-f58c-417b-aada-ed0f9948ca7b");
+    private static final Instant NOW = Instant.parse("2026-08-04T18:00:00Z");
+    private static final List<String> IMMEDIATE_RESTRICTION_ORDER = List.of(
+            "leaveVehicle",
+            "closeInventory",
+            "sendMessage"
+    );
 
     @Test
     void declaresExplicitHandlersForCoveredInteractions() {
@@ -73,36 +86,90 @@ class FreezeInteractionCoverageTest {
     }
 
     @Test
-    void immediateRestrictionLeavesVehicleAndClosesInventory() {
-        AtomicInteger vehicleExits = new AtomicInteger();
-        AtomicInteger inventoryClosures = new AtomicInteger();
-        AtomicInteger messages = new AtomicInteger();
-        Player player = proxy(Player.class, method -> switch (method.getName()) {
-            case "getUniqueId" -> PLAYER_ID;
-            case "leaveVehicle" -> {
-                vehicleExits.incrementAndGet();
-                yield true;
-            }
-            case "closeInventory" -> {
-                inventoryClosures.incrementAndGet();
-                yield null;
-            }
-            case "sendMessage" -> {
-                messages.incrementAndGet();
-                yield null;
-            }
-            default -> defaultValue(method.getReturnType());
-        });
+    void freezeActivationSecuresPlayerInLifecycleOrder() {
+        List<String> interactions = new ArrayList<>();
+        FreezeManager manager = lifecycleManager(recordingPlayer(interactions), () -> null);
 
-        manager().securePlayer(player);
+        manager.applyOnline(PLAYER_ID);
 
-        assertEquals(1, vehicleExits.get());
-        assertEquals(1, inventoryClosures.get());
-        assertEquals(1, messages.get());
+        assertTrue(manager.isRestricted(PLAYER_ID));
+        assertEquals(IMMEDIATE_RESTRICTION_ORDER, interactions);
+    }
+
+    @Test
+    void storedFreezeRecoverySecuresPlayerInLifecycleOrder() {
+        List<String> interactions = new ArrayList<>();
+        FreezeStore activeStore = activeStore();
+        FreezeManager manager = lifecycleManager(recordingPlayer(interactions), () -> activeStore);
+
+        manager.verify(PLAYER_ID, "RestrictedPlayer");
+
+        assertTrue(manager.isRestricted(PLAYER_ID));
+        assertEquals(IMMEDIATE_RESTRICTION_ORDER, interactions);
     }
 
     private static FreezeManager manager() {
         return new FreezeManager(null, Clock.systemUTC(), () -> null, proxy(ExecutorService.class));
+    }
+
+    private static FreezeManager lifecycleManager(Player player, Supplier<FreezeStore> store) {
+        FreezeManager.PlayerDispatcher dispatcher = (playerId, operation, unavailable) -> {
+            assertEquals(PLAYER_ID, playerId);
+            assertNotNull(unavailable);
+            operation.accept(player);
+        };
+        Consumer<Runnable> globalScheduler = operation -> assertNotNull(operation);
+        return new FreezeManager(
+                null,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                store,
+                directExecutor(),
+                dispatcher,
+                globalScheduler
+        );
+    }
+
+    private static FreezeStore activeStore() {
+        FreezeRecord record = new FreezeRecord(
+                PLAYER_ID,
+                ACTOR_ID,
+                "staff review",
+                NOW,
+                Optional.empty(),
+                false,
+                1L
+        );
+        return proxy(FreezeStore.class, (method, arguments) -> "active".equals(method.getName())
+                ? Optional.of(record)
+                : defaultValue(method.getReturnType()));
+    }
+
+    private static ExecutorService directExecutor() {
+        return proxy(ExecutorService.class, (method, arguments) -> {
+            if ("execute".equals(method.getName())) {
+                ((Runnable) arguments[0]).run();
+            }
+            return defaultValue(method.getReturnType());
+        });
+    }
+
+    private static Player recordingPlayer(List<String> interactions) {
+        return proxy(Player.class, (method, arguments) -> switch (method.getName()) {
+            case "getUniqueId" -> PLAYER_ID;
+            case "leaveVehicle" -> {
+                interactions.add("leaveVehicle");
+                yield true;
+            }
+            case "closeInventory" -> {
+                interactions.add("closeInventory");
+                yield null;
+            }
+            case "sendMessage" -> {
+                interactions.add("sendMessage");
+                yield null;
+            }
+            default -> defaultValue(method.getReturnType());
+        });
     }
 
     private static Player player() {
@@ -201,17 +268,17 @@ class FreezeInteractionCoverageTest {
     }
 
     private static <T> T proxy(Class<T> type) {
-        return proxy(type, method -> "getUniqueId".equals(method.getName())
+        return proxy(type, (method, arguments) -> "getUniqueId".equals(method.getName())
                 ? PLAYER_ID
                 : defaultValue(method.getReturnType()));
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, Function<Method, Object> invocation) {
+    private static <T> T proxy(Class<T> type, BiFunction<Method, Object[], Object> invocation) {
         return (T) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
-                (instance, method, arguments) -> invocation.apply(method)
+                (instance, method, arguments) -> invocation.apply(method, arguments)
         );
     }
 

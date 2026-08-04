@@ -26,12 +26,13 @@ The freeze runtime corrected `PlayerMoveEvent`, but mounted movement has a separ
 
 ## Implemented behavior
 
-- `FreezeManager.applyOnline` and durable active-state recovery now call one shared immediate restriction method.
-- The shared restriction calls `Player.leaveVehicle()`, closes the inventory and sends the existing freeze notice.
-- `FreezeManager` now owns `EntityMountEvent` at `HIGHEST` priority with `ignoreCancelled = true`.
+- `FreezeManager.applyOnline` and durable active-state recovery call one shared immediate restriction method.
+- The shared restriction calls `Player.leaveVehicle()`, closes the inventory and sends the existing freeze notice in that order.
+- `FreezeManager` owns `EntityMountEvent` at `HIGHEST` priority with `ignoreCancelled = true`.
 - Mount attempts are cancelled only when the mounting entity is a player whose existing `FreezeRuntimeState` is restricted.
 - Pending durable verification remains fail-closed because the mount guard reuses the same restriction boundary.
 - Ordinary players remain unaffected.
+- A package-private test seam dispatches existing player and global-scheduler operations during server-free tests; the production Paper/Folia scheduler path remains the existing path.
 
 Existing damage, inventory, item, command, chat, teleport, portal, block, interaction, backend-switch, persistence, reconnect and offline-expiration behavior is unchanged.
 
@@ -45,30 +46,37 @@ Existing damage, inventory, item, command, chat, teleport, portal, block, intera
 
 ## Focused tests and meaningful coverage
 
-`FreezeInteractionCoverageTest` now verifies:
+`FreezeInteractionCoverageTest` verifies:
 
 1. the explicit `EntityMountEvent` handler exists;
 2. it uses `HIGHEST` priority and `ignoreCancelled = true`;
 3. a pending/restricted player cannot mount;
 4. an ordinary player can mount;
-5. the immediate restriction calls vehicle exit, inventory closure and player notification exactly once.
+5. direct freeze activation invokes vehicle exit, inventory closure and player notification in order;
+6. stored active-freeze recovery invokes the same ordered restriction lifecycle.
 
-The test reuses the existing server-free Paper event fixture rather than adding a parallel harness. Existing `FreezeRuntimeStateTest` covers unrestricted, pending, confirmed, released and stale-generation lifecycle decisions used by the new handler.
+The test reuses the existing server-free Paper event fixture rather than adding a parallel harness. Existing `FreezeRuntimeStateTest` covers unrestricted, pending, confirmed, released and stale-generation lifecycle decisions used by the handler and both lifecycle entry points.
 
-The remaining low-level adapter paths are the existing Paper event and scheduler wiring. Exact-head Paper compilation and applicable runtime staging must prove the concrete API signatures and registration. No persistence, transaction, concurrency, migration or protocol behavior changed.
+The production fallback branches in the package-private test seam are thin Paper/Folia scheduler adapters whose body is the existing runtime routing. Exact-head Paper compilation, full configured tests and applicable Pi staging must prove those concrete APIs. No persistence, transaction, migration or protocol behavior changed.
 
 ## Harsh-review findings and corrections
 
 1. **Merge blocker fixed:** the initial implementation lacked focused tests. Direct handler and immediate-restriction tests were added.
 2. **Confirmed defect fixed:** the first test implementation duplicated proxy/event fixture logic already owned by `FreezeInteractionCoverageTest`; it was consolidated and the duplicate file removed.
 3. **Confirmed cleanup fixed:** an unused import in the discarded fixture was removed before consolidation.
-4. **Confirmed cleanup fixed:** the retained proxy callback was simplified to the standard `Function<Method, Object>` shape.
-5. **Verified existing behavior:** Velocity already denies backend switching for active durable freezes, so no duplicate backend-switch system was added.
-6. **Optional future hardening:** production-like interaction with third-party plugins that deliberately interfere with dismounting remains a staging concern, not evidence of a repository defect in the ordinary Paper mount path.
+4. **Confirmed cleanup fixed:** the retained proxy callback initially used a narrower invocation adapter; the review repair uses the standard `BiFunction<Method, Object[], Object>` shape required by the direct executor fixture.
+5. **CodeRabbit finding fixed:** exact-head review run `e1f19ae2-8e84-49f5-996c-446bb81b1b16` correctly found that direct helper testing did not prove activation and recovery callers. Both public lifecycle paths are now exercised and their operation order is asserted.
+6. **CodeRabbit finding fixed:** workspace and handoff records now apply one exact post-merge contract requiring a normal merge commit, actual merge commit SHA, resulting `main` SHA, feature-head containment, remote branch deletion and confirmation that no follow-up `main` commit was created merely to insert evidence.
+7. **Verified existing behavior:** Velocity already denies backend switching for active durable freezes, so no duplicate backend-switch system was added.
+8. **Optional future hardening:** production-like interaction with third-party plugins that deliberately interfere with dismounting remains a staging concern, not evidence of a repository defect in the ordinary Paper mount path.
+
+## Superseded validation evidence
+
+Exact head `2ce272fc78de201eac9568a0b39e7fde2c48c2bd` passed Coverage run `30937808581`, aggregate coverage and runtime-JAR inspection, and Codacy reported 0 new issues with 77.78% diff coverage. That evidence is superseded by the valid CodeRabbit repair commit and must not be reused as final exact-head evidence.
 
 ## Validation contract
 
-After the handoff commit and any valid CI/review repair, freeze one exact head. On that unchanged SHA require direct evidence for:
+After the review-repair commit and any later valid CI/review repair, freeze one exact head. On that unchanged SHA require direct evidence for:
 
 - clean Java 21 build and all configured unit, Paper, Velocity, persistence, protocol and MariaDB/Testcontainers tests;
 - migration checksum, clean-install and upgrade tests with V1–V16 unchanged;
@@ -82,6 +90,10 @@ After the handoff commit and any valid CI/review repair, freeze one exact head. 
 
 If direct evidence shows GitHub Actions quota, billing limits, disabled Actions or equivalent platform unavailability prevented Pi repository code from executing, record Pi as not run and do not claim it passed. Any Pi run that executes repository code and exposes a product, test, migration, packaging, startup, restart or shutdown defect remains a merge blocker.
 
+## Post-merge evidence contract
+
+Merge only with a normal merge commit and the expected exact feature head. Before cleanup, record and verify the actual merge commit SHA and resulting `main` SHA, prove the exact feature head is contained in `main`, prove no unmerged feature commits remain, and verify remote branch deletion. Confirm that no follow-up `main` commit was created solely to record the merge SHA; live PR comments carry merge and post-merge evidence.
+
 ## Permanent boundaries
 
 - LiteBans remains authoritative.
@@ -94,4 +106,4 @@ If direct evidence shows GitHub Actions quota, billing limits, disabled Actions 
 
 ## Next action
 
-Finish PR #64 only. Resolve valid review or CI findings, synchronize with live `main`, freeze one final head, complete the exact-head evidence comment, mark ready and merge normally only if every gate permits it, then perform post-merge containment and branch cleanup. Do not begin another feature in this session.
+Finish PR #64 only. Resolve valid review or CI findings, synchronize with live `main`, freeze one final head, complete the exact-head evidence comment, and merge with a normal merge commit only if every gate permits it. Then verify the actual merge commit and resulting `main` SHAs, exact feature-head containment, no unmerged feature commits and branch deletion before cleanup, without creating a follow-up `main` evidence commit. Do not begin another feature in this session.

@@ -18,7 +18,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE DRAFT — implementation and focused tests complete; exact-head validation and review resolution pending` |
+| State | `ACTIVE — implementation and CodeRabbit review repairs complete; new exact-head validation and review resolution pending` |
 | Pull request | `#64 — Block mounted movement while frozen` |
 | Feature branch | `fix/freeze-mounted-movement` |
 | Starting main | `f95d5ec404b7a4eca705bdd2ac013eb55af56a11` |
@@ -27,7 +27,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Migration boundary | V16 is highest; PR #64 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 | External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
-| Intended post-merge status | Merge PR #64 normally only after all available applicable exact-head gates pass and exact-head Pi succeeds, or direct evidence proves the permitted GitHub Actions quota/platform-unavailability exception; then verify resulting `main`, feature-head containment and branch cleanup without deploying or accessing production |
+| Intended post-merge status | Merge PR #64 with a normal merge commit only after every applicable exact-head gate permits it. Record the actual merge commit SHA and resulting `main` SHA, verify exact feature-head containment and remote branch deletion before cleanup, and confirm no follow-up `main` commit was created merely to record merge evidence. Do not deploy or access production. |
 
 ## Live start-state reconciliation
 
@@ -52,7 +52,7 @@ PR #64:
 - reuses the existing fail-closed `FreezeRuntimeState.isRestricted` boundary;
 - leaves ordinary players and all other existing freeze behavior unchanged.
 
-No new state, persistence, scheduler, permission, command, configuration, migration, vanish, staff-mode, provider or proxy system is introduced.
+No new state, persistence, permission, command, configuration, migration, vanish, staff-mode, provider or proxy system is introduced. A package-private test seam dispatches the existing player and global scheduler operations without changing the production Paper/Folia path.
 
 ## Focused tests
 
@@ -61,7 +61,8 @@ No new state, persistence, scheduler, permission, command, configuration, migrat
 - an explicit mount handler exists at the required priority and cancelled-event setting;
 - pending/restricted players cannot mount;
 - ordinary players retain mount behavior;
-- the shared immediate restriction attempts vehicle exit, closes inventory and sends the freeze notice exactly once.
+- direct freeze activation invokes vehicle exit, inventory closure and the freeze notice in that order;
+- stored active-freeze recovery invokes the same ordered restriction lifecycle.
 
 Existing freeze runtime-state tests continue to prove unrestricted defaults, fail-closed pending verification, confirmed restrictions and lifecycle-generation fencing.
 
@@ -71,11 +72,13 @@ Existing freeze runtime-state tests continue to prove unrestricted defaults, fai
 2. **Confirmed defect fixed:** restricted players had no explicit mount-event restriction.
 3. **Confirmed test-maintainability defect fixed:** the first focused test duplicated the existing freeze event fixture; mount coverage was folded into `FreezeInteractionCoverageTest` and the duplicate file was removed.
 4. **Confirmed test cleanup fixed:** removed an unused import and simplified the test invocation adapter.
-5. **Scope preserved:** backend-switch enforcement already exists in Velocity and was not duplicated. RoseChat/provider behavior, command policy, freeze duration semantics, vanish and staff mode remain separate.
+5. **CodeRabbit finding fixed:** the test no longer calls the helper directly; it proves both activation and durable recovery entry points and verifies the required operation order.
+6. **CodeRabbit finding fixed:** all routing records now require the actual normal merge commit SHA, resulting `main` SHA, exact feature-head containment, branch deletion and confirmation that no follow-up `main` evidence commit was created.
+7. **Scope preserved:** backend-switch enforcement already exists in Velocity and was not duplicated. RoseChat/provider behavior, command policy, freeze duration semantics, vanish and staff mode remain separate.
 
 ## Exact-head completion gate
 
-Tracked content is not frozen until this handoff commit and any valid review or CI repair are complete. Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for every available applicable configured check: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, Wiki validation when triggered, CodeRabbit/human review and zero valid unresolved threads.
+Tracked content is not frozen until this review-repair commit and any later valid review or CI repair are complete. Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for every available applicable configured check: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, Wiki validation when triggered, CodeRabbit/human review and zero valid unresolved threads.
 
 Pi must succeed on the exact head when it executes normally. If direct evidence proves GitHub Actions quota, billing, disabled Actions or equivalent platform unavailability prevented repository code from executing, record `Pi not run — GitHub Actions quota/platform unavailable` with the exact evidence and do not claim Pi passed. A real executed product, test, migration, packaging, startup, restart or shutdown failure remains a merge blocker.
 
@@ -85,8 +88,8 @@ PR #64 is dormant development work only. It does not authorize deployment, produ
 
 ## Next route
 
-1. Finish PR #64 only: complete exact-head validation, inspect Codacy/CodeRabbit and every review thread, fix confirmed defects, synchronize with live `main`, and merge normally only when every gate permits it.
-2. Record merge/resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup in PR metadata.
+1. Finish PR #64 only: validate one unchanged head, inspect Codacy/CodeRabbit and every review thread, fix confirmed defects, synchronize with live `main`, and merge with a normal merge commit only when every gate permits it.
+2. Before cleanup, record and verify the actual merge commit SHA and resulting `main` SHA, prove the exact feature head is contained in `main`, prove no unmerged feature commits remain, verify remote branch deletion, and confirm no follow-up `main` commit was created solely to insert merge evidence.
 3. After PR #64 completes, freshly select one bounded remaining priority-one staff-mode, vanish or freeze item.
 4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
 5. Do not begin another feature in the PR #64 session.

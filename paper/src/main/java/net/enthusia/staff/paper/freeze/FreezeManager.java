@@ -57,6 +57,8 @@ public final class FreezeManager implements Listener {
     private final Clock clock;
     private final Supplier<FreezeStore> store;
     private final ExecutorService workers;
+    private final PlayerDispatcher playerDispatcher;
+    private final Consumer<Runnable> globalScheduler;
     private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
 
     public FreezeManager(
@@ -65,10 +67,23 @@ public final class FreezeManager implements Listener {
             Supplier<FreezeStore> store,
             ExecutorService workers
     ) {
+        this(plugin, clock, store, workers, null, null);
+    }
+
+    FreezeManager(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<FreezeStore> store,
+            ExecutorService workers,
+            PlayerDispatcher playerDispatcher,
+            Consumer<Runnable> globalScheduler
+    ) {
         this.plugin = plugin;
         this.clock = clock;
         this.store = store;
         this.workers = workers;
+        this.playerDispatcher = playerDispatcher;
+        this.globalScheduler = globalScheduler;
     }
 
     public boolean isRestricted(UUID playerId) {
@@ -343,7 +358,7 @@ public final class FreezeManager implements Listener {
         relayFrozenChat(event.getPlayer(), Component.text(event.getMessage()));
     }
 
-    void securePlayer(Player player) {
+    private void securePlayer(Player player) {
         player.leaveVehicle();
         player.closeInventory();
         player.sendMessage(Component.text("You have been frozen by network staff."));
@@ -363,7 +378,7 @@ public final class FreezeManager implements Listener {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         Component rendered = Component.text("<" + playerName + "> ").append(body);
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             Player current = plugin.getServer().getPlayer(playerId);
             if (current != null) {
                 current.sendMessage(rendered);
@@ -376,7 +391,7 @@ public final class FreezeManager implements Listener {
     }
 
     private void alertStaff(UUID playerId, long generation, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
                 return;
             }
@@ -385,12 +400,20 @@ public final class FreezeManager implements Listener {
     }
 
     private void alertStaffDuringVerification(UUID playerId, long generation, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             if (!runtimeState.isVerificationCurrent(playerId, generation)) {
                 return;
             }
             sendAlert(message);
         });
+    }
+
+    private void scheduleGlobal(Runnable operation) {
+        if (globalScheduler != null) {
+            globalScheduler.accept(operation);
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, operation);
     }
 
     private void sendAlert(String message) {
@@ -415,6 +438,10 @@ public final class FreezeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable unavailable) {
+        if (playerDispatcher != null) {
+            playerDispatcher.dispatch(playerId, operation, unavailable);
+            return;
+        }
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
             if (player == null) {
@@ -423,5 +450,10 @@ public final class FreezeManager implements Listener {
             }
             player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
         });
+    }
+
+    @FunctionalInterface
+    interface PlayerDispatcher {
+        void dispatch(UUID playerId, Consumer<Player> operation, Runnable unavailable);
     }
 }
