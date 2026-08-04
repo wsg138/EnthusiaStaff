@@ -65,7 +65,7 @@ public final class FreezeManager implements Listener {
     }
 
     public boolean isFrozen(UUID playerId) {
-        return runtimeState.isFrozen(playerId);
+        return runtimeState.isRestricted(playerId);
     }
 
     public void applyOnline(UUID playerId) {
@@ -107,7 +107,9 @@ public final class FreezeManager implements Listener {
         try {
             FreezeStore loaded = store.get();
             if (loaded == null) {
-                runtimeState.resolveVerification(playerId, verificationToken, false);
+                plugin.getLogger().severe(
+                        "Freeze storage is unavailable; the joining player remains restricted"
+                );
                 return;
             }
             boolean active = loaded.active(playerId, clock.instant()).isPresent();
