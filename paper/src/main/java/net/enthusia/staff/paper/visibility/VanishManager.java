@@ -49,6 +49,7 @@ public final class VanishManager implements Listener {
     private final Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
     private final Set<UUID> stateWrites = ConcurrentHashMap.newKeySet();
     private final Set<UUID> reconciliationFailureNotified = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> pendingStaffModeExitDisables = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private final VanishAudienceCoordinator<Player> audiences;
     private final SpectatorTabPacketAdapter spectatorTabPackets;
@@ -193,11 +194,16 @@ public final class VanishManager implements Listener {
     }
 
     private void disableAfterStaffModeExit(UUID playerId, Player player) {
-        if (visibility.isVanished(playerId)) {
-            StaffRank rank = resolveAndPublishRank(player);
-            if (rank != null && requiresStaffMode(rank)) {
-                set(player, rank, false);
-            }
+        StaffRank rank = resolveAndPublishRank(player);
+        if (rank == null || !requiresStaffMode(rank)) {
+            pendingStaffModeExitDisables.remove(playerId);
+            return;
+        }
+        pendingStaffModeExitDisables.add(playerId);
+        if (visibility.isVanished(playerId) || durableVanishedRanks.containsKey(playerId)) {
+            set(player, rank, false);
+        } else {
+            pendingStaffModeExitDisables.remove(playerId);
         }
     }
 
@@ -223,6 +229,7 @@ public final class VanishManager implements Listener {
                     durableVanishedRanks.put(playerId, rank);
                 } else {
                     durableVanishedRanks.remove(playerId);
+                    pendingStaffModeExitDisables.remove(playerId);
                 }
                 boolean viewerChanged = publishViewerRank(playerId, rank);
                 visibility.setVanished(playerId, rank, vanished);
@@ -284,12 +291,14 @@ public final class VanishManager implements Listener {
         }
         StaffRank durableRank = durableVanishedRanks.get(playerId);
         boolean vanished = visibility.isVanished(playerId);
+        boolean exitPending = pendingStaffModeExitDisables.contains(playerId);
         VanishRankReconciliationPolicy.VanishAction vanishAction =
                 VanishRankReconciliationPolicy.vanishAction(
                         vanished,
                         durableRank,
                         liveRank,
-                        staffMode.active(playerId)
+                        staffMode.active(playerId),
+                        exitPending
                 );
         if (vanishAction == VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK) {
             applyReconciledMemoryState(player, liveRank, true);
@@ -310,6 +319,8 @@ public final class VanishManager implements Listener {
                         "Vanish was disabled because your current staff rank or staff-mode state no longer permits it."
                 );
             }
+        } else if (exitPending && (!requiresStaffMode(liveRank) || (!vanished && durableRank == null))) {
+            pendingStaffModeExitDisables.remove(playerId);
         }
     }
 
@@ -362,6 +373,7 @@ public final class VanishManager implements Listener {
                     durableVanishedRanks.put(playerId, rank);
                 } else {
                     durableVanishedRanks.remove(playerId);
+                    pendingStaffModeExitDisables.remove(playerId);
                 }
                 reconciliationRetryAfter.remove(playerId);
                 reconciliationFailureNotified.remove(playerId);
