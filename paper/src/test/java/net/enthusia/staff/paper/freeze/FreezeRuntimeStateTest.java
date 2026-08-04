@@ -20,6 +20,7 @@ final class FreezeRuntimeStateTest {
         assertTrue(state.resolveVerification(PLAYER_ID, token, true));
         assertTrue(state.isRestricted(PLAYER_ID));
         assertTrue(state.isFrozen(PLAYER_ID));
+        assertTrue(state.isCurrentFrozen(PLAYER_ID, token));
         assertFalse(state.isVerificationCurrent(PLAYER_ID, token));
     }
 
@@ -63,11 +64,25 @@ final class FreezeRuntimeStateTest {
         FreezeRuntimeState state = new FreezeRuntimeState();
         long token = state.beginVerification(PLAYER_ID);
 
-        state.apply(PLAYER_ID);
+        long generation = state.apply(PLAYER_ID);
 
         assertFalse(state.resolveVerification(PLAYER_ID, token, false));
         assertTrue(state.isRestricted(PLAYER_ID));
         assertTrue(state.isFrozen(PLAYER_ID));
+        assertTrue(state.isCurrentFrozen(PLAYER_ID, generation));
+    }
+
+    @Test
+    void laterStateChangeFencesDelayedFrozenSideEffects() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+        long recoveredGeneration = state.beginVerification(PLAYER_ID);
+        assertTrue(state.resolveVerification(PLAYER_ID, recoveredGeneration, true));
+
+        state.release(PLAYER_ID);
+        long appliedGeneration = state.apply(PLAYER_ID);
+
+        assertFalse(state.isCurrentFrozen(PLAYER_ID, recoveredGeneration));
+        assertTrue(state.isCurrentFrozen(PLAYER_ID, appliedGeneration));
     }
 
     @Test
@@ -91,7 +106,7 @@ final class FreezeRuntimeStateTest {
     }
 
     @Test
-    void failedCurrentVerificationRemainsFailClosed() {
+    void unresolvedCurrentVerificationRemainsFailClosed() {
         FreezeRuntimeState state = new FreezeRuntimeState();
         long token = state.beginVerification(PLAYER_ID);
 
