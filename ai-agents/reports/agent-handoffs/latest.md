@@ -2,31 +2,32 @@
 
 Current handoff:
 
-[`2026-08-03-staffmode-disable-recovery.md`](2026-08-03-staffmode-disable-recovery.md)
+[`2026-08-04-vanish-live-rank-reconciliation.md`](2026-08-04-vanish-live-rank-reconciliation.md)
 
 Related PR:
 
-[`#58 — Recover staff sessions across Paper disable`](https://github.com/wsg138/EnthusiaStaff/pull/58)
+[`#59 — Reconcile vanish visibility with live rank changes`](https://github.com/wsg138/EnthusiaStaff/pull/59)
 
 ## Summary
 
 | Field | Value |
 | --- | --- |
-| Work item | Durably recover open staff-mode sessions after Paper disable or reload without player/entity mutation during teardown |
-| PR | `#58` |
-| Branch | `fix/staffmode-disable-recovery` |
-| Starting main | `03971345a8c3cd079deda9f38b2f471dcbbcfd42` |
-| Expected committed state | `IDLE — PR #58 requires live merge verification` |
-| Implementation | Drain accepted workers, transactionally mark this backend's `ACTIVE`/`EXITING` sessions `RECOVERY_REQUIRED`, audit each new transition, close MariaDB afterward, then use the existing exact snapshot/checksum restoration path on next enable/login |
-| Recovery correction | `RECOVERY_REQUIRED` now enters `EXITING` before verification; unresolved queue, persistence, scheduler, restore and checksum paths retain the transition fence until verified close or disconnect |
-| Tests | Shutdown order and continued cleanup; MariaDB server scope, idempotency, backend isolation, rollback and exact recovery closure; activation-recovery queue and persistence failure fencing |
-| Harsh-review fixes | Isolated shared-container scenarios; repaired durable recovery closure; added asynchronous recovery fencing; removed fail-open recovery paths; corrected the shared activation coordinator; replaced the static-analysis boolean equality assertion |
-| Migration boundary | V16 is highest; PR #58 adds no migration; V1–V16 remain immutable |
+| Work item | Reconcile cached vanish viewer and target ranks with live explicit permissions and durable staff-session state |
+| PR | `#59` |
+| Branch | `fix/vanish-live-rank-reconciliation` |
+| Starting main | `8bed23c521f907aa134453445e77f17df75a3743` |
+| State | `ACTIVE — exact-head validation and review pending` |
+| Implementation | One owner-scheduled periodic check per player; incremental viewer/target refresh; durable target-rank correction; rank-removal disable; bounded and token-fenced durable staff-session verification for lower ranks; retryable staff-mode-exit cleanup |
+| Startup behavior | Open durable staff sessions preserve valid Helper/Mod/Developer vanish while asynchronous staff-mode recovery completes; confirmed missing sessions disable it |
+| Failure behavior | In-memory authority fails safely, writes and session checks are bounded, failed operations back off and retry, and stale reconnect callbacks are discarded |
+| Tests | Promotion/demotion matrix, missing/`SYSTEM` ranks, durable-session active/inactive/unknown/exited states, Admin/Founder independence, stale durable cleanup, viewer-owner scheduling and reconnect fencing |
+| Harsh-review fixes | Quit-message ordering; startup recovery race; collided exit cleanup; crash-window durable verification; reconnect-fenced session checks; event-driven viewer refresh |
+| Migration boundary | V16 is highest; PR #59 adds no migration; V1–V16 remain immutable |
 | Configuration changes | None |
-| External provider blocker | RoseChat private-message evidence remains blocked pending the supported provider callback/event contract, delivery lifecycle, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. See `2026-08-02-pr50-rosechat-provider-blocker.md`; do not route it through issue #43. |
-| Production boundary | No deployment, authority activation, LiteBans change, production Discord use or production access |
-| Next owner-priority workstream | Freshly select one remaining staff mode, vanish or freeze item after PR #58; do not begin it in this PR |
+| External provider blocker | RoseChat private-message evidence remains blocked pending the supported provider callback/event contract, delivery lifecycle, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. Do not route it through issue #43. |
+| Production boundary | No deployment, authority activation, LiteBans change, production Discord use, production access, or cutover |
+| Next owner-priority workstream | Freshly select one remaining staff mode, vanish, or freeze item only after PR #59 completes |
 
-Exact validation, review, Pi and merge evidence belongs in PR #58 live metadata. Reject cancelled, superseded, skipped, stale-head, different-revision and merge-ref-only results.
+Exact validation, review, Pi, and merge evidence belongs in PR #59 live metadata. Reject cancelled, superseded, skipped, stale-head, different-revision, and merge-ref-only results.
 
-The next agent must reconcile live GitHub state before acting, resume PR #58 rather than opening another branch, read the canonical handoff, resolve every valid review finding, require the complete exact-head gate, and stop after merge or a verified blocker. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, begin issue #43 acceptance, or combine another feature into PR #58.
+The next agent must reconcile live GitHub state before acting, resume PR #59 rather than opening another branch, read the canonical handoff, resolve every valid review finding, require the complete exact-head gate, and stop after merge or a verified blocker. Do not edit V1–V16, use Flyway repair, deploy, access production data, alter LiteBans authority, begin issue #43 acceptance, or combine another feature into PR #59.
