@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -34,6 +35,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class VanishManager implements Listener {
     private static final long RECONCILIATION_RETRY_SECONDS = 5L;
+    private static final int FULL_RANK_SCAN_INTERVAL_PASSES = 5;
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -55,6 +57,7 @@ public final class VanishManager implements Listener {
     private final Set<UUID> staffSessionCheckFailureNotified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> pendingStaffModeExitDisables = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
+    private final AtomicInteger rankReconciliationPass = new AtomicInteger();
     private final VanishAudienceCoordinator<Player> audiences;
     private final SpectatorTabPacketAdapter spectatorTabPackets;
 
@@ -101,8 +104,9 @@ public final class VanishManager implements Listener {
             return;
         }
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
+            boolean fullScan = nextRankReconciliationPass() == 0;
             for (UUID playerId : audiences.playerIds()) {
-                if (!pendingRankChecks.add(playerId)) {
+                if (!shouldCheckRank(playerId, fullScan) || !pendingRankChecks.add(playerId)) {
                     continue;
                 }
                 audiences.onOwner(
@@ -118,6 +122,20 @@ public final class VanishManager implements Listener {
                 );
             }
         }, 20L, 20L);
+    }
+
+    private int nextRankReconciliationPass() {
+        return rankReconciliationPass.getAndUpdate(
+                current -> (current + 1) % FULL_RANK_SCAN_INTERVAL_PASSES
+        );
+    }
+
+    private boolean shouldCheckRank(UUID playerId, boolean fullScan) {
+        return fullScan
+                || staffMode.active(playerId)
+                || onlineStaffRanks.containsKey(playerId)
+                || durableVanishedRanks.containsKey(playerId)
+                || pendingStaffModeExitDisables.contains(playerId);
     }
 
     private void recoverOnlinePlayers() {
@@ -282,54 +300,100 @@ public final class VanishManager implements Listener {
         UUID playerId = player.getUniqueId();
         StaffRank cachedRank = onlineStaffRanks.get(playerId);
         StaffRank liveRank = resolveLiveRank(player);
-        VanishRankReconciliationPolicy.ViewerAction viewerAction =
-                VanishRankReconciliationPolicy.viewerAction(cachedRank, liveRank);
-        boolean viewerChanged = applyViewerAction(playerId, liveRank, viewerAction);
-        if (viewerChanged) {
-            applySpectatorPolicy(player, player.getGameMode(), false);
-            audiences.updateGameMode(playerId, player.getGameMode());
-            audiences.refreshViewer(playerId);
-            audiences.refreshTarget(playerId);
-        }
+        reconcileViewerAuthority(player, playerId, cachedRank, liveRank);
         if (stateWrites.contains(playerId)) {
             return;
         }
         StaffRank durableRank = durableVanishedRanks.get(playerId);
         boolean vanished = visibility.isVanished(playerId);
         VanishRankReconciliationPolicy.StaffModeState staffModeState = staffModeState(playerId);
-        VanishRankReconciliationPolicy.VanishAction vanishAction =
-                VanishRankReconciliationPolicy.vanishAction(
-                        vanished,
-                        durableRank,
-                        liveRank,
-                        staffModeState
-                );
-        if (vanishAction == VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK) {
+        VanishRankReconciliationPolicy.VanishAction action = VanishRankReconciliationPolicy.vanishAction(
+                vanished,
+                durableRank,
+                liveRank,
+                staffModeState
+        );
+        applyVanishAction(player, action, cachedRank, liveRank, durableRank, vanished);
+    }
+
+    private void reconcileViewerAuthority(
+            Player player,
+            UUID playerId,
+            StaffRank cachedRank,
+            StaffRank liveRank
+    ) {
+        VanishRankReconciliationPolicy.ViewerAction action =
+                VanishRankReconciliationPolicy.viewerAction(cachedRank, liveRank);
+        if (!applyViewerAction(playerId, liveRank, action)) {
+            return;
+        }
+        applySpectatorPolicy(player, player.getGameMode(), false);
+        audiences.updateGameMode(playerId, player.getGameMode());
+        audiences.refreshViewer(playerId);
+        audiences.refreshTarget(playerId);
+    }
+
+    private void applyVanishAction(
+            Player player,
+            VanishRankReconciliationPolicy.VanishAction action,
+            StaffRank cachedRank,
+            StaffRank liveRank,
+            StaffRank durableRank,
+            boolean vanished
+    ) {
+        UUID playerId = player.getUniqueId();
+        switch (action) {
+            case UPDATE_RANK -> updateVanishedRank(player, liveRank);
+            case VERIFY_SESSION -> verifyLowerRankSession(player, liveRank);
+            case DISABLE -> disableReconciledVanish(player, cachedRank, liveRank, durableRank);
+            case NONE -> clearCompletedPendingExit(playerId, vanished, durableRank);
+        }
+    }
+
+    private void updateVanishedRank(Player player, StaffRank liveRank) {
+        applyReconciledMemoryState(player, liveRank, true);
+        reconcileDurableState(
+                player.getUniqueId(),
+                liveRank,
+                true,
+                "Your vanish visibility was updated for your current staff rank."
+        );
+    }
+
+    private void verifyLowerRankSession(Player player, StaffRank liveRank) {
+        UUID playerId = player.getUniqueId();
+        if (liveRank != null && visibility.vanishedRank(playerId) != liveRank) {
             applyReconciledMemoryState(player, liveRank, true);
+        }
+        verifyStaffSession(playerId);
+    }
+
+    private void disableReconciledVanish(
+            Player player,
+            StaffRank cachedRank,
+            StaffRank liveRank,
+            StaffRank durableRank
+    ) {
+        UUID playerId = player.getUniqueId();
+        StaffRank writeRank = firstPlayerRank(
+                durableRank,
+                visibility.vanishedRank(playerId),
+                cachedRank,
+                liveRank
+        );
+        applyReconciledMemoryState(player, writeRank, false);
+        if (writeRank != null) {
             reconcileDurableState(
                     playerId,
-                    liveRank,
-                    true,
-                    "Your vanish visibility was updated for your current staff rank."
+                    writeRank,
+                    false,
+                    "Vanish was disabled because your current staff rank or staff-mode state no longer permits it."
             );
-        } else if (vanishAction == VanishRankReconciliationPolicy.VanishAction.VERIFY_SESSION) {
-            if (liveRank != null && visibility.vanishedRank(playerId) != liveRank) {
-                applyReconciledMemoryState(player, liveRank, true);
-            }
-            verifyStaffSession(playerId);
-        } else if (vanishAction == VanishRankReconciliationPolicy.VanishAction.DISABLE) {
-            StaffRank writeRank = firstPlayerRank(durableRank, visibility.vanishedRank(playerId), cachedRank, liveRank);
-            applyReconciledMemoryState(player, writeRank, false);
-            if (writeRank != null) {
-                reconcileDurableState(
-                        playerId,
-                        writeRank,
-                        false,
-                        "Vanish was disabled because your current staff rank or staff-mode state no longer permits it."
-                );
-            }
-        } else if (pendingStaffModeExitDisables.contains(playerId)
-                && (!vanished && durableRank == null || staffModeState == VanishRankReconciliationPolicy.StaffModeState.ACTIVE)) {
+        }
+    }
+
+    private void clearCompletedPendingExit(UUID playerId, boolean vanished, StaffRank durableRank) {
+        if (pendingStaffModeExitDisables.contains(playerId) && !vanished && durableRank == null) {
             pendingStaffModeExitDisables.remove(playerId);
         }
     }
@@ -546,6 +610,7 @@ public final class VanishManager implements Listener {
         staffSessionCheckFailureNotified.remove(playerId);
         hiddenSpectators.remove(playerId);
         pendingRankChecks.remove(playerId);
+        pendingStaffModeExitDisables.remove(playerId);
         reconciliationRetryAfter.remove(playerId);
         reconciliationFailureNotified.remove(playerId);
     }
