@@ -8,18 +8,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class FreezeRuntimeState {
+    private static final String PLAYER_ID_ARGUMENT = "playerId";
+
     private final Map<UUID, Entry> states = new ConcurrentHashMap<>();
     private final AtomicLong nextGeneration = new AtomicLong();
 
     long beginVerification(UUID playerId) {
-        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         long token = nextGeneration.incrementAndGet();
         states.put(playerId, Entry.pending(token));
         return token;
     }
 
     boolean resolveVerification(UUID playerId, long token, boolean active) {
-        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         AtomicBoolean resolved = new AtomicBoolean();
         states.compute(playerId, (ignored, current) -> {
             if (current == null || !current.pending(token)) {
@@ -32,37 +34,37 @@ final class FreezeRuntimeState {
     }
 
     boolean isVerificationCurrent(UUID playerId, long token) {
-        Entry current = states.get(Objects.requireNonNull(playerId, "playerId"));
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
         return current != null && current.pending(token);
     }
 
     long apply(UUID playerId) {
-        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         long generation = nextGeneration.incrementAndGet();
         states.put(playerId, Entry.frozen(generation));
         return generation;
     }
 
     void release(UUID playerId) {
-        states.remove(Objects.requireNonNull(playerId, "playerId"));
+        states.remove(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
     }
 
     boolean retire(UUID playerId) {
-        Entry retired = states.remove(Objects.requireNonNull(playerId, "playerId"));
+        Entry retired = states.remove(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
         return retired != null && retired.status() == Status.FROZEN;
     }
 
     boolean isRestricted(UUID playerId) {
-        return states.containsKey(Objects.requireNonNull(playerId, "playerId"));
+        return states.containsKey(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
     }
 
     boolean isFrozen(UUID playerId) {
-        Entry current = states.get(Objects.requireNonNull(playerId, "playerId"));
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
         return current != null && current.status() == Status.FROZEN;
     }
 
     boolean isCurrentFrozen(UUID playerId, long generation) {
-        Entry current = states.get(Objects.requireNonNull(playerId, "playerId"));
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
         return current != null && current.frozen(generation);
     }
 
