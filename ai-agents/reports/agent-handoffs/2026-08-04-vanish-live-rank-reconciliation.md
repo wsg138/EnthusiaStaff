@@ -11,6 +11,7 @@ Last updated: 2026-08-04
 | Branch | `fix/vanish-live-rank-reconciliation` |
 | Starting main | `8bed23c521f907aa134453445e77f17df75a3743` |
 | State | `ACTIVE — exact-head validation and review pending` |
+| Intended post-merge state | Merge normally after every gate succeeds; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
 | Highest migration | V16 |
 | Migration impact | None; V1–V16 remain immutable |
 | Commands, permissions, configuration | No change |
@@ -34,8 +35,10 @@ Live GitHub state overrides this handoff. The final feature SHA, workflow/job/ar
 PR #59 now:
 
 - runs one idempotent plugin-owned reconciliation task every second;
+- checks known staff, active staff-mode players, vanished players, and pending cleanup every second;
+- performs a full online rank-discovery pass every five seconds so new promotions remain discoverable without five permission checks per ordinary player every second;
 - schedules permission reads and visibility mutations on each player's entity scheduler;
-- permits only one queued periodic check per online player;
+- permits only one queued periodic check per selected player;
 - immediately updates viewer authority and refreshes only that viewer when the live rank changes;
 - updates a vanished target's in-memory rank classification and durably persists the new rank;
 - removes viewer authority and disables vanish after explicit rank removal or `SYSTEM` resolution;
@@ -46,6 +49,7 @@ PR #59 now:
 - bounds durable session checks and vanish writes independently;
 - token-fences session checks against disconnect/reconnect;
 - backs off failed verification and persistence attempts;
+- clears transient reconciliation and pending-exit markers on quit;
 - suppresses quit messages before retiring runtime visibility state;
 - keeps Admin/Founder independent vanish semantics and the configured rank matrix.
 
@@ -53,6 +57,8 @@ PR #59 now:
 
 `VanishRankReconciliationPolicyTest` proves:
 
+- tracked players remain eligible between full-discovery passes;
+- the full-discovery pass includes previously untracked online players;
 - unchanged viewer ranks require no work;
 - every promotion/demotion updates viewer authority;
 - missing and `SYSTEM` ranks remove viewer authority;
@@ -73,14 +79,20 @@ PR #59 now:
 
 ## Harsh whole-diff review
 
-Confirmed defects fixed during review:
+Confirmed defects and merge-gate findings fixed during review:
 
 1. quit-time reconciliation could clear vanish before quit-message suppression;
 2. startup could disable valid lower-rank vanish before asynchronous staff-mode recovery completed;
 3. a collided staff-mode-exit write could leave lower-rank vanish active indefinitely;
 4. an in-memory-only exit marker could not cover a crash between staff-session closure and vanish disable;
 5. asynchronous durable-session checks initially lacked reconnect fencing;
-6. event-driven viewer-rank changes could update the cache without refreshing existing viewer relationships.
+6. event-driven viewer-rank changes could update the cache without refreshing existing viewer relationships;
+7. the pending staff-mode-exit marker was not cleared on quit;
+8. the first periodic implementation performed five permission checks per second for every ordinary online player;
+9. reconciliation and policy methods exceeded configured Codacy size or complexity limits;
+10. the workspace routing record lacked an explicit intended post-merge status.
+
+The performance correction deliberately uses tiered scanning instead of a hard known-staff prefilter. A hard prefilter would never discover an ordinary online player who was newly promoted. Known staff remain one-second reconciled; newly promoted players are discovered within five seconds.
 
 No confirmed defect is intentionally deferred inside this bounded work item. Remaining entity/tracker suppression, integrations, Java/Bedrock staging, complete Folia runtime verification, freeze work, and report-provider work remain separate.
 
