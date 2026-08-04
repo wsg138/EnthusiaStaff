@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -221,6 +223,47 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
     }
 
     @Override
+    public int recoveryRequiredForServer(String serverId, String reason, Instant now) {
+        validateServerRecovery(serverId, reason, now);
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                List<RecoverableSession> sessions = lockRecoverableSessions(connection, serverId);
+                if (sessions.isEmpty()) {
+                    connection.rollback();
+                    return 0;
+                }
+                int updated = markServerRecovery(connection, serverId);
+                if (updated != sessions.size()) {
+                    throw new SQLException("staff-session shutdown recovery lost a locked state transition");
+                }
+                for (RecoverableSession session : sessions) {
+                    insertAudit(
+                            connection,
+                            session.staffId(),
+                            session.sessionId(),
+                            "STAFF_MODE_RECOVERY_REQUIRED",
+                            reason,
+                            now
+                    );
+                }
+                connection.commit();
+                return updated;
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } finally {
+                restoreAutoCommit(connection);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException(
+                    "Unable to mark server staff sessions for shutdown recovery",
+                    exception
+            );
+        }
+    }
+
+    @Override
     public boolean setVanish(UUID staffId, boolean vanished, Instant now) {
         if (staffId == null || now == null) {
             throw new IllegalArgumentException("staff and current time are required");
@@ -287,6 +330,42 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
                         UuidBytes.fromBytes(result.getBytes(1)), StaffSessionState.valueOf(result.getString(2))
                 ) : null;
             }
+        }
+    }
+
+    private static List<RecoverableSession> lockRecoverableSessions(
+            Connection connection,
+            String serverId
+    ) throws SQLException {
+        List<RecoverableSession> sessions = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT session_id, staff_id
+                FROM staff_sessions
+                WHERE server_id = ? AND state IN ('ACTIVE', 'EXITING')
+                ORDER BY session_id
+                FOR UPDATE
+                """)) {
+            statement.setString(1, serverId);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    sessions.add(new RecoverableSession(
+                            UuidBytes.fromBytes(result.getBytes("session_id")),
+                            UuidBytes.fromBytes(result.getBytes("staff_id"))
+                    ));
+                }
+            }
+        }
+        return sessions;
+    }
+
+    private static int markServerRecovery(Connection connection, String serverId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_sessions
+                SET state = 'RECOVERY_REQUIRED', revision = revision + 1
+                WHERE server_id = ? AND state IN ('ACTIVE', 'EXITING')
+                """)) {
+            statement.setString(1, serverId);
+            return statement.executeUpdate();
         }
     }
 
@@ -375,6 +454,13 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         }
     }
 
+    private static void validateServerRecovery(String serverId, String reason, Instant now) {
+        if (serverId == null || !serverId.matches("[A-Za-z0-9_-]{1,64}")
+                || reason == null || reason.isBlank() || reason.length() > 512 || now == null) {
+            throw new IllegalArgumentException("valid server staff-recovery fields are required");
+        }
+    }
+
     private static String escape(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"")
                 .replace("\r", "\\r").replace("\n", "\\n");
@@ -397,5 +483,8 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
     }
 
     private record SessionIdentity(UUID staffId, StaffSessionState state) {
+    }
+
+    private record RecoverableSession(UUID sessionId, UUID staffId) {
     }
 }

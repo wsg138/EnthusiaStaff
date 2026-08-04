@@ -23,5 +23,9 @@ public interface StaffSessionStore {
 
     void recoveryRequired(UUID sessionId, String reason, Instant now);
 
+    default int recoveryRequiredForServer(String serverId, String reason, Instant now) {
+        throw new UnsupportedOperationException("server-wide staff-session recovery is not supported");
+    }
+
     boolean setVanish(UUID staffId, boolean vanished, Instant now);
 }

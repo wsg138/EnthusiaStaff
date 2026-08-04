@@ -158,6 +158,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 this::stopOperationalRuntime,
                 this::closeNonDatabaseResources,
                 this::shutdownWorkers,
+                this::markStaffSessionsForRecovery,
                 this::closeDatabaseRuntime
         ).shutdown();
     }
@@ -613,6 +614,21 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 exception.addSuppressed(forcedFailure);
             }
             getLogger().log(Level.WARNING, "Worker executor cleanup failed", exception);
+        }
+    }
+
+    private void markStaffSessionsForRecovery() {
+        var sessions = storageValue(PaperStorageBindings::staffSessionStore);
+        if (sessions == null) {
+            return;
+        }
+        int marked = sessions.recoveryRequiredForServer(
+                networkServerId(),
+                "Paper runtime disabled before normal staff-mode exit",
+                Clock.systemUTC().instant()
+        );
+        if (marked > 0 && getLogger().isLoggable(Level.INFO)) {
+            getLogger().info("Marked " + marked + " staff session(s) for exact restoration after restart");
         }
     }
 
