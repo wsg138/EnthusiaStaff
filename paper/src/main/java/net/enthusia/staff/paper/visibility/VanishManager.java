@@ -430,7 +430,6 @@ public final class VanishManager implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        reconcileLiveRank(player);
         if (visibility.isVanished(player.getUniqueId())) {
             event.quitMessage(null);
         }
