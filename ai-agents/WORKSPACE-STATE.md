@@ -49,15 +49,16 @@ PR #60 now:
 - assigns a monotonic generation to every verification and manual freeze;
 - applies durable lookup results atomically only when their verification generation is still current;
 - ignores stale active/inactive results after quit, reconnect, newer verification, manual freeze, or manual release;
-- keeps a failed current verification fail-closed;
+- keeps a failed or storage-unavailable current verification fail-closed;
+- exposes pending verification as restricted to RoseChat so provider-handled public/private chat remains staff-only;
 - generation-fences delayed recovered inventory closure, player messaging, and staff alerts;
 - retires all runtime state on quit;
 - persists offline timeout only for a confirmed frozen session;
-- preserves existing restrictions, chat routing, commands, permissions, persistence schema, and offline expiry.
+- preserves existing restrictions, commands, permissions, persistence schema, and offline expiry.
 
 ## Focused tests
 
-`FreezeRuntimeStateTest` covers current active/inactive results, reconnect fencing, manual release/apply races, delayed callback generation fencing, pending and confirmed quit retirement, and fail-closed unresolved verification.
+`FreezeRuntimeStateTest` covers current active/inactive results, reconnect fencing, manual release/apply races, delayed callback generation fencing, pending and confirmed quit retirement, and fail-closed unresolved verification, including the provider-consumed restricted state.
 
 ## Harsh-review corrections already applied
 
@@ -65,6 +66,7 @@ PR #60 now:
 2. Prevented stale durable active/inactive results from applying across newer lifecycle state.
 3. Retained a generation for confirmed frozen states so delayed callbacks can distinguish old recovery from a later freeze.
 4. Guarded delayed entity and global scheduler recovery side effects at execution time.
+5. Kept storage-unavailable verification and the RoseChat moderation bridge fail-closed while verification is pending.
 
 ## Exact-head completion gate
 
