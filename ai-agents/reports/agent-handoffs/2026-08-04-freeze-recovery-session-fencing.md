@@ -38,16 +38,17 @@ PR #60 now:
 - assigns each verification or manual freeze a monotonic generation;
 - atomically applies a durable lookup result only when its verification generation is still current;
 - ignores stale active and inactive results after quit, reconnect, a newer verification, manual freeze, or manual release;
-- keeps the current verification fail-closed when durable lookup fails;
+- keeps the current verification fail-closed when durable lookup fails or storage is unavailable;
+- exposes pending verification as restricted to the RoseChat moderation bridge so public and private chat remain staff-only until recovery resolves;
 - guards delayed inventory-close, player-message, and staff-alert callbacks against the exact frozen generation;
 - retires all runtime state on quit;
 - persists the offline timeout only when the departed session was confirmed frozen, not merely pending verification;
-- preserves existing restriction listeners, chat routing, command behavior, permissions, storage schema, and offline-expiry policy.
+- preserves existing restriction listeners, command behavior, permissions, storage schema, and offline-expiry policy.
 
 ## Files and architecture
 
 - `paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeRuntimeState.java` — one atomic, generation-fenced source of runtime authority.
-- `paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeManager.java` — delegates lifecycle transitions and fences delayed scheduler side effects.
+- `paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeManager.java` — delegates lifecycle transitions, exposes fail-closed provider state, and fences delayed scheduler side effects.
 - `paper/src/test/java/net/enthusia/staff/paper/freeze/FreezeRuntimeStateTest.java` — focused transition and stale-result coverage without platform event mocks.
 
 ## Focused tests
@@ -60,13 +61,14 @@ PR #60 now:
 - manual apply fencing a stale inactive result;
 - delayed callback generations becoming stale after later state changes;
 - pending and confirmed quit retirement;
-- fail-closed unresolved verification.
+- fail-closed unresolved verification, including the restriction state consumed by provider paths.
 
 ## Harsh-review findings and fixes
 
 1. **Confirmed defect:** state-token fencing alone did not stop already-scheduled recovery messages and inventory closure from running after release. Fixed by generation-checking every delayed recovered-state side effect at execution time.
 2. **Confirmed defect:** a later manual freeze could make an older recovered `FROZEN` state indistinguishable if confirmed entries had no generation. Fixed by retaining a generation for every confirmed frozen state.
-3. The complete diff must be reviewed again after the final tracked handoff batch and before exact-head validation.
+3. **Confirmed defect:** pending verification remained fail-closed for Bukkit listeners but `FreezeManager.isFrozen` returned false to RoseChat, allowing provider-handled public/private chat before durable recovery completed. Fixed by exposing the unified restricted state and retaining pending state when storage is unavailable.
+4. The complete diff must be reviewed again after this final tracked correction and before exact-head validation.
 
 ## Validation requirements
 
