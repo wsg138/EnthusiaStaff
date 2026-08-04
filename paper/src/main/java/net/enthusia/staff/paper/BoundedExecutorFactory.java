@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper;
 
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -21,14 +22,49 @@ final class BoundedExecutorFactory {
             thread.setDaemon(true);
             return thread;
         };
-        return new ThreadPoolExecutor(
+        return new TerminationAwaitingThreadPoolExecutor(
                 threads,
-                threads,
-                0L,
-                TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(queueCapacity),
-                factory,
-                new ThreadPoolExecutor.AbortPolicy()
+                factory
         );
+    }
+
+    private static final class TerminationAwaitingThreadPoolExecutor extends ThreadPoolExecutor {
+        private TerminationAwaitingThreadPoolExecutor(
+                int threads,
+                ArrayBlockingQueue<Runnable> workQueue,
+                ThreadFactory threadFactory
+        ) {
+            super(
+                    threads,
+                    threads,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    workQueue,
+                    threadFactory,
+                    new ThreadPoolExecutor.AbortPolicy()
+            );
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            List<Runnable> awaitingExecution = super.shutdownNow();
+            awaitTerminationUninterruptibly();
+            return awaitingExecution;
+        }
+
+        private void awaitTerminationUninterruptibly() {
+            boolean interrupted = false;
+            while (!isTerminated()) {
+                try {
+                    super.awaitTermination(1, TimeUnit.SECONDS);
+                } catch (InterruptedException exception) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 }
