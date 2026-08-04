@@ -67,9 +67,13 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
         return viewerRank != null && visibilityMatrix.getOrDefault(viewerRank, Set.of()).contains(targetRank);
     }
 
+    StaffRank vanishedRank(UUID playerId) {
+        return vanished.get(playerId);
+    }
+
     public void setVanished(UUID playerId, StaffRank rank, boolean value) {
         if (value) {
-            vanished.put(playerId, rank);
+            vanished.put(playerId, Objects.requireNonNull(rank, "rank"));
         } else {
             vanished.remove(playerId);
         }
