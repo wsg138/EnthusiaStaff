@@ -32,6 +32,7 @@ final class FreezeRuntimeStateTest {
         assertTrue(state.resolveVerification(PLAYER_ID, token, false));
         assertFalse(state.isRestricted(PLAYER_ID));
         assertFalse(state.isFrozen(PLAYER_ID));
+        assertTrue(state.isCurrentRelease(PLAYER_ID, token));
     }
 
     @Test
@@ -52,11 +53,12 @@ final class FreezeRuntimeStateTest {
         FreezeRuntimeState state = new FreezeRuntimeState();
         long token = state.beginVerification(PLAYER_ID);
 
-        state.release(PLAYER_ID);
+        long releaseGeneration = state.release(PLAYER_ID);
 
         assertFalse(state.resolveVerification(PLAYER_ID, token, true));
         assertFalse(state.isRestricted(PLAYER_ID));
         assertFalse(state.isFrozen(PLAYER_ID));
+        assertTrue(state.isCurrentRelease(PLAYER_ID, releaseGeneration));
     }
 
     @Test
@@ -83,6 +85,18 @@ final class FreezeRuntimeStateTest {
 
         assertFalse(state.isCurrentFrozen(PLAYER_ID, recoveredGeneration));
         assertTrue(state.isCurrentFrozen(PLAYER_ID, appliedGeneration));
+    }
+
+    @Test
+    void reFreezeFencesDelayedReleaseSideEffects() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+        long releaseGeneration = state.release(PLAYER_ID);
+
+        long frozenGeneration = state.apply(PLAYER_ID);
+
+        assertFalse(state.isCurrentRelease(PLAYER_ID, releaseGeneration));
+        assertTrue(state.isCurrentFrozen(PLAYER_ID, frozenGeneration));
+        assertTrue(state.isRestricted(PLAYER_ID));
     }
 
     @Test
