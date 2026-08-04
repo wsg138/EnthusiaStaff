@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
@@ -39,7 +40,7 @@ class FreezeInteractionCoverageTest {
     private static final UUID PLAYER_ID = UUID.fromString("66702d67-a72e-4485-aa83-14ce402878e6");
 
     @Test
-    void declaresExplicitHandlersForPreciseAndResourceInteractions() {
+    void declaresExplicitHandlersForCoveredInteractions() {
         assertHighestPriorityCancellationHandler(EntityMountEvent.class);
         assertHighestPriorityCancellationHandler(PlayerInteractAtEntityEvent.class);
         assertHighestPriorityCancellationHandler(PlayerArmorStandManipulateEvent.class);
@@ -76,7 +77,7 @@ class FreezeInteractionCoverageTest {
         AtomicInteger vehicleExits = new AtomicInteger();
         AtomicInteger inventoryClosures = new AtomicInteger();
         AtomicInteger messages = new AtomicInteger();
-        Player player = proxy(Player.class, (method, arguments) -> switch (method.getName()) {
+        Player player = proxy(Player.class, method -> switch (method.getName()) {
             case "getUniqueId" -> PLAYER_ID;
             case "leaveVehicle" -> {
                 vehicleExits.incrementAndGet();
@@ -200,17 +201,17 @@ class FreezeInteractionCoverageTest {
     }
 
     private static <T> T proxy(Class<T> type) {
-        return proxy(type, (method, arguments) -> "getUniqueId".equals(method.getName())
+        return proxy(type, method -> "getUniqueId".equals(method.getName())
                 ? PLAYER_ID
                 : defaultValue(method.getReturnType()));
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, Invocation invocation) {
+    private static <T> T proxy(Class<T> type, Function<Method, Object> invocation) {
         return (T) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
-                (instance, method, arguments) -> invocation.invoke(method, arguments)
+                (instance, method, arguments) -> invocation.apply(method)
         );
     }
 
@@ -226,11 +227,6 @@ class FreezeInteractionCoverageTest {
             Cancellable event,
             Consumer<FreezeManager> dispatch
     ) {
-    }
-
-    @FunctionalInterface
-    private interface Invocation {
-        Object invoke(Method method, Object[] arguments);
     }
 
     private static final class ServerFreeItemStack extends ItemStack {
