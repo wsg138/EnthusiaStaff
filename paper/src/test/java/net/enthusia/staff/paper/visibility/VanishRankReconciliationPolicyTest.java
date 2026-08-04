@@ -65,17 +65,27 @@ class VanishRankReconciliationPolicyTest {
     }
 
     @Test
-    void lowerRanksCannotRemainVanishedOutsideStaffMode() {
+    void unchangedLowerRankSurvivesAsynchronousStartupRecovery() {
+        for (StaffRank rank : new StaffRank[]{StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER}) {
+            assertEquals(
+                    VanishRankReconciliationPolicy.VanishAction.NONE,
+                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false)
+            );
+        }
+    }
+
+    @Test
+    void demotionToStaffModeRequiredRankDisablesWithoutActiveSession() {
         for (StaffRank rank : new StaffRank[]{StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER}) {
             assertEquals(
                     VanishRankReconciliationPolicy.VanishAction.DISABLE,
-                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false)
+                    VanishRankReconciliationPolicy.vanishAction(true, StaffRank.ADMIN, rank, false)
             );
         }
         for (StaffRank rank : new StaffRank[]{StaffRank.ADMIN, StaffRank.FOUNDER}) {
             assertEquals(
-                    VanishRankReconciliationPolicy.VanishAction.NONE,
-                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false)
+                    VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK,
+                    VanishRankReconciliationPolicy.vanishAction(true, StaffRank.HELPER, rank, false)
             );
         }
     }
