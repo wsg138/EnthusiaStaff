@@ -58,7 +58,13 @@ class VanishRankReconciliationPolicyTest {
                         : VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK;
                 assertEquals(
                         expected,
-                        VanishRankReconciliationPolicy.vanishAction(true, durableRank, liveRank, true)
+                        VanishRankReconciliationPolicy.vanishAction(
+                                true,
+                                durableRank,
+                                liveRank,
+                                true,
+                                false
+                        )
                 );
             }
         }
@@ -69,9 +75,33 @@ class VanishRankReconciliationPolicyTest {
         for (StaffRank rank : new StaffRank[]{StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER}) {
             assertEquals(
                     VanishRankReconciliationPolicy.VanishAction.NONE,
-                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false)
+                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false, false)
             );
         }
+    }
+
+    @Test
+    void completedStaffModeExitForcesCleanupUntilDurableDisableSucceeds() {
+        for (StaffRank rank : new StaffRank[]{StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER}) {
+            assertEquals(
+                    VanishRankReconciliationPolicy.VanishAction.DISABLE,
+                    VanishRankReconciliationPolicy.vanishAction(true, rank, rank, false, true)
+            );
+            assertEquals(
+                    VanishRankReconciliationPolicy.VanishAction.DISABLE,
+                    VanishRankReconciliationPolicy.vanishAction(false, rank, rank, false, true)
+            );
+        }
+        assertEquals(
+                VanishRankReconciliationPolicy.VanishAction.NONE,
+                VanishRankReconciliationPolicy.vanishAction(
+                        true,
+                        StaffRank.ADMIN,
+                        StaffRank.ADMIN,
+                        false,
+                        true
+                )
+        );
     }
 
     @Test
@@ -79,13 +109,25 @@ class VanishRankReconciliationPolicyTest {
         for (StaffRank rank : new StaffRank[]{StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER}) {
             assertEquals(
                     VanishRankReconciliationPolicy.VanishAction.DISABLE,
-                    VanishRankReconciliationPolicy.vanishAction(true, StaffRank.ADMIN, rank, false)
+                    VanishRankReconciliationPolicy.vanishAction(
+                            true,
+                            StaffRank.ADMIN,
+                            rank,
+                            false,
+                            false
+                    )
             );
         }
         for (StaffRank rank : new StaffRank[]{StaffRank.ADMIN, StaffRank.FOUNDER}) {
             assertEquals(
                     VanishRankReconciliationPolicy.VanishAction.UPDATE_RANK,
-                    VanishRankReconciliationPolicy.vanishAction(true, StaffRank.HELPER, rank, false)
+                    VanishRankReconciliationPolicy.vanishAction(
+                            true,
+                            StaffRank.HELPER,
+                            rank,
+                            false,
+                            false
+                    )
             );
         }
     }
@@ -94,19 +136,37 @@ class VanishRankReconciliationPolicyTest {
     void rankRemovalDisablesVanishAndRetriesStaleDurableState() {
         assertEquals(
                 VanishRankReconciliationPolicy.VanishAction.DISABLE,
-                VanishRankReconciliationPolicy.vanishAction(true, StaffRank.ADMIN, null, false)
+                VanishRankReconciliationPolicy.vanishAction(
+                        true,
+                        StaffRank.ADMIN,
+                        null,
+                        false,
+                        false
+                )
         );
         assertEquals(
                 VanishRankReconciliationPolicy.VanishAction.DISABLE,
-                VanishRankReconciliationPolicy.vanishAction(true, StaffRank.ADMIN, StaffRank.SYSTEM, false)
+                VanishRankReconciliationPolicy.vanishAction(
+                        true,
+                        StaffRank.ADMIN,
+                        StaffRank.SYSTEM,
+                        false,
+                        false
+                )
         );
         assertEquals(
                 VanishRankReconciliationPolicy.VanishAction.DISABLE,
-                VanishRankReconciliationPolicy.vanishAction(false, StaffRank.ADMIN, null, false)
+                VanishRankReconciliationPolicy.vanishAction(
+                        false,
+                        StaffRank.ADMIN,
+                        null,
+                        false,
+                        false
+                )
         );
         assertEquals(
                 VanishRankReconciliationPolicy.VanishAction.NONE,
-                VanishRankReconciliationPolicy.vanishAction(false, null, null, false)
+                VanishRankReconciliationPolicy.vanishAction(false, null, null, false, false)
         );
     }
 
