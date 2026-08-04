@@ -17,11 +17,11 @@ Related PR:
 | Branch | `fix/vanish-live-rank-reconciliation` |
 | Starting main | `8bed23c521f907aa134453445e77f17df75a3743` |
 | State | `ACTIVE — exact-head validation and review pending` |
-| Implementation | One owner-scheduled periodic check per player; incremental viewer/target refresh; durable target-rank correction; rank-removal disable; bounded and token-fenced durable staff-session verification for lower ranks; retryable staff-mode-exit cleanup |
+| Implementation | One-second checks for tracked staff/vanish state plus five-second full online discovery; incremental viewer/target refresh; durable target-rank correction; rank-removal disable; bounded and token-fenced durable staff-session verification for lower ranks; retryable staff-mode-exit cleanup |
 | Startup behavior | Open durable staff sessions preserve valid Helper/Mod/Developer vanish while asynchronous staff-mode recovery completes; confirmed missing sessions disable it |
-| Failure behavior | In-memory authority fails safely, writes and session checks are bounded, failed operations back off and retry, and stale reconnect callbacks are discarded |
-| Tests | Promotion/demotion matrix, missing/`SYSTEM` ranks, durable-session active/inactive/unknown/exited states, Admin/Founder independence, stale durable cleanup, viewer-owner scheduling and reconnect fencing |
-| Harsh-review fixes | Quit-message ordering; startup recovery race; collided exit cleanup; crash-window durable verification; reconnect-fenced session checks; event-driven viewer refresh |
+| Failure behavior | In-memory authority fails safely, writes and session checks are bounded, failed operations back off and retry, stale reconnect callbacks are discarded, and transient per-player markers clear on quit |
+| Tests | Scan-selection policy, promotion/demotion matrix, missing/`SYSTEM` ranks, durable-session active/inactive/unknown/exited states, Admin/Founder independence, stale durable cleanup, viewer-owner scheduling and reconnect fencing |
+| Harsh-review fixes | Quit-message ordering; startup recovery race; collided exit cleanup; crash-window durable verification; reconnect-fenced session checks; event-driven viewer refresh; quit-marker leak; tiered performance scan; Codacy method complexity; intended post-merge routing |
 | Migration boundary | V16 is highest; PR #59 adds no migration; V1–V16 remain immutable |
 | Configuration changes | None |
 | External provider blocker | RoseChat private-message evidence remains blocked pending the supported provider callback/event contract, delivery lifecycle, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. Do not route it through issue #43. |
