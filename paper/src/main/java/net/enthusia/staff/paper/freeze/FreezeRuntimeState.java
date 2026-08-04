@@ -57,6 +57,19 @@ final class FreezeRuntimeState {
         return retired != null && retired.status() == Status.FROZEN;
     }
 
+    boolean retireIfCurrent(UUID playerId, long generation) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        AtomicBoolean retired = new AtomicBoolean();
+        states.computeIfPresent(playerId, (ignored, current) -> {
+            if (current.generation() != generation) {
+                return current;
+            }
+            retired.set(true);
+            return null;
+        });
+        return retired.get();
+    }
+
     boolean isRestricted(UUID playerId) {
         Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
         return current != null && current.status() != Status.RELEASED;
