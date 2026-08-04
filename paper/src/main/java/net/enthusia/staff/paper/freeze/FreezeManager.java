@@ -23,6 +23,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -80,8 +81,7 @@ public final class FreezeManager implements Listener {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
                 return;
             }
-            player.closeInventory();
-            player.sendMessage(Component.text("You have been frozen by network staff."));
+            securePlayer(player);
         }, () -> runtimeState.retireIfCurrent(playerId, generation));
     }
 
@@ -139,8 +139,7 @@ public final class FreezeManager implements Listener {
                 if (!runtimeState.isCurrentFrozen(playerId, verificationToken)) {
                     return;
                 }
-                player.closeInventory();
-                player.sendMessage(Component.text("You have been frozen by network staff."));
+                securePlayer(player);
             });
             alertStaff(playerId, verificationToken, "Freeze restored for " + displayName
                     + ". Use /unfreeze or /freeze keep after review.");
@@ -181,6 +180,13 @@ public final class FreezeManager implements Listener {
         stationary.setYaw(to.getYaw());
         stationary.setPitch(to.getPitch());
         event.setTo(stationary);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onMount(EntityMountEvent event) {
+        if (event.getEntity() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -335,6 +341,12 @@ public final class FreezeManager implements Listener {
         }
         event.setCancelled(true);
         relayFrozenChat(event.getPlayer(), Component.text(event.getMessage()));
+    }
+
+    void securePlayer(Player player) {
+        player.leaveVehicle();
+        player.closeInventory();
+        player.sendMessage(Component.text("You have been frozen by network staff."));
     }
 
     private boolean restricted(Player player) {
