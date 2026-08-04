@@ -100,7 +100,7 @@ class StaffModeActivationCoordinatorTest {
     }
 
     @Test
-    void rejectedRecoveryQueueClearsTransitionAndDoesNotPretendMarkerPersisted() {
+    void rejectedRecoveryQueueKeepsTransitionAndDoesNotPretendMarkerPersisted() {
         Fixture fixture = new Fixture(operation -> {
             throw new RejectedExecutionException("full");
         });
@@ -113,9 +113,31 @@ class StaffModeActivationCoordinatorTest {
 
         fixture.assertUnpublished();
         assertEquals(0, fixture.store.recoveryMarks);
-        assertFalse(fixture.transitions.contains(PLAYER_ID));
+        assertTrue(fixture.transitions.contains(PLAYER_ID));
         assertTrue(fixture.messages.stream().anyMatch(message -> message.contains("could not be queued")));
+        assertTrue(fixture.messages.stream().anyMatch(message -> message.contains("remains blocked")));
         assertFalse(fixture.messages.stream().anyMatch(message -> message.contains("recovery is pending")));
+        fixture.assertLogContainsIdentifiers();
+    }
+
+    @Test
+    void recoveryPersistenceFailureKeepsTransitionUntilDisconnectOrVerifiedRestore() {
+        Fixture fixture = new Fixture(new QueuedExecutor());
+        fixture.store.failRecovery = true;
+
+        assertFalse(fixture.activate(
+                StaffModeActivationCoordinator.ActivationPath.ACTIVE_RECOVERY,
+                () -> { throw new IllegalStateException("apply failed"); },
+                () -> fixture.transitions.remove(PLAYER_ID)
+        ));
+
+        fixture.executor.runOnly();
+
+        fixture.assertUnpublished();
+        assertEquals(0, fixture.store.recoveryMarks);
+        assertTrue(fixture.transitions.contains(PLAYER_ID));
+        assertTrue(fixture.messages.stream().anyMatch(message -> message.contains("administrator recovery")));
+        assertTrue(fixture.messages.stream().anyMatch(message -> message.contains("remains blocked")));
         fixture.assertLogContainsIdentifiers();
     }
 
@@ -251,6 +273,7 @@ class StaffModeActivationCoordinatorTest {
     private static final class RecordingStore implements StaffSessionStore {
         private int recoveryMarks;
         private UUID markedSessionId;
+        private boolean failRecovery;
 
         @Override
         public StaffSessionSnapshot begin(
@@ -281,6 +304,9 @@ class StaffModeActivationCoordinatorTest {
 
         @Override
         public void recoveryRequired(UUID sessionId, String reason, Instant now) {
+            if (failRecovery) {
+                throw new IllegalStateException("recovery persistence unavailable");
+            }
             recoveryMarks++;
             markedSessionId = sessionId;
         }
