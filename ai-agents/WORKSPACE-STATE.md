@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-03
+Last updated: 2026-08-04
 
 This is a routing record, not a substitute for live GitHub reconciliation.
 
@@ -10,7 +10,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current legitimate `main` at PR #58 start | `03971345a8c3cd079deda9f38b2f471dcbbcfd42` |
+| Current legitimate `main` at PR #59 start | `8bed23c521f907aa134453445e77f17df75a3743` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
@@ -18,94 +18,85 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `IDLE — PR #58 requires live merge verification` |
-| Intended post-merge state | PR #58 merged normally into `main`; resulting `main` contains the reviewed feature head; the feature branch is deleted or otherwise confirmed clean; LiteBans remains authoritative and no deployment, production access, authority activation, shadow window or cutover occurs |
-| Pull request to verify | `#58 — Recover staff sessions across Paper disable` |
-| Feature branch to verify | `fix/staffmode-disable-recovery` |
-| Completed work item | Durably route backend-owned open staff sessions through exact restoration after Paper disable or reload, and keep unresolved recovery fail-closed |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-staffmode-disable-recovery.md` |
-| Exact validation/merge evidence | Read PR #58 live. Require one unchanged exact feature head synchronized with current `main`; terminal results for every configured Java 21, MariaDB/Testcontainers, migration immutability, runtime-JAR/provider-leak, coverage, Codacy/static-analysis, wiki/documentation, applicable public/private Pi and review gate; zero unresolved valid threads; exact run/job/artifact identities and hashes; normal merge commit; resulting `main`; feature-head containment; no unmerged branch commits; and branch cleanup. |
-| External blocker | Supported RoseChat private-message provider contract remains unavailable. See `ai-agents/reports/agent-handoffs/2026-08-02-pr50-rosechat-provider-blocker.md`; implementation requires the supported callback/event API, lifecycle and delivery semantics, identity/duplicate fields, threading guarantees, version coordinates, privacy fields, and provider-present/missing behavior. Route it through a focused blocker issue or handoff, never issue #43. |
+| State | `ACTIVE — PR #59 exact-head validation and review pending` |
+| Pull request | `#59 — Reconcile vanish visibility with live rank changes` |
+| Feature branch | `fix/vanish-live-rank-reconciliation` |
+| Starting main | `8bed23c521f907aa134453445e77f17df75a3743` |
+| Work item | Reconcile cached vanish viewer/target rank authority with live explicit permissions, durably correct persisted target rank, and disable unauthorized vanish without breaking startup recovery |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-vanish-live-rank-reconciliation.md` |
+| Migration boundary | V16 is highest; PR #59 adds no migration; V1–V16 remain immutable |
+| Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
+| External blocker | RoseChat private-message evidence remains separately blocked pending the supported provider contract; never route that blocker through issue #43 |
 
-## Start-state reconciliation for PR #58
+## Live start-state reconciliation
 
-- PR #57 merged normally as `03971345a8c3cd079deda9f38b2f471dcbbcfd42`.
-- The PR #57 feature head is contained in `main`, its branch was removed, and no pull request or non-`main` branch remained before PR #58.
-- PR #58 started from exact `main` `03971345a8c3cd079deda9f38b2f471dcbbcfd42`.
-- V16 was the live highest migration; PR #58 adds no migration and V1–V16 remain immutable.
-- The owner-priority route was staff mode, vanish and freeze. PR #57's handoff explicitly deferred reload/disable restoration, so PR #58 selected that one bounded correctness item.
+- PR #58 merged normally as `8bed23c521f907aa134453445e77f17df75a3743`.
+- Its feature head is contained in `main`, its branch was removed, and no pull request or non-`main` branch was active before PR #59.
+- PR #59 began from exact `main` `8bed23c521f907aa134453445e77f17df75a3743`.
+- V16 remains the live highest migration; PR #59 changes no schema or migration bytes.
+- Owner priority remains staff mode, vanish, and freeze before report notifications and escalation policy.
 
-## PR #58 completed behavior
+## Confirmed defect
 
-Before PR #58, Paper disable or reload could leave a durable staff session `ACTIVE` while the player retained the temporary staff inventory/game mode and the enforcing listeners disappeared. The next runtime could resume the temporary profile rather than restore the exact saved snapshot.
+`VanishManager` cached each online viewer rank and each vanished target rank. Online permission changes did not reconcile those caches until reconnect or another incidental vanish-related event. A demoted viewer could retain visibility to vanished ranks they no longer supervised, a promoted viewer could remain incorrectly restricted, a vanished target could remain classified under an old rank, and rank removal could leave a former staff member hidden.
 
-PR #58 now:
+## Implemented behavior
 
-- stops operational producers and closes non-database integrations before final storage work;
-- drains accepted bounded worker operations before the shutdown recovery transaction;
-- transactionally locks and changes this backend's remaining `ACTIVE` and `EXITING` staff sessions to `RECOVERY_REQUIRED` while MariaDB remains open;
-- writes one audit record per newly transitioned session, leaves existing recovery rows untouched, isolates other backend IDs and rolls back all state changes if any audit insert fails;
-- closes MariaDB only after the recovery transaction;
-- routes `RECOVERY_REQUIRED` through `beginExit` before checksum-verified restoration so successful restart recovery closes the durable session;
-- keeps recovery interaction fences active across queue rejection, persistence failure, entity-scheduler retirement, restoration failure and checksum mismatch;
-- clears the fence only after verified durable closure or disconnect;
-- performs no player/entity mutation from `onDisable`.
+PR #59 now:
+
+- starts one plugin-owned periodic rank reconciler;
+- resolves live permissions only on each player's owning entity scheduler;
+- bounds periodic work to one queued rank check per player;
+- updates changed viewer authority and refreshes only that viewer;
+- updates a changed vanished-target rank in memory and persists the new rank asynchronously;
+- verifies lower-rank authorization against the durable staff-session store when in-memory staff-mode state is not yet known;
+- treats completed staff-mode exit or confirmed missing durable session as requiring vanish disable;
+- keeps valid persisted Helper/Mod/Developer vanish intact while asynchronous startup recovery still has an open durable staff session;
+- retries failed durable rank/disable writes with bounded backoff;
+- keeps one state write and one durable staff-session check per player in flight;
+- token-fences staff-session checks so disconnect/reconnect cannot apply stale results;
+- preserves quit-message suppression before removing runtime visibility state;
+- keeps ordinary toggle, spectator masking, configured hierarchy, and incremental viewer/target refresh behavior.
 
 ## Focused tests
 
-- `PaperShutdownCoordinatorTest` proves shutdown order and continued cleanup after earlier failures.
-- `StaffSessionShutdownRecoveryIntegrationTest` proves server scope, `ACTIVE`/`EXITING` transition, existing-recovery idempotency, backend isolation, exact recovery closure and full rollback on audit failure against MariaDB/Testcontainers.
-- `StaffModeActivationCoordinatorTest` proves rejected recovery queues and failed recovery persistence remain fail-closed while successful activation/recovery behavior remains intact.
+- `VanishRankReconciliationPolicyTest` covers every promotion/demotion, rank removal, `SYSTEM`, durable-session unknown/active/inactive/exited states, independent Admin/Founder behavior, and stale durable-disable retry.
+- `VanishAudienceCoordinatorTest` covers viewer-owner scheduling, reconnect fencing, retired/rejected cleanup, current-session snapshots, incremental recovery, and stale-target removal.
+- Existing visibility hierarchy, spectator-tab policy, packet masking, field preservation, unauthorized removal, and fail-closed tests remain part of the configured suite.
 
-## Harsh-review result
+## Harsh-review corrections already applied
 
-The complete diff received a separate harsh review. It found and fixed:
+1. Removed quit-time reconciliation that could clear vanish before quit-message suppression.
+2. Prevented startup from disabling valid lower-rank vanish before asynchronous staff-mode recovery completes.
+3. Added a durable cleanup path for staff-mode exit writes that collide or fail.
+4. Replaced the temporary in-memory-only startup workaround with a durable staff-session lookup, covering the crash window between staff-session closure and vanish disable.
+5. Added token fencing and retry backoff for asynchronous staff-session verification.
+6. Ensured event-driven viewer-rank refreshes also refresh the viewer's existing visibility relationships.
 
-1. order-dependent integration scenarios sharing one backend ID;
-2. `RECOVERY_REQUIRED` restoration attempting `completeExit` without first entering `EXITING`;
-3. missing transition fencing during asynchronous recovery;
-4. fail-open fence release on scheduler, queue, persistence, restore and checksum failures;
-5. the same fail-open recovery behavior in the shared activation coordinator;
-6. a static-analysis boolean equality assertion in the new integration test.
+## Exact-head completion gate
 
-No confirmed merge blocker is intentionally deferred. Remaining broader staff-mode transition restrictions, full vanish work and full freeze work remain separate owner-priority items.
+Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for:
 
-## Owner priorities and selection guardrails
+- Java 21 build and unit/integration tests;
+- migration checksum and immutability checks with V1–V16 unchanged;
+- exactly one valid Paper and one valid Velocity runtime JAR;
+- provider-class leak inspection and artifact SHA-256 identities;
+- aggregate coverage and configured Codacy/static-analysis upload;
+- wiki/documentation validation;
+- CodeRabbit, Codacy, and human review with zero valid unresolved threads;
+- exact-head public Pi wrapper and correlated private staging run when applicable;
+- one consolidated exact-head evidence comment.
 
-Current owner priority order:
-
-1. Staff mode, vanish, and freeze.
-2. Report notification completion.
-3. Escalation-policy completion.
-
-PR #58 is one bounded priority-one correctness item. Do not combine full vanish, freeze, general inventory editing, confiscation, report notification or escalation work into it.
-
-## Pi evidence routing
-
-The public Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper check, annotations and summary, then follow the correlated private `wsg138/EnthusiaStaff-Staging` run and artifacts.
-
-Cancelled, superseded, skipped, stale-head, different-revision and merge-ref-only results are historical only. PR #58 requires terminal successful public and private Pi evidence for the final exact feature head when the workflow is applicable.
-
-## Migration boundary
-
-| Field | Value |
-| --- | --- |
-| Highest live migration | V16 |
-| PR #58 migration | None |
-| Immutable history | V1–V16 |
-| Next expected number | V17 unless live state is newer |
-| Locked checksums | V11 `-2005375055`; V12 `-1787751803`; V13 `1189066017` |
-
-Never edit an applied migration or use Flyway repair.
+Cancelled, superseded, skipped, stale-head, different-revision, and merge-ref-only runs are not acceptable evidence.
 
 ## Production boundary
 
-LiteBans remains authoritative. Issue #43 remains open specifically for production-cutover acceptance. PR #58 does not authorize deployment, production access, production Discord use, authority activation, a production shadow window, LiteBans disablement or removal, final production migration, or live cutover.
+PR #59 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, authority activation, a real shadow window, LiteBans disablement/removal, final migration, issue #43 acceptance, or live cutover.
 
 ## Next route
 
-1. Apply the complete exact-head gate to PR #58 and merge normally only after every applicable check and review gate succeeds for one unchanged synchronized head.
-2. Record the merge commit, resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup in one post-merge PR comment.
-3. After PR #58 is complete, freshly reconcile the remaining priority-one staff mode, vanish and freeze gaps; rank-aware vanish completion is a likely staff-visible candidate but is not preselected.
-4. The RoseChat private-message evidence item remains externally blocked until the supported provider contract described above becomes available.
-5. Do not begin the next work item in the PR #58 session.
+1. Finish PR #59 only: resolve all valid findings, freeze one exact head, complete every applicable gate, and merge normally only with zero unresolved valid threads.
+2. Record the merge commit, resulting `main`, feature-head containment, no unmerged branch commits, and branch cleanup in PR metadata.
+3. After PR #59 is complete, freshly select one bounded remaining priority-one staff mode, vanish, or freeze item.
+4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
+5. Do not begin another feature in the PR #59 session.
