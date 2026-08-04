@@ -10,7 +10,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current legitimate `main` at PR #62 start | `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` |
+| Current legitimate `main` at PR #63 start | `1cf4277bdc6ec8f3e50c7db97f6fe99d9054db0f` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
@@ -18,57 +18,69 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE — PR #62 review corrections applied; exact-head validation and Pi evidence pending` |
-| Pull request | `#62 — Block ordinary world interactions during staff mode` |
-| Feature branch | `fix/staffmode-world-interaction-guard` |
-| Starting main | `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` |
-| Work item | Prevent confirmed active staff-mode profiles from changing ordinary gameplay state through uncovered Paper world-interaction events |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-staffmode-world-interaction-guard.md` |
-| Migration boundary | V16 is highest; PR #62 adds no migration; V1–V16 remain immutable |
+| State | `ACTIVE — prior exact-head validation failures repaired; final exact-head Coverage, Codacy and Pi evidence pending` |
+| Pull request | `#63 — Block precise world interactions while frozen` |
+| Feature branch | `fix/freeze-precise-world-interactions` |
+| Starting main | `1cf4277bdc6ec8f3e50c7db97f6fe99d9054db0f` |
+| Work item | Explicitly cancel precise entity and resource-specific Paper events for restricted frozen players |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-freeze-precise-world-interactions.md` |
+| Validation history | Source `591324324b721c21b4c2b86f71501d0bc2210f59` failed Pi wrapper `30903529787`; correlated staging run `30903538014` failed in trusted-runtime build job `91973196566`, so the Pi boot/restart job did not run. Later Coverage failures exposed and led to repairs for a deprecated event constructor and a serverless Paper-registry test fixture. All of that evidence is superseded; the final unchanged head still requires fresh terminal validation. |
+| Migration boundary | V16 is highest; PR #63 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 | External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
-| Intended post-merge status | Merge PR #62 normally only after all configured gates pass and exact-head Pi succeeds, or direct evidence proves the permitted GitHub Actions quota/platform-unavailability exception; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
+| Intended post-merge status | Merge PR #63 normally only after all configured gates pass and exact-head Pi succeeds, or direct evidence proves the permitted GitHub Actions quota/platform-unavailability exception; verify resulting `main`, feature-head containment and branch cleanup; do not deploy or access production |
 
 ## Live start-state reconciliation
 
-- Live GitHub showed no open pull request and only the `main` branch before PR #62.
-- PR #60 and PR #61 had already merged; the recorded PR #60 handoff/state was stale.
-- `main` was `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` at branch creation.
-- V16 remains the highest migration; this PR changes no schema or migration bytes.
-- Owner priority remains staff mode, vanish, and freeze before report notifications and escalation policy.
+- PR #62 had already merged normally as `1cf4277bdc6ec8f3e50c7db97f6fe99d9054db0f`; the recorded PR #62 handoff/state was stale.
+- No pull request was open and only `main` existed before PR #63.
+- PR #62 feature head `123ffbe7c984b28a6eaafa0e6ded57e7b4e25a60` is contained in `main`, and its remote branch is absent.
+- V16 remains the live highest migration; PR #63 changes no schema or migration bytes.
+- Owner priority remains staff mode, vanish and freeze before report notifications and escalation policy.
+
+## Confirmed defect
+
+`FreezeManager` registered ordinary entity interaction and broad player interaction handlers but did not explicitly own the distinct event classes used for precise entity hitboxes, armor-stand manipulation, harvesting, shearing and fishing.
 
 ## Implemented behavior
 
-PR #62 adds a dedicated Paper listener that blocks confirmed active staff-mode players from block break/place, bucket fill/empty, harvesting, non-air block/physical interaction, ordinary and precise entity interaction, armor-stand manipulation, shearing, consumption, and fishing.
+PR #63 adds explicit `HIGHEST`-priority, `ignoreCancelled = true` handlers for:
 
-Air clicks remain available for dedicated staff tools. Ordinary players are unaffected. The implementation reuses `StaffModeManager.active(UUID)` and the existing Paper composition root; it creates no new session state, persistence, scheduler, permission, command, configuration, migration, vanish, or freeze system.
+- `PlayerInteractAtEntityEvent`;
+- `PlayerArmorStandManipulateEvent`;
+- `PlayerHarvestBlockEvent`;
+- `PlayerShearEntityEvent`;
+- `PlayerFishEvent`.
+
+Every handler reuses the existing fail-closed `FreezeRuntimeState.isRestricted` boundary. Ordinary players remain unaffected. The cancellation helper now accepts Bukkit's `Cancellable` contract directly. No new state, persistence, scheduler, permission, command, configuration, migration, vanish or staff-mode system is introduced.
 
 ## Focused tests
 
-`StaffModeWorldInteractionPolicyTest` covers inactive-player pass-through, active mutation blocking, air-click allowance, and block/physical interaction blocking.
+`FreezeInteractionCoverageTest` verifies explicit handler presence, `HIGHEST` priority and cancelled-event behavior metadata for all five event types.
 
-The Bukkit listener is thin adapter wiring. Low direct listener line coverage is acceptable only when exact-head compilation and terminal successful exact-head Pi staging prove event signatures and registration, unless direct evidence establishes the permitted GitHub Actions quota, billing, disabled-Actions, or equivalent platform-unavailability exception. The directly tested policy proves the interaction decisions. Cancelled, skipped, superseded, stale-head, different-revision, merge-ref-only, or executed-but-inconclusive Pi results are not passing evidence.
+Existing `FreezeRuntimeStateTest` proves unrestricted defaults, fail-closed pending verification, confirmed restrictions and lifecycle-generation fencing. The listener methods are thin Paper wiring; exact-head Paper compilation and applicable Pi staging must prove event signatures and runtime registration unless direct evidence establishes the permitted Actions quota/platform-unavailability exception.
 
-## Harsh-review corrections already applied
+## Harsh-review findings
 
-1. Replaced a custom cancellation callback with Bukkit's `Cancellable` contract.
-2. Added explicit `PlayerInteractAtEntityEvent` coverage rather than relying on superclass dispatch.
-3. Kept transition/recovery-state exposure outside this bounded PR because the existing public query reports confirmed active sessions only.
-4. Verified CodeRabbit's suggested entity-damage handler already exists in `StaffModeManager` and covers direct players plus player-shot projectiles with the stronger active-or-transition predicate; no duplicate was added.
-5. Added exact handoff timestamp, explicit readiness, and consistent Pi success-or-permitted-exception wording.
+1. Fixed the missing precise-hitbox entity handler.
+2. Fixed missing explicit armor-stand, harvest, shear and fish handlers.
+3. Replaced a custom boolean cancellation callback with `Cancellable`.
+4. Repaired focused-test compilation and serverless Paper fixture defects exposed by exact-head Coverage.
+5. Replaced brittle internal-JVM fixture construction and resolved valid static-analysis findings in the focused test.
+6. Kept backend-switch enforcement, command policy, RoseChat/provider behavior and freeze-duration expansion outside this bounded PR.
 
 ## Exact-head completion gate
 
-Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for all applicable configured checks: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, wiki validation when triggered, CodeRabbit/human review, and zero valid unresolved threads. Pi must succeed on the exact head unless direct evidence proves that GitHub Actions quota, billing, disabled Actions, or equivalent platform unavailability prevented execution. In that permitted exception case, record `Pi not run — GitHub Actions quota/platform unavailable` and the exact evidence; do not claim Pi passed. No other unavailable or non-success Pi result permits merge.
+Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for all applicable configured checks: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, wiki validation when triggered, CodeRabbit/human review and zero valid unresolved threads. Pi must succeed on the exact head unless direct evidence proves GitHub Actions quota, billing, disabled Actions or equivalent platform unavailability prevented execution. In that exception case, record `Pi not run — GitHub Actions quota/platform unavailable` and the exact evidence; do not claim Pi passed.
 
 ## Production boundary
 
-PR #62 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, authority activation, LiteBans changes, issue #43 acceptance, migration repair, or cutover.
+PR #63 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, authority activation, LiteBans changes, issue #43 acceptance, migration repair or cutover.
 
 ## Next route
 
-1. Finish PR #62 only: complete final full-diff review, synchronize with live `main`, exact-head validation, review resolution, and normal merge only when every gate permits it.
-2. Record merge/resulting `main`, feature-head containment, no unmerged branch commits, and branch cleanup in PR metadata.
-3. After PR #62 completes, freshly select one bounded remaining priority-one vanish or freeze restriction/lifecycle item.
+1. Finish PR #63 only: complete full-diff review, synchronize with live `main`, exact-head validation, review resolution and normal merge only when every gate permits it.
+2. Record merge/resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup in PR metadata.
+3. After PR #63 completes, freshly select one bounded remaining priority-one vanish or freeze restriction/lifecycle item; backend-switch enforcement is a candidate if its protocol prerequisites are ready.
 4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
-5. Do not begin another feature in the PR #62 session.
+5. Do not begin another feature in the PR #63 session.
