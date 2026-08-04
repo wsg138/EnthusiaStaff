@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -49,11 +50,20 @@ final class BoundedExecutorFactory {
         @Override
         public List<Runnable> shutdownNow() {
             List<Runnable> awaitingExecution = super.shutdownNow();
-            awaitTerminationUninterruptibly();
-            return awaitingExecution;
+            boolean interrupted = awaitTerminationUninterruptibly();
+            List<RuntimeException> failures = runAwaitingTasks(awaitingExecution);
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            if (!failures.isEmpty()) {
+                RuntimeException failure = failures.getFirst();
+                failures.stream().skip(1).forEach(failure::addSuppressed);
+                throw failure;
+            }
+            return List.of();
         }
 
-        private void awaitTerminationUninterruptibly() {
+        private boolean awaitTerminationUninterruptibly() {
             boolean interrupted = false;
             while (!isTerminated()) {
                 try {
@@ -64,9 +74,19 @@ final class BoundedExecutorFactory {
                     interrupted = true;
                 }
             }
-            if (interrupted) {
-                Thread.currentThread().interrupt();
+            return interrupted;
+        }
+
+        private static List<RuntimeException> runAwaitingTasks(List<Runnable> awaitingExecution) {
+            List<RuntimeException> failures = new ArrayList<>();
+            for (Runnable task : awaitingExecution) {
+                try {
+                    task.run();
+                } catch (RuntimeException exception) {
+                    failures.add(exception);
+                }
             }
+            return failures;
         }
     }
 }
