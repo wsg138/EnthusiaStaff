@@ -57,7 +57,9 @@ final class BoundedExecutorFactory {
             boolean interrupted = false;
             while (!isTerminated()) {
                 try {
-                    super.awaitTermination(1, TimeUnit.SECONDS);
+                    if (super.awaitTermination(1, TimeUnit.SECONDS)) {
+                        break;
+                    }
                 } catch (InterruptedException exception) {
                     interrupted = true;
                 }
