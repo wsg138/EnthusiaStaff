@@ -95,6 +95,7 @@ class FreezeInteractionCoverageTest {
         PlayerHarvestBlockEvent harvest = new PlayerHarvestBlockEvent(
                 player,
                 proxy(Block.class),
+                EquipmentSlot.HAND,
                 List.of()
         );
         PlayerShearEntityEvent shear = new PlayerShearEntityEvent(
