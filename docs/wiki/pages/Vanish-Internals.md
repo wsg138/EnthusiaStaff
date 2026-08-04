@@ -84,8 +84,17 @@ error rather than pretending the toggle succeeded.
 
 ## Live rank reconciliation
 
-One plugin-owned global task runs every second. It snapshots current audience UUIDs
-and permits only one queued entity check per player. The entity check:
+One plugin-owned global task runs every second. It uses tiered selection:
+
+- known online staff, active staff-mode players, persisted vanished players, and
+  pending exit cleanup remain eligible every second;
+- every fifth pass includes the complete online audience so newly promoted players
+  are discovered within five seconds;
+- ordinary untracked players are skipped between full-discovery passes.
+
+This avoids five permission checks per second for every ordinary online player
+without making promotion detection depend on reconnecting. Each selected UUID may
+have only one queued entity check. The entity check:
 
 1. resolves the live explicit EnthusiaStaff rank;
 2. compares it with the cached viewer rank;
@@ -105,7 +114,8 @@ Helper, Mod, and Developer normally leave vanish when staff mode exits. If that
 cleanup collides with another state write or fails, a pending cleanup marker keeps
 the disable operation eligible for retry. A later restart also detects the closed
 staff session through durable verification, covering the crash window between
-staff-session closure and vanish disable.
+staff-session closure and vanish disable. Transient cleanup markers are removed on
+quit; reconnect re-establishes authority from durable storage.
 
 Viewer authority and target classification are separate:
 
@@ -140,7 +150,7 @@ Registered at `EventPriority.HIGHEST`.
 - Suppresses the quit message before retiring runtime state when the player is
   vanished.
 - Removes that audience session, viewer rank, spectator-tab state, queued rank
-  marker, and transient session-verification caches.
+  marker, pending exit marker, and transient session-verification caches.
 - Does not clear durable vanish state.
 
 ### `PlayerGameModeChangeEvent`
@@ -263,7 +273,9 @@ player's entity scheduler.
 
 Bounds include:
 
-- one periodic entity rank check per online player;
+- one-second rank checks for tracked staff/vanish state;
+- one full online rank-discovery pass every five seconds;
+- one queued entity rank check per selected player;
 - one vanish state write per player;
 - one durable staff-session verification per player;
 - retry backoff after failed persistence or session verification;
@@ -292,6 +304,7 @@ provider integrations that trigger additional scans.
 Reviewers should verify:
 
 - every viewer and target promotion/demotion combination;
+- promotion discovery within the full-scan interval;
 - rank removal and `SYSTEM` handling;
 - staff-mode exit, collided writes, restart, reconnect, and crash-window cleanup;
 - durable staff-session active, absent, exiting, and recovery-required states;
