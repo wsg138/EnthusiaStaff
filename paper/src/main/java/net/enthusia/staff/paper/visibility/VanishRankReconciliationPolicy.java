@@ -25,7 +25,7 @@ final class VanishRankReconciliationPolicy {
         if (!isPlayerRank(liveRank)) {
             return VanishAction.DISABLE;
         }
-        if (requiresStaffMode(liveRank) && !staffModeActive) {
+        if (requiresStaffMode(liveRank) && !staffModeActive && durableRank != liveRank) {
             return VanishAction.DISABLE;
         }
         return durableRank == liveRank ? VanishAction.NONE : VanishAction.UPDATE_RANK;
