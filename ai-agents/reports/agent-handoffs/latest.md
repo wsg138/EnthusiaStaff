@@ -18,9 +18,9 @@ Related PR:
 | Starting main | `a5cf73568310ee1d12bd961ed192945b1859884a` |
 | State | `ACTIVE — exact-head validation and review pending` |
 | Implementation | One per-player concurrent pending/frozen state machine; monotonic lifecycle generations; atomic stale-result rejection; generation-fenced delayed recovery effects; confirmed-only quit persistence |
-| Failure behavior | Current verification remains fail-closed on lookup failure; stale results and callbacks cannot change or announce a newer session state |
-| Tests | Active/inactive recovery, reconnect, manual freeze/release races, delayed callback generations, pending/confirmed quit, and unresolved fail-closed state |
-| Harsh-review fixes | Replaced split state sets; retained confirmed generations; fenced delayed entity/global scheduler recovery effects |
+| Failure behavior | Current verification remains fail-closed on lookup failure or unavailable storage; pending verification remains restricted through Bukkit and RoseChat paths; stale results and callbacks cannot change or announce a newer state |
+| Tests | Active/inactive recovery, reconnect, manual freeze/release races, delayed callback generations, pending/confirmed quit, and unresolved fail-closed restricted state |
+| Harsh-review fixes | Replaced split state sets; retained confirmed generations; fenced delayed entity/global scheduler effects; closed storage-unavailable and RoseChat pending-verification gaps |
 | Migration boundary | V16 is highest; PR #60 adds no migration; V1–V16 remain immutable |
 | Commands, permissions, configuration | None changed |
 | External provider blocker | RoseChat private-message evidence remains blocked pending the supported provider contract. Do not route it through issue #43. |
