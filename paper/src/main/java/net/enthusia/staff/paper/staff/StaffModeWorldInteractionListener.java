@@ -2,10 +2,10 @@ package net.enthusia.staff.paper.staff;
 
 import java.util.Objects;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
@@ -32,27 +32,27 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHarvest(PlayerHarvestBlockEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -67,37 +67,32 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onShear(PlayerShearEntityEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
-        cancelForActiveStaff(event.getPlayer(), event::setCancelled);
+        cancelForActiveStaff(event.getPlayer(), event);
     }
 
-    private void cancelForActiveStaff(Player player, Cancellation cancellation) {
+    private void cancelForActiveStaff(Player player, Cancellable event) {
         if (StaffModeWorldInteractionPolicy.blocksMutation(staffMode.active(player.getUniqueId()))) {
-            cancellation.cancel(true);
+            event.setCancelled(true);
         }
-    }
-
-    @FunctionalInterface
-    private interface Cancellation {
-        void cancel(boolean cancelled);
     }
 }
