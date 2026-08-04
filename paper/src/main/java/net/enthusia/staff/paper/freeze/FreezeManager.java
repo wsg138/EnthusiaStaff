@@ -80,9 +80,13 @@ public final class FreezeManager implements Listener {
     }
 
     public void releaseOnline(UUID playerId) {
-        runtimeState.release(playerId);
-        onEntity(playerId, player ->
-                player.sendMessage(Component.text("Your staff freeze has been released.")));
+        long generation = runtimeState.release(playerId);
+        onEntity(playerId, player -> {
+            if (!runtimeState.isCurrentRelease(playerId, generation)) {
+                return;
+            }
+            player.sendMessage(Component.text("Your staff freeze has been released."));
+        });
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
