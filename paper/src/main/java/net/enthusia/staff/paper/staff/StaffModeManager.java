@@ -200,14 +200,19 @@ public final class StaffModeManager implements Listener {
     }
 
     public void recover(UUID playerId, StaffRank rankSnapshot) {
-        submit(() -> {
+        if (!transitions.add(playerId)) {
+            return;
+        }
+        if (!submit(() -> {
             StaffSessionStore loaded = store.get();
             if (loaded == null) {
+                transitions.remove(playerId);
                 return;
             }
             try {
                 StaffSessionSnapshot session = loaded.active(playerId).orElse(null);
                 if (session == null) {
+                    transitions.remove(playerId);
                     return;
                 }
                 if (!session.serverId().equals(serverId)) {
@@ -221,7 +226,10 @@ public final class StaffModeManager implements Listener {
                 }
                 if (session.state() == StaffSessionState.EXITING
                         || session.state() == StaffSessionState.RECOVERY_REQUIRED) {
-                    restoreAndVerify(playerId, session, loaded);
+                    StaffSessionSnapshot restoring = session.state() == StaffSessionState.RECOVERY_REQUIRED
+                            ? loaded.beginExit(playerId, clock.instant()).orElse(session)
+                            : session;
+                    restoreAndVerify(playerId, restoring, loaded);
                     return;
                 }
                 if (StaffModeRankReconciliationPolicy.decide(null, rankSnapshot)
@@ -233,10 +241,14 @@ public final class StaffModeManager implements Listener {
                 }
                 onEntity(playerId, current -> finishActiveRecovery(playerId, session, loaded, current));
             } catch (RuntimeException exception) {
+                transitions.remove(playerId);
                 plugin.getLogger().log(Level.SEVERE, "Staff session recovery failed", exception);
                 message(playerId, "Your staff session could not be recovered automatically; contact an administrator.");
             }
-        });
+        })) {
+            transitions.remove(playerId);
+            message(playerId, "The bounded work queue is full; staff session recovery did not start.");
+        }
     }
 
     private void finishActiveRecovery(
@@ -251,18 +263,19 @@ public final class StaffModeManager implements Listener {
             player.sendMessage(Component.text(
                     "Your explicit staff rank is no longer assigned; restoring your saved state."
             ));
-            submit(() -> {
+            if (!submit(() -> {
                 try {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElse(session);
                     restoreAndVerify(playerId, exiting, loaded);
                 } catch (RuntimeException exception) {
+                    transitions.remove(playerId);
                     plugin.getLogger().log(Level.SEVERE, "Staff session recovery exit failed", exception);
                     message(playerId, "Your staff session could not be recovered automatically; contact an administrator.");
                 }
-            });
-            return;
-        }
-        if (!transitions.add(playerId)) {
+            })) {
+                transitions.remove(playerId);
+                player.sendMessage(Component.text("The bounded work queue is full; staff session recovery did not continue."));
+            }
             return;
         }
         activateDurableSession(
@@ -518,39 +531,51 @@ public final class StaffModeManager implements Listener {
     }
 
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
-        onEntity(playerId, player -> {
-            try {
-                removeStaffTools(player);
-                if (!codec.restore(player, session.snapshot())) {
-                    submit(() -> loaded.recoveryRequired(
-                            session.sessionId(), "Original location could not be restored", clock.instant()
-                    ));
-                    player.sendMessage(Component.text("Restoration could not complete; recovery remains pending."));
-                    transitions.remove(playerId);
-                    return;
-                }
-                StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
-                submit(() -> {
-                    boolean closed = loaded.completeExit(session.sessionId(), restored.checksum(), clock.instant());
-                    if (closed) {
-                        active.remove(playerId);
-                        ranks.remove(playerId);
-                        exitListener.accept(playerId);
-                        message(playerId, "Staff mode exited; your exact saved state was restored and verified.");
-                    } else {
-                        message(playerId, "State was restored, but checksum verification requires administrator review.");
+        onEntity(
+                playerId,
+                player -> {
+                    try {
+                        removeStaffTools(player);
+                        if (!codec.restore(player, session.snapshot())) {
+                            submit(() -> loaded.recoveryRequired(
+                                    session.sessionId(), "Original location could not be restored", clock.instant()
+                            ));
+                            player.sendMessage(Component.text(
+                                    "Restoration could not complete; recovery remains pending."
+                            ));
+                            transitions.remove(playerId);
+                            return;
+                        }
+                        StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
+                        submit(() -> {
+                            boolean closed = loaded.completeExit(
+                                    session.sessionId(), restored.checksum(), clock.instant()
+                            );
+                            if (closed) {
+                                active.remove(playerId);
+                                ranks.remove(playerId);
+                                exitListener.accept(playerId);
+                                message(playerId,
+                                        "Staff mode exited; your exact saved state was restored and verified.");
+                            } else {
+                                message(playerId,
+                                        "State was restored, but checksum verification requires administrator review.");
+                            }
+                            transitions.remove(playerId);
+                        });
+                    } catch (RuntimeException exception) {
+                        submit(() -> loaded.recoveryRequired(
+                                session.sessionId(), "Runtime restoration failure", clock.instant()
+                        ));
+                        transitions.remove(playerId);
+                        plugin.getLogger().log(Level.SEVERE, "Staff state restoration failed", exception);
+                        player.sendMessage(Component.text(
+                                "Restoration failed safely; your original snapshot remains durable."
+                        ));
                     }
-                    transitions.remove(playerId);
-                });
-            } catch (RuntimeException exception) {
-                submit(() -> loaded.recoveryRequired(
-                        session.sessionId(), "Runtime restoration failure", clock.instant()
-                ));
-                transitions.remove(playerId);
-                plugin.getLogger().log(Level.SEVERE, "Staff state restoration failed", exception);
-                player.sendMessage(Component.text("Restoration failed safely; your original snapshot remains durable."));
-            }
-        });
+                },
+                () -> transitions.remove(playerId)
+        );
     }
 
     private void applyStaffState(Player player, StaffRank rank) {
