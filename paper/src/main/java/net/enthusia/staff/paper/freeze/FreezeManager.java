@@ -64,7 +64,7 @@ public final class FreezeManager implements Listener {
         this.workers = workers;
     }
 
-    public boolean isFrozen(UUID playerId) {
+    public boolean isRestricted(UUID playerId) {
         return runtimeState.isRestricted(playerId);
     }
 
@@ -76,7 +76,7 @@ public final class FreezeManager implements Listener {
             }
             player.closeInventory();
             player.sendMessage(Component.text("You have been frozen by network staff."));
-        });
+        }, () -> runtimeState.retireIfCurrent(playerId, generation));
     }
 
     public void releaseOnline(UUID playerId) {
@@ -86,7 +86,7 @@ public final class FreezeManager implements Listener {
                 return;
             }
             player.sendMessage(Component.text("Your staff freeze has been released."));
-        });
+        }, () -> runtimeState.retireIfCurrent(playerId, generation));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -104,7 +104,14 @@ public final class FreezeManager implements Listener {
                 ? playerId.toString()
                 : playerName;
         long verificationToken = runtimeState.beginVerification(playerId);
-        submit(() -> verifyStoredState(playerId, displayName, verificationToken));
+        if (submit(() -> verifyStoredState(playerId, displayName, verificationToken))) {
+            return;
+        }
+        plugin.getLogger().severe("Freeze verification was not scheduled for " + displayName
+                + "; the player remains restricted until staff intervene");
+        alertStaffDuringVerification(playerId, verificationToken,
+                "Freeze verification could not run for " + displayName
+                        + ". The player remains restricted. Use /unfreeze after review.");
     }
 
     private void verifyStoredState(UUID playerId, String displayName, long verificationToken) {
@@ -330,26 +337,48 @@ public final class FreezeManager implements Listener {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
                 return;
             }
-            plugin.getServer().getOnlinePlayers().stream()
-                    .filter(player -> player.hasPermission("enthusiastaff.freeze"))
-                    .forEach(player -> player.sendMessage(Component.text(message)));
+            sendAlert(message);
         });
     }
 
-    private void submit(Runnable operation) {
+    private void alertStaffDuringVerification(UUID playerId, long generation, String message) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            if (!runtimeState.isVerificationCurrent(playerId, generation)) {
+                return;
+            }
+            sendAlert(message);
+        });
+    }
+
+    private void sendAlert(String message) {
+        plugin.getServer().getOnlinePlayers().stream()
+                .filter(player -> player.hasPermission("enthusiastaff.freeze"))
+                .forEach(player -> player.sendMessage(Component.text(message)));
+    }
+
+    private boolean submit(Runnable operation) {
         try {
             workers.execute(operation);
+            return true;
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().warning("Freeze persistence operation skipped because the bounded queue is full");
+            return false;
         }
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
+        onEntity(playerId, operation, () -> {
+        });
+    }
+
+    private void onEntity(UUID playerId, Consumer<Player> operation, Runnable unavailable) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+            if (player == null) {
+                unavailable.run();
+                return;
             }
+            player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
         });
     }
 }
