@@ -23,6 +23,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -56,6 +57,8 @@ public final class FreezeManager implements Listener {
     private final Clock clock;
     private final Supplier<FreezeStore> store;
     private final ExecutorService workers;
+    private final PlayerDispatcher playerDispatcher;
+    private final Consumer<Runnable> globalScheduler;
     private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
 
     public FreezeManager(
@@ -64,10 +67,23 @@ public final class FreezeManager implements Listener {
             Supplier<FreezeStore> store,
             ExecutorService workers
     ) {
+        this(plugin, clock, store, workers, null, null);
+    }
+
+    FreezeManager(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<FreezeStore> store,
+            ExecutorService workers,
+            PlayerDispatcher playerDispatcher,
+            Consumer<Runnable> globalScheduler
+    ) {
         this.plugin = plugin;
         this.clock = clock;
         this.store = store;
         this.workers = workers;
+        this.playerDispatcher = playerDispatcher;
+        this.globalScheduler = globalScheduler;
     }
 
     public boolean isRestricted(UUID playerId) {
@@ -80,8 +96,7 @@ public final class FreezeManager implements Listener {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
                 return;
             }
-            player.closeInventory();
-            player.sendMessage(Component.text("You have been frozen by network staff."));
+            securePlayer(player);
         }, () -> runtimeState.retireIfCurrent(playerId, generation));
     }
 
@@ -139,8 +154,7 @@ public final class FreezeManager implements Listener {
                 if (!runtimeState.isCurrentFrozen(playerId, verificationToken)) {
                     return;
                 }
-                player.closeInventory();
-                player.sendMessage(Component.text("You have been frozen by network staff."));
+                securePlayer(player);
             });
             alertStaff(playerId, verificationToken, "Freeze restored for " + displayName
                     + ". Use /unfreeze or /freeze keep after review.");
@@ -181,6 +195,13 @@ public final class FreezeManager implements Listener {
         stationary.setYaw(to.getYaw());
         stationary.setPitch(to.getPitch());
         event.setTo(stationary);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onMount(EntityMountEvent event) {
+        if (event.getEntity() instanceof Player player && restricted(player)) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -337,6 +358,12 @@ public final class FreezeManager implements Listener {
         relayFrozenChat(event.getPlayer(), Component.text(event.getMessage()));
     }
 
+    private void securePlayer(Player player) {
+        player.leaveVehicle();
+        player.closeInventory();
+        player.sendMessage(Component.text("You have been frozen by network staff."));
+    }
+
     private boolean restricted(Player player) {
         return runtimeState.isRestricted(player.getUniqueId());
     }
@@ -351,7 +378,7 @@ public final class FreezeManager implements Listener {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         Component rendered = Component.text("<" + playerName + "> ").append(body);
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             Player current = plugin.getServer().getPlayer(playerId);
             if (current != null) {
                 current.sendMessage(rendered);
@@ -364,7 +391,7 @@ public final class FreezeManager implements Listener {
     }
 
     private void alertStaff(UUID playerId, long generation, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
                 return;
             }
@@ -373,12 +400,20 @@ public final class FreezeManager implements Listener {
     }
 
     private void alertStaffDuringVerification(UUID playerId, long generation, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        scheduleGlobal(() -> {
             if (!runtimeState.isVerificationCurrent(playerId, generation)) {
                 return;
             }
             sendAlert(message);
         });
+    }
+
+    private void scheduleGlobal(Runnable operation) {
+        if (globalScheduler != null) {
+            globalScheduler.accept(operation);
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, operation);
     }
 
     private void sendAlert(String message) {
@@ -403,6 +438,10 @@ public final class FreezeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable unavailable) {
+        if (playerDispatcher != null) {
+            playerDispatcher.dispatch(playerId, operation, unavailable);
+            return;
+        }
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
             if (player == null) {
@@ -411,5 +450,10 @@ public final class FreezeManager implements Listener {
             }
             player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
         });
+    }
+
+    @FunctionalInterface
+    interface PlayerDispatcher {
+        void dispatch(UUID playerId, Consumer<Player> operation, Runnable unavailable);
     }
 }
