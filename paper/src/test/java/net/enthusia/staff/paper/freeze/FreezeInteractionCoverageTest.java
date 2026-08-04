@@ -173,7 +173,10 @@ class FreezeInteractionCoverageTest {
     }
 
     private static Object defaultValue(Class<?> type) {
-        return type.isPrimitive() ? Array.get(Array.newInstance(type, 1), 0) : null;
+        if (!type.isPrimitive() || type == void.class) {
+            return null;
+        }
+        return Array.get(Array.newInstance(type, 1), 0);
     }
 
     private record InteractionCase(
