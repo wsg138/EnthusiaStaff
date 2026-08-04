@@ -69,8 +69,11 @@ public final class FreezeManager implements Listener {
     }
 
     public void applyOnline(UUID playerId) {
-        runtimeState.apply(playerId);
+        long generation = runtimeState.apply(playerId);
         onEntity(playerId, player -> {
+            if (!runtimeState.isCurrentFrozen(playerId, generation)) {
+                return;
+            }
             player.closeInventory();
             player.sendMessage(Component.text("You have been frozen by network staff."));
         });
@@ -112,10 +115,13 @@ public final class FreezeManager implements Listener {
                 return;
             }
             onEntity(playerId, player -> {
+                if (!runtimeState.isCurrentFrozen(playerId, verificationToken)) {
+                    return;
+                }
                 player.closeInventory();
                 player.sendMessage(Component.text("You have been frozen by network staff."));
             });
-            alertStaff("Freeze restored for " + displayName
+            alertStaff(playerId, verificationToken, "Freeze restored for " + displayName
                     + ". Use /unfreeze or /freeze keep after review.");
         } catch (RuntimeException exception) {
             if (runtimeState.isVerificationCurrent(playerId, verificationToken)) {
@@ -311,11 +317,15 @@ public final class FreezeManager implements Listener {
         });
     }
 
-    private void alertStaff(String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
-                plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.freeze"))
-                        .forEach(player -> player.sendMessage(Component.text(message))));
+    private void alertStaff(UUID playerId, long generation, String message) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            if (!runtimeState.isCurrentFrozen(playerId, generation)) {
+                return;
+            }
+            plugin.getServer().getOnlinePlayers().stream()
+                    .filter(player -> player.hasPermission("enthusiastaff.freeze"))
+                    .forEach(player -> player.sendMessage(Component.text(message)));
+        });
     }
 
     private void submit(Runnable operation) {
