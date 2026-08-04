@@ -17,8 +17,7 @@ final class VanishRankReconciliationPolicy {
             boolean vanished,
             StaffRank durableRank,
             StaffRank liveRank,
-            boolean staffModeActive,
-            boolean staffModeExitPending
+            StaffModeState staffModeState
     ) {
         if (!vanished) {
             return durableRank == null ? VanishAction.NONE : VanishAction.DISABLE;
@@ -26,11 +25,13 @@ final class VanishRankReconciliationPolicy {
         if (!isPlayerRank(liveRank)) {
             return VanishAction.DISABLE;
         }
-        if (staffModeExitPending && requiresStaffMode(liveRank)) {
-            return VanishAction.DISABLE;
-        }
-        if (requiresStaffMode(liveRank) && !staffModeActive && durableRank != liveRank) {
-            return VanishAction.DISABLE;
+        if (requiresStaffMode(liveRank)) {
+            if (staffModeState == StaffModeState.UNKNOWN) {
+                return VanishAction.VERIFY_SESSION;
+            }
+            if (staffModeState == StaffModeState.INACTIVE || staffModeState == StaffModeState.EXITED) {
+                return VanishAction.DISABLE;
+            }
         }
         return durableRank == liveRank ? VanishAction.NONE : VanishAction.UPDATE_RANK;
     }
@@ -52,6 +53,14 @@ final class VanishRankReconciliationPolicy {
     enum VanishAction {
         NONE,
         UPDATE_RANK,
+        VERIFY_SESSION,
         DISABLE
+    }
+
+    enum StaffModeState {
+        ACTIVE,
+        INACTIVE,
+        UNKNOWN,
+        EXITED
     }
 }
