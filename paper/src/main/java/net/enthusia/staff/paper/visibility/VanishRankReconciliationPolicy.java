@@ -6,6 +6,16 @@ final class VanishRankReconciliationPolicy {
     private VanishRankReconciliationPolicy() {
     }
 
+    static boolean shouldCheckRank(
+            boolean fullScan,
+            boolean staffModeActive,
+            boolean onlineStaff,
+            boolean durableVanish,
+            boolean pendingExitCleanup
+    ) {
+        return fullScan || staffModeActive || onlineStaff || durableVanish || pendingExitCleanup;
+    }
+
     static ViewerAction viewerAction(StaffRank cachedRank, StaffRank liveRank) {
         if (!isPlayerRank(liveRank)) {
             return cachedRank == null ? ViewerAction.NONE : ViewerAction.REMOVE;
