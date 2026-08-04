@@ -89,12 +89,11 @@ final class StaffModeActivationCoordinator {
                         "Staff mode activation failed; your durable snapshot is preserved and recovery is pending."
                 );
             } else {
-                transitions.remove(playerId);
                 safeMessage(
                         playerId,
                         session,
                         playerMessage,
-                        "Staff mode activation failed; recovery could not be queued, so contact an administrator immediately."
+                        "Staff mode activation failed; recovery could not be queued and interaction remains blocked."
                 );
             }
             return false;
@@ -123,7 +122,6 @@ final class StaffModeActivationCoordinator {
                     );
                     recovery.run();
                 } catch (RuntimeException exception) {
-                    transitions.remove(playerId);
                     logger.log(
                             Level.SEVERE,
                             "Staff activation recovery persistence failed for player " + playerId
@@ -134,7 +132,7 @@ final class StaffModeActivationCoordinator {
                             playerId,
                             session,
                             playerMessage,
-                            "Your durable staff snapshot requires administrator recovery before staff mode can be used."
+                            "Your durable staff snapshot requires administrator recovery; interaction remains blocked."
                     );
                 }
             });
