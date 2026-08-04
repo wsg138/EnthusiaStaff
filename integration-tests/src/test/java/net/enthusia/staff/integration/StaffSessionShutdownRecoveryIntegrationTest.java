@@ -3,6 +3,7 @@ package net.enthusia.staff.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -75,7 +76,7 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
 
             StaffSessionSnapshot restoring = store.beginExit(activeStaff, NOW.plusSeconds(5)).orElseThrow();
             assertEquals(StaffSessionState.EXITING, restoring.state());
-            assertEquals(true, store.completeExit(
+            assertTrue(store.completeExit(
                     restoring.sessionId(),
                     active.checksum(),
                     NOW.plusSeconds(6)
