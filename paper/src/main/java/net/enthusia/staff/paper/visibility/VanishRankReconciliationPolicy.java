@@ -25,15 +25,20 @@ final class VanishRankReconciliationPolicy {
         if (!isPlayerRank(liveRank)) {
             return VanishAction.DISABLE;
         }
-        if (requiresStaffMode(liveRank)) {
-            if (staffModeState == StaffModeState.UNKNOWN) {
-                return VanishAction.VERIFY_SESSION;
-            }
-            if (staffModeState == StaffModeState.INACTIVE || staffModeState == StaffModeState.EXITED) {
-                return VanishAction.DISABLE;
-            }
-        }
-        return durableRank == liveRank ? VanishAction.NONE : VanishAction.UPDATE_RANK;
+        VanishAction sessionAction = requiresStaffMode(liveRank)
+                ? staffModeAction(staffModeState)
+                : null;
+        return sessionAction != null
+                ? sessionAction
+                : durableRank == liveRank ? VanishAction.NONE : VanishAction.UPDATE_RANK;
+    }
+
+    private static VanishAction staffModeAction(StaffModeState staffModeState) {
+        return switch (staffModeState) {
+            case UNKNOWN -> VanishAction.VERIFY_SESSION;
+            case INACTIVE, EXITED -> VanishAction.DISABLE;
+            case ACTIVE -> null;
+        };
     }
 
     static boolean requiresStaffMode(StaffRank rank) {
