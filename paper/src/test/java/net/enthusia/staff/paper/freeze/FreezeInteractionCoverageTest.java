@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
@@ -78,7 +79,7 @@ class FreezeInteractionCoverageTest {
     @SuppressWarnings("removal")
     private static List<InteractionCase> interactions(Player player) {
         Entity entity = proxy(Entity.class);
-        ItemStack item = new TestItemStack();
+        ItemStack item = new ServerFreeItemStack();
         PlayerInteractAtEntityEvent precise = new PlayerInteractAtEntityEvent(
                 player,
                 entity,
@@ -138,31 +139,14 @@ class FreezeInteractionCoverageTest {
         return (T) Proxy.newProxyInstance(
                 type.getClassLoader(),
                 new Class<?>[]{type},
-                (instance, method, arguments) -> {
-                    if ("getUniqueId".equals(method.getName())) {
-                        return PLAYER_ID;
-                    }
-                    if (method.getDeclaringClass() == Object.class) {
-                        return switch (method.getName()) {
-                            case "equals" -> instance == arguments[0];
-                            case "hashCode" -> System.identityHashCode(instance);
-                            case "toString" -> type.getSimpleName() + " test proxy";
-                            default -> null;
-                        };
-                    }
-                    Class<?> returnType = method.getReturnType();
-                    if (!returnType.isPrimitive()) {
-                        return null;
-                    }
-                    if (returnType == boolean.class) {
-                        return false;
-                    }
-                    if (returnType == char.class) {
-                        return '\0';
-                    }
-                    return 0;
-                }
+                (instance, method, arguments) -> "getUniqueId".equals(method.getName())
+                        ? PLAYER_ID
+                        : defaultValue(method.getReturnType())
         );
+    }
+
+    private static Object defaultValue(Class<?> type) {
+        return type.isPrimitive() ? Array.get(Array.newInstance(type, 1), 0) : null;
     }
 
     private record InteractionCase(
@@ -172,8 +156,8 @@ class FreezeInteractionCoverageTest {
     ) {
     }
 
-    private static final class TestItemStack extends ItemStack {
-        private TestItemStack() {
+    private static final class ServerFreeItemStack extends ItemStack {
+        private ServerFreeItemStack() {
             super();
         }
     }
