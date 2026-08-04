@@ -51,6 +51,7 @@ record PaperRuntimeComponents(
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
         staffMode.startRankReconciliation();
+        vanish.startRankReconciliation();
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),

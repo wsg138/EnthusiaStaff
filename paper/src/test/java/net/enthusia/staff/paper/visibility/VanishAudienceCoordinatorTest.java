@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.bukkit.GameMode;
 import org.junit.jupiter.api.Test;
 
@@ -134,6 +135,44 @@ final class VanishAudienceCoordinatorTest {
         assertFalse(fixture.audiences.onOwner(VIEWER_ID, callbacks::add));
     }
 
+    @Test
+    void staleOwnerCallbackRunsRetirementCleanup() {
+        Fixture fixture = new Fixture();
+        AtomicInteger retired = new AtomicInteger();
+        List<EntityHandle> callbacks = new ArrayList<>();
+        fixture.audiences.register(VIEWER_ID, new EntityHandle("old-viewer"), GameMode.SURVIVAL);
+
+        assertTrue(fixture.audiences.onOwner(VIEWER_ID, callbacks::add, retired::incrementAndGet));
+        fixture.audiences.register(VIEWER_ID, new EntityHandle("new-viewer"), GameMode.SURVIVAL);
+        fixture.scheduler.runAll();
+
+        assertTrue(callbacks.isEmpty());
+        assertEquals(1, retired.get());
+    }
+
+    @Test
+    void rejectedOwnerScheduleRunsRetirementCleanup() {
+        Fixture fixture = new Fixture();
+        AtomicInteger retired = new AtomicInteger();
+        fixture.audiences.register(VIEWER_ID, new EntityHandle(VIEWER_NAME), GameMode.SURVIVAL);
+        fixture.scheduler.rejectNext();
+
+        assertFalse(fixture.audiences.onOwner(VIEWER_ID, ignored -> {
+        }, retired::incrementAndGet));
+        assertEquals(1, retired.get());
+    }
+
+    @Test
+    void playerIdSnapshotTracksCurrentSessions() {
+        Fixture fixture = new Fixture();
+        fixture.audiences.register(VIEWER_ID, new EntityHandle(VIEWER_NAME), GameMode.SURVIVAL);
+        List<UUID> snapshot = fixture.audiences.playerIds();
+        fixture.audiences.register(TARGET_ID, new EntityHandle(TARGET_NAME), GameMode.SURVIVAL);
+
+        assertEquals(List.of(VIEWER_ID), snapshot);
+        assertEquals(Set.of(VIEWER_ID, TARGET_ID), Set.copyOf(fixture.audiences.playerIds()));
+    }
+
     private static final class Fixture {
         private final QueuedScheduler scheduler = new QueuedScheduler();
         private final List<String> refreshed = new ArrayList<>();
@@ -148,11 +187,20 @@ final class VanishAudienceCoordinatorTest {
     private static final class QueuedScheduler
             implements VanishAudienceCoordinator.OwningScheduler<EntityHandle> {
         private final List<Scheduled> pending = new ArrayList<>();
+        private boolean rejectNext;
 
         @Override
         public boolean execute(EntityHandle owner, Runnable operation) {
+            if (rejectNext) {
+                rejectNext = false;
+                return false;
+            }
             pending.add(new Scheduled(owner, operation));
             return true;
+        }
+
+        void rejectNext() {
+            rejectNext = true;
         }
 
         List<EntityHandle> owners() {

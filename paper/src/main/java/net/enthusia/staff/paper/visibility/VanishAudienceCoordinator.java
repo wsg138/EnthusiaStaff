@@ -37,37 +37,54 @@ final class VanishAudienceCoordinator<T> {
         online.remove(playerId);
     }
 
+    List<UUID> playerIds() {
+        return List.copyOf(online.keySet());
+    }
+
     boolean onOwner(UUID playerId, Consumer<T> operation) {
-        Objects.requireNonNull(operation, "operation");
-        OnlineEntity<T> scheduled = online.get(playerId);
-        if (scheduled == null) {
-            return false;
-        }
-        return scheduler.execute(scheduled.owner(), () -> {
-            OnlineEntity<T> current = online.get(playerId);
-            if (sameSession(current, scheduled)) {
-                operation.accept(current.owner());
-            }
+        return onOwner(playerId, operation, () -> {
         });
     }
 
+    boolean onOwner(UUID playerId, Consumer<T> operation, Runnable retired) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(retired, "retired");
+        OnlineEntity<T> scheduled = online.get(playerId);
+        if (scheduled == null) {
+            retired.run();
+            return false;
+        }
+        boolean accepted = scheduler.execute(scheduled.owner(), () -> {
+            OnlineEntity<T> current = online.get(playerId);
+            if (sameSession(current, scheduled)) {
+                operation.accept(current.owner());
+            } else {
+                retired.run();
+            }
+        });
+        if (!accepted) {
+            retired.run();
+        }
+        return accepted;
+    }
+
     void forEachOwner(Consumer<T> operation) {
-        List.copyOf(online.keySet()).forEach(playerId -> onOwner(playerId, operation));
+        playerIds().forEach(playerId -> onOwner(playerId, operation));
     }
 
     void refreshAll() {
-        List.copyOf(online.keySet()).forEach(this::refreshViewer);
+        playerIds().forEach(this::refreshViewer);
     }
 
     void refreshViewer(UUID viewerId) {
-        scheduleRefresh(viewerId, List.copyOf(online.keySet()));
+        scheduleRefresh(viewerId, playerIds());
     }
 
     void refreshTarget(UUID targetId) {
         if (!online.containsKey(targetId)) {
             return;
         }
-        for (UUID viewerId : List.copyOf(online.keySet())) {
+        for (UUID viewerId : playerIds()) {
             scheduleRefresh(viewerId, List.of(targetId));
         }
     }
