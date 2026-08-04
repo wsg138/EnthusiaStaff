@@ -76,17 +76,33 @@ class FreezeInteractionCoverageTest {
         return proxy(Player.class);
     }
 
-    @SuppressWarnings("removal")
     private static List<InteractionCase> interactions(Player player) {
-        Entity entity = proxy(Entity.class);
-        ItemStack item = new ServerFreeItemStack();
-        PlayerInteractAtEntityEvent precise = new PlayerInteractAtEntityEvent(
+        return List.of(
+                preciseInteraction(player),
+                armorStandInteraction(player),
+                harvestInteraction(player),
+                shearInteraction(player),
+                fishInteraction(player)
+        );
+    }
+
+    private static InteractionCase preciseInteraction(Player player) {
+        PlayerInteractAtEntityEvent event = new PlayerInteractAtEntityEvent(
                 player,
-                entity,
+                proxy(Entity.class),
                 new Vector(),
                 EquipmentSlot.HAND
         );
-        PlayerArmorStandManipulateEvent armorStand = new PlayerArmorStandManipulateEvent(
+        return new InteractionCase(
+                "precise entity interaction",
+                event,
+                manager -> manager.onInteractAtEntity(event)
+        );
+    }
+
+    private static InteractionCase armorStandInteraction(Player player) {
+        ItemStack item = new ServerFreeItemStack();
+        PlayerArmorStandManipulateEvent event = new PlayerArmorStandManipulateEvent(
                 player,
                 proxy(ArmorStand.class),
                 item,
@@ -94,33 +110,44 @@ class FreezeInteractionCoverageTest {
                 EquipmentSlot.HAND,
                 EquipmentSlot.HAND
         );
-        PlayerHarvestBlockEvent harvest = new PlayerHarvestBlockEvent(
+        return new InteractionCase(
+                "armor-stand manipulation",
+                event,
+                manager -> manager.onArmorStandManipulate(event)
+        );
+    }
+
+    @SuppressWarnings("removal")
+    private static InteractionCase harvestInteraction(Player player) {
+        PlayerHarvestBlockEvent event = new PlayerHarvestBlockEvent(
                 player,
                 proxy(Block.class),
                 EquipmentSlot.HAND,
                 List.of()
         );
-        PlayerShearEntityEvent shear = new PlayerShearEntityEvent(
+        return new InteractionCase("block harvesting", event, manager -> manager.onHarvest(event));
+    }
+
+    private static InteractionCase shearInteraction(Player player) {
+        PlayerShearEntityEvent event = new PlayerShearEntityEvent(
                 player,
-                entity,
-                item,
+                proxy(Entity.class),
+                new ServerFreeItemStack(),
                 EquipmentSlot.HAND,
                 List.of()
         );
-        PlayerFishEvent fish = new PlayerFishEvent(
+        return new InteractionCase("entity shearing", event, manager -> manager.onShear(event));
+    }
+
+    private static InteractionCase fishInteraction(Player player) {
+        PlayerFishEvent event = new PlayerFishEvent(
                 player,
                 null,
                 proxy(FishHook.class),
                 EquipmentSlot.HAND,
                 PlayerFishEvent.State.FISHING
         );
-        return List.of(
-                new InteractionCase("precise entity interaction", precise, manager -> manager.onInteractAtEntity(precise)),
-                new InteractionCase("armor-stand manipulation", armorStand, manager -> manager.onArmorStandManipulate(armorStand)),
-                new InteractionCase("block harvesting", harvest, manager -> manager.onHarvest(harvest)),
-                new InteractionCase("entity shearing", shear, manager -> manager.onShear(shear)),
-                new InteractionCase("fishing", fish, manager -> manager.onFish(fish))
-        );
+        return new InteractionCase("fishing", event, manager -> manager.onFish(event));
     }
 
     private static void assertHighestPriorityCancellationHandler(Class<? extends Event> eventType) {
@@ -137,7 +164,7 @@ class FreezeInteractionCoverageTest {
     @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type) {
         return (T) Proxy.newProxyInstance(
-                type.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
                 (instance, method, arguments) -> "getUniqueId".equals(method.getName())
                         ? PLAYER_ID
