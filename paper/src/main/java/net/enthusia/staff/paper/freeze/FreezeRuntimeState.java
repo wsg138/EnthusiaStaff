@@ -28,7 +28,7 @@ final class FreezeRuntimeState {
                 return current;
             }
             resolved.set(true);
-            return active ? Entry.frozenState(token) : null;
+            return active ? Entry.frozenState(token) : Entry.releasedState(token);
         });
         return resolved.get();
     }
@@ -45,8 +45,11 @@ final class FreezeRuntimeState {
         return generation;
     }
 
-    void release(UUID playerId) {
-        states.remove(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    long release(UUID playerId) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        long generation = nextGeneration.incrementAndGet();
+        states.put(playerId, Entry.releasedState(generation));
+        return generation;
     }
 
     boolean retire(UUID playerId) {
@@ -55,7 +58,8 @@ final class FreezeRuntimeState {
     }
 
     boolean isRestricted(UUID playerId) {
-        return states.containsKey(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.status() != Status.RELEASED;
     }
 
     boolean isFrozen(UUID playerId) {
@@ -68,9 +72,15 @@ final class FreezeRuntimeState {
         return current != null && current.matchesFrozen(generation);
     }
 
+    boolean isCurrentRelease(UUID playerId, long generation) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.matchesReleased(generation);
+    }
+
     private enum Status {
         PENDING_VERIFICATION,
-        FROZEN
+        FROZEN,
+        RELEASED
     }
 
     private record Entry(Status status, long generation) {
@@ -82,12 +92,20 @@ final class FreezeRuntimeState {
             return new Entry(Status.FROZEN, generation);
         }
 
+        private static Entry releasedState(long generation) {
+            return new Entry(Status.RELEASED, generation);
+        }
+
         private boolean matchesPending(long token) {
             return status == Status.PENDING_VERIFICATION && generation == token;
         }
 
         private boolean matchesFrozen(long expectedGeneration) {
             return status == Status.FROZEN && generation == expectedGeneration;
+        }
+
+        private boolean matchesReleased(long expectedGeneration) {
+            return status == Status.RELEASED && generation == expectedGeneration;
         }
     }
 }
