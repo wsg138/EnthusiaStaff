@@ -27,6 +27,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Migration boundary | V16 is highest; PR #59 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 | External blocker | RoseChat private-message evidence remains separately blocked pending the supported provider contract; never route that blocker through issue #43 |
+| Intended post-merge status | Merge PR #59 normally only after all gates pass; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
 
 ## Live start-state reconciliation
 
@@ -45,6 +46,8 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 PR #59 now:
 
 - starts one plugin-owned periodic rank reconciler;
+- checks known staff, active staff-mode players, vanished players, and pending cleanup every second;
+- performs a bounded full online rank-discovery pass every five seconds so newly promoted players are still detected without five permission checks per ordinary player every second;
 - resolves live permissions only on each player's owning entity scheduler;
 - bounds periodic work to one queued rank check per player;
 - updates changed viewer authority and refreshes only that viewer;
@@ -55,6 +58,7 @@ PR #59 now:
 - retries failed durable rank/disable writes with bounded backoff;
 - keeps one state write and one durable staff-session check per player in flight;
 - token-fences staff-session checks so disconnect/reconnect cannot apply stale results;
+- clears all transient per-player reconciliation markers on quit;
 - preserves quit-message suppression before removing runtime visibility state;
 - keeps ordinary toggle, spectator masking, configured hierarchy, and incremental viewer/target refresh behavior.
 
@@ -72,6 +76,9 @@ PR #59 now:
 4. Replaced the temporary in-memory-only startup workaround with a durable staff-session lookup, covering the crash window between staff-session closure and vanish disable.
 5. Added token fencing and retry backoff for asynchronous staff-session verification.
 6. Ensured event-driven viewer-rank refreshes also refresh the viewer's existing visibility relationships.
+7. Cleared the pending staff-mode-exit marker on quit to prevent process-lifetime growth.
+8. Replaced the all-player-per-second permission scan with one-second tracked-player checks plus five-second full discovery.
+9. Split the reconciliation and policy branches to satisfy configured method-size and complexity limits.
 
 ## Exact-head completion gate
 
