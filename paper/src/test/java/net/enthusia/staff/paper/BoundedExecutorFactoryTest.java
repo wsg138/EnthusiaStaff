@@ -21,12 +21,16 @@ class BoundedExecutorFactoryTest {
         workers.execute(() -> {
             started.countDown();
             boolean released = false;
+            boolean interrupted = false;
             while (!released) {
                 try {
                     released = release.await(1, TimeUnit.SECONDS);
-                } catch (InterruptedException ignored) {
-                    // Simulate cleanup that must finish before the recovery transaction can run.
+                } catch (InterruptedException exception) {
+                    interrupted = true;
                 }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         });
         assertTrue(started.await(2, TimeUnit.SECONDS));
@@ -35,6 +39,7 @@ class BoundedExecutorFactoryTest {
             workers.shutdownNow();
             shutdownReturned.set(true);
         });
+        shutdown.setDaemon(true);
         shutdown.start();
 
         assertFalse(waitFor(shutdownReturned, Duration.ofMillis(150)));
