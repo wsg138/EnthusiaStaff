@@ -18,12 +18,13 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE — PR #63 implementation and focused tests committed; exact-head validation and review pending` |
+| State | `ACTIVE — prior exact-head validation failures repaired; final exact-head Coverage, Codacy and Pi evidence pending` |
 | Pull request | `#63 — Block precise world interactions while frozen` |
 | Feature branch | `fix/freeze-precise-world-interactions` |
 | Starting main | `1cf4277bdc6ec8f3e50c7db97f6fe99d9054db0f` |
 | Work item | Explicitly cancel precise entity and resource-specific Paper events for restricted frozen players |
 | Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-freeze-precise-world-interactions.md` |
+| Validation history | Source `591324324b721c21b4c2b86f71501d0bc2210f59` failed Pi wrapper `30903529787`; correlated staging run `30903538014` failed in trusted-runtime build job `91973196566`, so the Pi boot/restart job did not run. Later Coverage failures exposed and led to repairs for a deprecated event constructor and a serverless Paper-registry test fixture. All of that evidence is superseded; the final unchanged head still requires fresh terminal validation. |
 | Migration boundary | V16 is highest; PR #63 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 | External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
@@ -64,7 +65,9 @@ Existing `FreezeRuntimeStateTest` proves unrestricted defaults, fail-closed pend
 1. Fixed the missing precise-hitbox entity handler.
 2. Fixed missing explicit armor-stand, harvest, shear and fish handlers.
 3. Replaced a custom boolean cancellation callback with `Cancellable`.
-4. Kept backend-switch enforcement, command policy, RoseChat/provider behavior and freeze-duration expansion outside this bounded PR.
+4. Repaired focused-test compilation and serverless Paper fixture defects exposed by exact-head Coverage.
+5. Replaced brittle internal-JVM fixture construction and resolved valid static-analysis findings in the focused test.
+6. Kept backend-switch enforcement, command policy, RoseChat/provider behavior and freeze-duration expansion outside this bounded PR.
 
 ## Exact-head completion gate
 
