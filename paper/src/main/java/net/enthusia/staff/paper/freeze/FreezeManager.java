@@ -4,9 +4,7 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
@@ -52,8 +50,7 @@ public final class FreezeManager implements Listener {
     private final Clock clock;
     private final Supplier<FreezeStore> store;
     private final ExecutorService workers;
-    private final Set<UUID> frozen = ConcurrentHashMap.newKeySet();
-    private final Set<UUID> pendingVerification = ConcurrentHashMap.newKeySet();
+    private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
 
     public FreezeManager(
             JavaPlugin plugin,
@@ -68,12 +65,11 @@ public final class FreezeManager implements Listener {
     }
 
     public boolean isFrozen(UUID playerId) {
-        return frozen.contains(playerId);
+        return runtimeState.isFrozen(playerId);
     }
 
     public void applyOnline(UUID playerId) {
-        frozen.add(playerId);
-        pendingVerification.remove(playerId);
+        runtimeState.apply(playerId);
         onEntity(playerId, player -> {
             player.closeInventory();
             player.sendMessage(Component.text("You have been frozen by network staff."));
@@ -81,8 +77,7 @@ public final class FreezeManager implements Listener {
     }
 
     public void releaseOnline(UUID playerId) {
-        frozen.remove(playerId);
-        pendingVerification.remove(playerId);
+        runtimeState.release(playerId);
         onEntity(playerId, player ->
                 player.sendMessage(Component.text("Your staff freeze has been released.")));
     }
@@ -101,35 +96,39 @@ public final class FreezeManager implements Listener {
         String displayName = playerName == null || playerName.isBlank()
                 ? playerId.toString()
                 : playerName;
-        pendingVerification.add(playerId);
-        submit(() -> {
+        long verificationToken = runtimeState.beginVerification(playerId);
+        submit(() -> verifyStoredState(playerId, displayName, verificationToken));
+    }
+
+    private void verifyStoredState(UUID playerId, String displayName, long verificationToken) {
+        try {
             FreezeStore loaded = store.get();
             if (loaded == null) {
-                pendingVerification.remove(playerId);
+                runtimeState.resolveVerification(playerId, verificationToken, false);
                 return;
             }
-            try {
-                boolean active = loaded.active(playerId, clock.instant()).isPresent();
-                if (active) {
-                    applyOnline(playerId);
-                    alertStaff("Freeze restored for " + displayName
-                            + ". Use /unfreeze or /freeze keep after review.");
-                } else {
-                    frozen.remove(playerId);
-                    pendingVerification.remove(playerId);
-                }
-            } catch (RuntimeException exception) {
+            boolean active = loaded.active(playerId, clock.instant()).isPresent();
+            if (!runtimeState.resolveVerification(playerId, verificationToken, active) || !active) {
+                return;
+            }
+            onEntity(playerId, player -> {
+                player.closeInventory();
+                player.sendMessage(Component.text("You have been frozen by network staff."));
+            });
+            alertStaff("Freeze restored for " + displayName
+                    + ". Use /unfreeze or /freeze keep after review.");
+        } catch (RuntimeException exception) {
+            if (runtimeState.isVerificationCurrent(playerId, verificationToken)) {
                 plugin.getLogger().log(Level.SEVERE,
                         "Freeze recovery lookup failed; the joining player remains restricted", exception);
             }
-        });
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
-        pendingVerification.remove(playerId);
-        if (!frozen.remove(playerId)) {
+        if (!runtimeState.retire(playerId)) {
             return;
         }
         Instant now = clock.instant();
@@ -287,8 +286,7 @@ public final class FreezeManager implements Listener {
     }
 
     private boolean restricted(Player player) {
-        UUID playerId = player.getUniqueId();
-        return frozen.contains(playerId) || pendingVerification.contains(playerId);
+        return runtimeState.isRestricted(player.getUniqueId());
     }
 
     private void cancel(Player player, java.util.function.Consumer<Boolean> cancellation) {
