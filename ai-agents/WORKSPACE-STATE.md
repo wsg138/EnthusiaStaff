@@ -10,7 +10,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current legitimate `main` at PR #60 start | `a5cf73568310ee1d12bd961ed192945b1859884a` |
+| Current legitimate `main` at PR #62 start | `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
@@ -18,91 +18,57 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE — PR #60 exact-head validation and review pending` |
-| Pull request | `#60 — Fence freeze recovery across reconnects and manual changes` |
-| Feature branch | `fix/freeze-recovery-session-fencing` |
-| Starting main | `a5cf73568310ee1d12bd961ed192945b1859884a` |
-| Work item | Prevent stale asynchronous freeze recovery and delayed freeze/release side effects from crossing quit, reconnect, newer verification, manual freeze, or manual release boundaries |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-freeze-recovery-session-fencing.md` |
-| Migration boundary | V16 is highest; PR #60 adds no migration; V1–V16 remain immutable |
+| State | `ACTIVE — PR #62 review corrections applied; exact-head validation and Pi evidence pending` |
+| Pull request | `#62 — Block ordinary world interactions during staff mode` |
+| Feature branch | `fix/staffmode-world-interaction-guard` |
+| Starting main | `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` |
+| Work item | Prevent confirmed active staff-mode profiles from changing ordinary gameplay state through uncovered Paper world-interaction events |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-staffmode-world-interaction-guard.md` |
+| Migration boundary | V16 is highest; PR #62 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
-| External blocker | RoseChat private-message evidence remains separately blocked pending the supported provider contract; never route that blocker through issue #43 |
-| Intended post-merge status | Merge PR #60 normally only after all gates pass; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
+| External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
+| Intended post-merge status | Merge PR #62 normally only after all configured gates pass and exact-head Pi succeeds, or direct evidence proves the permitted GitHub Actions quota/platform-unavailability exception; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
 
 ## Live start-state reconciliation
 
-- PR #59 merged normally as `a5cf73568310ee1d12bd961ed192945b1859884a`.
-- Its feature head is contained in `main`, its branch was removed, and no pull request or non-`main` branch was active before PR #60.
-- PR #60 began from exact `main` `a5cf73568310ee1d12bd961ed192945b1859884a`.
-- During PR #60 validation, `main` advanced to `be8d696a090e1fa27523916babcb2ced8de6974d`; the branch was synchronized by a two-parent merge without opening or inspecting the unrelated uploaded file.
-- V16 remains the live highest migration; PR #60 changes no schema or migration bytes.
+- Live GitHub showed no open pull request and only the `main` branch before PR #62.
+- PR #60 and PR #61 had already merged; the recorded PR #60 handoff/state was stale.
+- `main` was `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` at branch creation.
+- V16 remains the highest migration; this PR changes no schema or migration bytes.
 - Owner priority remains staff mode, vanish, and freeze before report notifications and escalation policy.
-
-## Confirmed defect
-
-`FreezeManager` kept pending durable verification and confirmed frozen state in separate concurrent sets. An old durable lookup could finish after quit/reconnect, a newer verification, `/freeze`, or `/unfreeze` and overwrite the newer state. Delayed freeze/recovery or release messages could also run after the state changed again.
 
 ## Implemented behavior
 
-PR #60 now:
+PR #62 adds a dedicated Paper listener that blocks confirmed active staff-mode players from block break/place, bucket fill/empty, harvesting, non-air block/physical interaction, ordinary and precise entity interaction, armor-stand manipulation, shearing, consumption, and fishing.
 
-- uses one per-player concurrent runtime state machine for pending verification, confirmed freeze, and released state;
-- assigns a monotonic generation to every verification, manual freeze, and manual release;
-- applies durable lookup results atomically only when their verification generation is still current;
-- ignores stale active/inactive results after quit, reconnect, newer verification, manual freeze, or manual release;
-- keeps a failed or storage-unavailable current verification fail-closed;
-- detects a rejected verification submission, logs the affected player, and alerts staff while the exact pending generation remains current;
-- exposes pending verification through the accurately named `isRestricted` API so provider-handled public/private chat remains staff-only;
-- generation-fences delayed inventory closure, freeze messages, release messages, and staff alerts;
-- retires an apply/release runtime entry when its target is already offline, without clearing a newer generation;
-- retires all runtime state on quit;
-- persists offline timeout only for a confirmed frozen session;
-- preserves existing restrictions, commands, permissions, persistence schema, and offline expiry.
+Air clicks remain available for dedicated staff tools. Ordinary players are unaffected. The implementation reuses `StaffModeManager.active(UUID)` and the existing Paper composition root; it creates no new session state, persistence, scheduler, permission, command, configuration, migration, vanish, or freeze system.
 
 ## Focused tests
 
-`FreezeRuntimeStateTest` covers unknown-player defaults, current active/inactive results, reconnect fencing, manual release/apply races, delayed frozen callback fencing, re-freeze suppression of delayed release notifications, generation-specific offline cleanup, pending and confirmed quit retirement, and fail-closed unresolved verification.
+`StaffModeWorldInteractionPolicyTest` covers inactive-player pass-through, active mutation blocking, air-click allowance, and block/physical interaction blocking.
+
+The Bukkit listener is thin adapter wiring. Low direct listener line coverage is acceptable only when exact-head compilation and terminal successful exact-head Pi staging prove event signatures and registration, unless direct evidence establishes the permitted GitHub Actions quota, billing, disabled-Actions, or equivalent platform-unavailability exception. The directly tested policy proves the interaction decisions. Cancelled, skipped, superseded, stale-head, different-revision, merge-ref-only, or executed-but-inconclusive Pi results are not passing evidence.
 
 ## Harsh-review corrections already applied
 
-1. Replaced two separately mutated sets with one atomic per-player state machine.
-2. Prevented stale durable active/inactive results from applying across newer lifecycle state.
-3. Retained a generation for confirmed frozen states so delayed callbacks can distinguish old recovery from a later freeze.
-4. Guarded delayed entity and global scheduler freeze/recovery side effects at execution time.
-5. Kept storage-unavailable verification and the RoseChat moderation bridge fail-closed while verification is pending.
-6. Added generated released state so a later freeze invalidates a delayed release message.
-7. Corrected the initial exact-head Java method-signature collision before restarting validation.
-8. Detected bounded-queue rejection so pending verification cannot remain silently stuck.
-9. Retired offline apply/release generations without disturbing a newer lifecycle state.
-10. Renamed the public restriction API and added default-state and offline-cleanup tests.
+1. Replaced a custom cancellation callback with Bukkit's `Cancellable` contract.
+2. Added explicit `PlayerInteractAtEntityEvent` coverage rather than relying on superclass dispatch.
+3. Kept transition/recovery-state exposure outside this bounded PR because the existing public query reports confirmed active sessions only.
+4. Verified CodeRabbit's suggested entity-damage handler already exists in `StaffModeManager` and covers direct players plus player-shot projectiles with the stronger active-or-transition predicate; no duplicate was added.
+5. Added exact handoff timestamp, explicit readiness, and consistent Pi success-or-permitted-exception wording.
 
 ## Exact-head completion gate
 
-Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for:
-
-- Java 21 build and unit/integration tests;
-- migration checksum and immutability checks with V1–V16 unchanged;
-- exactly one valid Paper and one valid Velocity runtime JAR;
-- JAR integrity, provider-class leak inspection, and SHA-256 identities;
-- aggregate and diff coverage;
-- configured Codacy/static analysis;
-- Wiki/documentation validation when applicable;
-- CodeRabbit, Codacy, and human review with zero valid unresolved threads;
-- exact-head public Pi wrapper and correlated staging run when applicable;
-- if Actions cannot execute, direct quota/platform evidence, precise blocker ownership, and an explicit verified exception before dormant merge;
-- if Pi wrapper or staging executes but cannot produce valid runtime evidence, keep it non-passing, record exact run/job/runner/step/artifact evidence and the precise blocker, route it to the repository owner, and require an explicit verified exception before dormant merge;
-- one consolidated exact-head evidence comment.
-
-No check may be described as passed without direct evidence. Cancelled, superseded, skipped, stale-head, different-revision, merge-ref-only, and executed-but-inconclusive results are not passing evidence.
+Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for all applicable configured checks: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, wiki validation when triggered, CodeRabbit/human review, and zero valid unresolved threads. Pi must succeed on the exact head unless direct evidence proves that GitHub Actions quota, billing, disabled Actions, or equivalent platform unavailability prevented execution. In that permitted exception case, record `Pi not run — GitHub Actions quota/platform unavailable` and the exact evidence; do not claim Pi passed. No other unavailable or non-success Pi result permits merge.
 
 ## Production boundary
 
-PR #60 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, authority activation, a real shadow window, LiteBans disablement/removal, final migration, issue #43 acceptance, or live cutover.
+PR #62 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, authority activation, LiteBans changes, issue #43 acceptance, migration repair, or cutover.
 
 ## Next route
 
-1. Finish PR #60 only: complete final full-diff review, exact-head validation, and review resolution; merge normally only with zero unresolved valid threads and no known blocker.
-2. Record the merge commit, resulting `main`, feature-head containment, no unmerged branch commits, and branch cleanup in PR metadata.
-3. After PR #60 completes, freshly select one bounded remaining priority-one staff mode, vanish, or freeze item.
+1. Finish PR #62 only: complete final full-diff review, synchronize with live `main`, exact-head validation, review resolution, and normal merge only when every gate permits it.
+2. Record merge/resulting `main`, feature-head containment, no unmerged branch commits, and branch cleanup in PR metadata.
+3. After PR #62 completes, freshly select one bounded remaining priority-one vanish or freeze restriction/lifecycle item.
 4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
-5. Do not begin another feature in the PR #60 session.
+5. Do not begin another feature in the PR #62 session.
