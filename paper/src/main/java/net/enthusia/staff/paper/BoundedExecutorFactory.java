@@ -56,7 +56,10 @@ final class BoundedExecutorFactory {
                 Thread.currentThread().interrupt();
             }
             if (!failures.isEmpty()) {
-                RuntimeException failure = failures.getFirst();
+                IllegalStateException failure = new IllegalStateException(
+                        "Queued worker task failed during forced shutdown",
+                        failures.getFirst()
+                );
                 failures.stream().skip(1).forEach(failure::addSuppressed);
                 throw failure;
             }
