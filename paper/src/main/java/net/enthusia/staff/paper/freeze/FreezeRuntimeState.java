@@ -1,0 +1,124 @@
+package net.enthusia.staff.paper.freeze;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
+final class FreezeRuntimeState {
+    private static final String PLAYER_ID_ARGUMENT = "playerId";
+
+    private final Map<UUID, Entry> states = new ConcurrentHashMap<>();
+    private final AtomicLong nextGeneration = new AtomicLong();
+
+    long beginVerification(UUID playerId) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        long token = nextGeneration.incrementAndGet();
+        states.put(playerId, Entry.pendingState(token));
+        return token;
+    }
+
+    boolean resolveVerification(UUID playerId, long token, boolean active) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        AtomicBoolean resolved = new AtomicBoolean();
+        states.compute(playerId, (ignored, current) -> {
+            if (current == null || !current.matchesPending(token)) {
+                return current;
+            }
+            resolved.set(true);
+            return active ? Entry.frozenState(token) : Entry.releasedState(token);
+        });
+        return resolved.get();
+    }
+
+    boolean isVerificationCurrent(UUID playerId, long token) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.matchesPending(token);
+    }
+
+    long apply(UUID playerId) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        long generation = nextGeneration.incrementAndGet();
+        states.put(playerId, Entry.frozenState(generation));
+        return generation;
+    }
+
+    long release(UUID playerId) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        long generation = nextGeneration.incrementAndGet();
+        states.put(playerId, Entry.releasedState(generation));
+        return generation;
+    }
+
+    boolean retire(UUID playerId) {
+        Entry retired = states.remove(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return retired != null && retired.status() == Status.FROZEN;
+    }
+
+    boolean retireIfCurrent(UUID playerId, long generation) {
+        Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        AtomicBoolean retired = new AtomicBoolean();
+        states.computeIfPresent(playerId, (ignored, current) -> {
+            if (current.generation() != generation) {
+                return current;
+            }
+            retired.set(true);
+            return null;
+        });
+        return retired.get();
+    }
+
+    boolean isRestricted(UUID playerId) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.status() != Status.RELEASED;
+    }
+
+    boolean isFrozen(UUID playerId) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.status() == Status.FROZEN;
+    }
+
+    boolean isCurrentFrozen(UUID playerId, long generation) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.matchesFrozen(generation);
+    }
+
+    boolean isCurrentRelease(UUID playerId, long generation) {
+        Entry current = states.get(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+        return current != null && current.matchesReleased(generation);
+    }
+
+    private enum Status {
+        PENDING_VERIFICATION,
+        FROZEN,
+        RELEASED
+    }
+
+    private record Entry(Status status, long generation) {
+        private static Entry pendingState(long token) {
+            return new Entry(Status.PENDING_VERIFICATION, token);
+        }
+
+        private static Entry frozenState(long generation) {
+            return new Entry(Status.FROZEN, generation);
+        }
+
+        private static Entry releasedState(long generation) {
+            return new Entry(Status.RELEASED, generation);
+        }
+
+        private boolean matchesPending(long token) {
+            return status == Status.PENDING_VERIFICATION && generation == token;
+        }
+
+        private boolean matchesFrozen(long expectedGeneration) {
+            return status == Status.FROZEN && generation == expectedGeneration;
+        }
+
+        private boolean matchesReleased(long expectedGeneration) {
+            return status == Status.RELEASED && generation == expectedGeneration;
+        }
+    }
+}
