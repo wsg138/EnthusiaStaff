@@ -18,7 +18,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE — PR #62 implementation complete; exact-head validation and review pending` |
+| State | `ACTIVE — PR #62 review corrections applied; exact-head validation and Pi evidence pending` |
 | Pull request | `#62 — Block ordinary world interactions during staff mode` |
 | Feature branch | `fix/staffmode-world-interaction-guard` |
 | Starting main | `8173ad4fcd2b675598ebcb53cd1d1dbc23cb340b` |
@@ -27,7 +27,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | Migration boundary | V16 is highest; PR #62 adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 | External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
-| Intended post-merge status | Merge PR #62 normally only after all available applicable gates pass; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
+| Intended post-merge status | Merge PR #62 normally only after all configured gates pass and exact-head Pi succeeds, or direct evidence proves the permitted GitHub Actions quota/platform-unavailability exception; verify resulting `main`, feature-head containment, and branch cleanup; do not deploy or access production |
 
 ## Live start-state reconciliation
 
@@ -47,17 +47,19 @@ Air clicks remain available for dedicated staff tools. Ordinary players are unaf
 
 `StaffModeWorldInteractionPolicyTest` covers inactive-player pass-through, active mutation blocking, air-click allowance, and block/physical interaction blocking.
 
-The Bukkit listener is thin adapter wiring. Low direct listener line coverage is acceptable only when exact-head compilation and available Pi staging prove event signatures/registration and the directly tested policy proves the decisions.
+The Bukkit listener is thin adapter wiring. Low direct listener line coverage is acceptable only when exact-head compilation and terminal successful exact-head Pi staging prove event signatures and registration, unless direct evidence establishes the permitted GitHub Actions quota, billing, disabled-Actions, or equivalent platform-unavailability exception. The directly tested policy proves the interaction decisions. Cancelled, skipped, superseded, stale-head, different-revision, merge-ref-only, or executed-but-inconclusive Pi results are not passing evidence.
 
 ## Harsh-review corrections already applied
 
 1. Replaced a custom cancellation callback with Bukkit's `Cancellable` contract.
 2. Added explicit `PlayerInteractAtEntityEvent` coverage rather than relying on superclass dispatch.
 3. Kept transition/recovery-state exposure outside this bounded PR because the existing public query reports confirmed active sessions only.
+4. Verified CodeRabbit's suggested entity-damage handler already exists in `StaffModeManager` and covers direct players plus player-shot projectiles with the stronger active-or-transition predicate; no duplicate was added.
+5. Added exact handoff timestamp, explicit readiness, and consistent Pi success-or-permitted-exception wording.
 
 ## Exact-head completion gate
 
-Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for all available applicable configured checks: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, wiki validation, CodeRabbit/human review, zero valid unresolved threads, and exact-head Pi when it executes. When GitHub Actions quota or platform unavailability prevents Pi from executing, record the exact evidence and do not claim Pi passed.
+Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for all applicable configured checks: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, wiki validation when triggered, CodeRabbit/human review, and zero valid unresolved threads. Pi must succeed on the exact head unless direct evidence proves that GitHub Actions quota, billing, disabled Actions, or equivalent platform unavailability prevented execution. In that permitted exception case, record `Pi not run — GitHub Actions quota/platform unavailable` and the exact evidence; do not claim Pi passed. No other unavailable or non-success Pi result permits merge.
 
 ## Production boundary
 
@@ -65,7 +67,7 @@ PR #62 is dormant development work only. It does not authorize deployment, produ
 
 ## Next route
 
-1. Finish PR #62 only: complete final full-diff review, synchronize with live `main`, exact-head validation, review resolution, and normal merge only when all gates permit it.
+1. Finish PR #62 only: complete final full-diff review, synchronize with live `main`, exact-head validation, review resolution, and normal merge only when every gate permits it.
 2. Record merge/resulting `main`, feature-head containment, no unmerged branch commits, and branch cleanup in PR metadata.
 3. After PR #62 completes, freshly select one bounded remaining priority-one vanish or freeze restriction/lifecycle item.
 4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
