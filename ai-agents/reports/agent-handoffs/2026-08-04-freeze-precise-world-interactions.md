@@ -46,14 +46,25 @@ The common cancellation helper now accepts Bukkit's `Cancellable` contract direc
 
 Existing `FreezeRuntimeStateTest` proves that unknown or released players are unrestricted, pending verification is restricted, confirmed freezes remain restricted and stale lifecycle generations cannot overwrite newer state. Together, those tests cover the new listener wiring and the existing decision boundary used by every handler.
 
-The event methods are thin Paper adapters. Remaining low line coverage in simple handler bodies is acceptable only with exact-head Paper compilation and applicable runtime staging evidence. No meaningful persistence, recovery, scheduler, permission or transaction path was added without direct tests.
+The event methods are thin Paper adapters. Coverage is low in simple handler bodies and is acceptable only with exact-head Paper compilation and applicable runtime staging evidence. No meaningful persistence, recovery, scheduler, permission or transaction path was added without direct tests.
 
 ## Harsh-review findings
 
 1. **Confirmed defect fixed:** precise-hitbox entity interaction had no explicit handler.
 2. **Confirmed defect fixed:** armor-stand manipulation, harvesting, shearing and fishing had no explicit freeze handlers.
-3. **Optional cleanup completed:** replaced the custom cancellation callback with `Cancellable` without changing behavior.
-4. **Excluded future work:** backend-switch enforcement, command policy, RoseChat provider behavior, additional freeze duration controls and broad production staging remain separate work items.
+3. **Confirmed test defect fixed:** the focused test used a deprecated-for-removal harvest-event constructor rejected by the warning-as-error build.
+4. **Confirmed test defect fixed:** the focused fixture initialized the Paper item registry without a running server.
+5. **Confirmed maintainability defect fixed:** a concurrent fixture repair used internal JVM allocation and reflective final-field mutation; it was replaced with ordinary event construction and a server-free item fixture.
+6. **Confirmed analysis findings fixed:** simplified the fixture and split event factories to remove valid error-prone and complexity findings.
+7. **Optional cleanup completed:** replaced the custom cancellation callback with `Cancellable` without changing behavior.
+8. **Excluded future work:** backend-switch enforcement, command policy, RoseChat provider behavior, additional freeze duration controls and broad production staging remain separate work items.
+
+## Superseded validation evidence
+
+- Source `591324324b721c21b4c2b86f71501d0bc2210f59` failed Pi wrapper run `30903529787`.
+- Correlated `EnthusiaStaff-Staging` run `30903538014` failed in trusted-runtime build job `91973196566`; the Pi boot/restart job was skipped and did not run.
+- Later exact-head Coverage runs exposed the deprecated constructor and serverless registry-fixture defects described above.
+- Those failed heads are superseded by repair commits and are not passing evidence. The final unchanged head still requires fresh terminal Coverage, Codacy and Pi evidence.
 
 ## Compatibility and boundaries
 
@@ -69,7 +80,7 @@ Read exact-head build, test, coverage, static-analysis, CodeRabbit, Codacy, revi
 
 Merge only after the branch includes current `main`, the complete diff is reviewed, all available applicable checks are terminal and acceptable, zero valid unresolved review threads remain and exact-head Pi succeeds when it executes normally. If direct evidence proves GitHub Actions quota, billing, disabled Actions or equivalent platform unavailability prevented Pi execution, record `Pi not run — GitHub Actions quota/platform unavailable` and do not claim Pi passed.
 
-Readiness: **NOT READY — exact-head validation and review-bot evidence pending.**
+Readiness: **NOT READY — final unchanged-head validation and review resolution pending.**
 
 ## Next recommended item
 
