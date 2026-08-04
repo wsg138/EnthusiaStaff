@@ -107,9 +107,11 @@ public final class FreezeManager implements Listener {
         try {
             FreezeStore loaded = store.get();
             if (loaded == null) {
-                plugin.getLogger().severe(
-                        "Freeze storage is unavailable; the joining player remains restricted"
-                );
+                if (runtimeState.isVerificationCurrent(playerId, verificationToken)) {
+                    plugin.getLogger().severe(
+                            "Freeze storage is unavailable; the joining player remains restricted"
+                    );
+                }
                 return;
             }
             boolean active = loaded.active(playerId, clock.instant()).isPresent();
