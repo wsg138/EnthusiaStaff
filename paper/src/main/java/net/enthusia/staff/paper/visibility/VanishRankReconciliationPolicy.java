@@ -17,12 +17,16 @@ final class VanishRankReconciliationPolicy {
             boolean vanished,
             StaffRank durableRank,
             StaffRank liveRank,
-            boolean staffModeActive
+            boolean staffModeActive,
+            boolean staffModeExitPending
     ) {
         if (!vanished) {
             return durableRank == null ? VanishAction.NONE : VanishAction.DISABLE;
         }
         if (!isPlayerRank(liveRank)) {
+            return VanishAction.DISABLE;
+        }
+        if (staffModeExitPending && requiresStaffMode(liveRank)) {
             return VanishAction.DISABLE;
         }
         if (requiresStaffMode(liveRank) && !staffModeActive && durableRank != liveRank) {
