@@ -1,11 +1,27 @@
 package net.enthusia.staff.paper.visibility;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import net.enthusia.staff.domain.auth.StaffRank;
 import org.junit.jupiter.api.Test;
 
 class VanishRankReconciliationPolicyTest {
+    @Test
+    void trackedPlayersAreCheckedBetweenFullDiscoveryPasses() {
+        assertTrue(VanishRankReconciliationPolicy.shouldCheckRank(false, true, false, false, false));
+        assertTrue(VanishRankReconciliationPolicy.shouldCheckRank(false, false, true, false, false));
+        assertTrue(VanishRankReconciliationPolicy.shouldCheckRank(false, false, false, true, false));
+        assertTrue(VanishRankReconciliationPolicy.shouldCheckRank(false, false, false, false, true));
+        assertFalse(VanishRankReconciliationPolicy.shouldCheckRank(false, false, false, false, false));
+    }
+
+    @Test
+    void fullDiscoveryPassChecksPreviouslyUntrackedPlayers() {
+        assertTrue(VanishRankReconciliationPolicy.shouldCheckRank(true, false, false, false, false));
+    }
+
     @Test
     void unchangedPlayerRankKeepsViewerAuthority() {
         for (StaffRank rank : playerRanks()) {
