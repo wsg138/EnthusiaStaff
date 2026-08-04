@@ -11,6 +11,17 @@ final class FreezeRuntimeStateTest {
     private static final UUID PLAYER_ID = UUID.fromString("d216b34b-c970-46af-959f-356f839e236b");
 
     @Test
+    void unknownPlayerIsUnrestrictedAndNotRetirable() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+
+        assertFalse(state.isRestricted(PLAYER_ID));
+        assertFalse(state.isFrozen(PLAYER_ID));
+        assertFalse(state.retire(PLAYER_ID));
+        assertFalse(state.resolveVerification(PLAYER_ID, 1L, true));
+        assertFalse(state.retireIfCurrent(PLAYER_ID, 1L));
+    }
+
+    @Test
     void currentActiveVerificationBecomesConfirmedFrozen() {
         FreezeRuntimeState state = new FreezeRuntimeState();
         long token = state.beginVerification(PLAYER_ID);
@@ -97,6 +108,18 @@ final class FreezeRuntimeStateTest {
         assertFalse(state.isCurrentRelease(PLAYER_ID, releaseGeneration));
         assertTrue(state.isCurrentFrozen(PLAYER_ID, frozenGeneration));
         assertTrue(state.isRestricted(PLAYER_ID));
+    }
+
+    @Test
+    void offlineCleanupOnlyRetiresItsOwnGeneration() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+        long staleGeneration = state.apply(PLAYER_ID);
+        long currentGeneration = state.release(PLAYER_ID);
+
+        assertFalse(state.retireIfCurrent(PLAYER_ID, staleGeneration));
+        assertTrue(state.isCurrentRelease(PLAYER_ID, currentGeneration));
+        assertTrue(state.retireIfCurrent(PLAYER_ID, currentGeneration));
+        assertFalse(state.isRestricted(PLAYER_ID));
     }
 
     @Test
