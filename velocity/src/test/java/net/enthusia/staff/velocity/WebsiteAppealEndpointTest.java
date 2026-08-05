@@ -13,14 +13,24 @@ import com.sun.net.httpserver.Headers;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.ports.SanctionMutationStore;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionActionLimits;
+import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionStatus;
 import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
 import org.junit.jupiter.api.Test;
 
@@ -36,34 +46,46 @@ final class WebsiteAppealEndpointTest {
     private static final UUID REVIEWER_ID =
             UUID.fromString("744cc693-a8a5-4ec9-8bb0-8074c951ff49");
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
+    private static final long REVISION = 7L;
 
     @Test
-    void appliesAuthorizedAppealAndCompletesDurablePreparation() {
+    void appliesAuthorizedAppealToOnlyTheExactPunishment() {
         AppealStore store = new AppealStore();
-        RecordingMutationStore mutations = new RecordingMutationStore(
-                new SanctionChangeResult.Applied(2, false)
-        );
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
         WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
 
         Map<?, ?> response = assertInstanceOf(Map.class, endpoint.accept(headers(), input("MOD")));
 
         assertEquals(1, store.preparations);
-        assertEquals(APPEAL_ID, store.completedAppealId);
-        assertEquals("APPLIED", store.completedState);
-        assertEquals("APPLIED", store.completedOutcome);
-        assertEquals(2, response.get("affectedSanctions"));
+        assertEquals(List.of("APPLIED:MUTATION_PENDING", "APPLIED:APPLIED"), store.completions);
+        assertEquals(1, response.get("affectedSanctions"));
         assertTrue(assertInstanceOf(Boolean.class, response.get("applied")));
         assertFalse(assertInstanceOf(Boolean.class, response.get("replayed")));
-        assertEquals(CASE_ID, mutations.request.caseId());
+        assertEquals(PUNISHMENT_ID, mutations.request.sanctionId());
+        assertEquals(REVISION, mutations.request.expectedRevision());
+        assertEquals(SanctionChangeAction.FULL_OVERTURN, mutations.request.action());
+        assertEquals(APPEAL_ID, mutations.request.linkedAppealId().orElseThrow());
         assertTrue(mutations.request.idempotencyKey().value().startsWith("website-appeal:"));
+        assertEquals("VELOCITY_WEBSITE", mutations.request.originRuntime());
+    }
+
+    @Test
+    void repeatedAcceptanceReturnsReplayWithoutChangingTheDurableOutcome() {
+        AppealStore store = new AppealStore();
+        store.preparation = new AppealAcceptancePreparation.Ready(true);
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(true));
+        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, endpoint.accept(headers(), input("ADMIN")));
+
+        assertTrue(assertInstanceOf(Boolean.class, response.get("replayed")));
+        assertEquals(List.of("APPLIED:MUTATION_PENDING", "APPLIED:APPLIED"), store.completions);
     }
 
     @Test
     void rejectsReadOnlyReviewerBeforePreparingMutation() {
         AppealStore store = new AppealStore();
-        RecordingMutationStore mutations = new RecordingMutationStore(
-                new SanctionChangeResult.Applied(1, false)
-        );
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
         WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
 
         WebsiteApiException error = assertThrows(
@@ -80,9 +102,7 @@ final class WebsiteAppealEndpointTest {
     @Test
     void leavesPreparedRequestReplayableWhenAuthorityModeIsBlocked() {
         AppealStore store = new AppealStore();
-        RecordingMutationStore mutations = new RecordingMutationStore(
-                new SanctionChangeResult.Applied(1, false)
-        );
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
         WebsiteAppealEndpoint endpoint = endpoint(
                 store,
                 mutations,
@@ -97,15 +117,18 @@ final class WebsiteAppealEndpointTest {
         assertEquals(503, error.status());
         assertEquals("AUTHORITY_NOT_ACTIVE", error.code());
         assertEquals(1, store.preparations);
-        assertNull(store.completedState);
+        assertTrue(store.completions.isEmpty());
         assertNull(mutations.request);
     }
 
     @Test
-    void persistsNonModeMutationRejectionForDeterministicReplay() {
+    void persistsStaleExactDecisionForDeterministicReplay() {
         AppealStore store = new AppealStore();
         RecordingMutationStore mutations = new RecordingMutationStore(
-                new SanctionChangeResult.Rejected("STALE_STATE", "The sanction changed")
+                new ExactSanctionChangeResult.Rejected(
+                        "STALE_SANCTION_STATE",
+                        "The sanction changed"
+                )
         );
         WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
 
@@ -115,9 +138,11 @@ final class WebsiteAppealEndpointTest {
         );
 
         assertEquals(409, error.status());
-        assertEquals("STALE_STATE", error.code());
-        assertEquals("REJECTED", store.completedState);
-        assertEquals("STALE_STATE", store.completedOutcome);
+        assertEquals("STALE_SANCTION_STATE", error.code());
+        assertEquals(
+                List.of("APPLIED:MUTATION_PENDING", "REJECTED:STALE_SANCTION_STATE"),
+                store.completions
+        );
     }
 
     @Test
@@ -127,9 +152,7 @@ final class WebsiteAppealEndpointTest {
                 "PUNISHMENT_NOT_FOUND",
                 "The punishment could not be found"
         );
-        RecordingMutationStore mutations = new RecordingMutationStore(
-                new SanctionChangeResult.Applied(1, false)
-        );
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
         WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
 
         WebsiteApiException error = assertThrows(
@@ -140,7 +163,42 @@ final class WebsiteAppealEndpointTest {
         assertEquals(404, error.status());
         assertEquals("PUNISHMENT_NOT_FOUND", error.code());
         assertNull(mutations.request);
-        assertNull(store.completedState);
+        assertTrue(store.completions.isEmpty());
+    }
+
+    @Test
+    void missingExactPunishmentIsRejectedBeforeAppealPreparation() {
+        AppealStore store = new AppealStore();
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
+        mutations.revision = OptionalLong.empty();
+        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+
+        WebsiteApiException error = assertThrows(
+                WebsiteApiException.class,
+                () -> endpoint.accept(headers(), input("MOD"))
+        );
+
+        assertEquals(404, error.status());
+        assertEquals("PUNISHMENT_NOT_FOUND", error.code());
+        assertEquals(0, store.preparations);
+        assertNull(mutations.request);
+    }
+
+    @Test
+    void exactMutationCapabilityIsRequiredFailClosed() {
+        AppealStore store = new AppealStore();
+        RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
+        mutations.exactSupported = false;
+        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+
+        WebsiteApiException error = assertThrows(
+                WebsiteApiException.class,
+                () -> endpoint.accept(headers(), input("FOUNDER"))
+        );
+
+        assertEquals(503, error.status());
+        assertEquals("EXACT_MUTATION_UNAVAILABLE", error.code());
+        assertEquals(0, store.preparations);
     }
 
     private static WebsiteAppealEndpoint endpoint(
@@ -152,7 +210,7 @@ final class WebsiteAppealEndpointTest {
         return new WebsiteAppealEndpoint(
                 store,
                 authorization,
-                new SanctionChangeService(authorization, mutations::apply),
+                new SanctionChangeService(authorization, mutations),
                 () -> mode,
                 CLOCK,
                 new WebsiteApiRequestDecoder()
@@ -177,13 +235,28 @@ final class WebsiteAppealEndpointTest {
         return input;
     }
 
+    private static ExactSanctionChangeResult.Applied applied(boolean replayed) {
+        return new ExactSanctionChangeResult.Applied(
+                CASE_ID,
+                PUNISHMENT_ID,
+                PLAYER_ACCOUNT_ID,
+                SanctionChangeAction.FULL_OVERTURN,
+                SanctionStatus.ACTIVE,
+                SanctionStatus.OVERTURNED,
+                Optional.of(NOW.plusSeconds(3_600)),
+                Optional.of(NOW.plusSeconds(3_600)),
+                NOW,
+                Optional.of(APPEAL_ID),
+                Optional.empty(),
+                replayed
+        );
+    }
+
     private static final class AppealStore extends WebsiteModerationStoreStub {
         private AppealAcceptancePreparation preparation =
                 new AppealAcceptancePreparation.Ready(false);
         private int preparations;
-        private UUID completedAppealId;
-        private String completedState;
-        private String completedOutcome;
+        private final List<String> completions = new ArrayList<>();
 
         @Override
         public AppealAcceptancePreparation prepareAppealAcceptance(
@@ -205,21 +278,41 @@ final class WebsiteAppealEndpointTest {
                 String outcomeCode,
                 Instant now
         ) {
-            completedAppealId = appealId;
-            completedState = state;
-            completedOutcome = outcomeCode;
+            completions.add(state + ":" + outcomeCode);
         }
     }
 
-    private static final class RecordingMutationStore {
-        private final SanctionChangeResult result;
-        private SanctionChangeRequest request;
+    private static final class RecordingMutationStore implements SanctionMutationStore {
+        private final ExactSanctionChangeResult result;
+        private boolean exactSupported = true;
+        private OptionalLong revision = OptionalLong.of(REVISION);
+        private ExactSanctionChangeRequest request;
 
-        private RecordingMutationStore(SanctionChangeResult result) {
+        private RecordingMutationStore(ExactSanctionChangeResult result) {
             this.result = result;
         }
 
-        private SanctionChangeResult apply(SanctionChangeRequest requested) {
+        @Override
+        public SanctionChangeResult apply(SanctionChangeRequest requested) {
+            throw new AssertionError("case-wide mutation path was called");
+        }
+
+        @Override
+        public boolean supportsExactChanges() {
+            return exactSupported;
+        }
+
+        @Override
+        public OptionalLong exactRevision(UUID sanctionId) {
+            assertEquals(PUNISHMENT_ID, sanctionId);
+            return revision;
+        }
+
+        @Override
+        public ExactSanctionChangeResult applyExact(
+                ExactSanctionChangeRequest requested,
+                SanctionActionLimits limits
+        ) {
             request = requested;
             return result;
         }
