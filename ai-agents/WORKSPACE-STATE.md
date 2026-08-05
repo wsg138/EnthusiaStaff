@@ -27,7 +27,7 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 | Active implementation package | `NONE` |
 | Active implementation branch/PR | `NONE` |
 | Setup branch | `package/es-setup-workspace-orchestration` |
-| Setup PR | `PENDING` |
+| Setup PR | `#67 — Establish work-package orchestration and component synchronization` |
 | Setup handoff | `ai-agents/reports/package-handoffs/2026-08-05-package-planning-setup.md` |
 | Production authority | LiteBans remains authoritative |
 
