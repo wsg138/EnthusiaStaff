@@ -10,7 +10,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current legitimate `main` at reconciliation start | `9d84f8d50a024b04530335c622d63b573343242b` |
+| Audited legitimate `main` | `dddc8352aed5aac1eeead3a670680cd647b1b9c2` |
 | Latest merged product work | PR #64 — Block mounted movement while frozen |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
@@ -19,46 +19,33 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `DOCUMENTATION-ONLY — verify PR #65 live; intended post-merge state is IDLE with no implementation item active or preselected` |
-| Pull request | `#65 — Reconcile repository routing after PR #64` |
-| Feature branch | `agent/reconcile-post-pr64-routing` |
-| Starting main | `9d84f8d50a024b04530335c622d63b573343242b` |
-| Work item | Reconcile routing, workspace-state, requirements and Wiki status documentation after recent merges |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-05-post-pr64-reconciliation.md` |
-| Migration boundary | V16 is highest; this documentation PR adds no migration; V1–V16 remain immutable |
+| State | `PLANNING — repository-wide completion audit is merged; no implementation package is active or preselected` |
+| Canonical audit | `reports/PROJECT-COMPLETION-AUDIT.md` |
+| Audit pull request | `#66 — Audit repository-wide project completion state` |
+| Audited main | `dddc8352aed5aac1eeead3a670680cd647b1b9c2` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-05-repository-completion-audit.md` |
+| Migration boundary | V16 is highest; the audit changes no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
 
-## Live reconciliation
+## Audit result
 
-- PR #64 merged by normal merge commit from exact feature head `63e5d450fad73ffed5900edc160548cb7f165b85`.
-- PR #64 merge commit and resulting `main` at reconciliation start are `9d84f8d50a024b04530335c622d63b573343242b`.
-- The PR #64 feature head is the merge base of current `main`; `main` is one merge commit ahead and zero behind.
-- The PR #64 remote branch is absent. Before this reconciliation branch, only `main` existed.
-- No open or draft pull request existed before PR #65.
-- Recent merged work also includes PR #58 staff-session disable recovery, PR #59 live-rank vanish reconciliation, PR #60 freeze recovery fencing, PR #61 database-dump protections, PR #62 staff-mode world-interaction restrictions and PR #63 precise freeze-interaction restrictions.
-- V16 remains the highest Flyway migration. No recent PR changed migration bytes.
-- The durable agent process in `ai-agents/UNIVERSAL-AGENT-PROMPT.md` remains correct and is not changed by this reconciliation.
-
-Exact final-head validation and merge evidence for PR #65 belongs in the pull-request description or consolidated comments rather than in this tracked state file.
-
-## Owner priorities and blockers
-
-When prerequisites are comparable, use this order:
-
-1. staff mode, vanish and freeze;
-2. report notification completion;
-3. escalation-policy completion.
-
-No open blocker prevents fresh selection within priority one. The supported RoseChat private-message provider contract remains unavailable and blocks provider-dependent report-notification and private-message evidence work. Issue #43 remains open only as the later LiteBans production-cutover acceptance gate; it is not a general blocker queue and does not block ordinary dormant development merges.
+- The repository is structurally established and feature-incomplete.
+- The canonical 99-item ledger records 19 `COMPLETE_GOOD`, 47 `COMPLETE_WITH_ISSUES`, 12 `PARTIAL`, 6 `NOT_STARTED`, 3 `BLOCKED`, 10 `DEFERRED_ACCEPTANCE`, and 2 `OUTSIDE_THIS_REPOSITORY` items.
+- The highest-risk confirmed defect is `AUD-APPEAL-003`: one punishment appeal can end all active sanctions in the same combined case.
+- Major incomplete areas include functional staff tools, cheat/fake tooling, provider-backed asset workflows, RoseChat-dependent communication/evidence, Velocity reload, Bedrock identity correctness, distributed staging, and LiteBans acceptance/cutover.
+- Exact-main Java 21 build/tests, MariaDB/Testcontainers integration, runtime JAR inspection, provider-leak inspection, aggregate coverage generation, and Wiki validation succeeded.
+- Aggregate coverage is 46.89% line and 37.83% branch; major runtime paths remain weakly proved.
+- Current-SHA Pi staging did not execute because GitHub reported account billing/spending-limit status before a runner started.
+- No product code, migration, workflow, runtime configuration, deployment control, production authority, LiteBans authority, or issue #43 acceptance changed.
 
 ## Next route
 
-1. Reconcile live GitHub before acting. If PR #65 remains open, finish this documentation-only PR and do not start implementation.
-2. After PR #65 is merged and no unfinished PR exists, inspect current code, tests, goals, the development blueprint and the requirements matrix for actual remaining gaps.
-3. Select exactly one bounded prerequisite-ready incomplete staff-mode, vanish or freeze item. No specific feature is preselected by this record.
-4. Do not route RoseChat-dependent report work until a supported provider contract exists. Provider-independent report work remains second priority when prerequisite-ready.
-5. Treat escalation-policy completion as third priority.
-6. Keep issue #43 reserved for later production-cutover acceptance when a release candidate and representative isolated environment exist.
+1. Reconcile live GitHub before planning.
+2. Use `reports/PROJECT-COMPLETION-AUDIT.md` as the authority for defining bounded implementation packages.
+3. Do not preselect work from older priority lists or handoffs.
+4. Resolve dependency and code-overlap relationships before allowing parallel work.
+5. Keep provider-dependent, private-data, distributed, Bedrock, and production-acceptance work in the environments identified by the audit.
+6. Keep issue #43 reserved for the later 168-hour production-like LiteBans acceptance gate.
 
 ## Permanent boundaries
 
