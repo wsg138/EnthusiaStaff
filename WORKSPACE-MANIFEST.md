@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-08-03 (America/Indiana/Indianapolis)
+Last updated: 2026-08-05 (`America/Indiana/Indianapolis`)
 
 This manifest records development coordination and authority boundaries. It does not authorize deployment, production-data access, LiteBans cutover or a change in punishment authority.
 
@@ -10,70 +10,58 @@ This manifest records development coordination and authority boundaries. It does
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| `main` at PR #56 start | `d71759aa4f121c82f984e57d6fd0968a80c502ba` |
-| Latest merged product PR | PR #55 — Admin staff-mode Ender view-only enforcement |
-| Work requiring live verification | PR #56 — staff-tool hotbar and offhand transfer bypass closure |
-| Expected committed state | `IDLE — PR #56 requires live merge verification` |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-03-staffmode-tool-transfer-bypasses.md` |
-| Migration boundary | V16 is highest; PR #56 adds no migration; V1–V16 remain immutable |
+| `main` at reconciliation start | `9d84f8d50a024b04530335c622d63b573343242b` |
+| Latest merged product PR | PR #64 — Block mounted movement while frozen |
+| Current documentation work | PR #65 — post-PR #64 routing reconciliation; verify live merge state |
+| Expected committed state | `IDLE — no implementation item active or preselected` |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-05-post-pr64-reconciliation.md` |
+| Migration boundary | V16 is highest; V1–V16 remain immutable |
 | Dormant default | Startup remains non-`ACTIVE` |
 | Production authority | **LiteBans remains authoritative** |
 
-At PR #56 start there were no open pull requests and no non-main branch remained active. PR #55 had merged normally, its feature head was contained in `main`, and its feature branch had been removed.
+At PR #65 start there were no open or draft pull requests and no non-`main` branch. PR #64 had merged normally, its exact feature head was contained in `main`, and its feature branch had been removed.
 
-## Implementation checkpoint
+## Recent merged checkpoints
 
-PR #56 is one bounded staff-mode item-leak prevention correction:
+The recent priority-one sequence is merged:
 
-- the previous active-session click guard inspected only the clicked item and cursor;
-- number-key and inventory offhand clicks can move a different source item;
-- a focused listener now identifies current, cursor, exact referenced hotbar and offhand sources;
-- one directly tested policy decides whether the transfer contains a protected staff tool;
-- number-key checks only the selected hotbar source;
-- offhand swap checks only the offhand source;
-- unrelated click types do not become over-restrictive;
-- transition and rank/Ender mutation rules remain enforced by `StaffModeManager`;
-- Helper restrictions, Admin Ender view-only behavior, Founder owner access, drag/drop/pickup/swap-hand protection and staff-tool cleanup remain unchanged.
+- PR #56 closed staff-tool number-key and offhand transfer bypasses.
+- PR #57 reconciled staff-mode profiles with live rank changes.
+- PR #58 added durable fail-closed recovery across Paper disable or reload.
+- PR #59 reconciled vanish state and visibility with live rank changes.
+- PR #60 fenced freeze recovery across reconnects and manual changes.
+- PR #61 added database-dump and private migration-input protections.
+- PR #62 blocked ordinary world interactions during active staff mode.
+- PR #63 blocked precise world interactions while frozen.
+- PR #64 ejected frozen players from mounts and rejected new mount attempts.
 
-No database, protocol, provider, command, permission, configuration, vanish, freeze, confiscation or production-authority behavior is part of this PR.
-
-## Harsh-review checkpoint
-
-The complete diff received a separate harsh review. It found and fixed one confirmed architecture defect: the first implementation left a second current-item/cursor guard in `StaffModeManager` beside the new listener. The manager now owns transition/rank restrictions while the dedicated listener owns active-session staff-tool click transfer protection.
-
-No tracked merge blocker remains before exact-head validation. Full Paper event-object staging is useful optional runtime confidence beyond the thin listener and directly tested decision policy.
-
-Exact final-head validation, review and merge evidence belongs in PR #56 live metadata.
+These are development checkpoints, not deployment or production-acceptance evidence.
 
 ## Owner priority checkpoint
 
-When prerequisites are comparable, use this order:
+When prerequisites are comparable:
 
-1. staff mode, vanish, and freeze;
+1. staff mode, vanish and freeze;
 2. report notification completion;
 3. escalation-policy completion.
 
-PR #56 is staff/player-visible leak prevention under priority one. Do not expand it into rank-change lifecycle, disable recovery, vanish, freeze, general inventory editing or confiscation.
+No specific next feature is selected by this manifest. After PR #65 is complete and no unfinished PR exists, the next agent must inspect live code, tests, goals and requirements and select one bounded prerequisite-ready remaining priority-one gap.
 
-## Prior verified evidence
+## Blocked-work routing
 
-PR #55 exact head `c6380aae35cf8c56044faf6dea96c471b14634f3` passed exact-head Coverage `30812589989` and Validate Wiki `30812589424`, had zero unresolved review threads, and merged normally as `d71759aa4f121c82f984e57d6fd0968a80c502ba`. Do not attribute that evidence to PR #56.
+The supported RoseChat private-message callback and privacy presentation contract remains unavailable. Provider-dependent report notification, private-message evidence and related staff-chat work must not invent APIs, reflect against unknown implementation classes, copy provider-owned classes or scrape logs as a substitute callback.
 
-The Pi wrapper uses `pull_request_target`, so commit-scoped workflow listings may omit it. Inspect the public wrapper and correlated private `wsg138/EnthusiaStaff-Staging` run directly. Cancelled, superseded, skipped, different-revision and merge-ref-only runs are not exact-head evidence. When Pi is configured and triggered, require a terminal successful public wrapper and correlated private run for the exact feature head; accept an exception only when live workflow configuration proves Pi is not applicable or cannot be triggered for that exact head, and record that verified exception in PR metadata.
-
-## Provider and blocked-work routing
-
-The supported RoseChat private-message callback and privacy presentation boundary remains blocked because no accessible supported provider repository/API defines callback timing, identity, cancellation/delivery semantics, threading, duplicate behavior, versions and privacy-safe evidence fields. Do not invent an API, reflect against unknown classes, copy provider-owned classes or scrape logs as a substitute callback.
-
-Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue. External blockers should normally be tracked in a focused issue and the normal handoff.
+Issue #43 is specifically the LiteBans production-cutover acceptance issue. It is not the general bug-report or blocker queue and does not prevent ordinary dormant development work. LiteBans remains authoritative until a separately approved production cutover is completed.
 
 ## Development merge gate
 
-Merge PR #56 only after one unchanged exact feature head is synchronized with current `main` and every configured check for that head has a terminal acceptable result: Java 21 build/tests, applicable MariaDB/Testcontainers and migration checksum/immutability checks, runtime-JAR and provider-leak inspection, aggregate coverage, configured static analysis and coverage upload, wiki/documentation validation, applicable public and private Pi staging, and all human/CodeRabbit/Codacy review gates. Reject cancelled, superseded, skipped, different-revision and merge-ref-only results. A Pi exception is valid only when live workflow configuration proves Pi is not applicable or cannot be triggered for the exact feature head and the exception is recorded in PR metadata. Zero unresolved valid threads must remain. Before merge, record the exact head, every run/job and artifact identity, hashes, review classification and synchronization evidence in the PR without changing the feature SHA. Use a normal merge commit, then record the merge commit, resulting `main`, feature-head containment, absence of unmerged branch commits and branch cleanup.
+For the next implementation PR, use the exact-head and merge rules in `ai-agents/AGENTS.md` and `ai-agents/UNIVERSAL-AGENT-PROMPT.md`. Require one reviewed unchanged head, every applicable configured check, zero valid unresolved review threads, a normal merge commit, exact resulting `main`, feature-head containment and safe branch cleanup.
+
+Documentation-only PR #65 does not require Pi solely because it changes documentation unless the repository workflow triggers and requires Pi for its exact head. Record actual workflow behavior accurately; do not claim skipped or absent checks passed.
 
 ## Production cutover gate
 
-Issue #43 remains open specifically for production-cutover acceptance. Before it is complete, do not deploy a production cutover candidate, begin a real shadow window, activate EnthusiaStaff authority, disable/remove LiteBans, perform final production migration or authorize live cutover.
+Issue #43 remains open specifically for production-cutover acceptance. Before it is separately completed and approved, do not deploy a production cutover candidate, begin a real shadow window, activate EnthusiaStaff authority, disable or remove LiteBans, perform a final production migration or authorize live cutover.
 
 ## Related repositories
 
@@ -81,11 +69,12 @@ Provider and website repositories remain independent. Their histories must not b
 
 ## Current route
 
-1. Apply the complete development merge gate above to PR #56's final unchanged exact head; verify all terminal checks or a documented valid Pi exception, zero unresolved threads, normal merge evidence, resulting `main`, feature-head containment, no unmerged branch commits and branch cleanup.
-2. After PR #56, select one separate bounded staff-mode lifecycle or restriction-enforcement item after fresh reconciliation.
-3. Continue owner priority one before report notifications when prerequisites are comparable.
-4. Treat escalation-policy completion as third priority.
-5. Stop after PR #56 and do not begin the next feature in the same session.
+1. Finish PR #65 only if it is still open; do not begin implementation in the same session.
+2. After PR #65 merges, reconcile live GitHub and inspect current implementation gaps.
+3. Select one bounded prerequisite-ready staff-mode, vanish or freeze item; no candidate is preselected.
+4. Continue report notifications second when their prerequisites are available.
+5. Treat escalation-policy completion as third priority.
+6. Complete issue #43 only later, when the plugin is closer to release and a pinned release candidate and representative isolated environment exist.
 
 ## Release boundaries
 
