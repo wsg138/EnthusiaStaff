@@ -2,26 +2,32 @@
 
 Current handoff:
 
-[`2026-08-05-post-pr64-reconciliation.md`](2026-08-05-post-pr64-reconciliation.md)
+[`2026-08-05-repository-completion-audit.md`](2026-08-05-repository-completion-audit.md)
+
+Canonical audit:
+
+[`reports/PROJECT-COMPLETION-AUDIT.md`](../../../reports/PROJECT-COMPLETION-AUDIT.md)
 
 Related PR:
 
-[`#65 — Reconcile repository routing after PR #64`](https://github.com/wsg138/EnthusiaStaff/pull/65)
+[`#66 — Audit repository-wide project completion state`](https://github.com/wsg138/EnthusiaStaff/pull/66)
 
 ## Summary
 
 | Field | Value |
 | --- | --- |
-| Work item | Reconcile repository routing, workspace-state, requirements and Wiki status records after recent merges |
-| PR | `#65` |
-| Branch | `agent/reconcile-post-pr64-routing` |
-| Starting main | `9d84f8d50a024b04530335c622d63b573343242b` |
-| State | `DOCUMENTATION-ONLY — intended post-merge state is idle with no implementation item preselected` |
-| Latest merged product work | PR #64 from exact feature head `63e5d450fad73ffed5900edc160548cb7f165b85` |
+| Work item | Repository-wide project completion audit |
+| PR | `#66` |
+| Branch | `audit/full-project-completion-state` |
+| Audited main | `dddc8352aed5aac1eeead3a670680cd647b1b9c2` |
+| State | `PLANNING — completion audit is merged; no implementation package is active or preselected` |
+| Overall verdict | Structurally established and feature-incomplete; not release-candidate or production ready |
+| Ledger | 99 classified requirements; use the canonical audit for categories, proof, dependencies and overlap |
+| Highest-risk confirmed defect | `AUD-APPEAL-003` — one punishment appeal can end all active sanctions in a combined case |
 | Migration boundary | V16 is highest; V1–V16 remain immutable |
 | Production boundary | LiteBans remains authoritative; no deployment, production access, issue #43 acceptance or cutover |
-| Next owner-priority route | Freshly select one bounded prerequisite-ready remaining staff-mode, vanish or freeze gap only after PR #65 completes and live GitHub is reconciled |
+| Next route | Reconcile live GitHub, then use the audit to define bounded implementation packages; do not preselect one from older handoffs |
 
-Read exact final-head validation, review disposition, merge commit, resulting `main`, feature-head containment and branch deletion live from PR #65. Do not edit historical feature handoffs merely to add later merge evidence.
+Read exact final-head validation, review disposition, merge commit, resulting `main`, audit-head containment and branch deletion live from PR #66 and its post-merge verification comment.
 
-The next agent must first reconcile live GitHub. If PR #65 is still open, finish it rather than opening a competing branch. If it is merged and no unfinished PR exists, inspect live code and requirements before selecting exactly one priority-one staff-mode, vanish or freeze item. Do not invent RoseChat provider behavior, treat issue #43 as a general blocker, deploy, access production data, alter migrations, activate EnthusiaStaff authority or change LiteBans.
+The next planner must use `reports/PROJECT-COMPLETION-AUDIT.md`, not stale percentages or prior priority routing, to define the next bounded packages. Preserve dependency and code-overlap constraints. Do not deploy, access production/private data, alter migrations, activate EnthusiaStaff authority, change LiteBans, or begin issue #43 acceptance.
