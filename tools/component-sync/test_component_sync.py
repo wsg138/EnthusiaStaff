@@ -1,22 +1,26 @@
-import json
-import subprocess
-import sys
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 
-SCRIPT = Path(__file__).with_name('component_sync.py')
+MODULE_PATH = Path(__file__).with_name('component_sync.py')
+
+
+def load_component_sync() -> ModuleType:
+    spec = importlib.util.spec_from_file_location('component_sync', MODULE_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError('unable to load component_sync module')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+component_sync = load_component_sync()
+ComparisonRefused = component_sync.ComparisonRefused
 
 
 class ComponentSyncTests(unittest.TestCase):
-    def run_tool(self, *args: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(SCRIPT), *map(str, args)],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
     def test_equal_ignores_only_aggregate_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             aggregate = Path(temp) / 'aggregate'
@@ -25,16 +29,15 @@ class ComponentSyncTests(unittest.TestCase):
             standalone.mkdir()
             (aggregate / 'src.txt').write_text('same\n', encoding='utf-8')
             (standalone / 'src.txt').write_text('same\n', encoding='utf-8')
-            (aggregate / 'COMPONENT-METADATA.md').write_text('orchestration\n', encoding='utf-8')
-            result = self.run_tool(
-                'compare', aggregate, standalone,
-                '--aggregate-sha', 'a', '--standalone-sha', 'b'
+            (aggregate / 'COMPONENT-METADATA.md').write_text(
+                'orchestration\n', encoding='utf-8'
             )
-            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-            data = json.loads(result.stdout)
-            self.assertTrue(data['parity'])
-            self.assertEqual('a', data['aggregate_sha'])
-            self.assertEqual('b', data['standalone_sha'])
+            result = component_sync.compare_trees(
+                aggregate, standalone, aggregate_sha='a', standalone_sha='b'
+            )
+            self.assertTrue(result['parity'])
+            self.assertEqual('a', result['aggregate_sha'])
+            self.assertEqual('b', result['standalone_sha'])
 
     def test_reports_added_removed_and_modified(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -46,23 +49,21 @@ class ComponentSyncTests(unittest.TestCase):
             (standalone / 'missing.txt').write_text('x', encoding='utf-8')
             (aggregate / 'changed.txt').write_text('aggregate', encoding='utf-8')
             (standalone / 'changed.txt').write_text('standalone', encoding='utf-8')
-            result = self.run_tool('compare', aggregate, standalone)
-            self.assertEqual(1, result.returncode)
-            data = json.loads(result.stdout)
-            self.assertEqual(['added.txt'], data['added_to_aggregate'])
-            self.assertEqual(['missing.txt'], data['missing_from_aggregate'])
-            self.assertEqual(['changed.txt'], data['modified'])
+            result = component_sync.compare_trees(aggregate, standalone)
+            self.assertFalse(result['parity'])
+            self.assertEqual(['added.txt'], result['added_to_aggregate'])
+            self.assertEqual(['missing.txt'], result['missing_from_aggregate'])
+            self.assertEqual(['changed.txt'], result['modified'])
 
     def test_forbidden_artifact_refuses_parity(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'component'
             root.mkdir()
             (root / 'private.db').write_bytes(b'x')
-            result = self.run_tool('manifest', root)
-            self.assertEqual(2, result.returncode)
-            self.assertTrue(json.loads(result.stdout)['refused'])
+            with self.assertRaises(ComparisonRefused):
+                component_sync.manifest(root)
 
-    def test_symlink_refuses_parity(self) -> None:
+    def test_file_symlink_refuses_parity(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'component'
             root.mkdir()
@@ -72,8 +73,33 @@ class ComponentSyncTests(unittest.TestCase):
                 (root / 'link.txt').symlink_to(target)
             except OSError:
                 self.skipTest('symlinks unavailable')
-            result = self.run_tool('manifest', root)
-            self.assertEqual(2, result.returncode)
+            with self.assertRaises(ComparisonRefused):
+                component_sync.manifest(root)
+
+    def test_directory_symlink_refuses_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'component'
+            target = Path(temp) / 'target'
+            root.mkdir()
+            target.mkdir()
+            try:
+                (root / 'linked').symlink_to(target, target_is_directory=True)
+            except OSError:
+                self.skipTest('directory symlinks unavailable')
+            with self.assertRaises(ComparisonRefused):
+                component_sync.manifest(root)
+
+    def test_root_symlink_refuses_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / 'target'
+            link = Path(temp) / 'link'
+            target.mkdir()
+            try:
+                link.symlink_to(target, target_is_directory=True)
+            except OSError:
+                self.skipTest('directory symlinks unavailable')
+            with self.assertRaises(ComparisonRefused):
+                component_sync.manifest(link)
 
     def test_gradle_wrapper_jar_is_compared(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -83,17 +109,16 @@ class ComponentSyncTests(unittest.TestCase):
                 wrapper = root / 'gradle' / 'wrapper'
                 wrapper.mkdir(parents=True)
                 (wrapper / 'gradle-wrapper.jar').write_bytes(b'wrapper')
-            result = self.run_tool('compare', aggregate, standalone)
-            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            result = component_sync.compare_trees(aggregate, standalone)
+            self.assertTrue(result['parity'])
 
     def test_nested_git_file_refuses_parity(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / 'component'
             root.mkdir()
             (root / '.git').write_text('gitdir: elsewhere', encoding='utf-8')
-            result = self.run_tool('manifest', root)
-            self.assertEqual(2, result.returncode)
-            self.assertTrue(json.loads(result.stdout)['refused'])
+            with self.assertRaises(ComparisonRefused):
+                component_sync.manifest(root)
 
 
 if __name__ == '__main__':
