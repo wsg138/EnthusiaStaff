@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
@@ -62,7 +63,10 @@ public final class SanctionChangeService {
                     "Sanction changes are disabled in " + mode
             );
         }
-        if (!authorization.permits(request.actor(), request.action().requiredModerationAction())) {
+        ModerationAction requiredAction = request.linkedAppealId().isPresent()
+                ? ModerationAction.ACCEPT_APPEAL
+                : request.action().requiredModerationAction();
+        if (!authorization.permits(request.actor(), requiredAction)) {
             return new ExactSanctionChangeResult.Rejected(
                     "FORBIDDEN",
                     "The actor is not permitted to perform this change"
