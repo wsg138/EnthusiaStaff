@@ -5,7 +5,7 @@ public record SanctionActionLimits(
         int maximumReasonLength,
         boolean allowPermanentReduction
 ) {
-    private static final int MAXIMUM_SUPPORTED_REASON_LENGTH = 2_000;
+    private static final int MAXIMUM_SUPPORTED_REASON_LENGTH = 1_000;
 
     public SanctionActionLimits {
         if (minimumReasonLength < 1 || maximumReasonLength < minimumReasonLength
