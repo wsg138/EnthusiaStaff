@@ -76,7 +76,7 @@ Latest coherent completed section.
 Exact remaining work.
 
 ## 26. Known blockers
-Evidence and unblock condition.
+For `BLOCKED`, state the exact blocker, evidence, safe nonblocked work still permitted, and exact unblock condition. Otherwise state `NONE` or dependency-only routing.
 
 ## 27. Final evidence
 Exact heads, checks, review, artifacts, parity.

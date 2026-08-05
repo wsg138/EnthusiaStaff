@@ -75,6 +75,26 @@ class ComponentSyncTests(unittest.TestCase):
             result = self.run_tool('manifest', root)
             self.assertEqual(2, result.returncode)
 
+    def test_gradle_wrapper_jar_is_compared(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            aggregate = Path(temp) / 'aggregate'
+            standalone = Path(temp) / 'standalone'
+            for root in (aggregate, standalone):
+                wrapper = root / 'gradle' / 'wrapper'
+                wrapper.mkdir(parents=True)
+                (wrapper / 'gradle-wrapper.jar').write_bytes(b'wrapper')
+            result = self.run_tool('compare', aggregate, standalone)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_nested_git_file_refuses_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'component'
+            root.mkdir()
+            (root / '.git').write_text('gitdir: elsewhere', encoding='utf-8')
+            result = self.run_tool('manifest', root)
+            self.assertEqual(2, result.returncode)
+            self.assertTrue(json.loads(result.stdout)['refused'])
+
 
 if __name__ == '__main__':
     unittest.main()

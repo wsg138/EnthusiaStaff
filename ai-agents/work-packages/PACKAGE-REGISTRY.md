@@ -43,7 +43,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -68,7 +68,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -93,7 +93,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -118,7 +118,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -143,7 +143,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -168,7 +168,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -193,7 +193,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -218,7 +218,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -243,7 +243,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -268,7 +268,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -293,7 +293,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -318,7 +318,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -343,7 +343,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -368,7 +368,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -393,7 +393,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -418,7 +418,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -443,7 +443,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | Conditional |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -468,7 +468,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -493,7 +493,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -518,7 +518,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |
@@ -543,7 +543,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Parallel safe | No |
 | Assigned worker | `UNASSIGNED` |
 | Active branches | `NONE` |
-| EnthusiaStaff PR | `NONE` |
+| Aggregate PR | `NONE` |
 | External PRs | `NONE` |
 | Starting SHAs | `UNSET` |
 | Final reviewed heads | `UNSET` |

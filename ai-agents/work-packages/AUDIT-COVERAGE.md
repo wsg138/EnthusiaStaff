@@ -86,7 +86,7 @@ Validation invariants:
 | `AUD-WEB-002` | `ES-P01` | Included in named implementation/provider package(s), with final audit confirmation. |
 | `AUD-WEB-003` | `ES-X05` | Included in named implementation/provider package(s), with final audit confirmation. |
 | `AUD-WEB-004` | `ES-X05` | Included in named implementation/provider package(s), with final audit confirmation. |
-| `AUD-MIG-001` | `ES-V01` | Implementation foundation retained; private/staging/acceptance evidence deferred to named package(s). |
+| `AUD-MIG-001` | `PRESERVED` | Dormant reader/schema/mapping implementation is retained as the audited foundation; representative-data proof is separately scoped to `ES-V01`. |
 | `AUD-MIG-002` | `PRESERVED` | Preserved as audited-good/current foundation; regression and final audit still apply. |
 | `AUD-MIG-003` | `ES-V01` | Implementation foundation retained; private/staging/acceptance evidence deferred to named package(s). |
 | `AUD-MIG-004` | `ES-V01` | Implementation foundation retained; private/staging/acceptance evidence deferred to named package(s). |

@@ -10,10 +10,10 @@ Initial `DEFERRED`; registry is authoritative.
 Verify dormant migration behavior against a representative private LiteBans database without exposing data.
 
 ## 4. Why the package exists
-Synthetic tests are strong, but representative schema/data mappings, rejected/disappeared rows, and interrupted recovery remain unverified.
+Synthetic tests are strong, but representative data mappings, rejected/disappeared rows, and interrupted recovery remain unverified.
 
 ## 5. Included audit IDs
-`AUD-MIG-001`, `AUD-MIG-003`, representative-data portions of `AUD-MIG-004`.
+`AUD-MIG-003` and representative-data portions of `AUD-MIG-004`.
 
 ## 6. Included behavior
 Private schema inspection; dry run and rerun; mappings/counts/checksums; rejected/disappeared rows; expiration/history/protected identity; interrupted-run/restart recovery; sanitized conclusions only.

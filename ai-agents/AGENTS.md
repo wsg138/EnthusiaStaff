@@ -46,7 +46,7 @@ There are no permanent component branches, split/subtree branches, component-onl
 - External package: normally one temporary branch/PR in the standalone repository and one temporary branch/PR to `EnthusiaStaff:main`. Both use the same package ID, cross-reference each other, and must reach deterministic parity.
 - Validation/acceptance/audit package: follow its explicit evidence/PR rules.
 
-Use `package/<package-id-lowercase>-<short-name>`. Never push directly to a default branch, rebase a shared branch, force-push, squash the final merge, enable auto-merge, or merge a draft PR. Use normal merge commits. Delete temporary branches after merge only after verifying containment and no unique work.
+Use `package/<package-id-lowercase>-<short-name>`. Open a draft PR early after the branch exists and record exact bases/scope. Before final validation, synchronize with the current target branch by the repository-approved merge-commit workflow and retest the resulting exact head when required. Never push directly to a default branch, rebase a shared branch, force-push, squash the final merge, enable auto-merge, or merge a draft PR. Use normal merge commits. Delete temporary branches after merge only after verifying containment and no unique work.
 
 ## 5. Implementation standards
 

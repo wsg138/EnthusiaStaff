@@ -10,12 +10,13 @@ from pathlib import Path
 
 IGNORED_DIRS = {'.git'}
 ORCHESTRATION_FILES = {'COMPONENT-METADATA.md'}
+ALLOWED_BINARY_PATHS = {'gradle/wrapper/gradle-wrapper.jar'}
 FORBIDDEN_DIRS = {
     '.gradle', '.idea', '.vscode', 'build', 'target', 'out', 'node_modules',
     'logs', 'log', 'cache', 'caches', 'runtime', 'server', 'servers', 'tmp', 'temp'
 }
 FORBIDDEN_NAMES = {
-    '.env', '.env.local', '.env.production', 'credentials.json', 'secrets.json'
+    '.git', '.env', '.env.local', '.env.production', 'credentials.json', 'secrets.json'
 }
 FORBIDDEN_SUFFIXES = {
     '.db', '.sqlite', '.sqlite3', '.log', '.jks', '.p12', '.pfx', '.pem',
@@ -57,7 +58,10 @@ def scan(root: Path) -> dict[str, str]:
                 forbidden.append(relative + ' (symlink)')
                 continue
             lower = name.lower()
-            if lower in FORBIDDEN_NAMES or any(lower.endswith(suffix) for suffix in FORBIDDEN_SUFFIXES):
+            if lower in FORBIDDEN_NAMES or (
+                relative not in ALLOWED_BINARY_PATHS
+                and any(lower.endswith(suffix) for suffix in FORBIDDEN_SUFFIXES)
+            ):
                 forbidden.append(relative)
                 continue
             files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
