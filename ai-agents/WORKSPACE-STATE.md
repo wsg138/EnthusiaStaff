@@ -19,7 +19,7 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `IDLE — PR #65 is documentation-only reconciliation pending live merge verification; no implementation item is active` |
+| State | `DOCUMENTATION-ONLY — verify PR #65 live; intended post-merge state is IDLE with no implementation item active or preselected` |
 | Pull request | `#65 — Reconcile repository routing after PR #64` |
 | Feature branch | `agent/reconcile-post-pr64-routing` |
 | Starting main | `9d84f8d50a024b04530335c622d63b573343242b` |
