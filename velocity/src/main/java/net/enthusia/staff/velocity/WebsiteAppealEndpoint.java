@@ -158,7 +158,7 @@ final class WebsiteAppealEndpoint {
                 Optional.of(appealId),
                 Optional.empty(),
                 "VELOCITY_WEBSITE",
-                false
+                true
         );
         return switch (sanctionChanges.applyExact(request, mode, APPEAL_ACTION_LIMITS)) {
             case ExactSanctionChangeResult.Applied applied -> {
