@@ -1,49 +1,12 @@
-# EnthusiaStaff AI agent workspace
+# AI agent workspace
 
-This directory is the shared operating location for AI-assisted repository work.
+All future implementation and validation work is routed through the package system:
 
-It exists so a new ChatGPT or coding-agent channel can determine the current repository state, resume unfinished work, complete one logical step, review it rigorously, validate the exact final revision, merge it safely, and leave a durable handoff for the next agent.
+1. read `AGENTS.md` and `WORKSPACE-STATE.md`;
+2. read `work-packages/PACKAGE-REGISTRY.md` as the canonical status index;
+3. accept exactly one assigned package ID;
+4. read the assigned package file and latest package handoff;
+5. follow the worker, temporary-branch/synchronization, and validation policies;
+6. stop after the same package is complete, blocked, partial, deferred, or the requested review/audit ends.
 
-## Files
-
-- [`AGENTS.md`](AGENTS.md) — permanent operating, review, validation, merge, safety, and handoff rules.
-- [`WORKSPACE-STATE.md`](WORKSPACE-STATE.md) — concise current state, active work, last completed work, next planned work, migration boundary, and release boundary.
-- [`UNIVERSAL-AGENT-PROMPT.md`](UNIVERSAL-AGENT-PROMPT.md) — reusable opening prompt for a new AI channel.
-- [`reports/`](reports/) — durable handoff reports and the report format.
-
-## Other authoritative repository documents
-
-The AI workspace coordinates work; it does not replace the project requirements.
-
-Agents must also read the relevant portions of:
-
-- [`/ENTHUSIASTAFF-GOALS.md`](../ENTHUSIASTAFF-GOALS.md)
-- [`/WORKSPACE-MANIFEST.md`](../WORKSPACE-MANIFEST.md)
-- [`/docs/wiki/pages/Development-Blueprint.md`](../docs/wiki/pages/Development-Blueprint.md)
-- [`/reports/REQUIREMENTS-MATRIX.md`](../reports/REQUIREMENTS-MATRIX.md)
-
-When documents disagree:
-
-1. Live GitHub and repository state determines what actually exists.
-2. `AGENTS.md` controls the agent workflow and safety process.
-3. `ENTHUSIASTAFF-GOALS.md` controls product requirements.
-4. `WORKSPACE-STATE.md` identifies the intended current work item but may be stale and must be reconciled against live state.
-5. The latest handoff explains the previous agent's work but is evidence, not authority to ignore current code or CI.
-
-An agent may not weaken review, migration, production, or merge safeguards merely by editing this directory.
-
-## Normal session flow
-
-1. Read this directory and the linked project documents.
-2. Inspect the live default branch, open PRs, branches, reviews, and CI.
-3. Resume the active or unfinished PR before starting another feature.
-4. Complete exactly one logical work item.
-5. Perform a separate harsh-review phase over the full diff.
-6. Fix confirmed defects.
-7. Update `WORKSPACE-STATE.md` and add the handoff report.
-8. Freeze tracked content and run exact-head validation.
-9. Merge with a normal merge commit only when every merge gate passes.
-10. Delete the merged feature branch when it is fully contained in `main` and tooling permits deletion.
-11. Verify the merge live, update the PR description or final PR comment with the exact merge result, and stop.
-
-The next agent must always verify live GitHub state rather than blindly trusting a recorded SHA.
+The universal prompt is `UNIVERSAL-AGENT-PROMPT.md`. Do not select work from stale handoffs or informal priority lists. There are no permanent component branches or isolated-component PRs.
