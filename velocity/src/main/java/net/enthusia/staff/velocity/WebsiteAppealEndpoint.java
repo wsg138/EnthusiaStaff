@@ -29,7 +29,7 @@ import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
 
 final class WebsiteAppealEndpoint {
     private static final int MINIMUM_REASON_LENGTH = 10;
-    private static final int MAXIMUM_REASON_LENGTH = 500;
+    private static final int MAXIMUM_REASON_LENGTH = 1_000;
     private static final String APPLIED = "APPLIED";
     private static final String MODE_BLOCKED = "MODE_BLOCKED";
     private static final String MUTATION_PENDING = "MUTATION_PENDING";
@@ -115,7 +115,6 @@ final class WebsiteAppealEndpoint {
                 punishmentId,
                 revision.orElseThrow(),
                 reviewer,
-                reviewerAccountId,
                 reason,
                 idempotencyKey,
                 mode
@@ -141,7 +140,6 @@ final class WebsiteAppealEndpoint {
             UUID punishmentId,
             long expectedRevision,
             Actor reviewer,
-            UUID reviewerAccountId,
             String reason,
             String idempotencyKey,
             OperationalMode mode
@@ -153,8 +151,7 @@ final class WebsiteAppealEndpoint {
                 reviewer,
                 SanctionChangeAction.FULL_OVERTURN,
                 Optional.empty(),
-                "Appeal " + appealId + " accepted by website reviewer "
-                        + reviewerAccountId + ": " + reason,
+                reason,
                 Optional.of(appealId),
                 Optional.empty(),
                 "VELOCITY_WEBSITE",
