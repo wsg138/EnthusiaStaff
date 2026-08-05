@@ -9,6 +9,7 @@ import java.time.Clock;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.CaseId;
@@ -20,14 +21,20 @@ import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
+import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
-import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
-import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
 
 final class WebsiteAppealEndpoint {
     private static final int MINIMUM_REASON_LENGTH = 10;
+    private static final int MAXIMUM_REASON_LENGTH = 500;
+    private static final String APPLIED = "APPLIED";
     private static final String MODE_BLOCKED = "MODE_BLOCKED";
+    private static final String MUTATION_PENDING = "MUTATION_PENDING";
+    private static final SanctionActionLimits APPEAL_ACTION_LIMITS =
+            new SanctionActionLimits(MINIMUM_REASON_LENGTH, MAXIMUM_REASON_LENGTH, true);
 
     private final WebsiteModerationStore store;
     private final AuthorizationPolicy authorization;
@@ -65,9 +72,24 @@ final class WebsiteAppealEndpoint {
         UUID reviewerAccountId = decoder.uuid(input, "actorAccountId");
         Actor reviewer = websiteActor(reviewerAccountId, decoder.text(input, "actorRank", 16));
         requireMutationAccess(reviewer);
-        String reason = decoder.text(input, "reason", 1_000).trim();
+        String reason = decoder.text(input, "reason", MAXIMUM_REASON_LENGTH).trim();
         if (reason.length() < MINIMUM_REASON_LENGTH) {
             throw badRequest("INVALID_REASON", "The appeal decision reason is too short");
+        }
+        if (!sanctionChanges.supportsExactChanges()) {
+            throw new WebsiteApiException(
+                    503,
+                    "EXACT_MUTATION_UNAVAILABLE",
+                    "Exact punishment changes are temporarily unavailable"
+            );
+        }
+        OptionalLong revision = sanctionChanges.exactRevision(punishmentId);
+        if (revision.isEmpty()) {
+            throw new WebsiteApiException(
+                    404,
+                    "PUNISHMENT_NOT_FOUND",
+                    "The punishment could not be found"
+            );
         }
         AppealAcceptancePreparation preparation = store.prepareAppealAcceptance(
                 appealId,
@@ -78,13 +100,25 @@ final class WebsiteAppealEndpoint {
                 clock.instant()
         );
         requirePrepared(preparation);
+        OperationalMode mode = authorityMode.get();
+        if (mode != OperationalMode.ACTIVE) {
+            throw authorityUnavailable();
+        }
+        store.completeAppealAcceptance(
+                appealId,
+                APPLIED,
+                MUTATION_PENDING,
+                clock.instant()
+        );
         return applyChange(
                 appealId,
-                caseId,
+                punishmentId,
+                revision.orElseThrow(),
                 reviewer,
                 reviewerAccountId,
                 reason,
-                idempotencyKey
+                idempotencyKey,
+                mode
         );
     }
 
@@ -104,47 +138,53 @@ final class WebsiteAppealEndpoint {
 
     private Object applyChange(
             UUID appealId,
-            CaseId caseId,
+            UUID punishmentId,
+            long expectedRevision,
             Actor reviewer,
             UUID reviewerAccountId,
             String reason,
-            String idempotencyKey
+            String idempotencyKey,
+            OperationalMode mode
     ) {
-        SanctionChangeRequest request = new SanctionChangeRequest(
+        ExactSanctionChangeRequest request = new ExactSanctionChangeRequest(
                 new IdempotencyKey("website-appeal:" + digestIdempotency(idempotencyKey)),
-                caseId,
+                punishmentId,
+                expectedRevision,
                 reviewer,
-                SanctionChangeAction.END_EARLY,
+                SanctionChangeAction.FULL_OVERTURN,
                 Optional.empty(),
                 "Appeal " + appealId + " accepted by website reviewer "
-                        + reviewerAccountId + ": " + reason
+                        + reviewerAccountId + ": " + reason,
+                Optional.of(appealId),
+                Optional.empty(),
+                "VELOCITY_WEBSITE",
+                false
         );
-        return switch (sanctionChanges.apply(request, authorityMode.get())) {
-            case SanctionChangeResult.Applied applied -> {
-                String outcome = applied.replayed() ? "REPLAYED" : "APPLIED";
-                store.completeAppealAcceptance(appealId, "APPLIED", outcome, clock.instant());
+        return switch (sanctionChanges.applyExact(request, mode, APPEAL_ACTION_LIMITS)) {
+            case ExactSanctionChangeResult.Applied applied -> {
+                store.completeAppealAcceptance(appealId, APPLIED, APPLIED, clock.instant());
                 yield Map.of(
                         "applied", true,
                         "replayed", applied.replayed(),
-                        "affectedSanctions", applied.affectedSanctions()
+                        "affectedSanctions", 1
                 );
             }
-            case SanctionChangeResult.Rejected rejected -> throw rejectedChange(appealId, rejected);
+            case ExactSanctionChangeResult.NoChange noChange -> throw rejectedChange(
+                    appealId,
+                    noChange.code()
+            );
+            case ExactSanctionChangeResult.Rejected rejected -> throw rejectedChange(
+                    appealId,
+                    rejected.code()
+            );
         };
     }
 
-    private WebsiteApiException rejectedChange(
-            UUID appealId,
-            SanctionChangeResult.Rejected rejected
-    ) {
-        if (MODE_BLOCKED.equals(rejected.code())) {
-            return new WebsiteApiException(
-                    503,
-                    "AUTHORITY_NOT_ACTIVE",
-                    "Punishment changes are temporarily unavailable"
-            );
+    private WebsiteApiException rejectedChange(UUID appealId, String code) {
+        if (MODE_BLOCKED.equals(code)) {
+            return authorityUnavailable();
         }
-        String outcome = decoder.safeOutcomeCode(rejected.code());
+        String outcome = decoder.safeOutcomeCode(code);
         store.completeAppealAcceptance(appealId, "REJECTED", outcome, clock.instant());
         return new WebsiteApiException(
                 409,
@@ -176,6 +216,14 @@ final class WebsiteAppealEndpoint {
             int status = "PUNISHMENT_NOT_FOUND".equals(rejected.code()) ? 404 : 409;
             throw new WebsiteApiException(status, rejected.code(), rejected.message());
         }
+    }
+
+    private static WebsiteApiException authorityUnavailable() {
+        return new WebsiteApiException(
+                503,
+                "AUTHORITY_NOT_ACTIVE",
+                "Punishment changes are temporarily unavailable"
+        );
     }
 
     private static String digestIdempotency(String value) {
