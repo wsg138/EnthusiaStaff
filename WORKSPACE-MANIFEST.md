@@ -20,7 +20,7 @@ This manifest records project orchestration and authority boundaries. It does no
 
 ## Repository model
 
-`main` is the complete aggregate workspace. The core EnthusiaStaff plugin remains at the repository root. External component copies live under `components/` and retain standalone repositories. There are no permanent component branches, generated split branches, or isolated-component PRs.
+`main` is the complete aggregate workspace. The core EnthusiaStaff plugin remains at the repository root. At setup, metadata-only external component directories live under `components/`; no external source has been imported. An assigned external package may later populate its designated directory as the tracked aggregate copy after verifying the standalone repository, source revision, license/history, exclusions, and reviewability. There are no permanent component branches, generated split branches, or isolated-component PRs.
 
 Internal packages normally use one temporary branch and one PR to `EnthusiaStaff:main`. External packages normally use one temporary branch/PR in the standalone repository and one temporary branch/PR to `EnthusiaStaff:main`; the PRs share a package ID, cross-reference each other, and must reach deterministic parity. Temporary branches are deleted after merge when safe.
 

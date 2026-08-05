@@ -2,18 +2,24 @@
 
 ## Assignment is mandatory
 
-Every implementation/validation channel starts with `Assigned package ID: <PACKAGE-ID>`. A worker must not choose a different package when the assigned package exists. A newer explicit owner instruction may reassign the package; the worker must record that change rather than silently switching.
+Every implementation, external-provider, validation, production-acceptance, and final-audit channel starts with `Assigned package ID: <PACKAGE-ID>`. A worker must not choose a different package when the assigned package exists. Reassignment requires an explicit current owner instruction and must be recorded in the registry, assigned package file, and handoff; otherwise stop rather than switching packages.
 
 ## Required startup order
 
-1. Read `ai-agents/AGENTS.md`.
-2. Read `ai-agents/WORKSPACE-STATE.md`.
-3. Read `PACKAGE-REGISTRY.md`.
-4. Read the assigned package file.
-5. Read its latest package handoff, or confirm none exists.
-6. Reconcile live GitHub across every required repository.
-7. Verify package status, active branches/PRs, review threads, checks, current default heads, and highest Flyway migration.
-8. Record exact starting SHAs and determine whether the action is start, resume, review, merge, synchronize, validate, or stop.
+1. `ai-agents/AGENTS.md`
+2. `ai-agents/WORKSPACE-STATE.md`
+3. `PACKAGE-REGISTRY.md`
+4. the assigned package file
+5. its latest package handoff, or a recorded confirmation that none exists
+6. `ai-agents/reports/agent-handoffs/latest.md`
+7. relevant portions of `ENTHUSIASTAFF-GOALS.md`
+8. `reports/PROJECT-COMPLETION-AUDIT.md`
+9. `WORKSPACE-MANIFEST.md`
+10. relevant portions of `reports/REQUIREMENTS-MATRIX.md`
+11. relevant Wiki/development/status/operator pages
+12. relevant contracts, migrations, component metadata, standalone-repository AGENTS, and provider documentation
+
+Then reconcile live GitHub across every required repository. Verify package status, active branches/PRs, review threads, every check state, current default heads, recent merges, highest Flyway migration, issue #43, standalone availability, and active workers. Record exact starting SHAs and determine whether the action is start, resume, review, merge, synchronize, validate, audit, accept, or stop.
 
 ## Status decision rules
 
@@ -29,19 +35,14 @@ Every implementation/validation channel starts with `Assigned package ID: <PACKA
 
 ## Checkpoints and handoffs
 
-After each major coherent section, update:
+After every major coherent section, update all three durable authorities before moving on:
 
-- canonical package status;
-- completed checklist and last checkpoint;
-- all active temporary branches and PRs;
-- latest pushed heads;
-- tests/static analysis run;
-- review state and unresolved threads;
-- blockers and evidence;
-- exact next action.
+1. `PACKAGE-REGISTRY.md`: canonical status, worker, branches, PRs, heads, date, handoff, and blocker.
+2. The assigned package file: completed checklist, last checkpoint, resume state, remaining work, blockers, and evidence.
+3. One timestamped handoff in `ai-agents/reports/package-handoffs/`: starting SHAs, active branches/PRs, latest heads, completed/incomplete work, tests/static analysis, failed/skipped/superseded checks, valid findings, unresolved threads, synchronization/parity, blocker evidence, exact next action, and systems not to disturb.
 
-Maintain one timestamped handoff in `ai-agents/reports/package-handoffs/`. The handoff must include package ID/status, starting SHAs, active branches, PR links, completed and incomplete work, failed checks, valid findings, unresolved threads, blocker evidence, exact next action, and systems not to disturb. Link it from the package file and registry. It does not override live GitHub or the registry.
+Link the handoff from the package file and registry. The handoff never overrides live GitHub or the registry.
 
 ## Stop rules
 
-Stop only when the assigned package is `COMPLETE`, correctly `BLOCKED`, correctly `PARTIAL`, intentionally `DEFERRED`, or the requested review/audit is complete. Never begin the next package in the same channel.
+Stop only when the assigned package is `COMPLETE`, correctly `BLOCKED`, correctly `PARTIAL`, intentionally `DEFERRED`, or the assigned review/audit/acceptance campaign is complete. Never begin another package in the same channel.

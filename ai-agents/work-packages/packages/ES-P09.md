@@ -13,13 +13,13 @@ Complete protected network identity, alt graph/confidence/manual relationships, 
 The audit found low-proof graph/storage and false-positive behavior despite protected-token foundations and active network sanctions.
 
 ## 5. Included audit IDs
-`AUD-ALT-001`, `AUD-ALT-002`, `AUD-ALT-003`, development portions of `AUD-ALT-004`, relevant `AUD-SEC-002`.
+`AUD-ALT-001`, `AUD-ALT-002`, `AUD-ALT-003`, the alt graph/confidence/ambiguity/manual-relationship/protected-network-identity/retention/sanction-inheritance fields of `AUD-ALT-004`, and relevant `AUD-SEC-002`.
 
 ## 6. Included behavior
-Protected address token/key lifecycle; identity graph/confidence and ambiguity controls; manual relationships/exceptions; `/alts` and `/alt` workflow; inheritance and audit; bounded retention/purge/restart; safe logging; migration interaction.
+Protected address token/key lifecycle; identity graph/confidence and ambiguity controls; manual relationships/exceptions; `/alts` and `/alt` workflow; sanction inheritance and audit; bounded retention/purge/restart; safe logging; migration interaction. Canonical Java/Floodgate platform identity and required normalization are owned by `ES-P03` and consumed here rather than reimplemented.
 
 ## 7. Explicit exclusions
-Production/private address datasets; Bedrock platform fix (`ES-P03`); production key rotation; acceptance/false-positive campaign (`ES-V02`).
+Canonical Java/Floodgate platform identity and normalization (`ES-P03`); production/private address datasets; production key rotation; acceptance/false-positive campaign (`ES-V02`).
 
 ## 8. Dependencies
 `ES-P03` must be `COMPLETE`.
@@ -34,10 +34,10 @@ Temporary `package/es-p09-alt-network-identity`; delete after verified merge con
 One PR to `wsg138/EnthusiaStaff:main`.
 
 ## 12. Implementation checklist
-Reconcile data flows; model graph/confidence/manual exceptions/retention; implement commands and inheritance safety; test privacy/races/restart; update docs/state/handoff; review/freeze/validate/merge/cleanup.
+Reconcile data flows and the `ES-P03` handoff; model graph/confidence/manual exceptions/retention; implement commands and inheritance safety; test privacy/races/restart; update docs/state/handoff; review/freeze/validate/merge/cleanup.
 
 ## 13. Acceptance criteria
-Raw addresses never persist/log; deterministic protected tokens and key-version handling work; ambiguous links cannot silently inherit sanctions; manual decisions are authorized/audited; queries/retention are bounded; restart and concurrent proxies are safe.
+Raw addresses never persist/log; deterministic protected tokens and key-version handling work; ambiguous links cannot silently inherit sanctions; manual decisions are authorized/audited; queries/retention are bounded; restart and concurrent proxies are safe; canonical platform identity is consumed without redefining it.
 
 ## 14. Test requirements
 Protector/key-version, graph confidence, ambiguity/manual exception, multi-proxy duplicate input, sanction inheritance, retention/purge, restart, migration interaction, authorization and redaction tests.
@@ -46,7 +46,7 @@ Protector/key-version, graph confidence, ambiguity/manual exception, multi-proxy
 Configured Java/static-analysis/review-bot gates; zero valid unresolved findings.
 
 ## 16. Documentation requirements
-Privacy model, commands/permissions, confidence/ambiguity/manual workflows, keys/retention, troubleshooting, Wiki, registry/handoff.
+Privacy model, commands/permissions, confidence/ambiguity/manual workflows, keys/retention, the field-level handoff from `ES-P03`, troubleshooting, Wiki, registry/handoff.
 
 ## 17. Security and privacy requirements
 Never expose raw/reversible addresses; keys from environment/secret store; least-privilege views; bounded retention; fail closed on key/version uncertainty.

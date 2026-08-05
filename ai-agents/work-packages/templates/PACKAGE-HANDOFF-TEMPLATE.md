@@ -23,7 +23,7 @@
 
 ## Synchronization/parity
 
-Record aggregate and standalone heads/hashes, or `NOT_APPLICABLE`. Use `SYNC_PENDING` when only one side merged or parity is false/unproved.
+Record aggregate and standalone heads/hashes, or `NOT_APPLICABLE`. Use `SYNC_PENDING` for an actionable one-sided merge or reconciliation state in which the required repositories remain accessible and work can continue. Use `BLOCKED` when a named missing repository, unavailable private environment, required owner decision, credential, or other external dependency prevents parity validation; record the exact evidence, safe remaining work, and unblock condition.
 
 ## Blocker evidence
 

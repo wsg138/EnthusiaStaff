@@ -19,7 +19,7 @@ The audit found durable producers/stores but weak worker/runtime proof and no ac
 Verify all required event producers; complete bounded worker delivery, formatting, retries/backoff/circuit state, dead letters, duplicate prevention, reload and restart recovery; support isolated non-production route testing only.
 
 ## 7. Explicit exclusions
-Production Discord routes; RoseChat PM capture; issue #43; provider unrelated events.
+Production Discord route use or contact; RoseChat PM capture; issue #43; provider-unrelated events.
 
 ## 8. Dependencies
 `ES-P05` must be `COMPLETE`.
@@ -34,22 +34,22 @@ Temporary `package/es-p06-discord-delivery`; delete after verified merge contain
 One PR to `wsg138/EnthusiaStaff:main`.
 
 ## 12. Implementation checklist
-Reconcile producers/store/worker; define event matrix; implement missing rendering/delivery/reload; inject failure/latency/restart; update docs/state/handoff; review/freeze/exact-head validate/merge/cleanup.
+Reconcile producers/store/worker; define event and approved-destination matrices; implement missing rendering/delivery/reload and route validation; inject failure/latency/restart/redirect cases; update docs/state/handoff; review/freeze/exact-head validate/merge/cleanup.
 
 ## 13. Acceptance criteria
-Every included event is durable and idempotent; retries are bounded; dead letters are inspectable/recoverable; rate/circuit state survives correctly; reload is safe; absent/invalid routes fail explicitly without leaking data.
+Every included event is durable and idempotent; retries are bounded; dead letters are inspectable/recoverable; rate/circuit state survives correctly; reload is safe; absent/invalid routes fail explicitly without leaking data. Configuration distinguishes explicitly approved staging and production destinations, but this package contacts only isolated non-production endpoints. Delivery requires HTTPS/TLS. Redirects are rejected by default; any allowed redirect must be revalidated against the approved destination policy without forwarding the webhook secret to a different host or scheme.
 
 ## 14. Test requirements
-Worker unit/integration tests, MariaDB queue/dead-letter/restart/concurrency tests, duplicate and poison-event cases, configuration reload, redaction, and isolated fake endpoint tests.
+Worker unit/integration tests, MariaDB queue/dead-letter/restart/concurrency tests, duplicate and poison-event cases, configuration reload, redaction, HTTPS enforcement, host/scheme/redirect controls, and isolated fake endpoint tests.
 
 ## 15. Static-analysis requirements
 Java 21 warnings-as-errors and configured analysis/review bots; zero valid unresolved findings.
 
 ## 16. Documentation requirements
-Event matrix, route configuration, privacy, retry/dead-letter operations, reload/status, troubleshooting, Wiki, package state/handoff.
+Event matrix, approved route configuration, TLS/redirect/privacy controls, retry/dead-letter operations, reload/status, troubleshooting, Wiki, package state/handoff.
 
 ## 17. Security and privacy requirements
-Environment-backed routes only; strict redaction/allowlisted fields; no production webhook contact; bounded body/logging.
+Environment-backed approved destinations only; HTTPS/TLS required; reject or revalidate redirects without forwarding secrets across host/scheme boundaries; strict redaction/allowlisted fields; no production webhook contact; bounded body/logging.
 
 ## 18. Migration impact
 No migration assumed; new post-V16 migration only if essential with upgrade/checksum tests.
@@ -79,7 +79,7 @@ All implementation, tests, review, validation, merge, and evidence remain.
 `ES-P05`; isolated route credentials/environment may be required for staging, but production routes are prohibited.
 
 ## 27. Final evidence
-Unset: event matrix, exact heads, tests/checks, redaction review, route-test evidence.
+Unset: event matrix, approved destinations, exact heads, tests/checks, redaction/TLS/redirect review, route-test evidence.
 
 ## 28. Merge and synchronization record
 Unset: feature head, normal merge, resulting main, containment, temporary branch deletion; parity not applicable.

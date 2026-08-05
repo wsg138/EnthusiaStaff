@@ -13,13 +13,13 @@ Persist and resolve Java and Floodgate/Bedrock identity correctly across Paper, 
 The audit confirmed unconditional Java platform writes and related offline/name-history risks that affect later staff, reports, alts, and staging.
 
 ## 5. Included audit IDs
-`AUD-ID-001`, `AUD-ID-004`, relevant `AUD-ALT-004`.
+`AUD-ID-001`, `AUD-ID-004`, and only the canonical Java/Floodgate platform-identity and normalization fields of `AUD-ALT-004`.
 
 ## 6. Included behavior
-Remove unconditional Java writes; preserve Floodgate UUID/prefixed-name/history semantics; correct join, mute, proxy/backend, offline target, and alt-record updates; add regression tests.
+Remove unconditional Java writes; preserve Floodgate UUID/prefixed-name/history semantics; correct join, mute, proxy/backend, offline target, and the canonical platform/normalization fields consumed by alt records; add regression tests. Alt graph, confidence, ambiguity, manual relationships, protected network identity, and sanction-inheritance semantics belong to `ES-P09`.
 
 ## 7. Explicit exclusions
-General alt completion; changing Floodgate rules; claiming live Bedrock acceptance; unrelated identity redesign.
+Alt graph/confidence/ambiguity/manual-relationship/inheritance completion (`ES-P09`); changing Floodgate rules; claiming live Bedrock acceptance; unrelated identity redesign.
 
 ## 8. Dependencies
 `ES-P02` must be `COMPLETE`.
@@ -34,19 +34,19 @@ Temporary `package/es-p03-bedrock-identity`; delete after verified merge contain
 One PR to `wsg138/EnthusiaStaff:main`.
 
 ## 12. Implementation checklist
-Reconcile live state; trace every platform write/read; implement canonical identity resolution; test Java/Bedrock/history/offline/races/restart; update durable state; review; freeze; exact-head validate; merge/cleanup.
+Reconcile live state; trace every platform write/read; implement canonical identity resolution and normalization only; test Java/Bedrock/history/offline/races/restart; update durable state; review; freeze; exact-head validate; merge/cleanup.
 
 ## 13. Acceptance criteria
-Every player platform write derives from verified runtime evidence; Java and Bedrock records remain stable across server changes/reconnects; name/UUID resolution is deterministic and privacy-safe; no Java-only fallback corrupts Bedrock records.
+Every player platform write derives from verified runtime evidence; Java and Bedrock records remain stable across server changes/reconnects; name/UUID resolution is deterministic and privacy-safe; no Java-only fallback corrupts Bedrock records; the handoff to `ES-P09` is preserved.
 
 ## 14. Test requirements
-Paper/Velocity unit/integration tests for join/mute/directory/network identity, historical names, prefixed aliases, duplicate updates, restart, and unavailable Floodgate behavior.
+Paper/Velocity unit/integration tests for join/mute/directory/network identity normalization, historical names, prefixed aliases, duplicate updates, restart, and unavailable Floodgate behavior.
 
 ## 15. Static-analysis requirements
 Java 21 warnings-as-errors and all configured analysis/review bots with zero valid unresolved findings.
 
 ## 16. Documentation requirements
-Update identity/Bedrock/operator/developer docs and package registry/handoff; do not claim representative client acceptance.
+Update identity/Bedrock/operator/developer docs and package registry/handoff; record the field-level ownership boundary with `ES-P09`; do not claim representative client acceptance.
 
 ## 17. Security and privacy requirements
 No raw addresses or player rows in evidence; protected identity storage remains fail-closed; prevent identity spoofing/cross-platform collision.

@@ -33,7 +33,7 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 
 ## Component state
 
-Verified standalone repositories: site, Currency, Market, and Commend at the heads in `COMPONENT-REGISTRY.md`. RoseChat is unresolved. Aggregate directories contain metadata only; no external source import has occurred.
+Verified standalone repositories: site, Currency, Market, and Commend at the heads in `COMPONENT-REGISTRY.md`. RoseChat is unresolved. The `components/` entries are metadata-only component directories at setup; no external source import has occurred. Assigned external packages may later populate only their designated tracked aggregate directory after source/repository verification.
 
 No long-lived component branches exist or are part of the design. No isolated-component PR is required. Internal packages require one PR; external packages normally require two cross-referenced PRs. Temporary branches are deleted after merge when safe.
 

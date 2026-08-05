@@ -16,17 +16,19 @@
 - Opened PR #67 from the one temporary setup branch and marked it ready for review.
 - Harsh review corrected aggregate parity handling for the Gradle wrapper, nested `.git` files and directory/root symlinks; aligned `ES-V01` to the assigned migration scope; restored the exact `Aggregate PR` registry field; tightened draft-PR, synchronization, and blocker rules.
 - Exact Codacy annotations identified two complexity findings, three duplicate production-assert findings, and five subprocess-security findings. The comparison tool was split into bounded helpers, the production assertion was removed, subprocess-based tests were replaced with direct module tests, and the safety suite expanded to eight cases.
+- Exact-head CodeRabbit review then corrected the canonical dependency DAG, split `AUD-ALT-004` ownership between `ES-P03` and `ES-P09`, strengthened Discord destination/TLS/redirect controls, added final-audit head freezing, separated `SYNC_PENDING` from `BLOCKED`, completed worker startup/checkpoint authority, hardened malformed-package validation, and aligned metadata-only setup wording.
 - Removed the abandoned long-lived component-branch design before creating any branch. No permanent component branch or isolated PR was created.
 
 ## Incomplete work
 
-- Run exact-head hosted validation after the final review-fix commit.
-- Confirm CodeRabbit/Codacy disposition and zero valid unresolved review threads.
+- Rerun the complete final-diff review on this review-fix batch.
+- Freeze the resulting reviewed head and run all applicable exact-head hosted/local checks.
+- Confirm Codacy/CodeRabbit disposition and zero valid unresolved review threads.
 - Record exact final-head evidence in PR text/comment, merge normally, verify containment, and delete the temporary setup branch when tooling permits.
 
 ## Exact next action
 
-Freeze tracked content after this review-fix batch, run all exact-head checks, resolve any new valid finding, merge normally, and stop. Do not start `ES-P01` in this channel.
+Review the complete PR #67 diff including this batch and fix any remaining valid finding. When no valid finding remains, freeze that reviewed head, record its exact SHA, run every applicable exact-head gate, and merge normally. If any post-freeze fix or head movement occurs, repeat the review, freeze, and validation cycle. Do not start `ES-P01` in this channel.
 
 ## Systems not to disturb
 

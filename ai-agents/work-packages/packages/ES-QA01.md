@@ -34,16 +34,16 @@ Temporary `package/es-qa01-final-audit`; delete after verified merge containment
 One PR to `wsg138/EnthusiaStaff:main` containing the canonical final audit and state/handoff only. No product implementation PRs authorized.
 
 ## 12. Implementation checklist
-Reconcile every live default head/PR/branch/review/check; verify package completion evidence and parity; inspect code/tests/migrations/config/docs/workflows/artifacts/staging/acceptance; reproduce/high-confidence validate findings; classify confirmed/unverified/accepted deferred; write audit without fixes; harshly review audit accuracy; validate docs; merge normally; verify cleanup.
+Reconcile every live default head/PR/branch/review/check; verify package completion evidence and parity; inspect code/tests/migrations/config/docs/workflows/artifacts/staging/acceptance; reproduce or high-confidence validate findings; classify confirmed/unverified/accepted deferred; write the audit without fixes; harshly review the complete audit and all selected repository states; freeze every reviewed repository head and record each exact SHA; run every applicable repository/audit/documentation gate against those exact frozen heads; if any fix or head movement occurs, repeat review, freezing, and validation; merge normally; verify cleanup.
 
 ## 13. Acceptance criteria
-Every package and all 99 IDs receive evidence-based disposition; every repository/copy/parity/merge is checked; no valid issue disappears; final verdict clearly states completion/readiness and all remaining confirmed/unverified issues; no product change occurs.
+Every package and all 99 IDs receive evidence-based disposition; every repository/copy/parity/merge is checked; every reviewed head is frozen and exact-SHA evidence is recorded before final validation; no valid issue disappears; final verdict clearly states completion/readiness and all remaining confirmed/unverified issues; no product change occurs.
 
 ## 14. Test requirements
-Audit existing exact-head test/CI/staging evidence and run safe read-only/reproducibility checks where needed; do not add/fix product tests during this package.
+Audit existing exact-head test/CI/staging evidence and run safe read-only/reproducibility checks against the frozen reviewed heads where needed; do not add/fix product tests during this package.
 
 ## 15. Static-analysis requirements
-Inspect current static-analysis/review status for all repos; the audit-doc PR passes its configured validation and has zero valid review threads.
+Inspect exact-head static-analysis/review status for all repos; the audit-doc PR passes its configured validation and has zero valid review threads.
 
 ## 16. Documentation requirements
 Create canonical final audit, update registry/workspace/handoff/index links, distinguish fact/inference/missing evidence, and name any new repair package proposals.
@@ -64,7 +64,7 @@ Audit topology, concurrency, restart, reconnect, switching, ownership, outage, l
 Inspect each standalone repo, contract/version, two-PR history, aggregate parity, provider-present/missing/outage evidence; unresolved RoseChat or divergence is explicit.
 
 ## 22. Completion definition
-The no-fix audit PR merges normally, all evidence/dispositions are complete, zero valid review threads remain, temporary branch handled, and every remaining issue is listed for a later explicit repair roadmap.
+The no-fix audit PR merges normally, all evidence/dispositions are complete at the frozen reviewed heads, zero valid review threads remain, temporary branch handled, and every remaining issue is listed for a later explicit repair roadmap.
 
 ## 23. Resume state
 Unassigned; no branch/PR/handoff. Start only after final prerequisites and explicit assignment.
@@ -73,13 +73,13 @@ Unassigned; no branch/PR/handoff. Start only after final prerequisites and expli
 Definition only; no final audit began.
 
 ## 25. Remaining checklist
-All prerequisite completion, repository/evidence inspection, final report, review, validation, merge, and cleanup remain.
+All prerequisite completion, repository/evidence inspection, head freezing, final report, review, exact-head validation, merge, and cleanup remain.
 
 ## 26. Known blockers
 Any incomplete/unaccepted prerequisite package or inaccessible required repository/evidence blocks final audit completion.
 
 ## 27. Final evidence
-Unset: audited heads, PRs/merges/checks/artifacts/staging/acceptance sources, parity hashes, findings, review and verdict.
+Unset: frozen audited heads, PRs/merges/checks/artifacts/staging/acceptance sources, parity hashes, findings, review and verdict.
 
 ## 28. Merge and synchronization record
 Unset: audit head/merge/resulting main/containment/temp branch cleanup; no product or external synchronization changes permitted.

@@ -40,7 +40,11 @@ for path in package_files:
     for section in range(1, 29):
         if f'## {section}.' not in text:
             errors.append(f'{path.stem} missing section {section}')
-    dependency_section = text.split('## 8. Dependencies', 1)[1].split('## 9.', 1)[0]
+    dependency_parts = text.split('## 8. Dependencies', 1)
+    if len(dependency_parts) != 2:
+        dependencies[path.stem] = []
+        continue
+    dependency_section = dependency_parts[1].split('## 9.', 1)[0]
     dependencies[path.stem] = [
         value
         for value in re.findall(r'`(ES-[A-Z]+\d+)`', dependency_section)
@@ -56,6 +60,7 @@ visit: dict[str, int] = {}
 
 
 def dfs(node: str, stack: list[str]) -> None:
+    """Record dependency cycles without stopping other validation checks."""
     if visit.get(node) == 1:
         errors.append('dependency cycle: ' + ' -> '.join(stack + [node]))
         return
@@ -79,7 +84,6 @@ for relative in required:
     if not (ROOT / relative).exists():
         errors.append(f'missing {relative}')
 
-# These documents intentionally state that the abandoned design is prohibited.
 negative_policy_docs = {
     'WORKSPACE-MANIFEST.md',
     'components/README.md',

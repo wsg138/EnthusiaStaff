@@ -7,7 +7,7 @@
 Initial `PLANNED`; registry is authoritative.
 
 ## 3. Objective
-Implement bounded, auditable fake-base generation, access control, lifecycle, and complete cleanup without risking real world/player data.
+Implement bounded, auditable fake-base generation, access control, lifecycle, and complete cleanup without risking real-world or player data.
 
 ## 4. Why the package exists
 `AUD-TESTER-003` is not started and needs a separate world-safety design after generic tester infrastructure.
