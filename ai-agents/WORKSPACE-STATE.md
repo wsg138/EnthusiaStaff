@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 This is a routing record, not a substitute for live GitHub reconciliation.
 
@@ -10,7 +10,8 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current legitimate `main` at PR #64 start | `f95d5ec404b7a4eca705bdd2ac013eb55af56a11` |
+| Current legitimate `main` at reconciliation start | `9d84f8d50a024b04530335c622d63b573343242b` |
+| Latest merged product work | PR #64 — Block mounted movement while frozen |
 | Plugin version | `0.1.0-SNAPSHOT` |
 | Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
 
@@ -18,78 +19,52 @@ This is a routing record, not a substitute for live GitHub reconciliation.
 
 | Field | Value |
 | --- | --- |
-| State | `ACTIVE — implementation and CodeRabbit review repairs complete; new exact-head validation and review resolution pending` |
-| Pull request | `#64 — Block mounted movement while frozen` |
-| Feature branch | `fix/freeze-mounted-movement` |
-| Starting main | `f95d5ec404b7a4eca705bdd2ac013eb55af56a11` |
-| Work item | Eject existing mounts when freeze becomes active or is restored, and reject new mount attempts while restricted |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-04-freeze-mounted-movement.md` |
-| Migration boundary | V16 is highest; PR #64 adds no migration; V1–V16 remain immutable |
+| State | `DOCUMENTATION-ONLY — verify PR #65 live; intended post-merge state is IDLE with no implementation item active or preselected` |
+| Pull request | `#65 — Reconcile repository routing after PR #64` |
+| Feature branch | `agent/reconcile-post-pr64-routing` |
+| Starting main | `9d84f8d50a024b04530335c622d63b573343242b` |
+| Work item | Reconcile routing, workspace-state, requirements and Wiki status documentation after recent merges |
+| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-05-post-pr64-reconciliation.md` |
+| Migration boundary | V16 is highest; this documentation PR adds no migration; V1–V16 remain immutable |
 | Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
-| External blocker | RoseChat private-message evidence remains separately blocked pending a supported provider contract; never route it through issue #43 |
-| Intended post-merge status | Merge PR #64 with a normal merge commit only after every applicable exact-head gate permits it. Record the actual merge commit SHA and resulting `main` SHA, verify exact feature-head containment and remote branch deletion before cleanup, and confirm no follow-up `main` commit was created merely to record merge evidence. Do not deploy or access production. |
 
-## Live start-state reconciliation
+## Live reconciliation
 
-- The recorded PR #63 state was stale. Live GitHub showed PR #63 merged normally as `f95d5ec404b7a4eca705bdd2ac013eb55af56a11` from exact feature head `f308a545d0a213712ee9346655778be4d1acebb4`.
-- PR #63 already had final evidence and post-merge verification comments, zero valid unresolved threads, feature-head containment, and remote branch cleanup.
-- No pull request was open and only `main` existed before PR #64.
-- Current `main` and the PR #63 merge commit were identical at PR #64 start.
-- V16 remains the live highest migration; PR #64 changes no schema or migration bytes.
-- Owner priority remains staff mode, vanish and freeze before report notifications and escalation policy.
+- PR #64 merged by normal merge commit from exact feature head `63e5d450fad73ffed5900edc160548cb7f165b85`.
+- PR #64 merge commit and resulting `main` at reconciliation start are `9d84f8d50a024b04530335c622d63b573343242b`.
+- The PR #64 feature head is the merge base of current `main`; `main` is one merge commit ahead and zero behind.
+- The PR #64 remote branch is absent. Before this reconciliation branch, only `main` existed.
+- No open or draft pull request existed before PR #65.
+- Recent merged work also includes PR #58 staff-session disable recovery, PR #59 live-rank vanish reconciliation, PR #60 freeze recovery fencing, PR #61 database-dump protections, PR #62 staff-mode world-interaction restrictions and PR #63 precise freeze-interaction restrictions.
+- V16 remains the highest Flyway migration. No recent PR changed migration bytes.
+- The durable agent process in `ai-agents/UNIVERSAL-AGENT-PROMPT.md` remains correct and is not changed by this reconciliation.
 
-## Confirmed defect
+Exact final-head validation and merge evidence for PR #65 belongs in the pull-request description or consolidated comments rather than in this tracked state file.
 
-`FreezeManager` corrected direct player movement but did not own the mount lifecycle. A player already riding an entity when frozen was not explicitly dismounted, and a restricted player had no explicit `EntityMountEvent` guard preventing another mount attempt.
+## Owner priorities and blockers
 
-## Implemented behavior
+When prerequisites are comparable, use this order:
 
-PR #64:
+1. staff mode, vanish and freeze;
+2. report notification completion;
+3. escalation-policy completion.
 
-- applies one shared immediate restriction path when a freeze is newly applied or restored;
-- calls `Player.leaveVehicle()` before closing the inventory and sending the freeze notice;
-- explicitly cancels `EntityMountEvent` at `HIGHEST` priority with `ignoreCancelled = true` when the mounting entity is a restricted player;
-- reuses the existing fail-closed `FreezeRuntimeState.isRestricted` boundary;
-- leaves ordinary players and all other existing freeze behavior unchanged.
-
-No new state, persistence, permission, command, configuration, migration, vanish, staff-mode, provider or proxy system is introduced. A package-private test seam dispatches the existing player and global scheduler operations without changing the production Paper/Folia path.
-
-## Focused tests
-
-`FreezeInteractionCoverageTest` now proves:
-
-- an explicit mount handler exists at the required priority and cancelled-event setting;
-- pending/restricted players cannot mount;
-- ordinary players retain mount behavior;
-- direct freeze activation invokes vehicle exit, inventory closure and the freeze notice in that order;
-- stored active-freeze recovery invokes the same ordered restriction lifecycle.
-
-Existing freeze runtime-state tests continue to prove unrestricted defaults, fail-closed pending verification, confirmed restrictions and lifecycle-generation fencing.
-
-## Harsh-review findings
-
-1. **Confirmed defect fixed:** active or restored freezes did not explicitly leave an existing vehicle.
-2. **Confirmed defect fixed:** restricted players had no explicit mount-event restriction.
-3. **Confirmed test-maintainability defect fixed:** the first focused test duplicated the existing freeze event fixture; mount coverage was folded into `FreezeInteractionCoverageTest` and the duplicate file was removed.
-4. **Confirmed test cleanup fixed:** removed an unused import and simplified the test invocation adapter.
-5. **CodeRabbit finding fixed:** the test no longer calls the helper directly; it proves both activation and durable recovery entry points and verifies the required operation order.
-6. **CodeRabbit finding fixed:** all routing records now require the actual normal merge commit SHA, resulting `main` SHA, exact feature-head containment, branch deletion and confirmation that no follow-up `main` evidence commit was created.
-7. **Scope preserved:** backend-switch enforcement already exists in Velocity and was not duplicated. RoseChat/provider behavior, command policy, freeze duration semantics, vanish and staff mode remain separate.
-
-## Exact-head completion gate
-
-Tracked content is not frozen until this review-repair commit and any later valid review or CI repair are complete. Before merge, require one unchanged head synchronized with current `main` and direct terminal evidence for every available applicable configured check: Java 21 build/tests, migration immutability, Paper and Velocity runtime JARs and hashes, provider-leak inspection, aggregate/diff coverage, static analysis/Codacy, Wiki validation when triggered, CodeRabbit/human review and zero valid unresolved threads.
-
-Pi must succeed on the exact head when it executes normally. If direct evidence proves GitHub Actions quota, billing, disabled Actions or equivalent platform unavailability prevented repository code from executing, record `Pi not run — GitHub Actions quota/platform unavailable` with the exact evidence and do not claim Pi passed. A real executed product, test, migration, packaging, startup, restart or shutdown failure remains a merge blocker.
-
-## Production boundary
-
-PR #64 is dormant development work only. It does not authorize deployment, production data or credential access, production Discord use, EnthusiaStaff authority activation, LiteBans changes, issue #43 acceptance, migration repair or cutover.
+No open blocker prevents fresh selection within priority one. The supported RoseChat private-message provider contract remains unavailable and blocks provider-dependent report-notification and private-message evidence work. Issue #43 remains open only as the later LiteBans production-cutover acceptance gate; it is not a general blocker queue and does not block ordinary dormant development merges.
 
 ## Next route
 
-1. Finish PR #64 only: validate one unchanged head, inspect Codacy/CodeRabbit and every review thread, fix confirmed defects, synchronize with live `main`, and merge with a normal merge commit only when every gate permits it.
-2. Before cleanup, record and verify the actual merge commit SHA and resulting `main` SHA, prove the exact feature head is contained in `main`, prove no unmerged feature commits remain, verify remote branch deletion, and confirm no follow-up `main` commit was created solely to insert merge evidence.
-3. After PR #64 completes, freshly select one bounded remaining priority-one staff-mode, vanish or freeze item.
-4. Keep the RoseChat provider blocker separate and do not use issue #43 as a general blocker queue.
-5. Do not begin another feature in the PR #64 session.
+1. Reconcile live GitHub before acting. If PR #65 remains open, finish this documentation-only PR and do not start implementation.
+2. After PR #65 is merged and no unfinished PR exists, inspect current code, tests, goals, the development blueprint and the requirements matrix for actual remaining gaps.
+3. Select exactly one bounded prerequisite-ready incomplete staff-mode, vanish or freeze item. No specific feature is preselected by this record.
+4. Do not route RoseChat-dependent report work until a supported provider contract exists. Provider-independent report work remains second priority when prerequisite-ready.
+5. Treat escalation-policy completion as third priority.
+6. Keep issue #43 reserved for later production-cutover acceptance when a release candidate and representative isolated environment exist.
+
+## Permanent boundaries
+
+- No deployment, service restart, production database, player data, credentials, Discord route or hosting access.
+- No EnthusiaStaff authority activation.
+- No LiteBans disablement, removal or authority change.
+- No issue #43 acceptance, 168-hour shadow window, production migration, cutover, backup or restore.
+- No Flyway repair, migration edit or history rewrite.
+- A merged development PR remains dormant until separately authorized production work occurs.

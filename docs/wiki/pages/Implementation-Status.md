@@ -38,9 +38,11 @@ Each group has its own detailed page. Open one to see:
 | Feature group | Estimated completion | What belongs there | Largest unfinished areas |
 | --- | ---: | --- | --- |
 | [[Core Platform and Infrastructure]] | **About 72%** | Runtime jars, architecture, Paper/Velocity lifecycle, MariaDB, protocol, safe-write controls, modes, configuration, identity and CI. | Complete operational modes, modular configuration/reload, Bedrock aliases, production-volume and multi-backend failure testing. |
-| [[Moderation, Punishments, and Reports]] | **About 63%** | Cases, sanctions, punishment GUI/drafts, rank approval, escalation, history, appeals, reports, evidence and automod. | Request notifications, complete escalation policy, report GUI, authenticated appeal-review UI, RoseChat PM evidence and automod integration. |
-| [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, freeze, vanish, inventory/Ender access, confiscation, economy actions, alts, inspector, testers and fake systems. | Crash/reconnect recovery, integration hiding, concurrent/offline inventory safety, provider-backed economy, alt lifecycle and fake systems. |
+| [[Moderation, Punishments, and Reports]] | **About 63%** | Cases, sanctions, punishment GUI/drafts, rank approval, escalation, history, appeals, reports, evidence and automod. | Request notifications, complete escalation policy, authenticated appeal-review UI, RoseChat PM evidence and automod integration. |
+| [[Staff Tools, Investigations, and Player-State Safety]] | **About 44%** | Staff mode, freeze, vanish, inventory/Ender access, confiscation, economy actions, alts, inspector, testers and fake systems. | Remaining recovery and integration hiding, concurrent/offline inventory safety, provider-backed economy, alt lifecycle and fake systems. |
 | [[Integrations, Migration, and Release Readiness]] | **About 36%** | Discord, website bridge/site, provider APIs, LiteBans migration, shadow/cutover, client/runtime acceptance and release evidence. | Provider reconstruction, private site, real-data migration rehearsal, 168-hour shadow, full topology/Bedrock/Folia/load/process-kill acceptance. |
+
+The percentages were not changed by PR #65 because this work reconciles routing and status wording rather than evaluating every feature group again.
 
 ## Find information by question
 
@@ -84,41 +86,53 @@ blockers. The Wiki percentages are the readable planning view of that evidence.
 
 ### I want to know what should be developed next
 
-Use [[Remaining Development Map|Development-Blueprint]]. It groups the unfinished
-work into the same four feature areas without repeating the full completion tables.
+Use [[Remaining Development Map|Development-Blueprint]]. It records the owner
+priority order but deliberately requires fresh live gap inspection before one
+bounded feature is selected.
 
 ## Current development boundaries
 
-The current feature branch is [PR #46](https://github.com/wsg138/EnthusiaStaff/pull/46),
-which adds punishment history and the exact sanction-change lifecycle. PR #27 and
-PR #37 are merged implementation checkpoints. Branch work is not counted as
-merged behavior merely because it has tests; the percentages here describe the
-reviewed implementation while the requirements matrix records exact-head status.
+PR #64 is the latest merged product checkpoint. It closes one mounted-movement
+freeze bypass and does not deploy or activate the plugin.
+
+PR #65 is documentation-only reconciliation. Read live GitHub to determine
+whether it remains open or is already merged. No implementation feature is
+preselected in tracked documentation after this reconciliation.
+
+The recent merged priority-one sequence includes staff-mode transfer, rank,
+disable-recovery and world-interaction corrections; vanish live-rank
+reconciliation; and freeze recovery, precise interaction and mounted-movement
+corrections. These merges do not establish complete production-like staff-mode,
+vanish or freeze acceptance.
+
+V16 remains the highest Flyway migration. LiteBans remains authoritative.
 
 ## Current command gaps
 
-On the PR #46 feature branch, `/history` is implemented and the remaining required
-top-level command not registered there is:
+`/history` and the exact sanction-change lifecycle are merged. The remaining
+known top-level command gap is:
 
 ```text
 /fakebase
 ```
 
-Until PR #46 merges, `main` is missing both `/history` and `/fakebase`.
-
 `/alts` and `/alt` are registered on Velocity, but the complete alt lifecycle,
 GUI, confidence, exception, inheritance and staging work remains unfinished.
 
+Command existence alone does not establish complete behavior; verify live source,
+registration, permissions, tests and Java/Bedrock usability before selecting work.
+
 ## External blockers
 
-- The supported RoseChat provider repository/API required for the complete staff,
-  private-message evidence and pre-broadcast moderation bridge is unavailable.
+- The supported RoseChat provider repository/API required for complete staff,
+  private-message evidence and pre-broadcast moderation behavior is unavailable.
 - Polar does not expose the supported violation-event contract required for
   automatic enforcement.
-- Complete provider branches, the private site, production-like LiteBans data,
+- Complete provider branches, the private site, representative migration data,
   real Bedrock/Folia clients and the full multi-server failure environment are
   unavailable or unfinished.
-- The mandatory real-data 168-hour LiteBans shadow observation has not run.
+- The mandatory uninterrupted 168-hour LiteBans shadow observation has not run
+  and belongs to later issue #43 production-cutover acceptance.
 
 ## Updating completion information
 
@@ -135,4 +149,8 @@ When implementation changes:
 
 ## Punishment history lifecycle update
 
-The history/sanction-change requirement group is implemented in PR #46 pending exact-head validation: database-bounded `/history`, complete `/case` detail, exact reduce/end/revoke/overturn, request/appeal linkage, append-only audit and concurrency tests. Production cutover and LiteBans authority are unchanged.
+The punishment history and exact sanction-change lifecycle from PR #46 is merged:
+database-bounded `/history`, complete `/case` detail, exact
+reduce/end/revoke/overturn behavior, request/appeal linkage, append-only audit and
+concurrency coverage exist in the repository. Representative non-production
+usability, website reviewer UI and production authority remain separate.
