@@ -2,9 +2,9 @@
 
 Last updated: 2026-08-05
 
-Canonical intended post-merge state: `PACKAGE-PLANNING READY — canonical package registry and aggregate/standalone synchronization model are merged; no implementation package is active; ES-P01 is the next assigned package.`
+Canonical current state: `ES-P01 ACTIVE — implementation is on package/es-p01-appeal-isolation in PR #68; no other package is active.`
 
-Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a`; no open PRs; only `main` existed; V16 was highest; issue #43 was open and deferred.
+ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
 
 ## Rules
 
@@ -37,20 +37,20 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `READY` |
+| Status | `ACTIVE` |
 | Priority | `10` |
 | Dependencies | — |
 | Parallel safe | No |
-| Assigned worker | `UNASSIGNED` |
-| Active branches | `NONE` |
-| Aggregate PR | `NONE` |
+| Assigned worker | `ChatGPT assigned-package implementation worker` |
+| Active branches | `package/es-p01-appeal-isolation` |
+| Aggregate PR | `#68` |
 | External PRs | `NONE` |
-| Starting SHAs | `UNSET` |
+| Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
 | Final reviewed heads | `UNSET` |
 | Merge commits | `UNSET` |
 | Last update | `2026-08-05` |
-| Handoff | `NONE` |
-| Blocker | NONE |
+| Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
+| Blocker | No product blocker. Pi staging infrastructure currently supplies no runner; hosted validation continues. |
 | Package file | [`packages/ES-P01.md`](packages/ES-P01.md) |
 
 ### `ES-P02` — Runtime database recovery and Velocity reload
