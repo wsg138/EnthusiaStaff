@@ -18,6 +18,7 @@ final class JdbcWebsiteAppealStore {
     private static final String APPEAL_PREPARED = "PREPARED";
     private static final String APPEAL_APPLIED = "APPLIED";
     private static final String APPEAL_REJECTED = "REJECTED";
+    private static final String MUTATION_PENDING = "MUTATION_PENDING";
     private static final String ELIGIBLE = "ELIGIBLE";
 
     private final DataSource dataSource;
@@ -226,13 +227,50 @@ final class JdbcWebsiteAppealStore {
         if (existing == null) {
             throw notFound("APPEAL_NOT_FOUND", "The appeal request could not be found");
         }
-        if (!APPEAL_PREPARED.equals(existing.state())) {
-            if (state.equals(existing.state()) && outcomeCode.equals(existing.outcomeCode())) {
-                return;
-            }
+        if (state.equals(existing.state()) && outcomeCode.equals(existing.outcomeCode())) {
+            return;
+        }
+        if (isFinalizedReplayProbe(existing, state, outcomeCode)) {
+            return;
+        }
+        if (!transitionAllowed(existing, state, outcomeCode)) {
             throw conflict("APPEAL_STATE_CONFLICT", "The appeal completion conflicts with prior state");
         }
-        appeals.complete(connection, appealId, state, outcomeCode, now);
+        appeals.transition(
+                connection,
+                appealId,
+                existing.state(),
+                state,
+                outcomeCode,
+                now
+        );
+    }
+
+    private static boolean isFinalizedReplayProbe(
+            AppealRow existing,
+            String state,
+            String outcomeCode
+    ) {
+        return APPEAL_APPLIED.equals(existing.state())
+                && APPEAL_APPLIED.equals(existing.outcomeCode())
+                && APPEAL_APPLIED.equals(state)
+                && MUTATION_PENDING.equals(outcomeCode);
+    }
+
+    private static boolean transitionAllowed(
+            AppealRow existing,
+            String state,
+            String outcomeCode
+    ) {
+        if (APPEAL_PREPARED.equals(existing.state())) {
+            return true;
+        }
+        if (!APPEAL_APPLIED.equals(existing.state())
+                || !MUTATION_PENDING.equals(existing.outcomeCode())) {
+            return false;
+        }
+        return APPEAL_REJECTED.equals(state)
+                || APPEAL_APPLIED.equals(state) && APPEAL_APPLIED.equals(outcomeCode);
     }
 
     private static boolean matches(
