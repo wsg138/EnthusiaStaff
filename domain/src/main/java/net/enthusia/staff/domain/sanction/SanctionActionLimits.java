@@ -5,9 +5,11 @@ public record SanctionActionLimits(
         int maximumReasonLength,
         boolean allowPermanentReduction
 ) {
+    private static final int MAXIMUM_SUPPORTED_REASON_LENGTH = 2_000;
+
     public SanctionActionLimits {
         if (minimumReasonLength < 1 || maximumReasonLength < minimumReasonLength
-                || maximumReasonLength > 512) {
+                || maximumReasonLength > MAXIMUM_SUPPORTED_REASON_LENGTH) {
             throw new IllegalArgumentException("sanction action reason limits are invalid");
         }
     }
