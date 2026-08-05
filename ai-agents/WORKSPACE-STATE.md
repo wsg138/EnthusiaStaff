@@ -2,56 +2,43 @@
 
 Last updated: 2026-08-05
 
-This is a routing record, not a substitute for live GitHub reconciliation.
+This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGISTRY.md` must be reconciled before acting.
 
 ## Repository
 
-| Field | Recorded value |
+| Field | Value |
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Audited legitimate `main` | `dddc8352aed5aac1eeead3a670680cd647b1b9c2` |
-| Latest merged product work | PR #64 — Block mounted movement while frozen |
+| Setup starting main | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
 | Plugin version | `0.1.0-SNAPSHOT` |
-| Java/runtime | Java 21; Paper-compatible backends, Velocity, MariaDB |
+| Java/runtime | Java 21; Paper/Leaf backends, Velocity, MariaDB |
+| Highest migration | `V16`; V1–V16 remain immutable |
+| Issue #43 | Open; owner-led LiteBans cutover acceptance remains deferred |
 
-## Current work
+## Intended post-merge state
+
+`PACKAGE-PLANNING READY — canonical package registry and aggregate/standalone synchronization model are merged; no implementation package is active; ES-P01 is the next assigned package.`
 
 | Field | Value |
 | --- | --- |
-| State | `PLANNING — repository-wide completion audit is merged; no implementation package is active or preselected` |
-| Canonical audit | `reports/PROJECT-COMPLETION-AUDIT.md` |
-| Audit pull request | `#66 — Audit repository-wide project completion state` |
-| Audited main | `dddc8352aed5aac1eeead3a670680cd647b1b9c2` |
-| Current handoff | `ai-agents/reports/agent-handoffs/2026-08-05-repository-completion-audit.md` |
-| Migration boundary | V16 is highest; the audit changes no migration; V1–V16 remain immutable |
-| Production authority | LiteBans remains authoritative; no deployment or cutover authority is granted |
+| Canonical package status | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
+| Next package | `ES-P01 — Exact-sanction appeal isolation` |
+| Active implementation package | `NONE` |
+| Active implementation branch/PR | `NONE` |
+| Setup branch | `package/es-setup-workspace-orchestration` |
+| Setup PR | `#67 — Establish work-package orchestration and component synchronization` |
+| Setup handoff | `ai-agents/reports/package-handoffs/2026-08-05-package-planning-setup.md` |
+| Production authority | LiteBans remains authoritative |
 
-## Audit result
+## Component state
 
-- The repository is structurally established and feature-incomplete.
-- The canonical 99-item ledger records 19 `COMPLETE_GOOD`, 47 `COMPLETE_WITH_ISSUES`, 12 `PARTIAL`, 6 `NOT_STARTED`, 3 `BLOCKED`, 10 `DEFERRED_ACCEPTANCE`, and 2 `OUTSIDE_THIS_REPOSITORY` items.
-- The highest-risk confirmed defect is `AUD-APPEAL-003`: one punishment appeal can end all active sanctions in the same combined case.
-- Major incomplete areas include functional staff tools, cheat/fake tooling, provider-backed asset workflows, RoseChat-dependent communication/evidence, Velocity reload, Bedrock identity correctness, distributed staging, and LiteBans acceptance/cutover.
-- Exact-main Java 21 build/tests, MariaDB/Testcontainers integration, runtime JAR inspection, provider-leak inspection, aggregate coverage generation, and Wiki validation succeeded.
-- Aggregate coverage is 46.89% line and 37.83% branch; major runtime paths remain weakly proved.
-- Current-SHA Pi staging did not execute because GitHub reported account billing/spending-limit status before a runner started.
-- No product code, migration, workflow, runtime configuration, deployment control, production authority, LiteBans authority, or issue #43 acceptance changed.
+Verified standalone repositories: site, Currency, Market, and Commend at the heads in `COMPONENT-REGISTRY.md`. RoseChat is unresolved. The `components/` entries are metadata-only component directories at setup; no external source import has occurred. Assigned external packages may later populate only their designated tracked aggregate directory after source/repository verification.
 
-## Next route
-
-1. Reconcile live GitHub before planning.
-2. Use `reports/PROJECT-COMPLETION-AUDIT.md` as the authority for defining bounded implementation packages.
-3. Do not preselect work from older priority lists or handoffs.
-4. Resolve dependency and code-overlap relationships before allowing parallel work.
-5. Keep provider-dependent, private-data, distributed, Bedrock, and production-acceptance work in the environments identified by the audit.
-6. Keep issue #43 reserved for the later 168-hour production-like LiteBans acceptance gate.
+No long-lived component branches exist or are part of the design. No isolated-component PR is required. Internal packages require one PR; external packages normally require two cross-referenced PRs. Temporary branches are deleted after merge when safe.
 
 ## Permanent boundaries
 
-- No deployment, service restart, production database, player data, credentials, Discord route or hosting access.
-- No EnthusiaStaff authority activation.
-- No LiteBans disablement, removal or authority change.
-- No issue #43 acceptance, 168-hour shadow window, production migration, cutover, backup or restore.
-- No Flyway repair, migration edit or history rewrite.
-- A merged development PR remains dormant until separately authorized production work occurs.
+- No product code, migration, workflow, runtime configuration, deployment, authority, private data, LiteBans acceptance, or production behavior changes in setup.
+- No implementation package starts until a worker is explicitly assigned a `READY` package.
+- No private database or derived rows may be uploaded.

@@ -1,437 +1,105 @@
 # EnthusiaStaff AI agent operating rules
 
-These rules apply to every AI-assisted work session that uses this repository.
+These rules govern every AI-assisted work session in this repository.
 
-They govern how an agent selects work, resumes pull requests, reviews changes, validates the exact final revision, merges, cleans up, and leaves a durable handoff.
+## 1. Assigned package authority
 
-## 1. Core operating principle
+Implementation, provider, validation, acceptance, and final-audit work must begin with `Assigned package ID: <PACKAGE-ID>`. Read `ai-agents/work-packages/PACKAGE-REGISTRY.md` and the assigned package file. Do not choose a different package when the assigned package exists. A direct new owner instruction may reassign work, but the change must be recorded.
 
-Complete exactly one logical work item per session.
+Complete exactly one assigned package or one explicitly requested review-only work item per session. Do not begin the next package after merge, blocker, partial handoff, or audit completion.
 
-A logical work item is one of:
+## 2. Required reading and live reconciliation
 
-- finishing an existing pull request;
-- implementing one focused feature or fix through merge;
-- resolving one clearly bounded blocker;
-- performing one explicitly requested repository review without implementation.
+Read, in order:
 
-Do not begin a second feature after the first work item is merged. Record the next recommended work and stop.
+1. this file;
+2. `ai-agents/WORKSPACE-STATE.md`;
+3. `ai-agents/work-packages/PACKAGE-REGISTRY.md`;
+4. the assigned package file;
+5. the package's latest handoff, or confirm none exists;
+6. `ai-agents/reports/agent-handoffs/latest.md`;
+7. relevant goals, audit, manifest, requirements matrix, Wiki, contracts, migrations, and provider rules.
 
-A review-only work item ends after the requested findings are reported. It does not authorize implementation, validation, merge, or branch cleanup unless the user separately asks for those actions.
+Then reconcile live GitHub across every required repository: default heads, open/draft PRs, temporary branches, recent merges, unresolved threads, every check state, exact reviewed heads, current highest Flyway migration, issue #43, standalone repository availability, and whether another worker is active. Live code/GitHub override stale files.
 
-## 2. Required reading order
+## 3. Canonical status and resume-first behavior
 
-At the beginning of every session, read:
+`PACKAGE-REGISTRY.md` is the only canonical package-status index.
 
-1. `ai-agents/AGENTS.md`
-2. `ai-agents/WORKSPACE-STATE.md`
-3. `ai-agents/reports/agent-handoffs/latest.md`
-4. the current pull request description and review threads, when a PR exists;
-5. relevant portions of `ENTHUSIASTAFF-GOALS.md`;
-6. `WORKSPACE-MANIFEST.md`;
-7. relevant portions of `docs/wiki/pages/Development-Blueprint.md`;
-8. relevant portions of `reports/REQUIREMENTS-MATRIX.md`.
+- `READY`: start the assigned package.
+- `ACTIVE`: resume existing branches/PRs.
+- `PARTIAL`: validate completed work and continue the same package/branches/PRs unless irrecoverably invalid.
+- `BLOCKED`: verify and record the blocker; do not switch packages.
+- `REVIEW`, `MERGE_PENDING`, `SYNC_PENDING`: complete review, repair, merge, or synchronization only.
+- `COMPLETE`: verify evidence and stop unless a later repair package exists.
+- `PLANNED`, `DEFERRED`, `SUPERSEDED`: do not start without legitimate routing.
 
-Then inspect live GitHub and repository state.
+Do not open a competing PR, redo completed work without evidence, or select unrelated work because the assigned package is difficult.
 
-Never rely on the files alone for:
+## 4. Repository and PR model
 
-- the current `main` SHA;
-- whether a PR is open, draft, ready, merged, or closed;
-- the current PR head;
-- ahead/behind status;
-- unresolved review threads;
-- exact-head CI status;
-- branch existence;
-- the latest Flyway migration.
+`wsg138/EnthusiaStaff:main` is the aggregate workspace. Core product modules remain at the root. External component copies live under `components/` and retain standalone repositories.
 
-Live repository state overrides stale recorded state. Reconcile discrepancies explicitly.
+There are no permanent component branches, split/subtree branches, component-only allowlists, or isolated-component PRs.
 
-## 3. Source-of-truth boundaries
+- Internal package: normally one temporary package branch and one PR to `EnthusiaStaff:main`.
+- External package: normally one temporary branch/PR in the standalone repository and one temporary branch/PR to `EnthusiaStaff:main`. Both use the same package ID, cross-reference each other, and must reach deterministic parity.
+- Validation/acceptance/audit package: follow its explicit evidence/PR rules.
 
-- Live code and GitHub state determine what is actually implemented.
-- `ENTHUSIASTAFF-GOALS.md` defines the intended finished product.
-- This file defines the agent workflow and safety process.
-- `WORKSPACE-STATE.md` identifies the expected current step, owner priorities and selection guardrails, but may be stale.
-- Handoff reports provide context and route the next agent to the relevant PR evidence. They do not override code, tests, requirements, current owner instructions, or current GitHub state.
+Use `package/<package-id-lowercase>-<short-name>`. Open a draft PR early after the branch exists and record exact bases/scope. Before final validation, synchronize with the current target branch by the repository-approved merge-commit workflow and retest the resulting exact head when required. Never push directly to a default branch, rebase a shared branch, force-push, squash the final merge, enable auto-merge, or merge a draft PR. Use normal merge commits. Delete temporary branches after merge only after verifying containment and no unique work.
 
-Do not claim a feature exists because it appears in a plan, PR description, handoff, matrix, or class name. Verify behavior in code and tests.
+## 5. Implementation standards
 
-## 4. Resume-first work selection
+Unless documentation-only, account for Java 21, Paper/Leaf/Folia thread ownership, Velocity lifecycle, asynchronous/bounded database work, MariaDB transactions/indexes, multiple runtimes, idempotency/retry, restart/shutdown recovery, bounded queues/queries/caches, permissions/hierarchy at service boundaries, atomic reload, Java/Bedrock usability, logging/privacy, provider-present/provider-missing behavior, audit completeness, rollback, and authority fencing.
 
-Before creating a new branch, inspect:
+Do not deliver placeholders, TODOs, unused interfaces, invented APIs, reflection against unknown provider implementations, log scraping as a callback substitute, or duplicate systems.
 
-- open pull requests;
-- draft pull requests;
-- active remote branches;
-- unresolved review threads;
-- failed, queued, pending, in-progress, skipped, cancelled, or superseded checks;
-- `WORKSPACE-STATE.md` active-work fields and owner-priority guardrails.
+## 6. Flyway and persistence
 
-Use this order:
+Verify the live migration boundary. Existing deployed migrations are immutable. Never edit migration bytes, use Flyway repair to hide checksums, rewrite history, or delete records to conceal failure. Add a new migration only when required; preserve checksum tests; test clean install and upgrade; add indexes for normal bounded query paths.
 
-1. Resume an explicitly active PR recorded in `WORKSPACE-STATE.md` when it still exists.
-2. Otherwise finish the oldest relevant unfinished EnthusiaStaff PR that is part of the current roadmap.
-3. Otherwise address a recorded blocker that prevents the current work item.
-4. Otherwise select the next incomplete work item from `WORKSPACE-STATE.md`, including the recorded owner priority order when prerequisites are comparable.
-5. If the state file has no valid next item, use the goals, development blueprint, requirements matrix, current implementation and current owner instructions to choose the highest-priority prerequisite-complete feature.
+## 7. Production and private-data boundary
 
-Do not open a competing PR for work already active elsewhere.
+Without separate explicit owner authorization, do not deploy, access production databases/player data/credentials/routes, alter hosting/services, activate EnthusiaStaff authority, disable/remove LiteBans, run cutover, start issue #43 acceptance, restore a production-derived backup, or claim CI/staging is production acceptance.
 
-Do not start unrelated work merely because the current item is difficult.
+Private databases, derived rows, raw IPs, private messages, secrets, credentials, and reconstructable evidence never enter GitHub, ChatGPT uploads, CI artifacts, or public logs. LiteBans remains authoritative.
 
-Direct owner instructions in the current conversation override a stale recorded priority order.
+## 8. Durable checkpoints
 
-## 5. Work-state model
+After each coherent section, update the registry/package/handoff with status, checklist, branches, PRs, heads, tests, review state, blockers, and exact next action. Maintain one canonical timestamped package handoff; do not create competing final variants.
 
-Classify the current work as one of:
+The package handoff does not override the registry or live GitHub. It must contain starting SHAs, branches/PRs, completed/incomplete work, failed checks, valid findings, unresolved threads, blocker evidence, exact next action, and systems not to disturb.
 
-- `IDLE`
-- `PLANNING`
-- `IMPLEMENTING`
-- `REVIEWING`
-- `FIXING_REVIEW`
-- `VALIDATING`
-- `READY_TO_MERGE`
-- `MERGING`
-- `MERGED`
-- `BLOCKED`
+## 9. Harsh review
 
-Update `WORKSPACE-STATE.md` when the state materially changes and ensure the final version included in the PR describes the intended post-merge state. A final tracked state should normally be an expected state such as `IDLE — PR #N requires live merge verification`, not an indefinitely stale claim that the PR is still actively validating after merge.
+Review each complete final PR diff for scope, architecture, lifecycle, threading, transactions, row locks/revisions, concurrency, idempotency, rollback, restart, bounds, indexes, permissions, console/SYSTEM behavior, stale GUI/inventory state, Bedrock fallback, configuration, privacy, provider mismatch, weak tests, documentation, and all human/CodeRabbit/Codacy/CI findings.
 
-## 6. Git and pull-request policy
+Classify findings as merge blockers, confirmed defects, optional cleanup, or unrelated future work. Fix blockers and confirmed defects. Require zero valid unresolved review threads.
 
-- Branch from the latest legitimate `main`.
-- Verify the exact starting SHA.
-- Use a focused descriptive branch.
-- Open a draft PR early for new implementation work.
-- Keep one logical feature or fix per PR.
-- Use intentional commits.
-- Never push directly to `main`.
-- Never rebase a shared feature branch.
-- Never squash the final PR.
-- Never force-push.
-- Merge using a normal merge commit.
-- Do not enable automatic merging.
-- Do not merge a draft PR.
-- Do not merge while the branch is behind `main` unless the repository's current documented workflow explicitly permits it and the final exact revision is retested.
-- Do not represent a merge-ref-only run as exact feature-head evidence unless the check is specifically defined to validate the merge result and this distinction is recorded.
-
-The universal agent prompt is explicit authorization to manually merge the single current implementation work item after every merge gate in this file passes. It is not authorization to weaken those gates or enable auto-merge. Review-only work is not merge authorization.
-
-## 7. Branch cleanup
-
-After a successful merge:
-
-1. verify the merge commit is on `main`;
-2. verify the feature head is contained in the merged history;
-3. verify no unmerged commits remain on the branch;
-4. verify whether GitHub automatically deleted the merged branch;
-5. delete the remote feature branch when it still exists and tooling and repository permissions permit;
-6. delete agent-created local branches, worktrees, and temporary files when applicable;
-7. record whether cleanup succeeded.
-
-Never delete a branch that contains unmerged work.
-
-If the available connector cannot delete the remote branch, report that limitation clearly rather than pretending cleanup occurred.
-
-## 8. Implementation standards
-
-Unless the current work item is documentation-only, inspect and account for:
-
-- Java 21 compatibility;
-- Paper-compatible server-thread rules;
-- Velocity event and scheduler behavior;
-- asynchronous database work;
-- MariaDB transactions and indexes;
-- multiple Paper and Velocity processes operating concurrently;
-- idempotency and retry safety;
-- restart and shutdown behavior;
-- bounded queues, queries, caches, and memory;
-- permissions and hierarchy enforcement at service boundaries;
-- configuration validation and safe reload behavior;
-- Java and Geyser/Floodgate usability;
-- logging and sensitive-data handling;
-- provider-present and provider-missing behavior where relevant;
-- audit completeness;
-- failure rollback and partial-operation recovery;
-- operational-mode and authoritative-write fencing where moderation authority is involved.
-
-Do not deliver only interfaces, placeholders, TODOs, schemas, or command stubs when the work item calls for a complete feature.
-
-## 9. Flyway and persistence rules
-
-- Existing deployed migrations are immutable.
-- Determine the current highest migration live before adding another.
-- Never edit an existing migration merely to satisfy a scanner or test.
-- Never use Flyway repair to hide a checksum mismatch.
-- Never rewrite migration history.
-- Never delete persistent records to conceal a failed migration or test.
-- Add a new migration for schema changes.
-- Preserve migration checksum tests.
-- Test both clean installation and upgrade from the previous migration where relevant.
-- Add indexes for normal query paths and prove pagination is database-bounded.
-
-`WORKSPACE-STATE.md` records the currently known migration boundary, but the agent must verify it against the repository before editing.
-
-## 10. Production and authority boundary
-
-Unless the user gives a separate explicit production instruction in the current conversation, do not:
-
-- deploy a JAR;
-- access production databases;
-- use production credentials;
-- use production player data;
-- contact production Discord or webhook routes;
-- alter Bloom or other production services;
-- activate EnthusiaStaff punishment authority;
-- disable or remove LiteBans;
-- run the production cutover;
-- start the issue #43 168-hour acceptance window;
-- create or restore a production-derived backup;
-- claim isolated CI or Pi testing is production acceptance.
-
-Merging dormant development code is not deployment or cutover authorization.
-
-LiteBans remains authoritative until issue #43 is separately completed and approved.
-
-## 11. Required harsh-review phase
-
-Implementation completion is not the same as review completion.
-
-After the feature or fix appears complete, move into a separate `REVIEWING` phase and inspect the entire final PR diff, not only the last commit.
-
-Review at minimum:
-
-- scope completeness;
-- architecture consistency;
-- duplicated or parallel systems;
-- lifecycle, startup, reload, and shutdown;
-- thread safety and main-thread blocking;
-- transaction boundaries;
-- row locking and optimistic revision behavior;
-- concurrency across multiple runtimes;
-- idempotency and duplicate prevention;
-- rollback after checked and unchecked failures;
-- restart recovery;
-- database query bounds and indexes;
-- migration safety;
-- permission and hierarchy enforcement;
-- console/system actor behavior;
-- GUI stale-state and inventory-event safety;
-- Bedrock command fallbacks;
-- configuration defaults and invalid reloads;
-- sensitive-data exposure in chat, logs, artifacts, and exceptions;
-- tests that pass without proving the intended behavior;
-- documentation accuracy;
-- unresolved human, CodeRabbit, Codacy, or CI findings.
-
-Classify findings as:
-
-- merge blocker;
-- confirmed defect to fix now;
-- safe optional cleanup;
-- unrelated future work.
-
-Fix merge blockers and confirmed defects. Do not create endless speculative cleanup merely to postpone completion.
-
-After a final workflow-documentation batch or any other tracked change, inspect the complete PR diff again. Fix only real defects, then freeze the new head.
-
-## 12. Freeze tracked content before exact-head validation
-
-A tracked file inside a PR cannot safely contain that same PR's final SHA, final CI run IDs, Pi result, artifact IDs, or merge commit without changing the revision again. Do not create a self-referential validation loop.
-
-Coverage and Pi may take roughly ten minutes. A newer commit may cancel or supersede the prior run. Batch all remaining tracked code, tests, migrations, workflow documentation, state, routing and handoff changes before final validation.
-
-Before starting final exact-head validation:
-
-1. finish all code, tests, migrations, documentation, state, and handoff-file changes;
-2. perform the separate harsh review and fix every confirmed defect;
-3. update `ai-agents/WORKSPACE-STATE.md` to the intended post-merge state without embedding a not-yet-existing merge SHA;
-4. maintain one canonical timestamped handoff file for the PR and edit it during implementation and review;
-5. update `ai-agents/reports/agent-handoffs/latest.md` to point to that one canonical report and the PR;
-6. ensure the handoff explains where exact-head and merge evidence will be recorded;
-7. make the final tracked changes in one batch when practical;
-8. stop changing tracked files unless validation or review finds a real defect.
-
-Do not create repeated `final`, `review-final`, or `validation-final` handoff variants merely because the head moved. Create a superseding handoff only when an earlier handoff was genuinely frozen and an immutable correction is required; explain the exception.
-
-Once final exact-head Coverage/Pi validation starts, make no more commits unless it exposes a real defect. If a real defect requires another commit, repeat the full-diff harsh review and exact-head validation for the new head.
-
-## 13. Exact-head validation
-
-Validation must apply to the final reviewed feature head after tracked content is frozen.
-
-Use the repository's actual configured checks. Normally verify:
-
-- clean Java 21 build;
-- unit tests;
-- Paper tests;
-- Velocity tests;
-- persistence tests;
-- protocol tests;
-- MariaDB/Testcontainers integration tests;
-- clean-install migration tests;
-- upgrade migration tests;
-- migration checksum tests;
-- compiler warnings as errors where configured;
-- static analysis;
-- coverage generation and upload where configured;
-- Paper runtime JAR;
-- Velocity runtime JAR;
-- ZIP/JAR integrity;
-- provider API leak checks;
-- wiki and documentation validation;
-- current review-bot status;
-- zero unresolved review threads.
-
-Run safe Pi boot/restart validation when the existing workflow supports the exact current head.
-
-Before saying Pi did not run, inspect queued, pending, in-progress, completed, cancelled, and superseded workflows plus current PR evidence. A Pi run may be queued or may begin after another workflow completes.
-
-If an exact-head Pi workflow is configured for an implementation PR but has not been triggered, trigger or re-run it when the available tooling supports that action. If the workflow cannot be triggered or cannot apply to the exact head, block merge unless a verified exception documents the concrete reason. A missing trigger alone is not non-applicability.
-
-Cancelled and superseded Coverage or Pi runs are not failures, but they are not validation evidence. Skipped, different-revision, merge-ref-only, or merely runtime-equivalent runs must also be labeled accurately.
-
-For an implementation PR, every configured applicable exact-head Pi workflow must reach a successful terminal result before merging. Do not merge while that Pi result is queued, pending, or in progress. A verified documented exception is required when the workflow cannot be triggered or applied.
-
-Documentation-only work may omit Pi when the workflow is not applicable or not configured for that change. Record the documentation-only distinction and the reason Pi was not required.
-
-Never claim a check passed without direct evidence.
-
-Record exact-head evidence in the PR description or a final pre-merge PR comment, because editing those does not change the feature SHA.
-
-Record at minimum:
-
-- final feature SHA;
-- workflow run and job IDs;
-- Java version;
-- build result;
-- test result;
-- coverage;
-- JAR hashes;
-- artifact identity;
-- migration result;
-- static-analysis result;
-- review-thread count;
-- Pi result, or a verified documented exception establishing that no applicable exact-head Pi workflow can be triggered. A merely missing trigger is not an exception.
-
-## 14. Merge gate
-
-Merge only when all of the following are true:
-
-- the PR scope is complete and usable;
-- the entire final diff received the harsh review;
-- every merge blocker and confirmed defect was addressed;
-- the branch is synchronized appropriately with `main`;
-- exact final-head validation is green;
-- every configured applicable exact-head Pi workflow for an implementation PR reached a successful terminal result, or a verified documented exception proves it cannot be triggered or applied;
-- migrations are safe and old migrations are unchanged;
-- permissions and configuration are documented;
-- no unresolved review thread remains;
-- the PR description or final pre-merge comment contains the exact final-head evidence;
-- `WORKSPACE-STATE.md` is updated for the intended post-merge state;
-- one canonical durable handoff report and the latest pointer are included;
-- no known release blocker remains for this specific PR.
-
-Production acceptance requirements block a development merge only when the PR is itself a production deployment or cutover action. They do not automatically block dormant, reviewed implementation code.
-
-## 15. State and handoff files
-
-Before final validation, update `ai-agents/WORKSPACE-STATE.md` with:
-
-- the PR number;
-- branch;
-- intended post-merge status;
-- completed-work summary;
-- next recommended work item and current owner priorities;
-- current migration boundary;
-- remaining blockers and their focused issue routing;
-- handoff link.
-
-Do not require the state file to contain the final feature SHA, final CI run IDs, Pi run ID, artifact IDs, or merge commit. Those values are live evidence and belong in the PR description or comments.
-
-Maintain one canonical timestamped handoff report per PR. Edit it during implementation and review, then freeze it immediately before final exact-head validation. Do not create repeated final-name variants unless an already-frozen historical file genuinely requires a superseding correction.
-
-The canonical handoff report must include:
-
-- repository and work item;
-- starting `main`;
-- branch and PR;
-- implemented behavior;
-- files or architecture materially changed;
-- migrations added and immutable migration boundary;
-- commands, permissions, and configuration added;
-- review findings and fixes;
-- validation requirements and a link to the PR's exact-head evidence;
-- merge readiness or blocker;
-- production boundary;
-- remaining work;
-- next recommended work item and owner-priority route.
-
-`latest.md` must point to the canonical report and PR and state that exact-head and merge evidence must be read live from GitHub.
-
-Do not include secrets, raw production data, private player information, credentials, or sensitive evidence.
-
-## 16. Post-merge verification
-
-After merging:
-
-- verify the actual merge commit and resulting `main` SHA;
-- verify the final feature head is contained in `main`;
-- verify whether GitHub automatically deleted the feature branch and safely delete it if it remains and tooling permits;
-- put the exact merge result in the PR description or a final PR comment;
-- include the exact result in the final user response;
-- perform safe local cleanup where applicable;
-- do not make a direct follow-up commit to `main` merely to insert the merge SHA into the handoff;
-- the next agent must reconcile the committed state and handoff with live GitHub before acting.
-
-This keeps the handoff in the reviewed PR while preserving exact live evidence without a circular commit sequence.
-
-## 17. Blocked work
-
-Issue #43 is specifically the LiteBans production-cutover acceptance issue and remains open. It is not the general bug-report or blocker queue.
-
-When work cannot proceed because of a genuine blocker:
-
-- do not invent credentials, data, requirements, source files, provider APIs, or test evidence;
-- do not open unrelated work to stay busy;
-- record the precise blocker;
-- record what was verified;
-- record the exact human or external input required;
-- normally create or update a focused GitHub blocker issue for an external dependency such as an unavailable provider API and record it in the normal handoff;
-- do not use issue #43 for unrelated blockers;
-- do not open a standalone documentation PR solely to record a blocker unless repository routing would otherwise be materially incorrect or unsafe;
-- update `WORKSPACE-STATE.md` to `BLOCKED` on the active branch when appropriate;
-- update the canonical handoff report;
-- leave the PR draft when the work is not mergeable;
-- stop.
-
-## 18. Safeguard against self-approval
-
-An agent may improve these workflow documents, but it may not weaken them merely to make its current PR mergeable.
-
-Changes to any of the following require explicit justification in the PR and separate review:
-
-- merge gates;
-- exact-head evidence requirements;
-- migration immutability;
-- production boundaries;
-- authority activation requirements;
-- review requirements;
-- branch policy;
-- handoff requirements.
-
-Editing a checklist does not prove the underlying requirement is satisfied.
-
-## 19. Stop condition
-
-After the single implementation work item is merged or accurately recorded as blocked:
-
-- verify and report the final state;
-- recommend the next owner-priority item briefly;
-- do not create the next branch;
-- do not begin implementation of the next feature;
-- stop.
-
-After a review-only work item, report findings and stop without implementation, merge, or cleanup unless the user separately requested those actions.
+## 10. Freeze and exact-head validation
+
+Finish tracked code, tests, migrations, docs, state, component metadata, and handoff before final validation. Freeze every reviewed head. If a real defect requires another commit, repeat full-diff review and exact-head validation.
+
+Run all applicable repository gates: Java 21 clean build/tests, warnings-as-errors, MariaDB/Testcontainers, migration clean-install/upgrade/checksum, static analysis, coverage, runtime JAR integrity, provider-leak checks, Wiki/Markdown/link validation, review bots, and safe exact-head Pi when configured/applicable. Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not success.
+
+Record exact heads, run/job IDs, Java version, tests, coverage, migrations, artifact hashes, static analysis, review-thread count, and Pi result or verified non-applicability in PR text/comments, not through a self-referential tracked-file loop.
+
+## 11. External synchronization
+
+After both external-package PRs merge, compare the aggregate component directory to the standalone default-branch checkout with `tools/component-sync/component_sync.py`. Record both heads and hashes. Exclude only `.git` and aggregate-only `COMPONENT-METADATA.md`; refuse parity when generated/private/runtime artifacts are detected.
+
+If one side merged first or parity is false/unproved, set `SYNC_PENDING`. Do not force-push, rewrite history, silently overwrite, or choose a winner when both sides diverged.
+
+## 12. Merge gate and cleanup
+
+Merge only when scope is complete, full-diff review is complete, all valid defects are fixed, every exact-head gate is green or validly non-applicable, migrations are safe, documentation/state/handoff are complete, and no valid review thread remains.
+
+Internal completion requires its one PR. External completion requires both PRs and parity. Validation/acceptance/audit completion follows the package file.
+
+After merge, verify merge commits, resulting heads, feature-head containment, no unmerged commits, synchronization metadata/parity when applicable, and temporary branch deletion when tooling permits. Record cleanup limitations honestly; never delete unique work.
+
+## 13. Safeguard and stop condition
+
+Do not weaken workflow, validation, migration, review, production, branch, or handoff rules merely to make the current package mergeable. Editing a checklist does not prove compliance.
+
+After the assigned package is complete, correctly blocked, correctly partial, deferred, or the requested review/audit ends, report the exact state and stop. Do not create or begin the next package.
