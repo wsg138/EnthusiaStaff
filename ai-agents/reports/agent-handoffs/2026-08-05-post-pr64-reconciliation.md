@@ -27,7 +27,7 @@ At reconciliation start:
 - V16 was the highest Flyway migration;
 - issue #43 remained open as a later production-cutover acceptance gate.
 
-Recent merged PR descriptions, final evidence comments and post-merge comments for PRs #62, #63 and #64 were inspected. They confirm the staff-mode world-interaction restriction, precise freeze-interaction restriction and mounted freeze restriction merged in sequence without migration or production-authority changes. PR #64 had zero valid unresolved review threads before merge. Its final Pi job did not execute because GitHub reported an account billing/spending-limit runner exception; the PR correctly recorded that as `not run`, not as a product success.
+Recent merged PR descriptions, final evidence comments and post-merge comments for PRs #62, #63 and #64 were inspected. They confirm the staff-mode world-interaction restriction, precise freeze-interaction restriction and mounted freeze restriction merged in sequence without migration or production-authority changes. Exact validation and review evidence remains in those pull requests rather than being duplicated in tracked routing files.
 
 ## Stale documentation found
 
