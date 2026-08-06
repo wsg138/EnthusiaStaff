@@ -17,6 +17,8 @@ import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 
 public interface WebsiteModerationStore {
+    String APPEAL_WORKFLOW_UNAVAILABLE = "Website appeal workflow is unavailable";
+
     PublicPunishmentPage listPublic(
             PublicPunishmentFilter filter,
             Optional<String> cursor,
@@ -67,7 +69,7 @@ public interface WebsiteModerationStore {
             int limit,
             Instant now
     ) {
-        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+        throw unavailableAppealWorkflow();
     }
 
     default WebsiteAppealSubmission submitAppeal(
@@ -78,7 +80,7 @@ public interface WebsiteModerationStore {
             String idempotencyKey,
             Instant now
     ) {
-        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+        throw unavailableAppealWorkflow();
     }
 
     default WebsiteAppealPage listAppeals(
@@ -87,7 +89,7 @@ public interface WebsiteModerationStore {
             int limit,
             Instant now
     ) {
-        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+        throw unavailableAppealWorkflow();
     }
 
     default WebsiteAppealDecisionPreparation prepareAppealDecision(
@@ -100,6 +102,10 @@ public interface WebsiteModerationStore {
             String idempotencyKey,
             Instant now
     ) {
-        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+        throw unavailableAppealWorkflow();
+    }
+
+    private static UnsupportedOperationException unavailableAppealWorkflow() {
+        return new UnsupportedOperationException(APPEAL_WORKFLOW_UNAVAILABLE);
     }
 }
