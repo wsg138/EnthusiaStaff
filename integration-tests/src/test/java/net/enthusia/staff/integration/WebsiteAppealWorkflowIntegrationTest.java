@@ -221,6 +221,55 @@ class WebsiteAppealWorkflowIntegrationTest {
         }
     }
 
+    @Test
+    void reviewerReplayKeysAreScopedToTheExactAppeal() throws SQLException {
+        AppealFixture first = seedEligiblePunishment(4);
+        AppealFixture second = seedEligiblePunishment(5);
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            WebsiteModerationStore store = claimedStore(runtime, first, ACCOUNT_ID);
+            claimedStore(runtime, second, ACCOUNT_ID);
+            UUID firstAppeal = store.submitAppeal(
+                    first.sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The first appeal is ready for an independent decision.",
+                    "submission-decision-scope-1",
+                    NOW.plusSeconds(1)
+            ).appeal().appealId();
+            UUID secondAppeal = store.submitAppeal(
+                    second.sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The second appeal is ready for an independent decision.",
+                    "submission-decision-scope-2",
+                    NOW.plusSeconds(2)
+            ).appeal().appealId();
+
+            WebsiteAppealDecisionPreparation firstDecision = store.prepareAppealDecision(
+                    firstAppeal,
+                    1,
+                    "deny",
+                    "The first exact appeal is denied after review.",
+                    REVIEWER_ID,
+                    REVIEWER_RANK,
+                    "shared-reviewer-decision-key",
+                    NOW.plusSeconds(3)
+            );
+            WebsiteAppealDecisionPreparation secondDecision = store.prepareAppealDecision(
+                    secondAppeal,
+                    1,
+                    "deny",
+                    "The second exact appeal is denied independently.",
+                    REVIEWER_ID,
+                    REVIEWER_RANK,
+                    "shared-reviewer-decision-key",
+                    NOW.plusSeconds(4)
+            );
+            assertEquals("DENIED", firstDecision.appeal().state());
+            assertEquals("DENIED", secondDecision.appeal().state());
+        }
+    }
+
     private static WebsiteModerationStore claimedStore(
             MariaDbRuntime runtime,
             AppealFixture fixture,
