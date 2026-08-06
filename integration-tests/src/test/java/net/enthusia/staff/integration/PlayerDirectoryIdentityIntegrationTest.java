@@ -30,6 +30,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class PlayerDirectoryIdentityIntegrationTest {
+    private static final String HUB = "hub";
+    private static final String LEGACY_NAME = "LegacyName";
+
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_identity_test")
@@ -65,7 +68,7 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant firstSeen = Instant.parse("2026-08-06T12:00:00Z");
         Instant renamedAt = firstSeen.plus(2, ChronoUnit.HOURS);
 
-        directory.recordSeenVerified(playerId, "*BedrockOne", PlayerPlatform.BEDROCK, "hub", firstSeen);
+        directory.recordSeenVerified(playerId, "*BedrockOne", PlayerPlatform.BEDROCK, HUB, firstSeen);
         directory.recordSeenVerified(playerId, "*BedrockTwo", PlayerPlatform.BEDROCK, "smp", renamedAt);
 
         PlayerResolution.Resolved current = assertInstanceOf(
@@ -93,15 +96,15 @@ class PlayerDirectoryIdentityIntegrationTest {
         UUID playerId = UUID.fromString("c414dcab-d4ce-4178-8f2c-c4979fba9b82");
         Instant base = Instant.parse("2026-08-06T13:00:00Z");
 
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.JAVA, "proxy", base.plusSeconds(30));
+        directory.recordSeen(playerId, LEGACY_NAME, PlayerPlatform.JAVA, "proxy", base.plusSeconds(30));
         assertEquals(
                 PlayerPlatform.UNKNOWN,
                 directory.find(playerId.toString()).orElseThrow().platform()
         );
 
-        directory.recordSeenVerified(playerId, "LegacyName", PlayerPlatform.BEDROCK, "hub", base);
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.UNKNOWN, "proxy", base.plusSeconds(60));
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.JAVA, "proxy", base.plusSeconds(90));
+        directory.recordSeenVerified(playerId, LEGACY_NAME, PlayerPlatform.BEDROCK, HUB, base);
+        directory.recordSeen(playerId, LEGACY_NAME, PlayerPlatform.UNKNOWN, "proxy", base.plusSeconds(60));
+        directory.recordSeen(playerId, LEGACY_NAME, PlayerPlatform.JAVA, "proxy", base.plusSeconds(90));
 
         PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
         assertEquals(PlayerPlatform.BEDROCK, identity.platform());
@@ -114,7 +117,7 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant newer = older.plus(5, ChronoUnit.MINUTES);
 
         directory.recordSeenVerified(playerId, "CurrentName", PlayerPlatform.JAVA, "smp", newer);
-        directory.recordSeenVerified(playerId, "OldName", PlayerPlatform.JAVA, "hub", older);
+        directory.recordSeenVerified(playerId, "OldName", PlayerPlatform.JAVA, HUB, older);
 
         PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
         assertEquals("CurrentName", identity.currentUsername().orElseThrow());
@@ -132,13 +135,13 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant firstConnection = Instant.parse("2026-08-06T15:00:00Z");
         Instant newerConnection = firstConnection.plus(10, ChronoUnit.MINUTES);
 
-        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", firstConnection);
-        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", newerConnection);
-        directory.recordDisconnected(playerId, "hub", firstConnection.plusSeconds(30));
+        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, HUB, firstConnection);
+        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, HUB, newerConnection);
+        directory.recordDisconnected(playerId, HUB, firstConnection.plusSeconds(30));
 
         PlayerPresence presence = directory.presence(playerId).orElseThrow();
         assertTrue(presence.online());
-        assertEquals("hub", presence.currentServer().orElseThrow());
+        assertEquals(HUB, presence.currentServer().orElseThrow());
         assertEquals(newerConnection, presence.lastSeenAt());
     }
 
@@ -151,7 +154,7 @@ class PlayerDirectoryIdentityIntegrationTest {
                 playerId,
                 "**spoofed",
                 PlayerPlatform.BEDROCK,
-                "hub",
+                HUB,
                 now
         ));
         assertThrows(IllegalArgumentException.class, () -> directory.search("**", 10));
