@@ -77,6 +77,7 @@ ES-P02 live baseline: `wsg138/EnthusiaStaff:main` was `d94d0219a598c9afb7e19c4ea
 | Primary component | `COMP-STAFF` |
 | Other components | — |
 | Status | `BLOCKED` |
+| Classification | `PARKED_BLOCKED` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
