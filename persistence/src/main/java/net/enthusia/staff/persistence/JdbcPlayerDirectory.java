@@ -26,6 +26,36 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
     private static final Pattern BEDROCK_ALIAS = Pattern.compile("\\*[A-Za-z0-9_]{1,31}");
     private static final Pattern JAVA_OR_UNPREFIXED_PREFIX = Pattern.compile("[A-Za-z0-9_]{0,32}");
     private static final Pattern BEDROCK_ALIAS_PREFIX = Pattern.compile("\\*[A-Za-z0-9_]{0,31}");
+    private static final String UPSERT_PLAYER = """
+            INSERT INTO players(player_id, current_username, lowercase_username, platform,
+                current_server, first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                current_username = IF(VALUES(last_seen_at) >= last_seen_at,
+                    VALUES(current_username), current_username),
+                lowercase_username = IF(VALUES(last_seen_at) >= last_seen_at,
+                    VALUES(lowercase_username), lowercase_username),
+                platform = CASE
+                    WHEN VALUES(platform) = 'BEDROCK' THEN 'BEDROCK'
+                    WHEN platform = 'UNKNOWN' AND VALUES(platform) = 'JAVA' THEN 'JAVA'
+                    ELSE platform
+                END,
+                last_server = IF(VALUES(last_seen_at) >= last_seen_at,
+                    current_server, last_server),
+                current_server = IF(VALUES(last_seen_at) >= last_seen_at,
+                    VALUES(current_server), current_server),
+                first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
+                last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at)),
+                revision = revision + 1
+            """;
+    private static final String UPSERT_PLAYER_NAME = """
+            INSERT INTO player_names(player_id, username, lowercase_username, first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                username = IF(VALUES(last_seen_at) >= last_seen_at, VALUES(username), username),
+                first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
+                last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at))
+            """;
 
     private final DataSource dataSource;
 
@@ -226,72 +256,92 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
             String serverId,
             Instant seenAt
     ) {
-        if (playerId == null || !validUsername(username) || platform == null
-                || serverId == null || serverId.isBlank() || serverId.length() > 64 || seenAt == null) {
-            throw new IllegalArgumentException("valid player observation fields must be present");
-        }
-        String lower = username.toLowerCase(Locale.ROOT);
+        validateObservation(playerId, username, platform, serverId, seenAt);
+        PlayerObservation observation = new PlayerObservation(
+                playerId,
+                username,
+                username.toLowerCase(Locale.ROOT),
+                platform,
+                serverId,
+                seenAt
+        );
         try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
-            try (PreparedStatement player = connection.prepareStatement("""
-                    INSERT INTO players(player_id, current_username, lowercase_username, platform,
-                        current_server, first_seen_at, last_seen_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        current_username = IF(VALUES(last_seen_at) >= last_seen_at,
-                            VALUES(current_username), current_username),
-                        lowercase_username = IF(VALUES(last_seen_at) >= last_seen_at,
-                            VALUES(lowercase_username), lowercase_username),
-                        platform = CASE
-                            WHEN VALUES(platform) = 'BEDROCK' THEN 'BEDROCK'
-                            WHEN platform = 'UNKNOWN' AND VALUES(platform) = 'JAVA' THEN 'JAVA'
-                            ELSE platform
-                        END,
-                        last_server = IF(VALUES(last_seen_at) >= last_seen_at,
-                            current_server, last_server),
-                        current_server = IF(VALUES(last_seen_at) >= last_seen_at,
-                            VALUES(current_server), current_server),
-                        first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
-                        last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at)),
-                        revision = revision + 1
-                    """);
-                 PreparedStatement name = connection.prepareStatement("""
-                    INSERT INTO player_names(player_id, username, lowercase_username, first_seen_at, last_seen_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        username = IF(VALUES(last_seen_at) >= last_seen_at, VALUES(username), username),
-                        first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
-                        last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at))
-                    """)) {
-                byte[] id = UuidBytes.toBytes(playerId);
-                player.setBytes(1, id);
-                player.setString(2, username);
-                player.setString(3, lower);
-                player.setString(4, platform.name());
-                player.setString(5, serverId);
-                player.setTimestamp(6, Timestamp.from(seenAt));
-                player.setTimestamp(7, Timestamp.from(seenAt));
-                player.executeUpdate();
-
-                name.setBytes(1, id);
-                name.setString(2, username);
-                name.setString(3, lower);
-                name.setTimestamp(4, Timestamp.from(seenAt));
-                name.setTimestamp(5, Timestamp.from(seenAt));
-                name.executeUpdate();
-                connection.commit();
-            } catch (SQLException exception) {
-                try {
-                    connection.rollback();
-                } catch (SQLException rollback) {
-                    exception.addSuppressed(rollback);
-                }
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
-            }
+            persistObservation(connection, observation);
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to record player observation", exception);
+        }
+    }
+
+    private static void validateObservation(
+            UUID playerId,
+            String username,
+            PlayerPlatform platform,
+            String serverId,
+            Instant seenAt
+    ) {
+        boolean invalidServer = serverId == null || serverId.isBlank() || serverId.length() > 64;
+        if (playerId == null || !validUsername(username) || platform == null
+                || invalidServer || seenAt == null) {
+            throw new IllegalArgumentException("valid player observation fields must be present");
+        }
+    }
+
+    private static void persistObservation(
+            Connection connection,
+            PlayerObservation observation
+    ) throws SQLException {
+        connection.setAutoCommit(false);
+        try {
+            upsertPlayer(connection, observation);
+            upsertPlayerName(connection, observation);
+            connection.commit();
+        } catch (SQLException exception) {
+            rollback(connection, exception);
+            throw exception;
+        } finally {
+            connection.setAutoCommit(true);
+        }
+    }
+
+    private static void upsertPlayer(
+            Connection connection,
+            PlayerObservation observation
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(UPSERT_PLAYER)) {
+            byte[] id = UuidBytes.toBytes(observation.playerId());
+            Timestamp seenAt = Timestamp.from(observation.seenAt());
+            statement.setBytes(1, id);
+            statement.setString(2, observation.username());
+            statement.setString(3, observation.lowercaseUsername());
+            statement.setString(4, observation.platform().name());
+            statement.setString(5, observation.serverId());
+            statement.setTimestamp(6, seenAt);
+            statement.setTimestamp(7, seenAt);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void upsertPlayerName(
+            Connection connection,
+            PlayerObservation observation
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(UPSERT_PLAYER_NAME)) {
+            byte[] id = UuidBytes.toBytes(observation.playerId());
+            Timestamp seenAt = Timestamp.from(observation.seenAt());
+            statement.setBytes(1, id);
+            statement.setString(2, observation.username());
+            statement.setString(3, observation.lowercaseUsername());
+            statement.setTimestamp(4, seenAt);
+            statement.setTimestamp(5, seenAt);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void rollback(Connection connection, SQLException failure) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
         }
     }
 
@@ -346,5 +396,15 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    private record PlayerObservation(
+            UUID playerId,
+            String username,
+            String lowercaseUsername,
+            PlayerPlatform platform,
+            String serverId,
+            Instant seenAt
+    ) {
     }
 }
