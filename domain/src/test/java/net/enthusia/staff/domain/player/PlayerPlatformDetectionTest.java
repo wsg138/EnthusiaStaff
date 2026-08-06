@@ -31,9 +31,9 @@ class PlayerPlatformDetectionTest {
     }
 
     @Test
-    void missingGeyserProvesJavaWithoutFloodgate() {
+    void missingLocalProvidersRemainUnknownForProxyHostedGeyser() {
         assertEquals(
-                PlayerPlatform.JAVA,
+                PlayerPlatform.UNKNOWN,
                 PlayerPlatformDetection.resolve(
                         IntegrationAvailability.NOT_INSTALLED,
                         false,

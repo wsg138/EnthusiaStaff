@@ -20,12 +20,6 @@ public final class PlayerPlatformDetection {
         if (floodgate == IntegrationAvailability.AVAILABLE) {
             return floodgatePlayer ? PlayerPlatform.BEDROCK : PlayerPlatform.JAVA;
         }
-        if (floodgatePlayer) {
-            return PlayerPlatform.UNKNOWN;
-        }
-        return floodgate == IntegrationAvailability.NOT_INSTALLED
-                && geyser == IntegrationAvailability.NOT_INSTALLED
-                ? PlayerPlatform.JAVA
-                : PlayerPlatform.UNKNOWN;
+        return PlayerPlatform.UNKNOWN;
     }
 }
