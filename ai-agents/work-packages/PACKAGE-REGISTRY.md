@@ -2,14 +2,18 @@
 
 Last updated: 2026-08-05
 
-Canonical current state: `ES-P01 COMPLETE — PR #68 merged normally at 203b2854d5546a6d3744037c367099129654b42a; exact reviewed head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179 is contained in main; no package-only commit remains; the implementation branch was deleted; and the owner-approved zero-execution infrastructure exception is recorded without calling the Pi gate passed. ES-P02 and ES-X05 are READY. No package is active.`
+Canonical current state: `ES-P02 ACTIVE — selected automatically after live reconciliation because no unfinished package work existed, ES-P01 is COMPLETE, and ES-P02 is the lowest-priority-number eligible READY package. Branch package/es-p02-runtime-db-recovery starts from main d94d0219a598c9afb7e19c4ea9fddafd554d6469. The initial checkpoint records automatic sequential orchestration and package routing; product implementation has not started. ES-X05 remains READY and unstarted.`
 
-ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
+ES-P02 live baseline: `wsg138/EnthusiaStaff:main` at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`; no open PRs and no remote branch other than main existed before claim; V16 was highest; issue #43 remained open, deferred, and excluded.
 
 ## Rules
 
 - This file is the only canonical package-status index.
-- Workers receive exactly one package ID and may not silently select another.
+- Workers reconcile live GitHub and automatically resume unfinished package work; otherwise they select exactly one package through `WORKER-PROTOCOL.md` and the registry.
+- A direct current owner instruction may assign or reassign a package, but the routing change must be recorded.
+- Existing unfinished package PRs and branches take priority over new work.
+- With no continuation work, select the dependency-complete eligible `READY` package with the lowest numerical priority.
+- Complete exactly one package and stop; do not activate or begin a newly ready package during finalization.
 - Internal packages normally require one EnthusiaStaff PR.
 - External packages normally require two cross-referenced PRs: standalone and aggregate.
 - There are no permanent component branches or isolated-component PRs.
@@ -47,7 +51,7 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
 | Final reviewed heads | `Frozen product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be; exact validated PR head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179` |
-| Merge commits | `Implementation merge 203b2854d5546a6d3744037c367099129654b42a` |
+| Merge commits | `Implementation merge 203b2854d5546a6d3744037c367099129654b42a; finalization merge d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Last update | `2026-08-05` |
 | Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
 | Blocker | `NONE. OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED: final-head parent run 31067402120/job 92507922737 dispatched staging run 31067405608; build job 92507935906 had runner_id 0, empty runner name, and steps []; Pi job 92507942018 was skipped with steps []. No product step executed, no product boot failure occurred, and no Pi pass is claimed. Owner wsg138 approved the exception on 2026-08-05. Missing distributed Pi build/restart and Java/Bedrock staging evidence is deferred to ES-V02.` |
@@ -62,20 +66,20 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `READY` |
+| Status | `ACTIVE` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
-| Assigned worker | `UNASSIGNED` |
-| Active branches | `NONE` |
-| Aggregate PR | `NONE` |
+| Assigned worker | `ChatGPT sequential package worker #2` |
+| Active branches | `package/es-p02-runtime-db-recovery` |
+| Aggregate PR | `Pending early draft creation after initial checkpoint` |
 | External PRs | `NONE` |
-| Starting SHAs | `UNSET` |
+| Starting SHAs | `EnthusiaStaff main d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Final reviewed heads | `UNSET` |
 | Merge commits | `UNSET` |
 | Last update | `2026-08-05` |
-| Handoff | `NONE` |
-| Blocker | NONE |
+| Handoff | [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md) |
+| Blocker | `NONE. Product implementation has not started; current checkpoint is orchestration and durable routing only.` |
 | Package file | [`packages/ES-P02.md`](packages/ES-P02.md) |
 
 ### `ES-P03` — Bedrock identity correctness
