@@ -144,29 +144,35 @@ final class WebsiteApiRouter {
             Headers headers,
             byte[] body
     ) {
-        decoder.requireQueryKeys(query, NO_QUERY);
         if (CLAIM_PATH.equals(path)) {
+            requireNoQuery(query);
             return claim(headers, body);
         }
         if (REVALIDATE_PATH.equals(path)) {
+            requireNoQuery(query);
             return revalidate(headers, body);
         }
         if (ELIGIBLE_APPEALS_PATH.equals(path)) {
+            requireNoQuery(query);
             return appealWorkflow.eligible(decoder.jsonBody(headers, body, ELIGIBLE_FIELDS));
         }
         if (SUBMIT_APPEAL_PATH.equals(path)) {
+            requireNoQuery(query);
             return appealWorkflow.submit(decoder.jsonBody(headers, body, SUBMIT_FIELDS));
         }
         if (REVIEW_APPEALS_PATH.equals(path)) {
+            requireNoQuery(query);
             return appealWorkflow.list(decoder.jsonBody(headers, body, REVIEW_LIST_FIELDS));
         }
         if (isReviewDecisionPath(path)) {
+            requireNoQuery(query);
             return appealWorkflow.decide(
                     reviewDecisionId(path),
                     decoder.jsonBody(headers, body, REVIEW_DECISION_FIELDS)
             );
         }
         if (ACCEPT_APPEAL_PATH.equals(path)) {
+            requireNoQuery(query);
             ObjectNode input = decoder.jsonBody(headers, body, ACCEPT_FIELDS);
             return appeals.accept(headers, input);
         }
@@ -251,6 +257,10 @@ final class WebsiteApiRouter {
                 clock.instant()
         );
         return WebsiteApiResponses.binding(binding);
+    }
+
+    private void requireNoQuery(Map<String, String> query) {
+        decoder.requireQueryKeys(query, NO_QUERY);
     }
 
     private static PublicPunishmentFilter filter(String raw) {
