@@ -1,55 +1,93 @@
 # `ES-X05` — Website UX, authentication, and appeals
 
 ## 1. Package identity
-`ES-X05`; External/multi-repository; primary `COMP-SITE`; other `COMP-STAFF`; priority 35.
+
+`ES-X05`; external/multi-repository; primary `COMP-SITE`; other `COMP-STAFF`; priority `35`; dependency `ES-P01`.
 
 ## 2. Status
-`PARTIAL` — `ACTIONABLE_CONTINUATION`
+
+`MERGE_PENDING` — `ACTIONABLE_CONTINUATION`
+
+Assigned worker: `ChatGPT sequential ES-X05 completion worker`.
 
 ## 3. Objective
-Complete website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, and verified aggregate synchronization.
+
+Complete website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, the real private EnthusiaStaff appeal contract, production site deployment, and verified standalone/aggregate synchronization.
 
 ## 4. Completed standalone-site work
+
 - Cloudflare Access JWT signature, issuer, audience, expiry, and not-before verification.
 - Canonical Minecraft identity derived only from verified claims.
 - Authenticated exact-punishment selector and appeal submission boundary.
 - Privileged reviewer listing and versioned decision boundary.
-- Same-origin mutation enforcement, fail-closed KV rate limiting, identity-bound idempotency, bounded bodies, and stale-decision protection.
-- Hosted Node 22 test/build workflow.
-- Correct exact vanilla potion IDs and tint colors for potions, splash potions, lingering potions, and tipped arrows nested in shulker boxes or bundles; live updates are serialized before rendering.
+- Same-origin mutation enforcement, identity-bound idempotency, bounded bodies, bounded upstream requests, and stale-decision protection.
+- Fixed-origin, allowlisted, bearer-plus-HMAC private Staff API requests with timestamp, nonce, and body-hash authentication.
+- Hosted Node 22 test/build workflow with persisted checkout credentials disabled.
+- Exact vanilla potion IDs and tint colors for potions, splash potions, lingering potions, and tipped arrows nested in shulker boxes or bundles; live updates are serialized and failed manifest loads may retry.
 
 ## 5. Standalone evidence
+
 - Repository: `wsg138/enthusia-site`
 - Starting main: `9408166c75def0b55caa8d38fb546c6e77ea1f7d`
-- Baseline PR #1 reviewed head: `cce9cff6243ee757db9d470eb7d8d7735c8c3495`
-- Baseline merge: `042b503b7a4adc2627f2259a09e7d7394ced06ce`
+- Baseline PR #1 merge: `042b503b7a4adc2627f2259a09e7d7394ced06ce`
 - Continuation branch: `package/es-x05-appeal-hardening`
 - Continuation PR: `wsg138/enthusia-site#2`
-- Exact head: `11e68b60ef874a01f8b6f04f72bd8d694c496b56`
-- Hosted validation run: `31105809682` — success.
-- Market preview Cloudflare deployment: success.
-- Production `enthusia-site` Cloudflare deployment: failure with no code annotation.
+- Final reviewed head: `1a45b32e372cf6939c078a0d7986655e7ed639d6`
+- Hosted validation: run `31113188453` — success.
+- Production `enthusia-site` Cloudflare deployment: success.
+- Market-preview Cloudflare deployment: success.
+- Review: zero unresolved threads; Codacy passed with zero annotations.
+- Normal merge commit and current standalone `main`: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
 
-## 6. Production build finding
-The production `enthusia-site` Cloudflare project failed on untouched pre-package main `9408166c75def0b55caa8d38fb546c6e77ea1f7d` and continues to fail on `11e68b60ef874a01f8b6f04f72bd8d694c496b56`. The same exact commits deploy successfully to `enthusia-market-preview`, and the repository test/build workflow succeeds. This is a pre-existing production Cloudflare project configuration/build-setting failure, not evidence of a source build failure. Do not mark deployment accepted until the production project settings/logs are corrected and an exact-head deployment succeeds.
+## 6. Completed aggregate and contract work
 
-## 7. Remaining completion work
-- Correct the production Cloudflare `enthusia-site` project configuration using its dashboard logs and obtain a successful exact-head deployment.
-- Reconcile and verify the real private EnthusiaStaff appeal service contract; placeholder service paths are not end-to-end acceptance evidence.
-- Import the standalone site into `components/enthusia-site/` using the canonical sync tooling.
-- Prove standalone/aggregate content-hash parity.
-- Open, validate, review, and merge the required EnthusiaStaff aggregate PR.
-- Merge standalone PR #2 only after required checks and contract review are satisfied.
-- Record final merge hashes and clean temporary branches before marking `COMPLETE`.
+- Aggregate branch: `package/es-x05-state-publication`.
+- Aggregate PR: `wsg138/EnthusiaStaff#73`.
+- Frozen aggregate product head before final state reconciliation: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
+- The site and Velocity implementation use the same exact POST routes and payloads:
+  - `/v1/website/appeals/eligible`
+  - `/v1/website/appeals/submit`
+  - `/v1/website/appeals/reviewer/list`
+  - `/v1/website/appeals/reviewer/{appealId}/decision`
+- The Velocity API validates bearer/HMAC authentication, timestamp skew, nonce replay, body hash, canonical UUIDs, bounded request bodies, fixed fields, and role/service-boundary authorization. It is loopback-only and is intended to sit behind the deployment proxy for `staff-api.enthusia.info`.
+- Durable MariaDB appeal workflow includes exact-punishment eligibility, account binding, duplicate prevention, atomic rate limiting, request idempotency, reviewer version checks, appeal-scoped reviewer replay keys, audit events, and exact-sanction approval integration.
+- V17 is the only new migration and does not alter V1–V16.
+- Integration tests cover lifecycle behavior, stale decisions, duplicate appeals, account binding, rate limits, submission replay, reviewer replay scoping, and exact-sanction acceptance delegation.
 
-## 8. Resume state
-Resume ES-X05 from `wsg138/enthusia-site#2`. Do not select another package. The next worker needs Cloudflare dashboard access or owner-supplied production build logs, plus an authenticated checkout capable of the canonical aggregate import/hash process.
+## 7. Component synchronization
 
-## 9. Security/privacy boundary
-No production credentials or player data were committed. Authentication, reviewer role, rate-limit, origin, and upstream-service configuration fail closed. No Access token is logged.
+- Standalone source: merge commit `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Aggregate destination: `components/enthusia-site/` in PR #73.
+- Canonical component hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`.
+- Standalone hash equals aggregate hash.
+- Added, missing, and modified path sets are empty.
+- Metadata-only `COMPONENT-METADATA.md` is excluded by the canonical sync method.
+- Parity evidence: [`2026-08-06-es-x05-component-parity.json`](../../reports/package-handoffs/2026-08-06-es-x05-component-parity.json).
 
-## 10. Handoff
-[`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/package-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
+## 8. Remaining completion work
 
-## 11. Last update
+1. Obtain a successful exact-current-head aggregate Coverage run. Run `31115480613` failed before checkout because GitHub could not resolve action downloads; no product step executed.
+2. Confirm applicable static-analysis checks and zero valid unresolved review threads on the final head.
+3. Reconfirm deterministic parity against standalone `main` at `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+4. Merge aggregate PR #73 by a normal merge commit with the reviewed head unchanged.
+5. Verify aggregate-main containment and no unique temporary-branch work.
+6. Publish final aggregate merge SHA and `COMPLETE` state, clean temporary branches where tooling permits, and stop without selecting another package.
+
+## 9. Migration and authority boundary
+
+- Current aggregate `main` remains at V16 until PR #73 merges.
+- PR #73 adds immutable `V17__website_appeal_workflow.sql`.
+- LiteBans remains authoritative. Issue #43 remains open, deferred, and excluded.
+- ES-X05 does not deploy or authorize a LiteBans cutover, access production punishment data, rewrite Flyway history, or activate EnthusiaStaff punishment authority.
+
+## 10. Security/privacy boundary
+
+No production credentials, Access tokens, player records, punishment records, or private database data are committed. Authentication, reviewer rank, origin, replay, rate-limit, timeout, request-size, and upstream-service configuration fail closed. Browser-provided identity and rank are never trusted as service authority.
+
+## 11. Canonical handoff
+
+[`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
+
+## 12. Last update
+
 2026-08-06
