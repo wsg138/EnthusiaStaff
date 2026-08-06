@@ -2,9 +2,9 @@
 
 Last updated: 2026-08-06
 
-Canonical current state: `ES-P01 is COMPLETE. ES-P02 is BLOCKED / PARKED_BLOCKED in preserved branch package/es-p02-runtime-db-recovery and open PR #70. ES-X05 is MERGE_PENDING / ACTIONABLE_CONTINUATION in aggregate branch package/es-x05-state-publication and open PR #73 after standalone PR wsg138/enthusia-site#2 merged normally. ES-V02 remains DEFERRED. Exactly one implementation package is active: ES-X05.`
+Canonical current state: `ES-P01 and ES-X05 are COMPLETE. ES-P02 is BLOCKED / PARKED_BLOCKED in preserved branch package/es-p02-runtime-db-recovery and open PR #70. ES-V02 remains DEFERRED. No implementation package is active; the ES-X05 worker stopped without selecting another package.`
 
-Live baseline: `wsg138/EnthusiaStaff:main` is `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` for this continuation pass; aggregate main has V16 as its highest migration until ES-X05 PR #73 merges V17. Issue #43 remains open, deferred, and excluded.
+Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` and immutable migration V17. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -26,8 +26,8 @@ Live baseline: `wsg138/EnthusiaStaff:main` is `515bd9a8591505c043b413f5b9ecb3e27
 - `COMPLETE` requires every package-specific PR and evidence gate and deterministic parity for external components.
 - A missing external repository becomes a named blocker when its package is otherwise startable; never invent a URL.
 - When an unmerged implementation PR stops in `PARTIAL`, `BLOCKED`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING`, and `main` does not reflect that state, the same worker must normally merge a documentation-only status-publication PR to `main` before stopping.
-- A status-publication PR may update only the registry, selected package file, workspace state, canonical package handoff, latest handoff pointer, and directly necessary routing documentation. It is not a second implementation package and may contain no product code, product tests, migrations, workflow changes, or runtime configuration.
-- Status publication must preserve the implementation PR and branch and record the true status, branch, PR, current package-record head, frozen product head when applicable, blocker evidence, and exact unblock condition. Use a normal merge commit.
+- A status-publication PR may update only the registry, selected package file, workspace state, canonical package handoff, latest handoff pointer, component metadata/parity evidence, and directly necessary routing documentation. It is not a second implementation package and may contain no product code, product tests, migrations, workflow changes, or runtime configuration.
+- Status publication must preserve the implementation PR and branch and record the true status, branch, PR, exact validated head, merge hash, evidence, and remaining blocker when applicable. Use a normal merge commit.
 - Tool loss is the only reason to stop with known persistent state unpublished; report that inconsistency as unfinished work.
 - The setup and process PRs are orchestration-only and are not implementation packages.
 
@@ -49,7 +49,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` is `515bd9a8591505c043b413f5b9ecb3e27
 | `ES-P01` | Exact-sanction appeal isolation | Internal | `COMP-STAFF` | `COMPLETE` | — | 10 | — | No | merged PR #68; no active branch | [`ES-P01.md`](packages/ES-P01.md) |
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `COMP-STAFF` | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | No | `ChatGPT sequential package worker #2`; branch `package/es-p02-runtime-db-recovery`; PR #70 | [`ES-P02.md`](packages/ES-P02.md) |
 | `ES-P03` | Bedrock identity correctness | Internal | `COMP-STAFF` | `PLANNED` | — | 30 | `ES-P02` | No | unassigned | [`ES-P03.md`](packages/ES-P03.md) |
-| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMP-SITE`, `COMP-STAFF` | `MERGE_PENDING` | `ACTIONABLE_CONTINUATION` | 35 | `ES-P01` | Conditional | `ChatGPT sequential ES-X05 completion worker`; aggregate branch `package/es-x05-state-publication`; PR #73; standalone PR `wsg138/enthusia-site#2` merged | [`ES-X05.md`](packages/ES-X05.md) |
+| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMP-SITE`, `COMP-STAFF` | `COMPLETE` | — | 35 | `ES-P01` | Conditional | standalone PR `wsg138/enthusia-site#2` and aggregate PR #73 merged normally; no active implementation work | [`ES-X05.md`](packages/ES-X05.md) |
 | `ES-P04` | Staff-mode operational tools | Internal | `COMP-STAFF` | `PLANNED` | — | 40 | `ES-P03` | No | unassigned | [`ES-P04.md`](packages/ES-P04.md) |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `COMP-STAFF` | `PLANNED` | — | 45 | `ES-P02` | Conditional | unassigned | [`ES-P07.md`](packages/ES-P07.md) |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `COMP-STAFF` | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | Conditional | unassigned | [`ES-P05.md`](packages/ES-P05.md) |
@@ -98,15 +98,19 @@ Live baseline: `wsg138/EnthusiaStaff:main` is `515bd9a8591505c043b413f5b9ecb3e27
 
 | Field | Value |
 | --- | --- |
-| Status | `MERGE_PENDING` / `ACTIONABLE_CONTINUATION` |
+| Status | `COMPLETE` |
 | Assigned worker | `ChatGPT sequential ES-X05 completion worker` |
-| Starting aggregate main | `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` for this continuation pass |
-| Aggregate branch / PR | `package/es-x05-state-publication`; PR #73 |
+| Starting aggregate main | `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` for the continuation pass |
 | Frozen aggregate product head | `96912301fc425ac6f5eff9349ee3b3d543d122eb` |
+| Exact validated aggregate head | `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
+| Aggregate PR / merge | PR #73; normal merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
+| Aggregate validation | Coverage run `31116854096` success: clean Java 21 build, all tests including MariaDB migrations/integration, JaCoCo, runtime-JAR/provider-leak checks, artifacts, and Codacy coverage upload |
+| Aggregate review | CodeRabbit success; zero unresolved valid threads |
 | Standalone final reviewed head | `1a45b32e372cf6939c078a0d7986655e7ed639d6` |
-| Standalone merge | PR `wsg138/enthusia-site#2` merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`; current standalone `main` |
+| Standalone PR / merge | `wsg138/enthusia-site#2`; normal merge and current standalone `main` `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | Standalone validation | run `31113188453` success; production and preview Cloudflare deployments success; Codacy success with zero annotations; zero unresolved review threads |
-| Migration boundary | aggregate main V16 before merge; PR #73 adds immutable V17 |
+| Migration boundary | V1–V16 unchanged; aggregate `main` now includes immutable V17 |
 | Component parity | true at SHA-256 `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`; no added, missing, or modified component paths |
+| Containment | Aggregate implementation branch has zero commits/files absent from merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; standalone branch has zero unique commits/files beyond merge `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | Handoff | [`2026-08-06-es-x05-website-auth-appeals.md`](../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md) |
-| Remaining gate | Successful exact-current-head aggregate build/test/migration/coverage/runtime-JAR validation, applicable static analysis, zero valid unresolved review threads, parity recheck, normal merge of PR #73, containment verification, final `COMPLETE` publication, and branch cleanup where tooling permits. Coverage run `31115480613` failed before checkout because GitHub could not resolve action downloads; no product step executed. |
+| Boundary | LiteBans remains authoritative; issue #43 and production cutover remain deferred and excluded. |
