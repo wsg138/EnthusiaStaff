@@ -15,6 +15,7 @@ import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
 import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
+import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 public interface WebsiteModerationStore {
     String APPEAL_WORKFLOW_UNAVAILABLE = "Website appeal workflow is unavailable";
@@ -105,7 +106,11 @@ public interface WebsiteModerationStore {
         throw unavailableAppealWorkflow();
     }
 
-    private static UnsupportedOperationException unavailableAppealWorkflow() {
-        return new UnsupportedOperationException(APPEAL_WORKFLOW_UNAVAILABLE);
+    private static WebsiteModerationException unavailableAppealWorkflow() {
+        return new WebsiteModerationException(
+                WebsiteModerationException.Kind.UNAVAILABLE,
+                "APPEAL_WORKFLOW_UNAVAILABLE",
+                APPEAL_WORKFLOW_UNAVAILABLE
+        );
     }
 }
