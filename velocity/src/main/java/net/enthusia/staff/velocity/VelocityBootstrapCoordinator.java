@@ -144,6 +144,8 @@ final class VelocityBootstrapCoordinator {
     }
 
     static final class PermanentFailure extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         PermanentFailure(String message) {
             super(message);
         }
