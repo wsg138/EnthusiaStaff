@@ -75,7 +75,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 | Field | Value |
 | --- | --- |
 | Status | `BLOCKED` / `PARKED_BLOCKED` |
-| Starting SHA | `d94d0219a598c9afb618f623581b31c6223d` |
+| Starting SHA | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
 | Current package-record head | `80d4ea840f34017c09afb618f623581b31c6223d` |
 | Branch / PR | `package/es-p02-runtime-db-recovery`; PR #70 |
