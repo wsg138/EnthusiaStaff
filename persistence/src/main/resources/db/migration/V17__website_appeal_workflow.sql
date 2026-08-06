@@ -19,8 +19,14 @@ ALTER TABLE website_appeal_requests
     ADD COLUMN reviewer_rank VARCHAR(16) NULL AFTER reviewer_account_id,
     ADD COLUMN decision_note VARCHAR(1000) NULL AFTER reviewer_rank,
     ADD COLUMN decided_at TIMESTAMP(6) NULL AFTER decision_note,
-    ADD UNIQUE KEY uq_website_appeal_submission_idempotency (submission_idempotency_key),
-    ADD UNIQUE KEY uq_website_appeal_decision_idempotency (decision_idempotency_key),
+    ADD UNIQUE KEY uq_website_appeal_submission_idempotency (
+        player_account_token,
+        submission_idempotency_key
+    ),
+    ADD UNIQUE KEY uq_website_appeal_decision_idempotency (
+        reviewer_account_id,
+        decision_idempotency_key
+    ),
     ADD INDEX idx_website_appeal_queue (state, updated_at, appeal_id);
 
 CREATE TABLE IF NOT EXISTS website_appeal_events (
@@ -41,7 +47,7 @@ CREATE TABLE IF NOT EXISTS website_appeal_events (
     created_at TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (event_id),
     UNIQUE KEY uq_website_appeal_event_revision (appeal_id, revision),
-    UNIQUE KEY uq_website_appeal_event_idempotency (idempotency_key),
+    UNIQUE KEY uq_website_appeal_event_idempotency (appeal_id, idempotency_key),
     INDEX idx_website_appeal_events_appeal (appeal_id, event_id),
     CONSTRAINT fk_website_appeal_events_appeal FOREIGN KEY (appeal_id)
         REFERENCES website_appeal_requests(appeal_id)
@@ -57,9 +63,10 @@ CREATE TABLE IF NOT EXISTS website_appeal_rate_buckets (
 
 CREATE TABLE IF NOT EXISTS website_appeal_rate_keys (
     account_token BINARY(32) NOT NULL,
+    punishment_id BINARY(16) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
     created_at TIMESTAMP(6) NOT NULL,
-    PRIMARY KEY (account_token, idempotency_key),
+    PRIMARY KEY (account_token, punishment_id, idempotency_key),
     INDEX idx_website_appeal_rate_keys_created (created_at),
     CONSTRAINT fk_website_appeal_rate_keys_bucket FOREIGN KEY (account_token)
         REFERENCES website_appeal_rate_buckets(account_token)
