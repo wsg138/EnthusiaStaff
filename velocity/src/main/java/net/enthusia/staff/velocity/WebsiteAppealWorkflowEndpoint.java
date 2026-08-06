@@ -134,7 +134,7 @@ final class WebsiteAppealWorkflowEndpoint {
                 clock.instant()
         );
         if (preparation.requiresAcceptance()) {
-            return accept(preparation, reviewer, note, idempotencyKey);
+            return accept(preparation, reviewer, note);
         }
         Map<String, Object> response = new LinkedHashMap<>(
                 WebsiteApiResponses.appeal(preparation.appeal())
@@ -146,8 +146,7 @@ final class WebsiteAppealWorkflowEndpoint {
     private Object accept(
             WebsiteAppealDecisionPreparation preparation,
             Actor reviewer,
-            String reason,
-            String idempotencyKey
+            String reason
     ) {
         ObjectNode input = json.createObjectNode();
         input.put("appealId", preparation.appeal().appealId().toString());
@@ -158,7 +157,10 @@ final class WebsiteAppealWorkflowEndpoint {
         input.put("actorRank", reviewer.rank().name());
         input.put("reason", reason);
         Headers headers = new Headers();
-        headers.add("idempotency-key", idempotencyKey);
+        headers.add(
+                "idempotency-key",
+                "workflow:" + preparation.appeal().appealId()
+        );
         return acceptance.accept(headers, input);
     }
 
