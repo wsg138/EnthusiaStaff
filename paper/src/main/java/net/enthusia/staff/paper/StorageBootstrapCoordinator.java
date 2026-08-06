@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 import net.enthusia.staff.domain.auth.StaffRank;
 
 final class StorageBootstrapCoordinator<S> {
+    private static final int MINIMUM_ATTEMPTS = 1;
     private static final long CLEANUP_RETRY_DELAY_MILLIS = 50L;
 
     private final WorkerExecutor workers;
@@ -55,6 +56,8 @@ final class StorageBootstrapCoordinator<S> {
         );
     }
 
+    @SuppressWarnings("PMD.ExcessiveParameterList")
+    // The coordinator dependencies are explicit lifecycle boundaries, not interchangeable options.
     StorageBootstrapCoordinator(
             WorkerExecutor workers,
             GlobalScheduler global,
@@ -209,6 +212,8 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
+    @SuppressWarnings("PMD.CyclomaticComplexity")
+    // Every branch is a fail-closed scheduler boundary that must trigger the same cleanup path.
     private void finishRecovery(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
         try {
             for (PlayerSnapshot snapshot : snapshots) {
@@ -368,6 +373,8 @@ final class StorageBootstrapCoordinator<S> {
         scheduleRetry(attempt, failure);
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement")
+    // java.util.logging receives the throwable lazily and retry exhaustion is exceptional.
     private void scheduleRetry(Attempt failedAttempt, RuntimeException failure) {
         if (failedAttempt.number() >= retryPolicy.maximumAttempts()) {
             terminal.set(true);
@@ -427,7 +434,7 @@ final class StorageBootstrapCoordinator<S> {
 
     record RetryPolicy(int maximumAttempts, long initialDelayMillis, long maximumDelayMillis) {
         RetryPolicy {
-            if (maximumAttempts < 1) {
+            if (maximumAttempts < MINIMUM_ATTEMPTS) {
                 throw new IllegalArgumentException("maximumAttempts must be at least one");
             }
             if (initialDelayMillis < 1L || maximumDelayMillis < initialDelayMillis) {

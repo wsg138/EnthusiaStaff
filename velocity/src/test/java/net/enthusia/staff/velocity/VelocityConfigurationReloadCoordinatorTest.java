@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
+// Repeated URLs make the before/after configuration fixtures readable at each assertion site.
 class VelocityConfigurationReloadCoordinatorTest {
     @Test
     void reloadableValuesPublishTogether() {
@@ -162,6 +164,8 @@ class VelocityConfigurationReloadCoordinatorTest {
         assertSame(initial, published.get());
     }
 
+    @SuppressWarnings("PMD.ExcessiveMethodLength")
+    // The production configuration record is intentionally constructed in full to catch field-order drift.
     private static VelocityConfiguration configuration(
             boolean failClosed,
             String appealsUrl,

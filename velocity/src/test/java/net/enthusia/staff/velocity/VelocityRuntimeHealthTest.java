@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 class VelocityRuntimeHealthTest {
     private static final String CHANNEL = "channel";
     private static final String OFFLINE = "offline";
+    private static final String CONFIGURATION_RELOAD = "configuration-reload";
 
     @Test
     void startsInBootstrapWithAnInitializationIssue() {
@@ -57,20 +58,20 @@ class VelocityRuntimeHealthTest {
         VelocityRuntimeHealth health = new VelocityRuntimeHealth();
         health.update(OperationalMode.ACTIVE, Map.of(CHANNEL, OFFLINE));
 
-        health.updateIssue(OperationalMode.ACTIVE, "configuration-reload", "invalid candidate");
+        health.updateIssue(OperationalMode.ACTIVE, CONFIGURATION_RELOAD, "invalid candidate");
         health.updateIssue(OperationalMode.DEGRADED, "mariadb", "refresh failed");
         VelocityRuntimeHealth.Snapshot degraded = health.snapshot();
 
         assertEquals(OperationalMode.DEGRADED, degraded.mode());
         assertEquals(Map.of(
                 CHANNEL, OFFLINE,
-                "configuration-reload", "invalid candidate",
+                CONFIGURATION_RELOAD, "invalid candidate",
                 "mariadb", "refresh failed"
         ), degraded.issues());
 
-        health.updateIssue(OperationalMode.DEGRADED, "configuration-reload", null);
+        health.updateIssue(OperationalMode.DEGRADED, CONFIGURATION_RELOAD, null);
         VelocityRuntimeHealth.Snapshot cleared = health.snapshot();
-        assertFalse(cleared.issues().containsKey("configuration-reload"));
+        assertFalse(cleared.issues().containsKey(CONFIGURATION_RELOAD));
         assertEquals(OFFLINE, cleared.issues().get(CHANNEL));
         assertEquals("refresh failed", cleared.issues().get("mariadb"));
     }

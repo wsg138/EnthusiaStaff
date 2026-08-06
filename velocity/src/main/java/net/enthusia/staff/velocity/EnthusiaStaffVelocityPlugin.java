@@ -137,6 +137,8 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
+    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.AvoidLiteralsInIfCondition"})
+    // SLF4J placeholders defer formatting; attempt one is the only recovery-log threshold.
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
         proxy.getCommandManager().register(
@@ -221,6 +223,8 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
+    @SuppressWarnings("PMD.NullAssignment")
+    // Clearing volatile resource references prevents post-shutdown readers from using closed objects.
     public void onProxyShutdown(ProxyShutdownEvent ignored) {
         shuttingDown.set(true);
         authorityMode.set(OperationalMode.MAINTENANCE);
@@ -317,7 +321,8 @@ public final class EnthusiaStaffVelocityPlugin {
         ));
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; the argument is an enum.
+    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.ExcessiveMethodLength"})
+    // One candidate is composed and published as a single fail-closed lifecycle transaction.
     private void initializeStorageAttempt() {
         VelocityConfiguration loaded;
         try {
@@ -396,6 +401,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement")
+    // SLF4J placeholders defer formatting of the exception class.
     private boolean scheduleBootstrapRetry(Runnable operation, long delayMillis) {
         if (shuttingDown.get()) {
             return false;
@@ -411,6 +418,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings("PMD.NullAssignment")
+    // References are cleared before retry so stale event readers cannot reach retired resources.
     private void cleanupFailedInitialization(MariaDbRuntime opened) {
         cancelScheduledTask("failed operational state refresh", operationalStateTask);
         operationalStateTask = null;
@@ -433,6 +442,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings("PMD.NullAssignment")
+    // Volatile null publication is the explicit unavailable-state fence.
     private void clearPublishedStores() {
         configuration = null;
         reloadCoordinator = null;
@@ -447,6 +458,8 @@ public final class EnthusiaStaffVelocityPlugin {
         websiteModerationStore = null;
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement")
+    // SLF4J placeholders defer formatting.
     private void cancelScheduledTask(String label, ScheduledTask task) {
         if (task == null) {
             return;
@@ -458,6 +471,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeOutboxWorker() {
         NetworkOutboxWorker worker = outboxWorker;
         outboxWorker = null;
@@ -470,6 +485,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeDiscordWorker() {
         DiscordOutboxWorker worker = discordOutboxWorker;
         discordOutboxWorker = null;
@@ -482,6 +499,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeWebsiteServer() {
         WebsiteApiServer server = websiteApiServer;
         websiteApiServer = null;
@@ -494,6 +513,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeChannelServer() {
         PersistentChannelServer server = channelServer;
         channelServer = null;
