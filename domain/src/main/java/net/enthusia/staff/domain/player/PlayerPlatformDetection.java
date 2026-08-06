@@ -23,7 +23,8 @@ public final class PlayerPlatformDetection {
         if (floodgatePlayer) {
             return PlayerPlatform.UNKNOWN;
         }
-        return geyser == IntegrationAvailability.NOT_INSTALLED
+        return floodgate == IntegrationAvailability.NOT_INSTALLED
+                && geyser == IntegrationAvailability.NOT_INSTALLED
                 ? PlayerPlatform.JAVA
                 : PlayerPlatform.UNKNOWN;
     }
