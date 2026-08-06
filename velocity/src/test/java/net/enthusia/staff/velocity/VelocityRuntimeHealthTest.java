@@ -1,6 +1,7 @@
 package net.enthusia.staff.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -49,5 +50,28 @@ class VelocityRuntimeHealthTest {
         assertEquals(Map.of(CHANNEL, OFFLINE), degraded.issues());
         assertEquals(OperationalMode.ACTIVE, health.snapshot().mode());
         assertTrue(health.snapshot().issues().isEmpty());
+    }
+
+    @Test
+    void issueUpdatesMergeAtomicallyAndUseTheSuppliedLatestMode() {
+        VelocityRuntimeHealth health = new VelocityRuntimeHealth();
+        health.update(OperationalMode.ACTIVE, Map.of(CHANNEL, OFFLINE));
+
+        health.updateIssue(OperationalMode.ACTIVE, "configuration-reload", "invalid candidate");
+        health.updateIssue(OperationalMode.DEGRADED, "mariadb", "refresh failed");
+        VelocityRuntimeHealth.Snapshot degraded = health.snapshot();
+
+        assertEquals(OperationalMode.DEGRADED, degraded.mode());
+        assertEquals(Map.of(
+                CHANNEL, OFFLINE,
+                "configuration-reload", "invalid candidate",
+                "mariadb", "refresh failed"
+        ), degraded.issues());
+
+        health.updateIssue(OperationalMode.DEGRADED, "configuration-reload", null);
+        VelocityRuntimeHealth.Snapshot cleared = health.snapshot();
+        assertFalse(cleared.issues().containsKey("configuration-reload"));
+        assertEquals(OFFLINE, cleared.issues().get(CHANNEL));
+        assertEquals("refresh failed", cleared.issues().get("mariadb"));
     }
 }
