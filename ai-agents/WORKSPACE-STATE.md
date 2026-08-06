@@ -17,11 +17,11 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-X05 implementation | aggregate PR #73 merged normally as current starting `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; standalone PR `wsg138/enthusia-site#2` merged as `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | ES-X05 remaining blocker | ordinary hosted exact-head Coverage gate for PR #74; do not rerun until material runner recovery evidence exists |
 | Active package | `ES-P03 — Bedrock identity correctness` |
-| ES-P03 status | `ACTIVE` |
-| ES-P03 classification | owner-directed ready continuation under the narrow dependency-routing exception below |
-| ES-P03 branch | `package/es-p03-bedrock-identity` |
+| ES-P03 status | `ACTIVE — implementation complete, exact-head validation pending` |
+| ES-P03 classification | owner-directed actionable continuation under the narrow dependency-routing exception below |
+| ES-P03 branch / PR | `package/es-p03-bedrock-identity`; PR #75 |
 | ES-P03 starting SHA | `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
-| Migration boundary | immutable V17 on aggregate `main`; V1–V17 must remain unchanged unless ES-P03 proves a new migration essential |
+| Migration boundary | immutable V17 on aggregate `main`; ES-P03 adds no migration |
 | Canonical handoff | [`2026-08-06-es-p03-bedrock-identity.md`](reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
@@ -42,12 +42,15 @@ This exception:
 
 ES-P03 owns verified Java/Floodgate platform observations, `*`-prefixed Bedrock current/history names, deterministic UUID/name resolution, duplicate and out-of-order identity writes, and the canonical identity fields later consumed by ES-P09. It excludes alt-graph confidence/inheritance, live Bedrock acceptance, provider invention, production data, and issue #43 work.
 
-## Current known defects
+## Implemented checkpoint
 
-- Paper mute enforcement records every joining player as `PlayerPlatform.JAVA`.
-- Velocity records every backend connection as `PlayerPlatform.JAVA`.
-- `JdbcPlayerDirectory` rejects the configured `*` Bedrock prefix and its prefix search rejects `*` aliases.
-- Directory upserts can overwrite a stronger known platform with a weaker or incorrect later observation.
+- Paper join observations derive platform from supported Floodgate/Geyser evidence and use the verified directory path.
+- Velocity observations remain unverified compatibility inputs; authoritative persistence records their platform as `UNKNOWN` while retaining UUID/name/presence updates.
+- Verified Bedrock repairs legacy Java/unknown rows and cannot be downgraded by weaker later observations.
+- Single-`*` current/history aliases and prefix lookup are supported without username-based platform inference.
+- Name/presence writes are ordered by observation time, and stale disconnects cannot clear newer connections.
+- Domain and MariaDB regression coverage and integration documentation are present.
+- Harsh review resolved the initial four Codacy annotations and an additional broken-provider fallback defect; the final exact-head external gates remain mandatory.
 
 ## Safety boundaries
 
