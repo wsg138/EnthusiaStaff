@@ -46,3 +46,22 @@ CREATE TABLE IF NOT EXISTS website_appeal_events (
     CONSTRAINT fk_website_appeal_events_appeal FOREIGN KEY (appeal_id)
         REFERENCES website_appeal_requests(appeal_id)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS website_appeal_rate_buckets (
+    account_token BINARY(32) NOT NULL,
+    window_started_at TIMESTAMP(6) NOT NULL,
+    submission_count SMALLINT UNSIGNED NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (account_token)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS website_appeal_rate_keys (
+    account_token BINARY(32) NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (account_token, idempotency_key),
+    INDEX idx_website_appeal_rate_keys_created (created_at),
+    CONSTRAINT fk_website_appeal_rate_keys_bucket FOREIGN KEY (account_token)
+        REFERENCES website_appeal_rate_buckets(account_token)
+        ON DELETE CASCADE
+) ENGINE=InnoDB;
