@@ -4,7 +4,7 @@
 `ES-P02`; Internal; primary `COMP-STAFF`; priority 20; not parallel-safe around lifecycle/configuration.
 
 ## 2. Status
-`ACTIVE`. Registry is authoritative.
+`REVIEW`. Implementation, focused tests, documentation, and review repair are complete on the package branch. Exact-head hosted validation, merge, containment, cleanup, and post-merge finalization remain.
 
 ## 3. Objective
 Recover from transient Paper/Velocity database bootstrap failures without process restart and provide safe Velocity configuration reload.
@@ -19,7 +19,7 @@ Recover from transient Paper/Velocity database bootstrap failures without proces
 Bounded bootstrap retry/recovery; atomic Velocity reload; candidate validation/rollback; restart-required reporting; health/operator feedback; reconnect, repeated reload, failed candidate, shutdown, and race tests.
 
 ## 7. Explicit exclusions
-Production DB access; Flyway repair/history rewrite; unrelated configuration redesign; issue #43.
+Production DB access; Flyway repair/history rewrite; unrelated configuration redesign; issue #43; deployment; authority activation; shadow period; cutover; other packages.
 
 ## 8. Dependencies
 `ES-P01` is `COMPLETE`.
@@ -31,7 +31,7 @@ Root EnthusiaStaff runtime/configuration/tests/docs only. No external component 
 Temporary `package/es-p02-runtime-db-recovery`; delete after verified merge containment.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`.
+PR `#70` to `wsg138/EnthusiaStaff:main`.
 
 ## 12. Implementation checklist
 - [x] Reconcile live heads, PRs, branches, registry, routing, migration boundary, issue #43, and prior handoff.
@@ -39,66 +39,73 @@ One PR to `wsg138/EnthusiaStaff:main`.
 - [x] Create `package/es-p02-runtime-db-recovery` from exact `main` `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
 - [x] Correct obsolete explicit-assignment orchestration documents on the selected package branch.
 - [x] Record package claim, workspace routing, handoff, scope, exclusions, and exact next action.
-- [ ] Open the early draft PR and keep its description current.
-- [ ] Reproduce and test Paper one-shot bootstrap failure.
-- [ ] Implement bounded Paper bootstrap retry/recovery and deterministic shutdown behavior.
-- [ ] Reproduce and test Velocity one-shot bootstrap failure and missing reload path.
-- [ ] Implement bounded Velocity bootstrap recovery with partial-resource cleanup and deterministic shutdown.
-- [ ] Implement atomic Velocity configuration candidate validation, reloadable-field publication, rollback, and restart-required reporting.
-- [ ] Add operator command, permission, health, status, verify, and reload feedback.
-- [ ] Add focused lifecycle/configuration/reconnect/repeated-reload/failed-candidate/shutdown/race tests and applicable MariaDB/Testcontainers proof.
-- [ ] Update configuration, recovery, operator, Wiki, and package documentation conservatively.
-- [ ] Harshly review the complete diff; fix every valid finding and resolve all review threads.
-- [ ] Freeze tracked content and run all exact-head validation gates.
+- [x] Open draft PR #70 and move it to review after the first complete implementation checkpoint.
+- [x] Reproduce the Paper one-shot bootstrap failure from current source and existing tests.
+- [x] Implement bounded Paper bootstrap retry/recovery and deterministic shutdown behavior.
+- [x] Reproduce the Velocity one-shot bootstrap failure and missing reload path.
+- [x] Implement bounded Velocity bootstrap recovery with partial-resource cleanup and deterministic shutdown.
+- [x] Implement atomic Velocity configuration candidate validation, reloadable-field publication, rollback, and restart-required reporting.
+- [x] Add the `enthusiastaff.reload` operator command boundary, sanitized status, retry, health, and restart-required feedback.
+- [x] Add focused lifecycle, worker/scheduler rejection, cleanup, reconnect-cycle, repeated reload, failed candidate, shutdown, and race tests.
+- [x] Document recovery, reload, operator procedure, security boundary, and unchanged V16 migration boundary.
+- [x] Harshly review the complete diff and repair every confirmed CodeRabbit finding.
+- [x] Resolve all three valid review threads; current thread count is zero unresolved.
+- [ ] Freeze the final tracked head after canonical REVIEW records are complete.
+- [ ] Run every applicable exact-head hosted validation gate and inspect jobs/logs.
+- [ ] Confirm current-head CodeRabbit/Codacy/static-analysis results and zero valid unresolved findings.
 - [ ] Merge normally, verify containment/divergence, clean the temporary branch, finalize package records, update dependencies, and stop.
 
 ## 13. Acceptance criteria
-Transient startup failure is recoverable without restart; reload is atomic and rejects invalid candidates without corrupting live state; bounded retries and shutdown are deterministic; health distinguishes degraded/retrying/restart-required states.
+Transient startup failure is recoverable without restart; reload is atomic and rejects invalid candidates without corrupting live state; bounded retries and shutdown are deterministic; health distinguishes degraded, retrying, exhausted, healthy, and restart-required states.
 
-## 14. Test requirements
-Focused Paper/Velocity lifecycle and configuration tests, MariaDB/Testcontainers failure/reconnect tests, repeated reload and shutdown races, plus full applicable Gradle suites.
+## 14. Tests added
+Paper coordinator tests cover thread-phase separation, transient recovery, initial worker rejection, retry exhaustion, shutdown before retry, cleanup-before-retry, retired entity callbacks, recovery failure, cleanup worker rejection, and retry callback payloads.
+
+Velocity coordinator tests cover transient recovery, exhaustion, permanent failure, shutdown, immediate retry without overlap, worker rejection, scheduler rejection, and retry-state publication. Reload tests cover atomic application, restart-required rejection, invalid candidate rollback, publication rollback, repeated reload, shutdown before load, and shutdown after candidate load. Health tests cover immutable snapshots and atomic issue merges.
+
+No final passing test claim is made until exact-head hosted runs finish. An earlier superseded Coverage run executed Paper, persistence, protocol, and integration tests successfully before exposing the now-fixed Velocity warnings-as-errors `serialVersionUID` defect.
 
 ## 15. Static-analysis requirements
 Java 21 warnings-as-errors, repository static analysis, CodeRabbit/Codacy where available, zero valid unresolved findings.
 
-## 16. Documentation requirements
-Update configuration, reload, health, recovery, operator, Wiki, registry/package/handoff records conservatively.
+## 16. Documentation
+`docs/runtime-database-recovery.md` documents bounded retry, partial cleanup, operator status, Velocity reload, restart-required settings, recovery procedure, security boundaries, V16 immutability, and later validation boundaries.
 
-## 17. Security and privacy requirements
-No secrets/DB rows; fail closed; redact connection details; authorization for operator commands.
+## 17. Security and privacy
+No secrets, database rows, private player data, raw addresses, or production routes were accessed or committed. Operator output is sanitized. Reload requires `enthusiastaff.reload`. Sensitive authority remains fail-closed and LiteBans remains authoritative.
 
 ## 18. Migration impact
-No migration expected. Live reconciliation confirmed V16 is highest. If a migration becomes unavoidable, add a new immutable migration after V16 and test clean install, upgrade, checksums, restart, and rollback; never edit V1–V16.
+No migration. V16 remains highest. V1–V16 remain byte-immutable; Flyway repair remains prohibited.
 
 ## 19. Bedrock considerations
-Reload/recovery must not regress Floodgate identity or text fallback; runtime Bedrock acceptance belongs to `ES-V02`.
+Reload/recovery does not change Floodgate identity or player-facing component contracts. Runtime Java/Bedrock acceptance remains assigned to `ES-V02`.
 
 ## 20. Distributed-runtime considerations
-Multiple Paper/Velocity processes, retry storms, ownership, reconnect, bounded queues, and shutdown must be safe.
+Each Paper or Velocity process owns one bounded bootstrap coordinator. Attempts and retries cannot overlap within a process; resource publication, cleanup, shutdown, stale callbacks, and manual retry are fenced. This package does not claim distributed staging acceptance.
 
 ## 21. External-provider considerations
-Provider settings must validate explicitly; missing/incompatible providers degrade safely without invented APIs.
+Provider and listener settings validate explicitly. Missing or unavailable optional integrations degrade with component health; no provider API or repository was invented.
 
 ## 22. Completion definition
-All criteria and exact-head gates pass; zero valid review threads; the one required PR merges normally; temporary branch cleanup and post-merge records are verified.
+All package scope and exact-head gates pass; zero valid review threads; PR #70 merges normally; feature-head containment, divergence, branch cleanup, final records, and dependency-derived statuses are verified.
 
 ## 23. Resume state
-Selected automatically from `READY` after live reconciliation. Branch `package/es-p02-runtime-db-recovery` starts at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. No prior ES-P02 branch, PR, or handoff existed. Current work is limited to the durable claim/orchestration checkpoint; product implementation has not started.
+Branch `package/es-p02-runtime-db-recovery` starts at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. Implementation and review repair are complete. The branch head immediately before this REVIEW record was `decb40702820333726f4dfa787af73a5ddb370c9`; this record itself advances the head and must be followed by one final canonical-state checkpoint before freezing validation.
 
-## 24. Last completed checkpoint
-Live GitHub reconciled, ES-P02 selected, branch created, obsolete assigned-package rules replaced with automatic sequential selection, and durable package-routing records prepared.
+## 24. Review findings and fixes
+CodeRabbit identified three valid defects: Paper could overwrite terminal degraded health with a retry message when scheduling failed; Velocity health issue updates could lose concurrent changes and republish a stale mode; Velocity bootstrap transitions could permit an immediate manual retry to overlap automatic retry or terminal publication. All three were fixed. Eleven lower-severity test and maintainability findings were reviewed; all behaviorally relevant items were implemented, including worker/scheduler rejection tests, retry payload assertions, harness extraction, dead-state removal, simpler recovery steps, reload shutdown-race coverage, and backoff simplification. The positional Velocity test fixture remains test-only and is subject to current-head static analysis.
 
 ## 25. Remaining checklist
-Draft PR creation; all Paper and Velocity implementation; focused and full tests; documentation; review and repair; exact-head hosted validation; merge; containment and cleanup; post-merge finalization; dependency-derived status updates.
+Complete canonical REVIEW updates; freeze the resulting exact branch head; make PR #70 reflect that head; rerun and inspect all applicable hosted workflows and review bots; merge normally if every gate passes; verify resulting `main`, containment, divergence, and cleanup; merge a documentation-only finalization PR if needed; mark ES-P02 complete; move dependency-cleared packages to READY without starting them.
 
 ## 26. Known blockers
-None known. Local shell DNS could not reach GitHub, so repository work is being performed through the authenticated GitHub connector; this is not a product or package blocker. No infrastructure exception is currently approved for ES-P02.
+No product blocker is known. The local shell cannot resolve GitHub, so no local build is claimed. Repository work and hosted validation use the authenticated GitHub connector and GitHub Actions. No ES-P02 infrastructure exception is approved.
 
-## 27. Final evidence
-Starting `main`: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. Highest migration: V16. Issue #43 remains open and excluded. Final reviewed heads, runs/jobs, tests, static analysis, coverage, runtime artifacts, staging disposition, and review evidence are unset until implementation freezes.
+## 27. Current evidence
+Starting `main`: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. PR: `#70`. Highest migration: V16. Issue #43 remains open and excluded. CodeRabbit's three review threads are resolved. Earlier workflow evidence is superseded and not final. Final reviewed head, run/job IDs, complete test results, static analysis, coverage, runtime artifact checks, staging disposition, and merge facts remain unset until the tracked head freezes.
 
 ## 28. Merge and synchronization record
-Unset. ES-P02 is internal; external parity is not applicable. Record feature head, normal merge commit, resulting `main`, containment, divergence, branch deletion, and finalization only after those events occur.
+Unset. ES-P02 is internal; external parity is not applicable. Record the frozen feature head, normal merge commit, resulting `main`, containment, divergence, branch deletion, and finalization only after those events occur.
 
 ## 29. Handoff
 [`2026-08-05-es-p02-runtime-db-recovery.md`](../../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
