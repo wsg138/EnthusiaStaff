@@ -139,6 +139,29 @@ class VelocityConfigurationReloadCoordinatorTest {
         assertFalse(loaded.get());
     }
 
+    @Test
+    void shutdownAfterCandidateLoadRejectsPublication() {
+        VelocityConfiguration initial = configuration(true, "https://example.test/appeals", "velocity");
+        VelocityConfiguration candidate = configuration(false, "https://example.test/new-appeals", "velocity");
+        AtomicBoolean stopping = new AtomicBoolean();
+        AtomicReference<VelocityConfiguration> published = new AtomicReference<>(initial);
+        VelocityConfigurationReloadCoordinator coordinator = new VelocityConfigurationReloadCoordinator(
+                initial,
+                () -> {
+                    stopping.set(true);
+                    return candidate;
+                },
+                published::set,
+                stopping::get
+        );
+
+        VelocityConfigurationReloadResult result = coordinator.reload();
+
+        assertEquals(VelocityConfigurationReloadResult.Outcome.SHUTTING_DOWN, result.outcome());
+        assertSame(initial, coordinator.active());
+        assertSame(initial, published.get());
+    }
+
     private static VelocityConfiguration configuration(
             boolean failClosed,
             String appealsUrl,
