@@ -1,0 +1,39 @@
+name: ES-P02 health race patch
+
+on:
+  push:
+    branches:
+      - package/es-p02-runtime-db-recovery
+    paths:
+      - .github/workflows/es-p02-health-race-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: package/es-p02-runtime-db-recovery
+          fetch-depth: 0
+      - name: Preserve current health mode
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java")
+          text = path.read_text(encoding="utf-8")
+          old = "        health.updateIssue(authorityMode.get(), component, reason);"
+          new = "        health.updateIssue(component, reason);"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one call site, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+      - name: Commit race repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java
+          git diff --cached --check
+          git commit -m "ES-P02: prevent stale reload health modes"
+          git push origin HEAD:package/es-p02-runtime-db-recovery
