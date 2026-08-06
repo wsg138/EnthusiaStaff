@@ -6,77 +6,59 @@
 
 ## 2. Status
 
-`BLOCKED` — `PARKED_BLOCKED`
+`COMPLETE` upon normal merge of finalization PR #74.
+
+Completion evidence includes **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; the unavailable staging gate is not a pass.
 
 Assigned worker: `ChatGPT sequential ES-X05 completion worker`.
 
-## 3. Objective
+## 3. Objective and completed behavior
 
-Complete website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, the real private EnthusiaStaff appeal contract, production site deployment, and verified standalone/aggregate synchronization.
+Completed website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, the private EnthusiaStaff appeal contract, production site deployment, durable MariaDB appeal persistence, and verified standalone/aggregate synchronization.
 
-## 4. Completed standalone-site work
+The standalone site verifies Cloudflare Access JWT signature/issuer/audience/time claims, derives Minecraft identity only from verified claims, enforces same-origin mutations, and sends only allowlisted fixed-origin bearer-plus-HMAC requests with bounded bodies and timeouts. The aggregate implements matching signed routes, persistent nonce replay controls, service-boundary reviewer authorization, durable exact-punishment eligibility/submission/review, atomic rate limiting, scoped idempotency, optimistic revisions, audit events, and exact-sanction approval delegation. V17 is the only new migration; V1–V16 remain unchanged.
 
-- Cloudflare Access JWT signature, issuer, audience, expiry, and not-before verification.
-- Canonical Minecraft identity derived only from verified claims.
-- Authenticated exact-punishment selector and appeal submission boundary.
-- Privileged reviewer listing and versioned decision boundary.
-- Same-origin mutation enforcement, identity-bound idempotency, bounded bodies, bounded upstream requests, and stale-decision protection.
-- Fixed-origin, allowlisted, bearer-plus-HMAC private Staff API requests with timestamp, nonce, and body-hash authentication.
-- Hosted Node 22 test/build workflow with persisted checkout credentials disabled.
-- Exact vanilla potion IDs and tint colors for nested potion items; serialized live updates and retryable transient manifest failures.
-
-## 5. Standalone evidence
+## 4. Standalone evidence
 
 - Repository: `wsg138/enthusia-site`.
 - Final reviewed head: `1a45b32e372cf6939c078a0d7986655e7ed639d6`.
 - Hosted validation run `31113188453`: success.
 - Production and market-preview Cloudflare deployments: success.
 - Codacy: success with zero annotations; zero unresolved review threads.
-- PR #2 normal merge and current standalone `main`: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- PR #2 normal merge/current standalone `main`: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
 - Containment: temporary standalone branch has zero unique commits or files.
 
-## 6. Completed aggregate implementation
+## 5. Aggregate evidence
 
-- Starting aggregate main: `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` for the continuation pass.
-- Aggregate PR: `wsg138/EnthusiaStaff#73`.
-- Frozen aggregate product head: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
+- Starting aggregate main: `515bd9a8591505c043b413f5b9ecb3e272c6d6f2`.
+- Frozen product head: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
 - Exact hosted-validation/review head: `4c818bb3aea953d3f877efc8a48a9175ba219d38`.
-- Normal implementation merge and resulting aggregate `main`: `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
-- Finalization branch/PR: `package/es-x05-finalization`; PR #74.
-- Durable MariaDB appeal workflow, atomic rate limiting, identity-scoped submission idempotency, appeal-scoped reviewer replay protection, optimistic revisions, audit events, signed private API routes, and exact-sanction approval delegation are integrated.
-- V17 is the only new migration; V1–V16 remain unchanged.
+- Coverage run `31116854096`, job `92668751419`: success for Java 21 clean build, all unit and MariaDB/Testcontainers integration/migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, and Codacy coverage.
+- JaCoCo: lines `47.50%`, branches `38.47%`, instructions `50.16%`.
+- CodeRabbit passed; all eight valid review threads were resolved.
+- PR #73 normal implementation merge/current aggregate `main`: `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
+- Implementation containment passed.
+- Finalization branch/PR: `package/es-x05-finalization`; PR #74. The exact finalization head and final hosted-check evidence are recorded in PR #74 to avoid a self-referential tracked-file loop.
 
-## 7. Successful aggregate evidence
+## 6. Owner-approved deferred staging
 
-- Coverage run `31116854096` checked out exact head `4c818bb3aea953d3f877efc8a48a9175ba219d38` and passed Java 21 clean build, all unit and MariaDB/Testcontainers integration/migration tests, JaCoCo, runtime-JAR integrity/provider-leak checks, artifact upload, and Codacy coverage upload.
-- Aggregate JaCoCo: lines `47.50%`, branches `38.47%`, instructions `50.16%`.
-- CodeRabbit passed and all valid review threads were resolved.
-- Implementation containment passed: the implementation head has zero commits or files absent from merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
+Evidence label: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED**.
 
-## 8. Blocking staging/infrastructure evidence
+- Owner: repository owner `wsg138`.
+- Approval source/date: explicit instruction in the current ChatGPT project conversation on 2026-08-06 to skip the current ES-X05 live test, continue development, and perform a larger combined PySentinel test later.
+- Named deferred package: `ES-V02 — Distributed and Java/Bedrock staging`.
+- Aggregate parent dispatcher: run `31116852061`, job `92668521113`, exact source head `4c818bb3aea953d3f877efc8a48a9175ba219d38`.
+- Private staging run: `wsg138/EnthusiaStaff-Staging` run `31116860919`.
+- Unavailable build job: `92668551209`; runner ID `0`; runner name empty; executed steps `[]`.
+- Downstream Pi job: `92668600472`; skipped.
+- No private checkout, build, artifact validation, product test, Paper boot, restart, migration, or other product-validation step executed. This is infrastructure-unavailable evidence, not a product result.
+- Later attempts `31117490156`, `31117820548`, `31117820542`, `31119701541`, and `31119699199` also stopped during allocation/action setup before product execution; none is labeled a pass.
 
-The configured Pi-staging gate did not pass and no owner-approved infrastructure exception exists.
+`ES-V02` must later test the pinned combined implementation set through PySentinel or equivalent isolated tooling, including ordinary exact-head build/artifact provenance, clean Paper boot and restart, V17 and later migration paths, config mutation/reload/restart behavior, appeal/auth API and persistence, failure/recovery behavior, provider interaction, representative Java/Bedrock scenarios, safely implemented automated client behavior, and complete cleanup. Any discovered product defect becomes a separately assigned repair package.
 
-- PR #73 dispatcher run `31116852061` targeted exact product head `4c818bb3aea953d3f877efc8a48a9175ba219d38` and dispatched staging run `31116860919`.
-- The staging repository job `92668551209` (`Build trusted EnthusiaStaff Paper runtime`) completed with `runner_id: 0`, an empty runner name, and zero steps. No checkout, build, product test, boot, or restart executed. The Pi job was skipped.
-- Post-merge dispatcher run `31117490156` failed during action preparation when GitHub returned `Service Unavailable`; product steps did not execute.
-- Finalization-head Coverage run `31117820548` and Pi Staging run `31117820542` were cancelled after roughly fifteen minutes with `runner_id: 0`, empty runner names, and zero steps.
-- GitHub Status reported an active major Actions incident/partial outage beginning August 6, 2026 at 15:22 UTC, including runs failing to start or failing partway through. These failures are infrastructure evidence, not product failures, but cancelled/zero-execution gates are not passes.
+This exception does not authorize production credentials, production Minecraft accounts, player data, routes, authority activation, or issue #43. Automated account-token handling requires separate security review and owner authorization.
 
-## 9. Exact unblock condition
-
-Resume ES-X05 only after evidence shows the GitHub Actions/staging runner condition changed. Then:
-
-1. Reconcile aggregate `main`, standalone `main`, PR #74, and both temporary branches.
-2. Update/synchronize the finalization branch only as necessary.
-3. Freeze the exact finalization head.
-4. Obtain a successful ordinary hosted Coverage run and a successful trusted staging build plus Pi boot/restart run for that exact head, or obtain an explicit policy-valid owner infrastructure disposition that does not relabel the missing ordinary hosted build as passed.
-5. Reconfirm zero valid review threads and deterministic component parity.
-6. Merge PR #74 normally, verify containment/no unique work, publish `COMPLETE`, clean branches where tooling permits, and stop without selecting another package.
-
-Do not manually rerun an identical zero-runner gate until there is evidence of recovery or configuration/capacity change.
-
-## 10. Component synchronization
+## 7. Component synchronization
 
 - Standalone source: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
 - Aggregate implementation merge: `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
@@ -84,14 +66,14 @@ Do not manually rerun an identical zero-runner gate until there is evidence of r
 - Added, missing, and modified path sets are empty; parity is true.
 - Evidence: [`2026-08-06-es-x05-component-parity.json`](../../reports/package-handoffs/2026-08-06-es-x05-component-parity.json).
 
-## 11. Authority and privacy boundary
+## 8. Authority and privacy boundary
 
 LiteBans remains authoritative. Issue #43, production cutover, production credentials/data, Flyway repair/history rewriting, and authority activation remain excluded. Authentication, reviewer rank, origin, replay, rate-limit, timeout, request-size, and upstream-service configuration fail closed.
 
-## 12. Canonical handoff
+## 9. Canonical handoff
 
 [`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
 
-## 13. Last update
+## 10. Last update
 
 2026-08-06
