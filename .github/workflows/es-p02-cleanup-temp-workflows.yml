@@ -1,0 +1,34 @@
+name: ES-P02 cleanup temporary workflows
+
+on:
+  push:
+    branches:
+      - package/es-p02-runtime-db-recovery
+    paths:
+      - .github/workflows/es-p02-cleanup-temp-workflows.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: package/es-p02-runtime-db-recovery
+          fetch-depth: 0
+      - name: Verify blocked registry and remove temporary workflows
+        run: |
+          grep -F 'ES-P02 BLOCKED' ai-agents/work-packages/PACKAGE-REGISTRY.md
+          grep -F '| Status | `BLOCKED` |' ai-agents/work-packages/PACKAGE-REGISTRY.md
+          rm -f .github/workflows/es-p02-blocked-registry-patch.yml
+          rm -f .github/workflows/es-p02-cleanup-temp-workflows.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A .github/workflows ai-agents/work-packages/PACKAGE-REGISTRY.md
+          git diff --cached --check
+          git commit -m "ES-P02: remove temporary blocked-state workflows"
+          git push origin HEAD:package/es-p02-runtime-db-recovery
