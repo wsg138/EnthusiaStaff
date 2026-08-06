@@ -33,7 +33,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
     private final JdbcPunishmentCodeStore punishmentCodes;
     private final JdbcWebsiteAppealStore appeals;
     private final JdbcWebsiteAppealWorkflowStore appealWorkflow;
-    private final JdbcWebsiteAppealRateLimiter appealRateLimiter;
 
     public JdbcWebsiteModerationStore(
             DataSource dataSource,
@@ -60,9 +59,9 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         this.appealWorkflow = new JdbcWebsiteAppealWorkflowStore(
                 dataSource,
                 codeProtector,
-                punishmentCodeRepository
+                punishmentCodeRepository,
+                new JdbcWebsiteAppealRateLimiter(codeProtector)
         );
-        this.appealRateLimiter = new JdbcWebsiteAppealRateLimiter(dataSource, codeProtector);
     }
 
     @Override
@@ -204,7 +203,6 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             String idempotencyKey,
             Instant now
     ) {
-        appealRateLimiter.enforce(accountId, idempotencyKey, now);
         return appealWorkflow.submit(
                 punishmentId,
                 accountId,
