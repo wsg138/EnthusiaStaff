@@ -40,7 +40,7 @@ This exception permits only ES-P03 implementation from current legitimate `main`
 | --- | --- | --- | --- | --- | ---: | --- | --- |
 | `ES-P01` | Exact-sanction appeal isolation | Internal | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; untouched |
-| `ES-P03` | Bedrock identity correctness | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 30 | ordinarily `ES-P02`; owner-directed narrow exception | `ChatGPT sequential package worker`; branch `package/es-p03-bedrock-identity`; PR pending first checkpoint |
+| `ES-P03` | Bedrock identity correctness | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 30 | ordinarily `ES-P02`; owner-directed narrow exception | `ChatGPT sequential package worker`; branch `package/es-p03-bedrock-identity`; PR #75; implementation complete, validation pending |
 | `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `BLOCKED` | `PARKED_BLOCKED` | 35 | `ES-P01` | implementation merged; finalization branch `package/es-x05-finalization`; PR #74; untouched |
 | `ES-P04` | Staff-mode operational tools | Internal | `PLANNED` | — | 40 | `ES-P03` | unassigned |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned |
@@ -95,14 +95,15 @@ This exception permits only ES-P03 implementation from current legitimate `main`
 | Assigned worker | `ChatGPT sequential package worker` |
 | Selection basis | owner-directed narrow routing exception while ES-P02 and ES-X05 remain parked |
 | Starting aggregate main | `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
-| Branch | `package/es-p03-bedrock-identity` |
-| PR | pending first coherent checkpoint |
-| Migration boundary | V17 current and immutable; no new migration assumed |
-| Known defects | unconditional Java writes in Paper mute join and Velocity backend connect; `*` alias rejected by directory validation/search; weaker observations can overwrite known platform |
-| Included boundary | verified Java/Bedrock/unknown observations, current/history aliases, deterministic lookup, duplicate/out-of-order persistence safety |
+| Branch / PR | `package/es-p03-bedrock-identity`; PR #75 |
+| Migration boundary | V17 current and immutable; no new migration |
+| Implemented boundary | proof-bearing Java/Bedrock/unknown observations; current/history `*` aliases; deterministic lookup; ordered duplicate/out-of-order persistence; stale-disconnect protection |
+| Velocity disposition | existing proxy observations are unverified and persist platform as `UNKNOWN`; they retain UUID/name/presence and cannot downgrade verified platform evidence |
+| Regression evidence | domain provider-state tests plus MariaDB/Testcontainers alias, history, non-downgrade, ordering, reconnect, and invalid-shape tests |
+| Harsh review | resolved four exact Codacy annotations and corrected broken-Floodgate/no-local-Geyser fallback to `UNKNOWN` |
 | Exclusions | ES-P09 alt graph/inheritance; representative client staging; provider invention; production/cutover work |
 | Handoff | [`2026-08-06-es-p03-bedrock-identity.md`](../reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
-| Exact next action | implement the platform observation and persistence policy with focused Paper, Velocity, and MariaDB tests; then review and exact-head validate |
+| Exact next action | freeze PR #75, run exact-head Codacy/GitHub Actions/external review, then merge normally or publish the precise blocker |
 
 ### `ES-X05` — Website UX, authentication, and appeals
 
