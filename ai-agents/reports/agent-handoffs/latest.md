@@ -8,10 +8,10 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` and `ES-X05 — Website UX, authentication, and appeals` are `BLOCKED` / `PARKED_BLOCKED`. No new implementation package is active.
+State after normal merge of PR #74: `ES-P01` and `ES-X05` are `COMPLETE`; `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED`. No new implementation package is active.
 
-ES-X05 standalone PR `wsg138/enthusia-site#2` passed validation/review and merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`. Aggregate PR #73 passed hosted Coverage run `31116854096`, CodeRabbit, deterministic parity, and containment, then merged normally as `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
+ES-X05 standalone PR `wsg138/enthusia-site#2` and aggregate PR #73 merged normally after successful hosted validation, review, containment, and deterministic parity. The exact product-head private staging run received no runner and executed no product step.
 
-The remaining package gate is trusted staging/Pi evidence. Exact product-head staging run `31116860919` had an ordinary hosted build job with runner ID 0, empty runner name, and no steps; the Pi job was skipped. Post-merge/finalization runs also failed or were cancelled before product execution during GitHub's August 6 Actions partial outage. No product failure, staging pass, or owner infrastructure exception is claimed.
+The owner explicitly approved **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** on 2026-08-06. The unavailable live gate is not a pass and is assigned to `ES-V02 — Distributed and Java/Bedrock staging`, including the future combined PySentinel acceptance matrix for boot/restart, migrations, configuration, appeal/auth persistence, distributed providers, representative Java/Bedrock clients, safely implemented automation, and cleanup. LiteBans remains authoritative; no production account, credential, data, route, or authority activation is authorized.
 
-Preserved continuation: branch `package/es-x05-finalization`, open PR #74. Resume only after evidence that the Actions/staging condition changed. Then validate one frozen exact head with successful hosted Coverage plus trusted staging build and Pi boot/restart (or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed), reconfirm review/parity, merge PR #74 normally, publish `COMPLETE`, verify containment, clean safe temporary branches, and stop. Do not select another package first.
+This worker completes only ES-X05 and stops. A later sequential worker may select the next canonical package after reconciling live GitHub.
