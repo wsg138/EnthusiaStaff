@@ -1,157 +1,114 @@
 # ES-P02 runtime database recovery and Velocity reload handoff
 
-- Date: 2026-08-05
+- Updated: 2026-08-06
 - Package: `ES-P02 — Runtime database recovery and Velocity reload`
 - Starting status: `READY`
-- Current status: `ACTIVE`
+- Current status: `REVIEW`
 - Selection: automatic sequential package selection
 - Starting `main`: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`
 - Branch: `package/es-p02-runtime-db-recovery`
-- Pull request: pending early draft creation at this checkpoint
+- Pull request: `#70`, open and non-draft
 - Highest Flyway migration: `V16`; V1–V16 remain immutable
-- Issue #43: open, deferred, and explicitly excluded
+- Issue #43: open, deferred, and excluded
 - Production authority: LiteBans remains authoritative
+- External parity: not applicable; ES-P02 is internal
 
 ## Selection and live reconciliation
 
-Live GitHub was reconciled before selection:
+Before claim, live GitHub showed `main` at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`, no open or draft PR, no package branch, ES-P01 complete, ES-P02 and ES-X05 ready, V16 highest, and issue #43 still open. ES-P02 priority 20 precedes ES-X05 priority 35 and depends only on ES-P01. ES-X05 remains READY and unstarted.
 
-- `main` was `d94d0219a598c9afb7e19c4ea9fddafd554d6469`, the normal merge of ES-P01 finalization PR #69.
-- No open or draft pull request existed.
-- No remote branch other than `main` existed before the ES-P02 branch was created.
-- ES-P01 was `COMPLETE`.
-- ES-P02 and ES-X05 were `READY`; ES-P02 priority 20 precedes ES-X05 priority 35.
-- ES-P02 depends only on ES-P01 and is not parallel-safe around lifecycle/configuration.
-- Issue #43 remained open and reserved for later production-like LiteBans acceptance.
-- V16 remained the highest migration.
-- No previous ES-P02 branch, PR, checkpoint, or handoff existed.
+## Included scope completed
 
-ES-P02 was therefore the next eligible package. ES-X05 remains READY and was not started.
+### Paper
 
-## Authority and package scope
+- Replaced terminal one-shot bootstrap with a bounded coordinator.
+- Default retry cycle: six attempts with capped exponential delays of 1, 2, 4, 8, 16, and at most 30 seconds.
+- Fenced one active attempt and one scheduled retry.
+- Required removal and close of a partially published runtime before retry.
+- Preserved worker/global/entity scheduler separation.
+- Ignored stale entity/global callbacks from retired attempts.
+- Suppressed new attempts after shutdown and handled cleanup worker rejection.
+- Published sanitized BOOTSTRAP, retrying, recovered, and exhausted health.
 
-Included audit IDs:
+### Velocity
 
-- `AUD-RUNTIME-001`
-- `AUD-RUNTIME-002`
-- `AUD-CONFIG-002`
-- `AUD-CONFIG-003`
-- `AUD-CONFIG-004`
-- `AUD-PERF-005`
-- relevant `AUD-ESC-005`
+- Added a bounded bootstrap coordinator with transient retry, permanent-failure exhaustion, manual restart of an exhausted cycle, worker/scheduler rejection, serialized terminal transitions, and shutdown suppression.
+- Kept authority in BOOTSTRAP until full runtime publication.
+- Closed partial channel, network outbox, Discord worker, website server, scheduled tasks, stores, and MariaDB runtime before retry.
+- Added deterministic shutdown cleanup and guaranteed store clearing even if runtime close throws.
+- Added `/estaff reload` with the independent `enthusiastaff.reload` permission.
+- Validated a complete candidate before publication.
+- Live-reloaded only `fail-closed-while-active` and `appeals-url` as one immutable snapshot.
+- Restored the previous snapshot when publication failed.
+- Rejected every resource-bound change with explicit restart-required keys and no partial application.
+- Rejected overlapping reload and reload during shutdown.
+- Allowed one immediate bounded bootstrap cycle after an exhausted startup only after configuration validation.
+- Made health issue changes atomic and tied them to the current authority mode.
 
-Included behavior:
+### Orchestration and documentation
 
-- bounded Paper and Velocity database bootstrap recovery;
-- transient startup failure recovery without process restart;
-- atomic Velocity configuration reload;
-- invalid-candidate rejection and rollback;
-- explicit restart-required reporting;
-- degraded, retrying, exhausted, healthy, and restart-required health/operator states;
-- reconnect, repeated reload, failed candidate, shutdown, and race tests;
-- directly necessary configuration, operator, Wiki, and package documentation.
+- Replaced obsolete mandatory `Assigned package ID` rules with automatic sequential selection in the repository agent prompt, rules, and worker protocol.
+- Updated package, workspace, registry routing, and latest handoff records.
+- Added `docs/runtime-database-recovery.md` with retry, reload, operator, security, migration, and validation boundaries.
 
-Explicit exclusions:
+## Exclusions preserved
 
-- production database access or private rows;
-- Flyway repair or migration-history rewrite;
-- unrelated configuration redesign;
-- invented provider APIs or repositories;
-- deployment or production authority changes;
-- issue #43, the 168-hour shadow period, migration, activation, cutover, or rollback;
-- ES-X05 or any other package.
+No production database, private player row, credential, secret, production route, deployment, provider invention, Flyway repair, migration rewrite, authority activation, issue #43 acceptance, shadow period, production migration, cutover, rollback, external component repository, ES-X05, or second package was touched.
 
-## Reproduced source gaps
+## Tests added
 
-Paper:
+Paper tests cover phase separation, transient recovery, initial worker rejection, retry exhaustion, shutdown before retry, cleanup-before-retry, retired entity callbacks, recovery failure, cleanup worker rejection, and callback payloads.
 
-- `StorageBootstrapCoordinator` permits one `start()` call and enters a terminal state after a bootstrap failure.
-- `EnthusiaStaffPaperPlugin.startStorageBootstrap()` constructs and invokes that one-shot coordinator once.
-- A transient initial MariaDB failure therefore leaves storage unavailable until process restart.
+Velocity bootstrap tests cover transient recovery, configured exhaustion, permanent failure, shutdown, immediate retry without overlap, worker rejection, and scheduler rejection. Reload tests cover atomic application, restart-required rejection, invalid candidates, publication rollback, repeated reload, shutdown before load, and shutdown after candidate load. Runtime-health tests cover immutable snapshots and atomic issue merges.
 
-Velocity:
+## Review findings and repairs
 
-- `onProxyInitialization` submits `initializeStorage()` once.
-- `initializeStorage()` loads configuration, initializes MariaDB, publishes many runtime fields/resources, and degrades health on failure without a retry lifecycle.
-- Velocity has no `/estaff reload` path.
-- Several resource-bound configuration values are composed only during initial bootstrap, so safe reload must distinguish atomically reloadable values from restart-required values.
-- Failed partial initialization needs explicit cleanup before retry.
+CodeRabbit reported three valid defects:
 
-## Completed checkpoint
+1. Paper could overwrite a terminal scheduling failure with a misleading retry health message.
+2. Velocity health read-copy-write updates could lose concurrent issues and republish a stale mode.
+3. Velocity bootstrap could expose a terminal-transition window in which manual retry overlapped the completing attempt.
 
-- Created `package/es-p02-runtime-db-recovery` from exact starting `main`.
-- Replaced obsolete owner-supplied `Assigned package ID` rules with automatic sequential selection in:
-  - `ai-agents/AGENTS.md`;
-  - `ai-agents/work-packages/WORKER-PROTOCOL.md`;
-  - `ai-agents/UNIVERSAL-AGENT-PROMPT.md`.
-- Preserved resume-first behavior, dependency ordering, one-package scope, branch/PR rules, exact-head validation, production boundaries, and stop conditions.
-- Updated ES-P02 package and workspace routing records.
-- No product source, test, migration, workflow, provider, or production path has changed yet.
+All were repaired. The review also produced lower-severity test and maintainability findings. Relevant repairs include initial worker-rejection tests, scheduler-rejection tests, retry payload assertions, a split Paper test harness, removed dead attempt state, simplified recovery steps, reload shutdown-race coverage, and simplified bounded backoff. Current unresolved review-thread count is zero.
 
-## Planned implementation direction
+A later harsh review identified and repaired an additional permanent-failure notification race: the exhausted health callback now occurs inside the serialized bootstrap transition so a manual retry cannot be followed by a stale degraded publication.
 
-Paper:
+## Workflow and validation history
 
-- make bootstrap retry bounded and explicit rather than reusing cleanup-only retry behavior;
-- prevent duplicate concurrent attempts;
-- retry transient bootstrap/recovery failures with capped delays;
-- stop deterministically during plugin shutdown;
-- preserve worker/global/entity thread separation and off-main-thread MariaDB close;
-- publish health transitions for retrying, exhausted, and recovered states.
+No final exact-head pass is claimed yet.
 
-Velocity:
+- Earlier Coverage runs are superseded.
+- Superseded run `31070331833`, job `92516786222`, executed Paper, persistence, protocol, and integration tests before Velocity compilation failed because `VelocityBootstrapCoordinator.PermanentFailure` lacked `serialVersionUID` under warnings-as-errors.
+- The compiler defect was fixed.
+- CodeRabbit reviewed a superseded implementation head and its confirmed defects were repaired.
+- The final tracked head still needs current-head Coverage/build, static analysis, documentation/package validation, runtime artifact checks, review-bot evidence, and any applicable staging disposition.
+- No ES-P02 infrastructure exception is approved. ES-P01's exception does not apply.
+- The local shell cannot resolve GitHub, so no local Gradle or shell validation is claimed.
 
-- introduce a testable bounded bootstrap retry coordinator;
-- open and validate a complete candidate runtime before publication;
-- close partial resources on any failed attempt;
-- publish a successful runtime atomically enough that event/command readers do not observe mismatched configuration/store/resource state;
-- stop retries and close runtime resources deterministically on shutdown;
-- add `/estaff reload` with explicit permission and bounded asynchronous dispatch;
-- validate candidates before mutation;
-- reload only values that are safe to publish live and report every changed resource-bound value as restart-required;
-- keep the previous active configuration on invalid or rejected candidates;
-- expose sanitized operator status without connection details or secrets.
+## Migration and privacy boundary
 
-This direction is not final evidence. It must be implemented, tested, harshly reviewed, and exact-head validated.
+No migration was added. V16 remains highest, and V1–V16 are byte-immutable. No private or production data was accessed. Logs and operator messages expose component state and exception classes only, not connection details or sensitive values.
 
-## Tests and validation
+## Current checkpoint
 
-Completed at this checkpoint:
+Implementation, focused tests, documentation, and all known review repairs are complete. The pre-record implementation/documentation head was `decb40702820333726f4dfa787af73a5ddb370c9`. Subsequent canonical REVIEW records advance the branch and must finish before the exact head freezes.
 
-- source and existing-test inspection only;
-- no build or test run is claimed;
-- no workflow result is claimed;
-- no static-analysis result is claimed;
-- no Pi or staging result is claimed.
+## Remaining work
 
-Required later evidence:
+1. Update the registry and latest routing to REVIEW with PR #70 and current facts.
+2. Freeze the resulting tracked branch head.
+3. Ensure PR #70's head equals that branch head; stale earlier PR-head metadata is not evidence.
+4. Request a current-head CodeRabbit review and verify zero valid unresolved findings.
+5. Run and inspect every applicable current-head GitHub Actions job, including Java 21 warnings-as-errors, full tests, MariaDB/Testcontainers, migration integrity, static analysis, coverage, runtime JAR/provider-leak checks, and documentation/package validation.
+6. Determine the exact Pi/staging gate result under `VALIDATION-POLICY.md`; do not inherit ES-P01's exception.
+7. Merge PR #70 normally only if the validated head remains unchanged and all gates pass.
+8. Verify resulting `main`, containment, divergence, no unique commits, and safe branch deletion.
+9. Merge a documentation-only finalization PR if required to record actual merge facts, mark ES-P02 complete, and move dependency-cleared packages to READY without starting them.
+10. Stop without beginning another package.
 
-- focused Paper bootstrap retry, recovery, exhaustion, shutdown, rejection, and late-callback tests;
-- focused Velocity retry, partial cleanup, atomic reload, invalid candidate, restart-required, repeated reload, concurrent reload, and shutdown-race tests;
-- applicable MariaDB/Testcontainers failure/reconnect proof;
-- Java 21 warnings-as-errors full build and module tests;
-- migration clean-install/upgrade/checksum integrity with V16 unchanged;
-- aggregate coverage and runtime JAR/provider-leak inspection;
-- configured static analysis, CodeRabbit, Codacy, documentation/package validation, and zero valid unresolved review threads;
-- applicable exact-head staging result or a separately authorized package-specific disposition. ES-P01's exception does not automatically apply.
+## Known blockers
 
-## Current branch history
-
-The first checkpoint consists of orchestration and routing commits on `package/es-p02-runtime-db-recovery`. Record the exact latest branch head and draft PR number after the PR is opened.
-
-## Current blockers
-
-None known.
-
-The local shell could not resolve GitHub DNS, so repository operations are being performed through the authenticated GitHub connector. This is not a product defect, package blocker, test result, or infrastructure exception.
-
-## Exact next action
-
-1. Update the canonical registry and latest-handoff route to mark ES-P02 ACTIVE.
-2. Open an early draft PR from `package/es-p02-runtime-db-recovery` to `main` and record its number/head.
-3. Implement and test bounded Paper bootstrap recovery.
-4. Implement and test bounded Velocity bootstrap recovery and atomic reload.
-5. Continue durable checkpoints without beginning another package.
+No product blocker is known. Current-head hosted evidence is still missing, so the package correctly remains REVIEW.
 
 ## Systems not to disturb
 
