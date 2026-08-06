@@ -22,6 +22,7 @@ class VelocityBootstrapCoordinatorTest {
 
         assertEquals(1, harness.coordinator.attempts());
         assertTrue(harness.coordinator.retryScheduled());
+        assertFalse(harness.coordinator.requestImmediateRetry());
         assertEquals(List.of(100L), harness.delays);
 
         harness.scheduled.runNext();
@@ -116,6 +117,23 @@ class VelocityBootstrapCoordinatorTest {
 
         assertTrue(harness.coordinator.completed());
         assertEquals(2, harness.coordinator.attempts());
+    }
+
+    @Test
+    void rejectedRetrySchedulerExhaustsWithoutLeavingScheduledFlagSet() {
+        Harness harness = new Harness(new VelocityBootstrapCoordinator.RetryPolicy(3, 75L, 300L));
+        harness.failuresRemaining = 1;
+        harness.scheduled.rejectNext = true;
+
+        harness.coordinator.start();
+        harness.workers.runNext();
+
+        assertTrue(harness.coordinator.exhausted());
+        assertFalse(harness.coordinator.retryScheduled());
+        assertFalse(harness.coordinator.completed());
+        assertEquals(0, harness.scheduled.size());
+        assertEquals(List.of(75L), harness.delays);
+        assertTrue(harness.events.contains("exhausted:1"));
     }
 
     private static final class Harness {
