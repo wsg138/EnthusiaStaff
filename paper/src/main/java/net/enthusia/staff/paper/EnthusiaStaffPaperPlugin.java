@@ -394,7 +394,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 lifecycle::stopping,
                 getLogger()
         );
-        if (!storageBootstrap.start()) {
+        if (!storageBootstrap.start() && storageBootstrap.retryScheduled()) {
             publishHealth(OperationalMode.BOOTSTRAP, Map.of(
                     "mariadb-retrying",
                     "The initial bounded-worker submission was rejected; storage retry scheduling is in progress"

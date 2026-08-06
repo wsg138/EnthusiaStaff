@@ -253,10 +253,13 @@ public final class EnthusiaStaffVelocityPlugin {
         }
         MariaDbRuntime runtime = databaseRuntime;
         databaseRuntime = null;
-        if (runtime != null) {
-            runtime.close();
+        try {
+            if (runtime != null) {
+                runtime.close();
+            }
+        } finally {
+            clearPublishedStores();
         }
-        clearPublishedStores();
     }
 
     @Subscribe
@@ -730,12 +733,14 @@ public final class EnthusiaStaffVelocityPlugin {
                     (message, failure) -> logger.error(message, failure)
             );
             server.start();
-            websiteModerationStore = store;
-            websiteApiServer = server;
-            websiteMaintenanceTask = proxy.getScheduler()
+            ScheduledTask maintenance = proxy.getScheduler()
                     .buildTask(this, this::maintainWebsiteApi)
                     .repeat(1, TimeUnit.MINUTES)
                     .schedule();
+            websiteModerationStore = store;
+            websiteApiServer = server;
+            websiteMaintenanceTask = maintenance;
+            server = null;
             logger.info(
                     "Restricted website API started on loopback; {} eligible punishment codes were backfilled",
                     created
@@ -1114,10 +1119,6 @@ public final class EnthusiaStaffVelocityPlugin {
             case APPLIED, NO_CHANGES -> {
                 updateHealthIssue("configuration-reload", null);
                 updateHealthIssue("configuration-restart-required", null);
-                MariaDbRuntime runtime = databaseRuntime;
-                if (runtime != null) {
-                    health.update(authorityMode.get(), operationalIssues(authorityMode.get()));
-                }
             }
             case RESTART_REQUIRED -> updateHealthIssue(
                     "configuration-restart-required",
@@ -1139,14 +1140,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     private void updateHealthIssue(String component, String reason) {
-        VelocityRuntimeHealth.Snapshot snapshot = health.snapshot();
-        Map<String, String> issues = new LinkedHashMap<>(snapshot.issues());
-        if (reason == null || reason.isBlank()) {
-            issues.remove(component);
-        } else {
-            issues.put(component, reason);
-        }
-        health.update(snapshot.mode(), issues);
+        health.updateIssue(authorityMode.get(), component, reason);
     }
 
     private final class AltsCommand implements SimpleCommand {
@@ -1385,6 +1379,10 @@ public final class EnthusiaStaffVelocityPlugin {
 
         @Override
         public boolean hasPermission(Invocation invocation) {
+            String[] arguments = invocation.arguments();
+            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("reload")) {
+                return invocation.source().hasPermission("enthusiastaff.reload");
+            }
             return invocation.source().hasPermission("enthusiastaff.status");
         }
 
