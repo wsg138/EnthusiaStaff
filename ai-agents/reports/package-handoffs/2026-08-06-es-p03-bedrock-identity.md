@@ -43,12 +43,12 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - A single configured `*` prefix is accepted for current and historical aliases and prefix search. Username text is never used as platform proof.
 - Current name, lowercase name, current/last server, first seen, and last seen are ordered by observation time.
 - Stale disconnects cannot clear a newer same-server connection.
-- Broken or incompatible Floodgate remains `UNKNOWN`, including when no local Geyser plugin is visible; only verified Floodgate evidence or explicit absence of both providers can prove Java.
+- Only an available Floodgate per-player observation can prove Java or Bedrock. Missing, unavailable, or incompatible local provider evidence remains `UNKNOWN`, including when both local plugins are absent, because Geyser and Floodgate may be installed only on the Velocity proxy.
 - No migration was required; V1–V17 remain unchanged.
 
 ## Regression coverage
 
-- Domain tests cover available Floodgate Bedrock/Java, both providers absent, Geyser with incompatible Floodgate, broken Floodgate without local Geyser, and contradictory provider observations.
+- Domain tests cover available Floodgate Bedrock/Java, both local providers absent in a proxy-hosted layout, Geyser with incompatible Floodgate, broken Floodgate without local Geyser, and contradictory provider observations.
 - MariaDB/Testcontainers tests cover:
   - `*` current and historical aliases;
   - case-insensitive exact and prefix lookup;
@@ -65,15 +65,15 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Removed duplicated test literals.
 - Split the ordered JDBC observation method into validation, transaction, player upsert, name upsert, and rollback helpers to remove the complexity findings.
 - Identified and corrected an additional source defect not reported by the analyzer: unavailable/incompatible Floodgate plus absent local Geyser had been treated as Java, which is unsafe for proxy-hosted Geyser/Floodgate layouts.
-- Remaining external review and exact-head analysis must still be green on the final frozen SHA.
+- Independent final review against the official GeyserMC proxy guidance found the remaining both-local-providers-absent fallback. The guidance permits Geyser and Floodgate to live only on the proxy, so that state now remains `UNKNOWN` and has a regression test.
+- External review and exact-head analysis must be green on the final frozen SHA.
 
 ## Current gate observations
 
-- PR #75 was marked ready for review after the implementation/documentation checkpoint.
-- An explicit CodeRabbit review request selected the full 14-file diff but was refused because the repository/developer review limit was reached. The bot reported that no review started; this is not a pass.
-- The first empty freeze commit did not produce a check suite, so it is not validation evidence.
-- PR #75 was closed and reopened on the unchanged head to invoke the repository's configured `pull_request` `reopened` trigger. Exact-head workflow creation/execution still must be observed directly.
-- This handoff update is a non-empty synchronization commit recording the live gate state; the resulting head is the new candidate and must receive fresh exact-head checks.
+- PR #75 is ready for review.
+- Exact-head hosted Coverage and Wiki validation passed on superseded head `ff0a67ad21c74125f838ec0736f7f1da76b7bf38`; those results are retained as historical evidence only.
+- CodeRabbit review quota recovered and began a full review after the proxy-hosted fallback correction, but any result on a superseded head is not final evidence.
+- The final candidate is the head containing the fallback correction and this synchronized handoff; it requires fresh exact-head Coverage, Wiki, Codacy, and CodeRabbit results.
 
 ## Validation requirements
 
@@ -83,7 +83,7 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Aggregate coverage and runtime-JAR integrity/provider-leak checks.
 - Wiki/package validation and configured static analysis.
 - Zero valid unresolved review threads.
-- Missing, queued, cancelled, skipped, merge-ref-only, rate-limited, or zero-runner ordinary hosted checks are not passes.
+- Missing, queued, cancelled, skipped, merge-ref-only, rate-limited, superseded, or zero-runner ordinary hosted checks are not passes.
 
 ## Systems not disturbed
 
@@ -96,4 +96,4 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 
 ## Exact next action
 
-Inspect the new exact-head Codacy/GitHub Actions results. If all configured source gates execute successfully, resolve any valid findings and re-request external review only when the rate limit has materially recovered. Otherwise publish the precise blocker and park PR #75 without beginning another package.
+Freeze the synchronized PR #75 head, require successful exact-head Coverage, Wiki, Codacy, and CodeRabbit review with zero valid unresolved findings, then merge normally or publish the precise blocker. Do not begin another package.
