@@ -2,84 +2,45 @@
 
 Last updated: 2026-08-06
 
-This is a routing record. Live GitHub must be reconciled before acting. Live PR, branch, review, and check state override stale default-branch package text, but known persistent state must be published to `main` through the documented status-publication process.
+Live GitHub state overrides stale records, but persistent package state must be published to `main`.
 
-## Repository
-
-| Field | Value |
-| --- | --- |
-| Repository | `wsg138/EnthusiaStaff` |
-| Default branch | `main` |
-| Canonical process baseline before this correction | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
-| Plugin version | `0.1.0-SNAPSHOT` |
-| Java/runtime | Java 21; Paper and Leaf backends, Velocity, MariaDB |
-| Highest migration | `V16`; V1–V16 remain immutable |
-| Issue #43 | Open and deferred |
-
-## Current package routing
-
-`ES-P01 is COMPLETE. ES-P02 is BLOCKED and PARKED_BLOCKED in preserved PR #70 while its runner and authorization condition remains unchanged. ES-X05 is READY and unstarted. ES-V02 is DEFERRED. No implementation package is active.`
+## Current routing
 
 | Field | Value |
 | --- | --- |
 | Completed prerequisite | `ES-P01 — Exact-sanction appeal isolation` |
-| Blocked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Classification | `PARKED_BLOCKED` while the exact external unblock condition is unchanged |
-| Preserved branch | `package/es-p02-runtime-db-recovery` |
-| Preserved PR | `#70 — open, non-draft, unmerged, and currently non-mergeable` |
-| Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
-| Current package-record head | `80d4ea840f34017c09afb618f623581b31c6223d` |
-| Canonical main at publication start | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
-| Blocker authority | PR #70, preserved branch records, checks, canonical ES-P02 package file, and canonical package handoff |
-| Ready package | `ES-X05 — Website UX, authentication, and appeals` |
+| Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
+| ES-P02 classification | `PARKED_BLOCKED` while its runner/authorization condition is unchanged |
+| Preserved ES-P02 work | branch `package/es-p02-runtime-db-recovery`, open PR #70 |
+| Active package | `ES-X05 — Website UX, authentication, and appeals` |
+| ES-X05 status | `PARTIAL` |
+| ES-X05 classification | `ACTIONABLE_CONTINUATION` |
+| Standalone continuation | `wsg138/enthusia-site#2`, branch `package/es-x05-appeal-hardening` |
+| Exact standalone head | `11e68b60ef874a01f8b6f04f72bd8d694c496b56` |
+| Exact validation | run `31105809682` — success |
 | Deferred validation | `ES-V02 — Distributed and Java/Bedrock staging` |
-| Active implementation package | `NONE` |
 
-The blocked-package routing and status-publication correction is documentation and process-tooling only and is not an implementation package. It does not change ES-P02 product code, product tests, scope, priority, dependencies, or blocker evidence. It changes only the canonical routing state to `BLOCKED` / `PARKED_BLOCKED` and aligns the orchestration validator with classification-first selection. It does not activate ES-X05.
+## ES-X05 evidence
+- Baseline standalone PR #1 merged as `042b503b7a4adc2627f2259a09e7d7394ced06ce`.
+- Continuation PR #2 adds same-origin controls, fail-closed rate limiting, idempotency, exact-sanction selection, versioned reviewer decisions, and regression coverage.
+- Nested potions in shulker boxes/bundles are normalized to exact namespaced potion IDs and vanilla tint colors before rendering; live updates are serialized.
+- GitHub-hosted validation, tests, and source build pass at the exact head.
+- `enthusia-market-preview` deploys the exact head successfully.
 
-## Selection classification and order
-
-Every incomplete package is classified before selection:
-
-- `ACTIONABLE_CONTINUATION`: existing work has a safe action that can be performed now.
-- `PARKED_BLOCKED`: the same unavailable external condition still controls the next action and no other actionable defect exists.
-- `READY`: dependency-complete and eligible to begin.
-
-Select the highest-priority `ACTIONABLE_CONTINUATION`, skip every `PARKED_BLOCKED` package, then select the eligible `READY` package with the lowest numerical priority. An open PR or branch alone does not receive priority.
+## Current blockers
+1. The production Cloudflare `enthusia-site` project fails before exposing a source annotation. This failure predates ES-X05 and occurs on untouched prior main `9408166c75def0b55caa8d38fb546c6e77ea1f7d`; the same commits deploy to `enthusia-market-preview`. Cloudflare dashboard logs/settings access is required.
+2. The real private EnthusiaStaff appeal service contract is not yet proven end to end.
+3. `components/enthusia-site/` remains `IMPORT_PENDING`; aggregate content-hash parity and the required aggregate PR are outstanding.
 
 ## Required next-worker behavior
+1. Inspect ES-P02 PR #70 only to confirm its external unblock condition remains unchanged; otherwise leave it untouched.
+2. Resume ES-X05 PR #2 before selecting any other package.
+3. Correct the production Cloudflare project settings and obtain an exact-head deployment pass.
+4. Verify the real private appeal contract.
+5. Merge the standalone continuation normally, import the exact merged site into the aggregate component, prove parity, open/validate/merge the aggregate PR, publish final hashes, and clean temporary branches.
+6. Mark ES-X05 `COMPLETE` only after all standalone, production, contract, aggregate, and parity requirements are satisfied.
 
-While PR #70's runner and authorization condition remains unchanged, a sequential worker must:
-
-1. inspect PR #70, its exact head, checks, reviews, package records, and unblock condition;
-2. classify ES-P02 as `PARKED_BLOCKED`;
-3. not rerun the identical staging gate;
-4. not merge `main` into the ES-P02 branch merely to keep it current;
-5. not modify or close PR #70;
-6. select ES-X05 as the lowest-priority eligible `READY` package;
-7. complete only ES-X05 and stop.
-
-When runner availability or owner authorization demonstrably changes, a future worker must classify ES-P02 as `ACTIONABLE_CONTINUATION` and resume PR #70 before starting another new package.
-
-## ES-P02 retained evidence
-
-- Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` passed the hosted Java 21 build, tests, MariaDB and Testcontainers, migration integrity, changed-code coverage threshold, runtime-JAR and provider-leak checks, Codacy with zero annotations, CodeRabbit, and zero valid unresolved review threads.
-- Required staging run `31072794096` did not execute a product step.
-- Ordinary hosted build attempts `92524048937` and `92541148296` each had `runner_id: 0`, an empty runner name, and `steps: []`.
-- Downstream Pi jobs `92524054852` and `92541160241` were skipped.
-- No staging product build, Pi boot, or restart executed. This is not a pass.
-- No ES-P02 package-specific infrastructure exception or owner authorization exists.
-- Branch drift and non-mergeability do not make the package actionable while the external blocker is unchanged.
-
-## Persistent status publication
-
-An unmerged implementation PR that stops in `PARTIAL`, `BLOCKED`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING` must have that state published to `main` through a small documentation-only PR before the worker stops, unless tool loss makes publication impossible.
-
-The publication PR preserves the implementation PR and branch and may update only the registry, selected package file, workspace state, canonical handoff, latest handoff pointer, and directly necessary routing documentation. It contains no product code, product tests, migrations, workflow changes, or runtime configuration.
-
-## Boundaries
-
-- No product code, product test, migration, workflow, runtime configuration, deployment, authority, private data, LiteBans cutover, issue #43 acceptance, shadow period, or production behavior is changed by this process correction.
-- LiteBans remains authoritative.
-- PR #70 and `package/es-p02-runtime-db-recovery` must remain preserved with all unique work.
-- Do not begin ES-X05 in this process-correction session.
+## Safety boundaries
+- No production credentials or player records are committed.
+- Authentication, origin, reviewer role, rate-limit, and upstream-service configuration fail closed.
+- ES-P02 PR #70 and its preserved branch must not be modified merely for drift while the external blocker is unchanged.
