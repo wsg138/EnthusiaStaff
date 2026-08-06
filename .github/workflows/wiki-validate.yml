@@ -15,63 +15,9 @@ on:
       - ".github/workflows/wiki-*.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-es-x05:
-    if: github.event_name == 'pull_request' && github.head_ref == 'package/es-x05-state-publication'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out package branch
-        uses: actions/checkout@v6
-        with:
-          ref: package/es-x05-state-publication
-      - name: Apply asserted replay-key patch
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java')
-          text = path.read_text()
-
-          old_call = 'rateLimiter.enforce(connection, accountId, idempotencyKey, now);'
-          new_call = 'rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);'
-          if text.count(old_call) != 1:
-              raise SystemExit(f'Expected one legacy limiter call, found {text.count(old_call)}')
-          text = text.replace(old_call, new_call, 1)
-
-          line_pattern = re.compile(
-              r"^\s*idempotency_key = CASE WHEN \? = 'APPROVE' THEN \? ELSE idempotency_key END\n",
-              re.MULTILINE
-          )
-          text, count = line_pattern.subn('', text, count=1)
-          if count != 1:
-              raise SystemExit(f'Expected one workflow-key overwrite line, found {count}')
-          text = text.replace('updated_at = ?,\n                WHERE', 'updated_at = ?\n                WHERE', 1)
-
-          bindings_pattern = re.compile(
-              r"statement\.setString\(10, decision\);\s*"
-              r"statement\.setString\(11, idempotencyKey\);\s*"
-              r"statement\.setBytes\(12, UuidBytes\.toBytes\(existing\.appealId\(\)\)\);\s*"
-              r"statement\.setLong\(13, existing\.revision\(\)\);"
-          )
-          replacement = '''statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
-            statement.setLong(11, existing.revision());'''
-          text, count = bindings_pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'Expected one legacy decision binding block, found {count}')
-
-          path.write_text(text)
-          PY
-      - name: Commit patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java
-          git commit -m "Fix ES-X05 storage replay keys"
-          git push origin HEAD:package/es-x05-state-publication
-
   validate:
     runs-on: ubuntu-latest
     steps:
