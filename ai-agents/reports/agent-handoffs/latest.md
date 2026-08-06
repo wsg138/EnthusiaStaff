@@ -8,12 +8,10 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` and `ES-X05 — Website UX, authentication, and appeals` are `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external staging runner and authorization condition is unchanged. No implementation package is active.
+State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` and `ES-X05 — Website UX, authentication, and appeals` are `BLOCKED` / `PARKED_BLOCKED`. No new implementation package is active.
 
-ES-X05 standalone PR `wsg138/enthusia-site#2` passed final-head site validation run `31113188453`, both production and market-preview Cloudflare deployments, Codacy with zero annotations, and review with zero unresolved threads. It merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`, which remains standalone `main`.
+ES-X05 standalone PR `wsg138/enthusia-site#2` passed validation/review and merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`. Aggregate PR #73 passed hosted Coverage run `31116854096`, CodeRabbit, deterministic parity, and containment, then merged normally as `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
 
-Aggregate PR #73 passed exact-head Coverage run `31116854096` on `4c818bb3aea953d3f877efc8a48a9175ba219d38`, including the Java 21 clean build, all unit and MariaDB integration/migration tests, JaCoCo generation, runtime-JAR/provider-leak inspection, validation artifact upload, and Codacy coverage upload. CodeRabbit succeeded and every valid review thread was resolved. PR #73 merged normally as `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
+The remaining package gate is trusted staging/Pi evidence. Exact product-head staging run `31116860919` had an ordinary hosted build job with runner ID 0, empty runner name, and no steps; the Pi job was skipped. Post-merge/finalization runs also failed or were cancelled before product execution during GitHub's August 6 Actions partial outage. No product failure, staging pass, or owner infrastructure exception is claimed.
 
-Standalone and aggregate component hashes match at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`, with no added, missing, or modified component paths. Merge containment shows neither temporary implementation branch contains unique work.
-
-The sequential worker completed exactly ES-X05, published its final package state, left ES-P02 untouched, and stopped without selecting or activating another package. A future worker must reconcile live GitHub and run the canonical classification and priority process from the current registry.
+Preserved continuation: branch `package/es-x05-finalization`, open PR #74. Resume only after evidence that the Actions/staging condition changed. Then validate one frozen exact head with successful hosted Coverage plus trusted staging build and Pi boot/restart (or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed), reconfirm review/parity, merge PR #74 normally, publish `COMPLETE`, verify containment, clean safe temporary branches, and stop. Do not select another package first.
