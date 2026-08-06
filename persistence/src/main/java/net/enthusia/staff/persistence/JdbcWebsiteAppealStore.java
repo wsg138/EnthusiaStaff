@@ -195,7 +195,11 @@ final class JdbcWebsiteAppealStore {
                     "The appeal acceptance was previously rejected"
             );
         }
-        return new AppealAcceptancePreparation.Ready(true, pendingRevision(existing));
+        return new AppealAcceptancePreparation.Ready(
+                true,
+                pendingRevision(existing),
+                isFinalized(existing)
+        );
     }
 
     private static AppealAcceptancePreparation.Rejected bindingRejection(
@@ -252,8 +256,7 @@ final class JdbcWebsiteAppealStore {
             String state,
             String outcomeCode
     ) {
-        return APPEAL_APPLIED.equals(existing.state())
-                && APPEAL_APPLIED.equals(existing.outcomeCode())
+        return isFinalized(existing)
                 && APPEAL_APPLIED.equals(state)
                 && parsePendingRevision(outcomeCode).isPresent();
     }
@@ -287,6 +290,11 @@ final class JdbcWebsiteAppealStore {
     private static boolean pendingTransitionAllowed(String state, String outcomeCode) {
         return APPEAL_REJECTED.equals(state)
                 || APPEAL_APPLIED.equals(state) && APPEAL_APPLIED.equals(outcomeCode);
+    }
+
+    private static boolean isFinalized(AppealRow existing) {
+        return APPEAL_APPLIED.equals(existing.state())
+                && APPEAL_APPLIED.equals(existing.outcomeCode());
     }
 
     private static OptionalLong pendingRevision(AppealRow existing) {
