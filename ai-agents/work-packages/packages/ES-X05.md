@@ -31,6 +31,7 @@ The standalone site verifies Cloudflare Access JWT signature/issuer/audience/tim
 ## 5. Aggregate evidence
 
 - Starting aggregate main: `515bd9a8591505c043b413f5b9ecb3e272c6d6f2`.
+- Aggregate implementation branch: `package/es-x05-state-publication`.
 - Frozen product head: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
 - Exact hosted-validation/review head: `4c818bb3aea953d3f877efc8a48a9175ba219d38`.
 - Coverage run `31116854096`, job `92668751419`: success for Java 21 clean build, all unit and MariaDB/Testcontainers integration/migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, and Codacy coverage.
