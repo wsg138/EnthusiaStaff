@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Package ID | `ES-P01` |
-| Type | Internal |
+| Type | Internal ordinary development package |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
 | Priority | `10` |
@@ -13,9 +13,9 @@
 
 ## 2. Status
 
-Canonical current status: `BLOCKED`. `PACKAGE-REGISTRY.md` is authoritative.
+Canonical current status: `MERGE_PENDING`. `PACKAGE-REGISTRY.md` is authoritative.
 
-Implementation, review, and every currently executable hosted gate are complete at frozen product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`. The remaining required Pi staging gate cannot execute because the private staging build receives no runner, and no verified owner exception has been accepted.
+Implementation and product review are frozen at `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`. Every executable hosted gate was passing at reconciled PR head `7b132a3c0696dfcd4f991d64d75390047bc79a39`, with Codacy and CodeRabbit clear and zero valid unresolved review threads. The owner has accepted the formal zero-execution infrastructure exception below. The final documentation head must pass every applicable exact-head gate and remain unchanged and mergeable before merge.
 
 ## 3. Objective
 
@@ -44,9 +44,10 @@ Ensure an appeal decision can mutate only the exact appealed sanction and cannot
 
 - Website UX changes
 - Production authority activation or deployment
-- LiteBans replacement, migration, cutover, or issue #43 acceptance
+- LiteBans replacement, migration, cutover, issue #43 acceptance, or the 168-hour shadow period
 - External provider or standalone-component changes
 - Private database or player-data access
+- ES-V02 execution or completion
 - Any package other than ES-P01
 
 ## 7. Dependencies and boundaries
@@ -65,44 +66,62 @@ Ensure an appeal decision can mutate only the exact appealed sanction and cannot
 - [x] Preserve authorization, hierarchy, SYSTEM immutability, authority fencing, and website contract behavior.
 - [x] Implement durable pending revision recovery, deterministic replay, stale-state protection, rollback, and concurrency handling.
 - [x] Add focused domain, Velocity, persistence, and MariaDB/Testcontainers tests.
-- [x] Complete harsh first-party review of the complete package diff.
+- [x] Complete harsh first-party review of the complete product diff.
 - [x] Resolve every valid CodeRabbit/Codacy finding and require zero valid unresolved review threads.
 - [x] Freeze product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be` and pass the full hosted Java 21/MariaDB/runtime-JAR/coverage gate.
-- [ ] Obtain successful applicable Pi staging build and safe boot/restart evidence, or a verified owner exception permitted by repository policy.
+- [x] Verify the Pi attempt allocated no runner, reported `runner_id: 0`, executed zero product steps, and skipped the downstream boot/restart job.
+- [x] Record owner approval under the formal zero-execution infrastructure-exception policy.
+- [x] Defer the missing distributed Pi boot/restart and Java/Bedrock staging evidence to `ES-V02` without starting it.
+- [ ] Freeze and validate the final policy/documentation PR head with every applicable executable gate.
 - [ ] Merge PR #68 normally.
 - [ ] Verify resulting `main`, reviewed-head containment, divergence, and safe branch deletion.
 - [ ] Complete post-merge canonical finalization and derive dependent package statuses.
 
-## 9. Exact-head validation evidence
+## 9. Hosted validation evidence
 
 Frozen product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`.
 
-- Coverage run `31064171443`, job `92498280092`: success.
+Latest reconciled pre-policy PR head: `7b132a3c0696dfcd4f991d64d75390047bc79a39`.
+
+- Coverage run `31064834286`, job `92500281761`: success.
 - Java: Temurin `21.0.11+10`.
 - Command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
-- Result: `BUILD SUCCESSFUL` in 5m28s; 49 tasks, 40 executed and 9 up-to-date.
+- Result: `BUILD SUCCESSFUL` in 5m22s; 49 tasks, 40 executed and 9 up-to-date.
 - All module tests and MariaDB/Testcontainers integration tests passed.
 - Runtime inspection checked 24 provider API source types and found zero leaks.
-- Paper JAR: 8,897,023 bytes; SHA-256 `ce0e19ae07af278d55db7a56ae65df74aa050aa21a9c010018e5283703c628b9`; 4,748 entries.
-- Velocity JAR: 7,790,210 bytes; SHA-256 `9b79c0e215d59a711a778414237789676b42cc083cd973f8c3f505d22e39612e`; 4,121 entries.
-- JaCoCo: 47.07% lines, 38.18% branches, 49.81% instructions.
-- Validation artifact `8953318443`: 18,264,471 bytes; SHA-256 `19a71478d9e05d1b08e2153d80442f81cc1a9208014adfabf186e9d969bb6e7f`.
-- Codacy static analysis and coverage upload passed with zero annotations.
-- CodeRabbit reports success; every current review thread is resolved.
+- Paper JAR: 8,897,023 bytes; SHA-256 `095ce7e763f267be050d5c1d36cb8a1190185937943f7b5272cd6dbc964cae9c`; 4,748 entries.
+- Velocity JAR: 7,790,210 bytes; SHA-256 `b23160d83709521b4910860357d4d1ab8019f894f5b61af15b77b97d1cec3229`; 4,121 entries.
+- JaCoCo: 47.07% lines, 38.16% branches, 49.81% instructions.
+- Validation artifact `8953543716`: 18,264,524 bytes; SHA-256 `a6f83d9977615ec1647b4cfbeaee74827b008db1054e6d71b32ae440582cc031`.
+- Codacy static analysis, coverage variation, and diff coverage passed.
+- CodeRabbit reported success; all six review threads were resolved and zero valid unresolved threads remained.
 
-## 10. Pi staging blocker
+The exact final PR head created by policy/package documentation must repeat every applicable executable hosted gate before merge. A later commit invalidates that evidence.
 
-The configured workflow dispatches to private repository `wsg138/EnthusiaStaff-Staging`.
+## 10. Owner-approved infrastructure exception
 
-- Parent run `31057348145`, job `92477622119`.
-- Staging run `31057358391`.
-- Staging build job `92477654523`: `runner_id: 0`, no runner name, zero executed steps.
-- Pi boot/restart job `92477660726`: skipped because the build dependency never ran.
+Status/evidence label: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
+
+### Approval
+
+Repository owner `wsg138` explicitly approved this narrowly defined infrastructure-only exception for ES-P01 in the current assigned-package instruction on 2026-08-05, America/Indiana/Indianapolis.
+
+### Exact evidence
+
+- External specialized environment: private `wsg138/EnthusiaStaff-Staging`.
+- Parent run `31057348145`, parent job `92477622119`.
+- Dispatched staging run `31057358391`.
+- Staging build job `92477654523`: labels `ubuntu-latest`, conclusion `failure`, `runner_id: 0`, empty runner name, and empty executed-step list `[]`.
+- Downstream job `92477660726`, `Boot and restart verified Paper runtime on Lincoln-PI-4`: conclusion `skipped`, no runner, and empty executed-step list `[]`.
 - Diagnostics artifact `8950755524`: SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
 
-This is infrastructure-unavailable evidence, not a passing gate and not a product boot failure. The responsible staging/CI owner is `wsg138`.
+### Disposition
 
-Unblock condition: allocate a compatible staging runner and obtain a successful exact-head staging build plus safe Pi boot/restart, or explicitly accept and record a verified validation exception permitted by repository policy.
+No product build, test, migration, runtime-JAR, server boot, or restart step executed. The staging result is infrastructure-unavailable evidence, not a product result. No product boot failure occurred.
+
+The Pi gate is not passed. This exception is not staging verification, production verification, or proof that EnthusiaStaff booted. It cannot excuse any allocated runner that executes a failing product step, compile/test/static-analysis/security/review/migration/JAR/documentation failure, private-validation package, issue #43, 168-hour shadow period, final cutover, production activation, ordinary GitHub-hosted build absence, or a failure caused by ES-P01 workflow edits.
+
+Missing distributed Pi build/boot/restart and Java/Bedrock staging evidence is assigned to `ES-V02 — Distributed and Java/Bedrock staging`. ES-V02 remains `DEFERRED`; it is neither started nor complete.
 
 ## 11. Migration impact
 
@@ -111,14 +130,14 @@ No migration is required. `V16` remains highest and V1–V16 remain immutable. T
 ## 12. Resume state
 
 - Starting package status: `ACTIVE`.
-- Current package status: `BLOCKED`.
-- Preserved branch: `package/es-p01-appeal-isolation`.
-- Preserved PR: `#68`.
+- Current package status: `MERGE_PENDING`.
+- Branch: `package/es-p01-appeal-isolation`.
+- PR: `#68`.
 - Frozen reviewed product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`.
 - Canonical handoff: [`../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md`](../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md).
-- No merge commit exists; `main` remains `e434b3dedc003d1d5b3def64f38cc7465752b0e5`.
-- No dependent package is `READY`; `ES-P02` and `ES-X05` remain `PLANNED`.
+- No merge commit exists yet; starting `main` remains `e434b3dedc003d1d5b3def64f38cc7465752b0e5` until PR #68 merges.
+- `ES-P02` and `ES-X05` remain `PLANNED` until post-merge finalization marks ES-P01 `COMPLETE`.
 
 ## 13. Exact next action
 
-Resolve the Pi gate without changing the frozen product head: configure a compatible runner in `wsg138/EnthusiaStaff-Staging` and rerun the exact-head staging build plus safe Pi boot/restart, or record an explicit verified owner exception. Then recheck that PR #68 still points to the validated head with all checks and reviews clear, merge normally, verify containment and divergence, delete the branch when safe, and complete a documentation-only post-merge finalization PR. Any real product commit requires another harsh review and every applicable exact-head gate.
+Harshly review the complete policy/package-state diff, freeze the resulting PR head, require Java 21 clean build, all module and MariaDB/Testcontainers tests, migration integrity, runtime-JAR construction/inspection, provider-leak inspection, aggregate coverage, Codacy, Wiki/documentation/package-orchestration validation, mergeability, and zero valid unresolved review threads. Confirm the head remains unchanged, then merge PR #68 normally, verify containment/divergence, safely delete the implementation branch, and complete a documentation-only finalization PR. Do not call Pi passed and do not start ES-V02, ES-P02, or ES-X05.
