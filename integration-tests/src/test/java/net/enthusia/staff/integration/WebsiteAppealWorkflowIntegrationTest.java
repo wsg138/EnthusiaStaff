@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Optional;
@@ -33,19 +34,14 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
+@SuppressWarnings("PMD.NcssCount")
 class WebsiteAppealWorkflowIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-06T12:00:00Z");
     private static final String PLAYER_NAME = "AppealPlayer";
     private static final String ACCOUNT_ID = uuid(801).toString();
     private static final UUID REVIEWER_ID = uuid(901);
-    private static final PunishmentCodeProtector CODE_PROTECTOR = new PunishmentCodeProtector(
-            1,
-            new SecretKeySpec(
-                    "website-appeal-workflow-integration-key"
-                            .getBytes(StandardCharsets.UTF_8),
-                    "HmacSHA256"
-            )
-    );
+    private static final String REVIEWER_RANK = "MOD";
+    private static final PunishmentCodeProtector CODE_PROTECTOR = testProtector();
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -104,7 +100,7 @@ class WebsiteAppealWorkflowIntegrationTest {
                     "request_information",
                     "Please provide the missing event context.",
                     REVIEWER_ID,
-                    "MOD",
+                    REVIEWER_RANK,
                     "decision-information-1",
                     NOW.plusSeconds(3)
             );
@@ -133,7 +129,7 @@ class WebsiteAppealWorkflowIntegrationTest {
                             "deny",
                             "This stale decision must not be accepted.",
                             REVIEWER_ID,
-                            "MOD",
+                            REVIEWER_RANK,
                             "decision-stale-1",
                             NOW.plusSeconds(6)
                     )
@@ -146,7 +142,7 @@ class WebsiteAppealWorkflowIntegrationTest {
                     "approve",
                     "The appeal is supported by the reviewed evidence.",
                     REVIEWER_ID,
-                    "MOD",
+                    REVIEWER_RANK,
                     "decision-approve-1",
                     NOW.plusSeconds(7)
             );
@@ -164,7 +160,7 @@ class WebsiteAppealWorkflowIntegrationTest {
                             "approve",
                             "The appeal is supported by the reviewed evidence.",
                             REVIEWER_ID,
-                            "MOD",
+                            REVIEWER_RANK,
                             "decision-approve-1",
                             NOW.plusSeconds(8)
                     );
@@ -254,6 +250,15 @@ class WebsiteAppealWorkflowIntegrationTest {
                 NOW.plusSeconds(3_600)
         );
         return new AppealFixture(caseId, sanctionId);
+    }
+
+    private static PunishmentCodeProtector testProtector() {
+        byte[] key = new byte[32];
+        new SecureRandom().nextBytes(key);
+        return new PunishmentCodeProtector(
+                1,
+                new SecretKeySpec(key, "HmacSHA256")
+        );
     }
 
     private static UUID uuid(long suffix) {

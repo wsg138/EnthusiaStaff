@@ -18,6 +18,10 @@ import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 
 final class WebsiteAppealWorkflowEndpoint {
+    private static final int MIN_APPEAL_REASON_LENGTH = 10;
+    private static final int MAX_APPEAL_REASON_LENGTH = 1_000;
+    private static final int MIN_DECISION_NOTE_LENGTH = 3;
+    private static final int MAX_DECISION_NOTE_LENGTH = 1_000;
     private static final Set<String> REVIEWER_STATES = Set.of(
             "ALL",
             "OPEN",
@@ -68,8 +72,8 @@ final class WebsiteAppealWorkflowEndpoint {
         UUID punishmentId = decoder.uuid(input, "punishmentId");
         String accountId = decoder.uuidText(input, "accountId");
         String username = decoder.minecraftUsername(input, "username");
-        String reason = decoder.text(input, "reason", 1_000).trim();
-        if (reason.length() < 10) {
+        String reason = decoder.text(input, "reason", MAX_APPEAL_REASON_LENGTH).trim();
+        if (reason.length() < MIN_APPEAL_REASON_LENGTH) {
             throw badRequest("INVALID_REASON", "The appeal reason is too short");
         }
         String idempotencyKey = decoder.text(input, "idempotencyKey", 128);
@@ -114,8 +118,8 @@ final class WebsiteAppealWorkflowEndpoint {
         requireReviewAccess(reviewer);
         String decision = decoder.text(input, "decision", 32);
         int expectedVersion = decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE);
-        String note = decoder.text(input, "note", 1_000).trim();
-        if (note.length() < 3) {
+        String note = decoder.text(input, "note", MAX_DECISION_NOTE_LENGTH).trim();
+        if (note.length() < MIN_DECISION_NOTE_LENGTH) {
             throw badRequest("INVALID_DECISION_NOTE", "The appeal decision note is too short");
         }
         String idempotencyKey = decoder.text(input, "idempotencyKey", 128);

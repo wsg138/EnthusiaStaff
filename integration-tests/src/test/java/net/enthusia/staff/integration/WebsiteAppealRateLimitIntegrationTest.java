@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,18 +33,12 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
+@SuppressWarnings("PMD.NcssCount")
 class WebsiteAppealRateLimitIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-06T12:00:00Z");
     private static final String PLAYER_NAME = "LimitedPlayer";
     private static final String ACCOUNT_ID = uuid(3_001).toString();
-    private static final PunishmentCodeProtector CODE_PROTECTOR = new PunishmentCodeProtector(
-            1,
-            new SecretKeySpec(
-                    "website-appeal-rate-limit-integration-key"
-                            .getBytes(StandardCharsets.UTF_8),
-                    "HmacSHA256"
-            )
-    );
+    private static final PunishmentCodeProtector CODE_PROTECTOR = testProtector();
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -142,6 +137,15 @@ class WebsiteAppealRateLimitIntegrationTest {
                 NOW.plusSeconds(7_200)
         );
         return new AppealFixture(caseId, sanctionId);
+    }
+
+    private static PunishmentCodeProtector testProtector() {
+        byte[] key = new byte[32];
+        new SecureRandom().nextBytes(key);
+        return new PunishmentCodeProtector(
+                1,
+                new SecretKeySpec(key, "HmacSHA256")
+        );
     }
 
     private static UUID uuid(long suffix) {
