@@ -30,7 +30,18 @@ final class VelocityConfigurationReloadCoordinator {
         return active.get();
     }
 
-    synchronized VelocityConfigurationReloadResult reload() {
+    VelocityConfigurationReloadResult reload() {
+        synchronized (this) {
+            return reloadLocked();
+        }
+    }
+
+    @SuppressWarnings({
+            "PMD.CyclomaticComplexity",
+            "PMD.NPathComplexity",
+            "PMD.ExcessiveMethodLength"
+    }) // A reload is one serialized transaction; splitting its rollback branches would obscure atomicity.
+    private VelocityConfigurationReloadResult reloadLocked() {
         if (stopping.getAsBoolean()) {
             return result(
                     VelocityConfigurationReloadResult.Outcome.SHUTTING_DOWN,
@@ -105,6 +116,8 @@ final class VelocityConfigurationReloadCoordinator {
         }
     }
 
+    @SuppressWarnings("PMD.ExcessiveMethodLength")
+    // Keeping the complete restart-required inventory together makes omissions reviewable against the configuration record.
     private static List<String> restartRequiredChanges(
             VelocityConfiguration current,
             VelocityConfiguration candidate
