@@ -2,16 +2,16 @@
 
 Current persistent package handoff:
 
-[`2026-08-05-es-p02-runtime-db-recovery.md`](../package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
+[`2026-08-06-es-x05-website-auth-appeals.md`](../package-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` is `BLOCKED` in preserved branch `package/es-p02-runtime-db-recovery` with open, non-draft, unmerged PR #70. Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` passed the hosted Java 21 build, all tests, MariaDB and Testcontainers, migration integrity, changed-code coverage threshold, runtime-JAR and provider-leak checks, Codacy with zero annotations, CodeRabbit, and zero valid unresolved review threads. Current package-record and PR head is `80d4ea840f34017c09afb618f623581b31c6223d`.
+State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external runner and authorization condition is unchanged. `ES-X05 — Website UX, authentication, and appeals` is `PARTIAL` and is the active `ACTIONABLE_CONTINUATION`.
 
-Required staging run `31072794096` failed twice before execution: ordinary `ubuntu-latest` build jobs `92524048937` and `92541148296` each received `runner_id: 0`, an empty runner name, and `steps: []`; downstream Pi jobs `92524054852` and `92541160241` were skipped. No staging product build, Pi boot, or restart executed. This is not a pass. No ES-P02 package-specific infrastructure exception or owner authorization exists.
+ES-X05 standalone baseline PR `wsg138/enthusia-site#1` merged as `042b503b7a4adc2627f2259a09e7d7394ced06ce`. Continuation PR `wsg138/enthusia-site#2` is open at exact head `11e68b60ef874a01f8b6f04f72bd8d694c496b56`; hosted validation run `31105809682` succeeded, including repository validation, appeal tests, nested shulker-potion preview tests, and the source build.
 
-While runner availability and authorization remain unchanged, classify ES-P02 as `PARKED_BLOCKED`. Its open PR, branch, drift behind `main`, and non-mergeability do not make it actionable. Do not rerun the identical staging gate, merge `main` into the implementation branch merely to keep it current, or modify PR #70. `ES-X05` is `READY` and unstarted; `ES-V02` is `DEFERRED`; no implementation package is active.
+The production `Cloudflare Pages: enthusia-site` check is a pre-existing project configuration/build-setting failure: it also fails on untouched prior main `9408166c75def0b55caa8d38fb546c6e77ea1f7d`, while both that commit and the current continuation head deploy successfully to `enthusia-market-preview`. Cloudflare dashboard logs/settings access is required to correct it.
 
-When hosted runner availability or owner authorization demonstrably changes, reclassify ES-P02 as `ACTIONABLE_CONTINUATION` and resume PR #70 before starting another new package.
+The aggregate site component remains `IMPORT_PENDING`, parity is unproven, and the real private appeal service contract is not yet accepted. Resume ES-X05 from PR #2; do not select another package. Do not modify ES-P02 PR #70 unless its external unblock condition demonstrably changes.
