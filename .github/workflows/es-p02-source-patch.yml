@@ -23,127 +23,129 @@ jobs:
         run: |
           from pathlib import Path
 
+          def block(*lines: str) -> str:
+              return "\n".join(lines) + "\n"
+
           def replace_once(path: str, old: str, new: str) -> None:
               target = Path(path)
               text = target.read_text(encoding="utf-8")
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}: {old!r}")
               target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
+          paper = "paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java"
           replace_once(
-              "paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java",
-              '''        if (!storageBootstrap.start()) {
-              publishHealth(OperationalMode.BOOTSTRAP, Map.of(
-                      "mariadb-retrying",
-                      "The initial bounded-worker submission was rejected; storage retry scheduling is in progress"
-              ));
-          }
-          ''',
-              '''        if (!storageBootstrap.start() && storageBootstrap.retryScheduled()) {
-              publishHealth(OperationalMode.BOOTSTRAP, Map.of(
-                      "mariadb-retrying",
-                      "The initial bounded-worker submission was rejected; storage retry scheduling is in progress"
-              ));
-          }
-          '''
+              paper,
+              "if (!storageBootstrap.start()) {",
+              "if (!storageBootstrap.start() && storageBootstrap.retryScheduled()) {"
           )
 
           velocity = "velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java"
           replace_once(
               velocity,
-              '''        MariaDbRuntime runtime = databaseRuntime;
-          databaseRuntime = null;
-          if (runtime != null) {
-              runtime.close();
-          }
-          clearPublishedStores();
-          ''',
-              '''        MariaDbRuntime runtime = databaseRuntime;
-          databaseRuntime = null;
-          try {
-              if (runtime != null) {
-                  runtime.close();
-              }
-          } finally {
-              clearPublishedStores();
-          }
-          '''
+              block(
+                  "        MariaDbRuntime runtime = databaseRuntime;",
+                  "        databaseRuntime = null;",
+                  "        if (runtime != null) {",
+                  "            runtime.close();",
+                  "        }",
+                  "        clearPublishedStores();"
+              ),
+              block(
+                  "        MariaDbRuntime runtime = databaseRuntime;",
+                  "        databaseRuntime = null;",
+                  "        try {",
+                  "            if (runtime != null) {",
+                  "                runtime.close();",
+                  "            }",
+                  "        } finally {",
+                  "            clearPublishedStores();",
+                  "        }"
+              )
           )
           replace_once(
               velocity,
-              '''            server.start();
-              websiteModerationStore = store;
-              websiteApiServer = server;
-              websiteMaintenanceTask = proxy.getScheduler()
-                      .buildTask(this, this::maintainWebsiteApi)
-                      .repeat(1, TimeUnit.MINUTES)
-                      .schedule();
-              logger.info(
-          ''',
-              '''            server.start();
-              ScheduledTask maintenance = proxy.getScheduler()
-                      .buildTask(this, this::maintainWebsiteApi)
-                      .repeat(1, TimeUnit.MINUTES)
-                      .schedule();
-              websiteModerationStore = store;
-              websiteApiServer = server;
-              websiteMaintenanceTask = maintenance;
-              server = null;
-              logger.info(
-          '''
+              block(
+                  "            server.start();",
+                  "            websiteModerationStore = store;",
+                  "            websiteApiServer = server;",
+                  "            websiteMaintenanceTask = proxy.getScheduler()",
+                  "                    .buildTask(this, this::maintainWebsiteApi)",
+                  "                    .repeat(1, TimeUnit.MINUTES)",
+                  "                    .schedule();",
+                  "            logger.info("
+              ),
+              block(
+                  "            server.start();",
+                  "            ScheduledTask maintenance = proxy.getScheduler()",
+                  "                    .buildTask(this, this::maintainWebsiteApi)",
+                  "                    .repeat(1, TimeUnit.MINUTES)",
+                  "                    .schedule();",
+                  "            websiteModerationStore = store;",
+                  "            websiteApiServer = server;",
+                  "            websiteMaintenanceTask = maintenance;",
+                  "            server = null;",
+                  "            logger.info("
+              )
           )
           replace_once(
               velocity,
-              '''            case APPLIED, NO_CHANGES -> {
-                  updateHealthIssue("configuration-reload", null);
-                  updateHealthIssue("configuration-restart-required", null);
-                  MariaDbRuntime runtime = databaseRuntime;
-                  if (runtime != null) {
-                      health.update(authorityMode.get(), operationalIssues(authorityMode.get()));
-                  }
-              }
-          ''',
-              '''            case APPLIED, NO_CHANGES -> {
-                  updateHealthIssue("configuration-reload", null);
-                  updateHealthIssue("configuration-restart-required", null);
-              }
-          '''
+              block(
+                  "            case APPLIED, NO_CHANGES -> {",
+                  "                updateHealthIssue(\"configuration-reload\", null);",
+                  "                updateHealthIssue(\"configuration-restart-required\", null);",
+                  "                MariaDbRuntime runtime = databaseRuntime;",
+                  "                if (runtime != null) {",
+                  "                    health.update(authorityMode.get(), operationalIssues(authorityMode.get()));",
+                  "                }",
+                  "            }"
+              ),
+              block(
+                  "            case APPLIED, NO_CHANGES -> {",
+                  "                updateHealthIssue(\"configuration-reload\", null);",
+                  "                updateHealthIssue(\"configuration-restart-required\", null);",
+                  "            }"
+              )
           )
           replace_once(
               velocity,
-              '''    private void updateHealthIssue(String component, String reason) {
-              VelocityRuntimeHealth.Snapshot snapshot = health.snapshot();
-              Map<String, String> issues = new LinkedHashMap<>(snapshot.issues());
-              if (reason == null || reason.isBlank()) {
-                  issues.remove(component);
-              } else {
-                  issues.put(component, reason);
-              }
-              health.update(snapshot.mode(), issues);
-          }
-          ''',
-              '''    private void updateHealthIssue(String component, String reason) {
-              health.updateIssue(authorityMode.get(), component, reason);
-          }
-          '''
+              block(
+                  "    private void updateHealthIssue(String component, String reason) {",
+                  "        VelocityRuntimeHealth.Snapshot snapshot = health.snapshot();",
+                  "        Map<String, String> issues = new LinkedHashMap<>(snapshot.issues());",
+                  "        if (reason == null || reason.isBlank()) {",
+                  "            issues.remove(component);",
+                  "        } else {",
+                  "            issues.put(component, reason);",
+                  "        }",
+                  "        health.update(snapshot.mode(), issues);",
+                  "    }"
+              ),
+              block(
+                  "    private void updateHealthIssue(String component, String reason) {",
+                  "        health.updateIssue(authorityMode.get(), component, reason);",
+                  "    }"
+              )
           )
           replace_once(
               velocity,
-              '''        @Override
-              public boolean hasPermission(Invocation invocation) {
-                  return invocation.source().hasPermission("enthusiastaff.status");
-              }
-          ''',
-              '''        @Override
-              public boolean hasPermission(Invocation invocation) {
-                  String[] arguments = invocation.arguments();
-                  if (arguments.length > 0 && arguments[0].equalsIgnoreCase("reload")) {
-                      return invocation.source().hasPermission("enthusiastaff.reload");
-                  }
-                  return invocation.source().hasPermission("enthusiastaff.status");
-              }
-          '''
+              block(
+                  "        @Override",
+                  "        public boolean hasPermission(Invocation invocation) {",
+                  "            return invocation.source().hasPermission(\"enthusiastaff.status\");",
+                  "        }"
+              ),
+              block(
+                  "        @Override",
+                  "        public boolean hasPermission(Invocation invocation) {",
+                  "            String[] arguments = invocation.arguments();",
+                  "            if (arguments.length > 0 && arguments[0].equalsIgnoreCase(\"reload\")) {",
+                  "                return invocation.source().hasPermission(\"enthusiastaff.reload\");",
+                  "            }",
+                  "            return invocation.source().hasPermission(\"enthusiastaff.status\");",
+                  "        }"
+              )
           )
       - name: Commit lifecycle repairs
         run: |
