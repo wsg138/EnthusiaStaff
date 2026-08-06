@@ -30,35 +30,38 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java')
           text = path.read_text()
-          changes = [
-              (
-                  'rateLimiter.enforce(connection, accountId, idempotencyKey, now);',
-                  'rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);'
-              ),
-              (
-                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?,
-                    idempotency_key = CASE WHEN ? = 'APPROVE' THEN ? ELSE idempotency_key END''',
-                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?'''
-              ),
-              (
-                  '''            statement.setTimestamp(9, Timestamp.from(now));
-            statement.setString(10, decision);
-            statement.setString(11, idempotencyKey);
-            statement.setBytes(12, UuidBytes.toBytes(existing.appealId()));
-            statement.setLong(13, existing.revision());''',
-                  '''            statement.setTimestamp(9, Timestamp.from(now));
-            statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
+
+          old_call = 'rateLimiter.enforce(connection, accountId, idempotencyKey, now);'
+          new_call = 'rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);'
+          if text.count(old_call) != 1:
+              raise SystemExit(f'Expected one legacy limiter call, found {text.count(old_call)}')
+          text = text.replace(old_call, new_call, 1)
+
+          line_pattern = re.compile(
+              r"^\s*idempotency_key = CASE WHEN \? = 'APPROVE' THEN \? ELSE idempotency_key END\n",
+              re.MULTILINE
+          )
+          text, count = line_pattern.subn('', text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one workflow-key overwrite line, found {count}')
+          text = text.replace('updated_at = ?,\n                WHERE', 'updated_at = ?\n                WHERE', 1)
+
+          bindings_pattern = re.compile(
+              r"statement\.setString\(10, decision\);\s*"
+              r"statement\.setString\(11, idempotencyKey\);\s*"
+              r"statement\.setBytes\(12, UuidBytes\.toBytes\(existing\.appealId\(\)\)\);\s*"
+              r"statement\.setLong\(13, existing\.revision\(\)\);"
+          )
+          replacement = '''statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
             statement.setLong(11, existing.revision());'''
-              )
-          ]
-          for old, new in changes:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'Expected one match, found {count}: {old[:80]!r}')
-              text = text.replace(old, new, 1)
+          text, count = bindings_pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one legacy decision binding block, found {count}')
+
           path.write_text(text)
           PY
       - name: Commit patch
