@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.OperationalMode;
@@ -34,6 +35,11 @@ final class WebsiteApiRouter {
     private static final String CLAIM_PATH = "/v1/website/punishment-codes/claim";
     private static final String REVALIDATE_PATH = "/v1/website/punishment-codes/revalidate";
     private static final String ACCEPT_APPEAL_PATH = "/v1/website/appeals/accept";
+    private static final String ELIGIBLE_APPEALS_PATH = "/v1/website/appeals/eligible";
+    private static final String SUBMIT_APPEAL_PATH = "/v1/website/appeals/submit";
+    private static final String REVIEW_APPEALS_PATH = "/v1/website/appeals/reviewer/list";
+    private static final String REVIEW_DECISION_PREFIX = "/v1/website/appeals/reviewer/";
+    private static final String REVIEW_DECISION_SUFFIX = "/decision";
     private static final Set<String> NO_QUERY = Set.of();
     private static final Set<String> CLAIM_FIELDS =
             Set.of(ACCOUNT_ID, "username", "punishmentCode");
@@ -48,11 +54,35 @@ final class WebsiteApiRouter {
             "actorRank",
             "reason"
     );
+    private static final Set<String> ELIGIBLE_FIELDS = Set.of(ACCOUNT_ID);
+    private static final Set<String> SUBMIT_FIELDS = Set.of(
+            PUNISHMENT_ID,
+            ACCOUNT_ID,
+            "username",
+            "reason",
+            "idempotencyKey"
+    );
+    private static final Set<String> REVIEW_LIST_FIELDS = Set.of(
+            "actorAccountId",
+            "actorRank",
+            "status",
+            "cursor",
+            "limit"
+    );
+    private static final Set<String> REVIEW_DECISION_FIELDS = Set.of(
+            "actorAccountId",
+            "actorRank",
+            "decision",
+            "expectedVersion",
+            "note",
+            "idempotencyKey"
+    );
 
     private final WebsiteModerationStore store;
     private final Clock clock;
     private final WebsiteApiRequestDecoder decoder;
     private final WebsiteAppealEndpoint appeals;
+    private final WebsiteAppealWorkflowEndpoint appealWorkflow;
 
     WebsiteApiRouter(
             WebsiteModerationStore store,
@@ -74,6 +104,13 @@ final class WebsiteApiRouter {
                 authorityMode,
                 clock,
                 decoder
+        );
+        this.appealWorkflow = new WebsiteAppealWorkflowEndpoint(
+                store,
+                authorization,
+                clock,
+                decoder,
+                appeals
         );
     }
 
@@ -108,15 +145,34 @@ final class WebsiteApiRouter {
             byte[] body
     ) {
         if (CLAIM_PATH.equals(path)) {
-            decoder.requireQueryKeys(query, NO_QUERY);
+            requireNoQuery(query);
             return claim(headers, body);
         }
         if (REVALIDATE_PATH.equals(path)) {
-            decoder.requireQueryKeys(query, NO_QUERY);
+            requireNoQuery(query);
             return revalidate(headers, body);
         }
+        if (ELIGIBLE_APPEALS_PATH.equals(path)) {
+            requireNoQuery(query);
+            return appealWorkflow.eligible(decoder.jsonBody(headers, body, ELIGIBLE_FIELDS));
+        }
+        if (SUBMIT_APPEAL_PATH.equals(path)) {
+            requireNoQuery(query);
+            return appealWorkflow.submit(decoder.jsonBody(headers, body, SUBMIT_FIELDS));
+        }
+        if (REVIEW_APPEALS_PATH.equals(path)) {
+            requireNoQuery(query);
+            return appealWorkflow.list(decoder.jsonBody(headers, body, REVIEW_LIST_FIELDS));
+        }
+        if (isReviewDecisionPath(path)) {
+            requireNoQuery(query);
+            return appealWorkflow.decide(
+                    reviewDecisionId(path),
+                    decoder.jsonBody(headers, body, REVIEW_DECISION_FIELDS)
+            );
+        }
         if (ACCEPT_APPEAL_PATH.equals(path)) {
-            decoder.requireQueryKeys(query, NO_QUERY);
+            requireNoQuery(query);
             ObjectNode input = decoder.jsonBody(headers, body, ACCEPT_FIELDS);
             return appeals.accept(headers, input);
         }
@@ -203,6 +259,10 @@ final class WebsiteApiRouter {
         return WebsiteApiResponses.binding(binding);
     }
 
+    private void requireNoQuery(Map<String, String> query) {
+        decoder.requireQueryKeys(query, NO_QUERY);
+    }
+
     private static PublicPunishmentFilter filter(String raw) {
         try {
             return PublicPunishmentFilter.valueOf(
@@ -217,6 +277,30 @@ final class WebsiteApiRouter {
         return path.startsWith(PUBLIC_CASE_PREFIX)
                 && path.length() > PUBLIC_CASE_PREFIX.length()
                 && path.indexOf('/', PUBLIC_CASE_PREFIX.length()) < 0;
+    }
+
+    private static boolean isReviewDecisionPath(String path) {
+        return path.startsWith(REVIEW_DECISION_PREFIX)
+                && path.endsWith(REVIEW_DECISION_SUFFIX)
+                && path.length() > REVIEW_DECISION_PREFIX.length()
+                        + REVIEW_DECISION_SUFFIX.length();
+    }
+
+    private static UUID reviewDecisionId(String path) {
+        int end = path.length() - REVIEW_DECISION_SUFFIX.length();
+        String raw = path.substring(REVIEW_DECISION_PREFIX.length(), end);
+        if (raw.indexOf('/') >= 0) {
+            throw badRequest("INVALID_APPEAL_ID", "The appeal identifier is invalid");
+        }
+        try {
+            UUID appealId = UUID.fromString(raw);
+            if (!appealId.toString().equalsIgnoreCase(raw)) {
+                throw new IllegalArgumentException("Non-canonical UUID");
+            }
+            return appealId;
+        } catch (IllegalArgumentException exception) {
+            throw badRequest("INVALID_APPEAL_ID", "The appeal identifier is invalid");
+        }
     }
 
     private static WebsiteApiException badRequest(String code, String message) {

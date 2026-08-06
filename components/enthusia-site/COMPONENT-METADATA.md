@@ -6,11 +6,13 @@
 | Standalone repository | `wsg138/enthusia-site` |
 | Standalone default branch | `main` |
 | Aggregate path | `components/enthusia-site/` |
-| Verified standalone head at setup | `9408166c75def0b55caa8d38fb546c6e77ea1f7d` |
-| Last synchronized external SHA | `UNSET` |
-| Last synchronized aggregate-main SHA | `UNSET` |
-| Synchronization state | `NOT_IMPORTED` |
+| Last synchronized external SHA | `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
+| Standalone continuation merge | `b385f78c522f452cc48d78ed19fd2ee82573f64d` via `wsg138/enthusia-site#2` |
+| Last synchronized aggregate-main SHA | `PENDING_PR_73_MERGE` |
+| Synchronization state | `PARITY_VERIFIED_ON_PR_BRANCH` |
+| Active package | `ES-X05` |
+| Content hash | `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2` |
 | Content-hash method | `tools/component-sync/component_sync.py`; SHA-256 over sorted POSIX paths and raw bytes; `COMPONENT-METADATA.md` excluded as aggregate-only orchestration metadata |
-| Current blockers | Source has not been imported into the aggregate path. Import only through an assigned external package. |
+| Parity evidence | `ai-agents/reports/package-handoffs/2026-08-06-es-x05-component-parity.json` |
 
 No permanent component branch or isolated-component PR exists or is required.

@@ -1,85 +1,93 @@
 # `ES-X05` — Website UX, authentication, and appeals
 
 ## 1. Package identity
-`ES-X05`; External/multi-repository; primary `COMP-SITE`; other `COMP-STAFF`; priority 35; conditional parallel safety after exact-sanction contract.
+
+`ES-X05`; external/multi-repository; primary `COMP-SITE`; other `COMP-STAFF`; priority `35`; dependency `ES-P01`.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+
+`MERGE_PENDING` — `ACTIONABLE_CONTINUATION`
+
+Assigned worker: `ChatGPT sequential ES-X05 completion worker`.
 
 ## 3. Objective
-Complete website authentication, punishment/appeal UX, staff review workflow, privacy, rate limiting, retries, and private-contract integration.
 
-## 4. Why the package exists
-User-facing appeal/auth/reviewer behavior is outside the core repo, while site-side privacy/concurrency/rate limiting remains incomplete.
+Complete website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, the real private EnthusiaStaff appeal contract, production site deployment, and verified standalone/aggregate synchronization.
 
-## 5. Included audit IDs
-`AUD-APPEAL-001`, `AUD-APPEAL-004`, site-side `AUD-WEB-003`, `AUD-WEB-004`.
+## 4. Completed standalone-site work
 
-## 6. Included behavior
-Player authentication/ownership and submission; punishment/appeal pages; reviewer UX/authorization; privacy-safe notifications; explicit rate limits/body/session controls; retry/concurrency/stale decision handling; exact-sanction contract consumption; matching aggregate copy/parity.
+- Cloudflare Access JWT signature, issuer, audience, expiry, and not-before verification.
+- Canonical Minecraft identity derived only from verified claims.
+- Authenticated exact-punishment selector and appeal submission boundary.
+- Privileged reviewer listing and versioned decision boundary.
+- Same-origin mutation enforcement, identity-bound idempotency, bounded bodies, bounded upstream requests, and stale-decision protection.
+- Fixed-origin, allowlisted, bearer-plus-HMAC private Staff API requests with timestamp, nonce, and body-hash authentication.
+- Hosted Node 22 test/build workflow with persisted checkout credentials disabled.
+- Exact vanilla potion IDs and tint colors for potions, splash potions, lingering potions, and tipped arrows nested in shulker boxes or bundles; live updates are serialized and failed manifest loads may retry.
 
-## 7. Explicit exclusions
-Core appeal mutation defect (`ES-P01`); production deployment/credentials/routes; unrelated website redesign.
+## 5. Standalone evidence
 
-## 8. Dependencies
-`ES-P01` must be `COMPLETE`.
+- Repository: `wsg138/enthusia-site`
+- Starting main: `9408166c75def0b55caa8d38fb546c6e77ea1f7d`
+- Baseline PR #1 merge: `042b503b7a4adc2627f2259a09e7d7394ced06ce`
+- Continuation branch: `package/es-x05-appeal-hardening`
+- Continuation PR: `wsg138/enthusia-site#2`
+- Final reviewed head: `1a45b32e372cf6939c078a0d7986655e7ed639d6`
+- Hosted validation: run `31113188453` — success.
+- Production `enthusia-site` Cloudflare deployment: success.
+- Market-preview Cloudflare deployment: success.
+- Review: zero unresolved threads; Codacy passed with zero annotations.
+- Normal merge commit and current standalone `main`: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
 
-## 9. Component and repository boundaries
-`wsg138/enthusia-site`, `components/enthusia-site/`, and directly necessary EnthusiaStaff private contracts/tests/state only. No permanent component branches or isolated PR.
+## 6. Completed aggregate and contract work
 
-## 10. Required branches
-Temporary `package/es-x05-site-appeals` in both repos (or stricter compatible site convention); delete after verified merges.
+- Aggregate branch: `package/es-x05-state-publication`.
+- Aggregate PR: `wsg138/EnthusiaStaff#73`.
+- Frozen aggregate product head before final state reconciliation: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
+- The site and Velocity implementation use the same exact POST routes and payloads:
+  - `/v1/website/appeals/eligible`
+  - `/v1/website/appeals/submit`
+  - `/v1/website/appeals/reviewer/list`
+  - `/v1/website/appeals/reviewer/{appealId}/decision`
+- The Velocity API validates bearer/HMAC authentication, timestamp skew, nonce replay, body hash, canonical UUIDs, bounded request bodies, fixed fields, and role/service-boundary authorization. It is loopback-only and is intended to sit behind the deployment proxy for `staff-api.enthusia.info`.
+- Durable MariaDB appeal workflow includes exact-punishment eligibility, account binding, duplicate prevention, atomic rate limiting, request idempotency, reviewer version checks, appeal-scoped reviewer replay keys, audit events, and exact-sanction approval integration.
+- V17 is the only new migration and does not alter V1–V16.
+- Integration tests cover lifecycle behavior, stale decisions, duplicate appeals, account binding, rate limits, submission replay, reviewer replay scoping, and exact-sanction acceptance delegation.
 
-## 11. Required PRs
-Two same-ID cross-referenced PRs: standalone site and aggregate EnthusiaStaff. No third/isolated PR.
+## 7. Component synchronization
 
-## 12. Implementation checklist
-Reconcile both repos/AGENTS/heads/license/build; verify/import aggregate source; confirm exact-sanction contract; implement UX/auth/rate/privacy/retry; test both; update metadata/state/handoff; review/freeze/validate; merge both; parity compare; cleanup.
+- Standalone source: merge commit `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Aggregate destination: `components/enthusia-site/` in PR #73.
+- Canonical component hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`.
+- Standalone hash equals aggregate hash.
+- Added, missing, and modified path sets are empty.
+- Metadata-only `COMPONENT-METADATA.md` is excluded by the canonical sync method.
+- Parity evidence: [`2026-08-06-es-x05-component-parity.json`](../../reports/package-handoffs/2026-08-06-es-x05-component-parity.json).
 
-## 13. Acceptance criteria
-Only authenticated owner may submit; reviewers are authorized; exact appealed sanction is displayed/acted upon; retries/stale decisions are duplicate-safe; rate/body/session limits explicit; private/public fields correct; both PRs merged and parity true.
+## 8. Remaining completion work
 
-## 14. Test requirements
-Site and core suites plus authentication/session/ownership, CSRF/replay/private API, rate limiting, stale/concurrent decisions, visibility/privacy, retry/failure, accessibility/usability, and contract compatibility.
+1. Obtain a successful exact-current-head aggregate Coverage run. Run `31115480613` failed before checkout because GitHub could not resolve action downloads; no product step executed.
+2. Confirm applicable static-analysis checks and zero valid unresolved review threads on the final head.
+3. Reconfirm deterministic parity against standalone `main` at `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+4. Merge aggregate PR #73 by a normal merge commit with the reviewed head unchanged.
+5. Verify aggregate-main containment and no unique temporary-branch work.
+6. Publish final aggregate merge SHA and `COMPLETE` state, clean temporary branches where tooling permits, and stop without selecting another package.
 
-## 15. Static-analysis requirements
-All configured checks/security/static analysis/review bots in both repos; zero valid unresolved findings.
+## 9. Migration and authority boundary
 
-## 16. Documentation requirements
-User appeal flow, staff review, authentication/privacy/rate limits, deployment-neutral configuration, contract version, component metadata, package state/handoff, PR cross-links.
+- Current aggregate `main` remains at V16 until PR #73 merges.
+- PR #73 adds immutable `V17__website_appeal_workflow.sql`.
+- LiteBans remains authoritative. Issue #43 remains open, deferred, and excluded.
+- ES-X05 does not deploy or authorize a LiteBans cutover, access production punishment data, rewrite Flyway history, or activate EnthusiaStaff punishment authority.
 
-## 17. Security and privacy requirements
-No production credentials/data; secure session/cookie/CSRF/replay boundaries; least-privilege reviewer access; no private punishment/evidence leakage.
+## 10. Security/privacy boundary
 
-## 18. Migration impact
-New immutable migration only in owning repo if essential after boundary verification; clean/upgrade/rollback tests; no existing-history edits.
+No production credentials, Access tokens, player records, punishment records, or private database data are committed. Authentication, reviewer rank, origin, replay, rate-limit, timeout, request-size, and upstream-service configuration fail closed. Browser-provided identity and rank are never trusted as service authority.
 
-## 19. Bedrock considerations
-Website login/ownership must work for Floodgate identities without exposing raw UUIDs or requiring Java-only assumptions.
+## 11. Canonical handoff
 
-## 20. Distributed-runtime considerations
-Private API retries, stale sanctions, multiple reviewers, core restarts, timeout/ambiguous response, and duplicate submission must be safe.
+[`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
 
-## 21. External-provider considerations
-The site is the external component; follow its own framework/AGENTS/security/CI and verified core contract only.
+## 12. Last update
 
-## 22. Completion definition
-Both exact-head PRs merge normally; UX/security/checks/reviews pass; parity true; metadata/evidence recorded; temp branches handled.
-
-## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after `ES-P01` and assignment.
-
-## 24. Last completed checkpoint
-Definition/metadata only; no implementation began.
-
-## 25. Remaining checklist
-All two-repo implementation, tests, review, merge, parity, and evidence remain.
-
-## 26. Known blockers
-Dependency `ES-P01`; production environment/credentials intentionally excluded.
-
-## 27. Final evidence
-Unset: bases/heads/PRs/merges, security/UX tests, checks/reviews, parity manifests/hashes.
-
-## 28. Merge and synchronization record
-Unset. One-sided merge means `SYNC_PENDING`; completion requires both merges, parity, metadata, containment, and temp branch cleanup.
+2026-08-06

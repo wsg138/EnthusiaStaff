@@ -184,6 +184,7 @@ final class WebsiteApiServer implements AutoCloseable {
             case NOT_FOUND -> 404;
             case CONFLICT -> 409;
             case INELIGIBLE -> 422;
+            case RATE_LIMITED -> 429;
             case UNAVAILABLE -> 503;
         };
     }
@@ -207,7 +208,7 @@ final class WebsiteApiServer implements AutoCloseable {
     }
 
     @Override
-    @SuppressWarnings("PMD.NullAssignment") // Clearing the field permits a clean restart after shutdown.
+    @SuppressWarnings("PMD.NullAssignment")
     public void close() {
         synchronized (lifecycleLock) {
             WebsiteApiRuntime current = runtime;

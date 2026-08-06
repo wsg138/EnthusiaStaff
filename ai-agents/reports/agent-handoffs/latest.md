@@ -2,16 +2,18 @@
 
 Current persistent package handoff:
 
-[`2026-08-05-es-p02-runtime-db-recovery.md`](../package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
+[`2026-08-06-es-x05-website-auth-appeals.md`](2026-08-06-es-x05-website-auth-appeals.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` is `BLOCKED` in preserved branch `package/es-p02-runtime-db-recovery` with open, non-draft, unmerged PR #70. Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` passed the hosted Java 21 build, all tests, MariaDB and Testcontainers, migration integrity, changed-code coverage threshold, runtime-JAR and provider-leak checks, Codacy with zero annotations, CodeRabbit, and zero valid unresolved review threads. Current package-record and PR head is `80d4ea840f34017c09afb618f623581b31c6223d`.
+State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external staging runner and authorization condition is unchanged. `ES-X05 — Website UX, authentication, and appeals` is `MERGE_PENDING` and is the active `ACTIONABLE_CONTINUATION` at owner priority `35`.
 
-Required staging run `31072794096` failed twice before execution: ordinary `ubuntu-latest` build jobs `92524048937` and `92541148296` each received `runner_id: 0`, an empty runner name, and `steps: []`; downstream Pi jobs `92524054852` and `92541160241` were skipped. No staging product build, Pi boot, or restart executed. This is not a pass. No ES-P02 package-specific infrastructure exception or owner authorization exists.
+ES-X05 standalone PR `wsg138/enthusia-site#2` passed final-head site validation run `31113188453`, both production and market-preview Cloudflare deployments, Codacy with zero annotations, and review with zero unresolved threads. It merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`, which is current standalone `main`.
 
-While runner availability and authorization remain unchanged, classify ES-P02 as `PARKED_BLOCKED`. Its open PR, branch, drift behind `main`, and non-mergeability do not make it actionable. Do not rerun the identical staging gate, merge `main` into the implementation branch merely to keep it current, or modify PR #70. `ES-X05` is `READY` and unstarted; `ES-V02` is `DEFERRED`; no implementation package is active.
+Aggregate PR #73 implements the matching signed private appeal contract, durable MariaDB workflow, exact-sanction approval delegation, V17 migration, integration coverage, and the canonical `components/enthusia-site/` import. Standalone and aggregate hashes match at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`, with no added, missing, or modified component paths.
 
-When hosted runner availability or owner authorization demonstrably changes, reclassify ES-P02 as `ACTIONABLE_CONTINUATION` and resume PR #70 before starting another new package.
+The aggregate product head before state reconciliation is `96912301fc425ac6f5eff9349ee3b3d543d122eb`. Coverage run `31115480613` failed before checkout because GitHub returned `Service Unavailable` while resolving action downloads; no product step executed, so a successful exact-current-head run is still required.
+
+Resume ES-X05 from aggregate PR #73. Validate and review the exact head, reconfirm parity, merge normally, verify containment, publish final `COMPLETE` state and merge hashes, clean temporary branches where tooling permits, and stop. Do not select another package or modify ES-P02 PR #70 unless its external unblock condition demonstrably changes.

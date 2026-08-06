@@ -19,6 +19,10 @@ import net.enthusia.staff.domain.website.PublicPunishmentFilter;
 import net.enthusia.staff.domain.website.PublicPunishmentPage;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
+import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
+import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealPage;
+import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 public final class JdbcWebsiteModerationStore implements WebsiteModerationStore {
@@ -28,6 +32,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
     private final JdbcPublicPunishmentRegistry publicRegistry;
     private final JdbcPunishmentCodeStore punishmentCodes;
     private final JdbcWebsiteAppealStore appeals;
+    private final JdbcWebsiteAppealWorkflowStore appealWorkflow;
 
     public JdbcWebsiteModerationStore(
             DataSource dataSource,
@@ -50,6 +55,12 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                 dataSource,
                 codeProtector,
                 punishmentCodeRepository
+        );
+        this.appealWorkflow = new JdbcWebsiteAppealWorkflowStore(
+                dataSource,
+                codeProtector,
+                punishmentCodeRepository,
+                new JdbcWebsiteAppealRateLimiter(codeProtector)
         );
     }
 
@@ -174,6 +185,67 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
         appeals.complete(appealId, state, outcomeCode, now);
     }
 
+    @Override
+    public List<WebsiteAppealCandidate> eligibleAppeals(
+            String accountId,
+            int limit,
+            Instant now
+    ) {
+        return appealWorkflow.eligible(accountId, limit, now);
+    }
+
+    @Override
+    public WebsiteAppealSubmission submitAppeal(
+            UUID punishmentId,
+            String accountId,
+            String username,
+            String reason,
+            String idempotencyKey,
+            Instant now
+    ) {
+        return appealWorkflow.submit(
+                punishmentId,
+                accountId,
+                username,
+                reason,
+                idempotencyKey,
+                now
+        );
+    }
+
+    @Override
+    public WebsiteAppealPage listAppeals(
+            String state,
+            Optional<String> cursor,
+            int limit,
+            Instant now
+    ) {
+        return appealWorkflow.list(state, cursor, limit, now);
+    }
+
+    @Override
+    public WebsiteAppealDecisionPreparation prepareAppealDecision(
+            UUID appealId,
+            long expectedVersion,
+            String decision,
+            String note,
+            UUID reviewerAccountId,
+            String reviewerRank,
+            String idempotencyKey,
+            Instant now
+    ) {
+        return appealWorkflow.prepareDecision(
+                appealId,
+                expectedVersion,
+                decision,
+                note,
+                reviewerAccountId,
+                reviewerRank,
+                idempotencyKey,
+                now
+        );
+    }
+
     private static WebsiteModerationException invalid(String code, String message) {
         return new WebsiteModerationException(WebsiteModerationException.Kind.INVALID, code, message);
     }
@@ -183,5 +255,4 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                 ? persistenceException
                 : new ModerationPersistenceException(message, exception);
     }
-
 }
