@@ -8,55 +8,47 @@ Live GitHub state overrides stale records, but persistent package state must be 
 
 | Field | Value |
 | --- | --- |
-| Completed prerequisite | `ES-P01 — Exact-sanction appeal isolation` |
-| Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| ES-P02 classification | `PARKED_BLOCKED` while its runner/authorization condition is unchanged |
-| Preserved ES-P02 work | branch `package/es-p02-runtime-db-recovery`, open PR #70, current package-record head `80d4ea840f34017c09afb618f623581b31c6223d` |
-| Active package | `ES-X05 — Website UX, authentication, and appeals` |
-| ES-X05 status | `MERGE_PENDING` |
-| ES-X05 classification | `ACTIONABLE_CONTINUATION` |
-| Owner priority | `35` |
-| Aggregate work | `wsg138/EnthusiaStaff#73`, branch `package/es-x05-state-publication` |
-| Frozen aggregate product head | `96912301fc425ac6f5eff9349ee3b3d543d122eb` |
-| Standalone repository | `wsg138/enthusia-site` |
-| Standalone reviewed head | `1a45b32e372cf6939c078a0d7986655e7ed639d6` |
-| Standalone merge | PR #2 merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`; standalone `main` points to that merge |
-| Standalone validation | Site validation run `31113188453` succeeded; production and market-preview Cloudflare deployments succeeded; zero unresolved review threads |
-| Component parity | verified at SHA-256 `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2` |
-| Migration boundary | aggregate PR adds immutable `V17__website_appeal_workflow.sql`; current aggregate `main` remains at V16 until PR #73 merges |
-| Intended post-merge status | `COMPLETE`, only after exact-head aggregate validation/review, normal merge of PR #73, containment, parity, and final state publication |
-| Canonical handoff | [`2026-08-06-es-x05-website-auth-appeals.md`](reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md) |
-| Deferred validation | `ES-V02 — Distributed and Java/Bedrock staging` |
+| Completed package | `ES-P01 — Exact-sanction appeal isolation` |
+| Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-X05 — Website UX, authentication, and appeals` |
+| ES-P02 status/classification | `BLOCKED` / `PARKED_BLOCKED` while its hosted/private runner condition is unchanged |
+| Preserved ES-P02 work | branch `package/es-p02-runtime-db-recovery`, open PR #70, package-record head `80d4ea840f34017c09afb618f623581b31c6223d`; untouched by this worker |
+| ES-X05 status/classification | `BLOCKED` / `PARKED_BLOCKED` at finalization |
+| Preserved ES-X05 finalization | branch `package/es-x05-finalization`, open PR #74, head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`; untouched by this worker |
+| ES-X05 implementation | aggregate PR #73 merged normally as current starting `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; standalone PR `wsg138/enthusia-site#2` merged as `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
+| ES-X05 remaining blocker | ordinary hosted exact-head Coverage gate for PR #74; do not rerun until material runner recovery evidence exists |
+| Active package | `ES-P03 — Bedrock identity correctness` |
+| ES-P03 status | `ACTIVE` |
+| ES-P03 classification | owner-directed ready continuation under the narrow dependency-routing exception below |
+| ES-P03 branch | `package/es-p03-bedrock-identity` |
+| ES-P03 starting SHA | `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
+| Migration boundary | immutable V17 on aggregate `main`; V1–V17 must remain unchanged unless ES-P03 proves a new migration essential |
+| Canonical handoff | [`2026-08-06-es-p03-bedrock-identity.md`](reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
+| Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
-## ES-X05 completed evidence
+## Owner-directed routing exception
 
-- Standalone PR #2 verifies Cloudflare Access JWT signature, issuer, audience, expiry, and not-before claims; derives the linked Minecraft identity from verified claims; and keeps appeal/reviewer pages off normal site navigation.
-- The site sends only allowlisted POST routes to `https://staff-api.enthusia.info`, with a fixed bearer token, HMAC-SHA256 over method/path/timestamp/nonce/body hash, a seven-second timeout, strict same-origin browser mutations, and fail-closed configuration.
-- Aggregate Velocity routes implement the same exact path and JSON contracts for eligible punishments, submission, reviewer listing, and versioned decisions. The API is loopback-only behind the deployment proxy, authenticates bearer/HMAC requests in constant time, bounds bodies, enforces timestamp skew, and persists nonce replay protection.
-- MariaDB-backed appeal submission rate limiting is atomic under row locks and scopes replay exemptions to account, exact punishment, and idempotency key. Submission and reviewer-decision idempotency constraints are identity- and appeal-scoped.
-- Appeal approval delegates to the exact-sanction acceptance boundary rather than ending an entire combined case.
-- The standalone merged tree and `components/enthusia-site/` import have no added, missing, or modified files under the canonical component-sync hash method.
-- Nested potions in shulker boxes/bundles use exact namespaced potion IDs and vanilla tint colors before rendering; live updates are serialized and transient manifest failures can retry.
+The ordinary execution graph requires ES-P02 to be complete before ES-P03. On 2026-08-06 the repository owner explicitly directed the next sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. No other ordinary implementation package was dependency-complete. The worker therefore selected the lowest-priority next implementation package, ES-P03, and records this as a narrow owner-directed routing exception.
 
-## Current aggregate gate
+This exception:
 
-- PR #73 is the only aggregate implementation PR for ES-X05.
-- Its last product commit is `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
-- Coverage run `31115480613` did not execute checkout or product code because GitHub returned `Service Unavailable` while resolving action downloads. It is transient infrastructure evidence, not a product failure or a passing gate.
-- Final merge still requires a successful exact-head hosted build/test/migration/coverage/runtime-JAR gate, applicable static analysis, zero valid unresolved review threads, unchanged parity, and normal merge-commit integration.
+- does not mark ES-P02 or ES-X05 complete;
+- does not merge, synchronize, or modify PR #70, PR #74, or their branches;
+- does not import unmerged ES-P02 lifecycle/reload work into ES-P03;
+- does not waive ES-P03 review, exact-head hosted validation, migration integrity, or merge gates;
+- does not make any later package ready automatically; and
+- requires later reconciliation if ES-P02 integration exposes a real source conflict or behavioral dependency.
 
-## Required next-worker behavior
+## ES-P03 package boundary
 
-1. Leave ES-P02 PR #70 and its branch untouched unless the external staging unblock condition demonstrably changes.
-2. Resume ES-X05 PR #73; do not select another package.
-3. Validate the exact current PR head, address every valid review finding, and preserve V1–V16 migration immutability while validating V17.
-4. Reconfirm standalone `main` at `b385f78c522f452cc48d78ed19fd2ee82573f64d` and deterministic aggregate parity.
-5. Merge PR #73 only through a normal merge commit after all gates pass and the reviewed head is unchanged.
-6. Verify merge containment and no unique branch work, publish final merge hashes and `COMPLETE` state through the canonical records, clean temporary branches where tooling permits, and stop without activating another package.
+ES-P03 owns verified Java/Floodgate platform observations, `*`-prefixed Bedrock current/history names, deterministic UUID/name resolution, duplicate and out-of-order identity writes, and the canonical identity fields later consumed by ES-P09. It excludes alt-graph confidence/inheritance, live Bedrock acceptance, provider invention, production data, and issue #43 work.
+
+## Current known defects
+
+- Paper mute enforcement records every joining player as `PlayerPlatform.JAVA`.
+- Velocity records every backend connection as `PlayerPlatform.JAVA`.
+- `JdbcPlayerDirectory` rejects the configured `*` Bedrock prefix and its prefix search rejects `*` aliases.
+- Directory upserts can overwrite a stronger known platform with a weaker or incorrect later observation.
 
 ## Safety boundaries
 
-- No production credentials, Cloudflare secrets, punishment records, player records, or private database data are committed.
-- Authentication, origin, reviewer role, rate-limit, replay, body-size, timeout, and upstream-service configuration fail closed.
-- LiteBans remains authoritative; issue #43 remains open and deferred. ES-X05 does not deploy or authorize a punishment-authority cutover.
-- ES-P02 PR #70 and its preserved branch must not be modified merely for drift while the external blocker is unchanged.
+No production credentials, Cloudflare secrets, punishment records, player records, raw addresses, or private database data may be committed or inspected. No deployment, authority activation, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, or cutover is authorized. Representative Java/Bedrock staging remains owned by `ES-V02`.
