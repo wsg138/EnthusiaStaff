@@ -69,7 +69,7 @@ final class VelocityBootstrapCoordinator {
         return exhausted.get();
     }
 
-    private boolean submitAttempt() {
+    private synchronized boolean submitAttempt() {
         if (stopping() || completed.get() || !attemptRunning.compareAndSet(false, true)) {
             return false;
         }
@@ -77,66 +77,78 @@ final class VelocityBootstrapCoordinator {
         if (workers.submit(() -> runAttempt(number))) {
             return true;
         }
-        attemptRunning.set(false);
         return handleFailure(number, new IllegalStateException("Velocity bootstrap worker submission was rejected"));
     }
 
     private void runAttempt(int number) {
         if (stopping()) {
-            attemptRunning.set(false);
+            synchronized (this) {
+                attemptRunning.set(false);
+            }
             return;
         }
         listener.attempting(number, retryPolicy.maximumAttempts());
         try {
             attempt.run();
-            attemptRunning.set(false);
-            if (stopping()) {
-                return;
+            synchronized (this) {
+                if (stopping()) {
+                    attemptRunning.set(false);
+                    return;
+                }
+                completed.set(true);
+                exhausted.set(false);
+                attemptRunning.set(false);
             }
-            completed.set(true);
-            exhausted.set(false);
             listener.recovered(number);
         } catch (PermanentFailure failure) {
-            attemptRunning.set(false);
-            exhausted.set(true);
+            synchronized (this) {
+                exhausted.set(true);
+                attemptRunning.set(false);
+            }
             listener.exhausted(number, failure);
         } catch (RuntimeException failure) {
-            attemptRunning.set(false);
             handleFailure(number, failure);
         }
     }
 
-    private boolean handleFailure(int failedAttempt, RuntimeException failure) {
+    private synchronized boolean handleFailure(int failedAttempt, RuntimeException failure) {
         if (stopping()) {
+            attemptRunning.set(false);
             return false;
         }
         if (failedAttempt >= retryPolicy.maximumAttempts()) {
             exhausted.set(true);
+            attemptRunning.set(false);
             listener.exhausted(failedAttempt, failure);
             return false;
         }
         long delayMillis = retryPolicy.delayAfterFailure(failedAttempt);
-        listener.retrying(failedAttempt + 1, retryPolicy.maximumAttempts(), delayMillis, failure);
         if (!retryScheduled.compareAndSet(false, true)) {
             exhausted.set(true);
+            attemptRunning.set(false);
             listener.exhausted(failedAttempt, new IllegalStateException(
                     "Duplicate Velocity bootstrap retry scheduling was rejected", failure));
             return false;
         }
-        boolean scheduled = scheduler.schedule(() -> {
-            retryScheduled.set(false);
-            if (!stopping()) {
-                submitAttempt();
-            }
-        }, delayMillis);
+        listener.retrying(failedAttempt + 1, retryPolicy.maximumAttempts(), delayMillis, failure);
+        boolean scheduled = scheduler.schedule(this::runScheduledRetry, delayMillis);
         if (!scheduled) {
             retryScheduled.set(false);
             exhausted.set(true);
+            attemptRunning.set(false);
             listener.exhausted(failedAttempt, new IllegalStateException(
                     "Velocity bootstrap retry scheduling was rejected", failure));
             return false;
         }
+        attemptRunning.set(false);
         return true;
+    }
+
+    private synchronized void runScheduledRetry() {
+        retryScheduled.set(false);
+        if (!stopping()) {
+            submitAttempt();
+        }
     }
 
     private boolean stopping() {
@@ -172,12 +184,9 @@ final class VelocityBootstrapCoordinator {
         long delayAfterFailure(int failedAttempt) {
             long delay = initialDelayMillis;
             for (int index = 1; index < failedAttempt && delay < maximumDelayMillis; index++) {
-                if (delay > maximumDelayMillis / 2L) {
-                    return maximumDelayMillis;
-                }
-                delay *= 2L;
+                delay = Math.min(delay * 2L, maximumDelayMillis);
             }
-            return Math.min(delay, maximumDelayMillis);
+            return delay;
         }
     }
 
