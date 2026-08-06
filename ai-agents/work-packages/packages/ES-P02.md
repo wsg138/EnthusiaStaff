@@ -62,7 +62,7 @@ PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, unmerged, and currentl
 - [x] Pass frozen-product-head Codacy with zero annotations and CodeRabbit.
 - [x] Reconcile the required staging failure and one rerun.
 - [x] Verify both ordinary `ubuntu-latest` build attempts had `runner_id: 0`, empty runner names, and zero steps, with both downstream Pi jobs skipped.
-- [x] Publish the persistent blocked state to canonical `main` through a documentation-only process PR.
+- [x] Prepare canonical blocked-state records for normal merge through the documentation-only status-publication process.
 - [ ] After the external condition changes, obtain successful exact-head staging build plus Pi build, safe boot, and restart evidence, or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed.
 - [ ] After that change, merge current `main` into the package branch through the approved normal merge-commit workflow and resolve conflicts without rebase or force-push.
 - [ ] Freeze and revalidate the synchronized exact head.
