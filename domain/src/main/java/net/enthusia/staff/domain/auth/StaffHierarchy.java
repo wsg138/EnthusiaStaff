@@ -12,7 +12,7 @@ public final class StaffHierarchy {
             return false;
         }
         if (bypassHierarchy) {
-            return actor == StaffRank.FOUNDER;
+            return actor != StaffRank.DEVELOPER && actor != StaffRank.SYSTEM;
         }
         return switch (actor) {
             case FOUNDER -> issuer != StaffRank.SYSTEM;
