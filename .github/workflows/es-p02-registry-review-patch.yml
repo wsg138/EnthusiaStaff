@@ -1,0 +1,61 @@
+name: ES-P02 registry review patch
+
+on:
+  push:
+    branches:
+      - package/es-p02-runtime-db-recovery
+    paths:
+      - .github/workflows/es-p02-registry-review-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: package/es-p02-runtime-db-recovery
+          fetch-depth: 0
+      - name: Apply asserted registry replacements
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("ai-agents/work-packages/PACKAGE-REGISTRY.md")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = {
+              "Last updated: 2026-08-05": "Last updated: 2026-08-06",
+              "Canonical current state: `ES-P02 ACTIVE — selected automatically after live reconciliation because no unfinished package work existed, ES-P01 is COMPLETE, and ES-P02 is the lowest-priority-number eligible READY package. Branch package/es-p02-runtime-db-recovery starts from main d94d0219a598c9afb7e19c4ea9fddafd554d6469. The initial checkpoint records automatic sequential orchestration and package routing; product implementation has not started. ES-X05 remains READY and unstarted.`": "Canonical current state: `ES-P02 REVIEW — implementation, focused tests, documentation, and all confirmed review repairs are committed on package/es-p02-runtime-db-recovery in open non-draft PR #70. Exact-head hosted validation, merge, containment, cleanup, and finalization remain. Starting main is d94d0219a598c9afb7e19c4ea9fddafd554d6469. ES-X05 remains READY and unstarted.`",
+              "| Status | `ACTIVE` |\n| Priority | `20` |": "| Status | `REVIEW` |\n| Priority | `20` |",
+              "| Aggregate PR | `Pending early draft creation after initial checkpoint` |": "| Aggregate PR | `#70 — open, non-draft; exact-head validation pending` |",
+              "| Blocker | `NONE. Product implementation has not started; current checkpoint is orchestration and durable routing only.` |": "| Blocker | `NONE. Implementation and review repair are complete; current-head hosted build, test, static-analysis, artifact, review-bot, and staging evidence remain before merge.` |"
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one registry match, found {count}: {old}")
+              text = text.replace(old, new, 1)
+
+          marker = "### `ES-P02` — Runtime database recovery and Velocity reload"
+          start = text.index(marker)
+          end = text.index("### `ES-P03`", start)
+          section = text[start:end]
+          old = "| Last update | `2026-08-05` |"
+          if section.count(old) != 1:
+              raise SystemExit("expected one ES-P02 Last update row")
+          section = section.replace(old, "| Last update | `2026-08-06` |", 1)
+          text = text[:start] + section + text[end:]
+
+          path.write_text(text, encoding="utf-8")
+      - name: Commit registry checkpoint
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ai-agents/work-packages/PACKAGE-REGISTRY.md
+          git diff --cached --check
+          git commit -m "ES-P02: mark canonical package status review"
+          git push origin HEAD:package/es-p02-runtime-db-recovery
