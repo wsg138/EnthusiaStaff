@@ -18,20 +18,23 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 
 ## Current package state
 
-`ES-P01 BLOCKED — implementation, first-party review, CodeRabbit review, hosted Java 21/MariaDB validation, runtime-JAR inspection, static analysis, and coverage all pass at exact product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be. The configured applicable Pi staging gate cannot execute because the private staging build receives no runner, and no owner exception has been accepted.`
+`ES-P01 MERGE_PENDING — implementation and product review are frozen at 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be. The owner approved the narrowly defined zero-execution infrastructure exception for the unavailable Pi staging gate. Final policy/package documentation and every executable exact-head gate must remain clear before PR #68 may merge.`
 
 | Field | Value |
 | --- | --- |
 | Canonical package status | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Active implementation package | `ES-P01 — Exact-sanction appeal isolation` |
-| Preserved implementation branch | `package/es-p01-appeal-isolation` |
-| Preserved implementation PR | `#68 — ES-P01: isolate appeals to the exact sanction` |
+| Implementation branch | `package/es-p01-appeal-isolation` |
+| Implementation PR | `#68 — ES-P01: isolate appeals to the exact sanction` |
 | Frozen reviewed product head | `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be` |
-| Passing hosted run | Coverage run `31064171443`, job `92498280092` |
+| Latest reconciled pre-policy PR head | `7b132a3c0696dfcd4f991d64d75390047bc79a39` |
+| Latest passing hosted run at reconciliation | Coverage run `31064834286`, job `92500281761` |
 | Package handoff | `ai-agents/reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md` |
-| Exact next action | The `wsg138/EnthusiaStaff-Staging` owner must allocate a compatible runner and rerun the exact-head staging build plus safe Pi boot/restart successfully, or explicitly accept and record a verified validation exception. Then reconcile the unchanged PR head and all checks/reviews, merge normally, verify containment, delete the branch, and finalize canonical package state. Any real defect requiring a new product commit must trigger another harsh review and every applicable exact-head gate. |
+| Infrastructure disposition | `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED` |
+| Deferred evidence package | `ES-V02 — Distributed and Java/Bedrock staging` |
+| Exact next action | Harshly review the policy/package documentation, freeze the resulting PR head, require every executable hosted exact-head gate, Codacy, CodeRabbit, documentation/package validation, mergeability, and zero valid unresolved threads, then merge PR #68 normally. Any new commit invalidates the current-head evidence. |
 | Intended post-merge status | `ES-P01 COMPLETE` only after normal merge, containment verification, safe branch deletion, and post-merge canonical finalization; `ES-P02` and `ES-X05` then become `READY`. |
-| Owner priority | Resolve the ES-P01 Pi gate and complete its merge/finalization before starting a dependent package. |
+| Owner priority | Finish ES-P01 merge and finalization without starting ES-V02 or any dependent package. |
 | Production authority | LiteBans remains authoritative |
 
 ## Completed work
@@ -42,34 +45,41 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 - Existing `MUTATION_PENDING_R<revision>` storage is centralized and rejects malformed, negative, signed, or leading-zero revisions.
 - No migration, provider, production-authority, website-UX, or issue #43 change was introduced.
 
-## Exact-head validation
+## Hosted validation evidence
 
-Frozen product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`:
+Frozen product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be` passed the full hosted Java/MariaDB gate. At live reconciliation, PR head `7b132a3c0696dfcd4f991d64d75390047bc79a39` also passed exact-head Coverage run `31064834286`, job `92500281761`:
 
-- Java 21 clean build, all module tests, MariaDB/Testcontainers, runtime-JAR integrity/provider-leak inspection, aggregate JaCoCo generation, artifact upload, and Codacy coverage upload passed in run `31064171443`, job `92498280092`.
-- Build command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
-- Result: `BUILD SUCCESSFUL` in 5m28s; 49 tasks, 40 executed and 9 up-to-date.
-- Runtime inspection checked 24 provider API types and found zero leaks.
-- Paper JAR: 8,897,023 bytes, SHA-256 `ce0e19ae07af278d55db7a56ae65df74aa050aa21a9c010018e5283703c628b9`, 4,748 entries.
-- Velocity JAR: 7,790,210 bytes, SHA-256 `9b79c0e215d59a711a778414237789676b42cc083cd973f8c3f505d22e39612e`, 4,121 entries.
-- Aggregate JaCoCo: 47.07% lines, 38.18% branches, 49.81% instructions.
-- Validation artifact `8953318443`: 18,264,471 bytes, SHA-256 `19a71478d9e05d1b08e2153d80442f81cc1a9208014adfabf186e9d969bb6e7f`.
-- Codacy static analysis and coverage checks passed with zero annotations. CodeRabbit reports success and zero valid unresolved review threads.
+- Temurin Java `21.0.11+10`.
+- Command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
+- `BUILD SUCCESSFUL` in 5m22s; 49 tasks, 40 executed and 9 up-to-date.
+- All module tests and MariaDB/Testcontainers integration tests passed.
+- Runtime inspection checked 24 provider API source types and found zero leaks.
+- Paper JAR: 8,897,023 bytes, SHA-256 `095ce7e763f267be050d5c1d36cb8a1190185937943f7b5272cd6dbc964cae9c`, 4,748 entries.
+- Velocity JAR: 7,790,210 bytes, SHA-256 `b23160d83709521b4910860357d4d1ab8019f894f5b61af15b77b97d1cec3229`, 4,121 entries.
+- Aggregate JaCoCo: 47.07% lines, 38.16% branches, 49.81% instructions.
+- Validation artifact `8953543716`: 18,264,524 bytes, SHA-256 `a6f83d9977615ec1647b4cfbeaee74827b008db1054e6d71b32ae440582cc031`.
+- Codacy static analysis, coverage variation, and diff coverage passed. CodeRabbit was successful and zero valid unresolved review threads remained.
 
-## Pi blocker and exception routing
+The final documentation head must repeat every applicable exact-head gate before merge.
 
+## Owner-approved infrastructure exception
+
+Status/evidence label: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
+
+- Owner approval: repository owner `wsg138` explicitly approved this narrowly defined infrastructure-only exception for ES-P01 in the current assigned-package instruction on 2026-08-05, America/Indiana/Indianapolis.
+- Affected external environment: private `wsg138/EnthusiaStaff-Staging` workflow.
 - Parent run `31057348145`, parent job `92477622119`, dispatched staging run `31057358391`.
-- Staging build job `92477654523` received `runner_id: 0`, no runner name, and executed zero steps.
-- Safe Pi boot/restart job `92477660726` was skipped because its build dependency never ran.
-- Diagnostics artifact `8950755524` has SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
-- This is infrastructure-unavailable evidence. It is neither a passing gate nor a product boot failure.
-- Responsible owner and focused routing: `wsg138`, owner of `wsg138/EnthusiaStaff-Staging`, through that repository's runner configuration or an explicitly recorded owner exception.
-- Required external input: allocate a compatible runner and obtain a successful exact-head staging build plus safe Pi boot/restart, or explicitly accept a verified validation exception allowed by repository policy.
-- PR #68 and its branch remain preserved. Merge is prohibited until this condition is resolved.
+- Staging build job `92477654523`: labels `ubuntu-latest`, `runner_id: 0`, empty runner name, and `steps: []`.
+- Safe Pi boot/restart job `92477660726`: skipped, no runner, and `steps: []` because the build dependency never executed.
+- Diagnostics artifact `8950755524`: SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
+- Reason: no runner was allocated and zero product build, test, migration, artifact, boot, or restart step executed. The evidence is infrastructure-unavailable, not a product result.
+- Deferred obligation: obtain distributed Pi build, boot, restart, and Java/Bedrock staging evidence in `ES-V02 — Distributed and Java/Bedrock staging` when that package is legitimately started.
+
+The Pi gate is not passed. This exception is not staging verification, production verification, or proof that the plugin booted. It cannot cover an allocated runner, an executed failing product step, a product boot failure, migration failure, security/static-analysis/review failure, issue #43, the 168-hour shadow period, cutover, production activation, or a failure caused by ES-P01 workflow edits.
 
 ## Dependency routing
 
-No later package is active or newly `READY`. `ES-P02` and `ES-X05` remain `PLANNED` because ES-P01 is not `COMPLETE`. They must not be started in the ES-P01 channel.
+No later package is active. `ES-P02` and `ES-X05` remain `PLANNED` until ES-P01 reaches `COMPLETE`. `ES-V02` remains `DEFERRED` and is not started by this exception.
 
 ## Component state
 
@@ -81,5 +91,6 @@ No long-lived component branches exist or are part of the design. Temporary pack
 
 - No package other than ES-P01 began in this channel.
 - No private database or derived rows were accessed or uploaded.
-- No production authority, deployment, LiteBans cutover, issue #43 acceptance, website UX, or external-provider work is part of ES-P01.
+- No deployment, production authority, LiteBans cutover, issue #43 acceptance, 168-hour shadow period, website UX, or external-provider work is part of ES-P01.
+- ES-V02, ES-P02, and ES-X05 were not started.
 - V1–V16 remain immutable; no migration is required for ES-P01.
