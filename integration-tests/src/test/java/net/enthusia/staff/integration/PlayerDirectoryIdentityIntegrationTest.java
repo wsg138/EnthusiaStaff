@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class PlayerDirectoryIdentityIntegrationTest {
     private static final String HUB = "hub";
+    private static final String SMP = "smp";
     private static final String LEGACY_NAME = "LegacyName";
 
     @Container
@@ -69,7 +70,7 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant renamedAt = firstSeen.plus(2, ChronoUnit.HOURS);
 
         directory.recordSeenVerified(playerId, "*BedrockOne", PlayerPlatform.BEDROCK, HUB, firstSeen);
-        directory.recordSeenVerified(playerId, "*BedrockTwo", PlayerPlatform.BEDROCK, "smp", renamedAt);
+        directory.recordSeenVerified(playerId, "*BedrockTwo", PlayerPlatform.BEDROCK, SMP, renamedAt);
 
         PlayerResolution.Resolved current = assertInstanceOf(
                 PlayerResolution.Resolved.class,
@@ -116,7 +117,7 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant older = Instant.parse("2026-08-06T14:00:00Z");
         Instant newer = older.plus(5, ChronoUnit.MINUTES);
 
-        directory.recordSeenVerified(playerId, "CurrentName", PlayerPlatform.JAVA, "smp", newer);
+        directory.recordSeenVerified(playerId, "CurrentName", PlayerPlatform.JAVA, SMP, newer);
         directory.recordSeenVerified(playerId, "OldName", PlayerPlatform.JAVA, HUB, older);
 
         PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
@@ -125,12 +126,27 @@ class PlayerDirectoryIdentityIntegrationTest {
         assertEquals(playerId, directory.find("OldName").orElseThrow().playerId());
 
         PlayerPresence presence = directory.presence(playerId).orElseThrow();
-        assertEquals("smp", presence.currentServer().orElseThrow());
+        assertEquals(SMP, presence.currentServer().orElseThrow());
         assertEquals(newer, presence.lastSeenAt());
     }
 
     @Test
-    void staleDisconnectCannotClearANewerConnection() {
+    void equalTimestampObservationsUseStableIdentityAndPresenceOrder() {
+        UUID forward = UUID.fromString("2256fc46-d3a6-4052-a9eb-adb07aa39b71");
+        UUID reverse = UUID.fromString("a68df36b-22ea-4a10-8d67-e060a3c6fc69");
+        Instant sameTime = Instant.parse("2026-08-06T14:30:00Z");
+
+        directory.recordSeenVerified(forward, "AlphaName", PlayerPlatform.JAVA, HUB, sameTime);
+        directory.recordSeenVerified(forward, "ZuluName", PlayerPlatform.JAVA, SMP, sameTime);
+        directory.recordSeenVerified(reverse, "ZuluName", PlayerPlatform.JAVA, SMP, sameTime);
+        directory.recordSeenVerified(reverse, "AlphaName", PlayerPlatform.JAVA, HUB, sameTime);
+
+        assertStableEqualTimeWinner(forward, sameTime);
+        assertStableEqualTimeWinner(reverse, sameTime);
+    }
+
+    @Test
+    void staleOrEqualDisconnectCannotClearANewerConnection() {
         UUID playerId = UUID.fromString("517ebd6b-56d9-4027-9be2-33f2a7fcc243");
         Instant firstConnection = Instant.parse("2026-08-06T15:00:00Z");
         Instant newerConnection = firstConnection.plus(10, ChronoUnit.MINUTES);
@@ -138,11 +154,32 @@ class PlayerDirectoryIdentityIntegrationTest {
         directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, HUB, firstConnection);
         directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, HUB, newerConnection);
         directory.recordDisconnected(playerId, HUB, firstConnection.plusSeconds(30));
+        directory.recordDisconnected(playerId, HUB, newerConnection);
 
         PlayerPresence presence = directory.presence(playerId).orElseThrow();
         assertTrue(presence.online());
         assertEquals(HUB, presence.currentServer().orElseThrow());
         assertEquals(newerConnection, presence.lastSeenAt());
+    }
+
+    @Test
+    void prefixSearchTreatsUnderscoreLiterally() {
+        UUID literal = UUID.fromString("8215e3f0-7ea2-49eb-a7cb-edfe899df528");
+        UUID wildcardLookalike = UUID.fromString("13f25c97-4f22-43a1-9033-d4b5ebcdfa23");
+        Instant now = Instant.parse("2026-08-06T15:30:00Z");
+
+        directory.recordSeenVerified(literal, "*bedrock_one", PlayerPlatform.BEDROCK, HUB, now);
+        directory.recordSeenVerified(
+                wildcardLookalike,
+                "*bedrockXone",
+                PlayerPlatform.BEDROCK,
+                HUB,
+                now.plusSeconds(1)
+        );
+
+        List<PlayerIdentity> matches = directory.search("*bedrock_", 10);
+        assertEquals(1, matches.size());
+        assertEquals(literal, matches.getFirst().playerId());
     }
 
     @Test
@@ -158,5 +195,14 @@ class PlayerDirectoryIdentityIntegrationTest {
                 now
         ));
         assertThrows(IllegalArgumentException.class, () -> directory.search("**", 10));
+    }
+
+    private void assertStableEqualTimeWinner(UUID playerId, Instant expectedTime) {
+        PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
+        assertEquals("ZuluName", identity.currentUsername().orElseThrow());
+        assertEquals(expectedTime, identity.lastSeenAt());
+        PlayerPresence presence = directory.presence(playerId).orElseThrow();
+        assertEquals(SMP, presence.currentServer().orElseThrow());
+        assertEquals(expectedTime, presence.lastSeenAt());
     }
 }
