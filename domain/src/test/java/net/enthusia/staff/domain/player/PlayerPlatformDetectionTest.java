@@ -55,6 +55,18 @@ class PlayerPlatformDetectionTest {
     }
 
     @Test
+    void brokenFloodgateWithoutLocalGeyserRemainsUnknown() {
+        assertEquals(
+                PlayerPlatform.UNKNOWN,
+                PlayerPlatformDetection.resolve(
+                        IntegrationAvailability.UNAVAILABLE,
+                        false,
+                        IntegrationAvailability.NOT_INSTALLED
+                )
+        );
+    }
+
+    @Test
     void inconsistentBedrockFlagWithoutAvailableFloodgateRemainsUnknown() {
         assertEquals(
                 PlayerPlatform.UNKNOWN,
