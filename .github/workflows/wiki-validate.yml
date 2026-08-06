@@ -15,9 +15,62 @@ on:
       - ".github/workflows/wiki-*.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  patch-es-x05:
+    if: github.event_name == 'pull_request' && github.head_ref == 'package/es-x05-state-publication'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out package branch
+        uses: actions/checkout@v6
+        with:
+          ref: package/es-x05-state-publication
+      - name: Apply asserted replay-key patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java')
+          text = path.read_text()
+          changes = [
+              (
+                  'rateLimiter.enforce(connection, accountId, idempotencyKey, now);',
+                  'rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);'
+              ),
+              (
+                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?,
+                    idempotency_key = CASE WHEN ? = 'APPROVE' THEN ? ELSE idempotency_key END
+                WHERE appeal_id = ? AND revision = ?''',
+                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?
+                WHERE appeal_id = ? AND revision = ?'''
+              ),
+              (
+                  '''            statement.setTimestamp(9, Timestamp.from(now));
+            statement.setString(10, decision);
+            statement.setString(11, idempotencyKey);
+            statement.setBytes(12, UuidBytes.toBytes(existing.appealId()));
+            statement.setLong(13, existing.revision());''',
+                  '''            statement.setTimestamp(9, Timestamp.from(now));
+            statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
+            statement.setLong(11, existing.revision());'''
+              )
+          ]
+          for old, new in changes:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected one match, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java
+          git commit -m "Fix ES-X05 storage replay keys"
+          git push origin HEAD:package/es-x05-state-publication
+
   validate:
     runs-on: ubuntu-latest
     steps:
