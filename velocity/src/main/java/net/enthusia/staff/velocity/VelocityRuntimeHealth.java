@@ -18,7 +18,7 @@ final class VelocityRuntimeHealth {
         snapshot.set(new Snapshot(mode, Map.copyOf(issues)));
     }
 
-    void updateIssue(OperationalMode mode, String component, String reason) {
+    void updateIssue(String component, String reason) {
         snapshot.updateAndGet(current -> {
             Map<String, String> issues = new LinkedHashMap<>(current.issues());
             if (reason == null || reason.isBlank()) {
@@ -26,7 +26,7 @@ final class VelocityRuntimeHealth {
             } else {
                 issues.put(component, reason);
             }
-            return new Snapshot(mode, Map.copyOf(issues));
+            return new Snapshot(current.mode(), Map.copyOf(issues));
         });
     }
 
