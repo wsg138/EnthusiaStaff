@@ -1,5 +1,6 @@
 name: ES-X05 maintenance patch
 
+# Temporary branch-only workflow; removed before final validation and merge.
 on:
   push:
     branches: [package/es-x05-state-publication]
@@ -87,12 +88,12 @@ jobs:
               )
 
           workflow_test = 'integration-tests/src/test/java/net/enthusia/staff/integration/WebsiteAppealWorkflowIntegrationTest.java'
+          replace(workflow_test, '"MOD"', 'REVIEWER_RANK', count=4)
           replace(
               workflow_test,
               '    private static final UUID REVIEWER_ID = uuid(901);\n',
               '    private static final UUID REVIEWER_ID = uuid(901);\n    private static final String REVIEWER_RANK = "MOD";\n'
           )
-          replace(workflow_test, '"MOD"', 'REVIEWER_RANK', count=4)
           PY
       - name: Commit remediation
         run: |
