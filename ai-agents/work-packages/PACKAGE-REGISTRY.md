@@ -1,8 +1,8 @@
 # Package registry
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
-Canonical current state: `ES-P02 ACTIVE — selected automatically after live reconciliation because no unfinished package work existed, ES-P01 is COMPLETE, and ES-P02 is the lowest-priority-number eligible READY package. Branch package/es-p02-runtime-db-recovery starts from main d94d0219a598c9afb7e19c4ea9fddafd554d6469. The initial checkpoint records automatic sequential orchestration and package routing; product implementation has not started. ES-X05 remains READY and unstarted.`
+Canonical current state: `ES-P02 REVIEW — implementation, focused tests, documentation, and all confirmed review repairs are committed on package/es-p02-runtime-db-recovery in open non-draft PR #70. Exact-head hosted validation, merge, containment, cleanup, and finalization remain. Starting main is d94d0219a598c9afb7e19c4ea9fddafd554d6469. ES-X05 remains READY and unstarted.`
 
 ES-P02 live baseline: `wsg138/EnthusiaStaff:main` at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`; no open PRs and no remote branch other than main existed before claim; V16 was highest; issue #43 remained open, deferred, and excluded.
 
@@ -66,20 +66,20 @@ ES-P02 live baseline: `wsg138/EnthusiaStaff:main` at `d94d0219a598c9afb7e19c4ea9
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `ACTIVE` |
+| Status | `REVIEW` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
 | Assigned worker | `ChatGPT sequential package worker #2` |
 | Active branches | `package/es-p02-runtime-db-recovery` |
-| Aggregate PR | `Pending early draft creation after initial checkpoint` |
+| Aggregate PR | `#70 — open, non-draft; exact-head validation pending` |
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Final reviewed heads | `UNSET` |
 | Merge commits | `UNSET` |
-| Last update | `2026-08-05` |
+| Last update | `2026-08-06` |
 | Handoff | [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md) |
-| Blocker | `NONE. Product implementation has not started; current checkpoint is orchestration and durable routing only.` |
+| Blocker | `NONE. Implementation and review repair are complete; current-head hosted build, test, static-analysis, artifact, review-bot, and staging evidence remain before merge.` |
 | Package file | [`packages/ES-P02.md`](packages/ES-P02.md) |
 
 ### `ES-P03` — Bedrock identity correctness
