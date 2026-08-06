@@ -30,7 +30,7 @@ final class StorageBootstrapCoordinator<S> {
     private final AtomicBoolean terminal = new AtomicBoolean();
     private final AtomicBoolean retryScheduled = new AtomicBoolean();
     private final AtomicInteger attempts = new AtomicInteger();
-    private final AtomicReference<Attempt<S>> activeAttempt = new AtomicReference<>();
+    private final AtomicReference<Attempt> activeAttempt = new AtomicReference<>();
 
     StorageBootstrapCoordinator(
             WorkerExecutor workers,
@@ -95,7 +95,7 @@ final class StorageBootstrapCoordinator<S> {
             return false;
         }
         int number = attempts.incrementAndGet();
-        Attempt<S> attempt = new Attempt<>(number);
+        Attempt attempt = new Attempt(number);
         if (!activeAttempt.compareAndSet(null, attempt)) {
             attempts.decrementAndGet();
             return false;
@@ -108,7 +108,7 @@ final class StorageBootstrapCoordinator<S> {
         return false;
     }
 
-    private void runStoragePhase(Attempt<S> attempt) {
+    private void runStoragePhase(Attempt attempt) {
         if (shouldAbort(attempt)) {
             retire(attempt);
             return;
@@ -121,7 +121,6 @@ final class StorageBootstrapCoordinator<S> {
                 terminal.set(true);
                 return;
             }
-            attempt.storage(storage);
             if (shouldAbort(attempt) || !storagePhase.isPublished(storage)) {
                 closeFromWorker(attempt, storage, null, false);
                 return;
@@ -144,7 +143,7 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
-    private void beginRecovery(Attempt<S> attempt, S storage) {
+    private void beginRecovery(Attempt attempt, S storage) {
         if (shouldAbort(attempt, storage)) {
             cleanupFromGlobal(attempt, storage, null, false);
             return;
@@ -182,7 +181,7 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void snapshotCompleted(
-            Attempt<S> attempt,
+            Attempt attempt,
             S storage,
             ConcurrentHashMap<UUID, PlayerSnapshot> snapshots,
             AtomicInteger remaining,
@@ -210,59 +209,43 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
-    private void finishRecovery(Attempt<S> attempt, S storage, List<PlayerSnapshot> snapshots) {
+    private void finishRecovery(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
         try {
-            if (shouldAbort(attempt, storage)) {
-                cleanupFromGlobal(attempt, storage, null, false);
-                return;
-            }
             for (PlayerSnapshot snapshot : snapshots) {
-                if (shouldAbort(attempt, storage)) {
-                    cleanupFromGlobal(attempt, storage, null, false);
+                if (!runRecoveryStep(attempt, storage, () -> recovery.verifyFreeze(snapshot))) {
                     return;
                 }
-                recovery.verifyFreeze(snapshot);
             }
             for (PlayerSnapshot snapshot : snapshots) {
-                if (shouldAbort(attempt, storage)) {
-                    cleanupFromGlobal(attempt, storage, null, false);
+                if (!runRecoveryStep(attempt, storage, () -> recovery.recoverStaffMode(snapshot))) {
                     return;
                 }
-                recovery.recoverStaffMode(snapshot);
             }
-            if (shouldAbort(attempt, storage)) {
-                cleanupFromGlobal(attempt, storage, null, false);
+            if (!runRecoveryStep(attempt, storage, recovery::initializeVanish)
+                    || !runRecoveryStep(attempt, storage, () -> recovery.attachAlerts(storage))
+                    || !runRecoveryStep(attempt, storage, () -> recovery.publishOperationalState(storage))) {
                 return;
             }
-            recovery.initializeVanish();
-            if (shouldAbort(attempt, storage)) {
-                cleanupFromGlobal(attempt, storage, null, false);
-                return;
-            }
-            recovery.attachAlerts(storage);
-            if (shouldAbort(attempt, storage)) {
-                cleanupFromGlobal(attempt, storage, null, false);
-                return;
-            }
-            recovery.publishOperationalState(storage);
-            if (shouldAbort(attempt, storage)) {
-                cleanupFromGlobal(attempt, storage, null, false);
-                return;
-            }
-            if (!workers.submit(() -> runFollowUp(attempt, storage))) {
-                cleanupFromGlobal(
-                        attempt,
-                        storage,
-                        new IllegalStateException("storage bootstrap follow-up was rejected"),
-                        true
-                );
-            }
+            runRecoveryStep(attempt, storage, () -> {
+                if (!workers.submit(() -> runFollowUp(attempt, storage))) {
+                    throw new IllegalStateException("storage bootstrap follow-up was rejected");
+                }
+            });
         } catch (RuntimeException exception) {
             cleanupFromGlobal(attempt, storage, exception, true);
         }
     }
 
-    private void runFollowUp(Attempt<S> attempt, S storage) {
+    private boolean runRecoveryStep(Attempt attempt, S storage, Runnable step) {
+        if (shouldAbort(attempt, storage)) {
+            cleanupFromGlobal(attempt, storage, null, false);
+            return false;
+        }
+        step.run();
+        return true;
+    }
+
+    private void runFollowUp(Attempt attempt, S storage) {
         if (shouldAbort(attempt, storage)) {
             closeFromWorker(attempt, storage, null, false);
             return;
@@ -287,7 +270,7 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void cleanupFromGlobal(
-            Attempt<S> attempt,
+            Attempt attempt,
             S storage,
             RuntimeException failure,
             boolean retryAfterClose
@@ -309,7 +292,7 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void submitWorkerCleanup(
-            Attempt<S> attempt,
+            Attempt attempt,
             S storage,
             RuntimeException failure,
             boolean retryAfterClose
@@ -321,7 +304,7 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void submitCleanup(
-            Attempt<S> attempt,
+            Attempt attempt,
             S storage,
             RuntimeException failure,
             boolean retryAfterClose
@@ -352,7 +335,7 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void closeFromWorker(
-            Attempt<S> attempt,
+            Attempt attempt,
             S storage,
             RuntimeException failure,
             boolean retryAfterClose
@@ -371,7 +354,7 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
-    private void failAttempt(Attempt<S> attempt, RuntimeException failure) {
+    private void failAttempt(Attempt attempt, RuntimeException failure) {
         if (!retire(attempt)) {
             return;
         }
@@ -385,7 +368,7 @@ final class StorageBootstrapCoordinator<S> {
         scheduleRetry(attempt, failure);
     }
 
-    private void scheduleRetry(Attempt<S> failedAttempt, RuntimeException failure) {
+    private void scheduleRetry(Attempt failedAttempt, RuntimeException failure) {
         if (failedAttempt.number() >= retryPolicy.maximumAttempts()) {
             terminal.set(true);
             logger.log(Level.SEVERE,
@@ -396,7 +379,6 @@ final class StorageBootstrapCoordinator<S> {
         }
         long delayMillis = retryPolicy.delayAfterFailure(failedAttempt.number());
         int nextAttempt = failedAttempt.number() + 1;
-        storagePhase.retrying(nextAttempt, retryPolicy.maximumAttempts(), delayMillis, failure);
         if (!retryScheduled.compareAndSet(false, true)) {
             terminal.set(true);
             storagePhase.failed(new IllegalStateException(
@@ -418,14 +400,16 @@ final class StorageBootstrapCoordinator<S> {
                     "storage bootstrap retry scheduling was rejected", failure);
             logger.log(Level.SEVERE, "MariaDB bootstrap retry could not be scheduled", schedulingFailure);
             storagePhase.failed(schedulingFailure);
+            return;
         }
+        storagePhase.retrying(nextAttempt, retryPolicy.maximumAttempts(), delayMillis, failure);
     }
 
-    private boolean shouldAbort(Attempt<S> attempt) {
+    private boolean shouldAbort(Attempt attempt) {
         return shouldStop() || !isActive(attempt);
     }
 
-    private boolean shouldAbort(Attempt<S> attempt, S storage) {
+    private boolean shouldAbort(Attempt attempt, S storage) {
         return shouldAbort(attempt) || !storagePhase.isPublished(storage);
     }
 
@@ -433,11 +417,11 @@ final class StorageBootstrapCoordinator<S> {
         return terminal.get() || stopping.getAsBoolean();
     }
 
-    private boolean isActive(Attempt<S> attempt) {
+    private boolean isActive(Attempt attempt) {
         return activeAttempt.get() == attempt;
     }
 
-    private boolean retire(Attempt<S> attempt) {
+    private boolean retire(Attempt attempt) {
         return activeAttempt.compareAndSet(attempt, null);
     }
 
@@ -458,12 +442,9 @@ final class StorageBootstrapCoordinator<S> {
         long delayAfterFailure(int failedAttempt) {
             long delay = initialDelayMillis;
             for (int index = 1; index < failedAttempt && delay < maximumDelayMillis; index++) {
-                if (delay > maximumDelayMillis / 2L) {
-                    return maximumDelayMillis;
-                }
-                delay *= 2L;
+                delay = Math.min(delay * 2L, maximumDelayMillis);
             }
-            return Math.min(delay, maximumDelayMillis);
+            return delay;
         }
     }
 
@@ -476,10 +457,9 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
-    private static final class Attempt<S> {
+    private static final class Attempt {
         private final int number;
         private final AtomicBoolean cleanupStarted = new AtomicBoolean();
-        private volatile S storage;
 
         private Attempt(int number) {
             this.number = number;
@@ -491,15 +471,6 @@ final class StorageBootstrapCoordinator<S> {
 
         private AtomicBoolean cleanupStarted() {
             return cleanupStarted;
-        }
-
-        private void storage(S value) {
-            storage = value;
-        }
-
-        @SuppressWarnings("unused")
-        private S storage() {
-            return storage;
         }
     }
 
