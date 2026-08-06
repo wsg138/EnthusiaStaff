@@ -149,7 +149,7 @@ final class JdbcWebsiteAppealWorkflowStore {
                         true
                 );
                 requireEligibleBinding(code, accountToken, now);
-                rateLimiter.enforce(connection, accountId, idempotencyKey, now);
+                rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);
                 AppealRow existing = selectByPunishment(connection, punishmentId, true);
                 WebsiteAppealSubmission result = existing == null
                         ? insertSubmission(
@@ -463,8 +463,7 @@ final class JdbcWebsiteAppealWorkflowStore {
                 UPDATE website_appeal_requests
                 SET state = ?, revision = ?, decision_type = ?,
                     decision_idempotency_key = ?, reviewer_account_id = ?,
-                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?,
-                    idempotency_key = CASE WHEN ? = 'APPROVE' THEN ? ELSE idempotency_key END
+                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?
                 WHERE appeal_id = ? AND revision = ?
                 """)) {
             statement.setString(1, nextState);
@@ -476,10 +475,8 @@ final class JdbcWebsiteAppealWorkflowStore {
             statement.setString(7, note);
             statement.setTimestamp(8, Timestamp.from(now));
             statement.setTimestamp(9, Timestamp.from(now));
-            statement.setString(10, decision);
-            statement.setString(11, idempotencyKey);
-            statement.setBytes(12, UuidBytes.toBytes(existing.appealId()));
-            statement.setLong(13, existing.revision());
+            statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
+  statement.setLong(11, existing.revision());
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Website appeal changed during decision"
