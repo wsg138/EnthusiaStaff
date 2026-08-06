@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
 This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGISTRY.md` must be reconciled before acting.
 
@@ -20,38 +20,51 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 
 ## Current package state
 
-`ES-P02 ACTIVE — selected automatically after live reconciliation because there was no unfinished package work, ES-P01 is COMPLETE, and ES-P02 is the lowest-priority-number eligible READY package. The package branch records the required one-time correction from explicit assignment to automatic sequential selection.`
+`ES-P02 REVIEW — implementation, focused tests, documentation, and review repair are complete on package/es-p02-runtime-db-recovery. Exact-head hosted validation, merge, containment, cleanup, finalization, and dependency-derived status updates remain.`
 
 | Field | Value |
 | --- | --- |
 | Canonical package status | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Active package | `ES-P02 — Runtime database recovery and Velocity reload` |
 | Starting status | `READY` |
-| Current status | `ACTIVE` |
+| Current status | `REVIEW` |
 | Starting `main` | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Branch | `package/es-p02-runtime-db-recovery` |
-| Pull request | `Pending early draft creation after claim checkpoint` |
+| Pull request | `#70 — open, non-draft` |
 | Package handoff | `ai-agents/reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md` |
-| Current checkpoint | Live state reconciled; package selected and branch created; orchestration documents updated; runtime implementation not yet started. |
-| Exact next action | Complete durable claim records, open the draft PR, then implement bounded Paper and Velocity database bootstrap recovery plus atomic Velocity reload and tests. |
+| Current checkpoint | Paper and Velocity bounded recovery, atomic Velocity reload, tests, documentation, and all confirmed CodeRabbit repairs are committed. Zero review threads are unresolved. |
+| Pre-record implementation head | `decb40702820333726f4dfa787af73a5ddb370c9` |
+| Exact next action | Complete canonical REVIEW records, freeze the resulting head, make PR #70 reflect it, request current-head review, and inspect every exact-head hosted workflow before merge. |
 | Other ready package | `ES-X05 — remains READY and unstarted` |
 
 ## Selection evidence
 
 - Live `main` was `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
-- No open or draft PR existed.
-- No remote branch other than `main` existed before the ES-P02 branch was created.
+- No open or draft PR existed and no package branch existed before ES-P02 was claimed.
 - ES-P01 was complete and ES-P02 and ES-X05 were ready.
 - ES-P02 priority 20 precedes ES-X05 priority 35.
 - ES-P02 depends only on complete ES-P01 and is not parallel-safe around lifecycle/configuration.
 
-## Previous package evidence retained
+## Implemented scope
 
-ES-P01 completed through implementation PR #68 and finalization PR #69. Its exact reviewed implementation head is contained in `main`; the implementation branch was deleted; and its owner-approved zero-execution infrastructure exception does not claim a Pi pass. Missing distributed Pi and Java/Bedrock staging evidence remains assigned to ES-V02.
+- Paper: bounded exponential bootstrap retry, one active attempt, cleanup-before-retry, stale callback rejection, shutdown suppression, exhaustion, recovery health, and scheduler-correct startup recovery.
+- Velocity: bounded transient retry, permanent-failure/manual-retry path, complete partial-resource cleanup, BOOTSTRAP authority until publication, deterministic shutdown, and serialized terminal transitions.
+- Reload: `enthusiastaff.reload`, complete candidate validation, immutable publication of fail-closed and appeal URL settings, rollback, concurrent-reload rejection, shutdown rejection, and explicit restart-required reporting for resource-bound settings.
+- Tests: worker and scheduler rejection, recovery, exhaustion, cleanup, stale callbacks, repeated reload, invalid candidate, publication rollback, restart-required candidates, atomic health, shutdown, and race paths.
+- Documentation: `docs/runtime-database-recovery.md`.
+- Orchestration: obsolete explicit-assignment rules replaced with automatic sequential package selection.
 
-## ES-P02 boundaries
+## Review state
 
-- Included: transient Paper/Velocity MariaDB bootstrap recovery, bounded retry, safe Velocity configuration reload, invalid-candidate rollback, restart-required reporting, health/operator feedback, reconnect/repeated-reload/shutdown/race tests, and directly necessary documentation.
-- Excluded: production database access, Flyway repair or history rewrite, unrelated configuration redesign, provider invention, deployment, authority activation, issue #43, shadow period, cutover, or another package.
-- Migration boundary: no migration expected; V16 remains highest and V1–V16 are immutable.
+CodeRabbit identified three confirmed defects: a Paper terminal-health overwrite, a Velocity lost-update/stale-mode health race, and a Velocity overlapping bootstrap race. All were fixed. Every review thread is resolved. Current-head hosted review and static analysis must still be rerun after the final canonical record commit.
+
+## Validation state
+
+No final exact-head pass is claimed. Earlier workflow runs are superseded. A prior Coverage job ran Paper, persistence, protocol, and integration tests before exposing a Velocity warnings-as-errors `serialVersionUID` defect; that defect is fixed, but only the final frozen head may supply merge evidence. No ES-P02 infrastructure exception is approved.
+
+## Boundaries
+
+- No production database, private player data, credential, secret, or production route was accessed.
+- No migration was added; V16 remains highest and V1–V16 remain immutable.
 - LiteBans remains authoritative.
+- Issue #43, staging acceptance, the shadow period, production migration, activation, cutover, rollback, ES-X05, and every other package remain untouched.
