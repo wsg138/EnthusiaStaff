@@ -4,7 +4,7 @@
 `ES-P02`; Internal; primary `COMP-STAFF`; priority 20; not parallel-safe around lifecycle/configuration.
 
 ## 2. Status
-`BLOCKED`. Product implementation, tests, documentation, review repair, Java 21 build/test/coverage, Codacy, runtime-JAR, and provider-leak validation passed for exact product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`. Merge is blocked because the required exact-head Pi staging workflow failed and ES-P02 has no package-specific owner-approved infrastructure exception.
+`BLOCKED`. Product implementation, tests, documentation, review repair, Java 21 build/test/coverage, MariaDB/Testcontainers, migration integrity, runtime-JAR/provider-leak, Codacy, and review-thread gates passed for exact product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`. Merge remains blocked because the required Pi staging workflow failed twice before any staging product step executed: the ordinary `ubuntu-latest` build job received no runner on attempts 1 and 2. That ordinary hosted job cannot be called passed or excused under the repository policy, and ES-P02 has no package-specific owner-approved infrastructure exception.
 
 ## 3. Objective
 Recover from transient Paper/Velocity database bootstrap failures without process restart and provide safe Velocity configuration reload.
@@ -37,7 +37,7 @@ Root EnthusiaStaff runtime/configuration/tests/docs only. No external component 
 `package/es-p02-runtime-db-recovery`; retained because PR #70 is unmerged and contains unique work.
 
 ## 11. Required PR
-PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, and not merged.
+PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, unmerged, and currently non-mergeable because the branch has diverged from current `main`.
 
 ## 12. Implementation checklist
 - [x] Reconcile live GitHub, registry, routing, migration boundary, issue #43, and prior handoff.
@@ -54,12 +54,16 @@ PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, and not merged.
 - [x] Resolve all review threads; zero unresolved threads remain.
 - [x] Pass exact-product-head Java 21 build, all tests, MariaDB/Testcontainers, migration integrity, coverage threshold, runtime-JAR, and provider-leak checks.
 - [x] Pass exact-product-head Codacy with zero annotations.
-- [ ] Obtain successful exact-head Pi build/boot/restart evidence, or obtain explicit ES-P02 owner approval for a valid infrastructure exception.
-- [ ] Revalidate the unchanged product head after the blocker clears.
+- [x] Reconcile the failed Pi staging run and rerun the failed staging build job once.
+- [x] Verify staging attempts 1 and 2 both assigned `runner_id: 0`, empty runner names, and zero executed steps to the ordinary `ubuntu-latest` build job; the Pi boot job was skipped both times.
+- [x] Verify current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e` and the package branch is diverged, 53 commits ahead and 5 commits behind with merge base `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
+- [ ] Obtain successful exact-head staging build plus Pi build/boot/restart evidence, or obtain explicit ES-P02 owner approval for a policy-valid exception that also addresses the ordinary hosted build gate.
+- [ ] Synchronize the package branch with current `main` through the repository-approved merge-commit workflow and resolve conflicts without rebasing or force-pushing.
+- [ ] Revalidate the resulting exact head after the blocker clears and synchronization completes.
 - [ ] Merge normally, verify containment/divergence, clean the branch, finalize records, update dependencies, and stop.
 
 ## 13. Acceptance criteria status
-All code-level acceptance criteria are implemented and validated. Package completion remains blocked by the required Pi staging gate.
+All code-level acceptance criteria are implemented and validated for the frozen product head. Package completion remains blocked by the required staging gate and later current-main synchronization/exact-head revalidation.
 
 ## 14. Tests added
 Paper tests cover scheduler phase separation, transient recovery, initial worker rejection, exhaustion, shutdown before retry, cleanup-before-retry, retired entity callbacks, recovery failure, cleanup worker rejection, and retry payloads.
@@ -98,24 +102,33 @@ Product head: `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`.
 - CodeRabbit check: `SUCCESS`.
 - Review threads: zero unresolved.
 - Snyk: skipped; not represented as passing evidence.
-- Exact percentage and artifact hash were not surfaced by the connector; the configured threshold and artifact-integrity steps passed.
+- Exact percentage and artifact hash were not surfaced by the connector; only the configured threshold and artifact-integrity steps are claimed as passed.
 
 ## 23. Blocking validation evidence
-Exact-head Pi staging workflow run `31072790867`, job `92524036760`, completed `FAILURE` for `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`. No passing Pi build/boot/restart evidence exists for ES-P02. The connector could not retrieve sufficient external-run details to classify this exact run as a valid zero-execution exception, and no ES-P02 owner approval exists in any case. ES-P01's one-time exception does not apply.
+Parent exact-head Pi staging workflow run `31072790867`, job `92524036760`, tested source SHA `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` and dispatched staging run `31072794096`.
+
+Staging run `31072794096` attempt 1:
+- Build job `92524048937`, label `ubuntu-latest`: `FAILURE` with `runner_id: 0`, empty runner name, and `steps: []`.
+- Pi job `92524054852`: `SKIPPED`.
+
+The failed build job was rerun as attempt 2:
+- Build job `92541148296`, label `ubuntu-latest`: `FAILURE` with `runner_id: 0`, empty runner name, and `steps: []`.
+- Pi job `92541160241`: `SKIPPED`.
+
+No staging product build, safe boot, or restart executed in either attempt. This proves an infrastructure allocation failure, not a product failure, but the unavailable job is an ordinary hosted build gate. `VALIDATION-POLICY.md` prohibits treating a missing ordinary GitHub-hosted build as an infrastructure exception, and no ES-P02 owner approval exists in any case. No pass is claimed.
 
 ## 24. Exact unblock condition
-One of the following must occur:
+All of the following are required before merge:
 
-1. allocate the specialized runner and obtain successful Pi build, safe boot, and restart evidence for the unchanged exact product head; or
-2. record explicit owner approval for ES-P02 under `VALIDATION-POLICY.md`, with evidence that the exact failed staging run meets every zero-execution infrastructure-exception condition.
-
-After either condition, rerun or verify every required exact-head gate and merge only if the validated head is unchanged.
+1. obtain a successful ordinary staging build and successful specialized-runner Pi build, safe boot, and restart evidence for an exact package head; or record an explicit ES-P02 owner-approved disposition that is valid under every applicable `VALIDATION-POLICY.md` condition and does not relabel the missing ordinary hosted build as passed;
+2. merge current `main` into the package branch through the approved merge-commit workflow, resolving the current divergence without rebase or force-push; and
+3. freeze and rerun every required exact-head gate on the synchronized head, with zero valid unresolved review findings.
 
 ## 25. Resume state
-Resume PR #70 and branch `package/es-p02-runtime-db-recovery`. Do not modify product code without a newly confirmed defect. Reconcile the current branch documentation-only head against frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`, resolve the staging blocker, then repeat applicable exact-head validation before merge.
+Resume PR #70 and branch `package/es-p02-runtime-db-recovery`. Do not modify product code without a newly confirmed defect. Current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e`; the package branch is 53 commits ahead and 5 commits behind with merge base `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. Resolve the staging allocation blocker first or when infrastructure availability changes, then synchronize with current `main`, resolve conflicts, freeze the resulting head, and repeat all applicable validation before merge.
 
 ## 26. Merge and cleanup record
-No merge occurred. `main` remains `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. Product-head containment in `main`, divergence cleanup, branch deletion, finalization PR, and dependency-derived READY updates are not applicable until merge. External parity is not applicable.
+No merge occurred. Current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e`. The package branch and PR #70 remain open because they contain unique work. Product-head containment in `main`, safe branch deletion, finalization, and dependency-derived READY updates are not applicable until the package merges. External parity is not applicable.
 
 ## 27. Handoff
 [`2026-08-05-es-p02-runtime-db-recovery.md`](../../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
