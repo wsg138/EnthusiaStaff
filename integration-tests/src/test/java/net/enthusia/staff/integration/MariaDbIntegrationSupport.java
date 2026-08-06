@@ -162,6 +162,8 @@ final class MariaDbIntegrationSupport {
              java.sql.Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM website_appeal_events");
             statement.executeUpdate("DELETE FROM website_appeal_requests");
+            statement.executeUpdate("DELETE FROM website_appeal_rate_keys");
+            statement.executeUpdate("DELETE FROM website_appeal_rate_buckets");
             statement.executeUpdate("DELETE FROM punishment_codes");
             statement.executeUpdate("DELETE FROM audit_events");
             statement.executeUpdate("DELETE FROM sanctions");
