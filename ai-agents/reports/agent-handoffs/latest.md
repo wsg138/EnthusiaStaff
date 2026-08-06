@@ -8,12 +8,12 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external staging runner and authorization condition is unchanged. `ES-X05 — Website UX, authentication, and appeals` is `MERGE_PENDING` and is the active `ACTIONABLE_CONTINUATION` at owner priority `35`.
+State: `ES-P01` and `ES-X05 — Website UX, authentication, and appeals` are `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external staging runner and authorization condition is unchanged. No implementation package is active.
 
-ES-X05 standalone PR `wsg138/enthusia-site#2` passed final-head site validation run `31113188453`, both production and market-preview Cloudflare deployments, Codacy with zero annotations, and review with zero unresolved threads. It merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`, which is current standalone `main`.
+ES-X05 standalone PR `wsg138/enthusia-site#2` passed final-head site validation run `31113188453`, both production and market-preview Cloudflare deployments, Codacy with zero annotations, and review with zero unresolved threads. It merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`, which remains standalone `main`.
 
-Aggregate PR #73 implements the matching signed private appeal contract, durable MariaDB workflow, exact-sanction approval delegation, V17 migration, integration coverage, and the canonical `components/enthusia-site/` import. Standalone and aggregate hashes match at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`, with no added, missing, or modified component paths.
+Aggregate PR #73 passed exact-head Coverage run `31116854096` on `4c818bb3aea953d3f877efc8a48a9175ba219d38`, including the Java 21 clean build, all unit and MariaDB integration/migration tests, JaCoCo generation, runtime-JAR/provider-leak inspection, validation artifact upload, and Codacy coverage upload. CodeRabbit succeeded and every valid review thread was resolved. PR #73 merged normally as `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
 
-The aggregate product head before state reconciliation is `96912301fc425ac6f5eff9349ee3b3d543d122eb`. Coverage run `31115480613` failed before checkout because GitHub returned `Service Unavailable` while resolving action downloads; no product step executed, so a successful exact-current-head run is still required.
+Standalone and aggregate component hashes match at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`, with no added, missing, or modified component paths. Merge containment shows neither temporary implementation branch contains unique work.
 
-Resume ES-X05 from aggregate PR #73. Validate and review the exact head, reconfirm parity, merge normally, verify containment, publish final `COMPLETE` state and merge hashes, clean temporary branches where tooling permits, and stop. Do not select another package or modify ES-P02 PR #70 unless its external unblock condition demonstrably changes.
+The sequential worker completed exactly ES-X05, published its final package state, left ES-P02 untouched, and stopped without selecting or activating another package. A future worker must reconcile live GitHub and run the canonical classification and priority process from the current registry.
