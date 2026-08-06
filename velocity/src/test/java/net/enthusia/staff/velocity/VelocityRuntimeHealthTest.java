@@ -54,12 +54,12 @@ class VelocityRuntimeHealthTest {
     }
 
     @Test
-    void issueUpdatesMergeAtomicallyAndUseTheSuppliedLatestMode() {
+    void issueUpdatesMergeAtomicallyWithoutReplacingCurrentMode() {
         VelocityRuntimeHealth health = new VelocityRuntimeHealth();
-        health.update(OperationalMode.ACTIVE, Map.of(CHANNEL, OFFLINE));
+        health.update(OperationalMode.DEGRADED, Map.of(CHANNEL, OFFLINE));
 
-        health.updateIssue(OperationalMode.ACTIVE, CONFIGURATION_RELOAD, "invalid candidate");
-        health.updateIssue(OperationalMode.DEGRADED, "mariadb", "refresh failed");
+        health.updateIssue(CONFIGURATION_RELOAD, "invalid candidate");
+        health.updateIssue("mariadb", "refresh failed");
         VelocityRuntimeHealth.Snapshot degraded = health.snapshot();
 
         assertEquals(OperationalMode.DEGRADED, degraded.mode());
@@ -69,8 +69,9 @@ class VelocityRuntimeHealthTest {
                 "mariadb", "refresh failed"
         ), degraded.issues());
 
-        health.updateIssue(OperationalMode.DEGRADED, CONFIGURATION_RELOAD, null);
+        health.updateIssue(CONFIGURATION_RELOAD, null);
         VelocityRuntimeHealth.Snapshot cleared = health.snapshot();
+        assertEquals(OperationalMode.DEGRADED, cleared.mode());
         assertFalse(cleared.issues().containsKey(CONFIGURATION_RELOAD));
         assertEquals(OFFLINE, cleared.issues().get(CHANNEL));
         assertEquals("refresh failed", cleared.issues().get("mariadb"));
