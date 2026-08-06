@@ -7,7 +7,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
-import javax.sql.DataSource;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
@@ -15,40 +14,53 @@ final class JdbcWebsiteAppealRateLimiter {
     private static final Duration WINDOW = Duration.ofHours(1);
     private static final int LIMIT = 3;
 
-    private final DataSource dataSource;
     private final PunishmentCodeProtector codeProtector;
 
-    JdbcWebsiteAppealRateLimiter(DataSource dataSource, PunishmentCodeProtector codeProtector) {
-        if (dataSource == null || codeProtector == null) {
-            throw new IllegalArgumentException("Website appeal rate limiter dependencies are required");
+    JdbcWebsiteAppealRateLimiter(PunishmentCodeProtector codeProtector) {
+        if (codeProtector == null) {
+            throw new IllegalArgumentException("Website appeal rate limiter dependency is required");
         }
-        this.dataSource = dataSource;
         this.codeProtector = codeProtector;
     }
 
-    void enforce(String accountId, String idempotencyKey, Instant now) {
-        if (accountId == null || accountId.isBlank() || accountId.length() > 128
-                || idempotencyKey == null || idempotencyKey.length() < 8
-                || idempotencyKey.length() > 128 || now == null) {
+    void enforce(
+            Connection connection,
+            String accountId,
+            String idempotencyKey,
+            Instant now
+    ) throws SQLException {
+        validateRequest(connection, accountId, idempotencyKey, now);
+        byte[] accountToken = accountToken(accountId);
+        enforceBucket(connection, accountToken, idempotencyKey, now);
+    }
+
+    private static void validateRequest(
+            Connection connection,
+            String accountId,
+            String idempotencyKey,
+            Instant now
+    ) {
+        if (connection == null || now == null) {
             throw invalid();
         }
-        byte[] accountToken;
+        if (accountId == null || accountId.isBlank() || accountId.length() > 128) {
+            throw invalid();
+        }
+        if (idempotencyKey == null || idempotencyKey.length() < 8
+                || idempotencyKey.length() > 128) {
+            throw invalid();
+        }
+    }
+
+    private byte[] accountToken(String accountId) {
         try {
-            accountToken = codeProtector.accountToken(accountId);
+            return codeProtector.accountToken(accountId);
         } catch (IllegalArgumentException exception) {
             throw invalid();
         }
-        JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to enforce the website appeal rate limit",
-                connection -> {
-                    enforce(connection, accountToken, idempotencyKey, now);
-                    return null;
-                }
-        );
     }
 
-    private static void enforce(
+    private static void enforceBucket(
             Connection connection,
             byte[] accountToken,
             String idempotencyKey,
@@ -59,10 +71,26 @@ final class JdbcWebsiteAppealRateLimiter {
         if (hasReplayKey(connection, accountToken, idempotencyKey)) {
             return;
         }
-        if (!bucket.windowStartedAt().plus(WINDOW).isAfter(now)) {
-            resetBucket(connection, accountToken, now);
-            bucket = new Bucket(now, 0);
+        Bucket current = currentBucket(connection, accountToken, bucket, now);
+        requireCapacity(current);
+        incrementBucket(connection, accountToken, now);
+        insertReplayKey(connection, accountToken, idempotencyKey, now);
+    }
+
+    private static Bucket currentBucket(
+            Connection connection,
+            byte[] accountToken,
+            Bucket bucket,
+            Instant now
+    ) throws SQLException {
+        if (bucket.windowStartedAt().plus(WINDOW).isAfter(now)) {
+            return bucket;
         }
+        resetBucket(connection, accountToken, now);
+        return new Bucket(now, 0);
+    }
+
+    private static void requireCapacity(Bucket bucket) {
         if (bucket.submissionCount() >= LIMIT) {
             throw new WebsiteModerationException(
                     WebsiteModerationException.Kind.RATE_LIMITED,
@@ -70,8 +98,6 @@ final class JdbcWebsiteAppealRateLimiter {
                     "Too many appeal submissions were made for this account"
             );
         }
-        incrementBucket(connection, accountToken, now);
-        insertReplayKey(connection, accountToken, idempotencyKey, now);
     }
 
     private static void ensureBucket(Connection connection, byte[] accountToken, Instant now)
