@@ -1,5 +1,6 @@
 name: ES-X05 exact site import
 
+# Temporary branch-only import workflow; removed before final validation and merge.
 on:
   push:
     branches: [package/es-x05-state-publication]
