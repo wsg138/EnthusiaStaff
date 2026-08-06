@@ -47,6 +47,7 @@ final class WebsiteAppealEndpointTest {
             UUID.fromString("744cc693-a8a5-4ec9-8bb0-8074c951ff49");
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
     private static final long REVISION = 7L;
+    private static final String PENDING = "APPLIED:MUTATION_PENDING_R7";
 
     @Test
     void appliesAuthorizedAppealToOnlyTheExactPunishment() {
@@ -57,7 +58,7 @@ final class WebsiteAppealEndpointTest {
         Map<?, ?> response = assertInstanceOf(Map.class, endpoint.accept(headers(), input("MOD")));
 
         assertEquals(1, store.preparations);
-        assertEquals(List.of("APPLIED:MUTATION_PENDING", "APPLIED:APPLIED"), store.completions);
+        assertEquals(List.of(PENDING, "APPLIED:APPLIED"), store.completions);
         assertEquals(1, response.get("affectedSanctions"));
         assertTrue(assertInstanceOf(Boolean.class, response.get("applied")));
         assertFalse(assertInstanceOf(Boolean.class, response.get("replayed")));
@@ -79,7 +80,33 @@ final class WebsiteAppealEndpointTest {
         Map<?, ?> response = assertInstanceOf(Map.class, endpoint.accept(headers(), input("ADMIN")));
 
         assertTrue(assertInstanceOf(Boolean.class, response.get("replayed")));
-        assertEquals(List.of("APPLIED:MUTATION_PENDING", "APPLIED:APPLIED"), store.completions);
+        assertEquals(List.of(PENDING, "APPLIED:APPLIED"), store.completions);
+    }
+
+    @Test
+    void pendingRetryUsesPersistedRevisionInsteadOfNewLiveRevision() {
+        AppealStore store = new AppealStore();
+        store.preparation = new AppealAcceptancePreparation.Ready(
+                true,
+                OptionalLong.of(REVISION)
+        );
+        RecordingMutationStore mutations = new RecordingMutationStore(
+                new ExactSanctionChangeResult.Rejected(
+                        "STALE_SANCTION_STATE",
+                        "The sanction changed after acceptance began"
+                )
+        );
+        mutations.revision = OptionalLong.of(REVISION + 4);
+        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+
+        WebsiteApiException error = assertThrows(
+                WebsiteApiException.class,
+                () -> endpoint.accept(headers(), input("MOD"))
+        );
+
+        assertEquals("STALE_SANCTION_STATE", error.code());
+        assertEquals(REVISION, mutations.request.expectedRevision());
+        assertEquals(List.of(PENDING, "REJECTED:STALE_SANCTION_STATE"), store.completions);
     }
 
     @Test
@@ -140,7 +167,7 @@ final class WebsiteAppealEndpointTest {
         assertEquals(409, error.status());
         assertEquals("STALE_SANCTION_STATE", error.code());
         assertEquals(
-                List.of("APPLIED:MUTATION_PENDING", "REJECTED:STALE_SANCTION_STATE"),
+                List.of(PENDING, "REJECTED:STALE_SANCTION_STATE"),
                 store.completions
         );
     }
