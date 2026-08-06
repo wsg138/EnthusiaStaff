@@ -40,10 +40,8 @@ jobs:
               ),
               (
                   '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?,
-                    idempotency_key = CASE WHEN ? = 'APPROVE' THEN ? ELSE idempotency_key END
-                WHERE appeal_id = ? AND revision = ?''',
-                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?
-                WHERE appeal_id = ? AND revision = ?'''
+                    idempotency_key = CASE WHEN ? = 'APPROVE' THEN ? ELSE idempotency_key END''',
+                  '''                    reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?'''
               ),
               (
                   '''            statement.setTimestamp(9, Timestamp.from(now));
