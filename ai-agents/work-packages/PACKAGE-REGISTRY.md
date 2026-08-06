@@ -2,33 +2,20 @@
 
 Last updated: 2026-08-06
 
-Canonical current state: `ES-P01 is COMPLETE. ES-P02 and ES-X05 are BLOCKED / PARKED_BLOCKED. ES-X05 implementation is integrated, but required trusted staging/Pi evidence is unavailable during GitHub's August 6 Actions outage; finalization branch package/es-x05-finalization and PR #74 are preserved. ES-V02 remains DEFERRED. No new implementation package is active.`
+Canonical state after normal merge of PR #74: `ES-P01` and `ES-X05` are `COMPLETE`; `ES-P02` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-V02` remains `DEFERRED` and owns ES-X05's deferred combined staging evidence. No new implementation package is active.
 
 Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` and immutable migration V17. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
-- This file is the only canonical package-status index.
-- Reconcile live GitHub before acting. Live evidence overrides stale text, but known persistent state must be published back to `main`.
-- Before selection, classify every incomplete package as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`.
-- `ACTIONABLE_CONTINUATION` means existing work has a safe action available now, including unfinished implementation, a product failure, a valid review finding, presently executable exact-head validation, merge-ready work, synchronization/finalization, containment/cleanup, or a blocker whose exact condition demonstrably changed.
-- `PARKED_BLOCKED` means the same unavailable external condition still controls the next action and no other actionable defect exists. An open PR, branch, drift, or non-mergeability does not make parked work actionable.
-- `READY` means dependencies are complete and the package is eligible after live conflict, duplicate-work, repository, and package-contract checks.
-- Select the highest-priority `ACTIONABLE_CONTINUATION`; skip every `PARKED_BLOCKED` package; otherwise select the eligible `READY` package with the lowest numerical priority. When none exists, report every blocker and stop.
-- Existing actionable unfinished work takes priority over new work. A parked package resumes before new work only after its unblock condition changes or another real actionable defect appears.
-- Do not merge `main` into a parked branch merely to keep it current. Synchronize only after the unblock condition changes, or when synchronization is necessary to evaluate that changed condition.
-- Do not repeatedly rerun an identical zero-runner/unavailable-infrastructure gate without evidence that runner capacity, billing, authorization, configuration, or environment availability changed. A manual rerun alone is not evidence of change.
-- Updating blocker documentation alone does not convert parked work into an actionable continuation.
-- Complete exactly one package and stop; do not activate or begin a newly ready package during finalization.
-- Internal packages normally require one EnthusiaStaff PR. External packages normally require one standalone PR and one aggregate PR.
-- There are no permanent component branches or isolated-component PRs.
-- `COMPLETE` requires all package PRs/evidence gates and deterministic parity for external components.
-- A missing external repository becomes a named blocker when its package is otherwise startable; never invent a URL.
-- When an unmerged package PR stops in `PARTIAL`, `BLOCKED`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING`, and `main` does not reflect that state, the same worker must normally merge a documentation-only status-publication PR before stopping.
-- Status publication may update only canonical package/routing/handoff/component-state documentation. It is not a second implementation package and may contain no product code/tests/migrations/workflows/runtime configuration.
-- Status publication must preserve implementation work and record true status, branch, PR, exact/frozen heads, blocker evidence, and exact unblock condition. Use a normal merge commit.
-- Tool loss is the only reason to stop with known persistent state unpublished; report that inconsistency as unfinished work.
-- Setup/process PRs are orchestration-only and are not implementation packages.
+- This file is the canonical package-status index; live GitHub overrides stale text and must be reconciled back here.
+- Classify every incomplete package as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY` before selection.
+- Select the highest-priority actionable continuation; skip parked work; otherwise select the lowest-priority-number eligible ready package.
+- Complete exactly one package and stop. Do not activate the next package during finalization.
+- Internal packages normally require one aggregate PR. External packages normally require standalone and aggregate PRs plus deterministic parity.
+- `COMPLETE` requires all package PRs/evidence gates, except a policy-valid owner-approved infrastructure exception recorded exactly as deferred and assigned to a named later validation package.
+- A zero-execution exception is never a pass and never grants staging, production, cutover, or authority evidence.
+- Use normal merge commits only. Preserve unique work and publish persistent state before stopping.
 
 ## Package count by type
 
@@ -43,29 +30,29 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 
 ## Canonical package index
 
-| ID | Title | Type | Components | Status | Classification | Priority | Dependencies | Parallel safe | Assignment / live work | Package file |
-| --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- |
-| `ES-P01` | Exact-sanction appeal isolation | Internal | `COMP-STAFF` | `COMPLETE` | — | 10 | — | No | merged PR #68; no active branch | [`ES-P01.md`](packages/ES-P01.md) |
-| `ES-P02` | Runtime database recovery and Velocity reload | Internal | `COMP-STAFF` | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | No | branch `package/es-p02-runtime-db-recovery`; PR #70 | [`ES-P02.md`](packages/ES-P02.md) |
-| `ES-P03` | Bedrock identity correctness | Internal | `COMP-STAFF` | `PLANNED` | — | 30 | `ES-P02` | No | unassigned | [`ES-P03.md`](packages/ES-P03.md) |
-| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMP-SITE`, `COMP-STAFF` | `BLOCKED` | `PARKED_BLOCKED` | 35 | `ES-P01` | Conditional | implementation merged; finalization branch `package/es-x05-finalization`; PR #74 | [`ES-X05.md`](packages/ES-X05.md) |
-| `ES-P04` | Staff-mode operational tools | Internal | `COMP-STAFF` | `PLANNED` | — | 40 | `ES-P03` | No | unassigned | [`ES-P04.md`](packages/ES-P04.md) |
-| `ES-P07` | Inventory and Ender editing runtime completion | Internal | `COMP-STAFF` | `PLANNED` | — | 45 | `ES-P02` | Conditional | unassigned | [`ES-P07.md`](packages/ES-P07.md) |
-| `ES-P05` | Report evidence and staff workflow completion | Internal | `COMP-STAFF` | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | Conditional | unassigned | [`ES-P05.md`](packages/ES-P05.md) |
-| `ES-P09` | Alt and network-identity completion | Internal | `COMP-STAFF` | `PLANNED` | — | 55 | `ES-P03` | Conditional | unassigned | [`ES-P09.md`](packages/ES-P09.md) |
-| `ES-P06` | Discord notification delivery completion | Internal | `COMP-STAFF` | `PLANNED` | — | 60 | `ES-P05` | Conditional | unassigned | [`ES-P06.md`](packages/ES-P06.md) |
-| `ES-P08` | Item confiscation and restoration | Internal | `COMP-STAFF` | `PLANNED` | — | 70 | `ES-P07` | No | unassigned | [`ES-P08.md`](packages/ES-P08.md) |
-| `ES-P10` | Cheat tester and fake-entity system | Internal | `COMP-STAFF` | `PLANNED` | — | 80 | `ES-P04` | Conditional | unassigned | [`ES-P10.md`](packages/ES-P10.md) |
-| `ES-P11` | Fake-base generation and cleanup | Internal | `COMP-STAFF` | `PLANNED` | — | 90 | `ES-P10` | No | unassigned | [`ES-P11.md`](packages/ES-P11.md) |
-| `ES-X01` | RoseChat provider and communication integration | External/multi-repository | `COMP-STAFF`, `COMP-ROSECHAT` | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | Conditional | unassigned; repository unresolved until dependencies complete | [`ES-X01.md`](packages/ES-X01.md) |
-| `ES-X02` | EnthusiaCurrency destructive provider | External/multi-repository | `COMP-STAFF`, `COMP-CURRENCY` | `PLANNED` | — | 110 | `ES-P08` | No | unassigned | [`ES-X02.md`](packages/ES-X02.md) |
-| `ES-X03` | EnthusiaMarket destructive provider | External/multi-repository | `COMP-STAFF`, `COMP-MARKET` | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | Conditional | unassigned | [`ES-X03.md`](packages/ES-X03.md) |
-| `ES-X04` | EnthusiaCommend reputation provider | External/multi-repository | `COMP-STAFF`, `COMP-COMMEND` | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | Conditional | unassigned | [`ES-X04.md`](packages/ES-X04.md) |
-| `ES-V01` | Private LiteBans representative-data verification | Private validation | `COMP-STAFF` | `DEFERRED` | — | 200 | — | Conditional | private/local environment required | [`ES-V01.md`](packages/ES-V01.md) |
-| `ES-V02` | Distributed and Java/Bedrock staging | Private validation | all applicable components | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | No | private/local environment required | [`ES-V02.md`](packages/ES-V02.md) |
-| `ES-V03` | Destructive, latency, and load acceptance | Private validation | `COMP-STAFF`, `COMP-CURRENCY`, `COMP-MARKET`, `COMP-COMMEND` | `DEFERRED` | — | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | No | private/local environment required | [`ES-V03.md`](packages/ES-V03.md) |
-| `ES-A01` | LiteBans cutover acceptance | Production acceptance | all release components | `DEFERRED` | — | 300 | `ES-V01`, `ES-V02`, `ES-V03` | No | owner authorization and issue #43 prerequisites required | [`ES-A01.md`](packages/ES-A01.md) |
-| `ES-QA01` | Final repository and workflow audit | Final no-fix audit | all components and standalone repositories | `PLANNED` | — | 400 | `ES-A01` | No | unassigned | [`ES-QA01.md`](packages/ES-QA01.md) |
+| ID | Title | Type | Status | Classification | Priority | Dependencies | Assignment / live work |
+| --- | --- | --- | --- | --- | ---: | --- | --- |
+| `ES-P01` | Exact-sanction appeal isolation | Internal | `COMPLETE` | — | 10 | — | merged PR #68 |
+| `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70 |
+| `ES-P03` | Bedrock identity correctness | Internal | `PLANNED` | — | 30 | `ES-P02` | unassigned |
+| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` after PR #74 merge | — | 35 | `ES-P01` | implementation merged; finalization PR #74; staging deferred to `ES-V02` |
+| `ES-P04` | Staff-mode operational tools | Internal | `PLANNED` | — | 40 | `ES-P03` | unassigned |
+| `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned |
+| `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
+| `ES-P09` | Alt and network-identity completion | Internal | `PLANNED` | — | 55 | `ES-P03` | unassigned |
+| `ES-P06` | Discord notification delivery completion | Internal | `PLANNED` | — | 60 | `ES-P05` | unassigned |
+| `ES-P08` | Item confiscation and restoration | Internal | `PLANNED` | — | 70 | `ES-P07` | unassigned |
+| `ES-P10` | Cheat tester and fake-entity system | Internal | `PLANNED` | — | 80 | `ES-P04` | unassigned |
+| `ES-P11` | Fake-base generation and cleanup | Internal | `PLANNED` | — | 90 | `ES-P10` | unassigned |
+| `ES-X01` | RoseChat provider and communication integration | External/multi-repository | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | unassigned |
+| `ES-X02` | EnthusiaCurrency destructive provider | External/multi-repository | `PLANNED` | — | 110 | `ES-P08` | unassigned |
+| `ES-X03` | EnthusiaMarket destructive provider | External/multi-repository | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | unassigned |
+| `ES-X04` | EnthusiaCommend reputation provider | External/multi-repository | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | unassigned |
+| `ES-V01` | Private LiteBans representative-data verification | Private validation | `DEFERRED` | — | 200 | — | private/local environment required |
+| `ES-V02` | Distributed and Java/Bedrock staging | Private validation | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | owns ES-X05 deferred PySentinel/runtime acceptance |
+| `ES-V03` | Destructive, latency, and load acceptance | Private validation | `DEFERRED` | — | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | private/local environment required |
+| `ES-A01` | LiteBans cutover acceptance | Production acceptance | `DEFERRED` | — | 300 | `ES-V01`, `ES-V02`, `ES-V03` | owner authorization and issue #43 prerequisites required |
+| `ES-QA01` | Final repository and workflow audit | Final no-fix audit | `PLANNED` | — | 400 | `ES-A01` | unassigned |
 
 ## Detailed current records
 
@@ -79,39 +66,48 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 | Exact validated PR head | `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179` |
 | Merge commits | implementation `203b2854d5546a6d3744037c367099129654b42a`; finalization `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
-| Boundary | Owner-approved infrastructure exception deferred distributed Pi build/restart and Java/Bedrock staging evidence to ES-V02. No product boot failure occurred and no Pi pass is claimed. |
+| Boundary | Owner-approved infrastructure exception deferred distributed Pi build/restart and Java/Bedrock staging evidence to ES-V02. No Pi pass is claimed. |
 
 ### `ES-P02` — Runtime database recovery and Velocity reload
 
 | Field | Value |
 | --- | --- |
 | Status | `BLOCKED` / `PARKED_BLOCKED` |
-| Starting SHA | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
+| Starting SHA | `d94d0219a598c9afb618f623581b31c6223d` |
 | Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
 | Current package-record head | `80d4ea840f34017c09afb618f623581b31c6223d` |
 | Branch / PR | `package/es-p02-runtime-db-recovery`; PR #70 |
 | Handoff | [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md) |
-| Blocker | Required staging run `31072794096` failed before execution: ordinary hosted jobs had runner ID 0, empty runner name, and no steps; Pi jobs were skipped. Exact unblock remains successful ordinary staging build plus Pi build/boot/restart for a synchronized exact head, or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed. Drift/non-mergeability alone is not actionable. |
+| Blocker | Required ordinary hosted staging build did not execute. Exact unblock remains a successful ordinary build plus Pi build/boot/restart for a synchronized head, or a separately policy-valid owner disposition. |
 
 ### `ES-X05` — Website UX, authentication, and appeals
 
 | Field | Value |
 | --- | --- |
-| Status | `BLOCKED` / `PARKED_BLOCKED` |
+| Status | `COMPLETE` upon normal merge of PR #74 |
 | Assigned worker | `ChatGPT sequential ES-X05 completion worker` |
 | Starting aggregate main | `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` |
 | Frozen aggregate product head | `96912301fc425ac6f5eff9349ee3b3d543d122eb` |
 | Exact hosted-validated aggregate head | `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
 | Aggregate PR / merge | PR #73; normal merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
-| Finalization branch / PR | `package/es-x05-finalization`; PR #74 |
-| Hosted validation | Coverage run `31116854096` success: Java 21 build, all unit/MariaDB integration/migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, Codacy coverage |
+| Finalization branch / PR | `package/es-x05-finalization`; PR #74; exact current head/final hosted check recorded in PR #74 |
+| Hosted validation | Coverage run `31116854096`, job `92668751419`, success: Java 21 build, unit/MariaDB integration and migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, Codacy coverage |
 | Review | CodeRabbit success; zero unresolved valid threads |
 | Standalone PR / merge | `wsg138/enthusia-site#2`; normal merge/current `main` `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | Standalone validation | run `31113188453` success; production/preview deployments and Codacy success; zero unresolved review threads |
 | Migration boundary | V1–V16 unchanged; aggregate `main` includes immutable V17 |
 | Component parity | true at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`; no added/missing/modified paths |
-| Containment | Aggregate and standalone temporary implementation branches have zero unique commits/files beyond their normal merges |
-| Staging blocker | Dispatcher `31116852061` sent exact product head to staging run `31116860919`; ordinary build job `92668551209` had runner ID 0, empty runner name, and no steps, so Pi boot/restart was skipped. Post-merge run `31117490156` failed during action preparation with `Service Unavailable`. PR #74 Coverage `31117820548` and Pi `31117820542` were cancelled with runner ID 0/no steps during GitHub's August 6 Actions partial outage. No product failure/pass or owner exception is claimed. |
-| Exact unblock | After demonstrable Actions/staging recovery or another material condition change, freeze PR #74 and obtain successful hosted Coverage plus trusted staging build and Pi boot/restart for that exact head, or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed; reconfirm review/parity, merge normally, publish `COMPLETE`, verify containment/cleanup, and stop. Do not rerun identical zero-runner gates without evidence of change. |
+| Containment | Aggregate and standalone implementation branches have zero unique work beyond their normal merges |
+| Exception label | `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED` |
+| Owner approval | repository owner `wsg138`; current ChatGPT project conversation; 2026-08-06; explicit direction to skip ES-X05 live testing now, continue development, and batch detailed testing later through PySentinel |
+| Affected parent | aggregate run `31116852061`, job `92668521113`, exact head `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
+| Unavailable gate | private `wsg138/EnthusiaStaff-Staging` run `31116860919`; build job `92668551209`; runner ID `0`; runner name empty; steps `[]`; downstream Pi job `92668600472` skipped |
+| Product execution | none in the unavailable private run; no checkout/build/test/artifact validation/boot/restart/migration step ran; no staging pass is claimed |
+| Named deferred package | `ES-V02 — Distributed and Java/Bedrock staging` |
+| Deferred matrix | pinned combined exact-head build/artifacts; Paper boot/restart; V17 and later migrations; config/reload/restart; appeal/auth persistence; provider/distributed behavior; representative Java/Bedrock clients; safely implemented automated client behavior; cleanup/isolation |
+| Security boundary | no production credentials/accounts/data/routes or authority activation; automated account credential handling requires separate implementation, review, and owner authorization |
 | Handoff | [`2026-08-06-es-x05-website-auth-appeals.md`](../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md) |
-| Boundary | LiteBans remains authoritative; issue #43, production cutover/data/credentials, and authority activation remain deferred/excluded. |
+
+## Deferred validation routing
+
+`ES-V02` remains a private-validation package and is not started by this worker. When legitimately assigned after its dependencies and environment are ready, it must include ES-X05's deferred evidence in its pinned combined acceptance campaign. A later PySentinel implementation may support that campaign, but its unfinished features are not claimed as current evidence.
