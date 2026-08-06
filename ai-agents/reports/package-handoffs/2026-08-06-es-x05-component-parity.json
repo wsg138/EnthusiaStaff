@@ -1,7 +1,9 @@
 {
   "added_to_aggregate": [],
   "aggregate_hash": "9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2",
-  "aggregate_sha": "96912301fc425ac6f5eff9349ee3b3d543d122eb",
+  "aggregate_main_sha": "345b7bbcec6facb45c7f96b0e6e181ac7a38e1da",
+  "aggregate_product_sha": "96912301fc425ac6f5eff9349ee3b3d543d122eb",
+  "exact_validated_aggregate_head": "4c818bb3aea953d3f877efc8a48a9175ba219d38",
   "hash_method": "tools/component-sync/component_sync.py; SHA-256 over sorted POSIX paths and raw bytes; aggregate-only COMPONENT-METADATA.md excluded",
   "missing_from_aggregate": [],
   "modified": [],
