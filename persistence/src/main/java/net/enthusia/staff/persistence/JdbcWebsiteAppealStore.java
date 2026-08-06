@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
@@ -18,7 +19,7 @@ final class JdbcWebsiteAppealStore {
     private static final String APPEAL_PREPARED = "PREPARED";
     private static final String APPEAL_APPLIED = "APPLIED";
     private static final String APPEAL_REJECTED = "REJECTED";
-    private static final String MUTATION_PENDING = "MUTATION_PENDING";
+    private static final String MUTATION_PENDING_PREFIX = "MUTATION_PENDING_R";
     private static final String ELIGIBLE = "ELIGIBLE";
 
     private final DataSource dataSource;
@@ -194,7 +195,7 @@ final class JdbcWebsiteAppealStore {
                     "The appeal acceptance was previously rejected"
             );
         }
-        return new AppealAcceptancePreparation.Ready(true);
+        return new AppealAcceptancePreparation.Ready(true, pendingRevision(existing));
     }
 
     private static AppealAcceptancePreparation.Rejected bindingRejection(
@@ -254,7 +255,7 @@ final class JdbcWebsiteAppealStore {
         return APPEAL_APPLIED.equals(existing.state())
                 && APPEAL_APPLIED.equals(existing.outcomeCode())
                 && APPEAL_APPLIED.equals(state)
-                && MUTATION_PENDING.equals(outcomeCode);
+                && parsePendingRevision(outcomeCode).isPresent();
     }
 
     private static boolean transitionAllowed(
@@ -263,14 +264,40 @@ final class JdbcWebsiteAppealStore {
             String outcomeCode
     ) {
         if (APPEAL_PREPARED.equals(existing.state())) {
-            return true;
+            return APPEAL_REJECTED.equals(state)
+                    || APPEAL_APPLIED.equals(state)
+                    && (APPEAL_APPLIED.equals(outcomeCode)
+                    || parsePendingRevision(outcomeCode).isPresent());
         }
         if (!APPEAL_APPLIED.equals(existing.state())
-                || !MUTATION_PENDING.equals(existing.outcomeCode())) {
+                || parsePendingRevision(existing.outcomeCode()).isEmpty()) {
             return false;
         }
         return APPEAL_REJECTED.equals(state)
                 || APPEAL_APPLIED.equals(state) && APPEAL_APPLIED.equals(outcomeCode);
+    }
+
+    private static OptionalLong pendingRevision(AppealRow existing) {
+        if (!APPEAL_APPLIED.equals(existing.state())) {
+            return OptionalLong.empty();
+        }
+        return parsePendingRevision(existing.outcomeCode());
+    }
+
+    private static OptionalLong parsePendingRevision(String outcomeCode) {
+        if (outcomeCode == null || !outcomeCode.startsWith(MUTATION_PENDING_PREFIX)) {
+            return OptionalLong.empty();
+        }
+        String encodedRevision = outcomeCode.substring(MUTATION_PENDING_PREFIX.length());
+        try {
+            long revision = Long.parseLong(encodedRevision);
+            if (revision < 0) {
+                throw new NumberFormatException("negative revision");
+            }
+            return OptionalLong.of(revision);
+        } catch (NumberFormatException exception) {
+            throw conflict("APPEAL_STATE_CONFLICT", "The pending appeal revision is invalid");
+        }
     }
 
     private static boolean matches(
