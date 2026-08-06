@@ -1,21 +1,35 @@
 # Package registry
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
-Canonical current state: `ES-P01 COMPLETE — PR #68 merged normally at 203b2854d5546a6d3744037c367099129654b42a; exact reviewed head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179 is contained in main; no package-only commit remains; the implementation branch was deleted; and the owner-approved zero-execution infrastructure exception is recorded without calling the Pi gate passed. ES-P02 and ES-X05 are READY. No package is active.`
+Canonical current state: `ES-P01 is COMPLETE. ES-P02 is BLOCKED in preserved branch package/es-p02-runtime-db-recovery and open PR #70. Its frozen product head is b63fa1fa09ae4a9ea90988143ecda2cc7decbe14 and its current package-record head is 80d4ea840f34017c09afb618f623581b31c6223d. ES-X05 is READY and unstarted. ES-V02 is DEFERRED. No implementation package is active.`
 
-ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
+ES-P02 live baseline: `wsg138/EnthusiaStaff:main` was `d94d0219a598c9afb7e19c4ea9fddafd554d6469` when claimed and is `5c969901146fc5081eec14b3c089bec7b06d5f5e` at this status publication; V16 is highest; issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
 - This file is the only canonical package-status index.
-- Workers receive exactly one package ID and may not silently select another.
+- Reconcile live GitHub before acting. Live evidence overrides stale text, but known persistent state must be published back to `main`.
+- Before selection, classify every incomplete package as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`.
+- `ACTIONABLE_CONTINUATION` means existing work has a safe action available now, such as unfinished implementation, an actual compile or test failure, a valid review finding, executable exact-head validation, merge-ready work, required synchronization or finalization, containment or cleanup, or a blocker whose exact unblock condition demonstrably changed.
+- `PARKED_BLOCKED` means the same unavailable external condition still controls the next action and no other actionable defect exists. An open PR, open branch, branch drift, or non-mergeability does not make parked work actionable.
+- `READY` means dependencies are complete and the package is eligible after live conflict, duplicate-work, repository, and package-contract checks.
+- Select the highest-priority `ACTIONABLE_CONTINUATION`; skip every `PARKED_BLOCKED` package; otherwise select the eligible `READY` package with the lowest numerical priority. When none exists, report every blocker and stop.
+- Existing actionable unfinished work takes priority over new work. A parked package resumes before a new package only after its unblock condition changes or another real actionable defect appears.
+- Do not merge `main` into a parked blocked branch merely to keep it current. Synchronize only after the unblock condition changes, or when synchronization is necessary to evaluate a newly changed condition.
+- Do not repeatedly rerun an identical zero-runner or unavailable-infrastructure gate without evidence that runner capacity, billing, authorization, configuration, or environment availability changed. A manual rerun alone is not evidence of change.
+- Updating blocker documentation alone does not convert a parked package into an actionable continuation.
+- Complete exactly one package and stop; do not activate or begin a newly ready package during finalization.
 - Internal packages normally require one EnthusiaStaff PR.
 - External packages normally require two cross-referenced PRs: standalone and aggregate.
 - There are no permanent component branches or isolated-component PRs.
-- `COMPLETE` requires every package-specific PR/evidence gate and deterministic parity for external components.
+- `COMPLETE` requires every package-specific PR and evidence gate and deterministic parity for external components.
 - A missing external repository becomes a named blocker when its package is otherwise startable; never invent a URL.
-- The setup PR is orchestration-only and is not an implementation package.
+- When an unmerged implementation PR stops in `PARTIAL`, `BLOCKED`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING`, and `main` does not reflect that state, the same worker must normally merge a documentation-only status-publication PR to `main` before stopping.
+- A status-publication PR may update only the registry, selected package file, workspace state, canonical package handoff, latest handoff pointer, and directly necessary routing documentation. It is not a second implementation package and may contain no product code, product tests, migrations, workflow changes, or runtime configuration.
+- Status publication must preserve the implementation PR and branch and record the true status, branch, PR, current package-record head, frozen product head when applicable, blocker evidence, and exact unblock condition. Use a normal merge commit.
+- Tool loss is the only reason to stop with known persistent state unpublished; report that inconsistency as unfinished work.
+- The setup and process PRs are orchestration-only and are not implementation packages.
 
 ## Package count by type
 
@@ -47,7 +61,7 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
 | Final reviewed heads | `Frozen product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be; exact validated PR head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179` |
-| Merge commits | `Implementation merge 203b2854d5546a6d3744037c367099129654b42a` |
+| Merge commits | `Implementation merge 203b2854d5546a6d3744037c367099129654b42a; finalization merge d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
 | Last update | `2026-08-05` |
 | Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
 | Blocker | `NONE. OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED: final-head parent run 31067402120/job 92507922737 dispatched staging run 31067405608; build job 92507935906 had runner_id 0, empty runner name, and steps []; Pi job 92507942018 was skipped with steps []. No product step executed, no product boot failure occurred, and no Pi pass is claimed. Owner wsg138 approved the exception on 2026-08-05. Missing distributed Pi build/restart and Java/Bedrock staging evidence is deferred to ES-V02.` |
@@ -62,20 +76,20 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `READY` |
+| Status | `BLOCKED` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
-| Assigned worker | `UNASSIGNED` |
-| Active branches | `NONE` |
-| Aggregate PR | `NONE` |
+| Assigned worker | `ChatGPT sequential package worker #2` |
+| Active branches | `package/es-p02-runtime-db-recovery` |
+| Aggregate PR | `#70 — open, non-draft, unmerged, and currently non-mergeable` |
 | External PRs | `NONE` |
-| Starting SHAs | `UNSET` |
-| Final reviewed heads | `UNSET` |
+| Starting SHAs | `EnthusiaStaff main d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
+| Final reviewed heads | `Frozen product head b63fa1fa09ae4a9ea90988143ecda2cc7decbe14; current package-record head 80d4ea840f34017c09afb618f623581b31c6223d` |
 | Merge commits | `UNSET` |
-| Last update | `2026-08-05` |
-| Handoff | `NONE` |
-| Blocker | NONE |
+| Last update | `2026-08-06` |
+| Handoff | [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md) |
+| Blocker | `Frozen product head b63fa1fa09ae4a9ea90988143ecda2cc7decbe14 passed hosted Java 21 build, all tests, MariaDB/Testcontainers, migration integrity, changed-code coverage threshold, runtime-JAR and provider-leak checks, Codacy with zero annotations, CodeRabbit, and zero unresolved review threads. Required staging run 31072794096 failed twice before execution: ordinary ubuntu-latest build jobs 92524048937 and 92541148296 each had runner_id 0, an empty runner name, and steps []; downstream Pi jobs 92524054852 and 92541160241 were skipped. No staging product build, Pi boot, or restart step executed. This is not a pass, and no ES-P02 infrastructure exception exists. Exact unblock: obtain successful ordinary staging build plus specialized-runner Pi build, safe boot, and restart evidence for an exact package head, or a policy-valid explicit owner disposition that does not relabel the missing ordinary hosted build as passed; then merge current main into the package branch by normal merge commit, resolve conflicts, freeze the synchronized head, and rerun every applicable exact-head gate. Branch drift and non-mergeability do not make the package actionable while the external runner or authorization condition is unchanged.` |
 | Package file | [`packages/ES-P02.md`](packages/ES-P02.md) |
 
 ### `ES-P03` — Bedrock identity correctness
