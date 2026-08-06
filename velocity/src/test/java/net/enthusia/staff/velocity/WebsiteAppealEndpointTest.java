@@ -10,10 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.Headers;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +51,7 @@ final class WebsiteAppealEndpointTest {
             UUID.fromString("744cc693-a8a5-4ec9-8bb0-8074c951ff49");
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
     private static final long REVISION = 7L;
+    private static final String REQUEST_IDEMPOTENCY_KEY = "appeal-request-001";
     private static final String PENDING = "APPLIED:MUTATION_PENDING_R7";
     private static final String STALE_SANCTION_STATE = "STALE_SANCTION_STATE";
 
@@ -67,7 +72,7 @@ final class WebsiteAppealEndpointTest {
         assertEquals(REVISION, mutations.request.expectedRevision());
         assertEquals(SanctionChangeAction.FULL_OVERTURN, mutations.request.action());
         assertEquals(APPEAL_ID, mutations.request.linkedAppealId().orElseThrow());
-        assertTrue(mutations.request.idempotencyKey().value().startsWith("website-appeal:"));
+        assertEquals(expectedMutationIdempotency(), mutations.request.idempotencyKey().value());
         assertEquals("VELOCITY_WEBSITE", mutations.request.originRuntime());
     }
 
@@ -247,7 +252,7 @@ final class WebsiteAppealEndpointTest {
 
     private static Headers headers() {
         Headers headers = new Headers();
-        headers.set("idempotency-key", "appeal-request-001");
+        headers.set("idempotency-key", REQUEST_IDEMPOTENCY_KEY);
         return headers;
     }
 
@@ -261,6 +266,18 @@ final class WebsiteAppealEndpointTest {
         input.put("actorRank", rank);
         input.put("reason", "The evidence supports accepting this appeal.");
         return input;
+    }
+
+    private static String expectedMutationIdempotency() {
+        String identityBoundValue = REQUEST_IDEMPOTENCY_KEY.length() + ":" + REQUEST_IDEMPOTENCY_KEY
+                + ":" + APPEAL_ID + ":" + PUNISHMENT_ID;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(identityBoundValue.getBytes(StandardCharsets.UTF_8));
+            return "website-appeal:" + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     private static ExactSanctionChangeResult.Applied applied(boolean replayed) {
