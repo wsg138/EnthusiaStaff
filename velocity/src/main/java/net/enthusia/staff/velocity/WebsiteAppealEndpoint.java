@@ -32,7 +32,7 @@ final class WebsiteAppealEndpoint {
     private static final int MAXIMUM_REASON_LENGTH = 1_000;
     private static final String APPLIED = "APPLIED";
     private static final String MODE_BLOCKED = "MODE_BLOCKED";
-    private static final String MUTATION_PENDING = "MUTATION_PENDING";
+    private static final String MUTATION_PENDING_PREFIX = "MUTATION_PENDING_R";
     private static final SanctionActionLimits APPEAL_ACTION_LIMITS =
             new SanctionActionLimits(MINIMUM_REASON_LENGTH, MAXIMUM_REASON_LENGTH, true);
 
@@ -83,37 +83,41 @@ final class WebsiteAppealEndpoint {
                     "Exact punishment changes are temporarily unavailable"
             );
         }
-        OptionalLong revision = sanctionChanges.exactRevision(punishmentId);
-        if (revision.isEmpty()) {
+        OptionalLong currentRevision = sanctionChanges.exactRevision(punishmentId);
+        if (currentRevision.isEmpty()) {
             throw new WebsiteApiException(
                     404,
                     "PUNISHMENT_NOT_FOUND",
                     "The punishment could not be found"
             );
         }
-        AppealAcceptancePreparation preparation = store.prepareAppealAcceptance(
-                appealId,
-                punishmentId,
-                caseId,
-                playerAccountId,
-                idempotencyKey,
-                clock.instant()
+        AppealAcceptancePreparation.Ready preparation = requirePrepared(
+                store.prepareAppealAcceptance(
+                        appealId,
+                        punishmentId,
+                        caseId,
+                        playerAccountId,
+                        idempotencyKey,
+                        clock.instant()
+                )
         );
-        requirePrepared(preparation);
         OperationalMode mode = authorityMode.get();
         if (mode != OperationalMode.ACTIVE) {
             throw authorityUnavailable();
         }
+        long expectedRevision = preparation.pendingRevision().isPresent()
+                ? preparation.pendingRevision().orElseThrow()
+                : currentRevision.orElseThrow();
         store.completeAppealAcceptance(
                 appealId,
                 APPLIED,
-                MUTATION_PENDING,
+                pendingOutcome(expectedRevision),
                 clock.instant()
         );
         return applyChange(
                 appealId,
                 punishmentId,
-                revision.orElseThrow(),
+                expectedRevision,
                 reviewer,
                 reason,
                 idempotencyKey,
@@ -208,11 +212,18 @@ final class WebsiteAppealEndpoint {
         }
     }
 
-    private static void requirePrepared(AppealAcceptancePreparation preparation) {
+    private static AppealAcceptancePreparation.Ready requirePrepared(
+            AppealAcceptancePreparation preparation
+    ) {
         if (preparation instanceof AppealAcceptancePreparation.Rejected rejected) {
             int status = "PUNISHMENT_NOT_FOUND".equals(rejected.code()) ? 404 : 409;
             throw new WebsiteApiException(status, rejected.code(), rejected.message());
         }
+        return (AppealAcceptancePreparation.Ready) preparation;
+    }
+
+    private static String pendingOutcome(long revision) {
+        return MUTATION_PENDING_PREFIX + revision;
     }
 
     private static WebsiteApiException authorityUnavailable() {
