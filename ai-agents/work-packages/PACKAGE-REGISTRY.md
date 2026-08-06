@@ -2,9 +2,9 @@
 
 Last updated: 2026-08-05
 
-Canonical intended post-merge state: `PACKAGE-PLANNING READY — canonical package registry and aggregate/standalone synchronization model are merged; no implementation package is active; ES-P01 is the next assigned package.`
+Canonical current state: `ES-P01 MERGE_PENDING — product implementation and review are complete; every executable hosted gate passed at the latest reconciled head; the owner approved the zero-execution infrastructure exception for the unavailable Pi gate under the label OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED. The final documentation head must pass every applicable exact-head gate before normal merge. No other package is active.`
 
-Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a`; no open PRs; only `main` existed; V16 was highest; issue #43 was open and deferred.
+ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
 
 ## Rules
 
@@ -37,20 +37,20 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `READY` |
+| Status | `MERGE_PENDING` |
 | Priority | `10` |
 | Dependencies | — |
 | Parallel safe | No |
-| Assigned worker | `UNASSIGNED` |
-| Active branches | `NONE` |
-| Aggregate PR | `NONE` |
+| Assigned worker | `ChatGPT assigned-package validation-policy correction and finalization worker` |
+| Active branches | `package/es-p01-appeal-isolation` |
+| Aggregate PR | `#68` |
 | External PRs | `NONE` |
-| Starting SHAs | `UNSET` |
-| Final reviewed heads | `UNSET` |
+| Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
+| Final reviewed heads | `Frozen product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be; latest reconciled pre-policy PR head 7b132a3c0696dfcd4f991d64d75390047bc79a39` |
 | Merge commits | `UNSET` |
 | Last update | `2026-08-05` |
-| Handoff | `NONE` |
-| Blocker | NONE |
+| Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
+| Blocker | `NONE. OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED: parent run 31057348145/job 92477622119 dispatched staging run 31057358391; build job 92477654523 had runner_id 0, empty runner name, and steps []; Pi job 92477660726 was skipped with steps []. No product step executed and no Pi pass is claimed. Owner wsg138 approved the exception on 2026-08-05; missing distributed Pi boot/restart and Java/Bedrock staging evidence is deferred to ES-V02. Final exact-head hosted validation and merge requirements remain mandatory.` |
 | Package file | [`packages/ES-P01.md`](packages/ES-P01.md) |
 
 ### `ES-P02` — Runtime database recovery and Velocity reload
@@ -475,7 +475,7 @@ Live setup baseline: `wsg138/EnthusiaStaff:main` at `af9aa3d0d54afc84de7c90cb3fd
 | Merge commits | `UNSET` |
 | Last update | `2026-08-05` |
 | Handoff | `NONE` |
-| Blocker | Private/local environment required. |
+| Blocker | `Private/local environment required. This package also owns the staging obligation deferred from ES-P01: obtain distributed Pi build, safe boot/restart, and Java/Bedrock staging evidence. This obligation does not start or complete ES-V02 early.` |
 | Package file | [`packages/ES-V02.md`](packages/ES-V02.md) |
 
 ### `ES-V03` — Destructive, latency, and load acceptance

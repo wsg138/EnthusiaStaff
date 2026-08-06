@@ -86,9 +86,10 @@ final class JdbcWebsiteAppealRepository {
         }
     }
 
-    void complete(
+    void transition(
             Connection connection,
             UUID appealId,
+            String expectedState,
             String state,
             String outcomeCode,
             Instant now
@@ -96,12 +97,13 @@ final class JdbcWebsiteAppealRepository {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE website_appeal_requests
                 SET state = ?, outcome_code = ?, updated_at = ?
-                WHERE appeal_id = ? AND state = 'PREPARED'
+                WHERE appeal_id = ? AND state = ?
                 """)) {
             statement.setString(1, state);
             statement.setString(2, outcomeCode);
             statement.setTimestamp(3, Timestamp.from(now));
             statement.setBytes(4, UuidBytes.toBytes(appealId));
+            statement.setString(5, expectedState);
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Appeal state changed during completion"

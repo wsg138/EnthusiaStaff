@@ -6,6 +6,7 @@ import java.util.UUID;
 import net.enthusia.staff.common.Checks;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
 
 public record ExactSanctionChangeRequest(
         IdempotencyKey idempotencyKey,
@@ -39,7 +40,21 @@ public record ExactSanctionChangeRequest(
         if (linkedAppealId.isPresent() && action != SanctionChangeAction.FULL_OVERTURN) {
             throw new IllegalArgumentException("appeal linkage is only valid for overturns");
         }
+        if (bypassHierarchy && !mayRequestHierarchyBypass(actor.rank(), linkedAppealId)) {
+            throw new IllegalArgumentException("hierarchy bypass requires Founder authority or an appeal reviewer link");
+        }
         reason = Checks.nonBlank(reason, "reason", 2_000);
         originRuntime = Checks.nonBlank(originRuntime, "originRuntime", 64);
+    }
+
+    private static boolean mayRequestHierarchyBypass(
+            StaffRank actorRank,
+            Optional<UUID> linkedAppealId
+    ) {
+        if (actorRank == StaffRank.FOUNDER) {
+            return true;
+        }
+        return linkedAppealId.isPresent()
+                && (actorRank == StaffRank.MOD || actorRank == StaffRank.ADMIN);
     }
 }

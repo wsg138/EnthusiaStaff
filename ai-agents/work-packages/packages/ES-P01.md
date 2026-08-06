@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Package ID | `ES-P01` |
-| Type | Internal |
+| Type | Internal ordinary development package |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
 | Priority | `10` |
@@ -13,17 +13,15 @@
 
 ## 2. Status
 
-Canonical initial status: `READY`. `PACKAGE-REGISTRY.md` is authoritative.
+Canonical current status: `MERGE_PENDING`. `PACKAGE-REGISTRY.md` is authoritative.
+
+Implementation and product review are frozen at `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`. Every executable hosted gate was passing at reconciled PR head `7b132a3c0696dfcd4f991d64d75390047bc79a39`, with Codacy and CodeRabbit clear and zero valid unresolved review threads. The owner has accepted the formal zero-execution infrastructure exception below. The final documentation head must pass every applicable exact-head gate and remain unchanged and mergeable before merge.
 
 ## 3. Objective
 
 Ensure an appeal decision can mutate only the exact appealed sanction and cannot end unrelated sanctions in a combined case.
 
-## 4. Why the package exists
-
-The 2026-08-05 completion audit groups these requirements into one coherent implementation, provider, validation, acceptance, or audit boundary. Splitting shared correctness work risks inconsistent behavior; broadening it would mix unrelated work.
-
-## 5. Included audit IDs
+## 4. Included audit IDs
 
 - `AUD-APPEAL-002`
 - `AUD-APPEAL-003`
@@ -31,122 +29,115 @@ The 2026-08-05 completion audit groups these requirements into one coherent impl
 - `AUD-SEC-005`
 - `AUD-WEB-002`
 
-## 6. Included behavior
+## 5. Included behavior completed
 
-- Replace case-wide appeal mutation with exact-sanction targeting.
-- Preserve reviewer authorization, idempotency, concurrency control, audit linkage, and website contract semantics.
-- Add regression coverage for combined cases, repeated acceptance, stale decisions, and rollback.
+- Replaced case-wide appeal mutation with exact-sanction targeting.
+- Preserved reviewer authorization while preventing linked appeals from granting general full-overturn authority.
+- Constrained hierarchy bypass to Founder or a service-authorized linked MOD/ADMIN appeal reviewer; SYSTEM sanctions remain immutable.
+- Bound mutation idempotency to the website key, appeal ID, and punishment ID.
+- Added durable pending/final appeal transitions and persisted the original expected revision for restart-safe stale-state detection.
+- Centralized the `MUTATION_PENDING_R<revision>` wire format and rejected malformed, negative, signed, and leading-zero encodings.
+- Preserved audit linkage, transaction rollback, retry/replay, concurrency, authority fencing, and the existing 10–1,000-character reason contract.
+- Added unit and MariaDB/Testcontainers regression coverage for exact targeting, combined cases, authorization, hierarchy, stale decisions, restart recovery, rollback, concurrent retries, missing capability/target, and finalized replay.
 
-## 7. Explicit exclusions
+## 6. Explicit exclusions preserved
 
 - Website UX changes
-- Production authority activation
-- Issue #43 acceptance
+- Production authority activation or deployment
+- LiteBans replacement, migration, cutover, issue #43 acceptance, or the 168-hour shadow period
+- External provider or standalone-component changes
+- Private database or player-data access
+- ES-V02 execution or completion
+- Any package other than ES-P01
 
-## 8. Dependencies
+## 7. Dependencies and boundaries
 
-- None.
+- Dependencies: none.
+- Repository: `wsg138/EnthusiaStaff` only.
+- Temporary branch: `package/es-p01-appeal-isolation`.
+- Implementation PR: `#68 — ES-P01: isolate appeals to the exact sanction`.
+- Starting `main`: `e434b3dedc003d1d5b3def64f38cc7465752b0e5`.
+- LiteBans remains authoritative.
 
-Dependencies must be `COMPLETE` before this package becomes `READY`, except where the registry and owner explicitly accept a `DEFERRED` validation dependency for a later audit stage.
+## 8. Implementation and acceptance checklist
 
-## 9. Component and repository boundaries
+- [x] Reconcile live GitHub, registry, branch, PR, checks, reviews, migrations, and issue #43.
+- [x] Implement exact-sanction appeal mutation and sibling-sanction isolation.
+- [x] Preserve authorization, hierarchy, SYSTEM immutability, authority fencing, and website contract behavior.
+- [x] Implement durable pending revision recovery, deterministic replay, stale-state protection, rollback, and concurrency handling.
+- [x] Add focused domain, Velocity, persistence, and MariaDB/Testcontainers tests.
+- [x] Complete harsh first-party review of the complete product diff.
+- [x] Resolve every valid CodeRabbit/Codacy finding and require zero valid unresolved review threads.
+- [x] Freeze product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be` and pass the full hosted Java 21/MariaDB/runtime-JAR/coverage gate.
+- [x] Verify the Pi attempt allocated no runner, reported `runner_id: 0`, executed zero product steps, and skipped the downstream boot/restart job.
+- [x] Record owner approval under the formal zero-execution infrastructure-exception policy.
+- [x] Defer the missing distributed Pi boot/restart and Java/Bedrock staging evidence to `ES-V02` without starting it.
+- [ ] Freeze and validate the final policy/documentation PR head with every applicable executable gate.
+- [ ] Merge PR #68 normally.
+- [ ] Verify resulting `main`, reviewed-head containment, divergence, and safe branch deletion.
+- [ ] Complete post-merge canonical finalization and derive dependent package statuses.
 
-- Primary: `COMP-STAFF`.
-- Additional: —.
-- Change only paths required by included behavior, tests, contracts, aggregate component copies, package state, and the canonical handoff.
-- Do not import or mutate unrelated components.
-- No permanent component branch or isolated-component PR is part of this package.
+## 9. Hosted validation evidence
 
-## 10. Required branches
+Frozen product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`.
 
-- EnthusiaStaff temporary branch: `package/es-p01-appeal-isolation`.
+Latest reconciled pre-policy PR head: `7b132a3c0696dfcd4f991d64d75390047bc79a39`.
 
-All branches are temporary and are deleted after merge when containment and absence of unique work are verified.
+- Coverage run `31064834286`, job `92500281761`: success.
+- Java: Temurin `21.0.11+10`.
+- Command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
+- Result: `BUILD SUCCESSFUL` in 5m22s; 49 tasks, 40 executed and 9 up-to-date.
+- All module tests and MariaDB/Testcontainers integration tests passed.
+- Runtime inspection checked 24 provider API source types and found zero leaks.
+- Paper JAR: 8,897,023 bytes; SHA-256 `095ce7e763f267be050d5c1d36cb8a1190185937943f7b5272cd6dbc964cae9c`; 4,748 entries.
+- Velocity JAR: 7,790,210 bytes; SHA-256 `b23160d83709521b4910860357d4d1ab8019f894f5b61af15b77b97d1cec3229`; 4,121 entries.
+- JaCoCo: 47.07% lines, 38.16% branches, 49.81% instructions.
+- Validation artifact `8953543716`: 18,264,524 bytes; SHA-256 `a6f83d9977615ec1647b4cfbeaee74827b008db1054e6d71b32ae440582cc031`.
+- Codacy static analysis, coverage variation, and diff coverage passed.
+- CodeRabbit reported success; all six review threads were resolved and zero valid unresolved threads remained.
 
-## 11. Required PRs
+The exact final PR head created by policy/package documentation must repeat every applicable executable hosted gate before merge. A later commit invalidates that evidence.
 
-- One PR targeting `wsg138/EnthusiaStaff:main`.
+## 10. Owner-approved infrastructure exception
 
-## 12. Implementation checklist
+Status/evidence label: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
 
-- [ ] Reconcile live GitHub and exact starting SHAs across every required repository.
-- [ ] Verify registry status, assignment, and absence of a conflicting worker.
-- [ ] Confirm included audit gaps still exist and exclusions remain correct.
-- [ ] Complete every included behavior without placeholders or invented provider APIs.
-- [ ] Add meaningful success, failure, concurrency, restart, and regression tests as applicable.
-- [ ] Update the package file, registry, workspace state, component metadata when applicable, and one canonical package handoff.
-- [ ] Harshly review every required final PR diff.
-- [ ] Freeze tracked content and validate every exact final head.
-- [ ] Merge every required PR normally.
-- [ ] Verify post-merge heads, containment, branch cleanup, and external parity when applicable.
+### Approval
 
-## 13. Acceptance criteria
+Repository owner `wsg138` explicitly approved this narrowly defined infrastructure-only exception for ES-P01 in the current assigned-package instruction on 2026-08-05, America/Indiana/Indianapolis.
 
-- Every included requirement is implemented or conclusively exercised for validation/audit packages.
-- Authorization, idempotency, concurrency, rollback, restart, bounds, privacy, and audit behavior are proved where applicable.
-- No explicit exclusion was implemented accidentally.
-- Package-specific PR and synchronization gates are satisfied.
+### Exact evidence
 
-## 14. Test requirements
+- External specialized environment: private `wsg138/EnthusiaStaff-Staging`.
+- Parent run `31057348145`, parent job `92477622119`.
+- Dispatched staging run `31057358391`.
+- Staging build job `92477654523`: labels `ubuntu-latest`, conclusion `failure`, `runner_id: 0`, empty runner name, and empty executed-step list `[]`.
+- Downstream job `92477660726`, `Boot and restart verified Paper runtime on Lincoln-PI-4`: conclusion `skipped`, no runner, and empty executed-step list `[]`.
+- Diagnostics artifact `8950755524`: SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
 
-Follow `VALIDATION-POLICY.md`. Add focused unit/integration/runtime tests for each included behavior and regression. Never claim staging or production acceptance from hosted unit tests.
+### Disposition
 
-## 15. Static-analysis requirements
+No product build, test, migration, runtime-JAR, server boot, or restart step executed. The staging result is infrastructure-unavailable evidence, not a product result. No product boot failure occurred.
 
-Run repository-configured warnings-as-errors and static analysis for every changed repository. Resolve every valid first-party finding; use only narrow justified suppressions. Verify CodeRabbit/Codacy where available.
+The Pi gate is not passed. This exception is not staging verification, production verification, or proof that EnthusiaStaff booted. It cannot excuse any allocated runner that executes a failing product step, compile/test/static-analysis/security/review/migration/JAR/documentation failure, private-validation package, issue #43, 168-hour shadow period, final cutover, production activation, ordinary GitHub-hosted build absence, or a failure caused by ES-P01 workflow edits.
 
-## 16. Documentation requirements
+Missing distributed Pi build/boot/restart and Java/Bedrock staging evidence is assigned to `ES-V02 — Distributed and Java/Bedrock staging`. ES-V02 remains `DEFERRED`; it is neither started nor complete.
 
-Update directly affected user/operator/developer documentation, commands, permissions, configuration, runbooks, component metadata, package status, and evidence. Keep claims conservative and revision-specific.
+## 11. Migration impact
 
-## 17. Security and privacy requirements
+No migration is required. `V16` remains highest and V1–V16 remain immutable. The pending marker fits the existing `outcome_code VARCHAR(64)` column while appeal state remains `APPLIED`.
 
-No secrets, credentials, raw addresses, private messages, databases, player rows, production routes, or reconstructable derived data in commits, PR comments, logs, or artifacts. Enforce service-boundary authorization and fail closed.
+## 12. Resume state
 
-## 18. Migration impact
+- Starting package status: `ACTIVE`.
+- Current package status: `MERGE_PENDING`.
+- Branch: `package/es-p01-appeal-isolation`.
+- PR: `#68`.
+- Frozen reviewed product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`.
+- Canonical handoff: [`../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md`](../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md).
+- No merge commit exists yet; starting `main` remains `e434b3dedc003d1d5b3def64f38cc7465752b0e5` until PR #68 merges.
+- `ES-P02` and `ES-X05` remain `PLANNED` until post-merge finalization marks ES-P01 `COMPLETE`.
 
-No migration is assumed. If a schema change is genuinely required, verify V16 is still highest, add a new immutable migration, and test clean install, upgrade, and checksum behavior. Never edit V1–V16, use Flyway repair, or rewrite history.
+## 13. Exact next action
 
-## 19. Bedrock considerations
-
-Provide text/command fallback for GUI-dependent behavior, preserve Floodgate identity, avoid Java-only assumptions, and defer acceptance claims until representative Bedrock staging is recorded.
-
-## 20. Distributed-runtime considerations
-
-Account for multiple Paper/Velocity processes, server switching, duplicate delivery, reconnect, restart, ownership, fences, bounded queues, and database latency. Hosted tests do not replace distributed staging.
-
-## 21. External-provider considerations
-
-Use only verified supported repositories/contracts. Provider missing or incompatible behavior must be explicit and safe. Never reflect against unknown implementations, invent APIs, or scrape logs as a substitute contract.
-
-## 22. Completion definition
-
-`COMPLETE` requires all included criteria, tests, static analysis, documentation, exact reviewed heads, zero valid unresolved threads, and that one required EnthusiaStaff PR is merged normally. One merged PR is sufficient only for packages whose required-PR section explicitly defines one PR.
-
-## 23. Resume state
-
-- Assigned worker: `UNASSIGNED`.
-- Current branches: `NONE`.
-- Current PRs: `NONE`.
-- Latest handoff: `NONE`.
-- Current action: Start only when explicitly assigned; dependencies are already satisfied.
-
-## 24. Last completed checkpoint
-
-Package definition created by the orchestration setup. No product implementation began.
-
-## 25. Remaining checklist
-
-All implementation, validation, review, merge, synchronization, and evidence items remain.
-
-## 26. Known blockers
-
-None beyond dependencies and live reconciliation.
-
-## 27. Final evidence
-
-`UNSET`. Record final reviewed heads, workflow/job IDs, test/static-analysis results, review disposition, parity hashes when applicable, and links in live PR evidence and the canonical handoff.
-
-## 28. Merge and synchronization record
-
-`UNSET`. Record the EnthusiaStaff feature head, merge commit, resulting `main`, containment, and temporary branch deletion. No component parity gate applies unless the package is later amended to include an external component.
+Harshly review the complete policy/package-state diff, freeze the resulting PR head, require Java 21 clean build, all module and MariaDB/Testcontainers tests, migration integrity, runtime-JAR construction/inspection, provider-leak inspection, aggregate coverage, Codacy, Wiki/documentation/package-orchestration validation, mergeability, and zero valid unresolved review threads. Confirm the head remains unchanged, then merge PR #68 normally, verify containment/divergence, safely delete the implementation branch, and complete a documentation-only finalization PR. Do not call Pi passed and do not start ES-V02, ES-P02, or ES-X05.

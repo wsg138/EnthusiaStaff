@@ -1,11 +1,11 @@
 # Latest AI handoff
 
-Current orchestration handoff:
+Current assigned-package handoff:
 
-[`2026-08-05-package-planning-setup.md`](../package-handoffs/2026-08-05-package-planning-setup.md)
+[`2026-08-05-es-p01-appeal-isolation.md`](../package-handoffs/2026-08-05-es-p01-appeal-isolation.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: package-planning setup is the current work item. Read exact PR, final-head validation, review, merge, resulting `main`, containment, and branch cleanup live from GitHub. No implementation package is active. After setup merges, `ES-P01` is the next assigned package; do not begin it in the setup channel.
+State: `ES-P01` is active on `package/es-p01-appeal-isolation` in PR #68. Resume that branch and PR if interrupted. Do not start another package. Live GitHub, the registry, exact-head checks, review threads, merge state, containment, and branch cleanup take priority over this routing summary.

@@ -5,11 +5,13 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
+import net.enthusia.staff.domain.website.AppealMutationPendingOutcome;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 import net.enthusia.staff.persistence.JdbcPunishmentCodeRepository.CodeRow;
 import net.enthusia.staff.persistence.JdbcWebsiteAppealRepository.AppealRow;
@@ -193,7 +195,11 @@ final class JdbcWebsiteAppealStore {
                     "The appeal acceptance was previously rejected"
             );
         }
-        return new AppealAcceptancePreparation.Ready(true);
+        return new AppealAcceptancePreparation.Ready(
+                true,
+                pendingRevision(existing),
+                isFinalized(existing)
+        );
     }
 
     private static AppealAcceptancePreparation.Rejected bindingRejection(
@@ -226,13 +232,88 @@ final class JdbcWebsiteAppealStore {
         if (existing == null) {
             throw notFound("APPEAL_NOT_FOUND", "The appeal request could not be found");
         }
-        if (!APPEAL_PREPARED.equals(existing.state())) {
-            if (state.equals(existing.state()) && outcomeCode.equals(existing.outcomeCode())) {
-                return;
-            }
+        if (state.equals(existing.state()) && outcomeCode.equals(existing.outcomeCode())) {
+            return;
+        }
+        if (isFinalizedReplayProbe(existing, state, outcomeCode)) {
+            return;
+        }
+        if (!transitionAllowed(existing, state, outcomeCode)) {
             throw conflict("APPEAL_STATE_CONFLICT", "The appeal completion conflicts with prior state");
         }
-        appeals.complete(connection, appealId, state, outcomeCode, now);
+        appeals.transition(
+                connection,
+                appealId,
+                existing.state(),
+                state,
+                outcomeCode,
+                now
+        );
+    }
+
+    private static boolean isFinalizedReplayProbe(
+            AppealRow existing,
+            String state,
+            String outcomeCode
+    ) {
+        return isFinalized(existing)
+                && APPEAL_APPLIED.equals(state)
+                && requirePendingRevision(outcomeCode).isPresent();
+    }
+
+    private static boolean transitionAllowed(
+            AppealRow existing,
+            String state,
+            String outcomeCode
+    ) {
+        if (APPEAL_PREPARED.equals(existing.state())) {
+            return preparedTransitionAllowed(state, outcomeCode);
+        }
+        if (!APPEAL_APPLIED.equals(existing.state())
+                || requirePendingRevision(existing.outcomeCode()).isEmpty()) {
+            return false;
+        }
+        return pendingTransitionAllowed(state, outcomeCode);
+    }
+
+    private static boolean preparedTransitionAllowed(String state, String outcomeCode) {
+        if (APPEAL_REJECTED.equals(state)) {
+            return true;
+        }
+        if (!APPEAL_APPLIED.equals(state)) {
+            return false;
+        }
+        return APPEAL_APPLIED.equals(outcomeCode)
+                || requirePendingRevision(outcomeCode).isPresent();
+    }
+
+    private static boolean pendingTransitionAllowed(String state, String outcomeCode) {
+        return APPEAL_REJECTED.equals(state)
+                || (APPEAL_APPLIED.equals(state) && APPEAL_APPLIED.equals(outcomeCode));
+    }
+
+    private static boolean isFinalized(AppealRow existing) {
+        return APPEAL_APPLIED.equals(existing.state())
+                && requirePendingRevision(existing.outcomeCode()).isEmpty();
+    }
+
+    private static OptionalLong pendingRevision(AppealRow existing) {
+        if (!APPEAL_APPLIED.equals(existing.state())) {
+            return OptionalLong.empty();
+        }
+        return requirePendingRevision(existing.outcomeCode());
+    }
+
+    private static OptionalLong requirePendingRevision(String outcomeCode) {
+        try {
+            return AppealMutationPendingOutcome.parse(outcomeCode);
+        } catch (NumberFormatException exception) {
+            throw conflict(
+                    "APPEAL_STATE_CONFLICT",
+                    "The pending appeal revision is invalid",
+                    exception
+            );
+        }
     }
 
     private static boolean matches(
@@ -315,5 +396,15 @@ final class JdbcWebsiteAppealStore {
 
     private static WebsiteModerationException conflict(String code, String message) {
         return new WebsiteModerationException(WebsiteModerationException.Kind.CONFLICT, code, message);
+    }
+
+    private static WebsiteModerationException conflict(
+            String code,
+            String message,
+            Throwable cause
+    ) {
+        WebsiteModerationException exception = conflict(code, message);
+        exception.initCause(cause);
+        return exception;
     }
 }

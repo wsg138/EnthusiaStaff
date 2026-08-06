@@ -19,13 +19,18 @@ final class StaffHierarchyTest {
     void developerNeverReceivesModerationMutationAuthority() {
         for (StaffRank issuer : StaffRank.values()) {
             assertFalse(StaffHierarchy.mayMutate(StaffRank.DEVELOPER, issuer, false));
+            assertFalse(StaffHierarchy.mayMutate(StaffRank.DEVELOPER, issuer, true));
         }
     }
 
     @Test
-    void bypassIsFounderOnlyAndStillCannotMutateSystemSanctions() {
-        assertFalse(StaffHierarchy.mayMutate(StaffRank.ADMIN, StaffRank.FOUNDER, true));
+    void prevalidatedBypassStillCannotMutateSystemSanctions() {
+        assertTrue(StaffHierarchy.mayMutate(StaffRank.HELPER, StaffRank.FOUNDER, true));
+        assertTrue(StaffHierarchy.mayMutate(StaffRank.MOD, StaffRank.FOUNDER, true));
+        assertTrue(StaffHierarchy.mayMutate(StaffRank.ADMIN, StaffRank.FOUNDER, true));
         assertTrue(StaffHierarchy.mayMutate(StaffRank.FOUNDER, StaffRank.FOUNDER, true));
+        assertFalse(StaffHierarchy.mayMutate(StaffRank.SYSTEM, StaffRank.FOUNDER, true));
+        assertFalse(StaffHierarchy.mayMutate(StaffRank.MOD, StaffRank.SYSTEM, true));
         assertFalse(StaffHierarchy.mayMutate(StaffRank.FOUNDER, StaffRank.SYSTEM, true));
     }
 }
