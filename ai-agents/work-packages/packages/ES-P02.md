@@ -40,7 +40,7 @@ PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, unmerged, and currentl
 
 ## 12. Heads and current routing record
 - Starting `main`: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
-- Current canonical `main` at status publication: `5c969901146fc5081eec14b3c089bec7b06d5f5e`.
+- Canonical `main` at status-publication start: `5c969901146fc5081eec14b3c089bec7b06d5f5e`.
 - Frozen ES-P02 product head: `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`.
 - Current ES-P02 package-record and PR head: `80d4ea840f34017c09afb618f623581b31c6223d`.
 - Current classification: `PARKED_BLOCKED` while runner availability and owner authorization remain unchanged.
