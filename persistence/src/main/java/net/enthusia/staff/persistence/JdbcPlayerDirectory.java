@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
@@ -21,6 +22,11 @@ import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 
 public final class JdbcPlayerDirectory implements PlayerDirectory {
+    private static final Pattern JAVA_OR_UNPREFIXED_NAME = Pattern.compile("[A-Za-z0-9_]{1,32}");
+    private static final Pattern BEDROCK_ALIAS = Pattern.compile("\\*[A-Za-z0-9_]{1,31}");
+    private static final Pattern JAVA_OR_UNPREFIXED_PREFIX = Pattern.compile("[A-Za-z0-9_]{0,32}");
+    private static final Pattern BEDROCK_ALIAS_PREFIX = Pattern.compile("\\*[A-Za-z0-9_]{0,31}");
+
     private final DataSource dataSource;
 
     public JdbcPlayerDirectory(DataSource dataSource) {
@@ -130,7 +136,7 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
 
     @Override
     public List<PlayerIdentity> search(String prefix, int limit) {
-        if (prefix == null || !prefix.matches("[A-Za-z0-9_]{0,32}") || limit < 1 || limit > 100) {
+        if (!validPrefix(prefix) || limit < 1 || limit > 100) {
             throw new IllegalArgumentException("prefix or limit is invalid");
         }
         String sql = """
@@ -196,9 +202,8 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
             String serverId,
             Instant seenAt
     ) {
-        if (playerId == null || username == null || !username.matches("[A-Za-z0-9_]{1,32}")
-                || platform == null || serverId == null || serverId.isBlank() || serverId.length() > 64
-                || seenAt == null) {
+        if (playerId == null || !validUsername(username) || platform == null
+                || serverId == null || serverId.isBlank() || serverId.length() > 64 || seenAt == null) {
             throw new IllegalArgumentException("valid player observation fields must be present");
         }
         String lower = username.toLowerCase(Locale.ROOT);
@@ -208,15 +213,31 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
                     INSERT INTO players(player_id, current_username, lowercase_username, platform,
                         current_server, first_seen_at, last_seen_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE current_username = VALUES(current_username),
-                        lowercase_username = VALUES(lowercase_username), platform = VALUES(platform),
-                        last_server = current_server, current_server = VALUES(current_server),
-                        last_seen_at = VALUES(last_seen_at), revision = revision + 1
+                    ON DUPLICATE KEY UPDATE
+                        current_username = IF(VALUES(last_seen_at) >= last_seen_at,
+                            VALUES(current_username), current_username),
+                        lowercase_username = IF(VALUES(last_seen_at) >= last_seen_at,
+                            VALUES(lowercase_username), lowercase_username),
+                        platform = CASE
+                            WHEN VALUES(platform) = 'BEDROCK' THEN 'BEDROCK'
+                            WHEN platform = 'UNKNOWN' AND VALUES(platform) = 'JAVA' THEN 'JAVA'
+                            ELSE platform
+                        END,
+                        last_server = IF(VALUES(last_seen_at) >= last_seen_at,
+                            current_server, last_server),
+                        current_server = IF(VALUES(last_seen_at) >= last_seen_at,
+                            VALUES(current_server), current_server),
+                        first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
+                        last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at)),
+                        revision = revision + 1
                     """);
                  PreparedStatement name = connection.prepareStatement("""
                     INSERT INTO player_names(player_id, username, lowercase_username, first_seen_at, last_seen_at)
                     VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE username = VALUES(username), last_seen_at = VALUES(last_seen_at)
+                    ON DUPLICATE KEY UPDATE
+                        username = IF(VALUES(last_seen_at) >= last_seen_at, VALUES(username), username),
+                        first_seen_at = LEAST(first_seen_at, VALUES(first_seen_at)),
+                        last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at))
                     """)) {
                 byte[] id = UuidBytes.toBytes(playerId);
                 player.setBytes(1, id);
@@ -260,13 +281,15 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
                 UPDATE players
                 SET last_server = current_server, current_server = NULL,
                     last_seen_at = ?, revision = revision + 1
-                WHERE player_id = ? AND current_server = ?
+                WHERE player_id = ? AND current_server = ? AND last_seen_at <= ?
                 """;
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setTimestamp(1, Timestamp.from(disconnectedAt));
+            Timestamp disconnected = Timestamp.from(disconnectedAt);
+            statement.setTimestamp(1, disconnected);
             statement.setBytes(2, UuidBytes.toBytes(playerId));
             statement.setString(3, serverId);
+            statement.setTimestamp(4, disconnected);
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to record player disconnect", exception);
@@ -281,6 +304,16 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
                 result.getTimestamp("first_seen_at").toInstant(),
                 result.getTimestamp("last_seen_at").toInstant()
         );
+    }
+
+    private static boolean validUsername(String username) {
+        return username != null && (JAVA_OR_UNPREFIXED_NAME.matcher(username).matches()
+                || BEDROCK_ALIAS.matcher(username).matches());
+    }
+
+    private static boolean validPrefix(String prefix) {
+        return prefix != null && (JAVA_OR_UNPREFIXED_PREFIX.matcher(prefix).matches()
+                || BEDROCK_ALIAS_PREFIX.matcher(prefix).matches());
     }
 
     private static UUID parseUuid(String value) {
