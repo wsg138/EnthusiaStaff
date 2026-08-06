@@ -18,7 +18,7 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 
 ## Current package state
 
-`ES-P01 ACTIVE — exact-sanction appeal isolation is implemented and has passing hosted Java/MariaDB evidence; PR #68 is in automated review and final exact-head validation.`
+`ES-P01 ACTIVE — exact-sanction appeal isolation is implemented in PR #68; current review repairs must be completed and the resulting tracked content frozen before final exact-head validation.`
 
 | Field | Value |
 | --- | --- |
@@ -26,12 +26,12 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 | Active implementation package | `ES-P01 — Exact-sanction appeal isolation` |
 | Active implementation branch | `package/es-p01-appeal-isolation` |
 | Active implementation PR | `#68 — ES-P01: isolate appeals to the exact sanction` |
-| Passing implementation head | `9acbbe0cb792deb69bd5758b364d9609da9ace58` before review-fix commits |
-| Passing hosted run | Coverage run `31059266809`, job `92483396625` |
+| Last passing reviewed product head | `b0444d60e215f38b8f3d196826fa51cf170aa228` before the current parser/documentation review repairs |
+| Last passing hosted run | Coverage run `31063653826`, job `92496717253` |
 | Package handoff | `ai-agents/reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md` |
-| Next action | Validate the final review-fix head, require zero valid unresolved threads, merge normally, verify containment, delete the implementation branch, and finalize package state. |
+| Next action | Complete every valid current review repair, harshly review the complete resulting diff, freeze all tracked content, and validate that exact head. Any real defect requiring another commit must trigger another harsh review and every applicable exact-head gate before merge. Then require zero valid unresolved threads, resolve the Pi gate described below, merge normally, verify containment, delete the implementation branch, and finalize package state. |
 | Intended post-merge status | `ES-P01 COMPLETE` only after normal merge, containment verification, and safe branch deletion; `ES-P02` and `ES-X05` then become `READY`. |
-| Owner priority | Finish ES-P01 review, exact-head validation, merge, cleanup, and canonical state finalization before starting any dependent package. |
+| Owner priority | Finish ES-P01 review, exact-head validation, Pi disposition, merge, cleanup, and canonical state finalization before starting any dependent package. |
 | Production authority | LiteBans remains authoritative |
 
 ## Completed work
@@ -43,10 +43,10 @@ This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGIS
 
 ## Validation routing
 
-- Head `9acbbe0cb792deb69bd5758b364d9609da9ace58` passed Java 21 clean build, all module tests, MariaDB/Testcontainers, runtime-JAR integrity/provider-leak inspection, aggregate JaCoCo generation, artifact upload, and Codacy coverage upload.
-- Review fixes moved the branch afterward; the final reviewed head must repeat those gates.
-- Codacy findings from the first non-draft review cycle were fixed; the current head must return zero valid annotations.
-- The configured Pi staging dispatch reaches `EnthusiaStaff-Staging`, but the staging build job receives no runner (`runner_id: 0`, zero steps). This is infrastructure-unavailable evidence, not a pass and not a product failure.
+- Head `b0444d60e215f38b8f3d196826fa51cf170aa228` passed Java 21 clean build, all module tests, MariaDB/Testcontainers, runtime-JAR integrity/provider-leak inspection, aggregate JaCoCo generation, artifact upload, Codacy static analysis, and Codacy coverage upload.
+- Current parser/documentation review repairs move the branch afterward; the fully reviewed and frozen final head must repeat every applicable gate.
+- Codacy reports zero annotations on the last passing head; every current CodeRabbit finding and valid thread must be resolved on the final head.
+- The configured Pi staging dispatch reaches `wsg138/EnthusiaStaff-Staging`, but staging build job `92477654523` in run `31057358391` received no runner (`runner_id: 0`, zero steps). Pi boot job `92477660726` was skipped. This is infrastructure-unavailable evidence, not a pass and not a product failure.
 - No production, private-data, distributed, Bedrock, or LiteBans cutover acceptance is claimed by ES-P01.
 
 ## Dependency routing
@@ -59,9 +59,13 @@ Verified standalone repositories remain site, Currency, Market, and Commend at t
 
 No long-lived component branches exist or are part of the design. Temporary package branches are deleted after merge when safe.
 
-## Blockers
+## Blockers and validation exception routing
 
-No product blocker is known. Pi staging remains unavailable because no staging runner is allocated. CodeRabbit availability may be rate-limited, but every produced valid finding must be resolved and all review threads must be closed before merge.
+- Product and review repairs remain `ACTIVE` until the current parser and documentation findings are fixed, reviewed, and validated. The package must not be labeled infrastructure-blocked while any product, test, static-analysis, or review failure remains.
+- The Pi merge gate is currently unavailable because `wsg138/EnthusiaStaff-Staging` build job `92477654523` received no runner and executed zero steps; downstream Pi boot job `92477660726` was skipped. The responsible staging/CI owner is `wsg138`, the owner of the private staging repository.
+- Required external input: the staging/CI owner must either allocate a compatible runner and obtain a successful exact-head staging build plus safe Pi boot/restart, or explicitly accept and record a verified validation exception permitted by repository policy.
+- Focused routing: resolve this only through the `wsg138/EnthusiaStaff-Staging` runner configuration or a documented owner exception; do not weaken product checks or treat the zero-step run as passing evidence.
+- Merge remains blocked until one of those two Pi dispositions is verified. If every product/review gate is clean while this condition remains unchanged, the canonical package status must transition from `ACTIVE` to `BLOCKED` and preserve PR #68 and its branch.
 
 ## Permanent boundaries
 

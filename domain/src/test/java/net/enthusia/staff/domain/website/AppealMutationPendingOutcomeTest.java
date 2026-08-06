@@ -22,7 +22,7 @@ final class AppealMutationPendingOutcomeTest {
     }
 
     @Test
-    void rejectsMalformedOrNegativePendingRevisions() {
+    void rejectsMalformedNegativeOrNoncanonicalPendingRevisions() {
         assertThrows(
                 NumberFormatException.class,
                 () -> AppealMutationPendingOutcome.parse("MUTATION_PENDING_Rinvalid")
@@ -30,6 +30,14 @@ final class AppealMutationPendingOutcomeTest {
         assertThrows(
                 NumberFormatException.class,
                 () -> AppealMutationPendingOutcome.parse("MUTATION_PENDING_R-1")
+        );
+        assertThrows(
+                NumberFormatException.class,
+                () -> AppealMutationPendingOutcome.parse("MUTATION_PENDING_R+1")
+        );
+        assertThrows(
+                NumberFormatException.class,
+                () -> AppealMutationPendingOutcome.parse("MUTATION_PENDING_R01")
         );
         assertThrows(
                 IllegalArgumentException.class,

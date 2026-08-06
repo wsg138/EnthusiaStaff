@@ -26,9 +26,10 @@ public final class AppealMutationPendingOutcome {
         if (outcomeCode == null || !outcomeCode.startsWith(PREFIX)) {
             return OptionalLong.empty();
         }
-        long revision = Long.parseLong(outcomeCode.substring(PREFIX.length()));
-        if (revision < 0) {
-            throw new NumberFormatException("negative appeal pending revision");
+        String encodedRevision = outcomeCode.substring(PREFIX.length());
+        long revision = Long.parseLong(encodedRevision);
+        if (revision < 0 || !Long.toString(revision).equals(encodedRevision)) {
+            throw new NumberFormatException("noncanonical appeal pending revision");
         }
         return OptionalLong.of(revision);
     }
