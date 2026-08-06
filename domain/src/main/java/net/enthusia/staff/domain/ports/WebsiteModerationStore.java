@@ -11,6 +11,10 @@ import net.enthusia.staff.domain.website.PublicPunishmentFilter;
 import net.enthusia.staff.domain.website.PublicPunishmentPage;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
+import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
+import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealPage;
+import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 
 public interface WebsiteModerationStore {
     PublicPunishmentPage listPublic(
@@ -57,4 +61,45 @@ public interface WebsiteModerationStore {
     );
 
     void completeAppealAcceptance(UUID appealId, String state, String outcomeCode, Instant now);
+
+    default List<WebsiteAppealCandidate> eligibleAppeals(
+            String accountId,
+            int limit,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+    }
+
+    default WebsiteAppealSubmission submitAppeal(
+            UUID punishmentId,
+            String accountId,
+            String username,
+            String reason,
+            String idempotencyKey,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+    }
+
+    default WebsiteAppealPage listAppeals(
+            String state,
+            Optional<String> cursor,
+            int limit,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+    }
+
+    default WebsiteAppealDecisionPreparation prepareAppealDecision(
+            UUID appealId,
+            long expectedVersion,
+            String decision,
+            String note,
+            UUID reviewerAccountId,
+            String reviewerRank,
+            String idempotencyKey,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("Website appeal workflow is unavailable");
+    }
 }
