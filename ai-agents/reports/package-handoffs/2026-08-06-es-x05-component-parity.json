@@ -5,11 +5,29 @@
   "aggregate_product_sha": "96912301fc425ac6f5eff9349ee3b3d543d122eb",
   "deferred_validation_package": "ES-V02",
   "exact_validated_aggregate_head": "4c818bb3aea953d3f877efc8a48a9175ba219d38",
+  "finalization_status": "BLOCKED / PARKED_BLOCKED",
   "hash_method": "tools/component-sync/component_sync.py; SHA-256 over sorted POSIX paths and raw bytes; aggregate-only COMPONENT-METADATA.md excluded",
   "missing_from_aggregate": [],
   "modified": [],
-  "package_status_after_finalization_merge": "COMPLETE",
+  "ordinary_hosted_blocker": {
+    "attempt_head": "e4be594d8dd811bd27b13c3a2207fcdb06a0a769",
+    "coverage_job": 92686159333,
+    "coverage_run": 31122594623,
+    "runner_id": 0,
+    "runner_name": "",
+    "steps": []
+  },
   "parity": true,
+  "recovery_staging_evidence": {
+    "build_job": 92686599218,
+    "build_runner_id": 0,
+    "build_runner_name": "",
+    "build_steps": [],
+    "pi_job": 92688928718,
+    "pi_result": "skipped",
+    "private_run": 31122730837,
+    "wrapper_run": 31122594379
+  },
   "staging_evidence": "OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED; not a pass",
   "standalone_hash": "9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2",
   "standalone_sha": "b385f78c522f452cc48d78ed19fd2ee82573f64d"
