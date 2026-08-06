@@ -121,7 +121,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", "MUTATION_PENDING", NOW);
+            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
             ExactSanctionChangeResult.Applied applied = assertInstanceOf(
                     ExactSanctionChangeResult.Applied.class,
                     service(runtime).applyExact(
@@ -138,8 +138,15 @@ class ExactSanctionAppealIsolationIntegrationTest {
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
-            assertPrepared(website, appealId, fixture, key, true);
-            website.completeAppealAcceptance(appealId, "APPLIED", "MUTATION_PENDING", NOW.plusSeconds(2));
+            AppealAcceptancePreparation.Ready ready = assertPrepared(
+                    website,
+                    appealId,
+                    fixture,
+                    key,
+                    true
+            );
+            assertTrue(ready.pendingRevision().isEmpty());
+            website.completeAppealAcceptance(appealId, "APPLIED", pending(1L), NOW.plusSeconds(2));
             ExactSanctionChangeResult.Applied replay = assertInstanceOf(
                     ExactSanctionChangeResult.Applied.class,
                     service(runtime).applyExact(
@@ -158,7 +165,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
     }
 
     @Test
-    void staleDecisionRejectsWithoutMutatingEitherSanction() throws Exception {
+    void pendingRevisionSurvivesRestartAndRejectsInterveningMutation() throws Exception {
         Fixture fixture = seedCombinedCase(2);
         UUID appealId = uuid(502);
         String key = "appeal-isolation-stale";
@@ -169,12 +176,26 @@ class ExactSanctionAppealIsolationIntegrationTest {
             long revision = runtime.sanctionMutationStore()
                     .exactRevision(fixture.appealedSanctionId())
                     .orElseThrow();
-            website.completeAppealAcceptance(appealId, "APPLIED", "MUTATION_PENDING", NOW);
-            incrementRevision(fixture.appealedSanctionId());
+            assertEquals(0L, revision);
+            website.completeAppealAcceptance(appealId, "APPLIED", pending(revision), NOW);
+        }
+
+        incrementRevision(fixture.appealedSanctionId());
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
+            AppealAcceptancePreparation.Ready ready = assertPrepared(
+                    website,
+                    appealId,
+                    fixture,
+                    key,
+                    true
+            );
+            assertEquals(0L, ready.pendingRevision().orElseThrow());
             ExactSanctionChangeResult.Rejected rejected = assertInstanceOf(
                     ExactSanctionChangeResult.Rejected.class,
                     service(runtime).applyExact(
-                            request(fixture, appealId, key, revision),
+                            request(fixture, appealId, key, ready.pendingRevision().orElseThrow()),
                             OperationalMode.ACTIVE,
                             LIMITS
                     )
@@ -199,7 +220,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", "MUTATION_PENDING", NOW);
+            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
             ExactSanctionChangeRequest request = request(runtime, fixture, appealId, key);
             execute("""
                     CREATE TRIGGER fail_appeal_isolation_audit
@@ -218,17 +239,24 @@ class ExactSanctionAppealIsolationIntegrationTest {
 
         assertEquals("ACTIVE", sanctionStatus(fixture.appealedSanctionId()));
         assertEquals("ACTIVE", sanctionStatus(fixture.siblingSanctionId()));
-        assertAppealState(appealId, "APPLIED", "MUTATION_PENDING");
+        assertAppealState(appealId, "APPLIED", pending(0L));
         assertEquals(0, countSanctionEvents(fixture.appealedSanctionId()));
         assertEquals(0, countOverturnAudits(fixture.caseId()));
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
-            assertPrepared(website, appealId, fixture, key, true);
+            AppealAcceptancePreparation.Ready ready = assertPrepared(
+                    website,
+                    appealId,
+                    fixture,
+                    key,
+                    true
+            );
+            assertEquals(0L, ready.pendingRevision().orElseThrow());
             ExactSanctionChangeResult.Applied applied = assertInstanceOf(
                     ExactSanctionChangeResult.Applied.class,
                     service(runtime).applyExact(
-                            request(runtime, fixture, appealId, key),
+                            request(fixture, appealId, key, ready.pendingRevision().orElseThrow()),
                             OperationalMode.ACTIVE,
                             LIMITS
                     )
@@ -249,7 +277,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime setup = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(setup, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", "MUTATION_PENDING", NOW);
+            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
         }
 
         try (MariaDbRuntime firstRuntime = MariaDb.initialize(databaseConfig(DATABASE));
@@ -304,7 +332,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
         return website;
     }
 
-    private static void assertPrepared(
+    private static AppealAcceptancePreparation.Ready assertPrepared(
             WebsiteModerationStore website,
             UUID appealId,
             Fixture fixture,
@@ -323,6 +351,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
                 )
         );
         assertEquals(replayed, ready.replayed());
+        return ready;
     }
 
     private static SanctionChangeService service(MariaDbRuntime runtime) {
@@ -485,6 +514,10 @@ class ExactSanctionAppealIsolationIntegrationTest {
              PreparedStatement statement = database.prepareStatement(sql)) { // nosemgrep
             statement.execute();
         }
+    }
+
+    private static String pending(long revision) {
+        return "MUTATION_PENDING_R" + revision;
     }
 
     private static UUID uuid(long suffix) {
