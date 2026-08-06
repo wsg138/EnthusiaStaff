@@ -2,6 +2,7 @@ package net.enthusia.staff.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -39,17 +40,65 @@ final class WebsiteAppealReasonContractTest {
     @Test
     void preservesTheExistingOneThousandCharacterReasonContract() {
         RecordingStore mutationStore = new RecordingStore();
+        WebsiteAppealEndpoint endpoint = endpoint(
+                new PreparedAppealStore(new AppealAcceptancePreparation.Ready(false)),
+                mutationStore
+        );
+
+        Map<?, ?> response = assertInstanceOf(
+                Map.class,
+                endpoint.accept(headers(), input("x".repeat(1_000)))
+        );
+
+        assertEquals(1, response.get("affectedSanctions"));
+        assertEquals(1_000, mutationStore.request.reason().length());
+    }
+
+    @Test
+    void finalizedAppealReplaysWithoutCreatingANewExactMutation() {
+        RecordingStore mutationStore = new RecordingStore();
+        WebsiteAppealEndpoint endpoint = endpoint(
+                new PreparedAppealStore(new AppealAcceptancePreparation.Ready(
+                        true,
+                        OptionalLong.empty(),
+                        true
+                )),
+                mutationStore
+        );
+
+        Map<?, ?> response = assertInstanceOf(
+                Map.class,
+                endpoint.accept(headers(), input("Previously accepted appeal replay"))
+        );
+
+        assertEquals(true, response.get("applied"));
+        assertEquals(true, response.get("replayed"));
+        assertEquals(1, response.get("affectedSanctions"));
+        assertNull(mutationStore.request);
+    }
+
+    private static WebsiteAppealEndpoint endpoint(
+            PreparedAppealStore appealStore,
+            RecordingStore mutationStore
+    ) {
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
-        WebsiteAppealEndpoint endpoint = new WebsiteAppealEndpoint(
-                new PreparedAppealStore(),
+        return new WebsiteAppealEndpoint(
+                appealStore,
                 authorization,
                 new SanctionChangeService(authorization, mutationStore),
                 () -> OperationalMode.ACTIVE,
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 new WebsiteApiRequestDecoder()
         );
+    }
+
+    private static Headers headers() {
         Headers headers = new Headers();
         headers.set("idempotency-key", "appeal-reason-contract");
+        return headers;
+    }
+
+    private static ObjectNode input(String reason) {
         ObjectNode input = new ObjectMapper().createObjectNode();
         input.put("appealId", APPEAL_ID.toString());
         input.put("punishmentId", SANCTION_ID.toString());
@@ -57,15 +106,17 @@ final class WebsiteAppealReasonContractTest {
         input.put("playerAccountId", ACCOUNT_ID.toString());
         input.put("actorAccountId", REVIEWER_ID.toString());
         input.put("actorRank", "MOD");
-        input.put("reason", "x".repeat(1_000));
-
-        Map<?, ?> response = assertInstanceOf(Map.class, endpoint.accept(headers, input));
-
-        assertEquals(1, response.get("affectedSanctions"));
-        assertEquals(1_000, mutationStore.request.reason().length());
+        input.put("reason", reason);
+        return input;
     }
 
     private static final class PreparedAppealStore extends WebsiteModerationStoreStub {
+        private final AppealAcceptancePreparation preparation;
+
+        private PreparedAppealStore(AppealAcceptancePreparation preparation) {
+            this.preparation = preparation;
+        }
+
         @Override
         public AppealAcceptancePreparation prepareAppealAcceptance(
                 UUID appealId,
@@ -75,7 +126,7 @@ final class WebsiteAppealReasonContractTest {
                 String idempotencyKey,
                 Instant now
         ) {
-            return new AppealAcceptancePreparation.Ready(false);
+            return preparation;
         }
 
         @Override
