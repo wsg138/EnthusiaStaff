@@ -104,8 +104,8 @@ final class VelocityBootstrapCoordinator {
             synchronized (this) {
                 exhausted.set(true);
                 attemptRunning.set(false);
+                listener.exhausted(number, failure);
             }
-            listener.exhausted(number, failure);
         } catch (RuntimeException failure) {
             handleFailure(number, failure);
         }
