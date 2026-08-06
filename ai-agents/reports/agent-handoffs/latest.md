@@ -2,16 +2,18 @@
 
 Current persistent package handoff:
 
-[`2026-08-06-es-x05-website-auth-appeals.md`](../package-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
+[`2026-08-06-es-x05-website-auth-appeals.md`](2026-08-06-es-x05-website-auth-appeals.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external runner and authorization condition is unchanged. `ES-X05 — Website UX, authentication, and appeals` is `PARTIAL` and is the active `ACTIONABLE_CONTINUATION`.
+State: `ES-P01` is `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED` in preserved PR #70 while its external staging runner and authorization condition is unchanged. `ES-X05 — Website UX, authentication, and appeals` is `MERGE_PENDING` and is the active `ACTIONABLE_CONTINUATION` at owner priority `35`.
 
-ES-X05 standalone baseline PR `wsg138/enthusia-site#1` merged as `042b503b7a4adc2627f2259a09e7d7394ced06ce`. Continuation PR `wsg138/enthusia-site#2` is open at exact head `11e68b60ef874a01f8b6f04f72bd8d694c496b56`; hosted validation run `31105809682` succeeded, including repository validation, appeal tests, nested shulker-potion preview tests, and the source build.
+ES-X05 standalone PR `wsg138/enthusia-site#2` passed final-head site validation run `31113188453`, both production and market-preview Cloudflare deployments, Codacy with zero annotations, and review with zero unresolved threads. It merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`, which is current standalone `main`.
 
-The production `Cloudflare Pages: enthusia-site` check is a pre-existing project configuration/build-setting failure: it also fails on untouched prior main `9408166c75def0b55caa8d38fb546c6e77ea1f7d`, while both that commit and the current continuation head deploy successfully to `enthusia-market-preview`. Cloudflare dashboard logs/settings access is required to correct it.
+Aggregate PR #73 implements the matching signed private appeal contract, durable MariaDB workflow, exact-sanction approval delegation, V17 migration, integration coverage, and the canonical `components/enthusia-site/` import. Standalone and aggregate hashes match at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`, with no added, missing, or modified component paths.
 
-The aggregate site component remains `IMPORT_PENDING`, parity is unproven, and the real private appeal service contract is not yet accepted. Resume ES-X05 from PR #2; do not select another package. Do not modify ES-P02 PR #70 unless its external unblock condition demonstrably changes.
+The aggregate product head before state reconciliation is `96912301fc425ac6f5eff9349ee3b3d543d122eb`. Coverage run `31115480613` failed before checkout because GitHub returned `Service Unavailable` while resolving action downloads; no product step executed, so a successful exact-current-head run is still required.
+
+Resume ES-X05 from aggregate PR #73. Validate and review the exact head, reconfirm parity, merge normally, verify containment, publish final `COMPLETE` state and merge hashes, clean temporary branches where tooling permits, and stop. Do not select another package or modify ES-P02 PR #70 unless its external unblock condition demonstrably changes.
