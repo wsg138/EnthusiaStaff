@@ -4,82 +4,61 @@
 `ES-X05`; External/multi-repository; primary `COMP-SITE`; other `COMP-STAFF`; priority 35; conditional parallel safety after exact-sanction contract.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`PARTIAL`
 
 ## 3. Objective
 Complete website authentication, punishment/appeal UX, staff review workflow, privacy, rate limiting, retries, and private-contract integration.
 
-## 4. Why the package exists
-User-facing appeal/auth/reviewer behavior is outside the core repo, while site-side privacy/concurrency/rate limiting remains incomplete.
+## 4. Completed standalone-site work
+- Cloudflare Access JWT signature, issuer, audience, expiry, and not-before verification.
+- Canonical Minecraft identity derived only from verified claims and frozen in the request session.
+- Authenticated appeal form and API without browser-editable identity fields.
+- Privileged reviewer dashboard and API role checks.
+- Same-origin mutation enforcement.
+- Fail-closed KV rate limiting.
+- Identity-bound appeal idempotency keys.
+- Exact-sanction selector endpoint and UI boundary.
+- Versioned/idempotent reviewer decisions with stale-update handling.
+- Hosted Node 22 site validation workflow and focused regression tests.
 
-## 5. Included audit IDs
-`AUD-APPEAL-001`, `AUD-APPEAL-004`, site-side `AUD-WEB-003`, `AUD-WEB-004`.
+## 5. Standalone repository evidence
+- Repository: `wsg138/enthusia-site`
+- Starting main: `9408166c75def0b55caa8d38fb546c6e77ea1f7d`
+- Baseline PR: `wsg138/enthusia-site#1`
+- Baseline reviewed head: `cce9cff6243ee757db9d470eb7d8d7735c8c3495`
+- Baseline squash merge: `042b503b7a4adc2627f2259a09e7d7394ced06ce`
+- Hardening branch: `package/es-x05-appeal-hardening`
+- Hardening PR: `wsg138/enthusia-site#2`
+- Hardening head at publication: `1b82971a1ebb7d48c96f832fb7aaaa9b0c106480`
+- Hosted validation run: `31105287800` (queued at publication start)
 
-## 6. Included behavior
-Player authentication/ownership and submission; punishment/appeal pages; reviewer UX/authorization; privacy-safe notifications; explicit rate limits/body/session controls; retry/concurrency/stale decision handling; exact-sanction contract consumption; matching aggregate copy/parity.
+## 6. Acceptance evidence obtained
+- Unauthenticated requests fail closed.
+- Linked identity is required and immutable.
+- Browser UUID/name fields cannot override the authenticated identity.
+- Reviewer access requires an explicitly configured privileged role.
+- Mutation requests require exact same-origin.
+- Rate limiting fails closed when its binding is absent.
+- Review decisions require a bounded idempotency key and expected version.
+- Focused baseline regression suite passed 5/5 locally before PR #1 merge.
 
-## 7. Explicit exclusions
-Core appeal mutation defect (`ES-P01`); production deployment/credentials/routes; unrelated website redesign.
+## 7. Remaining completion work
+- Wait for and resolve exact-head PR #2 hosted validation/review.
+- Reconcile the site adapter with the real EnthusiaStaff website contract. Current core routes include punishment-code claim/revalidation and exact appeal acceptance; the placeholder storage/list service contract is not yet proven end to end.
+- Import the standalone site into `components/enthusia-site/` through the canonical component-sync process.
+- Produce standalone/aggregate content-hash parity evidence.
+- Open, review, validate, and merge the required EnthusiaStaff aggregate PR.
+- Update registry, workspace state, metadata, handoff, merge hashes, and delete temporary branches after verified merges.
+- Private production credentials/routes and representative live acceptance remain excluded or deferred as documented.
 
-## 8. Dependencies
-`ES-P01` must be `COMPLETE`.
+## 8. Current blocker / resume state
+The connected GitHub environment can edit repositories but has no local authenticated checkout or network access for the required component import/hash tooling. The aggregate component is still `NOT_IMPORTED`. Resume ES-X05 from site PR #2 and perform the aggregate import/parity work before selecting another package.
 
-## 9. Component and repository boundaries
-`wsg138/enthusia-site`, `components/enthusia-site/`, and directly necessary EnthusiaStaff private contracts/tests/state only. No permanent component branches or isolated PR.
+## 9. Security/privacy boundary
+No production credentials or player data were committed. All unconfigured authentication, rate, upstream-service, or role boundaries fail closed. No Access token is logged.
 
-## 10. Required branches
-Temporary `package/es-x05-site-appeals` in both repos (or stricter compatible site convention); delete after verified merges.
+## 10. Handoff
+[`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/package-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
 
-## 11. Required PRs
-Two same-ID cross-referenced PRs: standalone site and aggregate EnthusiaStaff. No third/isolated PR.
-
-## 12. Implementation checklist
-Reconcile both repos/AGENTS/heads/license/build; verify/import aggregate source; confirm exact-sanction contract; implement UX/auth/rate/privacy/retry; test both; update metadata/state/handoff; review/freeze/validate; merge both; parity compare; cleanup.
-
-## 13. Acceptance criteria
-Only authenticated owner may submit; reviewers are authorized; exact appealed sanction is displayed/acted upon; retries/stale decisions are duplicate-safe; rate/body/session limits explicit; private/public fields correct; both PRs merged and parity true.
-
-## 14. Test requirements
-Site and core suites plus authentication/session/ownership, CSRF/replay/private API, rate limiting, stale/concurrent decisions, visibility/privacy, retry/failure, accessibility/usability, and contract compatibility.
-
-## 15. Static-analysis requirements
-All configured checks/security/static analysis/review bots in both repos; zero valid unresolved findings.
-
-## 16. Documentation requirements
-User appeal flow, staff review, authentication/privacy/rate limits, deployment-neutral configuration, contract version, component metadata, package state/handoff, PR cross-links.
-
-## 17. Security and privacy requirements
-No production credentials/data; secure session/cookie/CSRF/replay boundaries; least-privilege reviewer access; no private punishment/evidence leakage.
-
-## 18. Migration impact
-New immutable migration only in owning repo if essential after boundary verification; clean/upgrade/rollback tests; no existing-history edits.
-
-## 19. Bedrock considerations
-Website login/ownership must work for Floodgate identities without exposing raw UUIDs or requiring Java-only assumptions.
-
-## 20. Distributed-runtime considerations
-Private API retries, stale sanctions, multiple reviewers, core restarts, timeout/ambiguous response, and duplicate submission must be safe.
-
-## 21. External-provider considerations
-The site is the external component; follow its own framework/AGENTS/security/CI and verified core contract only.
-
-## 22. Completion definition
-Both exact-head PRs merge normally; UX/security/checks/reviews pass; parity true; metadata/evidence recorded; temp branches handled.
-
-## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after `ES-P01` and assignment.
-
-## 24. Last completed checkpoint
-Definition/metadata only; no implementation began.
-
-## 25. Remaining checklist
-All two-repo implementation, tests, review, merge, parity, and evidence remain.
-
-## 26. Known blockers
-Dependency `ES-P01`; production environment/credentials intentionally excluded.
-
-## 27. Final evidence
-Unset: bases/heads/PRs/merges, security/UX tests, checks/reviews, parity manifests/hashes.
-
-## 28. Merge and synchronization record
-Unset. One-sided merge means `SYNC_PENDING`; completion requires both merges, parity, metadata, containment, and temp branch cleanup.
+## 11. Last update
+2026-08-06
