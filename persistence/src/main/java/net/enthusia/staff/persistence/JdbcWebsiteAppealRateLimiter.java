@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
@@ -26,21 +27,23 @@ final class JdbcWebsiteAppealRateLimiter {
     void enforce(
             Connection connection,
             String accountId,
+            UUID punishmentId,
             String idempotencyKey,
             Instant now
     ) throws SQLException {
-        validateRequest(connection, accountId, idempotencyKey, now);
+        validateRequest(connection, accountId, punishmentId, idempotencyKey, now);
         byte[] accountToken = accountToken(accountId);
-        enforceBucket(connection, accountToken, idempotencyKey, now);
+        enforceBucket(connection, accountToken, punishmentId, idempotencyKey, now);
     }
 
     private static void validateRequest(
             Connection connection,
             String accountId,
+            UUID punishmentId,
             String idempotencyKey,
             Instant now
     ) {
-        if (connection == null || now == null) {
+        if (connection == null || punishmentId == null || now == null) {
             throw invalid();
         }
         if (accountId == null || accountId.isBlank() || accountId.length() > 128) {
@@ -63,18 +66,23 @@ final class JdbcWebsiteAppealRateLimiter {
     private static void enforceBucket(
             Connection connection,
             byte[] accountToken,
+            UUID punishmentId,
             String idempotencyKey,
             Instant now
     ) throws SQLException {
         ensureBucket(connection, accountToken, now);
-        Bucket bucket = lockBucket(connection, accountToken);
-        if (hasReplayKey(connection, accountToken, idempotencyKey)) {
+        Bucket current = currentBucket(
+                connection,
+                accountToken,
+                lockBucket(connection, accountToken),
+                now
+        );
+        if (hasReplayKey(connection, accountToken, punishmentId, idempotencyKey)) {
             return;
         }
-        Bucket current = currentBucket(connection, accountToken, bucket, now);
         requireCapacity(current);
         incrementBucket(connection, accountToken, now);
-        insertReplayKey(connection, accountToken, idempotencyKey, now);
+        insertReplayKey(connection, accountToken, punishmentId, idempotencyKey, now);
     }
 
     private static Bucket currentBucket(
@@ -138,15 +146,17 @@ final class JdbcWebsiteAppealRateLimiter {
     private static boolean hasReplayKey(
             Connection connection,
             byte[] accountToken,
+            UUID punishmentId,
             String idempotencyKey
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT 1
                 FROM website_appeal_rate_keys
-                WHERE account_token = ? AND idempotency_key = ?
+                WHERE account_token = ? AND punishment_id = ? AND idempotency_key = ?
                 """)) {
             statement.setBytes(1, accountToken);
-            statement.setString(2, idempotencyKey);
+            statement.setBytes(2, UuidBytes.toBytes(punishmentId));
+            statement.setString(3, idempotencyKey);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next();
             }
@@ -194,17 +204,19 @@ final class JdbcWebsiteAppealRateLimiter {
     private static void insertReplayKey(
             Connection connection,
             byte[] accountToken,
+            UUID punishmentId,
             String idempotencyKey,
             Instant now
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO website_appeal_rate_keys(
-                    account_token, idempotency_key, created_at
-                ) VALUES (?, ?, ?)
+                    account_token, punishment_id, idempotency_key, created_at
+                ) VALUES (?, ?, ?, ?)
                 """)) {
             statement.setBytes(1, accountToken);
-            statement.setString(2, idempotencyKey);
-            statement.setTimestamp(3, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(punishmentId));
+            statement.setString(3, idempotencyKey);
+            statement.setTimestamp(4, Timestamp.from(now));
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Website appeal rate replay key was not inserted"
