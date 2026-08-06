@@ -2,11 +2,13 @@
 
 These rules govern every AI-assisted work session in this repository.
 
-## 1. Assigned package authority
+## 1. Sequential package authority
 
-Implementation, provider, validation, acceptance, and final-audit work must begin with `Assigned package ID: <PACKAGE-ID>`. Read `ai-agents/work-packages/PACKAGE-REGISTRY.md` and the assigned package file. Do not choose a different package when the assigned package exists. A direct new owner instruction may reassign work, but the change must be recorded.
+Implementation, provider, validation, acceptance, and final-audit workers do not require an owner-supplied package ID. Begin by reconciling live GitHub, then resume unfinished package work when it exists; otherwise select the next eligible package through `ai-agents/work-packages/PACKAGE-REGISTRY.md` and `WORKER-PROTOCOL.md`.
 
-Complete exactly one assigned package or one explicitly requested review-only work item per session. Do not begin the next package after merge, blocker, partial handoff, or audit completion.
+An explicit current owner instruction may assign or reassign a package, but the routing change must be recorded. Workers must not invent replacement tasks, silently alter package scope, or choose work outside the registry.
+
+Complete exactly one selected package or one explicitly requested review-only work item per session. Do not begin the next package after merge, blocker, partial handoff, or audit completion.
 
 ## 2. Required reading and live reconciliation
 
@@ -15,26 +17,32 @@ Read, in order:
 1. this file;
 2. `ai-agents/WORKSPACE-STATE.md`;
 3. `ai-agents/work-packages/PACKAGE-REGISTRY.md`;
-4. the assigned package file;
-5. the package's latest handoff, or confirm none exists;
-6. `ai-agents/reports/agent-handoffs/latest.md`;
-7. relevant goals, audit, manifest, requirements matrix, Wiki, contracts, migrations, and provider rules.
+4. `ai-agents/work-packages/WORKER-PROTOCOL.md`;
+5. `ai-agents/work-packages/EXECUTION-ORDER.md`;
+6. `ai-agents/work-packages/BRANCH-AND-MIRROR-POLICY.md`;
+7. `ai-agents/work-packages/VALIDATION-POLICY.md`;
+8. `ai-agents/work-packages/COMPONENT-REGISTRY.md`;
+9. `ai-agents/reports/agent-handoffs/latest.md`;
+10. the selected package file and its latest handoff, or confirm none exists;
+11. relevant goals, audit, manifest, requirements matrix, Wiki, contracts, migrations, and provider rules.
 
-Then reconcile live GitHub across every required repository: default heads, open/draft PRs, temporary branches, recent merges, unresolved threads, every check state, exact reviewed heads, current highest Flyway migration, issue #43, standalone repository availability, and whether another worker is active. Live code/GitHub override stale files.
+Then reconcile live GitHub across every required repository: default heads, open/draft PRs, temporary branches, recent merges, unresolved threads, every check state, exact reviewed heads, current highest Flyway migration, issue #43, standalone repository availability, and whether another worker is active. Live code and GitHub override stale files.
 
 ## 3. Canonical status and resume-first behavior
 
 `PACKAGE-REGISTRY.md` is the only canonical package-status index.
 
-- `READY`: start the assigned package.
+Existing unfinished package branches or PRs take priority over new work. When no live work determines the package, continue `ACTIVE`, `PARTIAL`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING` packages in dependency-safe priority order. Recheck potentially cleared blockers, then select the lowest-priority-number eligible `READY` package. If no package is eligible, report every incomplete package and its exact unblock condition, then stop.
+
+- `READY`: claim the selected package.
 - `ACTIVE`: resume existing branches/PRs.
 - `PARTIAL`: validate completed work and continue the same package/branches/PRs unless irrecoverably invalid.
-- `BLOCKED`: verify and record the blocker; do not switch packages.
+- `BLOCKED`: verify and record the blocker; do not repeatedly select an unchanged blocker when another eligible package exists.
 - `REVIEW`, `MERGE_PENDING`, `SYNC_PENDING`: complete review, repair, merge, or synchronization only.
 - `COMPLETE`: verify evidence and stop unless a later repair package exists.
 - `PLANNED`, `DEFERRED`, `SUPERSEDED`: do not start without legitimate routing.
 
-Do not open a competing PR, redo completed work without evidence, or select unrelated work because the assigned package is difficult.
+Do not open a competing PR or redo completed work without evidence.
 
 ## 4. Repository and PR model
 
@@ -46,11 +54,11 @@ There are no permanent component branches, split/subtree branches, component-onl
 - External package: normally one temporary branch/PR in the standalone repository and one temporary branch/PR to `EnthusiaStaff:main`. Both use the same package ID, cross-reference each other, and must reach deterministic parity.
 - Validation/acceptance/audit package: follow its explicit evidence/PR rules.
 
-Use `package/<package-id-lowercase>-<short-name>`. Open a draft PR early after the branch exists and record exact bases/scope. Before final validation, synchronize with the current target branch by the repository-approved merge-commit workflow and retest the resulting exact head when required. Never push directly to a default branch, rebase a shared branch, force-push, squash the final merge, enable auto-merge, or merge a draft PR. Use normal merge commits. Delete temporary branches after merge only after verifying containment and no unique work.
+Use `package/<package-id-lowercase>-<short-name>`. Open a draft PR early after the first coherent checkpoint. Before final validation, synchronize with the current target branch by the repository-approved merge-commit workflow and retest the resulting exact head when required. Never push directly to a default branch, rebase a shared branch, force-push, squash the final merge, enable auto-merge, or merge a draft PR. Use normal merge commits. Delete temporary branches after merge only after verifying containment and no unique work.
 
 ## 5. Implementation standards
 
-Unless documentation-only, account for Java 21, Paper/Leaf/Folia thread ownership, Velocity lifecycle, asynchronous/bounded database work, MariaDB transactions/indexes, multiple runtimes, idempotency/retry, restart/shutdown recovery, bounded queues/queries/caches, permissions/hierarchy at service boundaries, atomic reload, Java/Bedrock usability, logging/privacy, provider-present/provider-missing behavior, audit completeness, rollback, and authority fencing.
+Unless documentation-only, account for Java 21, Paper/Leaf/Folia thread ownership, Velocity lifecycle, asynchronous and bounded database work, MariaDB transactions/indexes, multiple runtimes, idempotency/retry, restart/shutdown recovery, bounded queues/queries/caches, permissions/hierarchy at service boundaries, atomic reload, Java/Bedrock usability, logging/privacy, provider-present/provider-missing behavior, audit completeness, rollback, and authority fencing.
 
 Do not deliver placeholders, TODOs, unused interfaces, invented APIs, reflection against unknown provider implementations, log scraping as a callback substitute, or duplicate systems.
 
@@ -102,4 +110,4 @@ After merge, verify merge commits, resulting heads, feature-head containment, no
 
 Do not weaken workflow, validation, migration, review, production, branch, or handoff rules merely to make the current package mergeable. Editing a checklist does not prove compliance.
 
-After the assigned package is complete, correctly blocked, correctly partial, deferred, or the requested review/audit ends, report the exact state and stop. Do not create or begin the next package.
+After the selected package is complete, correctly blocked, correctly partial, deferred, or the requested review/audit ends, update dependency-derived statuses and stop. Do not activate or begin a newly ready package.
