@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-06
 
-This is a routing record. Live GitHub must be reconciled before acting. Live PR, branch, review, and check state override stale default-branch package text.
+This is a routing record. Live GitHub must be reconciled before acting. Live PR, branch, review, and check state override stale default-branch package text, but known persistent state must be published to `main` through the documented status-publication process.
 
 ## Repository
 
@@ -10,51 +10,76 @@ This is a routing record. Live GitHub must be reconciled before acting. Live PR,
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Default branch | `main` |
-| Current process baseline | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
+| Canonical process baseline before this correction | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
 | Plugin version | `0.1.0-SNAPSHOT` |
-| Java/runtime | Java 21; Paper/Leaf backends, Velocity, MariaDB |
+| Java/runtime | Java 21; Paper and Leaf backends, Velocity, MariaDB |
 | Highest migration | `V16`; V1–V16 remain immutable |
 | Issue #43 | Open and deferred |
 
 ## Current package routing
 
-`ES-P01 is COMPLETE. ES-P02 is BLOCKED in preserved PR #70. ES-X05 is READY and unstarted. ES-V02 is DEFERRED. No implementation package is active.`
+`ES-P01 is COMPLETE. ES-P02 is BLOCKED and PARKED_BLOCKED in preserved PR #70 while its runner and authorization condition remains unchanged. ES-X05 is READY and unstarted. ES-V02 is DEFERRED. No implementation package is active.`
 
 | Field | Value |
 | --- | --- |
 | Completed prerequisite | `ES-P01 — Exact-sanction appeal isolation` |
 | Blocked package | `ES-P02 — Runtime database recovery and Velocity reload` |
+| Classification | `PARKED_BLOCKED` while the exact external unblock condition is unchanged |
 | Preserved branch | `package/es-p02-runtime-db-recovery` |
-| Preserved PR | `#70 — open and unmerged` |
-| Blocker authority | Live PR #70, its branch records, checks, and canonical ES-P02 handoff |
+| Preserved PR | `#70 — open, non-draft, unmerged, and currently non-mergeable` |
+| Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
+| Current package-record head | `80d4ea840f34017c09afb618f623581b31c6223d` |
+| Canonical main at publication start | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
+| Blocker authority | PR #70, preserved branch records, checks, canonical ES-P02 package file, and canonical package handoff |
 | Ready package | `ES-X05 — Website UX, authentication, and appeals` |
 | Deferred validation | `ES-V02 — Distributed and Java/Bedrock staging` |
 | Active implementation package | `NONE` |
 
-The process-extraction work is documentation-only and is not an implementation package. It does not change ES-P02 product code, tests, evidence, status, scope, priority, dependencies, or blocker. It does not activate ES-X05.
+The blocked-package routing and status-publication correction is documentation-only and is not an implementation package. It does not change ES-P02 product code, tests, evidence, status, scope, priority, dependencies, or blocker. It does not activate ES-X05.
 
-## Sequential selection
+## Selection classification and order
 
-A future sequential worker must:
+Every incomplete package is classified before selection:
 
-1. reconcile live GitHub and inspect PR #70;
-2. resume ES-P02 only when its unblock condition may have changed or actionable work exists;
-3. leave ES-P02 blocked when the blocker is unchanged;
-4. then select the lowest-priority eligible `READY` package, which is currently ES-X05;
-5. complete exactly one package and stop.
+- `ACTIONABLE_CONTINUATION`: existing work has a safe action that can be performed now.
+- `PARKED_BLOCKED`: the same unavailable external condition still controls the next action and no other actionable defect exists.
+- `READY`: dependency-complete and eligible to begin.
 
-When the default-branch registry is stale relative to live PR evidence, the worker must use live GitHub for selection and correct the stale package state on the selected package branch.
+Select the highest-priority `ACTIONABLE_CONTINUATION`, skip every `PARKED_BLOCKED` package, then select the eligible `READY` package with the lowest numerical priority. An open PR or branch alone does not receive priority.
 
-## ES-P01 retained evidence
+## Required next-worker behavior
 
-- Implementation PR #68 merged normally at `203b2854d5546a6d3744037c367099129654b42a`.
-- Finalization PR #69 merged normally at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
-- ES-P01's owner-approved zero-execution infrastructure exception remains recorded without calling the Pi gate passed.
-- The deferred distributed Pi/Java/Bedrock obligation remains assigned to ES-V02.
+While PR #70's runner and authorization condition remains unchanged, a sequential worker must:
+
+1. inspect PR #70, its exact head, checks, reviews, package records, and unblock condition;
+2. classify ES-P02 as `PARKED_BLOCKED`;
+3. not rerun the identical staging gate;
+4. not merge `main` into the ES-P02 branch merely to keep it current;
+5. not modify or close PR #70;
+6. select ES-X05 as the lowest-priority eligible `READY` package;
+7. complete only ES-X05 and stop.
+
+When runner availability or owner authorization demonstrably changes, a future worker must classify ES-P02 as `ACTIONABLE_CONTINUATION` and resume PR #70 before starting another new package.
+
+## ES-P02 retained evidence
+
+- Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` passed the hosted Java 21 build, tests, MariaDB and Testcontainers, migration integrity, changed-code coverage threshold, runtime-JAR and provider-leak checks, Codacy with zero annotations, CodeRabbit, and zero valid unresolved review threads.
+- Required staging run `31072794096` did not execute a product step.
+- Ordinary hosted build attempts `92524048937` and `92541148296` each had `runner_id: 0`, an empty runner name, and `steps: []`.
+- Downstream Pi jobs `92524054852` and `92541160241` were skipped.
+- No staging product build, Pi boot, or restart executed. This is not a pass.
+- No ES-P02 package-specific infrastructure exception or owner authorization exists.
+- Branch drift and non-mergeability do not make the package actionable while the external blocker is unchanged.
+
+## Persistent status publication
+
+An unmerged implementation PR that stops in `PARTIAL`, `BLOCKED`, `REVIEW`, `MERGE_PENDING`, or `SYNC_PENDING` must have that state published to `main` through a small documentation-only PR before the worker stops, unless tool loss makes publication impossible.
+
+The publication PR preserves the implementation PR and branch and may update only the registry, selected package file, workspace state, canonical handoff, latest handoff pointer, and directly necessary routing documentation. It contains no product code, product tests, migrations, workflow changes, or runtime configuration.
 
 ## Boundaries
 
-- No product code, test, migration, workflow, runtime configuration, deployment, authority, private data, LiteBans cutover, issue #43 acceptance, shadow period, or production behavior is changed by the process extraction.
+- No product code, product test, migration, workflow, runtime configuration, deployment, authority, private data, LiteBans cutover, issue #43 acceptance, shadow period, or production behavior is changed by this process correction.
 - LiteBans remains authoritative.
 - PR #70 and `package/es-p02-runtime-db-recovery` must remain preserved with all unique work.
-- Do not begin ES-X05 in the process-extraction session.
+- Do not begin ES-X05 in this process-correction session.
