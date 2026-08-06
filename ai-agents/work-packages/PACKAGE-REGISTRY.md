@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-06
 
-Canonical state after normal merge of PR #74: `ES-P01` and `ES-X05` are `COMPLETE`; `ES-P02` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-V02` remains `DEFERRED` and owns ES-X05's deferred combined staging evidence. No new implementation package is active.
+Canonical current state: `ES-P01` is `COMPLETE`; `ES-P02` and `ES-X05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-X05` implementation is merged and synchronized, its private staging evidence is owner-approved deferred to `ES-V02`, and its remaining ordinary hosted exact-head Coverage gate is unavailable. No new implementation package is active.
 
 Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` and immutable migration V17. Issue #43 remains open, deferred, and excluded.
 
@@ -15,6 +15,8 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 - Internal packages normally require one aggregate PR. External packages normally require standalone and aggregate PRs plus deterministic parity.
 - `COMPLETE` requires all package PRs/evidence gates, except a policy-valid owner-approved infrastructure exception recorded exactly as deferred and assigned to a named later validation package.
 - A zero-execution exception is never a pass and never grants staging, production, cutover, or authority evidence.
+- The staging exception cannot excuse a missing ordinary GitHub-hosted build.
+- Do not repeat identical zero-runner retries without evidence of a material runner, billing, authorization, configuration, or service change.
 - Use normal merge commits only. Preserve unique work and publish persistent state before stopping.
 
 ## Package count by type
@@ -35,7 +37,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 | `ES-P01` | Exact-sanction appeal isolation | Internal | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70 |
 | `ES-P03` | Bedrock identity correctness | Internal | `PLANNED` | — | 30 | `ES-P02` | unassigned |
-| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` after PR #74 merge | — | 35 | `ES-P01` | implementation merged; finalization PR #74; staging deferred to `ES-V02` |
+| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `BLOCKED` | `PARKED_BLOCKED` | 35 | `ES-P01` | implementation merged; finalization branch `package/es-x05-finalization`; PR #74; ordinary hosted Coverage unavailable; staging deferred to `ES-V02` |
 | `ES-P04` | Staff-mode operational tools | Internal | `PLANNED` | — | 40 | `ES-P03` | unassigned |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
@@ -73,7 +75,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 | Field | Value |
 | --- | --- |
 | Status | `BLOCKED` / `PARKED_BLOCKED` |
-| Starting SHA | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
+| Starting SHA | `d94d0219a598c9afb618f623581b31c6223d` |
 | Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
 | Current package-record head | `80d4ea840f34017c09afb618f623581b31c6223d` |
 | Branch / PR | `package/es-p02-runtime-db-recovery`; PR #70 |
@@ -84,29 +86,30 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 
 | Field | Value |
 | --- | --- |
-| Status | `COMPLETE` upon normal merge of PR #74 |
+| Status | `BLOCKED` / `PARKED_BLOCKED` |
 | Assigned worker | `ChatGPT sequential ES-X05 completion worker` |
 | Starting aggregate main | `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` |
 | Frozen aggregate product head | `96912301fc425ac6f5eff9349ee3b3d543d122eb` |
-| Exact hosted-validated aggregate head | `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
+| Exact hosted-validated aggregate product head | `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
 | Aggregate implementation branch | `package/es-x05-state-publication` |
 | Aggregate PR / merge | PR #73; normal merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
-| Finalization branch / PR | `package/es-x05-finalization`; PR #74; exact current head/final hosted check recorded in PR #74 |
-| Hosted validation | Coverage run `31116854096`, job `92668751419`, success: Java 21 build, unit/MariaDB integration and migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, Codacy coverage |
+| Finalization branch / PR | `package/es-x05-finalization`; open PR #74; current branch head recorded in PR #74 |
+| Product hosted validation | Coverage run `31116854096`, job `92668751419`, success: Java 21 build, unit/MariaDB integration and migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, Codacy coverage |
 | Review | CodeRabbit success; zero unresolved valid threads |
 | Standalone PR / merge | `wsg138/enthusia-site#2`; normal merge/current `main` `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | Standalone validation | run `31113188453` success; production/preview deployments and Codacy success; zero unresolved review threads |
 | Migration boundary | V1–V16 unchanged; aggregate `main` includes immutable V17 |
 | Component parity | true at `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`; no added/missing/modified paths |
 | Containment | Aggregate and standalone implementation branches have zero unique work beyond their normal merges |
-| Exception label | `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED` |
-| Owner approval | repository owner `wsg138`; current ChatGPT project conversation; 2026-08-06; explicit direction to skip ES-X05 live testing now, continue development, and batch detailed testing later through PySentinel |
-| Affected parent | aggregate run `31116852061`, job `92668521113`, exact head `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
-| Unavailable gate | private `wsg138/EnthusiaStaff-Staging` run `31116860919`; build job `92668551209`; runner ID `0`; runner name empty; steps `[]`; downstream Pi job `92668600472` skipped |
-| Product execution | none in the unavailable private run; no checkout/build/test/artifact validation/boot/restart/migration step ran; no staging pass is claimed |
+| Staging exception | `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`; owner `wsg138`; approval in current ChatGPT project conversation on 2026-08-06; deferred to `ES-V02`; not a pass |
+| Original unavailable staging | private run `31116860919`; build job `92668551209`; runner ID `0`; empty runner name; steps `[]`; downstream Pi job `92668600472` skipped |
+| Recovery retry head | `e4be594d8dd811bd27b13c3a2207fcdb06a0a769`; tree-identical to prior reviewed finalization head |
+| Ordinary hosted blocker | Coverage run `31122594623`, job `92686159333`, cancelled after fifteen minutes with runner ID `0`, empty runner name, and steps `[]` |
+| Recovery staging evidence | wrapper `31122594379` dispatched private run `31122730837`; build job `92686599218` cancelled after fifteen minutes with runner ID `0`, empty runner name, and steps `[]`; Pi job `92688928718` skipped; wrapper published failure |
+| Product execution in recovery attempts | none; no checkout/build/test/artifact validation/boot/restart/migration step ran; no pass or product failure is claimed |
 | Named deferred package | `ES-V02 — Distributed and Java/Bedrock staging` |
-| Deferred matrix | pinned combined exact-head build/artifacts; Paper boot/restart; V17 and later migrations; config/reload/restart; appeal/auth persistence; provider/distributed behavior; representative Java/Bedrock clients; safely implemented automated client behavior; cleanup/isolation |
 | Security boundary | no production credentials/accounts/data/routes or authority activation; automated account credential handling requires separate implementation, review, and owner authorization |
+| Exact unblock | evidence of ordinary Ubuntu hosted-runner recovery or another material condition change; reconcile/freeze PR #74; obtain successful exact-head Coverage; retain staging deferral; reconfirm review/scope/parity; merge normally; verify containment and publish `COMPLETE`; stop |
 | Handoff | [`2026-08-06-es-x05-website-auth-appeals.md`](../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md) |
 
 ## Deferred validation routing
