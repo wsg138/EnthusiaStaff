@@ -27,8 +27,13 @@ CREATE TABLE IF NOT EXISTS website_appeal_events (
     event_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     appeal_id BINARY(16) NOT NULL,
     revision BIGINT UNSIGNED NOT NULL,
-    event_type ENUM('SUBMITTED', 'RESUBMITTED', 'INFORMATION_REQUESTED', 'APPROVED', 'DENIED')
-        NOT NULL,
+    event_type ENUM(
+        'SUBMITTED',
+        'RESUBMITTED',
+        'INFORMATION_REQUESTED',
+        'APPROVAL_REQUESTED',
+        'DENIED'
+    ) NOT NULL,
     actor_account_id BINARY(16) NULL,
     actor_rank VARCHAR(16) NULL,
     note VARCHAR(1000) NOT NULL,
