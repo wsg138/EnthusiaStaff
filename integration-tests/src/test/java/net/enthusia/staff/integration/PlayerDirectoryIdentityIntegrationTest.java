@@ -65,8 +65,8 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant firstSeen = Instant.parse("2026-08-06T12:00:00Z");
         Instant renamedAt = firstSeen.plus(2, ChronoUnit.HOURS);
 
-        directory.recordSeen(playerId, "*BedrockOne", PlayerPlatform.BEDROCK, "hub", firstSeen);
-        directory.recordSeen(playerId, "*BedrockTwo", PlayerPlatform.BEDROCK, "smp", renamedAt);
+        directory.recordSeenVerified(playerId, "*BedrockOne", PlayerPlatform.BEDROCK, "hub", firstSeen);
+        directory.recordSeenVerified(playerId, "*BedrockTwo", PlayerPlatform.BEDROCK, "smp", renamedAt);
 
         PlayerResolution.Resolved current = assertInstanceOf(
                 PlayerResolution.Resolved.class,
@@ -89,14 +89,19 @@ class PlayerDirectoryIdentityIntegrationTest {
     }
 
     @Test
-    void verifiedBedrockRepairsLegacyJavaAndCannotBeDowngraded() {
+    void verifiedBedrockRepairsUnverifiedProxyHintAndCannotBeDowngraded() {
         UUID playerId = UUID.fromString("c414dcab-d4ce-4178-8f2c-c4979fba9b82");
         Instant base = Instant.parse("2026-08-06T13:00:00Z");
 
         directory.recordSeen(playerId, "LegacyName", PlayerPlatform.JAVA, "proxy", base.plusSeconds(30));
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.BEDROCK, "hub", base);
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.UNKNOWN, "smp", base.plusSeconds(60));
-        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.JAVA, "smp", base.plusSeconds(90));
+        assertEquals(
+                PlayerPlatform.UNKNOWN,
+                directory.find(playerId.toString()).orElseThrow().platform()
+        );
+
+        directory.recordSeenVerified(playerId, "LegacyName", PlayerPlatform.BEDROCK, "hub", base);
+        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.UNKNOWN, "proxy", base.plusSeconds(60));
+        directory.recordSeen(playerId, "LegacyName", PlayerPlatform.JAVA, "proxy", base.plusSeconds(90));
 
         PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
         assertEquals(PlayerPlatform.BEDROCK, identity.platform());
@@ -108,8 +113,8 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant older = Instant.parse("2026-08-06T14:00:00Z");
         Instant newer = older.plus(5, ChronoUnit.MINUTES);
 
-        directory.recordSeen(playerId, "CurrentName", PlayerPlatform.JAVA, "smp", newer);
-        directory.recordSeen(playerId, "OldName", PlayerPlatform.JAVA, "hub", older);
+        directory.recordSeenVerified(playerId, "CurrentName", PlayerPlatform.JAVA, "smp", newer);
+        directory.recordSeenVerified(playerId, "OldName", PlayerPlatform.JAVA, "hub", older);
 
         PlayerIdentity identity = directory.find(playerId.toString()).orElseThrow();
         assertEquals("CurrentName", identity.currentUsername().orElseThrow());
@@ -127,8 +132,8 @@ class PlayerDirectoryIdentityIntegrationTest {
         Instant firstConnection = Instant.parse("2026-08-06T15:00:00Z");
         Instant newerConnection = firstConnection.plus(10, ChronoUnit.MINUTES);
 
-        directory.recordSeen(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", firstConnection);
-        directory.recordSeen(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", newerConnection);
+        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", firstConnection);
+        directory.recordSeenVerified(playerId, "ReconnectName", PlayerPlatform.JAVA, "hub", newerConnection);
         directory.recordDisconnected(playerId, "hub", firstConnection.plusSeconds(30));
 
         PlayerPresence presence = directory.presence(playerId).orElseThrow();
@@ -142,7 +147,7 @@ class PlayerDirectoryIdentityIntegrationTest {
         UUID playerId = UUID.fromString("1fa0b562-bd07-4ef0-b2fc-0cac0f98bd08");
         Instant now = Instant.parse("2026-08-06T16:00:00Z");
 
-        assertThrows(IllegalArgumentException.class, () -> directory.recordSeen(
+        assertThrows(IllegalArgumentException.class, () -> directory.recordSeenVerified(
                 playerId,
                 "**spoofed",
                 PlayerPlatform.BEDROCK,
