@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-05
 
-Canonical current state: `ES-P01 ACTIVE — implementation is on package/es-p01-appeal-isolation in PR #68; no other package is active.`
+Canonical current state: `ES-P01 BLOCKED — product implementation, review, and hosted exact-head validation pass in PR #68; the applicable Pi staging gate cannot execute because the private staging build receives no runner, and no verified owner exception has been accepted. No other package is active.`
 
 ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
 
@@ -37,7 +37,7 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `ACTIVE` |
+| Status | `BLOCKED` |
 | Priority | `10` |
 | Dependencies | — |
 | Parallel safe | No |
@@ -46,11 +46,11 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Aggregate PR | `#68` |
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
-| Final reviewed heads | `UNSET` |
+| Final reviewed heads | `EnthusiaStaff product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be` |
 | Merge commits | `UNSET` |
 | Last update | `2026-08-05` |
 | Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
-| Blocker | No product blocker. Pi staging infrastructure currently supplies no runner; hosted validation continues. |
+| Blocker | `wsg138/EnthusiaStaff-Staging` build job `92477654523` received `runner_id: 0` and executed zero steps; Pi boot job `92477660726` was skipped. Unblock by allocating a compatible runner and passing exact-head staging build plus safe Pi boot/restart, or by recording an explicit verified owner exception permitted by policy. |
 | Package file | [`packages/ES-P01.md`](packages/ES-P01.md) |
 
 ### `ES-P02` — Runtime database recovery and Velocity reload
