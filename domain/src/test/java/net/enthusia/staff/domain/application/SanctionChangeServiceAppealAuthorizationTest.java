@@ -2,6 +2,7 @@ package net.enthusia.staff.domain.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
@@ -68,19 +69,41 @@ final class SanctionChangeServiceAppealAuthorizationTest {
         org.junit.jupiter.api.Assertions.assertFalse(called.get());
     }
 
+    @Test
+    void nonReviewerCannotConstructAnAppealHierarchyBypass() {
+        Actor helper = new Actor(ACTOR_ID, "Helper", StaffRank.HELPER);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> request(helper, Optional.of(APPEAL_ID), true)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> request(MODERATOR, Optional.empty(), true)
+        );
+    }
+
     private static ExactSanctionChangeRequest request(Optional<UUID> appealId) {
+        return request(MODERATOR, appealId, appealId.isPresent());
+    }
+
+    private static ExactSanctionChangeRequest request(
+            Actor actor,
+            Optional<UUID> appealId,
+            boolean bypassHierarchy
+    ) {
         return new ExactSanctionChangeRequest(
-                new IdempotencyKey("appeal-authorization-test-" + appealId.isPresent()),
+                new IdempotencyKey("appeal-authorization-test-" + actor.rank() + '-' + appealId.isPresent()),
                 SANCTION_ID,
                 0L,
-                MODERATOR,
+                actor,
                 SanctionChangeAction.FULL_OVERTURN,
                 Optional.empty(),
                 "Accepted appeal exact sanction overturn",
                 appealId,
                 Optional.empty(),
                 "VELOCITY_WEBSITE",
-                appealId.isPresent()
+                bypassHierarchy
         );
     }
 
