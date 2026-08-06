@@ -264,15 +264,27 @@ final class JdbcWebsiteAppealStore {
             String outcomeCode
     ) {
         if (APPEAL_PREPARED.equals(existing.state())) {
-            return APPEAL_REJECTED.equals(state)
-                    || APPEAL_APPLIED.equals(state)
-                    && (APPEAL_APPLIED.equals(outcomeCode)
-                    || parsePendingRevision(outcomeCode).isPresent());
+            return preparedTransitionAllowed(state, outcomeCode);
         }
         if (!APPEAL_APPLIED.equals(existing.state())
                 || parsePendingRevision(existing.outcomeCode()).isEmpty()) {
             return false;
         }
+        return pendingTransitionAllowed(state, outcomeCode);
+    }
+
+    private static boolean preparedTransitionAllowed(String state, String outcomeCode) {
+        if (APPEAL_REJECTED.equals(state)) {
+            return true;
+        }
+        if (!APPEAL_APPLIED.equals(state)) {
+            return false;
+        }
+        return APPEAL_APPLIED.equals(outcomeCode)
+                || parsePendingRevision(outcomeCode).isPresent();
+    }
+
+    private static boolean pendingTransitionAllowed(String state, String outcomeCode) {
         return APPEAL_REJECTED.equals(state)
                 || APPEAL_APPLIED.equals(state) && APPEAL_APPLIED.equals(outcomeCode);
     }
