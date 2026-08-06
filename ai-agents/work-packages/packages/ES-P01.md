@@ -76,13 +76,16 @@ A post-merge state-only finalization PR may be required because the exact merge 
 - [x] Confirm included audit gaps still exist and exclusions remain correct.
 - [x] Replace the website case-wide mutation path with the existing exact-sanction mutation contract.
 - [x] Preserve appeal-review authorization without granting general full-overturn authority.
+- [x] Constrain appeal hierarchy bypass to service-authorized MOD/ADMIN reviewers or Founder authority; keep SYSTEM sanctions immutable.
 - [x] Add durable pending/final appeal transitions for restart recovery and stable replay outcomes.
+- [x] Persist the original expected sanction revision in the pending outcome so retries cannot silently accept intervening mutations.
 - [x] Preserve the existing 1,000-character website reason contract.
-- [x] Add focused unit tests for targeting, authorization, replay, stale state, authority fencing, missing capability, and reason bounds.
-- [x] Add MariaDB regressions for combined cases, repeated acceptance/restart, stale decisions, rollback, and concurrent retries.
-- [ ] Complete passing hosted exact-head build, tests, runtime-JAR inspection, coverage, and static-analysis evidence.
-- [ ] Complete harsh final-diff review and resolve every valid finding/thread.
-- [ ] Freeze tracked content and validate the exact reviewed head.
+- [x] Add focused unit tests for targeting, authorization, hierarchy, replay, stale state, authority fencing, missing capability, and reason bounds.
+- [x] Add MariaDB regressions for combined cases, repeated acceptance/restart, persisted-revision staleness, rollback, and concurrent retries.
+- [x] Complete a passing hosted Java 21 clean build, all module tests, MariaDB/Testcontainers tests, runtime-JAR inspection, aggregate coverage, and Codacy coverage upload on `9acbbe0cb792deb69bd5758b364d9609da9ace58`.
+- [x] Complete a harsh first-party full-diff review and fix all valid findings discovered before automated review.
+- [ ] Mark PR #68 ready and resolve CodeRabbit/human review findings and every valid thread.
+- [ ] Freeze tracked content and validate the exact final reviewed head after the review cycle.
 - [ ] Merge PR #68 normally.
 - [ ] Verify resulting `main`, feature-head containment, and deletion of `package/es-p01-appeal-isolation`.
 - [ ] Finalize registry, workspace state, this package file, and canonical handoff with exact post-merge evidence.
@@ -104,7 +107,7 @@ Run repository-configured warnings-as-errors and static analysis for every chang
 
 ## 16. Documentation requirements
 
-Update directly affected user/operator/developer documentation, commands, permissions, configuration, runbooks, component metadata, package status, and evidence. Keep claims conservative and revision-specific.
+The directly affected developer/package documentation records exact-target behavior, durable pending revision recovery, boundaries, test evidence, and remaining acceptance. Existing public API fields, commands, permissions, configuration, and operator actions are unchanged.
 
 ## 17. Security and privacy requirements
 
@@ -112,7 +115,7 @@ No secrets, credentials, raw addresses, private messages, databases, player rows
 
 ## 18. Migration impact
 
-No migration is required. V16 remains highest and V1–V16 remain immutable. `MUTATION_PENDING` is an outcome code inside the existing `VARCHAR(64)` column; the existing appeal state remains `APPLIED`.
+No migration is required. V16 remains highest and V1–V16 remain immutable. `MUTATION_PENDING_R<revision>` is an outcome code inside the existing `VARCHAR(64)` column; the existing appeal state remains `APPLIED`.
 
 ## 19. Bedrock considerations
 
@@ -120,7 +123,7 @@ This package changes a private website/Velocity mutation path and does not add a
 
 ## 20. Distributed-runtime considerations
 
-The exact store's transaction, revision, idempotency, appeal linkage, and outbox behavior are reused. A durable `APPLIED/MUTATION_PENDING` appeal state makes both pre-mutation and post-commit/pre-finalization crash windows retryable across Velocity restarts. Hosted MariaDB tests do not replace distributed staging.
+The exact store's transaction, revision, idempotency, appeal linkage, and outbox behavior are reused. A durable `APPLIED/MUTATION_PENDING_R<revision>` appeal state makes both pre-mutation and post-commit/pre-finalization crash windows retryable across Velocity restarts while preserving stale-state detection. Hosted MariaDB tests do not replace distributed staging.
 
 ## 21. External-provider considerations
 
@@ -136,20 +139,20 @@ No external provider API is added or changed. LiteBans remains authoritative unt
 - Starting `main`: `e434b3dedc003d1d5b3def64f38cc7465752b0e5`.
 - Current branch: `package/es-p01-appeal-isolation`.
 - Current PR: `#68 — ES-P01: isolate appeals to the exact sanction`.
-- Latest implementation head at this checkpoint: `5e3f07ee546c4a569f7d27cf2b4e09e1b0c97adf`.
+- Latest implementation/evidence head at this checkpoint: `9acbbe0cb792deb69bd5758b364d9609da9ace58`.
 - Latest handoff: [`../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md`](../../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md).
-- Current action: finish hosted validation, full-diff review, exact-head freeze, merge, containment, cleanup, and final state synchronization.
+- Current action: open the non-draft automated review cycle, resolve findings, freeze the resulting head, repeat exact-head validation, merge, verify containment, clean branches, and finalize state.
 
 ## 24. Last completed checkpoint
 
-Implementation and regression coverage are committed. The first hosted run exposed only an invalid synthetic Crockford case ID; the fixture and audit-count assumptions were corrected. Pi staging dispatch reached `EnthusiaStaff-Staging`, but its build job received no runner (`runner_id: 0`, zero steps), so no product code or Pi boot executed.
+Head `9acbbe0cb792deb69bd5758b364d9609da9ace58` passed Coverage run `31059266809`, job `92483396625`: Temurin 21.0.11+10; `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`; all module and MariaDB/Testcontainers tests; runtime-JAR integrity/provider-leak inspection; JaCoCo generation; artifact upload; and Codacy coverage upload. Codacy's PR summary reports zero new issues. Pi staging remained infrastructure-unavailable before code execution.
 
 ## 25. Remaining checklist
 
-1. Obtain a passing hosted coverage/build run for the current or later exact head.
-2. Review the complete final diff for transaction, authorization, concurrency, restart, rollback, contract, privacy, and scope defects.
-3. Resolve CodeRabbit/Codacy/human findings and all valid review threads.
-4. Freeze the reviewed head and rerun every applicable exact-head gate.
+1. Mark PR #68 ready and obtain a current CodeRabbit review.
+2. Resolve every valid automated or human finding and require zero valid unresolved threads.
+3. Harshly review the complete resulting diff again.
+4. Freeze that exact reviewed head and rerun every applicable exact-head gate.
 5. Record the Pi infrastructure result conservatively; it is neither a pass nor a product failure.
 6. Merge PR #68 normally with the expected reviewed head.
 7. Verify containment and delete `package/es-p01-appeal-isolation`.
@@ -157,11 +160,20 @@ Implementation and regression coverage are committed. The first hosted run expos
 
 ## 26. Known blockers
 
-No product blocker is known. The configured Pi staging workflow is currently infrastructure-blocked before execution: staging run `31057358391`, build job `92477654523`, `runner_id: 0`, no steps, boot job skipped. Hosted build and MariaDB validation remain available.
+No product blocker is known. The configured Pi staging workflow is infrastructure-blocked before execution: no staging runner is allocated (`runner_id: 0`, zero steps), so no Pi build or boot occurs. Hosted Java/MariaDB validation passes.
 
 ## 27. Final evidence
 
-Pending exact-head freeze. Current evidence and failure corrections are recorded in the canonical handoff and PR #68.
+Pre-review passing evidence on `9acbbe0cb792deb69bd5758b364d9609da9ace58`:
+
+- Coverage run `31059266809`; job `92483396625`; success.
+- Runtime artifact `8951540150`; SHA-256 `0abac9547c2b59cf6d9c5d112bd90d90e60ebd21c74a2a64457aad520d919b22`; 18,257,819 bytes.
+- JaCoCo: 47.04% lines, 38.10% branches, 49.78% instructions.
+- Paper runtime JAR: 8,895,602 bytes; SHA-256 `51df452638f8efeb31f52583684603cef5b6c70470529fe90ad20cfb6c90cb1b`; 4,747 entries; zero provider API leaks.
+- Velocity runtime JAR: 7,788,490 bytes; SHA-256 `743aac566ee14a856d011f9d22e882b28f1312538c538d8de6ea141c184d58b2`; 4,120 entries; zero provider API leaks.
+- Codacy coverage upload succeeded and PR summary reports zero new issues.
+
+This head is not yet the final frozen head because the required non-draft CodeRabbit review has not run.
 
 ## 28. Merge and synchronization record
 
