@@ -55,6 +55,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class ExactSanctionAppealIsolationIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-05T20:00:00Z");
+    private static final String APPLIED = "APPLIED";
+    private static final String ACTIVE = "ACTIVE";
+    private static final String REJECTED = "REJECTED";
+    private static final String STALE_SANCTION_STATE = "STALE_SANCTION_STATE";
     private static final String ACCOUNT_ID = uuid(800).toString();
     private static final String USERNAME = "appeal_isolation_user";
     private static final String PASSWORD = UUID.randomUUID().toString();
@@ -63,7 +67,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
     private static final PunishmentCodeProtector CODE_PROTECTOR = new PunishmentCodeProtector(
             1,
             new SecretKeySpec(
-                    "appeal-isolation-integration-key".getBytes(StandardCharsets.UTF_8),
+                    UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8),
                     "HmacSHA256"
             )
     );
@@ -121,47 +125,27 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
-            ExactSanctionChangeResult.Applied applied = assertInstanceOf(
-                    ExactSanctionChangeResult.Applied.class,
-                    service(runtime).applyExact(
-                            request(runtime, fixture, appealId, key),
-                            OperationalMode.ACTIVE,
-                            LIMITS
-                    )
-            );
+            website.completeAppealAcceptance(appealId, APPLIED, pending(0L), NOW);
+            ExactSanctionChangeResult.Applied applied = apply(runtime, request(runtime, fixture, appealId, key));
             assertFalse(applied.replayed());
-            website.completeAppealAcceptance(appealId, "APPLIED", "APPLIED", NOW.plusSeconds(1));
+            website.completeAppealAcceptance(appealId, APPLIED, APPLIED, NOW.plusSeconds(1));
         }
 
         assertIsolatedResult(fixture, appealId);
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
-            AppealAcceptancePreparation.Ready ready = assertPrepared(
-                    website,
-                    appealId,
-                    fixture,
-                    key,
-                    true
-            );
+            AppealAcceptancePreparation.Ready ready = assertPrepared(website, appealId, fixture, key, true);
             assertTrue(ready.pendingRevision().isEmpty());
-            website.completeAppealAcceptance(appealId, "APPLIED", pending(1L), NOW.plusSeconds(2));
-            ExactSanctionChangeResult.Applied replay = assertInstanceOf(
-                    ExactSanctionChangeResult.Applied.class,
-                    service(runtime).applyExact(
-                            request(runtime, fixture, appealId, key),
-                            OperationalMode.ACTIVE,
-                            LIMITS
-                    )
-            );
+            website.completeAppealAcceptance(appealId, APPLIED, pending(1L), NOW.plusSeconds(2));
+            ExactSanctionChangeResult.Applied replay = apply(runtime, request(runtime, fixture, appealId, key));
             assertTrue(replay.replayed());
-            website.completeAppealAcceptance(appealId, "APPLIED", "APPLIED", NOW.plusSeconds(3));
+            website.completeAppealAcceptance(appealId, APPLIED, APPLIED, NOW.plusSeconds(3));
         }
 
         assertIsolatedResult(fixture, appealId);
-        assertEquals(1, countSanctionEvents(fixture.appealedSanctionId()));
-        assertEquals(1, countOverturnAudits(fixture.caseId()));
+        assertEquals(1L, countSanctionEvents(fixture.appealedSanctionId()));
+        assertEquals(1L, countOverturnAudits(fixture.caseId()));
     }
 
     @Test
@@ -173,42 +157,34 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            long revision = runtime.sanctionMutationStore()
-                    .exactRevision(fixture.appealedSanctionId())
-                    .orElseThrow();
+            long revision = exactRevision(runtime, fixture);
             assertEquals(0L, revision);
-            website.completeAppealAcceptance(appealId, "APPLIED", pending(revision), NOW);
+            website.completeAppealAcceptance(appealId, APPLIED, pending(revision), NOW);
         }
 
         incrementRevision(fixture.appealedSanctionId());
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
-            AppealAcceptancePreparation.Ready ready = assertPrepared(
-                    website,
-                    appealId,
-                    fixture,
-                    key,
-                    true
-            );
-            assertEquals(0L, ready.pendingRevision().orElseThrow());
+            AppealAcceptancePreparation.Ready ready = assertPrepared(website, appealId, fixture, key, true);
+            long acceptedRevision = ready.pendingRevision().orElseThrow();
+            assertEquals(0L, acceptedRevision);
             ExactSanctionChangeResult.Rejected rejected = assertInstanceOf(
                     ExactSanctionChangeResult.Rejected.class,
                     service(runtime).applyExact(
-                            request(fixture, appealId, key, ready.pendingRevision().orElseThrow()),
+                            request(fixture, appealId, key, acceptedRevision),
                             OperationalMode.ACTIVE,
                             LIMITS
                     )
             );
-            assertEquals("STALE_SANCTION_STATE", rejected.code());
-            website.completeAppealAcceptance(appealId, "REJECTED", rejected.code(), NOW.plusSeconds(1));
+            assertEquals(STALE_SANCTION_STATE, rejected.code());
+            website.completeAppealAcceptance(appealId, REJECTED, rejected.code(), NOW.plusSeconds(1));
         }
 
-        assertEquals("ACTIVE", sanctionStatus(fixture.appealedSanctionId()));
-        assertEquals("ACTIVE", sanctionStatus(fixture.siblingSanctionId()));
-        assertAppealState(appealId, "REJECTED", "STALE_SANCTION_STATE");
-        assertEquals(0, countSanctionEvents(fixture.appealedSanctionId()));
-        assertEquals(0, countOverturnAudits(fixture.caseId()));
+        assertUnchanged(fixture);
+        assertAppealState(appealId, REJECTED, STALE_SANCTION_STATE);
+        assertEquals(0L, countSanctionEvents(fixture.appealedSanctionId()));
+        assertEquals(0L, countOverturnAudits(fixture.caseId()));
     }
 
     @Test
@@ -217,52 +193,22 @@ class ExactSanctionAppealIsolationIntegrationTest {
         UUID appealId = uuid(503);
         String key = "appeal-isolation-rollback";
 
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
-            WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
-            assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
-            ExactSanctionChangeRequest request = request(runtime, fixture, appealId, key);
-            execute("""
-                    CREATE TRIGGER fail_appeal_isolation_audit
-                    BEFORE INSERT ON audit_events
-                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced appeal audit failure'
-                    """);
-            try {
-                assertThrows(
-                        ModerationPersistenceException.class,
-                        () -> service(runtime).applyExact(request, OperationalMode.ACTIVE, LIMITS)
-                );
-            } finally {
-                execute("DROP TRIGGER IF EXISTS fail_appeal_isolation_audit");
-            }
-        }
+        preparePendingAndForceRollback(fixture, appealId, key);
 
-        assertEquals("ACTIVE", sanctionStatus(fixture.appealedSanctionId()));
-        assertEquals("ACTIVE", sanctionStatus(fixture.siblingSanctionId()));
-        assertAppealState(appealId, "APPLIED", pending(0L));
-        assertEquals(0, countSanctionEvents(fixture.appealedSanctionId()));
-        assertEquals(0, countOverturnAudits(fixture.caseId()));
+        assertUnchanged(fixture);
+        assertAppealState(appealId, APPLIED, pending(0L));
+        assertEquals(0L, countSanctionEvents(fixture.appealedSanctionId()));
+        assertEquals(0L, countOverturnAudits(fixture.caseId()));
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
-            AppealAcceptancePreparation.Ready ready = assertPrepared(
-                    website,
-                    appealId,
-                    fixture,
-                    key,
-                    true
-            );
-            assertEquals(0L, ready.pendingRevision().orElseThrow());
-            ExactSanctionChangeResult.Applied applied = assertInstanceOf(
-                    ExactSanctionChangeResult.Applied.class,
-                    service(runtime).applyExact(
-                            request(fixture, appealId, key, ready.pendingRevision().orElseThrow()),
-                            OperationalMode.ACTIVE,
-                            LIMITS
-                    )
+            AppealAcceptancePreparation.Ready ready = assertPrepared(website, appealId, fixture, key, true);
+            ExactSanctionChangeResult.Applied applied = apply(
+                    runtime,
+                    request(fixture, appealId, key, ready.pendingRevision().orElseThrow())
             );
             assertFalse(applied.replayed());
-            website.completeAppealAcceptance(appealId, "APPLIED", "APPLIED", NOW.plusSeconds(2));
+            website.completeAppealAcceptance(appealId, APPLIED, APPLIED, NOW.plusSeconds(2));
         }
 
         assertIsolatedResult(fixture, appealId);
@@ -277,7 +223,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
         try (MariaDbRuntime setup = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore website = claimedWebsiteStore(setup, fixture);
             assertPrepared(website, appealId, fixture, key, false);
-            website.completeAppealAcceptance(appealId, "APPLIED", pending(0L), NOW);
+            website.completeAppealAcceptance(appealId, APPLIED, pending(0L), NOW);
         }
 
         try (MariaDbRuntime firstRuntime = MariaDb.initialize(databaseConfig(DATABASE));
@@ -296,14 +242,50 @@ class ExactSanctionAppealIsolationIntegrationTest {
                     assertInstanceOf(ExactSanctionChangeResult.Applied.class, first.get(20, TimeUnit.SECONDS)),
                     assertInstanceOf(ExactSanctionChangeResult.Applied.class, second.get(20, TimeUnit.SECONDS))
             );
-            assertEquals(1, results.stream().filter(ExactSanctionChangeResult.Applied::replayed).count());
+            assertEquals(1L, results.stream().filter(ExactSanctionChangeResult.Applied::replayed).count());
             firstRuntime.websiteModerationStore(CODE_PROTECTOR)
-                    .completeAppealAcceptance(appealId, "APPLIED", "APPLIED", NOW.plusSeconds(1));
+                    .completeAppealAcceptance(appealId, APPLIED, APPLIED, NOW.plusSeconds(1));
         }
 
         assertIsolatedResult(fixture, appealId);
-        assertEquals(1, countSanctionEvents(fixture.appealedSanctionId()));
-        assertEquals(1, countOverturnAudits(fixture.caseId()));
+        assertEquals(1L, countSanctionEvents(fixture.appealedSanctionId()));
+        assertEquals(1L, countOverturnAudits(fixture.caseId()));
+    }
+
+    private static void preparePendingAndForceRollback(
+            Fixture fixture,
+            UUID appealId,
+            String key
+    ) throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            WebsiteModerationStore website = claimedWebsiteStore(runtime, fixture);
+            assertPrepared(website, appealId, fixture, key, false);
+            website.completeAppealAcceptance(appealId, APPLIED, pending(0L), NOW);
+            ExactSanctionChangeRequest request = request(runtime, fixture, appealId, key);
+            execute("""
+                    CREATE TRIGGER fail_appeal_isolation_audit
+                    BEFORE INSERT ON audit_events
+                    FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='forced appeal audit failure'
+                    """);
+            try {
+                assertThrows(
+                        ModerationPersistenceException.class,
+                        () -> service(runtime).applyExact(request, OperationalMode.ACTIVE, LIMITS)
+                );
+            } finally {
+                execute("DROP TRIGGER IF EXISTS fail_appeal_isolation_audit");
+            }
+        }
+    }
+
+    private static ExactSanctionChangeResult.Applied apply(
+            MariaDbRuntime runtime,
+            ExactSanctionChangeRequest request
+    ) {
+        return assertInstanceOf(
+                ExactSanctionChangeResult.Applied.class,
+                service(runtime).applyExact(request, OperationalMode.ACTIVE, LIMITS)
+        );
     }
 
     private static ExactSanctionChangeResult applyWhenReleased(
@@ -361,16 +343,19 @@ class ExactSanctionAppealIsolationIntegrationTest {
         );
     }
 
+    private static long exactRevision(MariaDbRuntime runtime, Fixture fixture) {
+        return runtime.sanctionMutationStore()
+                .exactRevision(fixture.appealedSanctionId())
+                .orElseThrow();
+    }
+
     private static ExactSanctionChangeRequest request(
             MariaDbRuntime runtime,
             Fixture fixture,
             UUID appealId,
             String key
     ) {
-        long revision = runtime.sanctionMutationStore()
-                .exactRevision(fixture.appealedSanctionId())
-                .orElseThrow();
-        return request(fixture, appealId, key, revision);
+        return request(fixture, appealId, key, exactRevision(runtime, fixture));
     }
 
     private static ExactSanctionChangeRequest request(
@@ -408,7 +393,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
                 caseId.value(),
                 targetId,
                 "BAN",
-                "ACTIVE",
+                ACTIVE,
                 issuedAt,
                 NOW.plusSeconds(7_200)
         );
@@ -418,7 +403,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
                 caseId.value(),
                 targetId,
                 "MUTE",
-                "ACTIVE",
+                ACTIVE,
                 issuedAt,
                 NOW.plusSeconds(7_200)
         );
@@ -427,18 +412,23 @@ class ExactSanctionAppealIsolationIntegrationTest {
 
     private static void assertIsolatedResult(Fixture fixture, UUID appealId) throws SQLException {
         assertEquals("OVERTURNED", sanctionStatus(fixture.appealedSanctionId()));
-        assertEquals("ACTIVE", sanctionStatus(fixture.siblingSanctionId()));
+        assertEquals(ACTIVE, sanctionStatus(fixture.siblingSanctionId()));
         assertEquals("OPEN", stringValue(
                 "SELECT state FROM cases WHERE case_id=?",
                 fixture.caseId().value()
         ));
-        assertAppealState(appealId, "APPLIED", "APPLIED");
+        assertAppealState(appealId, APPLIED, APPLIED);
         assertEquals(1L, longValue(
                 "SELECT COUNT(*) FROM sanction_events WHERE linked_appeal_id=? AND sanction_id=?",
                 appealId,
                 fixture.appealedSanctionId()
         ));
         assertEquals(0L, countSanctionEvents(fixture.siblingSanctionId()));
+    }
+
+    private static void assertUnchanged(Fixture fixture) throws SQLException {
+        assertEquals(ACTIVE, sanctionStatus(fixture.appealedSanctionId()));
+        assertEquals(ACTIVE, sanctionStatus(fixture.siblingSanctionId()));
     }
 
     private static void assertAppealState(UUID appealId, String state, String outcome) throws SQLException {
