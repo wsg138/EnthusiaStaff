@@ -3,21 +3,24 @@
 - Date: 2026-08-05
 - Package: `ES-P01 — Exact-sanction appeal isolation`
 - Starting status: `ACTIVE`
-- Current status: `BLOCKED`
+- Current status: `MERGE_PENDING`
 - Starting `main`: `e434b3dedc003d1d5b3def64f38cc7465752b0e5`
-- Preserved branch: `package/es-p01-appeal-isolation`
-- Preserved pull request: `#68 — ES-P01: isolate appeals to the exact sanction`
+- Branch: `package/es-p01-appeal-isolation`
+- Pull request: `#68 — ES-P01: isolate appeals to the exact sanction`
 - Frozen reviewed product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`
-- Highest Flyway migration: `V16`; no migration changed or added
+- Latest reconciled pre-policy PR head: `7b132a3c0696dfcd4f991d64d75390047bc79a39`
+- Infrastructure disposition: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`
+- Deferred validation package: `ES-V02 — Distributed and Java/Bedrock staging`
+- Highest Flyway migration: `V16`; V1–V16 remain unchanged
 - Production authority: LiteBans remains authoritative
 
-## Why this package was selected
+## Resume and live reconciliation
 
-Live reconciliation found PR #68 and its active package branch as the only unfinished package work. The universal worker rules require resuming an existing package PR before selecting a new `READY` package, so ES-P01 was resumed and no second package began.
+PR #68 remained open, non-draft, and mergeable. Its branch was the only active package branch and no unrelated package was active. The live PR head at reconciliation was `7b132a3c0696dfcd4f991d64d75390047bc79a39`; the frozen product head remained `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`. All six review threads were resolved. CodeRabbit and all Codacy checks were successful. V16 remained highest and V1–V16 remained immutable.
 
 ## Completed implementation
 
-- Website appeal acceptance now targets only the submitted punishment ID through the exact-sanction mutation contract.
+- Website appeal acceptance targets only the submitted punishment ID through the exact-sanction mutation contract.
 - A combined case can overturn the appealed sanction while leaving sibling sanctions active and the case open.
 - Linked appeal authorization uses `ACCEPT_APPEAL` without granting ordinary full-overturn authority.
 - Hierarchy bypass is constrained at the request boundary to Founder or a linked MOD/ADMIN appeal reviewer; SYSTEM sanctions remain immutable.
@@ -28,99 +31,60 @@ Live reconciliation found PR #68 and its active package branch as the only unfin
 - Existing API fields and the 10–1,000-character website reason contract are preserved.
 - No migration was required because the marker fits the existing `outcome_code VARCHAR(64)` column.
 
-## Tests added or strengthened
+## Review state
 
-Domain and Velocity tests cover:
+First-party review covered authorization, persistence linkage, transaction boundaries, replay, rollback, stale revisions, idempotency, concurrency, exact-only mutation, privacy, scope, and migration boundaries. CodeRabbit findings were repaired and all six threads were resolved. Codacy static analysis, coverage variation, and diff coverage were successful. Zero valid unresolved review threads remained at reconciliation.
 
-- exact punishment targeting, original expected revision, linked appeal, full overturn, and one affected sanction;
-- no case-wide mutation fallback;
-- appeal authorization versus general overturn authorization;
-- hierarchy bypass construction and SYSTEM immutability;
-- finalized replay without live capability or target lookup;
-- pending retry using the persisted revision rather than a newer live revision;
-- read-only reviewer denial, authority fencing, stale-state persistence, missing exact target/capability, and reason bounds;
-- canonical pending-revision encoding and rejection of malformed, negative, signed, and leading-zero suffixes.
+The policy change was reviewed for loopholes. It cannot be used for an allocated runner that executes a failing test/build/migration/JAR/boot step, an actual plugin boot failure, a migration or security failure, a private-validation or acceptance package, issue #43, the 168-hour shadow period, final cutover, production activation, an absent ordinary GitHub-hosted build, or a failure caused by package workflow edits.
 
-MariaDB/Testcontainers tests cover:
+## Hosted validation
 
-- exact isolation in a combined case;
-- finalized replay after restart;
-- persisted-revision stale rejection after restart;
-- transaction rollback with pending-state recovery;
-- concurrent identical retries producing one mutation and one replay;
-- sibling-sanction and audit/event isolation.
+At reconciled PR head `7b132a3c0696dfcd4f991d64d75390047bc79a39`:
 
-## Review findings and repairs
-
-The run resumed at head `dbcef45397f0d694744816776cc076800ab253d6`, where hosted validation failed because two Velocity tests still expected appeal preparation to occur after capability/target checks. The durable replay design intentionally prepares first, so the tests were corrected and finalized-replay coverage was added.
-
-Further valid review repairs included:
-
-- centralizing the pending-revision wire format;
-- rejecting noncanonical stored revisions;
-- reducing transition-state complexity;
-- retaining parse causes and making fail-closed behavior explicit;
-- replacing an unchecked sealed-interface cast with an exhaustive switch;
-- binding idempotency to appeal and punishment identity;
-- deriving test expectations from shared constants;
-- recording tracked-content freeze and the precise Pi owner/unblock condition.
-
-One review suggestion incorrectly expected low-level prevalidated `HELPER` hierarchy bypass to be false. Current policy intentionally admits that branch, while `ExactSanctionChangeRequest` prevents a HELPER from constructing the appeal bypass. The test was corrected to pin the actual policy while retaining SYSTEM denials.
-
-First-party harsh review rechecked authorization through persistence linkage, transaction boundaries, replay, rollback, stale revisions, idempotency, concurrency, exact-only mutation, privacy, scope, and migration boundaries. No remaining product defect was found. CodeRabbit reports success and every current review thread is resolved.
-
-## Exact-head hosted validation
-
-Frozen product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`.
-
-- Coverage run `31064171443`; job `92498280092`; success.
-- Java: Temurin `21.0.11+10`.
+- Coverage run `31064834286`; job `92500281761`; success.
+- Temurin Java `21.0.11+10`.
 - Command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
-- Result: `BUILD SUCCESSFUL` in 5m28s; 49 tasks, 40 executed and 9 up-to-date.
-- Every module test and MariaDB/Testcontainers integration test passed.
+- `BUILD SUCCESSFUL` in 5m22s; 49 tasks, 40 executed and 9 up-to-date.
+- All module tests and MariaDB/Testcontainers integration tests passed.
 - Runtime inspection checked 24 provider API source types and found zero leaks.
-- Paper JAR: 8,897,023 bytes; SHA-256 `ce0e19ae07af278d55db7a56ae65df74aa050aa21a9c010018e5283703c628b9`; 4,748 entries.
-- Velocity JAR: 7,790,210 bytes; SHA-256 `9b79c0e215d59a711a778414237789676b42cc083cd973f8c3f505d22e39612e`; 4,121 entries.
-- Aggregate JaCoCo: 47.07% lines, 38.18% branches, 49.81% instructions.
-- Artifact `8953318443`: 18,264,471 bytes; SHA-256 `19a71478d9e05d1b08e2153d80442f81cc1a9208014adfabf186e9d969bb6e7f`.
-- Codacy static analysis and coverage upload passed with zero annotations.
+- Paper JAR: 8,897,023 bytes; SHA-256 `095ce7e763f267be050d5c1d36cb8a1190185937943f7b5272cd6dbc964cae9c`; 4,748 entries.
+- Velocity JAR: 7,790,210 bytes; SHA-256 `b23160d83709521b4910860357d4d1ab8019f894f5b61af15b77b97d1cec3229`; 4,121 entries.
+- Aggregate JaCoCo: 47.07% lines, 38.16% branches, 49.81% instructions.
+- Artifact `8953543716`: 18,264,524 bytes; SHA-256 `a6f83d9977615ec1647b4cfbeaee74827b008db1054e6d71b32ae440582cc031`.
+- Codacy static analysis, coverage variation, and diff coverage passed.
 
-## Pi staging evidence and blocker
+The final documentation head must repeat every applicable exact-head executable gate. Any later commit invalidates that evidence.
 
-The configured workflow dispatches to private repository `wsg138/EnthusiaStaff-Staging`, owned by `wsg138`.
+## Owner-approved infrastructure exception
 
-- Parent run `31057348145`, job `92477622119`.
-- Staging run `31057358391`.
-- Staging build job `92477654523`: `runner_id: 0`, no runner name, zero executed steps.
-- Pi boot/restart job `92477660726`: skipped because the build dependency never ran.
-- Diagnostics artifact `8950755524`: SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
+Status/evidence label: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
 
-This is infrastructure-unavailable evidence. It is not a passing gate and does not indicate a product boot failure.
+Owner approval: repository owner `wsg138` explicitly approved the narrowly defined infrastructure-only exception for ES-P01 in the current assigned-package instruction on 2026-08-05, America/Indiana/Indianapolis.
 
-The only remaining required action depends on external staging infrastructure. ES-P01 is therefore `BLOCKED`, with PR #68 and its branch preserved.
+Exact unavailable-infrastructure evidence:
 
-Unblock condition: the `wsg138/EnthusiaStaff-Staging` owner must allocate a compatible runner and obtain a successful exact-head staging build plus safe Pi boot/restart, or explicitly accept and record a verified validation exception permitted by repository policy.
+- external specialized environment: private `wsg138/EnthusiaStaff-Staging`;
+- parent run `31057348145`, parent job `92477622119`;
+- staging run `31057358391`;
+- staging build job `92477654523`, labels `ubuntu-latest`, conclusion `failure`, `runner_id: 0`, empty runner name, and executed steps `[]`;
+- downstream Pi job `92477660726`, `Boot and restart verified Paper runtime on Lincoln-PI-4`, conclusion `skipped`, no runner, and executed steps `[]`;
+- diagnostics artifact `8950755524`, SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
 
-## Explicit exclusions preserved
+No product build, test, migration, artifact, server boot, or restart step executed. The run is infrastructure-unavailable evidence, not a product result. No product boot failure occurred.
 
-- Website UX and `enthusia-site`
-- Production authority or deployment
-- LiteBans migration/cutover and issue #43
-- V1–V16 migrations
-- External providers or aggregate component copies
-- Private databases, player rows, logs, messages, credentials, addresses, and production routes
-- Every package other than ES-P01
+The Pi gate is not passed. The exception is not staging verification, production verification, or proof that the plugin booted. Missing distributed Pi build/boot/restart and Java/Bedrock staging evidence is assigned to `ES-V02 — Distributed and Java/Bedrock staging`. ES-V02 remains `DEFERRED` and was not started.
 
-## Merge, containment, and cleanup state
+## Boundaries preserved
 
-- PR #68 was not merged because the Pi gate is unresolved.
-- No merge commit exists.
-- `main` remains `e434b3dedc003d1d5b3def64f38cc7465752b0e5`.
-- Reviewed-head containment and post-merge divergence verification are not yet applicable.
-- `package/es-p01-appeal-isolation` remains preserved and was not deleted.
-- No external parity gate applies.
-- No dependent package became `READY`; `ES-P02` and `ES-X05` remain `PLANNED`.
+- No product behavior was changed by the policy correction.
+- No migration was added or edited; V16 remains highest.
+- No deployment, private data, production authority, LiteBans cutover, issue #43, 168-hour shadow period, production rollback, or cutover action occurred.
+- ES-V02, ES-P02, ES-X05, and every other package were not started.
+
+## Merge and finalization state
+
+PR #68 has not yet merged. No implementation merge commit exists. The implementation branch remains present until containment and divergence are verified after merge. A small documentation-only finalization PR will record the merge commit, resulting `main`, reviewed-head containment, divergence, branch deletion, exception disposition, deferred ES-V02 obligation, and dependency-derived READY statuses.
 
 ## Exact next action
 
-Resolve the Pi gate without changing frozen product head `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`: configure a compatible staging runner and rerun the exact-head staging build plus safe Pi boot/restart, or record an explicit verified owner exception. Then reconcile that PR #68 still points to the reviewed head with all checks and threads clear, merge normally, verify containment and divergence, delete the branch when safe, and complete a documentation-only post-merge finalization PR. Any real product commit requires another harsh review and every applicable exact-head gate.
+Freeze the final PR #68 head after all policy/package records and the PR description are updated. Require every applicable exact-head hosted gate, Codacy, Wiki/documentation/package-orchestration checks, mergeability, CodeRabbit, and zero valid unresolved review threads. Confirm the head remains unchanged, merge with a normal merge commit, verify containment and no unique branch commits, safely delete the branch, then create and merge the documentation-only finalization PR. Do not call Pi passed and do not start another package.
