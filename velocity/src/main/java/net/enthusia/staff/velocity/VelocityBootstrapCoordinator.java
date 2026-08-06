@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 final class VelocityBootstrapCoordinator {
+    private static final int MINIMUM_ATTEMPTS = 1;
+
     private final WorkerExecutor workers;
     private final DelayedScheduler scheduler;
     private final Attempt attempt;
@@ -40,13 +42,15 @@ final class VelocityBootstrapCoordinator {
         return started.compareAndSet(false, true) && submitAttempt();
     }
 
-    synchronized boolean requestImmediateRetry() {
-        if (stopping() || completed.get() || attemptRunning.get() || retryScheduled.get()) {
-            return false;
+    boolean requestImmediateRetry() {
+        synchronized (this) {
+            if (stopping() || completed.get() || attemptRunning.get() || retryScheduled.get()) {
+                return false;
+            }
+            attempts.set(0);
+            exhausted.set(false);
+            return submitAttemptLocked();
         }
-        attempts.set(0);
-        exhausted.set(false);
-        return submitAttempt();
     }
 
     void stop() {
@@ -69,7 +73,13 @@ final class VelocityBootstrapCoordinator {
         return exhausted.get();
     }
 
-    private synchronized boolean submitAttempt() {
+    private boolean submitAttempt() {
+        synchronized (this) {
+            return submitAttemptLocked();
+        }
+    }
+
+    private boolean submitAttemptLocked() {
         if (stopping() || completed.get() || !attemptRunning.compareAndSet(false, true)) {
             return false;
         }
@@ -77,7 +87,10 @@ final class VelocityBootstrapCoordinator {
         if (workers.submit(() -> runAttempt(number))) {
             return true;
         }
-        return handleFailure(number, new IllegalStateException("Velocity bootstrap worker submission was rejected"));
+        return handleFailureLocked(
+                number,
+                new IllegalStateException("Velocity bootstrap worker submission was rejected")
+        );
     }
 
     private void runAttempt(int number) {
@@ -111,7 +124,13 @@ final class VelocityBootstrapCoordinator {
         }
     }
 
-    private synchronized boolean handleFailure(int failedAttempt, RuntimeException failure) {
+    private boolean handleFailure(int failedAttempt, RuntimeException failure) {
+        synchronized (this) {
+            return handleFailureLocked(failedAttempt, failure);
+        }
+    }
+
+    private boolean handleFailureLocked(int failedAttempt, RuntimeException failure) {
         if (stopping()) {
             attemptRunning.set(false);
             return false;
@@ -144,10 +163,12 @@ final class VelocityBootstrapCoordinator {
         return true;
     }
 
-    private synchronized void runScheduledRetry() {
-        retryScheduled.set(false);
-        if (!stopping()) {
-            submitAttempt();
+    private void runScheduledRetry() {
+        synchronized (this) {
+            retryScheduled.set(false);
+            if (!stopping()) {
+                submitAttemptLocked();
+            }
         }
     }
 
@@ -169,7 +190,7 @@ final class VelocityBootstrapCoordinator {
 
     record RetryPolicy(int maximumAttempts, long initialDelayMillis, long maximumDelayMillis) {
         RetryPolicy {
-            if (maximumAttempts < 1) {
+            if (maximumAttempts < MINIMUM_ATTEMPTS) {
                 throw new IllegalArgumentException("maximumAttempts must be at least one");
             }
             if (initialDelayMillis < 1L || maximumDelayMillis < initialDelayMillis) {
