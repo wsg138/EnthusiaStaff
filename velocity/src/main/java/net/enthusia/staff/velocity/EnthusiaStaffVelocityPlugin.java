@@ -1161,7 +1161,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     private void updateHealthIssue(String component, String reason) {
-        health.updateIssue(authorityMode.get(), component, reason);
+        health.updateIssue(component, reason);
     }
 
     private final class AltsCommand implements SimpleCommand {
