@@ -67,6 +67,14 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Identified and corrected an additional source defect not reported by the analyzer: unavailable/incompatible Floodgate plus absent local Geyser had been treated as Java, which is unsafe for proxy-hosted Geyser/Floodgate layouts.
 - Remaining external review and exact-head analysis must still be green on the final frozen SHA.
 
+## Current gate observations
+
+- PR #75 was marked ready for review after the implementation/documentation checkpoint.
+- An explicit CodeRabbit review request selected the full 14-file diff but was refused because the repository/developer review limit was reached. The bot reported that no review started; this is not a pass.
+- The first empty freeze commit did not produce a check suite, so it is not validation evidence.
+- PR #75 was closed and reopened on the unchanged head to invoke the repository's configured `pull_request` `reopened` trigger. Exact-head workflow creation/execution still must be observed directly.
+- This handoff update is a non-empty synchronization commit recording the live gate state; the resulting head is the new candidate and must receive fresh exact-head checks.
+
 ## Validation requirements
 
 - Java 21 warnings-as-errors.
@@ -75,7 +83,7 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Aggregate coverage and runtime-JAR integrity/provider-leak checks.
 - Wiki/package validation and configured static analysis.
 - Zero valid unresolved review threads.
-- Missing, queued, cancelled, skipped, merge-ref-only, or zero-runner ordinary hosted checks are not passes.
+- Missing, queued, cancelled, skipped, merge-ref-only, rate-limited, or zero-runner ordinary hosted checks are not passes.
 
 ## Systems not disturbed
 
@@ -88,4 +96,4 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 
 ## Exact next action
 
-Freeze the documentation-complete PR #75 head, mark it ready for review, inspect exact-head Codacy/GitHub Actions/CodeRabbit results, resolve every valid finding, then either merge normally with containment and branch cleanup or publish a precise parked blocker. Do not begin another package.
+Inspect the new exact-head Codacy/GitHub Actions results. If all configured source gates execute successfully, resolve any valid findings and re-request external review only when the rate limit has materially recovered. Otherwise publish the precise blocker and park PR #75 without beginning another package.
