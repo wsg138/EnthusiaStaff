@@ -38,6 +38,7 @@ class WebsiteAppealRateLimitIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-06T12:00:00Z");
     private static final String PLAYER_NAME = "LimitedPlayer";
     private static final String ACCOUNT_ID = uuid(3_001).toString();
+    private static final String SHARED_KEY = "rate-shared-key";
     private static final PunishmentCodeProtector CODE_PROTECTOR = testProtector();
 
     @Container
@@ -59,9 +60,9 @@ class WebsiteAppealRateLimitIntegrationTest {
     }
 
     @Test
-    void identicalRetriesAreExemptWhileFourthDistinctSubmissionIsLimited() throws SQLException {
+    void replayExemptionRequiresTheSamePunishmentAndCurrentWindow() throws SQLException {
         List<AppealFixture> fixtures = new ArrayList<>();
-        for (int suffix = 1; suffix <= 4; suffix++) {
+        for (int suffix = 1; suffix <= 5; suffix++) {
             fixtures.add(seedEligiblePunishment(suffix));
         }
 
@@ -72,16 +73,31 @@ class WebsiteAppealRateLimitIntegrationTest {
                 store.claimCode(code, ACCOUNT_ID, PLAYER_NAME, NOW);
             }
 
-            for (int index = 0; index < 3; index++) {
-                store.submitAppeal(
-                        fixtures.get(index).sanctionId(),
-                        ACCOUNT_ID,
-                        PLAYER_NAME,
-                        "Distinct appeal submission number " + (index + 1) + " is ready for review.",
-                        "rate-submission-" + (index + 1),
-                        NOW.plusSeconds(index + 1L)
-                );
-            }
+            String firstReason = "The first exact punishment is ready for appeal review.";
+            store.submitAppeal(
+                    fixtures.get(0).sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    firstReason,
+                    SHARED_KEY,
+                    NOW.plusSeconds(1)
+            );
+            store.submitAppeal(
+                    fixtures.get(1).sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The second punishment reuses the browser key but remains distinct.",
+                    SHARED_KEY,
+                    NOW.plusSeconds(2)
+            );
+            store.submitAppeal(
+                    fixtures.get(2).sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The third distinct appeal submission is ready for review.",
+                    "rate-submission-3",
+                    NOW.plusSeconds(3)
+            );
 
             WebsiteModerationException limited = assertThrows(
                     WebsiteModerationException.class,
@@ -98,21 +114,21 @@ class WebsiteAppealRateLimitIntegrationTest {
             assertEquals("APPEAL_RATE_LIMITED", limited.code());
 
             WebsiteAppealSubmission replay = store.submitAppeal(
-                    fixtures.getFirst().sanctionId(),
+                    fixtures.get(0).sanctionId(),
                     ACCOUNT_ID,
                     PLAYER_NAME,
-                    "Distinct appeal submission number 1 is ready for review.",
-                    "rate-submission-1",
+                    firstReason,
+                    SHARED_KEY,
                     NOW.plusSeconds(5)
             );
             assertTrue(replay.replayed());
 
             WebsiteAppealSubmission afterReset = store.submitAppeal(
-                    fixtures.get(3).sanctionId(),
+                    fixtures.get(4).sanctionId(),
                     ACCOUNT_ID,
                     PLAYER_NAME,
-                    "The fourth submission is accepted after the one-hour window resets.",
-                    "rate-submission-4",
+                    "The expired replay key is counted in the new window and accepted.",
+                    SHARED_KEY,
                     NOW.plusSeconds(3_602)
             );
             assertEquals("OPEN", afterReset.appeal().state());
