@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-06
 
-Canonical current state: `ES-P02 REVIEW — implementation, focused tests, documentation, and all confirmed review repairs are committed on package/es-p02-runtime-db-recovery in open non-draft PR #70. Exact-head hosted validation, merge, containment, cleanup, and finalization remain. Starting main is d94d0219a598c9afb7e19c4ea9fddafd554d6469. ES-X05 remains READY and unstarted.`
+Canonical current state: `ES-P02 BLOCKED — frozen product head b63fa1fa09ae4a9ea90988143ecda2cc7decbe14 passed Java 21 build/test/coverage, MariaDB/Testcontainers, migration integrity, runtime-JAR/provider-leak, Codacy, and review-thread gates in PR #70. Required exact-head Pi staging run 31072790867/job 92524036760 failed, and no ES-P02 package-specific infrastructure exception is approved. PR #70 remains open and unmerged. ES-X05 remains READY and unstarted.`
 
 ES-P02 live baseline: `wsg138/EnthusiaStaff:main` at `d94d0219a598c9afb7e19c4ea9fddafd554d6469`; no open PRs and no remote branch other than main existed before claim; V16 was highest; issue #43 remained open, deferred, and excluded.
 
@@ -66,20 +66,20 @@ ES-P02 live baseline: `wsg138/EnthusiaStaff:main` at `d94d0219a598c9afb7e19c4ea9
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `REVIEW` |
+| Status | `BLOCKED` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
 | Assigned worker | `ChatGPT sequential package worker #2` |
 | Active branches | `package/es-p02-runtime-db-recovery` |
-| Aggregate PR | `#70 — open, non-draft; exact-head validation pending` |
+| Aggregate PR | `#70 — open, non-draft, blocked; not merged` |
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
-| Final reviewed heads | `UNSET` |
+| Final reviewed heads | `Product head b63fa1fa09ae4a9ea90988143ecda2cc7decbe14; documentation-only blocker head recorded separately on branch` |
 | Merge commits | `UNSET` |
 | Last update | `2026-08-06` |
 | Handoff | [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md) |
-| Blocker | `NONE. Implementation and review repair are complete; current-head hosted build, test, static-analysis, artifact, review-bot, and staging evidence remain before merge.` |
+| Blocker | `Required exact-head Pi staging run 31072790867/job 92524036760 failed. No successful Pi build/boot/restart evidence exists and no ES-P02 owner-approved infrastructure exception is recorded. Unblock with successful specialized-runner staging for the unchanged product head, or explicit ES-P02 approval plus proof that every zero-execution exception condition is met.` |
 | Package file | [`packages/ES-P02.md`](packages/ES-P02.md) |
 
 ### `ES-P03` — Bedrock identity correctness
