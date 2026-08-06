@@ -1,5 +1,6 @@
 name: ES-X05 replay fix
 
+# Temporary branch-only workflow; removed before final validation and merge.
 on:
   push:
     branches: [package/es-x05-state-publication]
