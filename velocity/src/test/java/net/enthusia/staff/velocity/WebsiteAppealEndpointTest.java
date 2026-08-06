@@ -48,6 +48,7 @@ final class WebsiteAppealEndpointTest {
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
     private static final long REVISION = 7L;
     private static final String PENDING = "APPLIED:MUTATION_PENDING_R7";
+    private static final String STALE_SANCTION_STATE = "STALE_SANCTION_STATE";
 
     @Test
     void appliesAuthorizedAppealToOnlyTheExactPunishment() {
@@ -92,7 +93,7 @@ final class WebsiteAppealEndpointTest {
         );
         RecordingMutationStore mutations = new RecordingMutationStore(
                 new ExactSanctionChangeResult.Rejected(
-                        "STALE_SANCTION_STATE",
+                        STALE_SANCTION_STATE,
                         "The sanction changed after acceptance began"
                 )
         );
@@ -104,9 +105,9 @@ final class WebsiteAppealEndpointTest {
                 () -> endpoint.accept(headers(), input("MOD"))
         );
 
-        assertEquals("STALE_SANCTION_STATE", error.code());
+        assertEquals(STALE_SANCTION_STATE, error.code());
         assertEquals(REVISION, mutations.request.expectedRevision());
-        assertEquals(List.of(PENDING, "REJECTED:STALE_SANCTION_STATE"), store.completions);
+        assertEquals(List.of(PENDING, "REJECTED:" + STALE_SANCTION_STATE), store.completions);
     }
 
     @Test
@@ -153,7 +154,7 @@ final class WebsiteAppealEndpointTest {
         AppealStore store = new AppealStore();
         RecordingMutationStore mutations = new RecordingMutationStore(
                 new ExactSanctionChangeResult.Rejected(
-                        "STALE_SANCTION_STATE",
+                        STALE_SANCTION_STATE,
                         "The sanction changed"
                 )
         );
@@ -165,9 +166,9 @@ final class WebsiteAppealEndpointTest {
         );
 
         assertEquals(409, error.status());
-        assertEquals("STALE_SANCTION_STATE", error.code());
+        assertEquals(STALE_SANCTION_STATE, error.code());
         assertEquals(
-                List.of(PENDING, "REJECTED:STALE_SANCTION_STATE"),
+                List.of(PENDING, "REJECTED:" + STALE_SANCTION_STATE),
                 store.completions
         );
     }
