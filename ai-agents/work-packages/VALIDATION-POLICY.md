@@ -10,6 +10,44 @@ Freeze tracked content before final validation. Evidence must apply to each exac
 
 Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not passing evidence. Documentation-only changes may omit runtime/Pi checks only when they are genuinely non-applicable and that reason is recorded.
 
+## Owner-approved infrastructure exception
+
+Use the evidence label `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`. Never label the unavailable gate `PASS`.
+
+An owner-approved infrastructure exception is permitted only when every condition below is verified:
+
+1. The affected gate requires an external or specialized runner or environment.
+2. The job received no runner, including evidence such as `runner_id: 0`, an empty runner name, or an equivalent provider record.
+3. No product build, test, server boot, restart, migration, artifact validation, or other product-validation step executed.
+4. The result is therefore infrastructure-unavailable evidence rather than a product result.
+5. Every executable hosted gate for the exact current PR head passes.
+6. Every static-analysis finding is resolved.
+7. Zero valid unresolved review threads remain.
+8. The PR is mergeable and its head has not changed after validation.
+9. The package is an ordinary development package. The exception is prohibited for private-validation, staging-acceptance, production-acceptance, cutover, or any package whose main purpose is proving the unavailable environment.
+10. The owner explicitly approves the exception for the named package and evidence.
+11. The missing staging evidence is assigned to a named later validation package.
+12. Every package, registry, handoff, PR, and final-report record states that the gate was unavailable and never calls it passed.
+
+The exception is not a successful gate, staging verification, production verification, or proof that the software booted. It cannot excuse a job that allocated a runner and then executed a failing product step. It cannot excuse compile failures, test failures, static-analysis or security findings, unresolved review findings, migration failures, runtime-JAR failures, documentation failures, or package-orchestration failures.
+
+The record must include the exact current PR head; owner and approval source/date; reason; affected repository, workflow run, parent job when applicable, downstream job, runner ID/name, and executed step list; every exact-head hosted validation run/job; and the named deferred validation package. The record must be visible in the package file, package registry, canonical handoff, PR description, and final report.
+
+### Non-applicability and anti-loophole rules
+
+A zero-execution infrastructure exception cannot be used for:
+
+- a runner that executed failing tests, build steps, migration steps, artifact checks, server boot, or restart;
+- a plugin or runtime that actually failed to boot;
+- a migration, security, static-analysis, review, documentation, or runtime-JAR failure;
+- a private-validation package, staging-acceptance package, production-acceptance package, cutover package, or final production activation;
+- issue #43, the 168-hour shadow period, final cutover, production activation, or production rollback;
+- a missing ordinary GitHub-hosted build that the repository normally executes;
+- a failure caused by the package's own workflow edits, runner-label edits, permissions edits, or dispatch edits;
+- evidence from another head, a merge ref, a superseded run, a skipped executable hosted gate, or an unmergeable PR.
+
+If a runner was allocated or any product step executed, the job produced product evidence and must be evaluated normally. An exception may not relabel that evidence as infrastructure-only.
+
 ## External repository validation
 
 Each standalone repository must satisfy its own AGENTS, build, test, security, static-analysis, and review rules. The aggregate PR must satisfy EnthusiaStaff rules. Aggregate-versus-standalone parity is an additional post-merge gate, not a substitute for either repository's validation.
