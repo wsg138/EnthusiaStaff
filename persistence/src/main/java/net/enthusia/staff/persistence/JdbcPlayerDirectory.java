@@ -202,6 +202,30 @@ public final class JdbcPlayerDirectory implements PlayerDirectory {
             String serverId,
             Instant seenAt
     ) {
+        if (platform == null) {
+            throw new IllegalArgumentException("platform compatibility hint must be present");
+        }
+        recordObservation(playerId, username, PlayerPlatform.UNKNOWN, serverId, seenAt);
+    }
+
+    @Override
+    public void recordSeenVerified(
+            UUID playerId,
+            String username,
+            PlayerPlatform platform,
+            String serverId,
+            Instant seenAt
+    ) {
+        recordObservation(playerId, username, platform, serverId, seenAt);
+    }
+
+    private void recordObservation(
+            UUID playerId,
+            String username,
+            PlayerPlatform platform,
+            String serverId,
+            Instant seenAt
+    ) {
         if (playerId == null || !validUsername(username) || platform == null
                 || serverId == null || serverId.isBlank() || serverId.length() > 64 || seenAt == null) {
             throw new IllegalArgumentException("valid player observation fields must be present");
