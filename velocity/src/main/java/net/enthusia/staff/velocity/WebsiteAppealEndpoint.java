@@ -149,7 +149,7 @@ final class WebsiteAppealEndpoint {
             OperationalMode mode
     ) {
         ExactSanctionChangeRequest request = new ExactSanctionChangeRequest(
-                new IdempotencyKey("website-appeal:" + digestIdempotency(idempotencyKey)),
+                new IdempotencyKey(mutationIdempotency(idempotencyKey, appealId, punishmentId)),
                 punishmentId,
                 expectedRevision,
                 reviewer,
@@ -224,6 +224,16 @@ final class WebsiteAppealEndpoint {
 
     private static String pendingOutcome(long revision) {
         return MUTATION_PENDING_PREFIX + revision;
+    }
+
+    private static String mutationIdempotency(
+            String idempotencyKey,
+            UUID appealId,
+            UUID punishmentId
+    ) {
+        String identityBoundValue = idempotencyKey.length() + ":" + idempotencyKey
+                + ":" + appealId + ":" + punishmentId;
+        return "website-appeal:" + digestIdempotency(identityBoundValue);
     }
 
     private static WebsiteApiException authorityUnavailable() {
