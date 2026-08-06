@@ -89,6 +89,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` contains ES-X05 implementation merge 
 | Starting aggregate main | `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` |
 | Frozen aggregate product head | `96912301fc425ac6f5eff9349ee3b3d543d122eb` |
 | Exact hosted-validated aggregate head | `4c818bb3aea953d3f877efc8a48a9175ba219d38` |
+| Aggregate implementation branch | `package/es-x05-state-publication` |
 | Aggregate PR / merge | PR #73; normal merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
 | Finalization branch / PR | `package/es-x05-finalization`; PR #74; exact current head/final hosted check recorded in PR #74 |
 | Hosted validation | Coverage run `31116854096`, job `92668751419`, success: Java 21 build, unit/MariaDB integration and migration tests, JaCoCo, runtime-JAR/provider-leak checks, artifacts, Codacy coverage |
