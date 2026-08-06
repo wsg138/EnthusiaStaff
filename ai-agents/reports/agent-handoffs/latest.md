@@ -1,11 +1,11 @@
 # Latest AI handoff
 
-Most recently completed package handoff:
+Current active package handoff:
 
-[`2026-08-05-es-p01-appeal-isolation.md`](../package-handoffs/2026-08-05-es-p01-appeal-isolation.md)
+[`2026-08-05-es-p02-runtime-db-recovery.md`](../package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-State: `ES-P01` is `COMPLETE`. PR #68 merged normally at `203b2854d5546a6d3744037c367099129654b42a`; the exact reviewed head is contained in `main`; the implementation branch was deleted; and the owner-approved zero-execution infrastructure exception is recorded without claiming a Pi pass. `ES-P02` and `ES-X05` are `READY`, but neither is started. No package is active. A future worker must reconcile live GitHub and the canonical registry before accepting a separately assigned package.
+State: `ES-P02 — Runtime database recovery and Velocity reload` is `ACTIVE` on `package/es-p02-runtime-db-recovery`, starting from `main` `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. It was selected automatically after live reconciliation because no unfinished package work existed and it was the lowest-priority-number eligible READY package. The first checkpoint updates automatic sequential orchestration and durable routing only; product implementation has not started. Resume this branch and its draft PR once created. Do not start ES-X05 or another package.
