@@ -294,7 +294,7 @@ final class JdbcWebsiteAppealStore {
 
     private static boolean isFinalized(AppealRow existing) {
         return APPEAL_APPLIED.equals(existing.state())
-                && APPEAL_APPLIED.equals(existing.outcomeCode());
+                && parsePendingRevision(existing.outcomeCode()).isEmpty();
     }
 
     private static OptionalLong pendingRevision(AppealRow existing) {
