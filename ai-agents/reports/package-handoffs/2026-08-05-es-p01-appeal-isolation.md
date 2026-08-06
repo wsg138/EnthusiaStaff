@@ -3,20 +3,29 @@
 - Date: 2026-08-05
 - Package: `ES-P01 — Exact-sanction appeal isolation`
 - Starting status: `ACTIVE`
-- Current status: `MERGE_PENDING`
+- Final status: `COMPLETE`
 - Starting `main`: `e434b3dedc003d1d5b3def64f38cc7465752b0e5`
-- Branch: `package/es-p01-appeal-isolation`
-- Pull request: `#68 — ES-P01: isolate appeals to the exact sanction`
+- Implementation branch: `package/es-p01-appeal-isolation` — deleted after merge
+- Implementation PR: `#68 — merged normally`
 - Frozen reviewed product head: `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`
-- Latest reconciled pre-policy PR head: `7b132a3c0696dfcd4f991d64d75390047bc79a39`
+- Final reviewed and validated PR head: `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179`
+- Implementation merge commit: `203b2854d5546a6d3744037c367099129654b42a`
+- Resulting implementation `main`: `203b2854d5546a6d3744037c367099129654b42a`
 - Infrastructure disposition: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`
 - Deferred validation package: `ES-V02 — Distributed and Java/Bedrock staging`
 - Highest Flyway migration: `V16`; V1–V16 remain unchanged
 - Production authority: LiteBans remains authoritative
 
-## Resume and live reconciliation
+## Final reconciliation
 
-PR #68 remained open, non-draft, and mergeable. Its branch was the only active package branch and no unrelated package was active. The live PR head at reconciliation was `7b132a3c0696dfcd4f991d64d75390047bc79a39`; the frozen product head remained `5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be`. All six review threads were resolved. CodeRabbit and all Codacy checks were successful. V16 remained highest and V1–V16 remained immutable.
+PR #68 was non-draft and mergeable at exact head `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179`. Every executable hosted gate passed, CodeRabbit and Codacy were successful, all six review threads were resolved, and zero valid unresolved review threads remained. PR #68 merged using a normal merge commit.
+
+Merge commit `203b2854d5546a6d3744037c367099129654b42a` has parents:
+
+- starting `main`: `e434b3dedc003d1d5b3def64f38cc7465752b0e5`;
+- exact reviewed head: `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179`.
+
+The reviewed head is contained in `main`. Reverse comparison reports the package head is `behind`, with `ahead_by: 0` and `behind_by: 1`; no unique package commit remains outside `main`. GitHub deleted `package/es-p01-appeal-isolation` after the merge.
 
 ## Completed implementation
 
@@ -29,62 +38,67 @@ PR #68 remained open, non-draft, and mergeable. Its branch was the only active p
 - Pending state survives restart, retains stale-state protection, and permits recovery after rollback or a post-commit/pre-finalization crash.
 - The shared pending-revision codec rejects malformed, negative, explicitly signed, and leading-zero revisions.
 - Existing API fields and the 10–1,000-character website reason contract are preserved.
-- No migration was required because the marker fits the existing `outcome_code VARCHAR(64)` column.
+- No migration was required.
 
-## Review state
+## Policy correction
 
-First-party review covered authorization, persistence linkage, transaction boundaries, replay, rollback, stale revisions, idempotency, concurrency, exact-only mutation, privacy, scope, and migration boundaries. CodeRabbit findings were repaired and all six threads were resolved. Codacy static analysis, coverage variation, and diff coverage were successful. Zero valid unresolved review threads remained at reconciliation.
+`ai-agents/work-packages/VALIDATION-POLICY.md` now defines a formal owner-approved infrastructure exception limited to zero-execution infrastructure failures. It requires an external or specialized environment, no allocated runner, zero executed product steps, all executable hosted exact-head gates passing, clean static analysis and review, an unchanged mergeable head, an ordinary development package, explicit owner approval, a named deferred package, and records that never call the unavailable gate passed.
 
-The policy change was reviewed for loopholes. It cannot be used for an allocated runner that executes a failing test/build/migration/JAR/boot step, an actual plugin boot failure, a migration or security failure, a private-validation or acceptance package, issue #43, the 168-hour shadow period, final cutover, production activation, an absent ordinary GitHub-hosted build, or a failure caused by package workflow edits.
+The policy expressly rejects use for any allocated runner with failing steps, actual boot failures, compile or test failures, migration failures, security/static-analysis/review/documentation failures, private or acceptance packages, issue #43, the 168-hour shadow period, cutover, production activation, missing ordinary hosted builds, or package-caused workflow failures.
 
-## Hosted validation
+## Exact-head hosted validation
 
-At reconciled PR head `7b132a3c0696dfcd4f991d64d75390047bc79a39`:
+At final head `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179`:
 
-- Coverage run `31064834286`; job `92500281761`; success.
+- Coverage run `31067403138`; job `92507961739`; success.
 - Temurin Java `21.0.11+10`.
 - Command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
-- `BUILD SUCCESSFUL` in 5m22s; 49 tasks, 40 executed and 9 up-to-date.
+- `BUILD SUCCESSFUL` in 5m33s; 49 tasks, 40 executed and 9 up-to-date.
 - All module tests and MariaDB/Testcontainers integration tests passed.
-- Runtime inspection checked 24 provider API source types and found zero leaks.
-- Paper JAR: 8,897,023 bytes; SHA-256 `095ce7e763f267be050d5c1d36cb8a1190185937943f7b5272cd6dbc964cae9c`; 4,748 entries.
-- Velocity JAR: 7,790,210 bytes; SHA-256 `b23160d83709521b4910860357d4d1ab8019f894f5b61af15b77b97d1cec3229`; 4,121 entries.
-- Aggregate JaCoCo: 47.07% lines, 38.16% branches, 49.81% instructions.
-- Artifact `8953543716`: 18,264,524 bytes; SHA-256 `a6f83d9977615ec1647b4cfbeaee74827b008db1054e6d71b32ae440582cc031`.
+- Migration integrity and runtime-JAR inspection passed.
+- 24 provider API source types were checked; zero leaks.
+- Paper JAR: 8,897,023 bytes; SHA-256 `c2c44ceb3d2ba9888aa167c3731a746008413336dd62d421f5b16f15dd8bb426`; 4,748 entries.
+- Velocity JAR: 7,790,210 bytes; SHA-256 `43135fb89c02f0c2418b08a0ef120987a65e5143373dfc3af0b3d56df0a018d8`; 4,121 entries.
+- Aggregate JaCoCo: 47.07% lines, 38.17% branches, 49.81% instructions.
+- Artifact `8954423281`: 18,264,384 bytes; SHA-256 `4c90a22bd42fc63ae7f90a268f4847c9181d37ba7d4bc4b2aaa1fad35fc9b514`.
 - Codacy static analysis, coverage variation, and diff coverage passed.
-
-The final documentation head must repeat every applicable exact-head executable gate. Any later commit invalidates that evidence.
+- CodeRabbit passed; zero valid unresolved review threads remained.
+- Wiki validation was non-applicable because no configured Wiki path changed.
 
 ## Owner-approved infrastructure exception
 
-Status/evidence label: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
+Status: `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`.
 
-Owner approval: repository owner `wsg138` explicitly approved the narrowly defined infrastructure-only exception for ES-P01 in the current assigned-package instruction on 2026-08-05, America/Indiana/Indianapolis.
+Owner approval: repository owner `wsg138`, assigned-package instruction, 2026-08-05, America/Indiana/Indianapolis.
 
-Exact unavailable-infrastructure evidence:
+Final-head evidence:
 
-- external specialized environment: private `wsg138/EnthusiaStaff-Staging`;
-- parent run `31057348145`, parent job `92477622119`;
-- staging run `31057358391`;
-- staging build job `92477654523`, labels `ubuntu-latest`, conclusion `failure`, `runner_id: 0`, empty runner name, and executed steps `[]`;
-- downstream Pi job `92477660726`, `Boot and restart verified Paper runtime on Lincoln-PI-4`, conclusion `skipped`, no runner, and executed steps `[]`;
-- diagnostics artifact `8950755524`, SHA-256 `7f4473dd32b89f1ad69c1e0a26379ae76fe92686e92fe83ead67762a7c04dcfb`.
+- parent run `31067402120`, parent job `92507922737`;
+- staging run `31067405608` for source head `ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179`;
+- build job `92507935906`: conclusion `failure`, `runner_id: 0`, empty runner name, and executed steps `[]`;
+- Pi boot/restart job `92507942018`: conclusion `skipped`, no runner, and executed steps `[]`;
+- diagnostics artifact `8954313460`, SHA-256 `e5d73eda6fb3481b4a5bb9d78b8e300ebec3351e79748704c3c17fdc5f4bb58b`.
 
-No product build, test, migration, artifact, server boot, or restart step executed. The run is infrastructure-unavailable evidence, not a product result. No product boot failure occurred.
+The earlier run `31057358391` independently recorded build job `92477654523` with `runner_id: 0` and steps `[]`, plus skipped Pi job `92477660726` with steps `[]`.
 
-The Pi gate is not passed. The exception is not staging verification, production verification, or proof that the plugin booted. Missing distributed Pi build/boot/restart and Java/Bedrock staging evidence is assigned to `ES-V02 — Distributed and Java/Bedrock staging`. ES-V02 remains `DEFERRED` and was not started.
+No product build, test, migration, artifact, server boot, or restart step executed. No product boot failure occurred.
+
+The Pi gate is **not passed**. The exception is not staging verification, production verification, or proof that the plugin booted. Missing distributed Pi build/boot/restart and Java/Bedrock staging evidence is assigned to `ES-V02`. ES-V02 remains `DEFERRED` and was not started.
+
+## Dependency-derived statuses
+
+- `ES-P02 — Runtime database recovery and Velocity reload`: `READY`.
+- `ES-X05 — Website UX, authentication, and appeals`: `READY`.
+
+Neither package was started.
 
 ## Boundaries preserved
 
-- No product behavior was changed by the policy correction.
 - No migration was added or edited; V16 remains highest.
-- No deployment, private data, production authority, LiteBans cutover, issue #43, 168-hour shadow period, production rollback, or cutover action occurred.
+- No deployment or private data access occurred.
+- No authority activation, LiteBans cutover, issue #43 work, 168-hour shadow period, production rollback, or cutover occurred.
 - ES-V02, ES-P02, ES-X05, and every other package were not started.
 
-## Merge and finalization state
+## Final routing
 
-PR #68 has not yet merged. No implementation merge commit exists. The implementation branch remains present until containment and divergence are verified after merge. A small documentation-only finalization PR will record the merge commit, resulting `main`, reviewed-head containment, divergence, branch deletion, exception disposition, deferred ES-V02 obligation, and dependency-derived READY statuses.
-
-## Exact next action
-
-Freeze the final PR #68 head after all policy/package records and the PR description are updated. Require every applicable exact-head hosted gate, Codacy, Wiki/documentation/package-orchestration checks, mergeability, CodeRabbit, and zero valid unresolved review threads. Confirm the head remains unchanged, merge with a normal merge commit, verify containment and no unique branch commits, safely delete the branch, then create and merge the documentation-only finalization PR. Do not call Pi passed and do not start another package.
+The documentation-only finalization branch is `package/es-p01-finalization`. Once this finalization record is merged normally and its branch is cleaned up, ES-P01 has no remaining action. Stop after ES-P01; do not begin the next package.
