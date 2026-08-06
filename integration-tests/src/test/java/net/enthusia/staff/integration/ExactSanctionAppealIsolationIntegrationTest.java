@@ -42,6 +42,7 @@ import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
+import net.enthusia.staff.domain.website.AppealMutationPendingOutcome;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
@@ -137,6 +138,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
             WebsiteModerationStore website = runtime.websiteModerationStore(CODE_PROTECTOR);
             AppealAcceptancePreparation.Ready ready = assertPrepared(website, appealId, fixture, key, true);
             assertTrue(ready.pendingRevision().isEmpty());
+            assertTrue(ready.finalized());
             website.completeAppealAcceptance(appealId, APPLIED, pending(1L), NOW.plusSeconds(2));
             ExactSanctionChangeResult.Applied replay = apply(runtime, request(runtime, fixture, appealId, key));
             assertTrue(replay.replayed());
@@ -507,7 +509,7 @@ class ExactSanctionAppealIsolationIntegrationTest {
     }
 
     private static String pending(long revision) {
-        return "MUTATION_PENDING_R" + revision;
+        return AppealMutationPendingOutcome.encode(revision);
     }
 
     private static UUID uuid(long suffix) {

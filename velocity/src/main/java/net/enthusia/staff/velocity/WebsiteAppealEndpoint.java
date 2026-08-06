@@ -26,13 +26,13 @@ import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionActionLimits;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.website.AppealAcceptancePreparation;
+import net.enthusia.staff.domain.website.AppealMutationPendingOutcome;
 
 final class WebsiteAppealEndpoint {
     private static final int MINIMUM_REASON_LENGTH = 10;
     private static final int MAXIMUM_REASON_LENGTH = 1_000;
     private static final String APPLIED = "APPLIED";
     private static final String MODE_BLOCKED = "MODE_BLOCKED";
-    private static final String MUTATION_PENDING_PREFIX = "MUTATION_PENDING_R";
     private static final SanctionActionLimits APPEAL_ACTION_LIMITS =
             new SanctionActionLimits(MINIMUM_REASON_LENGTH, MAXIMUM_REASON_LENGTH, true);
 
@@ -214,11 +214,14 @@ final class WebsiteAppealEndpoint {
     private static AppealAcceptancePreparation.Ready requirePrepared(
             AppealAcceptancePreparation preparation
     ) {
-        if (preparation instanceof AppealAcceptancePreparation.Rejected rejected) {
-            int status = "PUNISHMENT_NOT_FOUND".equals(rejected.code()) ? 404 : 409;
-            throw new WebsiteApiException(status, rejected.code(), rejected.message());
-        }
-        return (AppealAcceptancePreparation.Ready) preparation;
+        return switch (preparation) {
+            case AppealAcceptancePreparation.Ready ready -> ready;
+            case AppealAcceptancePreparation.Rejected rejected -> throw new WebsiteApiException(
+                    "PUNISHMENT_NOT_FOUND".equals(rejected.code()) ? 404 : 409,
+                    rejected.code(),
+                    rejected.message()
+            );
+        };
     }
 
     private static Map<String, Object> appliedResponse(boolean replayed) {
@@ -230,7 +233,7 @@ final class WebsiteAppealEndpoint {
     }
 
     private static String pendingOutcome(long revision) {
-        return MUTATION_PENDING_PREFIX + revision;
+        return AppealMutationPendingOutcome.encode(revision);
     }
 
     private static String mutationIdempotency(
