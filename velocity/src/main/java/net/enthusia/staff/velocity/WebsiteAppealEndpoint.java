@@ -76,6 +76,19 @@ final class WebsiteAppealEndpoint {
         if (reason.length() < MINIMUM_REASON_LENGTH) {
             throw badRequest("INVALID_REASON", "The appeal decision reason is too short");
         }
+        AppealAcceptancePreparation.Ready preparation = requirePrepared(
+                store.prepareAppealAcceptance(
+                        appealId,
+                        punishmentId,
+                        caseId,
+                        playerAccountId,
+                        idempotencyKey,
+                        clock.instant()
+                )
+        );
+        if (preparation.finalized()) {
+            return appliedResponse(true);
+        }
         if (!sanctionChanges.supportsExactChanges()) {
             throw new WebsiteApiException(
                     503,
@@ -91,16 +104,6 @@ final class WebsiteAppealEndpoint {
                     "The punishment could not be found"
             );
         }
-        AppealAcceptancePreparation.Ready preparation = requirePrepared(
-                store.prepareAppealAcceptance(
-                        appealId,
-                        punishmentId,
-                        caseId,
-                        playerAccountId,
-                        idempotencyKey,
-                        clock.instant()
-                )
-        );
         OperationalMode mode = authorityMode.get();
         if (mode != OperationalMode.ACTIVE) {
             throw authorityUnavailable();
@@ -164,11 +167,7 @@ final class WebsiteAppealEndpoint {
         return switch (sanctionChanges.applyExact(request, mode, APPEAL_ACTION_LIMITS)) {
             case ExactSanctionChangeResult.Applied applied -> {
                 store.completeAppealAcceptance(appealId, APPLIED, APPLIED, clock.instant());
-                yield Map.of(
-                        "applied", true,
-                        "replayed", applied.replayed(),
-                        "affectedSanctions", 1
-                );
+                yield appliedResponse(applied.replayed());
             }
             case ExactSanctionChangeResult.NoChange noChange -> throw rejectedChange(
                     appealId,
@@ -220,6 +219,14 @@ final class WebsiteAppealEndpoint {
             throw new WebsiteApiException(status, rejected.code(), rejected.message());
         }
         return (AppealAcceptancePreparation.Ready) preparation;
+    }
+
+    private static Map<String, Object> appliedResponse(boolean replayed) {
+        return Map.of(
+                "applied", true,
+                "replayed", replayed,
+                "affectedSanctions", 1
+        );
     }
 
     private static String pendingOutcome(long revision) {
