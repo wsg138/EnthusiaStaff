@@ -8,6 +8,7 @@ public final class WebsiteModerationException extends RuntimeException {
         NOT_FOUND,
         CONFLICT,
         INELIGIBLE,
+        RATE_LIMITED,
         UNAVAILABLE
     }
 
