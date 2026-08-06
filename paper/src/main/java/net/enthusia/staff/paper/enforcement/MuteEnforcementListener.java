@@ -85,7 +85,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         submit(() -> {
             PlayerDirectory directory = players.get();
             if (directory != null) {
-                directory.recordSeen(playerId, username, platform, serverId, seenAt);
+                directory.recordSeenVerified(playerId, username, platform, serverId, seenAt);
             }
             refreshNow(playerId);
         });
