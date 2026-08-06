@@ -4,19 +4,19 @@
 `ES-P03`; Internal; primary `COMP-STAFF`; priority 30; sequential identity-correctness package.
 
 ## 2. Status
-`ACTIVE` under the owner-directed 2026-08-06 routing exception recorded below. The registry remains authoritative.
+`ACTIVE` under the owner-directed 2026-08-06 routing exception recorded below. Implementation and self-review are complete; exact-head hosted validation and external review remain.
 
 ## 3. Objective
 Persist and resolve Java and Floodgate/Bedrock identity correctly across Paper, Velocity, moderation, and network identity.
 
 ## 4. Why the package exists
-The audit confirmed unconditional Java platform writes and related offline/name-history risks that affect later staff, reports, alts, and staging.
+The audit confirmed unconditional Java platform persistence and related offline/name-history risks that affect later staff, reports, alts, and staging.
 
 ## 5. Included audit IDs
 `AUD-ID-001`, `AUD-ID-004`, and only the canonical Java/Floodgate platform-identity and normalization fields of `AUD-ALT-004`.
 
 ## 6. Included behavior
-Remove unconditional Java writes; preserve Floodgate UUID, `*`-prefixed name, current-name, and history semantics; correct join, mute, proxy/backend, offline target, and the canonical platform/normalization fields consumed by alt records; add regression tests. Alt graph, confidence, ambiguity, manual relationships, protected network identity, and sanction-inheritance semantics belong to `ES-P09`.
+Replace unconditional Java persistence with proof-bearing Java/Bedrock/unknown observations; preserve Floodgate UUID, `*`-prefixed name, current-name, and history semantics; correct join, mute, proxy/backend, offline target, and the canonical platform/normalization fields consumed by alt records; add regression tests. Alt graph, confidence, ambiguity, manual relationships, protected network identity, and sanction-inheritance semantics belong to `ES-P09`.
 
 ## 7. Explicit exclusions
 Alt graph/confidence/ambiguity/manual-relationship/inheritance completion (`ES-P09`); changing Floodgate rules; claiming live Bedrock acceptance; unrelated identity redesign.
@@ -31,25 +31,25 @@ Root identity/runtime/persistence/tests/docs only. No external source import, pe
 Temporary `package/es-p03-bedrock-identity`, created from exact legitimate `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; delete after verified merge containment.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`.
+One PR to `wsg138/EnthusiaStaff:main`: PR #75.
 
 ## 12. Implementation checklist
 - [x] Reconcile live state, both parked PRs, branches, review state, issue #43, migration V17, and current default head.
 - [x] Record owner-directed routing exception without changing ES-P02 or ES-X05.
-- [ ] Trace every platform write/read and every current/historical name path.
-- [ ] Implement verified Java/Bedrock/unknown observation and `*`-alias handling.
-- [ ] Preserve known Bedrock identity against weaker later observations and repair legacy unconditional-Java observations safely.
-- [ ] Test Java, Bedrock, history, offline resolution, prefix search, duplicate updates, reconnect/order races, and unavailable/incompatible Floodgate behavior.
-- [ ] Update operator/developer documentation and durable state.
-- [ ] Harshly review the complete diff and resolve every valid finding.
+- [x] Trace every platform write/read and every current/historical name path.
+- [x] Implement verified Java/Bedrock/unknown observation and `*`-alias handling.
+- [x] Preserve known Bedrock identity against weaker later observations and repair legacy unconditional-Java observations safely.
+- [x] Test Java, Bedrock, history, offline resolution, prefix search, duplicate updates, reconnect/order races, and unavailable/incompatible Floodgate behavior.
+- [x] Update operator/developer documentation and durable state.
+- [x] Harshly review the complete diff and resolve identified correctness/static-analysis findings.
 - [ ] Freeze and exact-head validate all applicable gates.
 - [ ] Merge normally, verify containment, clean the branch, publish `COMPLETE`, and stop.
 
 ## 13. Acceptance criteria
-Every player platform write derives from verified runtime evidence or is explicitly `UNKNOWN`; Java and Bedrock records remain stable across server changes/reconnects; name/UUID resolution is deterministic and privacy-safe; no Java-only fallback corrupts Bedrock records; `*`-prefixed Bedrock current/history lookup remains supported; the handoff to `ES-P09` is preserved.
+Every persisted player platform derives from verified runtime evidence or is explicitly `UNKNOWN`; Java and Bedrock records remain stable across server changes/reconnects; name/UUID resolution is deterministic and privacy-safe; no Java-only fallback corrupts Bedrock records; `*`-prefixed Bedrock current/history lookup remains supported; the handoff to `ES-P09` is preserved.
 
 ## 14. Test requirements
-Paper/Velocity unit tests and MariaDB integration tests for join/mute/directory/network identity normalization, historical names, `*` aliases, duplicate and out-of-order updates, restart-relevant persistence, and unavailable/incompatible Floodgate behavior.
+Domain/Paper tests and MariaDB integration tests for join/mute/directory/network identity normalization, historical names, `*` aliases, verified versus unverified proxy observations, duplicate and out-of-order updates, restart-relevant persistence, and unavailable/incompatible Floodgate behavior.
 
 ## 15. Static-analysis requirements
 Java 21 warnings-as-errors and all configured analysis/review bots with zero valid unresolved findings.
@@ -61,7 +61,7 @@ Update identity/Bedrock/operator/developer docs and package registry/handoff; re
 No raw addresses or player rows in evidence; protected identity storage remains fail-closed; prevent identity spoofing and cross-platform collision; do not infer Bedrock solely from untrusted username text.
 
 ## 18. Migration impact
-Current highest migration is immutable V17. No migration is assumed; add one only if essential, without rewriting V1–V17, and require clean-install/upgrade/checksum tests.
+Current highest migration is immutable V17. No migration is required; V1–V17 remain unchanged.
 
 ## 19. Bedrock considerations
 This package owns implementation correctness; `ES-V02` owns representative Java/Bedrock staging acceptance.
@@ -76,22 +76,22 @@ Use the supported Floodgate API shape already present in the repository; explici
 All included behavior/tests/docs pass on one exact reviewed head; one PR merges normally; containment and branch cleanup are verified; no live-staging claim is made.
 
 ## 23. Resume state
-Selected by the 2026-08-06 sequential worker. Branch `package/es-p03-bedrock-identity`; starting `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; implementation PR to be opened after the first coherent checkpoint.
+Draft PR #75 on branch `package/es-p03-bedrock-identity`; starting `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`. The implementation is ready to be frozen for exact-head hosted validation and external review.
 
 ## 24. Last completed checkpoint
-Live reconciliation and owner-directed package claim. ES-P02 PR #70 and ES-X05 PR #74 remain parked and untouched.
+Implemented the evidence boundary, alias/history handling, ordered persistence, stale-disconnect protection, regression tests, and documentation. Harsh review resolved the four initial Codacy annotations and corrected the broken-Floodgate/no-local-Geyser fallback to `UNKNOWN`.
 
 ## 25. Remaining checklist
-Implementation, regression tests, documentation, review, exact-head validation, normal merge, containment, cleanup, and final publication.
+Freeze the final documentation head; require zero new Codacy findings, successful applicable GitHub Actions on the exact head, zero valid unresolved review findings, normal merge, containment, branch cleanup, and final publication.
 
 ## 26. Known blockers
 No source blocker identified. Ordinary hosted exact-head validation is mandatory; current runner recovery is not assumed. Representative Bedrock acceptance remains intentionally deferred to `ES-V02`.
 
 ## 27. Final evidence
-Unset: record exact heads, workflow run/job IDs, Java version, tests, migration boundary, artifact integrity, analysis, review threads, and affected platform-write inventory.
+Pending exact-head validation. Planned evidence: frozen SHA, workflow run/job IDs, Java version, tests, migration boundary, artifact integrity, analysis, review threads, and affected platform-write inventory.
 
 ## 28. Merge and synchronization record
-Unset: record merge/containment/temporary branch cleanup; external parity not applicable.
+Pending. External parity is not applicable.
 
 ## 29. Canonical handoff
 [`2026-08-06-es-p03-bedrock-identity.md`](../../reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md)
