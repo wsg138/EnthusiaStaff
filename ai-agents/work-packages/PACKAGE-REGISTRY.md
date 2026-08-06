@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-05
 
-Canonical current state: `ES-P01 MERGE_PENDING — product implementation and review are complete; every executable hosted gate passed at the latest reconciled head; the owner approved the zero-execution infrastructure exception for the unavailable Pi gate under the label OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED. The final documentation head must pass every applicable exact-head gate before normal merge. No other package is active.`
+Canonical current state: `ES-P01 COMPLETE — PR #68 merged normally at 203b2854d5546a6d3744037c367099129654b42a; exact reviewed head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179 is contained in main; no package-only commit remains; the implementation branch was deleted; and the owner-approved zero-execution infrastructure exception is recorded without calling the Pi gate passed. ES-P02 and ES-X05 are READY. No package is active.`
 
 ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f38cc7465752b0e5`; no open PRs or package branches existed before assignment; V16 was highest; issue #43 remained open and deferred.
 
@@ -37,20 +37,20 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `MERGE_PENDING` |
+| Status | `COMPLETE` |
 | Priority | `10` |
 | Dependencies | — |
 | Parallel safe | No |
 | Assigned worker | `ChatGPT assigned-package validation-policy correction and finalization worker` |
-| Active branches | `package/es-p01-appeal-isolation` |
-| Aggregate PR | `#68` |
+| Active branches | `NONE` |
+| Aggregate PR | `#68 — merged normally` |
 | External PRs | `NONE` |
 | Starting SHAs | `EnthusiaStaff main e434b3dedc003d1d5b3def64f38cc7465752b0e5` |
-| Final reviewed heads | `Frozen product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be; latest reconciled pre-policy PR head 7b132a3c0696dfcd4f991d64d75390047bc79a39` |
-| Merge commits | `UNSET` |
+| Final reviewed heads | `Frozen product head 5a668d5fecd2bb809a31fdb7ddcb7e27b536a7be; exact validated PR head ffa8ae4e3ffbfcff39698caa6bbfb61ec40ee179` |
+| Merge commits | `Implementation merge 203b2854d5546a6d3744037c367099129654b42a` |
 | Last update | `2026-08-05` |
 | Handoff | [`2026-08-05-es-p01-appeal-isolation.md`](../reports/package-handoffs/2026-08-05-es-p01-appeal-isolation.md) |
-| Blocker | `NONE. OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED: parent run 31057348145/job 92477622119 dispatched staging run 31057358391; build job 92477654523 had runner_id 0, empty runner name, and steps []; Pi job 92477660726 was skipped with steps []. No product step executed and no Pi pass is claimed. Owner wsg138 approved the exception on 2026-08-05; missing distributed Pi boot/restart and Java/Bedrock staging evidence is deferred to ES-V02. Final exact-head hosted validation and merge requirements remain mandatory.` |
+| Blocker | `NONE. OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED: final-head parent run 31067402120/job 92507922737 dispatched staging run 31067405608; build job 92507935906 had runner_id 0, empty runner name, and steps []; Pi job 92507942018 was skipped with steps []. No product step executed, no product boot failure occurred, and no Pi pass is claimed. Owner wsg138 approved the exception on 2026-08-05. Missing distributed Pi build/restart and Java/Bedrock staging evidence is deferred to ES-V02.` |
 | Package file | [`packages/ES-P01.md`](packages/ES-P01.md) |
 
 ### `ES-P02` — Runtime database recovery and Velocity reload
@@ -62,7 +62,7 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | Internal |
 | Primary component | `COMP-STAFF` |
 | Other components | — |
-| Status | `PLANNED` |
+| Status | `READY` |
 | Priority | `20` |
 | Dependencies | `ES-P01` |
 | Parallel safe | No |
@@ -412,7 +412,7 @@ ES-P01 live baseline: `wsg138/EnthusiaStaff:main` at `e434b3dedc003d1d5b3def64f3
 | Type | External/multi-repository |
 | Primary component | `COMP-SITE` |
 | Other components | COMP-STAFF |
-| Status | `PLANNED` |
+| Status | `READY` |
 | Priority | `35` |
 | Dependencies | `ES-P01` |
 | Parallel safe | Conditional |
