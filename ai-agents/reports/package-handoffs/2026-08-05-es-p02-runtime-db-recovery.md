@@ -53,7 +53,7 @@ When hosted runner availability or owner authorization demonstrably changes, cla
 
 - `docs/runtime-database-recovery.md` on the preserved implementation branch documents recovery, reload, operator, security, and migration boundaries.
 - The implementation branch package records preserve the detailed product checklist and evidence.
-- This canonical handoff publishes only routing and blocker state; it does not copy product source or tests.
+- This canonical handoff publishes routing and blocker state plus summarized scope and validation evidence; it does not copy product source or test files.
 
 ## Exclusions preserved
 
