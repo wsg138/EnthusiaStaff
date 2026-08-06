@@ -21,9 +21,11 @@ ALTER TABLE website_appeal_requests
     ADD COLUMN decided_at TIMESTAMP(6) NULL AFTER decision_note,
     ADD UNIQUE KEY uq_website_appeal_submission_idempotency (
         player_account_token,
+        punishment_id,
         submission_idempotency_key
     ),
     ADD UNIQUE KEY uq_website_appeal_decision_idempotency (
+        appeal_id,
         reviewer_account_id,
         decision_idempotency_key
     ),
