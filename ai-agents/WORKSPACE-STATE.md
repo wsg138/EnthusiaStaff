@@ -35,7 +35,7 @@ This is a routing record. Live GitHub must be reconciled before acting. Live PR,
 | Deferred validation | `ES-V02 — Distributed and Java/Bedrock staging` |
 | Active implementation package | `NONE` |
 
-The blocked-package routing and status-publication correction is documentation-only and is not an implementation package. It does not change ES-P02 product code, tests, evidence, status, scope, priority, dependencies, or blocker. It does not activate ES-X05.
+The blocked-package routing and status-publication correction is documentation and process-tooling only and is not an implementation package. It does not change ES-P02 product code, product tests, scope, priority, dependencies, or blocker evidence. It changes only the canonical routing state to `BLOCKED` / `PARKED_BLOCKED` and aligns the orchestration validator with classification-first selection. It does not activate ES-X05.
 
 ## Selection classification and order
 
