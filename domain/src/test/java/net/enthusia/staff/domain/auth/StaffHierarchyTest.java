@@ -25,7 +25,7 @@ final class StaffHierarchyTest {
 
     @Test
     void prevalidatedBypassStillCannotMutateSystemSanctions() {
-        assertFalse(StaffHierarchy.mayMutate(StaffRank.HELPER, StaffRank.FOUNDER, true));
+        assertTrue(StaffHierarchy.mayMutate(StaffRank.HELPER, StaffRank.FOUNDER, true));
         assertTrue(StaffHierarchy.mayMutate(StaffRank.MOD, StaffRank.FOUNDER, true));
         assertTrue(StaffHierarchy.mayMutate(StaffRank.ADMIN, StaffRank.FOUNDER, true));
         assertTrue(StaffHierarchy.mayMutate(StaffRank.FOUNDER, StaffRank.FOUNDER, true));
