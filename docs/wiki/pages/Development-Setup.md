@@ -1,18 +1,16 @@
 # Development Setup
 
-Read [[Development Blueprint]] and [[Implementation Status]] before starting a
-major feature. The blueprint identifies the ordered work and release gates; the
-status page identifies what is actually proven.
+Use this page to prepare a clean development environment. Before changing behavior, use [[Developer Guide Index]] to find the owning feature and [[Code Review Guide]] to understand the invariants your change must preserve.
 
 ## Prerequisites
 
 - Git
 - Java 21 JDK
-- Docker daemon exposing API 1.44 or newer for MariaDB Testcontainers
+- Docker daemon compatible with the repository's MariaDB Testcontainers usage
 - Python 3 for Wiki validation
 - An IDE with Gradle support
-- Access to required private compile-only provider APIs
-- No production secrets in the checkout
+- Access to any required private compile-only provider artifacts for the exact task
+- No production secrets or private player/evidence data in the checkout
 
 ## Checkout
 
@@ -22,86 +20,108 @@ cd EnthusiaStaff
 git fetch --all --tags --prune
 ```
 
-Create coherent feature branches from the latest applicable `main`. Preserve
-existing branch commits and keep unrelated or concurrent work separate. Never
-recreate a branch by silently discarding work.
+Create work from the latest legitimate `main`. Preserve existing branch commits and keep unrelated/concurrent work separate. Do not recreate another worker's branch or silently discard work to obtain a cleaner history.
 
-The authoritative development references are:
+If you are explicitly assigned an `ai-agents/` work package, follow that package contract and live GitHub routing. Ordinary development should not invent, finalize, or rewrite package state merely because a code or Wiki discrepancy was found.
 
-```text
-ENTHUSIASTAFF-GOALS.md
-reports/REQUIREMENTS-MATRIX.md
-docs/development-blueprint.md
-WORKSPACE-MANIFEST.md
-```
+## Authoritative reading order
 
-Update the matrix and manifest when a new verified root checkpoint is established.
+For a feature change:
 
-## Java
+1. [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) — intended finished behavior.
+2. Current merged code/config/migrations/tests — implemented behavior.
+3. [[Implementation Status]] and matching feature hub — readable current limitations and entry points.
+4. [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate review/runtime evidence — exact proof and blockers.
+5. [[Developer Code Guide]] — detailed source trace.
+6. [[Code Review Guide]] — boundary/failure review.
+
+Historical implementation plans and package records explain how older work was executed; they are not automatically the current product state.
+
+## Java and Gradle
 
 ```bash
 java -version
 ./gradlew --version
 ```
 
-Both must use Java 21. Compilation uses `-Xlint:all -Werror`.
+Both should resolve Java 21 for normal repository builds. The project treats compiler warnings seriously; do not weaken lint/quality gates merely to make a change pass.
 
-## Docker
+## Docker and MariaDB
 
-Confirm Testcontainers can reach Docker before starting a complete build. MariaDB
-integration tests are meaningful validation, not optional decoration. Record the
-actual container suite and test counts.
+Confirm Testcontainers can reach Docker before calling a run a complete validation checkpoint. MariaDB tests are part of persistence/migration correctness, not optional decoration.
 
-## Local configuration
+Use disposable schemas/containers for development. Do not point tests or local experiments at production MariaDB or LiteBans data.
 
-- Copy example files; do not add secrets to tracked defaults.
-- Use disposable MariaDB schemas.
-- Generate local TLS material.
-- Use non-production webhook destinations or disable them.
-- Keep private jars under ignored local paths.
-- Never commit `.env`, credentials, runtime folders, databases, logs, build
-  output, private evidence or generated reports.
+## Local secrets and provider artifacts
 
-## Workspace boundaries
+- Copy example configuration only when needed; keep real values out of tracked files.
+- Generate disposable local TLS material.
+- Use non-production webhook/site endpoints or disable them.
+- Keep private provider jars under ignored local paths.
+- Never commit `.env`, credentials, keys, runtime folders, databases, logs, private evidence, build output or generated reports.
+- Provider contracts are compile-time boundaries. Do not copy provider-owned internals into EnthusiaStaff because the real API is inconvenient or unavailable.
 
-Related plugins remain separate Git repositories even when arranged under one
-workspace. Do not flatten histories or push `wsg138` work to unrelated remotes.
+## Repository shape
 
-Provider contracts in `integration-contracts/` are compile-time boundaries, not
-permission to copy provider-owned APIs into runtime jars. Real provider behavior
-must be implemented and staged in the owning repository.
+The core modules are:
+
+```text
+common/
+domain/
+integration-contracts/
+persistence/
+protocol/
+paper/
+velocity/
+integration-tests/
+components/             # aggregate copies for external components when present
+docs/
+```
+
+Exactly two Minecraft runtime JARs should be produced: Paper and Velocity. Shared/internal modules and tests are not deployable plugins.
+
+See [[Architecture]] for dependency direction and [[Developer Code Guide]] for composition roots.
 
 ## Development loop
 
-1. Read the relevant goals, matrix row and blueprint milestone.
-2. Identify domain, persistence, runtime adapter, configuration, recovery, tests,
-   verification and documentation changes.
-3. Run focused tests while editing.
-4. Add hostile-input, permission, stale-state, duplicate, restart, failure and
-   concurrency coverage where applicable.
-5. Run the complete clean validation from [[Build and Testing]].
-6. Inspect exactly two runtime jars.
-7. Review Codacy without hiding legitimate findings.
-8. Run exact-head Pi staging when eligible.
-9. Record the exact SHA and unavailable acceptance groups.
+1. Identify the owning domain service/policy and durable store before editing an adapter.
+2. Read nearby tests and the relevant migration/configuration boundary.
+3. Run focused tests while developing.
+4. Add hostile-input, authority, stale-state, duplicate, restart, failure and concurrency coverage where the risk exists.
+5. Review Paper/Folia or Velocity thread ownership for every new callback/asynchronous hop.
+6. Review Java/Bedrock/provider fallback assumptions.
+7. Run the complete clean validation from [[Build and Testing]].
+8. Inspect the two runtime JARs and provider-leak checks.
+9. Review static-analysis/coverage results without suppressing legitimate findings.
+10. Run the required exact-candidate runtime/staging gates for the claim you intend to make.
+11. Update the focused Wiki page that owns changed human-facing behavior.
 
-A green branch does not waive Velocity, provider, multi-server, Bedrock, Folia,
-load, migration, rollback or shadow gates.
+A green local branch does not waive Velocity, provider, multi-server, Bedrock, Folia, load, migration, rollback or production acceptance when those are relevant to the change.
 
 ## Documentation changes
 
-Wiki source lives in `docs/wiki/pages`. Run:
+Repository-managed Wiki source lives in `docs/wiki/pages/`. Validate it with:
 
 ```bash
 python scripts/wiki/validate_wiki.py
 ```
 
-Keep these synchronized when development status changes:
+Use progressive disclosure:
 
-- [[Development Blueprint]]
-- [[Implementation Status]]
+- concise answer/procedure first;
+- feature hub for readable status and entry points;
+- [[Developer Code Guide]] for detailed source mapping;
+- focused deep-dive pages for complex internals;
+- [[Code Review Guide]] for cross-cutting review invariants;
+- authoritative goals/evidence for exact requirements and proof.
+
+Do not make the live GitHub Wiki the only copy of a change. See [[Wiki Maintenance]].
+
+## Related pages
+
+- [[Developer Guide Index]]
+- [[Code Review Guide]]
+- [[Architecture]]
+- [[Developer Code Guide]]
 - [[Build and Testing]]
-- affected staff, operator, integration, migration, recovery and developer pages
-
-The live Wiki is published from reviewed repository source. Do not make the live
-Wiki the only copy of a documentation change.
+- [[Wiki Maintenance]]
