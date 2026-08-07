@@ -14,7 +14,7 @@ For operator procedure, use [[Installation]], [[LiteBans Migration]], [[Shadow M
 | Enthusia-owned provider contracts | **Partial / provider-dependent** | Several provider-side APIs/implementations are incomplete or unavailable. |
 | Optional third-party integrations | **Available with limitations** | Exact-version/provider failure/classloader/client staging remains. |
 | LiteBans schema inspection/import | **Implemented, not production-accepted** | Representative private data, volume, interruption/resume and final reconciliation remain. |
-| Shadow comparison | **Implemented, not production-accepted** | The required accepted 168-hour production-like observation has not been completed. |
+| Shadow comparison | **Implemented, not production-accepted** | The required 168-hour production-like observation has not been accepted. |
 | Cutover/recovery coordination | **Implemented foundations; acceptance blocked** | Real final-import/writer-fence/restart/rollback/emergency-recovery acceptance remains. |
 | Java/Bedrock/Folia/provider topology | **Not staging-verified as a complete candidate** | One exact release candidate still needs representative distributed acceptance. |
 | Load/saturation/process-kill | **Incomplete** | High-risk workflows still need representative queue/load/kill/recovery evidence. |
@@ -73,7 +73,7 @@ Provider plugins remain authoritative for their own state. EnthusiaStaff should 
 | EnthusiaCurrency | exact balance plan/apply/verify/restore under an external operation | provider-side completion/acceptance still required |
 | EnthusiaCommend | persistent reputation blacklist/enforcement | provider-side completion/acceptance still required |
 | EnthusiaAutoClicker | versioned bounded client evidence | provider contract/runtime acceptance incomplete |
-| Enthusia-RoseChat | staff/chat/mute/freeze/PM-evidence/automod/visibility integration | required supported API remains incomplete/unavailable for all intended paths |
+| Enthusia-RoseChat | staff/chat/mute/freeze/PM-evidence/automod/visibility integration | The supported API required for all intended paths remains incomplete or unavailable. |
 | EnthusiaMarket | supported stall moderation/review/restoration | provider-side completion/acceptance still required |
 
 Primary paths:
