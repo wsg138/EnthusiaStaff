@@ -24,6 +24,7 @@ import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
+import net.enthusia.staff.paper.staff.StaffToolDispatcher;
 import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -35,6 +36,7 @@ record PaperRuntimeComponents(
         ReportEvidenceMaintenance reportEvidenceMaintenance,
         FreezeManager freeze,
         StaffModeManager staffMode,
+        StaffToolDispatcher staffTools,
         DefaultStaffVisibilityService visibility,
         VanishManager vanish,
         InventoryOperationContext inventoryContext,
@@ -51,6 +53,12 @@ record PaperRuntimeComponents(
         StaffModeManager staffMode = createStaffModeManager(dependencies);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffToolDispatcher staffTools = createStaffToolDispatcher(
+                dependencies,
+                staffMode,
+                vanish,
+                freeze
+        );
         staffMode.startRankReconciliation();
         vanish.startRankReconciliation();
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
@@ -60,7 +68,7 @@ record PaperRuntimeComponents(
         );
         InventoryCoordinator inventory = createInventoryCoordinator(dependencies, inventoryContext);
         return new PaperRuntimeComponents(
-                evidence, freeze, staffMode, visibility, vanish, inventoryContext, inventory
+                evidence, freeze, staffMode, staffTools, visibility, vanish, inventoryContext, inventory
         );
     }
 
@@ -153,6 +161,31 @@ record PaperRuntimeComponents(
         staffMode.setExitListener(vanish::staffModeExited);
         registerListener(dependencies.environment().plugin(), vanish);
         return vanish;
+    }
+
+    private static StaffToolDispatcher createStaffToolDispatcher(
+            Dependencies dependencies,
+            StaffModeManager staffMode,
+            VanishManager vanish,
+            FreezeManager freeze
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        StaffToolDispatcher dispatcher = new StaffToolDispatcher(
+                plugin,
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                staffMode,
+                vanish,
+                freeze
+        );
+        registerListener(plugin, dispatcher);
+        var command = java.util.Objects.requireNonNull(
+                plugin.getCommand("stafftools"),
+                "stafftools command is missing from plugin.yml"
+        );
+        command.setExecutor(dispatcher);
+        command.setTabCompleter(dispatcher);
+        return dispatcher;
     }
 
     private static InventoryCoordinator createInventoryCoordinator(

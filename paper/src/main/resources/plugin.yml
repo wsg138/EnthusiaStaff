@@ -94,6 +94,10 @@ commands:
     description: Enter or exit durable staff mode
     usage: /staff
     permission: enthusiastaff.staffmode
+  stafftools:
+    description: Use the staff-mode operational tool menu and text fallbacks
+    usage: /stafftools | /stafftools random | /stafftools spectate <player>
+    permission: enthusiastaff.stafftools.menu
   vanish:
     description: Toggle durable rank-aware vanish or spectator tab presentation
     usage: /vanish | /vanish tab <show|hide>
@@ -190,6 +194,16 @@ permissions:
     default: false
   enthusiastaff.staffmode:
     default: false
+  enthusiastaff.stafftools.teleport:
+    default: false
+  enthusiastaff.stafftools.spectate:
+    default: false
+  enthusiastaff.stafftools.menu:
+    default: false
+  enthusiastaff.stafftools.random-exempt:
+    default: false
+  enthusiastaff.stafftools.spectate-exempt:
+    default: false
   enthusiastaff.vanish:
     default: false
   enthusiastaff.staffchat:
@@ -229,6 +243,9 @@ permissions:
       enthusiastaff.freeze: true
       enthusiastaff.freeze.chat: true
       enthusiastaff.staffmode: true
+      enthusiastaff.stafftools.teleport: true
+      enthusiastaff.stafftools.spectate: true
+      enthusiastaff.stafftools.menu: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
       enthusiastaff.inventory.view: true
@@ -251,6 +268,9 @@ permissions:
       enthusiastaff.freeze: true
       enthusiastaff.freeze.chat: true
       enthusiastaff.staffmode: true
+      enthusiastaff.stafftools.teleport: true
+      enthusiastaff.stafftools.spectate: true
+      enthusiastaff.stafftools.menu: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
       enthusiastaff.client: true

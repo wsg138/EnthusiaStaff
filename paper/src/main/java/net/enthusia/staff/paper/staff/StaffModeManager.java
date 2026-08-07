@@ -1,8 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
 import java.time.Clock;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +16,6 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -40,6 +37,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -52,8 +50,11 @@ public final class StaffModeManager implements Listener {
     private final StaffStateCodec codec = new StaffStateCodec();
     private final CombatStatusAdapter combat;
     private final NamespacedKey staffToolKey;
+    private final NamespacedKey staffToolOwnerKey;
+    private final NamespacedKey staffToolSessionKey;
     private final Map<UUID, StaffSessionSnapshot> active = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
+    private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
@@ -77,6 +78,8 @@ public final class StaffModeManager implements Listener {
         this.workers = workers;
         this.combat = new CombatStatusAdapter(plugin);
         this.staffToolKey = new NamespacedKey(plugin, "staff_tool");
+        this.staffToolOwnerKey = new NamespacedKey(plugin, "staff_tool_owner");
+        this.staffToolSessionKey = new NamespacedKey(plugin, "staff_tool_session");
         this.activation = new StaffModeActivationCoordinator(
                 clock,
                 workers,
@@ -308,7 +311,7 @@ public final class StaffModeManager implements Listener {
             StaffModeActivationCoordinator.ActivationPath path,
             String successMessage
     ) {
-        activation.activate(
+        boolean activated = activation.activate(
                 playerId,
                 session,
                 loaded,
@@ -323,6 +326,9 @@ public final class StaffModeManager implements Listener {
                 message -> player.sendMessage(Component.text(message)),
                 successMessage
         );
+        if (!activated) {
+            toolSessions.remove(playerId);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -330,6 +336,7 @@ public final class StaffModeManager implements Listener {
         UUID playerId = event.getPlayer().getUniqueId();
         active.remove(playerId);
         ranks.remove(playerId);
+        toolSessions.remove(playerId);
         recoveryGate.clear(playerId);
         profileApplications.remove(playerId);
         pendingRankChecks.remove(playerId);
@@ -432,6 +439,46 @@ public final class StaffModeManager implements Listener {
                 ));
             }
         }
+    }
+
+    StaffToolResolution resolveTool(Player player, ItemStack item, int heldSlot) {
+        if (item == null || !item.hasItemMeta()) {
+            return StaffToolResolution.untagged();
+        }
+        PersistentDataContainer data = item.getItemMeta().getPersistentDataContainer();
+        String id = data.get(staffToolKey, PersistentDataType.STRING);
+        if (id == null) {
+            return StaffToolResolution.untagged();
+        }
+        StaffToolDefinition tool = StaffToolDefinition.fromId(id).orElse(null);
+        if (tool == null) {
+            return StaffToolResolution.tagged(null, StaffToolSessionPolicy.Status.UNKNOWN_TOOL);
+        }
+        UUID playerId = player.getUniqueId();
+        String activeToken = active.containsKey(playerId) && !transitions.contains(playerId)
+                ? toolSessions.get(playerId)
+                : null;
+        StaffRank rank = activeToken == null ? null : rankForAction(player);
+        StaffToolSessionPolicy.Status status = StaffToolSessionPolicy.validate(
+                playerId,
+                activeToken,
+                heldSlot,
+                tool,
+                item.getType(),
+                data.get(staffToolOwnerKey, PersistentDataType.STRING),
+                data.get(staffToolSessionKey, PersistentDataType.STRING),
+                rank
+        );
+        return StaffToolResolution.tagged(tool, status);
+    }
+
+    boolean authorizedForTool(Player player, StaffToolDefinition tool) {
+        UUID playerId = player.getUniqueId();
+        if (!active.containsKey(playerId) || transitions.contains(playerId)) {
+            return false;
+        }
+        StaffRank rank = rankForAction(player);
+        return rank != null && !transitions.contains(playerId) && tool.availableFor(rank);
     }
 
     private StaffRank rankForAction(Player player) {
@@ -588,6 +635,7 @@ public final class StaffModeManager implements Listener {
         }
         active.remove(playerId);
         ranks.remove(playerId);
+        toolSessions.remove(playerId);
         recoveryGate.clear(playerId);
         try {
             exitListener.accept(playerId);
@@ -600,6 +648,8 @@ public final class StaffModeManager implements Listener {
     private void applyStaffState(Player player, StaffRank rank) {
         UUID playerId = player.getUniqueId();
         profileApplications.add(playerId);
+        String toolSession = UUID.randomUUID().toString();
+        toolSessions.put(playerId, toolSession);
         try {
             player.closeInventory();
             player.getInventory().clear();
@@ -626,21 +676,10 @@ public final class StaffModeManager implements Listener {
             }
             player.setAllowFlight(true);
             player.setFlying(true);
-            List<Tool> tools = new ArrayList<>(List.of(
-                    new Tool(Material.COMPASS, "random-teleport", "Random Player Teleport"),
-                    new Tool(Material.PLAYER_HEAD, "player-inspector", "Player Inspector"),
-                    new Tool(Material.PACKED_ICE, "freeze", "Freeze"),
-                    new Tool(Material.BOOK, "reports", "Reports"),
-                    new Tool(Material.SPYGLASS, "spectate", "Follow or Spectate"),
-                    new Tool(Material.ENDER_EYE, "vanish", "Vanish"),
-                    new Tool(Material.ECHO_SHARD, "staff-chat", "Staff Chat")
-            ));
-            if (StaffModeAccessPolicy.hasAdvancedStaffTools(rank)) {
-                tools.add(new Tool(Material.BLAZE_ROD, "cheat-tester", "Cheat Tester"));
-                tools.add(new Tool(Material.NETHER_STAR, "staff-tools", "Staff Tools Menu"));
-            }
-            for (int slot = 0; slot < tools.size(); slot++) {
-                player.getInventory().setItem(slot, item(tools.get(slot)));
+            for (StaffToolDefinition tool : StaffToolDefinition.values()) {
+                if (tool.availableFor(rank)) {
+                    player.getInventory().setItem(tool.slot(), item(playerId, toolSession, tool));
+                }
             }
             player.updateInventory();
         } finally {
@@ -652,11 +691,14 @@ public final class StaffModeManager implements Listener {
         return active.containsKey(playerId) || transitions.contains(playerId);
     }
 
-    private ItemStack item(Tool tool) {
+    private ItemStack item(UUID playerId, String toolSession, StaffToolDefinition tool) {
         ItemStack item = ItemStack.of(tool.material());
         ItemMeta meta = item.getItemMeta();
         meta.displayName(Component.text(tool.displayName()));
-        meta.getPersistentDataContainer().set(staffToolKey, PersistentDataType.STRING, tool.id());
+        PersistentDataContainer data = meta.getPersistentDataContainer();
+        data.set(staffToolKey, PersistentDataType.STRING, tool.id());
+        data.set(staffToolOwnerKey, PersistentDataType.STRING, playerId.toString());
+        data.set(staffToolSessionKey, PersistentDataType.STRING, toolSession);
         item.setItemMeta(meta);
         return item;
     }
@@ -724,8 +766,5 @@ public final class StaffModeManager implements Listener {
                 retired.run();
             }
         });
-    }
-
-    private record Tool(Material material, String id, String displayName) {
     }
 }
