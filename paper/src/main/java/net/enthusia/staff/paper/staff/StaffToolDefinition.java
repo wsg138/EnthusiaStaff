@@ -163,7 +163,7 @@ enum StaffToolDefinition {
     }
 
     boolean availableFor(StaffRank rank) {
-        if (rank == null || rank == StaffRank.SYSTEM) {
+        if (this == CHEAT_TESTER || rank == null || rank == StaffRank.SYSTEM) {
             return false;
         }
         return !advancedOnly || StaffModeAccessPolicy.hasAdvancedStaffTools(rank);
