@@ -13,13 +13,22 @@ final class CheatTesterConfigurationParser {
         JsonNode staffTools = ConfigurationNodes.optionalMapping(root, "staff-tools", "staff-tools", errors);
         JsonNode tester = ConfigurationNodes.optionalMapping(staffTools, "cheat-tester", ROOT, errors);
         Limits limits = parseLimits(tester, defaults, errors);
+        Velocity velocity = parseVelocity(tester, defaults, errors);
         return new CheatTesterSettings(
                 parseTimeout(tester, defaults, errors),
                 limits.global(),
                 limits.perStaff(),
-                boundedDouble(tester, "fake-entity-distance", defaults.fakeEntityDistance(), 1.0D, 8.0D, errors),
-                parseVelocity(tester, defaults, errors).horizontal(),
-                parseVelocity(tester, defaults, errors).vertical(),
+                boundedDouble(
+                        tester,
+                        "fake-entity-distance",
+                        ROOT + ".fake-entity-distance",
+                        defaults.fakeEntityDistance(),
+                        1.0D,
+                        8.0D,
+                        errors
+                ),
+                velocity.horizontal(),
+                velocity.vertical(),
                 parseNoFall(tester, defaults, errors),
                 ConfigurationNodes.boundedInteger(
                         tester,
@@ -73,10 +82,12 @@ final class CheatTesterConfigurationParser {
     }
 
     private static Velocity parseVelocity(JsonNode tester, CheatTesterSettings defaults, List<String> errors) {
-        JsonNode velocity = ConfigurationNodes.optionalMapping(tester, "velocity", ROOT + ".velocity", errors);
+        String root = ROOT + ".velocity";
+        JsonNode velocity = ConfigurationNodes.optionalMapping(tester, "velocity", root, errors);
         double horizontal = boundedDouble(
                 velocity,
                 "horizontal",
+                root + ".horizontal",
                 defaults.velocityHorizontal(),
                 0.0D,
                 2.0D,
@@ -85,6 +96,7 @@ final class CheatTesterConfigurationParser {
         double vertical = boundedDouble(
                 velocity,
                 "vertical",
+                root + ".vertical",
                 defaults.velocityVertical(),
                 0.0D,
                 2.0D,
@@ -94,27 +106,29 @@ final class CheatTesterConfigurationParser {
     }
 
     private static double parseNoFall(JsonNode tester, CheatTesterSettings defaults, List<String> errors) {
-        JsonNode noFall = ConfigurationNodes.optionalMapping(tester, "no-fall", ROOT + ".no-fall", errors);
-        return boundedDouble(noFall, "vertical", defaults.noFallVertical(), 0.1D, 2.0D, errors);
+        String root = ROOT + ".no-fall";
+        JsonNode noFall = ConfigurationNodes.optionalMapping(tester, "no-fall", root, errors);
+        return boundedDouble(
+                noFall,
+                "vertical",
+                root + ".vertical",
+                defaults.noFallVertical(),
+                0.1D,
+                2.0D,
+                errors
+        );
     }
 
     private static double boundedDouble(
             JsonNode node,
             String key,
+            String path,
             double fallback,
             double minimum,
             double maximum,
             List<String> errors
     ) {
-        return ConfigurationNodes.boundedDouble(
-                node,
-                key,
-                ROOT + "." + key,
-                fallback,
-                minimum,
-                maximum,
-                errors
-        );
+        return ConfigurationNodes.boundedDouble(node, key, path, fallback, minimum, maximum, errors);
     }
 
     private record Limits(int global, int perStaff) {
