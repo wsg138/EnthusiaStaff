@@ -29,7 +29,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -95,7 +94,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         return Map.copyOf(configured);
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onInteract(PlayerInteractEvent event) {
         if (!isPrimaryToolClick(event)) {
             return;
@@ -118,11 +117,6 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        handleEntityInteraction(event.getPlayer(), event.getRightClicked(), event.getHand(), event::setCancelled);
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onInteractAtEntity(PlayerInteractAtEntityEvent event) {
         handleEntityInteraction(event.getPlayer(), event.getRightClicked(), event.getHand(), event::setCancelled);
     }
 
