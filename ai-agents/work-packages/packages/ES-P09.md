@@ -31,7 +31,7 @@ Root identity/alt/persistence/Velocity/tests/docs only. No external source impor
 Active temporary branch `package/es-p09-alt-network-identity`, created from legitimate `main` commit `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`. Integration authority: this branch and its single same-repository PR to `main`. Delete after verified merge containment when tooling permits.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`.
+One PR to `wsg138/EnthusiaStaff:main`: PR #84.
 
 ## 12. Implementation checklist
 Reconcile data flows and the `ES-P03` handoff; model graph/confidence/manual exceptions/retention; implement commands and inheritance safety; test privacy/races/restart; update docs/state/handoff; review/freeze/validate/merge/cleanup.
@@ -52,7 +52,7 @@ Privacy model, commands/permissions, confidence/ambiguity/manual workflows, keys
 Never expose raw/reversible addresses; keys from environment/secret store; least-privilege views; bounded retention; fail closed on key/version uncertainty.
 
 ## 18. Migration impact
-New post-V17 migration only if necessary for graph/manual/retention state, with clean/upgrade/checksum tests.
+No schema change was required; V17 remains current and immutable.
 
 ## 19. Bedrock considerations
 Consume corrected platform identity from `ES-P03`; ensure prefixed names do not change network identity semantics; acceptance remains `ES-V02`.
@@ -70,16 +70,16 @@ Development scope proven and merged in one exact-head PR with zero valid threads
 Claimed 2026-08-07 by `ChatGPT sequential package worker`. Start `main`: `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`. Branch: `package/es-p09-alt-network-identity`. No pre-existing ES-P09 work was taken over.
 
 ## 24. Last completed checkpoint
-Live startup reconciliation and ES-P03 handoff review are complete; package branch claimed from current legitimate `main`. Product edits have not yet been committed.
+Implementation, direct tests, Wiki/privacy documentation, and the first CodeRabbit pass are complete. CodeRabbit's valid retention finding was fixed by removing cleanup from the observation transaction and scheduling it from an injected trusted UTC runtime clock behind the authority fence. PR #84 is ready for review and final exact-head gates are running.
 
 ## 25. Remaining checklist
-Implementation, tests, review, exact-head validation, merge/containment, package-state finalization, and temporary branch cleanup remain.
+Exact-head review/static/hosted validation, terminal state publication, normal merge/containment verification, and temporary branch cleanup remain.
 
 ## 26. Known blockers
-No dependency blocker. Production/private representative network data and false-positive acceptance remain intentionally unavailable and deferred to `ES-V02`; this does not block development-package completion.
+No dependency blocker. Production/private representative network data and false-positive acceptance remain intentionally unavailable and deferred to `ES-V02`; this does not block development-package completion. Private staging remains unavailable under the known Billing & plans zero-runner condition and is not a pass.
 
 ## 27. Final evidence
-In progress. Claim base `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`; branch `package/es-p09-alt-network-identity`.
+In progress. Claim base `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`; branch `package/es-p09-alt-network-identity`; PR #84.
 
 ## 28. Merge and synchronization record
-In progress; no PR or merge yet.
+PR #84 is open and ready for review; no merge yet. Base at selection: `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`. Current head is the live PR head and must be frozen only after review fixes finish; exact-head validation follows that freeze.
