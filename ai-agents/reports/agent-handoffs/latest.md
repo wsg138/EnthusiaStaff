@@ -8,15 +8,14 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-Current state: `ES-P01` is `COMPLETE`; `ES-P02 — Runtime database recovery and Velocity reload` and `ES-X05 — Website UX, authentication, and appeals` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P03 — Bedrock identity correctness` is the only `ACTIVE` implementation package.
+Current state: `ES-P01` and `ES-P03 — Bedrock identity correctness` are `COMPLETE`; `ES-P02 — Runtime database recovery and Velocity reload` and `ES-X05 — Website UX, authentication, and appeals` remain `BLOCKED` / `PARKED_BLOCKED`. No implementation package is active.
 
-The owner explicitly directed the sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. Because no ordinary implementation package was dependency-complete, the worker recorded a narrow routing exception and selected ES-P03 from current legitimate `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`. This does not mark ES-P02 complete, import its unmerged lifecycle/reload work, waive ES-P03 validation, or authorize any later package.
+ES-P03 exact reviewed and validated product head `15608bc3099dc34aa080c80ca8e824ffd51cdae4` passed Coverage run `31133176482` / job `92726659126`, Wiki run `31133176536` / job `92726609318`, CodeRabbit with all six threads resolved, and Codacy with zero new issues. Java 21 build, all tests, MariaDB/Testcontainers migrations, aggregate coverage, runtime-JAR integrity, artifact upload, and provider-leak checks succeeded. V1–V17 remain unchanged.
 
-Preserved parked work remains untouched:
+PR #75 merged normally as `b960e91ea59627a870ff24f89c2f761d0cbb68ab`. The product head is contained with no unique branch work. Remote branch deletion was not possible through the connected tool because it exposes no ref-deletion action; the branch is inactive.
 
-- ES-P02 branch `package/es-p02-runtime-db-recovery`, PR #70, package-record head `80d4ea840f34017c09afb618f623581b31c6223d`.
-- ES-X05 branch `package/es-x05-finalization`, PR #74, head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`.
+The completed behavior includes proof-bearing Java/Bedrock/unknown observations, safe proxy-hosted provider fallback, `*` current/history aliases, platform non-downgrade, deterministic unequal/equal timestamp ordering, stale/equal disconnect protection, and literal underscore prefix matching. ES-P09 retains alt graph/inheritance, and ES-V02 retains representative Java/Bedrock staging.
 
-ES-P03 branch: `package/es-p03-bedrock-identity`. Confirmed defects are unconditional Java platform writes in Paper mute join and Velocity backend connect, rejection of configured `*` Bedrock aliases, and platform upserts that can downgrade stronger identity evidence. The package owns verified platform observations, deterministic current/history alias handling, and duplicate/out-of-order persistence safety. ES-P09 retains alt graph/inheritance and ES-V02 retains representative Java/Bedrock staging.
+ES-P02 PR #70 and ES-X05 PR #74 remain untouched. The owner-directed ES-P03 routing exception does not automatically waive dependencies for any later package. A future sequential worker must reconcile live GitHub and select through the canonical system from scratch.
 
 LiteBans remains authoritative; no production account, credential, data, route, issue #43 action, cutover, or authority activation is authorized.

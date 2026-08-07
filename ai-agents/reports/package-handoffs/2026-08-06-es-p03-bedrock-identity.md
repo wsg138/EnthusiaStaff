@@ -3,109 +3,65 @@
 Date: 2026-08-06
 Package: `ES-P03 — Bedrock identity correctness`
 Worker: `ChatGPT sequential package worker`
-Status: `ACTIVE — implementation and review repairs complete, exact-head validation pending`
+Status: `COMPLETE`
 
 ## Selection and routing
 
 - Legitimate aggregate `main` at selection: `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
-- Temporary package branch: `package/es-p03-bedrock-identity`.
-- Aggregate PR: ready PR #75.
-- Ordinary dependency: ES-P02 must be `COMPLETE`, but it remains `BLOCKED` / `PARKED_BLOCKED`.
-- Owner instruction: continue another productive package while ES-P02 and ES-X05 remain parked until GitHub-hosted runners recover.
-- Recorded disposition: narrow owner-directed routing exception selecting ES-P03, the lowest-priority next implementation package. This does not mark ES-P02 complete, import PR #70, waive ES-P03 gates, or activate another package.
+- Implementation branch: `package/es-p03-bedrock-identity`.
+- Implementation PR: #75.
+- ES-P02 remained `BLOCKED` / `PARKED_BLOCKED`; ES-X05 remained `BLOCKED` / `PARKED_BLOCKED`.
+- The owner-directed 2026-08-06 exception selected ES-P03 only. It did not complete ES-P02, import PR #70, touch PR #74, waive gates, or authorize later packages.
 
-## Live reconciliation
+## Completed implementation
 
-- ES-P01: complete.
-- ES-P02: `BLOCKED` / `PARKED_BLOCKED`; branch `package/es-p02-runtime-db-recovery`; PR #70; package-record head `80d4ea840f34017c09afb618f623581b31c6223d`; untouched.
-- ES-X05: implementation merged in aggregate and standalone; finalization remains `BLOCKED` / `PARKED_BLOCKED`; branch `package/es-x05-finalization`; PR #74; head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`; untouched.
-- Open package PRs at start: #70 and #74 only. PR #75 was created for ES-P03.
-- Highest Flyway migration on current `main`: immutable V17.
-- Issue #43: open and deferred; no production or cutover authority.
-- No competing active implementation worker was visible.
+- Shared proof-bearing `PlayerPlatformDetection` and Paper Floodgate resolver.
+- Verified Paper observations; unverified proxy observations persist platform as `UNKNOWN` while retaining UUID/name/presence.
+- Only available Floodgate per-player evidence proves Java or Bedrock; absent/unavailable/incompatible local providers remain `UNKNOWN`, including proxy-hosted layouts.
+- Single-`*` Bedrock current/history aliases, exact lookup, and literal prefix search.
+- Verified Bedrock repairs legacy rows and cannot be downgraded; verified Java upgrades only unknown records.
+- Event-time ordering plus stable equal-time identity/presence tie-breaking independent of database arrival order.
+- Strictly-later disconnect requirement preventing stale/equal disconnects from clearing presence.
+- SQL `LIKE` escaping for literal underscores.
+- Domain and MariaDB/Testcontainers regressions for provider states, aliases/history, non-downgrade, unequal/equal ordering, reconnect races, literal prefixes, and invalid shapes.
+- V1–V17 unchanged; no migration added.
 
-## Confirmed defects at package start
+## Review record
 
-1. Paper mute join persisted every player as Java.
-2. Velocity login/backend observations supplied Java without Floodgate proof.
-3. The directory rejected the configured single-`*` Bedrock prefix and prefix search.
-4. Platform upserts could overwrite stronger known evidence.
-5. Current-name and presence writes were not ordered by observation time, and a stale disconnect could clear a newer connection.
+CodeRabbit identified six valid findings: dependency wording, stale PR readiness, missing terminal/next-owner state, unsupported Java-proof documentation, nondeterministic equal-time updates, and SQL wildcard prefix matching. All were corrected and all six threads are resolved. Independent review also corrected proxy-hosted Geyser/Floodgate fallback behavior. Codacy reports zero new issues.
 
-## Implemented behavior
+## Exact-head validation
 
-- Added `PlayerPlatformDetection` as the shared policy for converting Floodgate/Geyser availability and per-player evidence into `JAVA`, `BEDROCK`, or `UNKNOWN`.
-- Added `PaperPlayerPlatformResolver`, reusing the supported Floodgate API shape already present in the repository.
-- Paper join persistence now calls the proof-bearing `recordSeenVerified` path.
-- The legacy `recordSeen` path is explicitly unverified. Authoritative JDBC persistence stores its platform as `UNKNOWN`, so existing Velocity observations can update UUID, name history, and presence without corrupting platform.
-- Verified Bedrock evidence upgrades legacy Java/unknown records and cannot be downgraded by later unverified Java/unknown observations.
-- Verified Java upgrades only unknown records; it cannot overwrite Bedrock.
-- A single configured `*` prefix is accepted for current and historical aliases and prefix search. Username text is never used as platform proof.
-- Only an available Floodgate per-player observation can prove Java or Bedrock. Missing, unavailable, incompatible, or absent local provider evidence remains `UNKNOWN`, including proxy-hosted layouts.
-- Unequal timestamps order identity and presence changes by event time.
-- Equal timestamps use a stable binary key built from normalized username, display username, and server ID, so database arrival order cannot choose the current identity or server.
-- Historical display-name updates use a stable binary tie-breaker at equal timestamps.
-- Disconnects must be strictly later than the matching connection; stale or equal-time disconnects cannot clear it.
-- Valid prefix searches escape SQL `LIKE` wildcards, so `_` remains literal for Java and Bedrock aliases.
-- No migration was required; V1–V17 remain unchanged.
+Frozen head: `15608bc3099dc34aa080c80ca8e824ffd51cdae4`.
 
-## Regression coverage
+- Coverage run `31133176482`, job `92726659126`: success on allocated Ubuntu 24.04.
+- Java: Temurin `21.0.12+8`.
+- Build command: `./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`.
+- Build: success; all module and MariaDB/Testcontainers integration/migration tests passed.
+- Wiki run `31133176536`, job `92726609318`: success.
+- CodeRabbit exact-head status: success; zero unresolved valid threads.
+- Codacy: zero new issues; 61.54% diff coverage; exact-head coverage upload and final notification succeeded.
+- Aggregate JaCoCo: 47.69% lines, 38.65% branches, 50.35% instructions.
+- Validation artifact: ID `8977006850`, size 18,400,042 bytes, SHA-256 `fc93e698ba4ee81e38f05c307f61d52627e1735f6ffc642756fd4cd696ba261e`.
+- Paper runtime JAR: 8,932,381 bytes; SHA-256 `81ff00cb50bc808db63ece6675b15e9a594e2350f84b113295037f03951e1c4c`; 4,762 entries.
+- Velocity runtime JAR: 7,830,636 bytes; SHA-256 `65c87b47ef27d09ef9f36515365f62a4f238207452468f726979fa8f01006975`; 4,135 entries.
+- Provider API source types checked: 24; provider API leaks: 0.
 
-- Domain tests cover available Floodgate Bedrock/Java, both local providers absent in a proxy-hosted layout, Geyser with incompatible Floodgate, broken Floodgate without local Geyser, and contradictory provider observations.
-- MariaDB/Testcontainers tests cover:
-  - `*` current and historical aliases;
-  - case-insensitive exact and prefix lookup;
-  - literal underscore prefix matching;
-  - unverified proxy Java hints persisting `UNKNOWN`;
-  - verified Bedrock repair and non-downgrade;
-  - out-of-order current-name/presence writes;
-  - arrival-order-independent equal-time identity/presence ties;
-  - stale and equal-time disconnect protection; and
-  - invalid double-prefix alias rejection.
-- Integration documentation records the evidence boundary and the ES-P09/ES-V02 ownership handoff.
+## Merge and containment
 
-## Harsh review record
+- PR #75 merged normally as `b960e91ea59627a870ff24f89c2f761d0cbb68ab`.
+- The merge commit has parents starting `main` and exact product head.
+- Compare from product head to merge commit: one commit ahead, zero behind, merge base equals product head, and no changed files. Product work is fully contained with no unique branch work.
+- Remote ref deletion could not be performed because the connected GitHub tool exposes no branch-delete action. This is a tooling limitation, not unmerged work; the implementation branch is inactive.
 
-- Retrieved exact Codacy annotations rather than relying on the summary count.
-- Removed duplicated test literals.
-- Split the ordered JDBC observation method into validation, transaction, player upsert, name upsert, and rollback helpers to remove the complexity findings.
-- Corrected unavailable/incompatible and both-local-providers-absent Java fallbacks for proxy-hosted Geyser/Floodgate layouts.
-- CodeRabbit identified inconsistent ES-P02 dependency wording, stale draft/ready state, missing intended terminal/next-owner state, nondeterministic equal-time persistence, and unescaped SQL `LIKE` underscores.
-- The dependency/readiness/terminal records were reconciled; equal-time ordering now uses a stable data-derived tie-breaker; disconnects require strictly later event time; prefix patterns escape SQL wildcard characters.
-- The generic CodeRabbit docstring-coverage warning is not a functional or repository-configured source defect; first-party Java build policy remains `-Xlint:all -Werror`, configured static analysis, and zero valid unresolved review findings.
+## Preserved boundaries
 
-## Current gate observations
+- ES-P02 PR #70 and branch remained untouched.
+- ES-X05 PR #74 and branch remained untouched.
+- ES-P09 retains alt graph/confidence/inheritance.
+- ES-V02 retains representative distributed Java/Bedrock acceptance; no live-client staging pass is claimed.
+- LiteBans remains authoritative; issue #43, production credentials/data/routes, deployment, migration/cutover, and authority activation remain excluded.
 
-- PR #75 is ready for review.
-- Exact-head runs on earlier candidates are superseded and are historical evidence only.
-- The synchronized head containing all valid review repairs must receive fresh Coverage, Wiki, Codacy, and CodeRabbit results.
-- Zero valid unresolved review threads are required before merge.
+## Terminal state
 
-## Validation requirements
-
-- Java 21 warnings-as-errors.
-- Clean build and all unit/integration tests.
-- Flyway clean-install, upgrade, checksum, and V1–V17 immutability checks.
-- Aggregate coverage and runtime-JAR integrity/provider-leak checks.
-- Wiki/package validation and configured static analysis.
-- Zero valid unresolved review threads.
-- Missing, queued, cancelled, skipped, merge-ref-only, rate-limited, superseded, or zero-runner ordinary hosted checks are not passes.
-
-## Intended terminal state and next owner action
-
-- Intended ES-P03 terminal state: `COMPLETE` after exact-head gates, normal merge, containment, safe branch cleanup, and persistent final publication.
-- Responsible next actor: repository owner `wsg138` directs or permits the next sequential package selection after live reclassification.
-- This worker will not activate that next package, and this package's routing exception does not automatically apply to later dependency edges.
-
-## Systems not disturbed
-
-- ES-P02 PR #70 and branch.
-- ES-X05 PR #74 and branch.
-- Existing migrations V1–V17.
-- LiteBans authority and issue #43.
-- Production credentials, data, routes, accounts, or environments.
-- ES-P09 alt-graph and inheritance scope.
-
-## Exact next action
-
-Freeze the synchronized PR #75 head, require successful exact-head Coverage, Wiki, Codacy, and CodeRabbit review with zero valid unresolved findings, then merge normally or publish the precise blocker. Do not begin another package.
+ES-P03 is complete. Persistent package, workspace, registry, and latest-handoff state is published through the same-package documentation-only finalization. No next package is selected or activated.
