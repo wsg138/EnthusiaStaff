@@ -3,7 +3,6 @@ package net.enthusia.staff.paper.tester;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -12,7 +11,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
@@ -39,7 +37,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final String serverId;
     private final InventoryCoordinator inventory;
     private final Supplier<CheatTesterJournalStore> store;
-    private final ExecutorService workers;
     private final CheatTesterSettings settings;
     private final CheatTesterSnapshotCodec snapshots;
     private final CheatTesterEvidence evidence;
@@ -50,6 +47,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final FakeEntityAdapter fakeEntities;
     private final CheatTesterProbeEngine probes;
     private final CheatTesterControlState controls;
+    private final CheatTesterRuntimeSupport runtime;
 
     public CheatTesterManager(
             JavaPlugin plugin,
@@ -63,11 +61,11 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.serverId = requireServerId(serverId);
+        this.serverId = CheatTesterRuntimeSupport.requireServerId(serverId);
         this.inventory = java.util.Objects.requireNonNull(inventory, "inventory");
         this.store = java.util.Objects.requireNonNull(store, "store");
-        this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.settings = java.util.Objects.requireNonNull(settings, "settings");
+        this.runtime = new CheatTesterRuntimeSupport(plugin, workers, settings, closed);
         this.snapshots = new CheatTesterSnapshotCodec(plugin);
         this.evidence = new CheatTesterEvidence(clock, settings);
         this.fakeEntities = installFakeEntityAdapter();
@@ -183,7 +181,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     public void recoverOnlinePlayers() {
         if (!closed.get()) {
-            submit(this::loadRecoverableSessions);
+            runtime.submit(this::loadRecoverableSessions);
         }
     }
 
@@ -220,7 +218,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         } catch (RuntimeException exception) {
             session.cancelJournalSubmission();
             plugin.getLogger().log(Level.WARNING, "Cheat tester preparation failed before durable mutation", exception);
-            failBeforeMutation(session, safePreparationMessage(exception));
+            failBeforeMutation(session, CheatTesterRuntimeSupport.safePreparationMessage(exception));
         }
     }
 
@@ -247,7 +245,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             retireWithoutJournal(session);
             return;
         }
-        if (!submit(() -> persistStart(session, start))) {
+        if (!runtime.submit(() -> persistStart(session, start))) {
             session.cancelJournalSubmission();
             failBeforeMutation(session, "The bounded work queue is full; tester did not start.");
         }
@@ -337,7 +335,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             probes.begin(target, session);
             session.startedMutation.set(true);
             scheduleTimeout(session);
-            message(session.staffId, Component.text(
+            runtime.message(session.staffId, Component.text(
                     "Started " + session.type.displayName() + " evidence probe for " + target.getName() + ".",
                     NamedTextColor.AQUA
             ));
@@ -351,7 +349,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         session.timeoutTask = plugin.getServer().getGlobalRegionScheduler().runDelayed(
                 plugin,
                 ignored -> finish(session, CheatTesterSessionState.RESTORED, "probe completed"),
-                timeoutTicks()
+                runtime.timeoutTicks()
         );
     }
 
@@ -367,8 +365,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         if (disposition == CheatTesterSession.FinishDisposition.ALREADY_FINISHING) {
             return;
         }
-        cancel(session.timeoutTask);
-        cancel(session.sampleTask);
+        CheatTesterRuntimeSupport.cancel(session.timeoutTask);
+        CheatTesterRuntimeSupport.cancel(session.sampleTask);
         if (disposition == CheatTesterSession.FinishDisposition.NO_JOURNAL) {
             retireWithoutJournal(session);
             return;
@@ -438,7 +436,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             String captured
     ) {
         Runnable restore = () -> restoreTarget(target, session, terminalState, reason, captured);
-        if (!submit(() -> checkpointThenScheduleRestore(session, captured, restore))) {
+        if (!runtime.submit(() -> checkpointThenScheduleRestore(session, captured, restore))) {
             restore.run();
         }
     }
@@ -448,7 +446,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         if (loaded != null) {
             checkpointEvidence(loaded, session, captured);
         }
-        scheduleTarget(
+        runtime.scheduleTarget(
                 session.targetId,
                 restore,
                 () -> retireForRecovery(session, "Target retired before exact restoration")
@@ -499,7 +497,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 failure
         );
         retireForRecovery(session, "Exact restoration failed and remains pending");
-        message(session.staffId, Component.text(
+        runtime.message(session.staffId, Component.text(
                 "Tester restoration did not verify. Durable recovery remains pending; do not rerun the target.",
                 NamedTextColor.RED
         ));
@@ -512,7 +510,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             String captured,
             boolean notify
     ) {
-        if (!submit(() -> completeOnWorker(session, terminalState, reason, captured, notify))) {
+        if (!runtime.submit(() -> completeOnWorker(session, terminalState, reason, captured, notify))) {
             retireForRecovery(session, "Bounded work queue full during tester completion");
         }
     }
@@ -535,7 +533,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             }
             retireCompleted(session);
             if (notify) {
-                message(session.staffId, Component.text(
+                runtime.message(session.staffId, Component.text(
                         "Cheat Tester finished: " + evidence.summary(session, captured),
                         NamedTextColor.GREEN
                 ));
@@ -716,7 +714,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     void recover(Player player) {
         if (!closed.get()) {
-            submit(() -> recoverById(player.getUniqueId()));
+            runtime.submit(() -> recoverById(player.getUniqueId()));
         }
     }
 
@@ -749,7 +747,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         if (activeByTarget.remove(session.targetId, session)) {
             releaseAssetLock(session);
             removeFakeTarget(session);
-            message(session.staffId, Component.text(failureMessage, NamedTextColor.RED));
+            runtime.message(session.staffId, Component.text(failureMessage, NamedTextColor.RED));
         }
     }
 
@@ -784,8 +782,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private static void cancelSessionTasks(CheatTesterSession session) {
-        cancel(session.timeoutTask);
-        cancel(session.sampleTask);
+        CheatTesterRuntimeSupport.cancel(session.timeoutTask);
+        CheatTesterRuntimeSupport.cancel(session.sampleTask);
     }
 
     private void releaseAssetLock(CheatTesterSession session) {
@@ -797,56 +795,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     private boolean sessionCurrent(CheatTesterSession session) {
         return activeByTarget.get(session.targetId) == session;
-    }
-
-    private void scheduleTarget(UUID targetId, Runnable operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player target = plugin.getServer().getPlayer(targetId);
-            if (target == null || !target.isOnline()
-                    || !target.getScheduler().execute(plugin, operation, retired, 1L)) {
-                retired.run();
-            }
-        });
-    }
-
-    private boolean submit(Runnable operation) {
-        if (closed.get() || workers.isShutdown()) {
-            return false;
-        }
-        try {
-            workers.execute(operation);
-            return true;
-        } catch (RejectedExecutionException exception) {
-            return false;
-        }
-    }
-
-    private void message(UUID playerId, Component message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                player.getScheduler().execute(plugin, () -> player.sendMessage(message), null, 1L);
-            }
-        });
-    }
-
-    private long timeoutTicks() {
-        long byDuration = Math.max(1L, settings.sessionTimeout().toMillis() / 50L);
-        return Math.max(1L, Math.min(settings.probeTicks(), byDuration));
-    }
-
-    private static String safePreparationMessage(RuntimeException exception) {
-        String message = exception.getMessage();
-        return message == null || message.isBlank()
-                ? "Cheat Tester preparation failed before any target state changed."
-                : message;
-    }
-
-    private static String requireServerId(String serverId) {
-        if (serverId == null || !serverId.matches("[A-Za-z0-9_-]{1,64}")) {
-            throw new IllegalArgumentException("serverId is invalid");
-        }
-        return serverId;
     }
 
     private FakeEntityAdapter installFakeEntityAdapter() {
@@ -886,17 +834,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     boolean mutating(UUID playerId) {
         CheatTesterSession session = activeByTarget.get(playerId);
         return session != null && session.startedMutation.get() && session.type.mutatesTargetState();
-    }
-
-    private static void cancel(ScheduledTask task) {
-        if (task == null) {
-            return;
-        }
-        try {
-            task.cancel();
-        } catch (RuntimeException ignored) {
-            // Cleanup is idempotent; the durable journal remains authoritative.
-        }
     }
 
     @Override
