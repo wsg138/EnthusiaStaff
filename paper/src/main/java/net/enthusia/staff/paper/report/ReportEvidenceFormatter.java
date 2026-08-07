@@ -123,18 +123,18 @@ public final class ReportEvidenceFormatter {
         add(lines, root, "protocolVersion", "Protocol");
         add(lines, root, "minecraftVersion", "Minecraft");
         add(lines, root, "reportedBrand", "Brand");
-        add(lines, root, "viaVersion", "ViaVersion");
+        add(lines, root, "viaVersionStatus", "ViaVersion");
         add(lines, root, "viaVersionPluginVersion", "ViaVersion plugin");
-        add(lines, root, "floodgate", "Floodgate");
+        add(lines, root, "floodgateStatus", "Floodgate");
         add(lines, root, "floodgatePlayer", "Floodgate player");
         add(lines, root, "bedrockVersion", "Bedrock version");
         add(lines, root, "bedrockDevice", "Bedrock device");
-        add(lines, root, "geyser", "Geyser");
-        add(lines, root, "autoClicker", "AutoClicker");
+        add(lines, root, "geyserStatus", "Geyser");
+        add(lines, root, "autoClickerStatus", "AutoClicker");
         if (present(root, "autoClickerHandshake")) {
             lines.add("AutoClicker handshake: " + bounded(root.path("autoClickerHandshake").toString()));
         }
-        add(lines, root, "polar", "Polar");
+        add(lines, root, "polarStatus", "Polar");
         if (present(root, "polarMetadata")) {
             lines.add("Polar metadata: withheld from chat presentation");
         }
