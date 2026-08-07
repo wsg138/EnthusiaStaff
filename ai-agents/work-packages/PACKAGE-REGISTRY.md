@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` on PR #79 with implementation/documentation complete and final exact-head validation pending; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` on PR #79 with implementation/documentation and identified review repairs complete, while final exact-head validation, review-thread disposition, and Pi disposition remain; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -26,7 +26,7 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c`; private Actions billing blocker unchanged |
 | `ES-P03` | Bedrock identity correctness | Internal | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | PR #75 merged as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` | — | 35 | `ES-P01` | finalization PR #74 merged as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; parity proven |
-| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; PR #79 ready for review; implementation/docs complete; latest product-code head `dd1f10a12680eab6768473aee5b542e840b09b65`; final records/exact-head validation checkpoint pending |
+| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; PR #79 ready for review; latest product-code head `ce6e516259b3739d08d4607a838c5e4940aafacd`; final records/exact-head validation and Pi disposition pending |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned; dependency blocked |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
 | `ES-P09` | Alt and network-identity completion | Internal | `READY` | `READY` | 55 | `ES-P03` | unassigned; not activated by ES-P04 worker |
@@ -76,15 +76,16 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 
 - Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`.
 - Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`; live `main` remained unchanged at latest reconciliation.
-- Branch/PR: `package/es-p04-staff-mode-tools`; PR #79 ready for review.
-- Latest product-code commit: `dd1f10a12680eab6768473aee5b542e840b09b65`; implementation and Wiki/reference documentation are complete.
+- Branch/PR: `package/es-p04-staff-mode-tools`; PR #79 ready for review and mergeable at the latest pre-freeze check.
+- Latest product-code head: `ce6e516259b3739d08d4607a838c5e4940aafacd`; implementation and Wiki/reference documentation are complete.
 - Implemented actions: random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester remains deferred to `ES-P10`; fake bases remain `ES-P11`.
 - Security: server-issued tools bind owner + random current-profile token + canonical slot/material; current active session/rank/action permission is rechecked. Unknown, stale, transferred, old-session, rank-invalid, wrong-slot, and wrong-material tools fail closed.
 - Existing durable snapshot/restoration/reconnect/rank/inventory/world/damage machinery remains intact; durable moderation actions reuse existing command/service boundaries. No migration change; V17 remains the boundary.
-- Static-analysis history: 14 issues on `c1db641169a40d0be64ad48b4672d3dce3da72c4` and one file-length issue on `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` were all structurally resolved. Codacy's PR summary showed 0 new issues after the split; exact final-head rerun remains required.
-- Superseded exact head `93858cf68c539a0c1fe62b20d1993607981517ab` passed Wiki `31173353489` / `92849855813` but hosted Java run `31173353511` / `92849833109` found a compile-only regression: extracted `StaffToolRandomTeleportService` lacked the two-argument `onEntity(...)` helper. Product commit `dd1f10a12680eab6768473aee5b542e840b09b65` restores it without gameplay behavior changes.
-- Private Pi remains unavailable before product execution under the Billing & plans restriction. Superseded exact evidence includes Ubuntu job `92847691164` with runner ID `0`, steps `[]`, and Pi `92847702006` skipped. Final-head evidence is still required; unavailable infrastructure is not a pass.
-- PR review threads at latest inspection: zero. `@coderabbitai review` was explicitly requested after marking PR #79 ready.
+- Static-analysis history: 14 issues on `c1db641169a40d0be64ad48b4672d3dce3da72c4` and one file-length issue on `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` were structurally resolved. The compile regression exposed at `93858cf68c539a0c1fe62b20d1993607981517ab` was fixed by `dd1f10a12680eab6768473aee5b542e840b09b65`.
+- Supporting but superseded green evidence on records head `4cc0178a8f908c43aafc6a88cf3014e81f5756f2`: Wiki `31173610733` / `92850645081`; Coverage `31173610764` / `92850703180`; Codacy static `92850885117`; coverage variation `92852019542`; diff coverage `92852019707`.
+- Review on that superseded head then found valid issues. Follow-up commits prevent the deferred Cheat Tester from being issued for any rank, add cooldown boundary coverage at 0/60000 ms with rejection at -1/60001 ms, and correct inaccurate follow/spectate feedback. The remaining scheduler-helper extraction note is maintainability-only because the actual compile defect is already fixed; it is not required to change package behavior.
+- Review threads are being dispositioned before the exact-head freeze; no claim of zero valid unresolved threads is made until that is verified live.
+- Private Pi remains unavailable before product execution under the Billing & plans restriction in the latest package evidence. No owner-approved ES-P04 infrastructure exception exists. Final frozen-head Pi evidence is still required; unavailable infrastructure is not a pass.
 - Handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
 - Exact next action: freeze the records checkpoint produced with package/registry/handoff reconciliation, obtain every ordinary exact-head hosted/static/review gate, record the exact Pi disposition, then either merge normally if all gates are satisfied or publish `BLOCKED` / `PARKED_BLOCKED` if the unavailable Pi gate remains unapproved.
 
