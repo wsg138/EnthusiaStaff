@@ -4,7 +4,7 @@
 `ES-P09`; Internal; primary `COMP-STAFF`; priority 55; conditionally parallel after identity correctness.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`READY` — dependency satisfied; unassigned; not activated by the ES-X05 recovery worker. Registry is authoritative.
 
 ## 3. Objective
 Complete protected network identity, alt graph/confidence/manual relationships, IP/network sanction inheritance, privacy, retention, and operator workflow.
@@ -22,7 +22,7 @@ Protected address token/key lifecycle; identity graph/confidence and ambiguity c
 Canonical Java/Floodgate platform identity and normalization (`ES-P03`); production/private address datasets; production key rotation; acceptance/false-positive campaign (`ES-V02`).
 
 ## 8. Dependencies
-`ES-P03` must be `COMPLETE`.
+`ES-P03` must be `COMPLETE`; satisfied by merge `b960e91ea59627a870ff24f89c2f761d0cbb68ab` and canonical completion publication.
 
 ## 9. Component and repository boundaries
 Root identity/alt/persistence/Velocity/tests/docs only. No external source import, permanent component branch, or isolated PR.
@@ -52,7 +52,7 @@ Privacy model, commands/permissions, confidence/ambiguity/manual workflows, keys
 Never expose raw/reversible addresses; keys from environment/secret store; least-privilege views; bounded retention; fail closed on key/version uncertainty.
 
 ## 18. Migration impact
-New post-V16 migration only if necessary for graph/manual/retention state, with clean/upgrade/checksum tests.
+New post-V17 migration only if necessary for graph/manual/retention state, with clean/upgrade/checksum tests.
 
 ## 19. Bedrock considerations
 Consume corrected platform identity from `ES-P03`; ensure prefixed names do not change network identity semantics; acceptance remains `ES-V02`.
@@ -67,16 +67,16 @@ No external source provider required; integrate only through verified Floodgate/
 Development scope proven and merged in one exact-head PR with zero valid threads and branch cleanup; private false-positive/staging acceptance remains deferred.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after `ES-P03` and assignment.
+Unassigned; no branch/PR/handoff. Eligible for normal sequential selection after outage recovery; priority 55. Live continuation classification still precedes new selection.
 
 ## 24. Last completed checkpoint
-Definition only; no product implementation began.
+Dependency `ES-P03` is complete; no ES-P09 product work has begun.
 
 ## 25. Remaining checklist
 All implementation, tests, review, validation, merge, and evidence remain.
 
 ## 26. Known blockers
-Dependency `ES-P03`; private representative data unavailable by design.
+No dependency blocker; private representative data remains unavailable by design for acceptance and is deferred to `ES-V02`.
 
 ## 27. Final evidence
 Unset: exact heads, privacy review, graph/inheritance test matrix, checks, docs.
