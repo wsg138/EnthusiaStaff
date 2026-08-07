@@ -39,6 +39,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -48,7 +49,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.server.PluginDisableEvent;
-import org.bukkit.inventory.InventoryType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -464,7 +464,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
         float current = target.getFallDistance();
         session.maxFallDistance = Math.max(session.maxFallDistance, current);
-        if (!target.isOnGround() && session.previousFallDistance > 2.0F && current < 0.25F) {
+        if (target.getVelocity().getY() < -0.05D && session.previousFallDistance > 2.0F && current < 0.25F) {
             session.airborneFallResets.incrementAndGet();
         }
         session.previousFallDistance = current;
