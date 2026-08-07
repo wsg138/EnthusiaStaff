@@ -23,9 +23,9 @@ import net.enthusia.staff.domain.tester.CheatTesterJournalStart;
 import net.enthusia.staff.domain.tester.CheatTesterSessionState;
 
 /**
- * Publishes the already-existing inventory storage binding while also exposing the dedicated V18
- * cheat-tester journal port. This keeps storage bootstrap atomic without coupling tester rows to
- * inventory patch/confiscation tables.
+ * Publishes the existing inventory storage binding while also exposing the dedicated V18
+ * cheat-tester journal port. A durable ACTIVE tester row participates in the inventory lock
+ * contract so offline edits cannot race exact tester recovery after a disconnect or restart.
  */
 public final class CompositeInventoryTesterJournalStore implements InventoryJournalStore, CheatTesterJournalStore {
     private final InventoryJournalStore inventory;
@@ -189,17 +189,29 @@ public final class CompositeInventoryTesterJournalStore implements InventoryJour
 
     @Override
     public boolean isLocked(UUID playerId, String scopeId, Instant now) {
-        return inventory.isLocked(playerId, scopeId, now);
+        if (inventory.isLocked(playerId, scopeId, now)) {
+            return true;
+        }
+        return testers.activeForTarget(playerId).isPresent();
     }
 
     @Override
     public Optional<String> lockedOwningServer(UUID playerId, Instant now) {
-        return inventory.lockedOwningServer(playerId, now);
+        Optional<String> inventoryOwner = inventory.lockedOwningServer(playerId, now);
+        if (inventoryOwner.isPresent()) {
+            return inventoryOwner;
+        }
+        return testers.activeForTarget(playerId).map(CheatTesterJournalRecord::serverId);
     }
 
     @Override
     public CheatTesterJournalRecord start(CheatTesterJournalStart start) {
         return testers.start(start);
+    }
+
+    @Override
+    public Optional<CheatTesterJournalRecord> activeForTarget(UUID targetId) {
+        return testers.activeForTarget(targetId);
     }
 
     @Override
