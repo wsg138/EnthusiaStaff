@@ -80,6 +80,9 @@ final class CheatTesterControlState {
     }
 
     List<String> statusLines(UUID staffId, boolean includeAll) {
+        if (!staffModeActive.test(staffId)) {
+            return List.of();
+        }
         List<String> lines = new ArrayList<>();
         for (CheatTesterSession session : activeByTarget.values()) {
             if (includeAll || session.staffId.equals(staffId)) {
