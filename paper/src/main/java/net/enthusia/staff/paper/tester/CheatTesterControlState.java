@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import net.enthusia.staff.domain.tester.CheatTesterType;
-import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
@@ -24,19 +24,19 @@ final class CheatTesterControlState {
     );
 
     private final Clock clock;
-    private final StaffModeManager staffMode;
+    private final Predicate<UUID> staffModeActive;
     private final CheatTesterSettings settings;
     private final Map<UUID, CheatTesterType> selections = new ConcurrentHashMap<>();
     private final Map<UUID, CheatTesterSession> activeByTarget;
 
     CheatTesterControlState(
             Clock clock,
-            StaffModeManager staffMode,
+            Predicate<UUID> staffModeActive,
             CheatTesterSettings settings,
             Map<UUID, CheatTesterSession> activeByTarget
     ) {
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
+        this.staffModeActive = java.util.Objects.requireNonNull(staffModeActive, "staffModeActive");
         this.settings = java.util.Objects.requireNonNull(settings, "settings");
         this.activeByTarget = java.util.Objects.requireNonNull(activeByTarget, "activeByTarget");
     }
@@ -97,7 +97,7 @@ final class CheatTesterControlState {
             }
             return false;
         }
-        if (!staffMode.active(staff.getUniqueId())) {
+        if (!staffModeActive.test(staff.getUniqueId())) {
             staff.sendMessage(Component.text("Enter staff mode before using Cheat Tester."));
             return false;
         }
