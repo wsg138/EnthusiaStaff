@@ -4,7 +4,7 @@
 `ES-P10`; Internal; primary `COMP-STAFF`; priority 80; conditional parallel safety only after staff-tool dispatch.
 
 ## 2. Status
-`MERGE_PENDING` as of 2026-08-07. Product implementation, tests, configuration, Wiki/operator documentation, V18 persistence, harsh review, and review-thread reconciliation are complete on `package/es-p10-cheat-testers`; exact-head merge gates are the remaining package work. Registry is authoritative.
+`COMPLETE` as of 2026-08-07. PR #86 merged normally, exact containment was verified, the implementation branch was deleted, and terminal state publication is the final documentation-only checkpoint. Registry is authoritative.
 
 ## 3. Objective
 Implement an auditable staff cheat-tester workflow and bounded fake-player/entity tooling with deterministic lifecycle and cleanup.
@@ -28,58 +28,72 @@ Fake bases (`ES-P11`); automatic punishment; unsupported unisolated NMS/packet i
 Root tester/staff/Paper/domain/tests/resources/docs only. No external source import, permanent component branch, or isolated PR.
 
 ## 10. Required branches
-Temporary `package/es-p10-cheat-testers`; delete after verified merge containment.
+Temporary implementation branch `package/es-p10-cheat-testers` was used and is deleted after verified merge containment. The documentation-only terminal publication branch is not product work and must also be removed after its normal merge.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`: PR #86.
+Implementation PR #86 to `wsg138/EnthusiaStaff:main`, merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d`.
 
 ## 12. Implementation checklist
-Completed: reconcile supported APIs; define threat/use cases and bounds; implement authorized workflow/lifecycle/cleanup; test termination/failure paths; document; update state/handoff; harsh review; reconcile all live review threads. Remaining: freeze the final tracked head, satisfy all applicable exact-head gates, merge normally, verify containment, publish terminal records, and clean up the temporary branch.
+Complete: reconcile supported APIs; define threat/use cases and bounds; implement authorized workflow/lifecycle/cleanup; test termination/failure paths; document; harsh review; resolve live review findings; freeze and validate exact head; merge normally; verify containment; clean up implementation branch; publish terminal state.
 
 ## 13. Acceptance criteria
-Only authorized staff can create/control testers; entities are bounded and correctly scoped; ordinary players cannot infer sensitive staff state beyond intended test behavior; timeout/cancel/disconnect/reload/shutdown leaves no untracked mutable state; no auto-sanction occurs.
+Satisfied for the development-package boundary: only authorized staff can create/control testers; entities are bounded and correctly scoped; ordinary players do not receive unintended staff-state disclosure; timeout/cancel/disconnect/reload/shutdown preserves durable recovery and exact-restoration guarantees; no automatic sanction occurs. Representative private Java/Bedrock/distributed acceptance remains assigned to `ES-V02` and is not claimed here.
 
 ## 14. Test requirements
-Command/permission, lifecycle, visibility/audience, duplicate/limit, disconnect/reload/shutdown, API unavailable, evidence/audit, scheduler/thread, and Bedrock-safe control tests. Direct package tests include command filtering, tester type/settings and non-finite bounds, lifecycle journal/cancellation phase ordering, evidence formatting/bounds, fake-entity bookkeeping, provider-unavailable behavior, control-state authorization/capacity, strict nested configuration keys, journal completion revision retry, staff-tool authorization, configuration reload boundaries, and MariaDB global-fence/restart/audit/migration behavior.
+Covered by command/permission, lifecycle, visibility/audience, duplicate/limit, disconnect/reload/shutdown, API-unavailable, evidence/audit, scheduler/thread, configuration, persistence, and Bedrock-safe text-fallback tests. Direct package tests include command filtering; tester type/settings and non-finite bounds; lifecycle journal/cancellation phase ordering; evidence formatting/bounds; fake-entity bookkeeping; provider-unavailable behavior; control-state authorization/capacity; strict nested configuration keys; journal-completion revision retry; staff-tool authorization; configuration reload boundaries; MariaDB global-fence/restart/audit/migration behavior; and durable inventory-lock participation.
 
 ## 15. Static-analysis requirements
-All configured Java/static-analysis/review-bot gates; zero valid unresolved findings. Continuation review fixed the prior oversized-manager finding by extracting fake-entity state and durable completion responsibilities, and added direct coverage for those extracted policy/state units. Every live CodeRabbit thread was reconciled; all are resolved or outdated and zero valid unresolved review threads remain before final exact-head recheck.
+Satisfied on frozen head `1997caa864847049d51bfc58402f019e0a0d65c6`: Codacy static check `93015840928` succeeded with zero issues. The oversized manager was structurally decomposed into focused fake-entity state/support and durable-completion collaborators rather than suppressed. All live PR review threads were resolved or outdated; zero valid unresolved threads remained at merge.
 
 ## 16. Documentation requirements
-Commands, permissions, configuration, operational limits, evidence/privacy, cleanup/recovery, Wiki, registry/handoff. Repository-managed Wiki and `reports/ES-P10-CHEAT-TESTER-IMPLEMENTATION.md` document the implemented boundary.
+Complete: commands, permissions, configuration, operational limits, evidence/privacy, cleanup/recovery, repository-managed Wiki, `reports/ES-P10-CHEAT-TESTER-IMPLEMENTATION.md`, package registry, workspace state, and canonical handoff.
 
 ## 17. Security and privacy requirements
-Strict authorization; bounded entities/evidence; no hidden staff/private data leakage; fail closed if packet/provider support is absent. Fake-entity evidence counts only target interactions; controlling-staff observer interaction is excluded from suspect evidence. `/cheattester status` requires the tester permission and active staff mode before session identities are exposed.
+Strict authorization; bounded entities/evidence; no hidden staff/private data leakage; fail closed if packet/provider support is absent. Fake-entity evidence counts only target interactions; controlling-staff observer interaction is excluded from suspect evidence. `/cheattester status` requires tester permission and active staff mode before session identities are exposed.
 
 ## 18. Migration impact
-ES-P10 owns immutable forward migration `V18__cheat_tester_session_journal.sql`. V1–V17 remain untouched. V18 stores bounded recovery/evidence state, revision/lifecycle metadata, and a globally unique nullable active-target fence. Payload columns are sized for the validated character bounds under utf8mb4. Clean-install, upgrade, checksum, restart, and uniqueness behavior are covered by the repository migration/integration suite.
+ES-P10 owns immutable forward migration `V18__cheat_tester_session_journal.sql`. V1–V17 are untouched. V18 stores bounded recovery/evidence state, revision/lifecycle metadata, and a globally unique nullable active-target fence. Payload columns are sized for validated character bounds under utf8mb4. Clean-install, upgrade, checksum, restart, and uniqueness behavior are covered by repository migration/integration tests. Aggregate `main` now includes V18.
 
 ## 19. Bedrock considerations
-Staff controls include a text fallback and do not rely on Java-only GUI interaction. Representative Java/Bedrock visibility/usability acceptance remains assigned to `ES-V02`; ES-P10 does not claim that private acceptance.
+Staff controls include a text fallback and do not rely on Java-only GUI interaction. Representative Java/Bedrock visibility/usability acceptance remains explicitly assigned to `ES-V02`; ES-P10 does not claim unavailable private staging as a pass.
 
 ## 20. Distributed-runtime considerations
-The V18 active-target fence prevents concurrent testing of one target across backend processes. Active durable tester rows participate in the existing inventory-lock contract so disconnect/restart recovery cannot race offline asset mutation. Login/respawn recovery now resolves the globally active target row rather than only rows owned by the current backend, preserving exact restoration after backend loss. Client-side fake entities are backend-local and nonpersistent.
+The V18 active-target fence prevents concurrent testing of one target across backend processes. Active durable tester rows participate in the existing inventory-lock contract so disconnect/restart recovery cannot race offline asset mutation. Login/respawn recovery resolves the globally active target row rather than only rows owned by the current backend, preserving exact restoration after backend loss. Client-side fake entities are backend-local and nonpersistent.
 
 ## 21. External-provider considerations
-ProtocolLib 5.4.0 is the supported packet boundary already present in the Paper build. `FakeEntityAdapter` isolates packet behavior; absence, disable, linkage failure, spawn failure, or destroy failure is fail-closed. A destroy failure propagates after fail-closing so an unverifiable cleanup cannot be incorrectly terminalized. No direct NMS dependency was introduced.
+ProtocolLib 5.4.0 is the supported packet boundary already present in the Paper build. `FakeEntityAdapter` isolates packet behavior; absence, disable, linkage failure, spawn failure, or destroy failure is fail-closed. A destroy failure propagates after fail-closing so unverifiable cleanup cannot be incorrectly terminalized. No direct NMS dependency was introduced.
 
 ## 22. Completion definition
-Tester/fake-entity scope fully implemented/tested/documented; one exact-head PR merges normally; zero valid threads; branch cleanup verified. This definition is not satisfied until PR #86 merges and terminal publication/cleanup complete.
+Satisfied. The tester/fake-entity scope owned by ES-P10 is implemented, tested, documented, reviewed, exact-head validated, normally merged, contained, and cleaned up. Deferred representative staging belongs to ES-V02 by contract and does not reopen ES-P10 absent a later validated defect.
 
 ## 23. Resume state
-Selected from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` by `ChatGPT sequential package worker`. Active branch: `package/es-p10-cheat-testers`. PR #86 remains the only ES-P10 implementation PR. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
+Terminal package; do not resume as ordinary ES-P10 work. Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736`. Frozen implementation head: `1997caa864847049d51bfc58402f019e0a0d65c6`. Product merge: `e605d8ad6094b2ae6842044d209875e13c38906d`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
 
 ## 24. Last completed checkpoint
-Continuation review at product head `ee49d35b2a84eb62e01dbef16d5991ae89ff10f8` reconciled the previously failing Codacy size/coverage evidence and every live review finding. Corrections include strict nested config-key rejection; reduced recovery polling; cancellation of damage from every tagged staff tool; status permission/staff-mode privacy; inventory click/drag mutation guards; finite-value settings checks; full snapshot validation before inventory writes; ProtocolLib runtime/linkage fail-closed handling; stale delayed fake-spawn suppression; global-on-login recovery across backend ownership; stable tester IDs; mapper-backed audit JSON; V18 payload sizing; and failure propagation when synthetic-entity cleanup cannot be verified. Focused regression tests were added for control state, fake-entity state, strict config parsing, settings bounds, and optimistic journal completion.
+The final static cleanup structurally extracted fake-entity support from `CheatTesterManager` and resolved all remaining Codacy findings. Frozen head `1997caa864847049d51bfc58402f019e0a0d65c6` then passed the complete unchanged-head hosted gate set. PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d`; compare from frozen head to merged `main` is one commit ahead, zero behind, with zero file differences; `package/es-p10-cheat-testers` was automatically deleted and returns 404.
 
 ## 25. Remaining checklist
-Freeze the final content head after this package-state publication; require successful exact-head hosted build/tests/MariaDB/Testcontainers/migration/runtime-JAR/Wiki/static/coverage gates; require zero valid unresolved review threads; record the private Pi/distributed zero-runner result as **NOT A PASS** and deferred to `ES-V02`; merge PR #86 normally; verify exact containment; delete the implementation branch; publish terminal package/registry/workspace/handoff state without activating ES-P11; stop.
+None for ES-P10 product work. Finish the documentation-only terminal publication, verify its normal merge/containment/branch cleanup, persist `COMPLETE` to `main`, recompute dependency-derived readiness without activating ES-P11, and stop.
 
 ## 26. Known blockers
-No product-code blocker is known. Private representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02` and is not a prerequisite for this ordinary development package. The private Actions account-level Billing & plans condition continues to produce runner ID `0` / no-step staging attempts; such attempts are unavailable infrastructure evidence, never a pass. ES-P02 and ES-P05 remain separately parked on their own required private gates.
+No ES-P10 product blocker. Exact frozen-head private staging run `31224339373` did not execute product validation: Ubuntu job `93015447468` had runner ID `0`, empty runner name, and `steps: []`; Pi `93015487565` was skipped. This is **NOT A PASS** and no ES-P10 infrastructure exception was claimed. Representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02`. ES-P02 and ES-P05 remain separately parked on their own required private gates.
 
 ## 27. Final evidence
-Starting main: `83302749b3247f7a05157f1625fc99da6aa43736`. Starting migration boundary: V17; ES-P10 adds V18. Final product-code head before the tracked state checkpoint: `ee49d35b2a84eb62e01dbef16d5991ae89ff10f8`. Protocol API decision: ProtocolLib 5.4.0 through a focused adapter; no unisolated NMS. Final exact tracked-head check IDs, merge SHA, containment, and branch deletion belong in the terminal publication after validation/merge so the evidence can refer to the unchanged merge input.
+- Starting legitimate main: `83302749b3247f7a05157f1625fc99da6aa43736`.
+- Frozen implementation head: `1997caa864847049d51bfc58402f019e0a0d65c6`.
+- Wiki/metadata check `93015435354`: success.
+- Java 21 workflow `31224336640`, unchanged-head rerun job `93016497496`: success for build/tests/MariaDB/Testcontainers/migrations/aggregate JaCoCo/runtime-JAR inspection/artifact/Codacy coverage upload.
+- Validation artifact `9011777818`, SHA-256 `4557877edff2589065483f4d2d81f0c231511001ad04ea82d5b36cfbba1c762a`.
+- Aggregate JaCoCo: 2,576 / 5,427 lines covered (47.47%); 796 / 1,887 branches covered (42.18%).
+- Codacy static `93015840928`: success, zero issues.
+- Coverage variation `93017546035`: success at `-0.98%` against `-1.0%` allowed.
+- Diff coverage `93017545807`: success at `29.91%`, no gate defined.
+- Review: zero valid unresolved live review threads at merge.
+- First workflow attempt: unrelated MariaDB concurrent-update failure in already-merged punishment-request-alert integration test; no ES-P10 code changed; unchanged-head rerun succeeded and is the counted evidence.
+- Exact private staging: run `31224339373`, Ubuntu `93015447468` zero-runner/no steps, Pi `93015487565` skipped — **NOT A PASS**, retained by ES-V02.
+- Product merge: PR #86 -> `e605d8ad6094b2ae6842044d209875e13c38906d`.
+- Containment: merged main is one merge commit ahead of frozen head, zero behind, zero file differences.
+- Implementation branch cleanup: `package/es-p10-cheat-testers` deleted; branch lookup returns 404.
 
 ## 28. Merge and synchronization record
-PR #86 is `MERGE_PENDING`. Merge/resulting main/containment/temporary branch deletion are pending. External parity is not applicable.
+PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d`. Exact containment is verified and implementation-branch cleanup is complete. External mirror parity is not applicable. Dependency recomputation makes `ES-P11` `READY`, but ES-P11 was not activated by this worker.
