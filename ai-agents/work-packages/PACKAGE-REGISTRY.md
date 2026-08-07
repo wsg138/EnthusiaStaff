@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P09` is `ACTIVE` on its canonical package branch; `ES-P10` remains dependency-derived `READY`. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; no implementation package is active; `ES-P10` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -24,17 +24,17 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
 | `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; private staging Billing & plans blocker |
-| `ES-P09` | Alt and network-identity completion | `ACTIVE` | `ACTIVE` | 55 | `ES-P03` | claimed 2026-08-07 by ChatGPT sequential package worker; branch `package/es-p09-alt-network-identity`; base `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7` |
+| `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
-| `ES-P10` | Cheat tester and fake-entity system | `READY` | `READY` | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 implementation |
+| `ES-P10` | Cheat tester and fake-entity system | `READY` | `READY` | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 and not activated by the ES-P09 worker |
 | `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | unassigned |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | unassigned |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | unassigned |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | unassigned |
 | `ES-V01` | Private LiteBans representative-data verification | `DEFERRED` | — | 200 | — | private/local environment required |
-| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | private validation |
+| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | private validation; retains ES-P09 representative-network false-positive/distributed acceptance |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | — | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | private validation |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | — | 300 | `ES-V01`, `ES-V02`, `ES-V03` | owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | — | 400 | `ES-A01` | unassigned |
@@ -76,10 +76,15 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 
 - Selected 2026-08-07 after live reconciliation confirmed no active actionable package, unchanged parked blockers for ES-P02/ES-P05, and no pre-existing ES-P09 branch/PR/handoff.
 - Starting legitimate `main`: `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7` (merge PR #82).
-- Active branch and integration authority: `package/es-p09-alt-network-identity`; one PR to primary `main`.
-- ES-P03 handoff is consumed as the canonical platform-identity boundary. ES-P09 must not redefine Floodgate/Java identity.
-- Private representative-network false-positive acceptance remains deferred to ES-V02; development acceptance still requires privacy, graph, authorization, concurrency/restart, retention, migration-interaction, hosted/static/review evidence, and normal merge.
+- Frozen implementation head: `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`.
+- PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36`; post-merge compare from frozen head reports one commit ahead, zero behind, and no file differences. Temporary implementation branch cleanup is complete.
+- Completed protected-token graph hardening: bounded shared-network matching and sanction reads; broad-network suppression; simultaneous-play ambiguity; preserved manual decisions; unambiguous-only narrow automatic inheritance; evidence throttling; trusted-clock, authority-fenced bounded retention; raw-address rejection before manual audit persistence; direct concurrency/restart/privacy/key-version tests; Wiki updates.
+- Exact frozen-head evidence: Wiki `31193764800` / `92916829444` success; Coverage `31193765341` / `92916907616` success on Java 21 including full build/tests/MariaDB-Testcontainers/aggregate JaCoCo/runtime-JAR inspection; Codacy `92917176627` success with zero annotations; repository CodeRabbit status success; all four actionable threads resolved/outdated and zero valid unresolved review threads at merge.
+- Private staging remains **NOT A PASS** and is assigned to ES-V02. Public wrapper `31193762319` dispatched private run `31193769314`; required Ubuntu build `92916864019` had runner ID `0`, empty runner name, steps `[]`, and the Billing & plans rejection; Pi `92916876057` skipped. No product validation step executed in that private run.
+- ES-P03 remains the canonical platform-identity boundary. Production/private representative network data, production key rotation, false-positive/distributed acceptance, deployment/cutover, and issue #43 remain excluded/deferred.
+- V17 remains current and immutable; ES-P09 added no migration.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p09-alt-network-identity.md`.
 
 ## Next-worker boundary
 
-`ES-P09` is active and owned by the current sequential worker. Do not select or activate another package while this branch/worker remains non-terminal. ES-P02 and ES-P05 remain parked on the unchanged external condition; ES-P10 remains READY but unassigned.
+No implementation package is active after ES-P09 terminal publication. This ES-P09 worker must stop and must not select or activate another package. A future sequential worker must freshly reconcile live GitHub and canonical state; `ES-P10` remains READY but unassigned, while ES-P02 and ES-P05 remain parked on their unchanged external blocker.
