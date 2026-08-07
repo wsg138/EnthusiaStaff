@@ -1,35 +1,33 @@
 # Integrations
 
-Optional integrations must degrade independently. A missing or incompatible
-provider should disable only the feature that requires it, produce actionable
-verification output and leave unrelated moderation work available.
+Optional integrations must degrade independently. A missing or incompatible provider should disable only the behavior that requires it, produce actionable verification output, and leave unrelated moderation features available when that is safe.
 
-- Completion, source files and remaining work:
-  [[Integrations, Migration, and Release Readiness]]
-- Core health/degraded behavior: [[Core Platform and Infrastructure]]
+- Current integration/release status: [[Integrations, Migration, and Release Readiness]]
+- Core health/degradation: [[Core Platform and Infrastructure]]
 - Runtime configuration: [[Configuration]]
-- Commands and verification: [[Commands and Permissions]]
+- Commands/verification: [[Commands and Permissions]]
+- Review guidance: [[Code Review Guide]]
 
 ## Integration matrix
 
 | Provider | Purpose | Required failure behavior |
 | --- | --- | --- |
-| MariaDB | Durable authority for moderation/recovery | Block new punishments and destructive edits; preserve safe reads/status |
-| Paper–Velocity channel | Network sanctions and coordination | Block new network sanctions; expose reconnect/backlog state |
+| MariaDB | Durable moderation/recovery authority | Block unsafe writes/destructive edits; preserve safe reads/status where possible |
+| Paper-Velocity channel | Network sanctions and coordination | Block unsafe network writes; expose reconnect/backlog state |
 | RoseChat | Staff/global channels, mute, vanish recipients, PM evidence, automod | Disable only affected chat features |
-| Simple Voice Chat | Voice mute and vanish-aware recipients | Text mute may remain; report voice enforcement unavailable |
+| Simple Voice Chat | Voice mute and vanish-aware recipients | Text moderation may remain; report voice enforcement unavailable |
 | ViaVersion/ViaBackwards | Protocol/version evidence | Mark version evidence unknown/unavailable |
-| Floodgate/Geyser | Bedrock identity and compatibility | Mark platform/alias/GUI compatibility unavailable |
-| CombatLogX | Staff-mode combat gate | Block staff-mode entry when safe combat state cannot be proven |
-| Polar | Anticheat evidence/future automation | Disable Polar automation only |
-| ProtocolLib | Player-info/entity packet handling | Fail closed for dependent spectator/vanish presentation |
-| DiscordSRV/webhooks | Staff notifications | Queue durably; never undo a valid case because Discord is down |
-| LuckPerms | Command discovery and rank permissions | Fail authority safely; central policy still rechecks writes |
-| EnthusiaCurrency | Economy confiscation/restoration | Hide or block economy actions |
-| EnthusiaMarket | Market restriction/removal/restoration | Block confirmation when provider authority is unavailable |
-| EnthusiaCommend | Reputation blacklist | Disable provider action only |
+| Floodgate/Geyser | Verified Bedrock platform evidence and client compatibility | Keep platform `UNKNOWN` when provider evidence is unavailable/incompatible; retain safe lookup behavior |
+| CombatLogX | Staff-mode combat gating | Block unsafe staff-mode transition when combat safety cannot be established |
+| Polar | Anticheat evidence/supported automation | Disable unsupported automation only |
+| ProtocolLib | Player-info/packet visibility support | Fail conservatively for dependent vanish/spectator presentation |
+| Discord delivery/webhooks | Staff notifications | Queue durably where configured; never undo a valid case because Discord is down |
+| LuckPerms/permission provider | Command discovery/rank permissions | Fail authority safely; central application policy still rechecks writes |
+| EnthusiaCurrency | Economy confiscation/restoration | Hide/block economy actions when provider authority is unavailable |
+| EnthusiaMarket | Market moderation/restoration | Block confirmation when provider authority cannot be proved |
+| EnthusiaCommend | Reputation blacklist | Disable provider-specific action only |
 | EnthusiaTeleport | Visibility/teleport compatibility | Disable dependent integration behavior |
-| PlayTimePlugin | Vanish-aware playtime | Mark integration unavailable without exposing vanished staff |
+| PlayTimePlugin | Vanish-aware external behavior | Degrade without exposing hidden staff |
 | InventoryRollbackPlus | Supporting history/recovery context | Never present it as EnthusiaStaff whole-server rollback |
 | EnthusiaAutoClicker | Versioned client evidence | Show unknown/unavailable safely |
 
@@ -38,149 +36,104 @@ verification output and leave unrelated moderation work available.
 | Location | Responsibility |
 | --- | --- |
 | [Integration contracts](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts/src/main/java) | Stable compile-time contracts for Enthusia-owned providers |
-| [Paper integration adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration) | Bukkit-side provider discovery and behavior |
+| [Paper integration adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration) | Bukkit-side provider discovery/behavior |
 | [Paper client adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client) | ViaVersion, Floodgate/Geyser, AutoClicker and client evidence |
 | [Paper economy adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/economy) | EnthusiaCurrency moderation gateway |
-| [Visibility API](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java) | Shared vanish decision boundary for other plugins |
-| [Paper integration manager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java) | Integration lifecycle and shutdown ownership |
-| [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Proxy/Discord/site integration settings |
+| [Visibility API](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java) | Shared visibility decision boundary |
+| [Paper integration manager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java) | Provider lifecycle/shutdown ownership |
+| [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Proxy/network/Discord/site integration settings |
 
 ## Enthusia-owned providers
 
 ### EnthusiaCurrency
 
-Used for exact economy snapshots, validated removal plans, idempotent replay,
-conflict handling and restoration. EnthusiaStaff must never bypass Currency with
-raw balance SQL.
+Used for exact balance snapshots/plans, idempotent removal, verification, conflict handling and restoration. EnthusiaStaff owns moderation intent/journaling; Currency remains balance authority. Raw provider balance SQL is outside this contract.
 
-Current state: the contract/gateway and moderation journal foundations exist; the
-complete provider API and cross-plugin staging remain incomplete.
+Current state: contract/gateway/journal foundations exist; complete provider-side moderation behavior and representative cross-plugin recovery staging remain incomplete.
 
 ### EnthusiaCommend
 
-Used for persistent reputation blacklists. Enforcement must cover GUI, command
-and API write paths while preserving existing score/viewing behavior.
+Used for a persistent moderation blacklist that must be enforced at every provider write entry point rather than one GUI surface.
 
-Current state: the required contract is defined; provider implementation and
-cross-surface enforcement remain incomplete.
+Current state: required boundary is defined; complete provider implementation and cross-surface staging remain incomplete.
 
 ### EnthusiaAutoClicker
 
-Used for versioned bounded client handshake/evidence. Unknown, missing or
-unsupported evidence must display safely rather than being treated as cheating.
+Used for versioned bounded client handshake/evidence. Unknown, missing, unsupported or stale evidence is context—not automatic proof of cheating.
 
-Current state: the contract and consumer foundations exist; provider storage and
-full integration remain incomplete.
+Current state: contract/consumer foundations exist; provider/runtime integration remains incomplete.
 
 ### Enthusia-RoseChat
 
-Required capabilities:
+Intended capabilities include staff/global channels, current/set channel, public/private classification, pre-broadcast moderation, private-message report capture, vanish-aware recipients, mute enforcement, frozen staff-only chat, staff-chat toggle and reload-safe registration.
 
-- current/set channel;
-- staff and global channels;
-- public/private classification;
-- pre-broadcast moderation;
-- private-message report capture;
-- join/quit rendering;
-- vanish-aware recipients;
-- mute enforcement;
-- staff-only frozen chat;
-- staff-chat toggle;
-- reload-safe registration.
-
-The supported provider repository/API required for the complete bridge is
-currently unavailable/incomplete. Report PM evidence, strict pre-broadcast
-automod and several staff/visibility features remain blocked.
+The supported provider API required for all of those paths is still incomplete/unavailable. Do not invent a provider contract from assumptions, reflection or command behavior. Dependent PM-evidence/strict automod/chat-visibility work remains limited until a supported contract exists.
 
 ### EnthusiaMarket
 
-Used for supported stall review, restriction, removal and restoration. The
-provider's own transaction model remains authoritative.
+Used for supported stall moderation, review, ownership/restriction changes and restoration while preserving the market plugin's own transaction/rent semantics.
 
-Current state: contracts/expected boundaries exist; the complete provider
-implementation and staging remain incomplete.
+Current state: contract boundaries exist; complete provider implementation and end-to-end staging remain incomplete.
 
-## Third-party integrations
+## Floodgate and Geyser
 
-### ProtocolLib
+Platform identity uses supported provider evidence, not username shape.
 
-Supports packet-level player-info/entity behavior where Paper APIs are
-insufficient. If unavailable or incompatible, spectator staff presentation must
-fail closed rather than exposing actual spectator state.
+- UUID is authoritative.
+- A successful supported Floodgate observation may persist verified `BEDROCK` or `JAVA` platform evidence.
+- Geyser with missing/unavailable/incompatible Floodgate remains `UNKNOWN`; provider failure is not proof of Java.
+- Velocity presence is intentionally unverified for platform. It may update UUID/name/presence but cannot downgrade a verified platform record.
+- A username beginning with `*` is a supported lookup alias shape, not platform proof.
+- Verified Bedrock evidence can repair legacy Java/unknown rows and should not be overwritten by later duplicate/out-of-order unverified proxy observations.
+- Current and historical `*` aliases remain case-insensitively resolvable through the player directory.
 
-See [[Vanish Internals]].
+Representative Java/Bedrock/Geyser/Floodgate reconnect, server-switch, provider-failure, GUI/text-fallback and packet/visibility acceptance is still required before making staging claims.
 
-### Floodgate and Geyser
+## ProtocolLib
 
-Used for Bedrock identity, `*` aliases and client compatibility.
+Used for narrowly scoped packet-level visibility behavior where Paper APIs alone are insufficient. Missing/incompatible ProtocolLib must not expose a state that the visibility contract considers unsafe.
 
-Platform persistence has an explicit evidence boundary:
+Deep dive: [[Vanish Internals]].
 
-- Paper resolves platform from the supported Floodgate API and the observed
-  Geyser/Floodgate availability state for that player UUID.
-- A working Floodgate observation may persist `BEDROCK` or `JAVA`.
-- Geyser with missing, unavailable or incompatible Floodgate persists `UNKNOWN`;
-  provider failure is never treated as proof of Java.
-- Velocity presence observations are intentionally unverified and therefore
-  persist `UNKNOWN` until a Paper backend supplies verified provider evidence.
-  They may update UUID, name history and presence, but cannot downgrade a known
-  platform.
-- A username beginning with `*` is a supported Bedrock alias shape, not proof of
-  platform. Platform is never inferred from username text.
-- Verified Bedrock evidence repairs legacy Java/unknown rows and is not
-  overwritten by later unverified, duplicate or out-of-order proxy observations.
-- Current and historical `*` aliases remain case-insensitively resolvable and
-  searchable through the player directory.
+## ViaVersion and ViaBackwards
 
-Full representative Java/Bedrock, reconnect and multi-backend acceptance remains
-owned by private validation package `ES-V02`; this source package does not claim
-that staging evidence.
+Used for protocol/version context. Version information is evidence/context only and should degrade to unknown/unavailable when the supported provider is missing.
 
-### ViaVersion and ViaBackwards
+## CombatLogX
 
-Used for protocol/version evidence. Version data is context, not proof of a rule
-violation.
+Used to prevent unsafe staff-mode transitions around combat and avoid staff-mode behavior silently bypassing combat policy. Provider absence or incompatible behavior should surface explicitly rather than be guessed.
 
-### CombatLogX
+## Polar
 
-Used to block unsafe staff-mode entry and prevent staff-mode/vanished players from
-creating or receiving combat tags.
+The project has targeted Polar `1.7.11-beta` for supported integration discovery. Automatic punishment must stay disabled unless the supported provider API exposes the required reliable violation-event contract. Private internals must not be decompiled, shaded or presented as a public API.
 
-### Polar
+## Simple Voice Chat
 
-Target integration version: `1.7.11-beta`, command namespace `/enthusia`.
-Automatic punishment remains disabled until Polar exposes a supported
-violation-event contract. Private internals must not be shaded, decompiled or
-presented as a supported API.
-
-### Simple Voice Chat
-
-Used for voice-mute and vanish-aware recipients. Voice integration failure should
-not corrupt text punishment state.
+Used for voice-mute and vanish-aware voice recipients. Voice integration failure must not corrupt text sanction state or cause a text moderation action to be reported as fully voice-enforced.
 
 ## Provider API safety
 
-For every destructive provider action:
+For a destructive provider action:
 
-- use a supported stable contract;
-- supply an idempotency key;
-- record durable intent before external effects;
-- verify the returned result;
-- distinguish unavailable, conflict, retryable and terminal failure;
-- enter visible recovery/quarantine when outcome is ambiguous;
-- never use raw provider SQL, reflection into private state or command dispatch as
-  a transaction mechanism.
+- call a supported stable contract;
+- carry an idempotency/external operation identity;
+- record durable moderation intent before external effects where required;
+- validate/recheck authority at the appropriate service boundary;
+- verify the returned/external result;
+- distinguish unavailable, conflict, retryable, terminal and ambiguous outcomes;
+- quarantine/retain recovery evidence when the external result cannot be proved;
+- bound retries/timeouts;
+- never use raw provider SQL, reflection into private internals, or command dispatch as a transaction protocol.
 
 ## Packaging and classloaders
 
-Provider APIs should normally be `compileOnly` or explicit Enthusia-owned SPI
-contracts. Runtime-jar inspection rejects provider-owned API duplication, but
-release acceptance must still install all providers together and verify service
-discovery/classloader behavior.
+Provider APIs should normally remain `compileOnly` or use explicit Enthusia-owned SPI/contracts. Runtime-JAR inspection can detect copied provider classes, but it does not prove live service discovery or classloader compatibility.
+
+Representative release staging should install supported providers together and test present/missing/incompatible/reload/restart cases.
 
 ## Verification output
 
-`/estaff verify full` should classify each provider as:
+`/estaff verify full` should distinguish states such as:
 
 - `PASS`
 - `WARNING`
@@ -188,16 +141,13 @@ discovery/classloader behavior.
 - `RESTART REQUIRED`
 - `CRITICAL`
 
-“Plugin present” is not sufficient. Verification should check compatible API,
-service registration, required callbacks/events where safely possible and the
-exact dependent features. It must not run destructive provider actions as a test.
+“Plugin present” is insufficient. Verification should identify whether the compatible API/service needed by the dependent capability is actually available. Verification must not perform destructive provider operations merely to prove discovery.
 
-## Current completion
+## Current state
 
-Provider implementation/classloader compatibility is one of the largest remaining
-release areas. The detailed percentages, provider source links, website/Discord
-status and migration dependencies are maintained in
-[[Integrations, Migration, and Release Readiness]].
+Integration/provider work remains one of the largest release-readiness areas. Several useful adapters and contracts are merged, including the current verified Floodgate identity boundary, but multiple provider-side implementations and representative all-provider/classloader/runtime acceptance are still incomplete.
+
+See [[Integrations, Migration, and Release Readiness]] for the current qualitative status rather than transient package identifiers or exact completion percentages.
 
 ## Related pages
 
@@ -206,4 +156,5 @@ status and migration dependencies are maintained in
 - [[Configuration]]
 - [[Commands and Permissions]]
 - [[Vanish Internals]]
+- [[Code Review Guide]]
 - [[Build and Testing]]
