@@ -18,4 +18,4 @@ Harsh review fixed the pre-mutation cancellation/journal race and staff-observer
 
 Private Pi/distributed staging attempts remain **NOT A PASS** when the private required Ubuntu job receives runner ID `0`, empty runner name, and no steps and Pi is skipped. ES-P10's contract assigns representative distributed Java/Bedrock acceptance to `ES-V02`, so unavailable private staging is recorded without being relabeled as success or as an executed product failure.
 
-Remaining work is package-finalization only: freeze the final content head, require exact-head hosted/static/coverage/review gates and zero valid threads, merge PR #86 normally, verify containment, delete the implementation branch, publish terminal `COMPLETE` state, recompute dependency-derived readiness without activating another package, and stop.
+Remaining work is package-finalization only: validate the frozen exact PR head with hosted/static/coverage/review gates and zero valid threads, merge PR #86 normally, verify containment, delete the implementation branch, publish terminal `COMPLETE` state, recompute dependency-derived readiness without activating another package, and stop.
