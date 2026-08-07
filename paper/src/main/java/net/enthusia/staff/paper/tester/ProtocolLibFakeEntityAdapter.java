@@ -1,0 +1,177 @@
+package net.enthusia.staff.paper.tester;
+
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.ListenerPriority;
+import com.comphenix.protocol.events.PacketAdapter;
+import com.comphenix.protocol.events.PacketContainer;
+import com.comphenix.protocol.events.PacketEvent;
+import com.comphenix.protocol.events.PacketListener;
+import com.comphenix.protocol.wrappers.WrappedEnumEntityUseAction;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import org.bukkit.EntityEffect;
+import org.bukkit.Location;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+
+final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
+    private static final int FIRST_SYNTHETIC_ENTITY_ID = 2_000_000_000;
+
+    interface InteractionHandler {
+        /** @return true when the packet belongs to a managed synthetic entity and must be cancelled. */
+        boolean handle(UUID viewerId, int entityId, String action);
+    }
+
+    private final JavaPlugin plugin;
+    private final ProtocolManager manager;
+    private final PacketListener listener;
+    private final AtomicInteger nextEntityId = new AtomicInteger(FIRST_SYNTHETIC_ENTITY_ID);
+    private final AtomicBoolean healthy;
+    private final AtomicBoolean closed = new AtomicBoolean();
+
+    private ProtocolLibFakeEntityAdapter(
+            JavaPlugin plugin,
+            ProtocolManager manager,
+            PacketListener listener,
+            AtomicBoolean healthy
+    ) {
+        this.plugin = plugin;
+        this.manager = manager;
+        this.listener = listener;
+        this.healthy = healthy;
+    }
+
+    static FakeEntityAdapter install(
+            JavaPlugin plugin,
+            InteractionHandler interactionHandler,
+            Runnable failureHandler
+    ) {
+        Objects.requireNonNull(plugin, "plugin");
+        Objects.requireNonNull(interactionHandler, "interactionHandler");
+        Objects.requireNonNull(failureHandler, "failureHandler");
+        ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
+        AtomicBoolean healthy = new AtomicBoolean(true);
+        PacketListener listener = listener(plugin, interactionHandler, failureHandler, healthy);
+        protocolManager.addPacketListener(listener);
+        return new ProtocolLibFakeEntityAdapter(plugin, protocolManager, listener, healthy);
+    }
+
+    private static PacketListener listener(
+            JavaPlugin plugin,
+            InteractionHandler interactionHandler,
+            Runnable failureHandler,
+            AtomicBoolean healthy
+    ) {
+        return new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Client.USE_ENTITY) {
+            @Override
+            public void onPacketReceiving(PacketEvent event) {
+                if (!healthy.get()) {
+                    return;
+                }
+                try {
+                    PacketContainer packet = event.getPacket();
+                    if (packet.getIntegers().size() == 0 || packet.getEnumEntityUseActions().size() == 0) {
+                        return;
+                    }
+                    int entityId = packet.getIntegers().read(0);
+                    WrappedEnumEntityUseAction action = packet.getEnumEntityUseActions().read(0);
+                    String actionName = action == null ? "UNKNOWN" : action.getAction().name();
+                    if (interactionHandler.handle(event.getPlayer().getUniqueId(), entityId, actionName)) {
+                        event.setCancelled(true);
+                    }
+                } catch (RuntimeException exception) {
+                    disableAfterFailure(plugin, failureHandler, healthy, exception);
+                }
+            }
+        };
+    }
+
+    @Override
+    public boolean available() {
+        return healthy.get() && !closed.get();
+    }
+
+    @Override
+    public Handle spawn(Collection<Player> viewers, Location location) {
+        requireAvailable();
+        Objects.requireNonNull(viewers, "viewers");
+        Objects.requireNonNull(location, "location");
+        int entityId = nextEntityId.getAndDecrement();
+        if (entityId < 1_500_000_000) {
+            nextEntityId.compareAndSet(entityId - 1, FIRST_SYNTHETIC_ENTITY_ID);
+        }
+        UUID entityUuid = UUID.randomUUID();
+        PacketContainer packet = manager.createPacket(PacketType.Play.Server.SPAWN_ENTITY, true);
+        packet.getIntegers().write(0, entityId);
+        packet.getUUIDs().write(0, entityUuid);
+        packet.getEntityTypeModifier().write(0, EntityType.ZOMBIE);
+        packet.getDoubles()
+                .write(0, location.getX())
+                .write(1, location.getY())
+                .write(2, location.getZ());
+        for (Player viewer : viewers) {
+            if (viewer != null && viewer.isOnline() && viewer.getWorld().equals(location.getWorld())) {
+                manager.sendServerPacket(viewer, packet.shallowClone());
+            }
+        }
+        return new Handle(entityId, entityUuid);
+    }
+
+    @Override
+    public void destroy(Collection<Player> viewers, Handle handle) {
+        if (handle == null || viewers == null || closed.get()) {
+            return;
+        }
+        try {
+            PacketContainer packet = manager.createPacket(PacketType.Play.Server.ENTITY_DESTROY, true);
+            packet.getIntLists().write(0, List.of(handle.entityId()));
+            for (Player viewer : viewers) {
+                if (viewer != null && viewer.isOnline()) {
+                    manager.sendServerPacket(viewer, packet.shallowClone());
+                }
+            }
+        } catch (RuntimeException exception) {
+            healthy.set(false);
+            plugin.getLogger().log(Level.WARNING, "Failed to remove a synthetic cheat-test entity", exception);
+        }
+    }
+
+    private void requireAvailable() {
+        if (!available()) {
+            throw new IllegalStateException("fake-entity packet adapter is unavailable");
+        }
+    }
+
+    private static void disableAfterFailure(
+            JavaPlugin plugin,
+            Runnable failureHandler,
+            AtomicBoolean healthy,
+            RuntimeException exception
+    ) {
+        if (!healthy.compareAndSet(true, false)) {
+            return;
+        }
+        plugin.getLogger().log(
+                Level.SEVERE,
+                "ProtocolLib fake-entity adapter failed; cheat-test fake entities are fail-closed",
+                exception
+        );
+        failureHandler.run();
+    }
+
+    @Override
+    public void close() {
+        healthy.set(false);
+        if (closed.compareAndSet(false, true)) {
+            manager.removePacketListener(listener);
+        }
+    }
+}
