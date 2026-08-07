@@ -1,134 +1,90 @@
 # `ES-P02` — Runtime database recovery and Velocity reload
 
 ## 1. Package identity
-`ES-P02`; Internal; primary `COMP-STAFF`; priority 20; not parallel-safe around lifecycle/configuration.
+`ES-P02`; internal; primary component `COMP-STAFF`; priority 20; not parallel-safe around lifecycle/configuration.
 
 ## 2. Status
-`BLOCKED`. Product implementation, tests, documentation, review repair, Java 21 build/test/coverage, MariaDB/Testcontainers, migration integrity, runtime-JAR/provider-leak, Codacy, and review-thread gates passed for exact product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`. Merge remains blocked because the required Pi staging workflow failed twice before any staging product step executed: the ordinary `ubuntu-latest` build job received no runner on attempts 1 and 2. That ordinary hosted job cannot be called passed or excused under the repository policy, and ES-P02 has no package-specific owner-approved infrastructure exception.
+`BLOCKED` / `PARKED_BLOCKED`.
+
+The product implementation is complete and the branch is synchronized with current `main`. Exact synchronized validation head `d671fef9fd14f0c4ae711c83edb29bc9b08ea002` passed every executable hosted gate, Codacy, CodeRabbit, and review-thread reconciliation. Merge is blocked only because the required private staging repository could not start its ordinary `ubuntu-latest` build job: GitHub reported failed account payments or an insufficient Actions spending limit. The job received `runner_id: 0`, an empty runner name, and zero steps on both attempts. The Pi boot/restart job was therefore skipped.
+
+This is infrastructure-unavailable evidence, not a product failure and not a pass. Repository policy explicitly prohibits treating a missing ordinary GitHub-hosted build as an owner-approved infrastructure exception.
 
 ## 3. Objective
 Recover from transient Paper/Velocity database bootstrap failures without process restart and provide safe Velocity configuration reload.
 
-## 4. Why the package exists
-`AUD-RUNTIME-001/002`, configuration reload, health, latency, and legacy policy reload share lifecycle composition and must be fixed coherently.
-
-## 5. Included audit IDs
-`AUD-RUNTIME-001`, `AUD-RUNTIME-002`, `AUD-CONFIG-002`, `AUD-CONFIG-003`, `AUD-CONFIG-004`, `AUD-PERF-005`, relevant `AUD-ESC-005`.
-
-## 6. Included behavior completed
+## 4. Included behavior completed
 - Bounded Paper and Velocity bootstrap retry/recovery.
 - Cleanup-before-retry and deterministic shutdown.
-- Atomic Velocity reload with validation and rollback.
-- Explicit restart-required reporting for resource-bound settings.
+- Correct worker/global/entity scheduler separation and stale-callback fencing.
+- Atomic Velocity reload with validation, rollback, authorization, and restart-required reporting.
 - Sanitized health and operator feedback.
-- Worker/scheduler rejection, retry, reconnect-cycle, repeated reload, invalid candidate, shutdown, and race tests.
-- Automatic sequential package-selection documentation correction.
+- Focused lifecycle, rejection, cleanup, retry, exhaustion, reload, rollback, shutdown, and race tests.
+- Operator documentation in `docs/runtime-database-recovery.md`.
 
-## 7. Explicit exclusions preserved
-Production DB access; private data; Flyway repair/history rewrite; unrelated configuration redesign; provider invention; deployment; authority activation; issue #43; shadow period; production migration; cutover; rollback; ES-X05; any second package.
+## 5. Explicit exclusions preserved
+No production database or private-data access; no Flyway repair/history rewrite; no deployment; no authority activation; no issue #43 acceptance; no shadow period, production migration, cutover, or rollback; no provider invention; no ES-X05 work; no second package. LiteBans remains authoritative.
 
-## 8. Dependencies
+## 6. Dependencies
 `ES-P01` is `COMPLETE`.
 
-## 9. Component and repository boundaries
-Root EnthusiaStaff runtime/configuration/tests/docs only. No external component import, permanent component branch, or isolated PR.
+## 7. Branch and PR
+- Branch: `package/es-p02-runtime-db-recovery`.
+- PR: #70 to `wsg138/EnthusiaStaff:main`.
+- Starting base: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
+- Current synchronized base: `9b1aac2677049ccc71dbddd963831f270c73dcd0`.
+- Synchronization merge commit: `b21cb81b81fdcf0bac5027ae6f6b7901f6b0c175`.
+- Exact hosted-validation head: `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`.
+- Paper and Velocity product files merged with current `main` without conflicts. Only package-governance records required resolution; current `main` remained authoritative for global rules and state.
 
-## 10. Required branch
-`package/es-p02-runtime-db-recovery`; retained because PR #70 is unmerged and contains unique work.
+## 8. Exact-head hosted validation
+Coverage workflow run `31138550369`, job `92743341861`, for exact head `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`: `SUCCESS`.
 
-## 11. Required PR
-PR `#70` to `wsg138/EnthusiaStaff:main`; open, non-draft, unmerged, and currently non-mergeable because the branch has diverged from current `main`.
+The job used Java 21 and successfully completed:
+- clean build and all configured tests;
+- MariaDB/Testcontainers and migration-integrity checks;
+- aggregate JaCoCo generation and changed-code coverage enforcement;
+- Paper/Velocity runtime-JAR creation and integrity inspection;
+- provider/API leak inspection;
+- validation artifact upload;
+- Codacy coverage upload.
 
-## 12. Implementation checklist
-- [x] Reconcile live GitHub, registry, routing, migration boundary, issue #43, and prior handoff.
-- [x] Select ES-P02 through automatic sequential rules.
-- [x] Create the documented package branch from exact `main` `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
-- [x] Correct obsolete explicit-assignment orchestration documents.
-- [x] Open PR #70 and maintain package records.
-- [x] Implement bounded Paper bootstrap recovery and shutdown behavior.
-- [x] Implement bounded Velocity bootstrap recovery and partial-resource cleanup.
-- [x] Implement atomic Velocity reload, rollback, restart-required reporting, and authorization.
-- [x] Add focused lifecycle, rejection, cleanup, retry, reload, and race tests.
-- [x] Add operator and recovery documentation.
-- [x] Harshly review the complete diff and repair confirmed findings.
-- [x] Resolve all review threads; zero unresolved threads remain.
-- [x] Pass exact-product-head Java 21 build, all tests, MariaDB/Testcontainers, migration integrity, coverage threshold, runtime-JAR, and provider-leak checks.
-- [x] Pass exact-product-head Codacy with zero annotations.
-- [x] Reconcile the failed Pi staging run and rerun the failed staging build job once.
-- [x] Verify staging attempts 1 and 2 both assigned `runner_id: 0`, empty runner names, and zero executed steps to the ordinary `ubuntu-latest` build job; the Pi boot job was skipped both times.
-- [x] Verify current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e` and the package branch is diverged, 53 commits ahead and 5 commits behind with merge base `d94d0219a598c9afb7e19c4ea9fddafd554d6469`.
-- [ ] Obtain successful exact-head staging build plus Pi build/boot/restart evidence, or obtain explicit ES-P02 owner approval for a policy-valid exception that also addresses the ordinary hosted build gate.
-- [ ] Synchronize the package branch with current `main` through the repository-approved merge-commit workflow and resolve conflicts without rebasing or force-pushing.
-- [ ] Revalidate the resulting exact head after the blocker clears and synchronization completes.
-- [ ] Merge normally, verify containment/divergence, clean the branch, finalize records, update dependencies, and stop.
+Artifact `java-21-validation`: ID `8979036747`; digest `sha256:18810296fc08695fb5d5f8497f008052161b7a0b0536fc898d27a22d69f65d70`.
 
-## 13. Acceptance criteria status
-All code-level acceptance criteria are implemented and validated for the frozen product head. Package completion remains blocked by the required staging gate and later current-main synchronization/exact-head revalidation.
-
-## 14. Tests added
-Paper tests cover scheduler phase separation, transient recovery, initial worker rejection, exhaustion, shutdown before retry, cleanup-before-retry, retired entity callbacks, recovery failure, cleanup worker rejection, and retry payloads.
-
-Velocity bootstrap tests cover transient recovery, exhaustion, permanent failure, shutdown, manual retry without overlap, worker rejection, and scheduler rejection. Reload tests cover atomic application, restart-required rejection, invalid candidate rollback, publication rollback, repeated reload, and shutdown races. Runtime-health tests cover immutable snapshots, atomic issue merges, and preservation of the current mode during issue updates.
-
-## 15. Review findings and fixes
-CodeRabbit identified three confirmed defects: Paper terminal-health overwrite, Velocity lost-update/stale-mode health publication, and overlapping Velocity bootstrap transitions. All were fixed. Manual harsh review also fixed a permanent-failure notification race and a remaining stale-mode issue-update race. Codacy findings were addressed by refactoring and narrow method-scoped suppressions with explanations. Current unresolved review-thread count is zero.
-
-A fresh full CodeRabbit review of later heads could not be started because the review quota was exhausted; no stale review is represented as current full-bot proof. The current CodeRabbit check is successful, and manual full-diff review found no remaining confirmed product defect.
-
-## 16. Documentation
-`docs/runtime-database-recovery.md` documents bounded retries, cleanup, status, Velocity reload, restart-required settings, operator recovery, privacy/security, V16 immutability, and later validation boundaries.
-
-## 17. Security and privacy
-No secret, credential, production route, database row, private player data, raw address, or production environment was accessed or committed. Operator output is sanitized. Reload requires `enthusiastaff.reload`. Sensitive authority remains fail-closed; LiteBans remains authoritative.
-
-## 18. Migration impact
-No migration. V16 remains highest. V1–V16 remain byte-immutable. Flyway repair remains prohibited.
-
-## 19. Bedrock considerations
-No Floodgate identity or player-facing protocol contract changed. Java/Bedrock staging acceptance remains assigned to `ES-V02` and is not claimed here.
-
-## 20. Distributed-runtime considerations
-Each process owns one fenced bootstrap coordinator. Attempts and retries cannot overlap within a process. Publication, cleanup, shutdown, stale callbacks, and manual retry are fenced. Distributed staging acceptance is not claimed.
-
-## 21. External-provider considerations
-Provider and listener settings validate explicitly. Missing optional integrations degrade with component health. No provider API or repository was invented.
-
-## 22. Exact product-head validation
-Product head: `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`.
-
-- Coverage workflow run `31072792371`, job `92524077883`: `SUCCESS`.
-- The successful job verified expected SHA, used Java 21, ran tests and generated coverage, enforced changed-code coverage, built plugin/extension runtime JARs, verified packaged JARs and API/provider leaks, and dispatched follow-up Pi staging.
+Additional exact-head evidence:
 - Codacy Static Code Analysis: `SUCCESS`, zero issues/annotations.
-- CodeRabbit check: `SUCCESS`.
-- Review threads: zero unresolved.
-- Snyk: skipped; not represented as passing evidence.
-- Exact percentage and artifact hash were not surfaced by the connector; only the configured threshold and artifact-integrity steps are claimed as passed.
+- CodeRabbit: `SUCCESS`.
+- Valid unresolved review threads: zero; all three historical threads are resolved.
 
-## 23. Blocking validation evidence
-Parent exact-head Pi staging workflow run `31072790867`, job `92524036760`, tested source SHA `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` and dispatched staging run `31072794096`.
+## 9. Blocking staging evidence
+Parent workflow run `31138550480`, job `92743298476`, dispatched private staging run `31138555091` in `wsg138/EnthusiaStaff-Staging` for exact source head `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`.
 
-Staging run `31072794096` attempt 1:
-- Build job `92524048937`, label `ubuntu-latest`: `FAILURE` with `runner_id: 0`, empty runner name, and `steps: []`.
-- Pi job `92524054852`: `SKIPPED`.
+Attempt 1:
+- ordinary build job `92743314720`, label `ubuntu-latest`: `FAILURE`;
+- `runner_id: 0`, empty runner name, `steps: []`;
+- Pi job `92743321663`: `SKIPPED`.
 
-The failed build job was rerun as attempt 2:
-- Build job `92541148296`, label `ubuntu-latest`: `FAILURE` with `runner_id: 0`, empty runner name, and `steps: []`.
-- Pi job `92541160241`: `SKIPPED`.
+Attempt 2, after one direct rerun:
+- ordinary build job `92743621264`, label `ubuntu-latest`: `FAILURE`;
+- `runner_id: 0`, empty runner name, `steps: []`;
+- Pi job `92743627928`: `SKIPPED`.
 
-No staging product build, safe boot, or restart executed in either attempt. This proves an infrastructure allocation failure, not a product failure, but the unavailable job is an ordinary hosted build gate. `VALIDATION-POLICY.md` prohibits treating a missing ordinary GitHub-hosted build as an infrastructure exception, and no ES-P02 owner approval exists in any case. No pass is claimed.
+GitHub check-run annotation for attempt 2 states: the job was not started because recent account payments failed or the spending limit must be increased, and directs the owner to **Billing & plans**. No product build, test, artifact inspection, Pi boot, or restart step executed in either attempt.
 
-## 24. Exact unblock condition
-All of the following are required before merge:
+## 10. Exact unblock condition
+The repository owner must resolve the GitHub Actions billing/payment or spending-limit restriction affecting the private `wsg138/EnthusiaStaff-Staging` repository. A resumed worker must then:
 
-1. obtain a successful ordinary staging build and successful specialized-runner Pi build, safe boot, and restart evidence for an exact package head; or record an explicit ES-P02 owner-approved disposition that is valid under every applicable `VALIDATION-POLICY.md` condition and does not relabel the missing ordinary hosted build as passed;
-2. merge current `main` into the package branch through the approved merge-commit workflow, resolving the current divergence without rebase or force-push; and
-3. freeze and rerun every required exact-head gate on the synchronized head, with zero valid unresolved review findings.
+1. reconcile current `main` and the preserved branch;
+2. freeze a current exact PR head;
+3. rerun all applicable exact-head hosted gates;
+4. obtain a successful ordinary private-staging build and successful Pi build/boot/restart result;
+5. confirm Codacy, CodeRabbit, mergeability, and zero valid unresolved review findings;
+6. merge normally, verify containment/divergence, update all records, clean the branch when safe, and stop.
 
-## 25. Resume state
-Resume PR #70 and branch `package/es-p02-runtime-db-recovery`. Do not modify product code without a newly confirmed defect. Current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e`; the package branch is 53 commits ahead and 5 commits behind with merge base `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. Resolve the staging allocation blocker first or when infrastructure availability changes, then synchronize with current `main`, resolve conflicts, freeze the resulting head, and repeat all applicable validation before merge.
+Do not use an infrastructure exception for the missing ordinary hosted build, do not relabel either staging attempt as passed, and do not modify product code unless a newly confirmed defect is found.
 
-## 26. Merge and cleanup record
-No merge occurred. Current `main` is `5c969901146fc5081eec14b3c089bec7b06d5f5e`. The package branch and PR #70 remain open because they contain unique work. Product-head containment in `main`, safe branch deletion, finalization, and dependency-derived READY updates are not applicable until the package merges. External parity is not applicable.
+## 11. Migration and compatibility boundaries
+No migration was added. V16 remains the highest migration introduced by this package lineage and all existing migrations remain immutable. No Floodgate identity or player-facing protocol contract changed.
 
-## 27. Handoff
-[`2026-08-05-es-p02-runtime-db-recovery.md`](../../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md)
+## 12. Handoff
+[`2026-08-06-es-p02-resume-validation.md`](../../reports/package-handoffs/2026-08-06-es-p02-resume-validation.md)
