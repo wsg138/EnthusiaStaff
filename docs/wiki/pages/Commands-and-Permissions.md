@@ -70,12 +70,20 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/freeze` | `/freeze <player> <reason>` | Apply durable investigation freeze | `enthusiastaff.freeze` |
 | `/unfreeze` | `/unfreeze <player> <reason> CONFIRM` | Release freeze | `enthusiastaff.freeze` |
 | `/staff` | `/staff` | Enter or leave durable staff mode | `enthusiastaff.staffmode` |
+| `/stafftools` | `/stafftools`, `/stafftools random`, `/stafftools spectate <player>` | Text/Bedrock fallback for staff hotbar menu, random teleport and follow/spectate | `enthusiastaff.stafftools.menu`; sub-actions also require their direct tool node |
 | `/vanish` | `/vanish` or `/vanish tab <show\|hide>` | Toggle vanish or spectator tab presentation | `enthusiastaff.vanish` |
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
 | `/inspect` | `/inspect <player>` | Player inspector and case-linked actions | `enthusiastaff.inspect` |
 | `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
+
+`/stafftools` requires an active staff-mode session in addition to Bukkit
+permissions. The hotbar and command fallback share the same dispatcher. Random
+teleport requires `enthusiastaff.stafftools.teleport`; follow/spectate requires
+`enthusiastaff.stafftools.spectate`; menu access requires
+`enthusiastaff.stafftools.menu`. See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
+for target filters, cooldowns, stale-tool rejection and Bedrock behavior.
 
 ## Velocity commands
 
@@ -94,15 +102,14 @@ exception, inheritance, GUI, alert and key-rotation workflow is finished. See
 
 ## Required but not registered
 
-The goals require these top-level commands, but current Paper metadata does not
-register them:
+The goals require this top-level command, but current Paper metadata does not
+register it:
 
 ```text
-/history
 /fakebase
 ```
 
-Do not add them to staff training until registration, behavior, permissions and
+Do not add it to staff training until registration, behavior, permissions and
 staging are complete.
 
 ## Permission nodes
@@ -151,6 +158,11 @@ enthusiastaff.reports.manage
 enthusiastaff.freeze
 enthusiastaff.freeze.chat
 enthusiastaff.staffmode
+enthusiastaff.stafftools.teleport
+enthusiastaff.stafftools.spectate
+enthusiastaff.stafftools.menu
+enthusiastaff.stafftools.random-exempt
+enthusiastaff.stafftools.spectate-exempt
 enthusiastaff.vanish
 enthusiastaff.staffchat
 enthusiastaff.client
@@ -158,6 +170,10 @@ enthusiastaff.inventory.view
 enthusiastaff.inventory.edit
 enthusiastaff.inspect
 ```
+
+The two `stafftools.*-exempt` nodes default to `false`. They are target-side
+exemptions and should be assigned deliberately; the dispatcher does not treat
+operators as implicitly exempt.
 
 ### History and exact-sanction authority
 
@@ -200,9 +216,9 @@ enthusiastaff.rank.founder
 ### Helper
 
 Includes basic status/verification, punishment/read access, configured punishment
-workflow, reports, alerts, freeze, staff mode, vanish, staff chat, inventory view
-and inspection. Central policy still limits direct punishment outcomes and
-inventory mutation.
+workflow, reports, alerts, freeze, staff mode, staff-tool teleport/spectate/menu,
+vanish, staff chat, inventory view and inspection. Central policy still limits
+direct punishment outcomes and inventory mutation.
 
 ### Mod
 
@@ -211,9 +227,9 @@ changes, inventory edit and configured confiscation permissions.
 
 ### Developer
 
-A separate technical aggregate with diagnostics/reload and investigation tools.
-It includes the punishment request entry surface, but central policy must deny
-direct punishment mutation and approval.
+A separate technical aggregate with diagnostics/reload and investigation tools,
+including the direct staff-tool permissions. It includes the punishment request
+entry surface, but central policy must deny direct punishment mutation and approval.
 
 ### Admin
 
@@ -245,5 +261,6 @@ run a destructive command as a test.
 - [[Roles and Permissions|Rank-Authority]]
 - [[Core Platform and Infrastructure]]
 - [[Moderation, Punishments, and Reports]]
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
 - [[Staff Tools, Investigations, and Player-State Safety]]
 - [[Developer Code Guide]]

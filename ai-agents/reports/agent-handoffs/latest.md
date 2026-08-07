@@ -2,22 +2,22 @@
 
 Current persistent package handoff:
 
-[`2026-08-06-es-x05-website-auth-appeals.md`](2026-08-06-es-x05-website-auth-appeals.md)
+[`2026-08-07-es-p04-staff-mode-tools.md`](../package-handoffs/2026-08-07-es-p04-staff-mode-tools.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-Outage-recovery state is reconciled for the selected package: `ES-P01`, `ES-P03`, and `ES-X05 — Website UX, authentication, and appeals` are `COMPLETE`. `ES-P02 — Runtime database recovery and Velocity reload` remains `BLOCKED` / `PARKED_BLOCKED`. No package is active.
+`ES-P04 — Staff-mode operational tools` is the selected active package on `package/es-p04-staff-mode-tools`, PR #79, starting from legitimate `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`. `ES-P09` remains `READY` at priority 55 but unassigned and must not be started by this worker.
 
-ES-X05 recovery started from aggregate `main` `9b1aac2677049ccc71dbddd963831f270c73dcd0` and finalization head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`. Current `main` was normally merged into the branch as `e9644c14e743f686758ee619ab347cbebe1b21ec`; frozen head `ab59b8357b8e2eb146b60ff122e316112906746f` passed Coverage `31140188918` / `92748299782`, CodeRabbit, Codacy static `92748599134`, and Codacy coverage checks `92749330468` / `92749330613` with zero valid unresolved review threads. PR #74 merged normally as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; containment has zero changed files.
+Implementation, documentation, review repairs, and Codacy test-quality cleanup are complete. Latest product/test head before the final records checkpoint is `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1`. Non-excluded tools are random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
 
-Live standalone reconciliation included the already-reviewed PR #3 fix, current standalone `main` `2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2`, deleting page-level middleware that incorrectly redirected public-but-unlinked appeal/reviewer pages. Exact post-merge parity run `31140896890` / `92750376952` proved the aggregate and standalone trees identical under the repository hash rules: hash `780269847698d37c470cb7c241539b1c7387014225cc7eee9598548c9dc97f8b`, no added/missing/modified paths; evidence artifact `8979748083`.
+All CodeRabbit threads through records head `7c32b823919fc276f5b8c40a80a5de2893956564` were resolved; the scheduler-helper consolidation suggestion was explicitly withdrawn as optional maintainability follow-up. The branch prevents deferred Cheat Tester issuance for every rank, covers 0/60000 ms accepted and -1/60001 ms rejected cooldown boundaries, and fixes inaccurate follow/spectate feedback. Five Codacy warnings introduced by the first boundary-test structure were corrected in `7642...` with explicit assertions and no loop allocations.
 
-The owner-approved ES-X05 private/Pi staging deferral remains assigned to `ES-V02`, deferred and not passed. No manual staging retry was requested; PR automation automatically dispatched wrapper `31140187754` / `92748257022`, private run `31140197043`, whose Ubuntu build `92748287250` again received no runner with the same Billing & plans restriction; Pi `92748295072` skipped. This does not change the deferral.
+Supporting older head `4cc0178a8f908c43aafc6a88cf3014e81f5756f2` passed Wiki, Java 21 Coverage/build/test/runtime-JAR, and Codacy static/coverage gates, but is superseded.
 
-ES-P02 remains parked: exact hosted head `d671fef9fd14f0c4ae711c83edb29bc9b08ea002` passed Coverage `31138550369` / `92743341861`, but its package-specific private run `31139079620` failed before runner allocation in `92744901730` on the same Billing & plans restriction; Pi `92744908539` skipped. Do not repeat that staging attempt until the billing condition materially changes.
+Exact later staging evidence on `7c32...` proves the configured private route remains externally unavailable: public Pi wrapper `31177696995`; private staging `31177702607`; required Ubuntu build `92863344441` runner ID `0`, empty runner name, steps `[]`, explicit Billing & plans failure; Pi `92863355649` skipped. No product staging ran, and no owner-approved ES-P04 infrastructure exception exists. This is not a pass.
 
-Dependency-derived state after ES-X05 recovery: `ES-P04 — Staff-mode operational tools` is `READY` at priority 40 and `ES-P09 — Alt and network-identity completion` is `READY` at priority 55. Neither was started. A normal sequential worker may resume after this recovery worker stops, reclassifying live continuations first; absent one, ES-P04 is the expected next package.
+Current migration boundary is immutable V17; ES-P04 adds no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production, private-data, cutover, deployment, or ES-V02 action is authorized.
 
-LiteBans remains authoritative; issue #43 and production activation remain deferred.
+Exact next action: read and freeze the final PR #79 head produced by this records reconciliation, verify zero valid unresolved review threads, obtain every required exact-head hosted/static/review gate and exact Pi evidence, then either normal-merge and publish `COMPLETE` or preserve PR #79 and publish `BLOCKED` / `PARKED_BLOCKED` through a documentation-only status-publication PR if Pi remains externally unavailable without an approved exception. Stop without starting ES-P09.

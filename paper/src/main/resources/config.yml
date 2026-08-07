@@ -19,6 +19,18 @@ workers:
   threads: 4
   queue-capacity: 256
 
+# Staff-mode direct movement tools read these values when the Paper runtime is
+# created. Changes are intentionally restart-only and are not applied by /estaff reload.
+staff-tools:
+  random-teleport:
+    disabled-servers: []
+    disabled-worlds: []
+  cooldowns:
+    random-teleport-millis: 2000
+    target-tool-millis: 750
+    toggle-tool-millis: 500
+    menu-millis: 500
+
 # Reloadable history presentation and event inclusion settings.
 history:
   # Accepted range: 1-100. Pagination is performed by MariaDB.
