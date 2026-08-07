@@ -23,6 +23,8 @@ final class CheatTesterSession {
     final AtomicInteger fakeAttacks = new AtomicInteger();
     final AtomicLong firstInteractionMillis = new AtomicLong(-1L);
 
+    private boolean journalSubmission;
+    private boolean journaled;
     volatile boolean assetLock;
     volatile long revision;
     volatile String snapshot;
@@ -52,6 +54,36 @@ final class CheatTesterSession {
         this.startedAt = java.util.Objects.requireNonNull(startedAt, "startedAt");
     }
 
+    synchronized boolean beginJournalSubmission() {
+        if (finishing.get()) {
+            return false;
+        }
+        journalSubmission = true;
+        return true;
+    }
+
+    synchronized void cancelJournalSubmission() {
+        if (!journaled) {
+            journalSubmission = false;
+        }
+    }
+
+    synchronized boolean markJournaledAndShouldBegin() {
+        journalSubmission = true;
+        journaled = true;
+        return !finishing.get();
+    }
+
+    synchronized FinishDisposition beginFinishing() {
+        if (!finishing.compareAndSet(false, true)) {
+            return FinishDisposition.ALREADY_FINISHING;
+        }
+        if (!journalSubmission) {
+            return FinishDisposition.NO_JOURNAL;
+        }
+        return journaled ? FinishDisposition.JOURNALED : FinishDisposition.WAIT_FOR_JOURNAL;
+    }
+
     static CheatTesterSession recovered(CheatTesterJournalRecord record) {
         CheatTesterSession session = new CheatTesterSession(
                 record.sessionId(),
@@ -65,7 +97,16 @@ final class CheatTesterSession {
         session.snapshot = record.snapshot();
         session.startedMutation.set(record.testerType().mutatesTargetState());
         session.finishing.set(true);
+        session.journalSubmission = true;
+        session.journaled = true;
         return session;
+    }
+
+    enum FinishDisposition {
+        ALREADY_FINISHING,
+        NO_JOURNAL,
+        WAIT_FOR_JOURNAL,
+        JOURNALED
     }
 
     record PreparedProbe(int sourceSlot, int armorSlot, int storageSlot) {
