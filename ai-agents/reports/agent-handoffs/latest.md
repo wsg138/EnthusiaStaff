@@ -8,16 +8,19 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P04 — Staff-mode operational tools` is the selected active package on `package/es-p04-staff-mode-tools`, PR #79, starting from legitimate `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`. `ES-P09` remains `READY` at priority 55 but unassigned and must not be started by this worker.
+`ES-P04 — Staff-mode operational tools` is `COMPLETE`.
 
-Implementation, documentation, review repairs, and Codacy test-quality cleanup are complete. Latest product/test head before the final records checkpoint is `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1`. Non-excluded tools are random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
+Frozen reviewed/validated implementation head: `15d9428eba454e9ae4a905752129bd18676acdb1`.
+Normal implementation merge: PR #79 as `a530b992232a8a08cbbd13b0eed6606228ceb652`.
 
-All CodeRabbit threads through records head `7c32b823919fc276f5b8c40a80a5de2893956564` were resolved; the scheduler-helper consolidation suggestion was explicitly withdrawn as optional maintainability follow-up. The branch prevents deferred Cheat Tester issuance for every rank, covers 0/60000 ms accepted and -1/60001 ms rejected cooldown boundaries, and fixes inaccurate follow/spectate feedback. Five Codacy warnings introduced by the first boundary-test structure were corrected in `7642...` with explicit assertions and no loop allocations.
+Completed scope includes random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, tools menu, authenticated/stale-safe tool dispatch, Folia-safe target sampling, cooldowns, durable staff-state recovery behavior, and Bedrock command/text fallbacks. Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
 
-Supporting older head `4cc0178a8f908c43aafc6a88cf3014e81f5756f2` passed Wiki, Java 21 Coverage/build/test/runtime-JAR, and Codacy static/coverage gates, but is superseded.
+All ordinary exact-head gates passed on `15d9428e...`: Wiki `31178353549` / `92865432750`; Java 21 Coverage/build/tests/runtime-JAR `31178353504` / `92865439305`; Codacy static `92865800728` with zero issues; Codacy coverage variation `92867049954`; Codacy diff coverage `92867049338`; zero valid unresolved review threads.
 
-Exact later staging evidence on `7c32...` proves the configured private route remains externally unavailable: public Pi wrapper `31177696995`; private staging `31177702607`; required Ubuntu build `92863344441` runner ID `0`, empty runner name, steps `[]`, explicit Billing & plans failure; Pi `92863355649` skipped. No product staging ran, and no owner-approved ES-P04 infrastructure exception exists. This is not a pass.
+Pi staging is **OWNER-APPROVED SKIPPED/DEFERRED**, not passed. Public wrapper `31178352312` dispatched private run `31178359804`; required Ubuntu build `92865456267` received runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92865494913` skipped. On 2026-08-07 the owner explicitly authorized ES-P04 to continue and requested an internal note to perform this staging later when available.
 
-Current migration boundary is immutable V17; ES-P04 adds no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production, private-data, cutover, deployment, or ES-V02 action is authorized.
+Internal follow-up: when the private Actions billing/runner path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that deferred test reveals a real defect.
 
-Exact next action: read and freeze the final PR #79 head produced by this records reconciliation, verify zero valid unresolved review threads, obtain every required exact-head hosted/static/review gate and exact Pi evidence, then either normal-merge and publish `COMPLETE` or preserve PR #79 and publish `BLOCKED` / `PARKED_BLOCKED` through a documentation-only status-publication PR if Pi remains externally unavailable without an approved exception. Stop without starting ES-P09.
+Migration boundary remains immutable V17; ES-P04 added no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production deployment, cutover, private-data migration, or ES-V02 execution occurred.
+
+Dependency-derived state after ES-P04 completion: ES-P05 and ES-P10 are now READY; ES-P09 remains READY. No package is active. A later sequential worker must reconcile live GitHub before selection; absent a higher-priority actionable continuation, ES-P05 is the lowest-priority-number READY package.
