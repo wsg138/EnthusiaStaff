@@ -5,10 +5,15 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
+import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
@@ -39,8 +44,15 @@ import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
 import net.enthusia.staff.persistence.migration.FencedPunishmentRequestStore;
 import net.enthusia.staff.persistence.migration.FencedSanctionMutationStore;
 import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class MariaDbRuntime implements AutoCloseable {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MariaDbRuntime.class);
+    private static final Duration NETWORK_IDENTITY_RETENTION = Duration.ofDays(90);
+    private static final int NETWORK_IDENTITY_RETENTION_BATCH_SIZE = 500;
+    private static final long NETWORK_IDENTITY_RETENTION_INTERVAL_HOURS = 1L;
+
     private final HikariDataSource dataSource;
     private final ModerationStore moderationStore;
     private final PunishmentRequestStore punishmentRequestStore;
@@ -54,6 +66,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final StaffSessionStore staffSessionStore;
     private final VanishStore vanishStore;
     private final NetworkIdentityStore networkIdentityStore;
+    private final ScheduledExecutorService networkIdentityRetentionExecutor;
     private final SanctionMutationStore sanctionMutationStore;
     private final CaseLookup caseLookup;
     private final CaseReviewStore caseReviewStore;
@@ -65,14 +78,18 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final PunishmentDraftStore punishmentDraftStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
-        this(dataSource, ReportPolicyRuntime::current);
+        this(dataSource, ReportPolicyRuntime::current, Clock.systemUTC());
     }
 
     MariaDbRuntime(HikariDataSource dataSource, Supplier<ReportPolicy> reportPolicy) {
+        this(dataSource, reportPolicy, Clock.systemUTC());
+    }
+
+    MariaDbRuntime(HikariDataSource dataSource, Supplier<ReportPolicy> reportPolicy, Clock clock) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         Objects.requireNonNull(reportPolicy, "reportPolicy");
+        Objects.requireNonNull(clock, "clock");
         ObjectMapper json = jsonMapper();
-        Clock clock = Clock.systemUTC();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
         this.moderationStore = new FencedModerationStore(
                 dataSource,
@@ -100,6 +117,8 @@ public final class MariaDbRuntime implements AutoCloseable {
                 dataSource,
                 new JdbcNetworkIdentityStore(dataSource, json)
         );
+        this.networkIdentityRetentionExecutor = createNetworkIdentityRetentionExecutor();
+        scheduleNetworkIdentityRetention(clock);
         SanctionMutationStore mutationStore = new CompositeSanctionMutationStore(
                 new JdbcSanctionMutationStore(dataSource, json, clock),
                 new JdbcExactSanctionMutationStore(dataSource, json, clock)
@@ -156,6 +175,41 @@ public final class MariaDbRuntime implements AutoCloseable {
         return new CutoverCoordinator(dataSource, jsonMapper(), Clock.systemUTC());
     }
 
+    private ScheduledExecutorService createNetworkIdentityRetentionExecutor() {
+        return Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "enthusia-network-identity-retention");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private void scheduleNetworkIdentityRetention(Clock clock) {
+        networkIdentityRetentionExecutor.scheduleWithFixedDelay(
+                () -> runNetworkIdentityRetention(clock),
+                NETWORK_IDENTITY_RETENTION_INTERVAL_HOURS,
+                NETWORK_IDENTITY_RETENTION_INTERVAL_HOURS,
+                TimeUnit.HOURS
+        );
+    }
+
+    private void runNetworkIdentityRetention(Clock clock) {
+        try {
+            NetworkIdentityRetentionResult result = networkIdentityStore.purgeExpired(
+                    clock.instant().minus(NETWORK_IDENTITY_RETENTION),
+                    NETWORK_IDENTITY_RETENTION_BATCH_SIZE
+            );
+            if (result.totalDeleted() > 0 && LOGGER.isInfoEnabled()) {
+                LOGGER.info(
+                        "Network identity retention removed {} protected token rows and {} evidence rows",
+                        result.identityTokensDeleted(),
+                        result.evidenceRowsDeleted()
+                );
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.error("Network identity retention failed; no retention success is assumed", exception);
+        }
+    }
+
     private static ObjectMapper jsonMapper() {
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -163,5 +217,8 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     @Override
-    public void close() { dataSource.close(); }
+    public void close() {
+        networkIdentityRetentionExecutor.shutdownNow();
+        dataSource.close();
+    }
 }

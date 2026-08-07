@@ -7,6 +7,7 @@ import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
+import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 
 public interface NetworkIdentityStore {
     NetworkIdentityObservationResult observeAndInherit(
@@ -28,4 +29,6 @@ public interface NetworkIdentityStore {
     );
 
     boolean reopen(UUID firstPlayerId, UUID secondPlayerId, UUID actorId, Instant changedAt, String reason);
+
+    NetworkIdentityRetentionResult purgeExpired(Instant cutoff, int batchSize);
 }
