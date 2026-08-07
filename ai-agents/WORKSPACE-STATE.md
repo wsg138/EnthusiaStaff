@@ -10,8 +10,8 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | --- | --- |
 | Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-P04 — Staff-mode operational tools`; `ES-P09 — Alt and network-identity completion`; `ES-X05 — Website UX, authentication, and appeals` |
 | Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
-| Active implementation package | `ES-P10 — Cheat tester and fake-entity system`; branch `package/es-p10-cheat-testers`; selected from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` by the ChatGPT sequential package worker |
-| Ready packages | None after ES-P10 claim. Dependency-derived statuses must be recomputed after ES-P10 reaches a terminal state; do not activate another package in this worker. |
+| Active implementation package | `ES-P10 — Cheat tester and fake-entity system`; status `MERGE_PENDING`; branch `package/es-p10-cheat-testers`; PR #86; selected from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` by the ChatGPT sequential package worker |
+| Ready packages | None until ES-P10 reaches terminal `COMPLETE`. Dependency-derived statuses are recomputed after merge/publication; do not activate another package in this worker. |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; private Actions Billing & plans blocker unchanged |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; required private staging unavailable under the same Billing & plans condition |
 | Fresh blocker confirmation | Private staging run `31196247124` created 2026-08-07 16:10 UTC for current EnthusiaStaff source; required Ubuntu build `92925059857` had runner ID `0`, empty runner name, and `steps: []`; Pi `92925074453` skipped. This confirms the same external condition still exists and is not a product pass. |
@@ -25,20 +25,25 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-P09 status | `COMPLETE`; PR #84; frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; normal merge `a88201524690848f778297f140f7ee2ba5b6ce36`; implementation branch deleted; terminal records published through docs-only PR #85 |
 | ES-P09 hosted validation | Wiki `31193764800` / `92916829444` success; Coverage `31193765341` / `92916907616` success on Java 21 with build/tests/MariaDB-Testcontainers/aggregate JaCoCo/runtime-JAR inspection; Codacy `92917176627` success with zero annotations; repository CodeRabbit status success; zero valid unresolved review threads |
 | ES-P09 private staging | **NOT A PASS**. Public wrapper `31193762319`; private run `31193769314`; Ubuntu build `92916864019` runner ID `0`, empty runner name, steps `[]`, Billing & plans rejection; Pi `92916876057` skipped. Private representative-network/distributed acceptance remains `ES-V02`. |
-| ES-P10 status | `ACTIVE`; starting main `83302749b3247f7a05157f1625fc99da6aa43736`; internal package; ProtocolLib 5.4.0 selected as the supported isolated packet adapter; fake bases remain ES-P11 |
-| Migration boundary | V17 remains current and immutable at ES-P10 selection; any required schema addition must begin at V18 |
+| ES-P10 status | `MERGE_PENDING`; PR #86; product scope and harsh pre-freeze review complete; final exact-head hosted/static/review gates and normal merge remain |
+| ES-P10 implementation | Four release tester types; `/cheattester` and staff-tool controls; V18 durable session journal; exact restoration; global active-target fencing; inventory-lock participation; evidence-only audit; optional ProtocolLib fake entity; fail-closed provider behavior; target-only suspect interaction evidence |
+| ES-P10 private staging | **NOT A PASS**. Repeated package attempts, including the pre-freeze `239ef4f...` head, dispatch private staging where the required Ubuntu job receives runner ID `0`, empty runner name, and no steps; Pi is skipped. Representative distributed/Java/Bedrock acceptance remains assigned to `ES-V02`. |
+| Migration boundary | ES-P10 adds immutable V18; V1–V17 remain unchanged. `main` remains at V17 until PR #86 merges. |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
-## ES-P10 active worker record
+## ES-P10 merge-pending worker record
 
 - Fresh live reconciliation classified ES-P02 and ES-P05 as unchanged `PARKED_BLOCKED`; no actionable continuation existed.
 - ES-P04 is `COMPLETE`; ES-P10 was the dependency-complete `READY` package with the lowest numerical priority and was selected automatically.
 - Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736`.
-- Active branch: `package/es-p10-cheat-testers`.
-- No pre-existing ES-P10 branch, PR, or package handoff existed at selection.
-- Included package scope is `AUD-TESTER-001` and `AUD-TESTER-002`: authorized cheat tester workflow, bounded client-side fake entity tooling, evidence/audit, exact temporary player-state restoration, lifecycle cleanup, duplicate/limit enforcement, configuration, commands/staff-tool controls, and tests.
+- Active branch: `package/es-p10-cheat-testers`; implementation PR #86.
+- Scope `AUD-TESTER-001` and `AUD-TESTER-002` is implemented: authorized cheat tester workflow, four release probes, bounded client-side fake entity tooling, evidence/audit, exact temporary player-state restoration, lifecycle recovery, duplicate/limit enforcement, configuration, command/staff-tool controls, and tests.
 - Fake bases (`AUD-TESTER-003`) remain exclusively `ES-P11`. No automatic punishment, production use, unisolated NMS, deployment, cutover, or private-data work is authorized.
-- ProtocolLib 5.4.0 is already the repository-supported compile-only Paper dependency; ES-P10 will keep packet behavior behind a focused optional adapter and fail closed when unavailable.
+- ProtocolLib 5.4.0 is the repository-supported compile-only Paper dependency; packet behavior is isolated behind an optional fail-closed adapter.
+- V18 durably journals tester sessions and globally fences one ACTIVE target across backends. State-changing ACTIVE rows participate in the inventory-lock contract through disconnect/restart.
+- Harsh review fixed a cancellation/journal race: cancellation before submission now creates no row, cancellation during submission terminalizes a successfully committed row before mutation, and cancellation after commit uses the durable finish path. Review also excludes controlling-staff fake-entity interactions from suspect evidence.
+- Static-analysis cleanup was structural, splitting session/probe/evidence/mutation-guard responsibilities rather than suppressing broad findings.
+- Private Pi/distributed attempts that allocate no runner are **NOT A PASS** and are not package-local staging acceptance; ES-V02 retains representative Java/Bedrock/distributed acceptance.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
 
 ## ES-P09 terminal worker record
@@ -59,7 +64,7 @@ ES-P02 and ES-P05 remain on the same account-level GitHub Actions payment/spendi
 
 ## Next routing
 
-ES-P10 is the only active implementation package for this sequential worker. Complete or correctly park ES-P10, publish its durable state, update dependency-derived statuses, and stop. Do not activate ES-P11 or any other newly ready package in this worker.
+ES-P10 is the only active package for this sequential worker and is `MERGE_PENDING`. Freeze/validate/merge/publish/clean up ES-P10, then recompute dependency-derived statuses and stop. Do not activate ES-P11 or any other newly ready package in this worker.
 
 ## Safety boundaries
 
