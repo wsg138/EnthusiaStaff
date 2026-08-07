@@ -1,0 +1,58 @@
+name: ES-P02 merge diagnostic
+
+on:
+  push:
+    branches:
+      - package/es-p02-runtime-db-recovery
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Attempt no-commit merge
+        id: merge
+        shell: bash
+        run: |
+          set +e
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main > merge-output.txt 2>&1
+          merge_exit=$?
+          git diff --name-only --diff-filter=U | tee conflict-files.txt
+          git status --short >> merge-output.txt
+          echo "merge_exit=${merge_exit}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Collect conflict snapshot
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p conflict-snapshot
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            mkdir -p "conflict-snapshot/$(dirname "$file")"
+            cp "$file" "conflict-snapshot/$file"
+          done < conflict-files.txt
+          cp merge-output.txt conflict-files.txt conflict-snapshot/
+
+      - name: Upload merge diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: es-p02-merge-diagnostic
+          path: conflict-snapshot
+          if-no-files-found: error
+
+      - name: Fail on conflicts
+        if: steps.merge.outputs.merge_exit != '0'
+        shell: bash
+        run: |
+          echo "The main-to-ES-P02 merge has conflicts; see the diagnostic artifact."
+          exit 1
