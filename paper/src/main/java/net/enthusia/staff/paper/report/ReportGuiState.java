@@ -33,7 +33,8 @@ sealed interface ReportGuiState {
             UUID viewerId,
             ReportQueue queue,
             int queuePage,
-            ReportDetails details
+            ReportDetails details,
+            boolean evidenceAccess
     ) implements ReportGuiState {
         public Detail {
             validateBase(viewerId, queue, queuePage);
@@ -48,6 +49,7 @@ sealed interface ReportGuiState {
             ReportQueue queue,
             int queuePage,
             ReportDetails details,
+            boolean evidenceAccess,
             ReportAction action,
             String note,
             UUID operationId
