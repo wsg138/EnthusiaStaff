@@ -4,7 +4,7 @@
 `ES-P04`; Internal; primary `COMP-STAFF`; priority 40; not parallel-safe around staff-mode dispatch/state.
 
 ## 2. Status
-`ACTIVE` / `ACTIONABLE_CONTINUATION` — implementation and documentation are complete on draft PR #79; final exact-head validation and terminal publication remain.
+`ACTIVE` / `ACTIONABLE_CONTINUATION` — implementation and documentation are complete on PR #79; final exact-head validation and terminal publication remain.
 
 ## 3. Objective
 Make staff-mode hotbar tools functional and complete safe operational entry, use, restoration, and recovery behavior.
@@ -31,29 +31,30 @@ Root Paper/domain/persistence/tests/resources/docs needed for staff mode. No ext
 Temporary `package/es-p04-staff-mode-tools`; created from exact legitimate `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; delete after verified merge containment.
 
 ## 11. Required PRs
-Draft PR #79 to `wsg138/EnthusiaStaff:main`.
+PR #79 to `wsg138/EnthusiaStaff:main`; marked ready for review after the implementation head was frozen.
 
 ## 12. Implementation checklist
 - [x] Reconcile live GitHub and classify every incomplete package.
 - [x] Confirm ES-P02 remains `PARKED_BLOCKED` on the unchanged private `ubuntu-latest` Billing & plans zero-runner failure.
 - [x] Select ES-P04 as the lowest-priority-number dependency-complete `READY` package.
-- [x] Create the required temporary branch from the exact legitimate default head.
+- [x] Create the required temporary branch from exact legitimate `main`.
 - [x] Map tags/actions/permissions and existing runtime services.
 - [x] Implement dispatcher and safe state transitions without duplicating existing moderation/service boundaries.
-- [x] Add focused policy tests for tool identity/session binding, fixed slots/ranks, cooldowns, target suitability, and settings.
-- [x] Document commands/permissions, tool behavior, recovery, troubleshooting, Bedrock fallbacks, target filtering, and restart-scoped settings.
+- [x] Add focused tests for tool identity/session binding, fixed slots/ranks, cooldowns, target suitability, and settings.
+- [x] Document commands/permissions, behavior, recovery, troubleshooting, Bedrock fallbacks, filtering, and restart-scoped settings.
 - [x] Resolve all 14 Codacy findings from superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4`.
-- [x] Harden Paper interaction-event behavior so predicted-cancelled air clicks are accepted and redundant precise entity packets do not double-dispatch.
-- [x] Resolve the final file-size Codacy finding from superseded records head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` by extracting random teleport execution into `StaffToolRandomTeleportService`; latest product-code head `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`.
+- [x] Harden Paper interaction-event behavior for predicted-cancelled air clicks and redundant precise entity packets.
+- [x] Resolve the final dispatcher file-size Codacy finding by extracting `StaffToolRandomTeleportService`.
+- [x] Fix the extracted service compile regression found by exact-head hosted run `31173353511`, job `92849833109`; product head `dd1f10a12680eab6768473aee5b542e840b09b65` restores the missing two-argument entity-scheduler helper overload.
 - [ ] Freeze the resulting records checkpoint and complete every applicable validation/review gate on that exact head.
 - [ ] Resolve the configured Pi staging disposition without treating unavailable infrastructure as a pass.
-- [ ] Merge normally if all completion gates are satisfied, verify containment, publish completion state, and clean the branch when safe.
+- [ ] Merge normally if every completion gate is satisfied; otherwise publish the correct terminal blocked state.
 
 ## 13. Acceptance criteria
 Each non-excluded tool performs its documented action only for authorized active staff; stale/transferred/spoofed tools fail safely; exact player state restores across exit/reconnect/reload/shutdown/rank loss; no duplication/loss or world bypass.
 
 ## 14. Test requirements
-Listener/dispatcher behavior through hosted build plus focused pure-policy tests; permission/hierarchy, inventory event, snapshot/revision, reconnect/reload/shutdown, concurrency, missing-provider, text-fallback behavior, and full existing suites.
+Focused staff-tool tests plus full Java 21 repository suites, MariaDB/Testcontainers migrations, coverage, runtime-JAR/provider-leak checks, and applicable review/static gates.
 
 ## 15. Static-analysis requirements
 Configured Java/static-analysis/review-bot gates; zero valid unresolved findings.
@@ -71,42 +72,36 @@ No migration change. Immutable migration boundary remains V17.
 Every new staff-tool surface has a usable command/text fallback. Representative Java/Bedrock acceptance remains assigned to `ES-V02`.
 
 ## 20. Distributed-runtime considerations
-Session ownership, backend switching, reconnect, duplicate events, and recovery remain fenced through the existing durable staff-session runtime; direct movement target state is sampled on Folia entity schedulers and actor authorization is rechecked before final movement.
+Session ownership, backend switching, reconnect, duplicate events, and recovery remain fenced through the existing durable runtime; movement target state is sampled on Folia entity schedulers and actor authorization is rechecked before final movement.
 
 ## 21. External-provider considerations
-Inspector, freeze, reports, vanish, and staff-chat hotbar actions reuse existing command/service paths so unsupported or unavailable providers fail through the established behavior; no replacement callbacks were invented.
+Inspector, freeze, reports, vanish, and staff-chat hotbar actions reuse existing command/service paths so unsupported providers fail through established behavior; no replacement callbacks were invented.
 
 ## 22. Completion definition
 All non-excluded tools and safety criteria are proven; one exact-head PR merges normally; zero valid threads; temporary branch removed when safe.
 
 ## 23. Resume state
-Active branch `package/es-p04-staff-mode-tools`; draft PR #79; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker. Latest product-code commit before this checkpoint: `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`. Canonical handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
+Active branch `package/es-p04-staff-mode-tools`; PR #79; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker. Latest product-code commit before this checkpoint: `dd1f10a12680eab6768473aee5b542e840b09b65`. Canonical handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
 
 ## 24. Last completed checkpoint
-The non-excluded operational tools are implemented and documented. Staff tools use fixed canonical slots and owner/session PDC bindings revalidated against the active staff session, current rank, slot, material, and action permission. Durable moderation actions reuse existing commands. Random teleport filters active staff, vanished/frozen/exempt/unsafe targets and disabled worlds; follow/spectate uses scheduler-safe target snapshots and preserves the rank-required game mode. `/stafftools` provides text/command fallbacks for Bedrock clients. Cheat Tester remains explicitly unavailable and assigned to ES-P10.
+All intended product behavior remains implemented and documented. Static-analysis findings were structurally removed without weakening authorization. The first exact head after the final file split, `93858cf68c539a0c1fe62b20d1993607981517ab`, passed Wiki validation and reached a real GitHub-hosted Java runner but failed compilation because `StaffToolRandomTeleportService.message(...)` referenced a missing convenience overload. Hosted run `31173353511`, job `92849833109`, reported that exact compile error. Product commit `dd1f10a12680eab6768473aee5b542e840b09b65` restores only that helper overload and keeps the scheduler-safe implementation unchanged.
 
-Static analysis history is fully remediated in product code. Superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4` reported 14 issues, fixed by structural refactoring. Superseded records head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` then reported one remaining file-length issue for the dispatcher, fixed in `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8` by extracting random teleport into a focused service. Final exact-head Codacy rerun is still required.
-
-Configured Pi staging remains externally unavailable. On superseded exact head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5`, aggregate wrapper `31172658131` identified private staging run `31172664638`; its ordinary `ubuntu-latest` job `92847691164` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans payment/spending-limit annotation, while Pi job `92847702006` skipped. No product code ran there. This is not a pass and must be re-evidenced for the final records head.
+The private Pi path remains externally unavailable. On superseded exact head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5`, private staging run `31172664638`, Ubuntu job `92847691164`, had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92847702006` skipped. This is not a pass and must be re-evidenced on the final records head.
 
 ## 25. Remaining checklist
-Freeze the records checkpoint produced with this state update, obtain successful exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/static-analysis/review evidence, record the exact Pi staging disposition, and then either merge normally or park the package on the remaining external gate. Do not start ES-P09 or another package.
+Freeze the records checkpoint produced with this state update; obtain successful exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/static-analysis/review evidence; record the exact Pi disposition; then merge normally or park the package on the remaining external gate. Do not start ES-P09.
 
 ## 26. Known blockers
-No dependency or known product blocker. The configured Pi staging path is currently blocked before product execution by the private repository Billing & plans restriction. Completion cannot claim that gate passed; if ordinary hosted/review gates all pass but Pi remains unavailable, the terminal outcome must follow `VALIDATION-POLICY.md` exactly, including explicit owner approval if an infrastructure exception is used.
+No dependency blocker and no known product blocker after `dd1f10a12680eab6768473aee5b542e840b09b65`. The configured Pi staging path is still expected to be externally blocked before product execution by the private repository Billing & plans restriction. No owner-approved ES-P04 exception exists in the inspected state.
 
 ## 27. Current evidence
 - Starting main: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- Draft PR: #79.
-- First coherent product commit: `b70c6c48976ca176a3ed5c9c327a31d9422ed934`.
-- Documentation commit: `c1db641169a40d0be64ad48b4672d3dce3da72c4`.
-- First static-analysis remediation: `b83d060b97f9dc46f59fc7d137e0d01672f407fb`.
-- Interaction-event hardening: `e7321ff2858f06da6d4daeca073fcb5a96bf4246`.
-- Final product-code refactor: `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`.
-- Superseded exact-head Wiki run `31172662371`, job `92847679913`: success.
-- Superseded Codacy check `92848009322`: one dispatcher file-length finding, fixed in `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`; not final evidence.
-- Superseded exact-head Pi private build `92847691164`: zero-runner Billing & plans failure; Pi `92847702006` skipped; not a pass.
-- PR review threads at latest inspection: zero; submitted reviews: zero.
+- PR: #79.
+- Latest product-code head: `dd1f10a12680eab6768473aee5b542e840b09b65`.
+- Superseded exact-head Wiki `31173353489` / `92849855813`: success.
+- Superseded exact-head hosted build `31173353511` / `92849833109`: failed compilation on the missing helper overload; fixed by `dd1f10a12680eab6768473aee5b542e840b09b65`.
+- Codacy PR summary after file split showed 0 new issues before that compile-only fix; final exact-head rerun remains required.
+- PR was marked ready for review and `@coderabbitai review` was requested; final exact-head review disposition remains required.
 - No migration changes; V1-V17 unchanged.
 
 ## 28. Merge and synchronization record

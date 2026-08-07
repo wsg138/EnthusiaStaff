@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` on draft PR #79 with implementation/documentation complete and final exact-head validation pending; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` on PR #79 with implementation/documentation complete and final exact-head validation pending; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -25,8 +25,8 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 | `ES-P01` | Exact-sanction appeal isolation | Internal | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c`; private Actions billing blocker unchanged |
 | `ES-P03` | Bedrock identity correctness | Internal | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | PR #75 merged as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
-| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` | — | 35 | `ES-P01` | implementation integrated; finalization PR #74 merged as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; parity proven |
-| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; draft PR #79; implementation/docs complete; latest product-code head `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`; final records/exact-head validation checkpoint pending |
+| `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` | — | 35 | `ES-P01` | finalization PR #74 merged as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; parity proven |
+| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; PR #79 ready for review; implementation/docs complete; latest product-code head `dd1f10a12680eab6768473aee5b542e840b09b65`; final records/exact-head validation checkpoint pending |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned; dependency blocked |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
 | `ES-P09` | Alt and network-identity completion | Internal | `READY` | `READY` | 55 | `ES-P03` | unassigned; not activated by ES-P04 worker |
@@ -51,11 +51,9 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 - Status: `BLOCKED` / `PARKED_BLOCKED`.
 - Branch/PR: `package/es-p02-runtime-db-recovery`; #70.
 - Current records head: `99da4103773e0c2ae43e0b0253200cd0d3d2c65c`.
-- Synchronized-main merge: `b21cb81b81fdcf0bac5027ae6f6b7901f6b0c175`.
-- Exact hosted-validation product head: `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`.
-- Hosted validation: Coverage run `31138550369`, job `92743341861`, success for Java 21 build/tests, MariaDB/Testcontainers and migrations, coverage, runtime-JAR/provider-leak checks, artifact upload, and Codacy coverage. CodeRabbit and Codacy are clean with zero valid unresolved threads.
-- Package-specific private staging `31139079620` failed before ordinary Ubuntu allocation. A newer private `plugin-live-test.yml` run `31141797380` independently confirmed the condition is unchanged: build job `92753075216` had runner ID `0`, empty runner name and steps `[]`; GitHub again reported the Billing & plans payment/spending-limit restriction. Pi job `92753100652` skipped.
-- Exact unblock: resolve the private-repository Billing & plans restriction, then resume PR #70, reconcile newer legitimate `main`, freeze one exact head, rerun every applicable gate, obtain a successful ordinary private build followed by Pi safe Paper boot/restart for the same source revision, merge normally, verify containment, publish `COMPLETE`, and stop.
+- Exact hosted-validation product head: `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`; Coverage run `31138550369`, job `92743341861`, success.
+- Private staging remains blocked before Ubuntu allocation: latest inspected build job `92753075216` had runner ID `0`, empty runner name, steps `[]`, and the Billing & plans payment/spending-limit rejection; Pi `92753100652` skipped.
+- Exact unblock: resolve the private-repository Billing & plans restriction, then resume PR #70, reconcile newer legitimate `main`, freeze one exact head, rerun every applicable gate, obtain a successful ordinary private build followed by Pi safe Paper boot/restart on the same source revision, merge normally, verify containment, publish `COMPLETE`, and stop.
 - Handoff: [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md).
 
 ### `ES-P03`
@@ -63,38 +61,32 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 - Status: `COMPLETE`.
 - Exact reviewed/validated product head: `15608bc3099dc34aa080c80ca8e824ffd51cdae4`.
 - Implementation PR/merge: #75 / `b960e91ea59627a870ff24f89c2f761d0cbb68ab`.
-- Validation: Coverage `31133176482` / job `92726659126`; Wiki `31133176536` / job `92726609318`; CodeRabbit success; Codacy 0 issues.
-- V1-V17 unchanged. Containment passed; no unique product work remains outside the merge.
+- Validation: Coverage `31133176482` / `92726659126`; Wiki `31133176536` / `92726609318`; CodeRabbit success; Codacy 0 issues. V1-V17 unchanged.
 - Handoff: [`2026-08-06-es-p03-bedrock-identity.md`](../reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md).
 
 ### `ES-X05`
 
 - Status: `COMPLETE`.
-- Frozen finalization head: `ab59b8357b8e2eb146b60ff122e316112906746f`.
-- Finalization hosted validation: Coverage `31140188918` / `92748299782` success; CodeRabbit success; Codacy static `92748599134`, coverage variation `92749330468`, and diff coverage `92749330613` success; zero valid unresolved review threads.
-- Finalization PR/merge: #74 / `2bcf5d46ca6471fddac600f85020c66105b1c0f2`.
-- Post-merge component parity: run `31140896890`, job `92750376952`, artifact `8979748083`; aggregate and standalone hashes both `780269847698d37c470cb7c241539b1c7387014225cc7eee9598548c9dc97f8b`; parity `true`.
-- Staging: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; no staging pass is claimed.
-- V17 remains the sole ES-X05 migration; Flyway history was not rewritten.
+- Frozen finalization head: `ab59b8357b8e2eb146b60ff122e316112906746f`; PR #74 normal merge `2bcf5d46ca6471fddac600f85020c66105b1c0f2`.
+- Coverage `31140188918` / `92748299782`, CodeRabbit, Codacy static/coverage, and post-merge parity `31140896890` / `92750376952` all passed.
+- Staging: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; no staging pass is claimed. V17 remains the sole ES-X05 migration.
 - Handoff: [`2026-08-06-es-x05-website-auth-appeals.md`](../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md).
 
 ### `ES-P04`
 
 - Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`.
-- Selection: ES-P02's exact external unblock condition was proven unchanged; among dependency-complete `READY` packages ES-P04 has priority 40 ahead of ES-P09 priority 55.
 - Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`; live `main` remained unchanged at latest reconciliation.
-- Branch/PR: `package/es-p04-staff-mode-tools`; draft PR #79.
-- Latest product-code commit: `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`; implementation and Wiki/reference documentation are complete.
+- Branch/PR: `package/es-p04-staff-mode-tools`; PR #79 ready for review.
+- Latest product-code commit: `dd1f10a12680eab6768473aee5b542e840b09b65`; implementation and Wiki/reference documentation are complete.
 - Implemented actions: random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester remains deferred to `ES-P10`; fake bases remain `ES-P11`.
-- Security: server-issued tools are bound to owner + random current-profile token and fixed canonical slot/material, then current active session/rank/action permission is rechecked. Unknown, stale, transferred, old-session, rank-invalid, wrong-slot, and wrong-material tools fail closed.
-- Existing durable snapshot/restoration/reconnect/rank/inventory/world/damage machinery remains intact; durable moderation tool actions reuse existing command/service boundaries.
-- Focused tests cover definitions/slots, session forgery/staleness, cooldowns, random-target suitability, and settings. No migration change; V17 remains the boundary.
-- Documentation covers tool behavior, permissions, recovery/troubleshooting, restart-scoped settings, and Bedrock command/text fallbacks.
-- Static analysis history: 14 findings on superseded `c1db641169a40d0be64ad48b4672d3dce3da72c4` were resolved in `b83d060b97f9dc46f59fc7d137e0d01672f407fb`; one remaining dispatcher file-length finding on superseded `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` was resolved by `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`. Final exact-head Codacy rerun is required.
-- Superseded exact head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` passed Wiki run `31172662371` / job `92847679913` and confirmed the Pi infrastructure blocker: aggregate wrapper `31172658131` identified private run `31172664638`; Ubuntu job `92847691164` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92847702006` skipped. This is not a pass and must be re-evidenced on the final records head.
-- PR review threads at latest inspection: zero; submitted PR reviews: zero.
+- Security: server-issued tools bind owner + random current-profile token + canonical slot/material; current active session/rank/action permission is rechecked. Unknown, stale, transferred, old-session, rank-invalid, wrong-slot, and wrong-material tools fail closed.
+- Existing durable snapshot/restoration/reconnect/rank/inventory/world/damage machinery remains intact; durable moderation actions reuse existing command/service boundaries. No migration change; V17 remains the boundary.
+- Static-analysis history: 14 issues on `c1db641169a40d0be64ad48b4672d3dce3da72c4` and one file-length issue on `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` were all structurally resolved. Codacy's PR summary showed 0 new issues after the split; exact final-head rerun remains required.
+- Superseded exact head `93858cf68c539a0c1fe62b20d1993607981517ab` passed Wiki `31173353489` / `92849855813` but hosted Java run `31173353511` / `92849833109` found a compile-only regression: extracted `StaffToolRandomTeleportService` lacked the two-argument `onEntity(...)` helper. Product commit `dd1f10a12680eab6768473aee5b542e840b09b65` restores it without gameplay behavior changes.
+- Private Pi remains unavailable before product execution under the Billing & plans restriction. Superseded exact evidence includes Ubuntu job `92847691164` with runner ID `0`, steps `[]`, and Pi `92847702006` skipped. Final-head evidence is still required; unavailable infrastructure is not a pass.
+- PR review threads at latest inspection: zero. `@coderabbitai review` was explicitly requested after marking PR #79 ready.
 - Handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
-- Exact next action: freeze the records checkpoint produced with the package/registry/handoff reconciliation, obtain every ordinary exact-head hosted/static/review gate, record the exact Pi staging disposition, then either merge normally if all gates are satisfied or publish `BLOCKED` / `PARKED_BLOCKED` if the unavailable Pi gate remains unapproved.
+- Exact next action: freeze the records checkpoint produced with package/registry/handoff reconciliation, obtain every ordinary exact-head hosted/static/review gate, record the exact Pi disposition, then either merge normally if all gates are satisfied or publish `BLOCKED` / `PARKED_BLOCKED` if the unavailable Pi gate remains unapproved.
 
 ## Next-worker boundary
 
