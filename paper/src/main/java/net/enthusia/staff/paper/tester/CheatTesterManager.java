@@ -7,7 +7,6 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,8 +26,6 @@ import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -37,7 +34,6 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -47,22 +43,13 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.server.PluginDisableEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.util.Vector;
 
 /** Evidence-only cheat tester runtime with durable exact-state recovery. */
 public final class CheatTesterManager implements Listener, AutoCloseable {
     private static final String PERMISSION = "enthusiastaff.cheattester";
     private static final String CANCEL_ANY_PERMISSION = "enthusiastaff.cheattester.cancel-any";
     private static final int MAX_RECOVERY_ROWS = 256;
-    private static final int HOTBAR_SIZE = 9;
-    private static final double MIN_DIRECTION_LENGTH_SQUARED = 0.0001D;
-    private static final double MIN_AIM_VECTOR_LENGTH_SQUARED = 0.000001D;
-    private static final double FALLING_VELOCITY_THRESHOLD = -0.05D;
-    private static final float PREVIOUS_FALL_THRESHOLD = 2.0F;
-    private static final float FALL_RESET_THRESHOLD = 0.25F;
     private static final String FAKE_SNAPSHOT = "{\"schemaVersion\":1,\"kind\":\"fake-entity\"}";
     private static final List<CheatTesterType> SELECTABLE = List.of(
             CheatTesterType.TOTEM_REFILL,
@@ -88,7 +75,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final Map<Integer, UUID> fakeEntityTargets = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
     private final FakeEntityAdapter fakeEntities;
-    private final Map<CheatTesterType, ProbeStarter> probeStarters;
+    private final CheatTesterProbeEngine probes;
 
     public CheatTesterManager(
             JavaPlugin plugin,
@@ -111,7 +98,14 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.snapshots = new CheatTesterSnapshotCodec(plugin);
         this.evidence = new CheatTesterEvidence(clock, settings);
         this.fakeEntities = installFakeEntityAdapter();
-        this.probeStarters = createProbeStarters();
+        this.probes = new CheatTesterProbeEngine(
+                plugin,
+                settings,
+                fakeEntities,
+                fakeEntityTargets,
+                this::sampleActive,
+                this::retireForRecovery
+        );
     }
 
     public boolean packetSupportAvailable() {
@@ -123,10 +117,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public void select(Player staff, CheatTesterType type) {
-        if (!authorized(staff)) {
-            return;
-        }
-        if (!providerAvailable(staff, type)) {
+        if (!authorized(staff) || !providerAvailable(staff, type)) {
             return;
         }
         selections.put(staff.getUniqueId(), type);
@@ -184,10 +175,9 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 assetLock,
                 clock.instant()
         );
-        if (!registerSession(staff, session)) {
-            return;
+        if (registerSession(staff, session)) {
+            schedulePreparation(staff, target, session);
         }
-        schedulePreparation(staff, target, session);
     }
 
     private boolean canStart(Player staff, Player target, CheatTesterType type) {
@@ -290,10 +280,9 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public void recoverOnlinePlayers() {
-        if (closed.get()) {
-            return;
+        if (!closed.get()) {
+            submit(this::loadRecoverableSessions);
         }
-        submit(this::loadRecoverableSessions);
     }
 
     private void loadRecoverableSessions() {
@@ -324,7 +313,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return;
         }
         try {
-            session.probe = prepareProbe(target, session.type);
+            session.probe = probes.prepare(target, session.type);
             session.startPoint = CheatTesterSession.StartPoint.capture(target.getLocation());
             if (session.type == CheatTesterType.FAKE_ENTITY) {
                 session.fakeHandle = fakeEntities.create();
@@ -353,37 +342,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 now,
                 now.plus(settings.sessionTimeout())
         );
-    }
-
-    private CheatTesterSession.PreparedProbe prepareProbe(Player target, CheatTesterType type) {
-        if (target.getOpenInventory().getType() != InventoryType.CRAFTING) {
-            target.closeInventory();
-        }
-        return switch (type) {
-            case TOTEM_REFILL -> prepareTotemProbe(target.getInventory());
-            case AUTO_ARMOR -> prepareArmorProbe(target.getInventory());
-            case VELOCITY, NO_FALL, FAKE_ENTITY -> CheatTesterSession.PreparedProbe.NONE;
-            default -> throw new IllegalArgumentException("Unsupported cheat tester type: " + type);
-        };
-    }
-
-    private static CheatTesterSession.PreparedProbe prepareTotemProbe(PlayerInventory inventory) {
-        int totemSlot = firstMaterial(inventory.getStorageContents(), Material.TOTEM_OF_UNDYING);
-        if (totemSlot < 0) {
-            throw new IllegalStateException("Target needs a totem in normal inventory for a no-injection refill probe");
-        }
-        return new CheatTesterSession.PreparedProbe(totemSlot, -1, -1);
-    }
-
-    private static CheatTesterSession.PreparedProbe prepareArmorProbe(PlayerInventory inventory) {
-        int armorSlot = firstNonEmpty(inventory.getArmorContents());
-        int storageSlot = firstEmpty(inventory.getStorageContents());
-        if (armorSlot < 0 || storageSlot < 0) {
-            throw new IllegalStateException(
-                    "Target needs equipped armor and one empty inventory slot for an exact-restore armor probe"
-            );
-        }
-        return new CheatTesterSession.PreparedProbe(-1, armorSlot, storageSlot);
     }
 
     private void persistStart(CheatTesterSession session, CheatTesterJournalStart start) {
@@ -426,30 +384,19 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         });
     }
 
-    private Map<CheatTesterType, ProbeStarter> createProbeStarters() {
-        EnumMap<CheatTesterType, ProbeStarter> starters = new EnumMap<>(CheatTesterType.class);
-        starters.put(CheatTesterType.TOTEM_REFILL, this::beginTotemProbe);
-        starters.put(CheatTesterType.AUTO_ARMOR, this::beginArmorProbe);
-        starters.put(CheatTesterType.VELOCITY, (target, ignored) -> beginVelocityProbe(target));
-        starters.put(CheatTesterType.NO_FALL, this::beginNoFallProbe);
-        starters.put(CheatTesterType.FAKE_ENTITY, this::beginFakeEntityProbe);
-        return Map.copyOf(starters);
-    }
-
     private void beginProbe(Player target, CheatTesterSession session) {
-        if (!sessionCurrent(session) || session.finishing.get() || !target.isOnline()) {
-            retireForRecovery(session, "Target unavailable or tester cancelled at probe start");
+        if (!sessionCurrent(session) || !target.isOnline()) {
+            retireForRecovery(session, "Target unavailable at probe start");
+            return;
+        }
+        if (session.finishing.get()) {
             return;
         }
         try {
             if (session.type.mutatesTargetState()) {
                 target.setInvulnerable(true);
             }
-            ProbeStarter starter = java.util.Objects.requireNonNull(
-                    probeStarters.get(session.type),
-                    "cheat tester probe starter"
-            );
-            starter.start(target, session);
+            probes.begin(target, session);
             session.startedMutation.set(true);
             scheduleTimeout(session);
             message(session.staffId, Component.text(
@@ -470,168 +417,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         );
     }
 
-    private void beginTotemProbe(Player target, CheatTesterSession session) {
-        PlayerInventory inventory = target.getInventory();
-        int source = session.probe.sourceSlot();
-        ItemStack[] storage = inventory.getStorageContents();
-        if (!validTotemSource(storage, source)) {
-            throw new IllegalStateException("The prepared totem source changed before probe start");
-        }
-        inventory.setItemInOffHand(new ItemStack(Material.AIR));
-        target.updateInventory();
-    }
-
-    private static boolean validTotemSource(ItemStack[] storage, int source) {
-        return source >= 0 && source < storage.length && storage[source] != null
-                && storage[source].getType() == Material.TOTEM_OF_UNDYING;
-    }
-
-    private void beginArmorProbe(Player target, CheatTesterSession session) {
-        PlayerInventory inventory = target.getInventory();
-        ItemStack[] armor = inventory.getArmorContents();
-        ItemStack[] storage = inventory.getStorageContents();
-        int armorSlot = session.probe.armorSlot();
-        int storageSlot = session.probe.storageSlot();
-        validateArmorSlots(armor, storage, armorSlot, storageSlot);
-        storage[storageSlot] = armor[armorSlot].clone();
-        armor[armorSlot] = new ItemStack(Material.AIR);
-        inventory.setStorageContents(storage);
-        inventory.setArmorContents(armor);
-        target.updateInventory();
-    }
-
-    private static void validateArmorSlots(ItemStack[] armor, ItemStack[] storage, int armorSlot, int storageSlot) {
-        if (armorSlot < 0 || armorSlot >= armor.length || storageSlot < 0 || storageSlot >= storage.length) {
-            throw new IllegalStateException("The prepared armor slots changed before probe start");
-        }
-        if (armor[armorSlot] == null || armor[armorSlot].isEmpty()) {
-            throw new IllegalStateException("The prepared armor item changed before probe start");
-        }
-        if (storage[storageSlot] != null && !storage[storageSlot].isEmpty()) {
-            throw new IllegalStateException("The prepared armor destination changed before probe start");
-        }
-    }
-
-    private void beginVelocityProbe(Player target) {
-        Vector horizontal = target.getLocation().getDirection().setY(0.0D);
-        if (horizontal.lengthSquared() < MIN_DIRECTION_LENGTH_SQUARED) {
-            horizontal = new Vector(1.0D, 0.0D, 0.0D);
-        } else {
-            horizontal.normalize();
-        }
-        target.setVelocity(horizontal.multiply(settings.velocityHorizontal()).setY(settings.velocityVertical()));
-    }
-
-    private void beginNoFallProbe(Player target, CheatTesterSession session) {
-        target.setFallDistance(0.0F);
-        target.setVelocity(new Vector(0.0D, settings.noFallVertical(), 0.0D));
-        session.sampleTask = target.getScheduler().runAtFixedRate(
-                plugin,
-                ignored -> sampleNoFall(target, session),
-                () -> retireForRecovery(session, "Target retired during no-fall sampling"),
-                1L,
-                1L
-        );
-    }
-
-    private void sampleNoFall(Player target, CheatTesterSession session) {
-        if (!sampleActive(session)) {
-            cancel(session.sampleTask);
-            return;
-        }
-        float current = target.getFallDistance();
-        session.maxFallDistance = Math.max(session.maxFallDistance, current);
-        if (fallResetObserved(target, session, current)) {
-            session.airborneFallResets.incrementAndGet();
-        }
-        session.previousFallDistance = current;
-    }
-
     private boolean sampleActive(CheatTesterSession session) {
         return sessionCurrent(session) && !session.finishing.get();
-    }
-
-    private static boolean fallResetObserved(Player target, CheatTesterSession session, float current) {
-        return target.getVelocity().getY() < FALLING_VELOCITY_THRESHOLD
-                && session.previousFallDistance > PREVIOUS_FALL_THRESHOLD
-                && current < FALL_RESET_THRESHOLD;
-    }
-
-    private void beginFakeEntityProbe(Player target, CheatTesterSession session) {
-        if (!fakeEntities.available() || session.fakeHandle == null) {
-            throw new IllegalStateException("ProtocolLib fake-entity support became unavailable");
-        }
-        Location location = fakeLocation(target);
-        session.fakeLocation = CheatTesterSession.StartPoint.capture(location);
-        fakeEntityTargets.put(session.fakeHandle.entityId(), session.targetId);
-        fakeEntities.show(target, session.fakeHandle, location);
-        scheduleShowForStaff(session, location);
-        session.sampleTask = target.getScheduler().runAtFixedRate(
-                plugin,
-                ignored -> sampleFakeAim(target, session),
-                () -> retireForRecovery(session, "Target retired during fake-entity aim sampling"),
-                1L,
-                1L
-        );
-    }
-
-    private void sampleFakeAim(Player target, CheatTesterSession session) {
-        if (!sampleActive(session)) {
-            cancel(session.sampleTask);
-            return;
-        }
-        CheatTesterSession.StartPoint fake = session.fakeLocation;
-        if (fake == null || !target.getWorld().getUID().equals(fake.worldId())) {
-            return;
-        }
-        Location eye = target.getEyeLocation();
-        Vector toFake = new Vector(fake.x() - eye.getX(), fake.y() + 1.0D - eye.getY(), fake.z() - eye.getZ());
-        if (toFake.lengthSquared() < MIN_AIM_VECTOR_LENGTH_SQUARED) {
-            session.minimumAimAngleDegrees = 0.0D;
-            return;
-        }
-        updateMinimumAimAngle(session, eye.getDirection(), toFake);
-    }
-
-    private static void updateMinimumAimAngle(CheatTesterSession session, Vector look, Vector toFake) {
-        if (look.lengthSquared() < MIN_AIM_VECTOR_LENGTH_SQUARED) {
-            return;
-        }
-        double dot = Math.max(-1.0D, Math.min(1.0D, look.normalize().dot(toFake.normalize())));
-        session.minimumAimAngleDegrees = Math.min(session.minimumAimAngleDegrees, Math.toDegrees(Math.acos(dot)));
-    }
-
-    private void scheduleShowForStaff(CheatTesterSession session, Location location) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player staff = plugin.getServer().getPlayer(session.staffId);
-            if (staff == null || !staff.isOnline()) {
-                return;
-            }
-            Location copy = location.clone();
-            staff.getScheduler().execute(
-                    plugin,
-                    () -> showFakeToStaff(staff, session, copy),
-                    null,
-                    1L
-            );
-        });
-    }
-
-    private void showFakeToStaff(Player staff, CheatTesterSession session, Location location) {
-        if (fakeEntities.available() && staff.getWorld().equals(location.getWorld())) {
-            fakeEntities.show(staff, session.fakeHandle, location);
-        }
-    }
-
-    private Location fakeLocation(Player target) {
-        Location base = target.getLocation();
-        Vector direction = base.getDirection().setY(0.0D);
-        if (direction.lengthSquared() < MIN_DIRECTION_LENGTH_SQUARED) {
-            direction = new Vector(0.0D, 0.0D, 1.0D);
-        } else {
-            direction.normalize();
-        }
-        return base.clone().add(direction.multiply(settings.fakeEntityDistance()));
     }
 
     private void finish(CheatTesterSession session, CheatTesterSessionState terminalState, String reason) {
@@ -691,7 +478,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     ) {
         String captured = evidence.capture(target, session, reason);
         if (session.type == CheatTesterType.FAKE_ENTITY) {
-            hideFakeEntity(target, session);
+            probes.hideFake(target, session);
             persistCompletion(session, terminalState, reason, captured, true);
             return;
         }
@@ -842,32 +629,9 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             CheatTesterSessionState terminalState,
             String reason
     ) {
-        scheduleHideForStaff(session);
+        probes.scheduleHideForStaff(session);
         removeFakeTarget(session);
         persistCompletion(session, terminalState, reason, evidence.withoutTarget(session, reason), false);
-    }
-
-    private void hideFakeEntity(Player target, CheatTesterSession session) {
-        FakeEntityAdapter.Handle handle = session.fakeHandle;
-        if (handle == null) {
-            return;
-        }
-        fakeEntityTargets.remove(handle.entityId());
-        fakeEntities.destroy(target, handle);
-        scheduleHideForStaff(session);
-    }
-
-    private void scheduleHideForStaff(CheatTesterSession session) {
-        FakeEntityAdapter.Handle handle = session.fakeHandle;
-        if (handle == null) {
-            return;
-        }
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player staff = plugin.getServer().getPlayer(session.staffId);
-            if (staff != null) {
-                staff.getScheduler().execute(plugin, () -> fakeEntities.destroy(staff, handle), null, 1L);
-            }
-        });
     }
 
     private boolean recordFakeInteraction(UUID viewerId, int entityId, String action) {
@@ -875,10 +639,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         if (session == null) {
             return fakeEntityTargets.containsKey(entityId);
         }
-        if (viewerId.equals(session.staffId)) {
-            return true;
-        }
-        if (!viewerId.equals(session.targetId)) {
+        if (viewerId.equals(session.staffId) || !viewerId.equals(session.targetId)) {
             return true;
         }
         session.fakeInteractions.incrementAndGet();
@@ -917,10 +678,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return;
         }
         CheatTesterSession recovered = CheatTesterSession.recovered(record);
-        if (activeByTarget.putIfAbsent(record.targetId(), recovered) != null) {
-            return;
-        }
-        if (!acquireRecoveryLock(record, recovered)) {
+        if (activeByTarget.putIfAbsent(record.targetId(), recovered) != null || !acquireRecoveryLock(record, recovered)) {
             return;
         }
         boolean scheduled = target.getScheduler().execute(
@@ -977,7 +735,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return;
         }
         fakeEntities.destroy(target, session.fakeHandle);
-        scheduleHideForStaff(session);
+        probes.scheduleHideForStaff(session);
         persistCompletion(
                 session,
                 CheatTesterSessionState.CANCELLED,
@@ -1012,11 +770,9 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private void recover(Player player) {
-        if (closed.get()) {
-            return;
+        if (!closed.get()) {
+            submit(() -> recoverById(player.getUniqueId()));
         }
-        UUID playerId = player.getUniqueId();
-        submit(() -> recoverById(playerId));
     }
 
     private void recoverById(UUID playerId) {
@@ -1146,34 +902,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private long timeoutTicks() {
         long byDuration = Math.max(1L, settings.sessionTimeout().toMillis() / 50L);
         return Math.max(1L, Math.min(settings.probeTicks(), byDuration));
-    }
-
-    private static int firstMaterial(ItemStack[] items, Material material) {
-        for (int index = 0; index < items.length; index++) {
-            ItemStack item = items[index];
-            if (item != null && !item.isEmpty() && item.getType() == material) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private static int firstNonEmpty(ItemStack[] items) {
-        for (int index = 0; index < items.length; index++) {
-            if (items[index] != null && !items[index].isEmpty()) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private static int firstEmpty(ItemStack[] items) {
-        for (int index = 0; index < items.length; index++) {
-            if (items[index] == null || items[index].isEmpty()) {
-                return index;
-            }
-        }
-        return -1;
     }
 
     private static String safePreparationMessage(RuntimeException exception) {
@@ -1354,10 +1082,5 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         fakeEntityTargets.clear();
         fakeEntities.close();
         // Durable ACTIVE rows remain authoritative until the next healthy runtime verifies cleanup/restoration.
-    }
-
-    @FunctionalInterface
-    private interface ProbeStarter {
-        void start(Player target, CheatTesterSession session);
     }
 }
