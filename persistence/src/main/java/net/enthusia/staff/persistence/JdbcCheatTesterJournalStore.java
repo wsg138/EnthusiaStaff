@@ -41,7 +41,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                Optional<CheatTesterJournalRecord> existing = activeForTarget(connection, start.serverId(), start.targetId(), true);
+                Optional<CheatTesterJournalRecord> existing = activeForTarget(connection, start.targetId(), true);
                 if (existing.isPresent()) {
                     connection.rollback();
                     return existing.orElseThrow();
@@ -55,7 +55,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
                 return created;
             } catch (SQLIntegrityConstraintViolationException conflict) {
                 rollback(connection, conflict);
-                Optional<CheatTesterJournalRecord> existing = activeForTarget(start.serverId(), start.targetId());
+                Optional<CheatTesterJournalRecord> existing = activeForTarget(start.targetId());
                 if (existing.isPresent()) {
                     return existing.orElseThrow();
                 }
@@ -68,6 +68,16 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open cheat tester transaction", exception);
+        }
+    }
+
+    @Override
+    public Optional<CheatTesterJournalRecord> activeForTarget(UUID targetId) {
+        validateTarget(targetId);
+        try (Connection connection = dataSource.getConnection()) {
+            return activeForTarget(connection, targetId, false);
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read globally active cheat tester", exception);
         }
     }
 
@@ -227,6 +237,24 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
 
     private static Optional<CheatTesterJournalRecord> activeForTarget(
             Connection connection,
+            UUID targetId,
+            boolean lock
+    ) throws SQLException {
+        String sql = """
+                SELECT * FROM cheat_tester_sessions
+                WHERE active_target_uuid = ? AND state = 'ACTIVE'
+                LIMIT 1
+                """ + (lock ? " FOR UPDATE" : "");
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, targetId.toString());
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(read(result)) : Optional.empty();
+            }
+        }
+    }
+
+    private static Optional<CheatTesterJournalRecord> activeForTarget(
+            Connection connection,
             String serverId,
             UUID targetId,
             boolean lock
@@ -306,6 +334,10 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
 
     private static void validateServerAndTarget(String serverId, UUID targetId) {
         validateServer(serverId);
+        validateTarget(targetId);
+    }
+
+    private static void validateTarget(UUID targetId) {
         if (targetId == null) {
             throw new IllegalArgumentException("targetId must be present");
         }
