@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -24,6 +25,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -45,6 +47,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     private final JavaPlugin plugin;
     private final StaffModeManager staffMode;
     private final VanishManager vanish;
+    private final CheatTesterManager cheatTester;
     private final StaffToolSettings settings;
     private final StaffToolCooldowns cooldowns;
     private final StaffToolRandomTeleportService randomTeleport;
@@ -56,11 +59,13 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             String serverId,
             StaffModeManager staffMode,
             VanishManager vanish,
-            FreezeManager freeze
+            FreezeManager freeze,
+            CheatTesterManager cheatTester
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
+        this.cheatTester = java.util.Objects.requireNonNull(cheatTester, "cheatTester");
         this.settings = StaffToolSettings.load(plugin.getConfig());
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
         this.randomTeleport = new StaffToolRandomTeleportService(
@@ -86,6 +91,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 (player, targetId) -> runTargetCommand(player, "freeze", targetId, "Staff-mode tool investigation")
         );
         configured.put(StaffToolDefinition.REPORTS, (player, ignored) -> runCommand(player, "reports"));
+        configured.put(StaffToolDefinition.CHEAT_TESTER, (player, ignored) -> cheatTester.cycleSelection(player));
         configured.put(StaffToolDefinition.SPECTATE, this::beginFollowOrSpectate);
         configured.put(StaffToolDefinition.VANISH, (player, ignored) -> runCommand(player, "vanish"));
         configured.put(StaffToolDefinition.STAFF_CHAT, (player, ignored) -> runCommand(player, "staffchat"));
@@ -104,6 +110,12 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         event.setCancelled(true);
+        if (resolution.valid()
+                && resolution.tool() == StaffToolDefinition.CHEAT_TESTER
+                && player.isSneaking()) {
+            dispatchCheatConfiguration(player, resolution.tool());
+            return;
+        }
         dispatchResolved(player, resolution, null);
     }
 
@@ -117,6 +129,26 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         handleEntityInteraction(event.getPlayer(), event.getRightClicked(), event.getHand(), event::setCancelled);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Player player) || !(event.getEntity() instanceof Player target)) {
+            return;
+        }
+        StaffToolResolution resolution = resolveHeldTool(player);
+        if (!resolution.tagged()) {
+            return;
+        }
+        event.setCancelled(true);
+        if (!resolution.valid()) {
+            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            return;
+        }
+        if (resolution.tool() != StaffToolDefinition.CHEAT_TESTER) {
+            return;
+        }
+        dispatchCheatRun(player, target, resolution.tool());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -138,6 +170,12 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cancellation.accept(true);
+        if (resolution.valid()
+                && resolution.tool() == StaffToolDefinition.CHEAT_TESTER
+                && player.isSneaking()) {
+            dispatchCheatConfiguration(player, resolution.tool());
+            return;
+        }
         Player target = clicked instanceof Player other ? other : null;
         dispatchResolved(player, resolution, target);
     }
@@ -156,10 +194,6 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     private void dispatch(Player player, StaffToolDefinition tool, UUID targetId) {
-        if (tool == StaffToolDefinition.CHEAT_TESTER) {
-            sendCheatTesterDeferred(player);
-            return;
-        }
         if (!hasToolAuthority(player, tool) || !hasValidTarget(player, tool, targetId)) {
             return;
         }
@@ -174,11 +208,25 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         action.execute(player, targetId);
     }
 
-    private void sendCheatTesterDeferred(Player player) {
-        player.sendMessage(Component.text(
-                "Cheat Tester is intentionally unavailable until package ES-P10 is completed.",
-                NamedTextColor.YELLOW
-        ));
+    private void dispatchCheatConfiguration(Player player, StaffToolDefinition tool) {
+        if (!hasToolAuthority(player, tool) || !acquireCooldown(player, tool)) {
+            return;
+        }
+        cheatTester.showConfiguration(player);
+    }
+
+    private void dispatchCheatRun(Player player, Player target, StaffToolDefinition tool) {
+        if (!hasToolAuthority(player, tool)) {
+            return;
+        }
+        if (target.getUniqueId().equals(player.getUniqueId())) {
+            player.sendMessage(Component.text("Cheat Tester cannot target yourself.", NamedTextColor.RED));
+            return;
+        }
+        if (!acquireCooldown(player, tool)) {
+            return;
+        }
+        cheatTester.runSelected(player, target);
     }
 
     private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {
@@ -372,12 +420,13 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         sendMenuLine(player, "/inspect <player>", "Player inspector", "/inspect ");
         sendMenuLine(player, "/freeze <player> <reason>", "Freeze", "/freeze ");
         sendMenuLine(player, "/reports", "Reports", "/reports");
+        sendMenuLine(player, "/cheattester config", "Cheat Tester", "/cheattester config");
         sendMenuLine(player, "/stafftools spectate <player>", "Follow/Spectate", "/stafftools spectate ");
         sendMenuLine(player, "/vanish", "Vanish", "/vanish");
         sendMenuLine(player, "/staffchat", "Staff chat", "/staffchat");
         sendMenuLine(player, "/staff", "Exit staff mode", "/staff");
         player.sendMessage(Component.text(
-                "Cheat Tester remains unavailable until ES-P10; no test state is changed by this package.",
+                "Cheat Tester tool: right-click chooses a tester, left-click a player runs it, shift-right-click shows configuration.",
                 NamedTextColor.GRAY
         ));
         player.sendMessage(Component.text(

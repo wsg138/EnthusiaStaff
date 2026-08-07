@@ -28,6 +28,9 @@ class PaperConfigurationLoaderTest {
         assertEquals(6, snapshot.restartRequired().workerThreads());
         assertEquals(300, snapshot.restartRequired().workerQueueCapacity());
         assertEquals("SMP", snapshot.restartRequired().networkServerId());
+        assertEquals(Duration.ofSeconds(4), snapshot.restartRequired().cheatTesterSettings().sessionTimeout());
+        assertEquals(8, snapshot.restartRequired().cheatTesterSettings().maximumActiveGlobal());
+        assertEquals(3.0D, snapshot.restartRequired().cheatTesterSettings().fakeEntityDistance());
         assertTrue(snapshot.punishmentRequestAlerts().enabled());
         assertEquals(Duration.ofSeconds(10), snapshot.punishmentRequestAlerts().pollInterval());
         assertEquals(Duration.ofSeconds(2), snapshot.punishmentRequestAlerts().joinDelay());
@@ -44,6 +47,16 @@ class PaperConfigurationLoaderTest {
         PaperConfigurationSnapshot snapshot = load(configuration);
 
         assertEquals(PunishmentRequestAlertDefaults.disabled(), snapshot.punishmentRequestAlerts());
+    }
+
+    @Test
+    void missingTesterSectionUsesSafeDefaults() throws IOException {
+        String configuration = validConfiguration().replace(testerConfiguration(), "");
+        PaperConfigurationSnapshot snapshot = load(configuration);
+        assertEquals(
+                net.enthusia.staff.paper.tester.CheatTesterSettings.defaults(),
+                snapshot.restartRequired().cheatTesterSettings()
+        );
     }
 
     @Test
@@ -100,6 +113,27 @@ class PaperConfigurationLoaderTest {
     }
 
     @Test
+    void rejectsUnsafeTesterSettingsAsOneValidatedConfiguration() throws IOException {
+        String configuration = validConfiguration()
+                .replace("timeout-millis: 4000", "timeout-millis: 16000")
+                .replace("maximum-active-global: 8", "maximum-active-global: 2")
+                .replace("maximum-active-per-staff: 2", "maximum-active-per-staff: 3")
+                .replace("fake-entity-distance: 3.0", "fake-entity-distance: 20.0");
+
+        PaperConfigurationValidationException exception = assertThrows(
+                PaperConfigurationValidationException.class,
+                () -> load(configuration)
+        );
+
+        assertContains(exception.errors(),
+                "staff-tools.cheat-tester.timeout-millis must be between 1000 and 15000");
+        assertContains(exception.errors(),
+                "staff-tools.cheat-tester.maximum-active-per-staff must not exceed maximum-active-global");
+        assertContains(exception.errors(),
+                "staff-tools.cheat-tester.fake-entity-distance must be between 1.0 and 8.0");
+    }
+
+    @Test
     void rejectsZeroNegativeExcessiveAndNonScalarValues() throws IOException {
         String configuration = validConfiguration()
                 .replace("  maximum-attempts: 6", "  maximum-attempts: 0")
@@ -131,6 +165,7 @@ class PaperConfigurationLoaderTest {
                 .replace("server-id: SMP", "server-id: HUB")
                 .replace("scope-id: SMP", "scope-id: HUB")
                 .replace("host: 127.0.0.1", "host: 127.0.0.2")
+                .replace("timeout-millis: 4000", "timeout-millis: 5000")
         ).restartRequired();
 
         assertEquals(List.of(
@@ -138,7 +173,8 @@ class PaperConfigurationLoaderTest {
                 "workers.queue-capacity",
                 "network.server-id",
                 "inventory.scope-id",
-                "channel.host"
+                "channel.host",
+                "staff-tools.cheat-tester"
         ), active.differencePaths(changed));
     }
 
@@ -229,6 +265,7 @@ class PaperConfigurationLoaderTest {
                 workers:
                   threads: 6
                   queue-capacity: 300
+                """ + testerConfiguration() + """
                 network:
                   server-id: SMP
                 inventory:
@@ -244,6 +281,23 @@ class PaperConfigurationLoaderTest {
                     trust-store: channel-trust.p12
                     trust-store-password-environment: ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD
                 """ + alertConfiguration();
+    }
+
+    private static String testerConfiguration() {
+        return """
+                staff-tools:
+                  cheat-tester:
+                    timeout-millis: 4000
+                    probe-ticks: 60
+                    maximum-active-global: 8
+                    maximum-active-per-staff: 2
+                    fake-entity-distance: 3.0
+                    velocity:
+                      horizontal: 0.75
+                      vertical: 0.30
+                    no-fall:
+                      vertical: 0.70
+                """;
     }
 
     private static String alertConfiguration() {
