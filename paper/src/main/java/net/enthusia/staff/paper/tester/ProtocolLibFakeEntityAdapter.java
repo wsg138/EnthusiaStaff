@@ -147,7 +147,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
             manager.sendServerPacket(viewer, packet);
         } catch (RuntimeException | LinkageError exception) {
             disableAfterFailure(plugin, failureHandler, healthy, exception);
-            plugin.getLogger().log(Level.WARNING, "Failed to remove a synthetic cheat-test entity", exception);
+            throw exception;
         }
     }
 
