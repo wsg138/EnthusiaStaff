@@ -8,36 +8,36 @@ Live GitHub state overrides stale records, but persistent package state must be 
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-X05 — Website UX, authentication, and appeals` |
+| Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-P04 — Staff-mode operational tools`; `ES-X05 — Website UX, authentication, and appeals` |
 | Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Active implementation package | `ES-P04 — Staff-mode operational tools`; branch `package/es-p04-staff-mode-tools`; PR #79 ready for review; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker |
-| ES-P04 intended terminal outcome | `COMPLETE` only after every required exact-head gate and normal merge; otherwise `BLOCKED` / `PARKED_BLOCKED` if the configured Pi gate remains unavailable without an owner-approved ES-P04 infrastructure exception |
-| Other dependency-ready package | `ES-P09 — Alt and network-identity completion` at priority 55; unassigned and not started |
-| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c` |
-| ES-P02 blocker recheck | private run `31141797380`; Ubuntu build `92753075216` received runner ID `0`, empty runner name and steps `[]`, with the Billing & plans payment/spending-limit annotation; Pi `92753100652` skipped |
-| ES-P04 status | `ACTIVE` / `ACTIONABLE_CONTINUATION`; implementation/documentation complete; all identified review findings dispositioned; final exact-head validation and terminal publication remain |
-| ES-P04 latest product/test head | `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1`; review fixes plus Codacy-compliant cooldown-boundary tests |
-| ES-P04 completed work | authenticated staff-tool dispatch, stale/spoofed/session/rank checks, random teleport suitability, cooldowns, operational command/service reuse, Bedrock text/command fallback, deferred Cheat Tester exclusion, corrected follow/spectate feedback, and inclusive cooldown-boundary coverage |
-| ES-P04 exact-head staging evidence so far | superseded records head `7c32b823919fc276f5b8c40a80a5de2893956564` dispatched private staging run `31177702607`; required Ubuntu job `92863344441` had runner ID `0`, empty runner name, steps `[]`, explicit Billing & plans failure; Pi `92863355649` skipped |
-| ES-P04 next work | freeze the records checkpoint produced by this state reconciliation; require exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/provider-leak/Codacy/CodeRabbit evidence and exact Pi disposition; then normal merge or blocked-state publication |
-| ES-P04 blocker risk | configured private Pi path remains externally unavailable before product execution under the private repository Billing & plans restriction; no owner-approved ES-P04 infrastructure exception exists in inspected state |
+| Active implementation package | `NONE` — ES-P04 completed and this worker stops after completion publication |
+| Newly ready packages | `ES-P05 — Report evidence and staff workflow completion` at priority 50; `ES-P09 — Alt and network-identity completion` at priority 55; `ES-P10 — Cheat tester and fake-entity system` at priority 80 |
+| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; private Actions Billing & plans blocker unchanged |
+| ES-P04 status | `COMPLETE` under an explicit owner-approved package-specific infrastructure exception for Pi staging |
+| ES-P04 validated head | `15d9428eba454e9ae4a905752129bd18676acdb1` |
+| ES-P04 merge | PR #79; normal merge `a530b992232a8a08cbbd13b0eed6606228ceb652` |
+| ES-P04 hosted validation | Wiki `31178353549` / `92865432750` success; Coverage `31178353504` / `92865439305` success on Java 21 including build/tests/coverage/runtime-JAR inspection; Codacy static `92865800728` success with zero issues; Codacy variation `92867049954` and diff coverage `92867049338` success; zero valid unresolved review threads |
+| ES-P04 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — PI STAGING SKIPPED/DEFERRED**; private staging `31178359804`, Ubuntu build `92865456267` runner ID `0`, steps `[]`, Billing & plans failure; Pi `92865494913` skipped. This is not a staging pass. |
+| ES-P04 internal follow-up | When the private Actions billing/runner path is available, rerun the ES-P04 Pi boot/restart staging against the merged behavior and record the result. This deferred check does not reopen ES-P04 unless it exposes a real defect. |
 | ES-P04 handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md` |
-| Migration boundary | immutable V17; ES-P04 adds no migration |
+| Migration boundary | immutable V17; ES-P04 added no migration |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
-## ES-P04 continuation evidence
+## ES-P04 completion evidence
 
 - Starting legitimate aggregate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- ES-P02's external blocker was unchanged, so ES-P04 was selected as priority-40 dependency-complete work ahead of ES-P09 priority 55.
-- Live GitHub exposed existing PR #79, so this worker resumed that actionable continuation rather than opening competing work.
-- Scope remains limited to non-excluded staff-mode operational tools and shared safety/recovery behavior. Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
-- All CodeRabbit threads identified through records head `7c32b823919fc276f5b8c40a80a5de2893956564` were resolved or explicitly withdrawn as non-blocking. The scheduler-helper consolidation was acknowledged by CodeRabbit as optional maintainability follow-up after the concrete compile defect was fixed.
-- Exact-head `7c32...` Wiki passed, while its private staging route failed before runner allocation due Billing & plans. Codacy then reported five test-structure warnings in the new boundary test; `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1` restructures those tests with explicit assertions and no loop allocations. Because that changed the branch, all final gates must run again on the records head produced after this update.
+- ES-P04 was selected ahead of ES-P09 after ES-P02 remained parked on its unchanged external blocker; existing PR #79 was resumed rather than duplicated.
+- Scope completed: authenticated staff-mode tools for random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu; stale/spoofed/session/rank/slot/material checks; Folia-safe target sampling; cooldowns; durable command/service reuse; Bedrock command/text fallbacks; restoration/reconnect/reload/shutdown/rank-change safety.
+- Explicit exclusions were preserved: Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
+- Review fixes prevent deferred Cheat Tester issuance, cover inclusive cooldown boundaries, correct follow/spectate feedback, and resolve Codacy test-quality findings. Every valid review thread was resolved; scheduler-helper consolidation was withdrawn as optional maintainability follow-up.
+- Frozen head `15d9428eba454e9ae4a905752129bd18676acdb1` passed all ordinary exact-head gates. The private staging route did not execute product code because GitHub rejected the required private Ubuntu build before runner allocation under Billing & plans.
+- On 2026-08-07 the owner explicitly authorized ES-P04 to continue despite that infrastructure condition, with the Pi check marked skipped/deferred and an internal requirement to run it later when available. The exception is package-specific and does not relabel the failed/skipped staging evidence as a pass.
+- PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; the merge commit has validated head `15d9428e...` as its package parent.
 
-## Current ES-P04 next action
+## Next routing
 
-Freeze the resulting PR #79 head and validate that exact SHA. Require every ordinary hosted/static/review gate and record the configured Pi result without relabeling unavailable infrastructure as success. If every gate passes, merge normally and publish `COMPLETE`. If ordinary gates pass but Pi again fails before product execution under the same unapproved Billing & plans restriction, preserve PR #79 and its branch and publish `BLOCKED` / `PARKED_BLOCKED` to `main` through the required documentation-only status-publication PR.
+ES-P04 is complete. Dependency-derived statuses may advance, but this worker does not activate or implement another package. A later sequential worker must reconcile live GitHub first; absent a higher-priority actionable continuation, ES-P05 is now the lowest-priority-number newly READY package.
 
 ## Safety boundaries
 
-No production credentials, accounts, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation is authorized or performed. Do not start ES-P09 or any second package during this worker.
+No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation was performed.
