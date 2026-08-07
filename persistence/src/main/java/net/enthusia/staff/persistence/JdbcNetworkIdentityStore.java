@@ -20,9 +20,9 @@ import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.security.NetworkAddressTextGuard;
 import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
+import net.enthusia.staff.domain.alt.AltInheritancePolicy;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
-import net.enthusia.staff.domain.alt.AltInheritancePolicy;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
 import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
@@ -45,6 +45,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final AltInheritancePolicy inheritancePolicy = new AltInheritancePolicy();
+    private final Object retentionLock = new Object();
     private Instant nextAutomaticRetentionAt = Instant.EPOCH;
 
     public JdbcNetworkIdentityStore(DataSource dataSource, ObjectMapper json) {
@@ -138,7 +139,14 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     );
                     if (shouldInherit) {
                         for (SourceSanction source : active) {
-                            if (inherit(connection, joiningPlayerId, otherPlayerId, source, relationship.state(), observedAt)) {
+                            if (inherit(
+                                    connection,
+                                    joiningPlayerId,
+                                    otherPlayerId,
+                                    source,
+                                    relationship.state(),
+                                    observedAt
+                            )) {
                                 inherited++;
                                 alerts++;
                             }
@@ -234,7 +242,14 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 if (existing == null) {
                     insertRelationship(connection, pair, state, actorId, changedAt);
                 } else {
-                    updateRelationship(connection, pair, state, actorId, changedAt, state == AltRelationshipState.NOT_RELATED);
+                    updateRelationship(
+                            connection,
+                            pair,
+                            state,
+                            actorId,
+                            changedAt,
+                            state == AltRelationshipState.NOT_RELATED
+                    );
                 }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
                 connection.commit();
@@ -252,8 +267,14 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
 
     @Override
     public boolean reopen(UUID firstPlayerId, UUID secondPlayerId, UUID actorId, Instant changedAt, String reason) {
-        validateManualChange(firstPlayerId, secondPlayerId, AltRelationshipState.LOW_CONFIDENCE,
-                actorId, changedAt, reason);
+        validateManualChange(
+                firstPlayerId,
+                secondPlayerId,
+                AltRelationshipState.LOW_CONFIDENCE,
+                actorId,
+                changedAt,
+                reason
+        );
         PlayerPair pair = ordered(firstPlayerId, secondPlayerId);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -854,17 +875,21 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         return new NetworkIdentityRetentionResult(tokensDeleted, evidenceDeleted);
     }
 
-    private synchronized boolean reserveAutomaticRetention(Instant now) {
-        if (now.isBefore(nextAutomaticRetentionAt)) {
-            return false;
+    private boolean reserveAutomaticRetention(Instant now) {
+        synchronized (retentionLock) {
+            if (now.isBefore(nextAutomaticRetentionAt)) {
+                return false;
+            }
+            nextAutomaticRetentionAt = now.plus(AUTOMATIC_RETENTION_INTERVAL);
+            return true;
         }
-        nextAutomaticRetentionAt = now.plus(AUTOMATIC_RETENTION_INTERVAL);
-        return true;
     }
 
-    private synchronized void releaseAutomaticRetentionReservation(Instant observedAt) {
-        if (!nextAutomaticRetentionAt.isAfter(observedAt.plus(AUTOMATIC_RETENTION_INTERVAL))) {
-            nextAutomaticRetentionAt = observedAt;
+    private void releaseAutomaticRetentionReservation(Instant observedAt) {
+        synchronized (retentionLock) {
+            if (!nextAutomaticRetentionAt.isAfter(observedAt.plus(AUTOMATIC_RETENTION_INTERVAL))) {
+                nextAutomaticRetentionAt = observedAt;
+            }
         }
     }
 
