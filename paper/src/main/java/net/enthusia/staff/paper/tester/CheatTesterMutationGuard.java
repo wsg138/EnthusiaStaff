@@ -7,6 +7,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -19,6 +21,20 @@ final class CheatTesterMutationGuard implements Listener {
 
     CheatTesterMutationGuard(CheatTesterManager manager) {
         this.manager = Objects.requireNonNull(manager, "manager");
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && manager.mutating(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof Player player && manager.mutating(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
