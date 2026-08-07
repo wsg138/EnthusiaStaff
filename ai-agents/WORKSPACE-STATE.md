@@ -10,8 +10,11 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | --- | --- |
 | Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-P04 — Staff-mode operational tools`; `ES-X05 — Website UX, authentication, and appeals` |
 | Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Active implementation package | `NONE` — ES-P04 completed and this worker stops after completion publication |
-| Newly ready packages | `ES-P05 — Report evidence and staff workflow completion` at priority 50; `ES-P09 — Alt and network-identity completion` at priority 55; `ES-P10 — Cheat tester and fake-entity system` at priority 80 |
+| Active implementation package | `ES-P05 — Report evidence and staff workflow completion` |
+| ES-P05 branch | `package/es-p05-report-workflow` |
+| ES-P05 starting main | `bf9b305ba96d9536f3d111c79eef674bd2e11dc5` |
+| ES-P05 handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md` |
+| Other ready packages | `ES-P09 — Alt and network-identity completion` at priority 55; `ES-P10 — Cheat tester and fake-entity system` at priority 80; do not activate while ES-P05 is active |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; private Actions Billing & plans blocker unchanged |
 | ES-P04 status | `COMPLETE` under an explicit owner-approved package-specific infrastructure exception for Pi staging |
 | ES-P04 validated head | `15d9428eba454e9ae4a905752129bd18676acdb1` |
@@ -19,11 +22,21 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-P04 hosted validation | Wiki `31178353549` / `92865432750` success; Coverage `31178353504` / `92865439305` success on Java 21 including build/tests/coverage/runtime-JAR inspection; Codacy static `92865800728` success with zero issues; Codacy variation `92867049954` and diff coverage `92867049338` success; zero valid unresolved review threads |
 | ES-P04 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — PI STAGING SKIPPED/DEFERRED**; private staging `31178359804`, Ubuntu build `92865456267` runner ID `0`, steps `[]`, Billing & plans failure; Pi `92865494913` skipped. This is not a staging pass. |
 | ES-P04 internal follow-up | When the private Actions billing/runner path is available, rerun the ES-P04 Pi boot/restart staging against the merged behavior and record the result. This deferred check does not reopen ES-P04 unless it exposes a real defect. |
-| ES-P04 handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md` |
-| Migration boundary | immutable V17; ES-P04 added no migration |
+| Migration boundary | immutable V17 at ES-P05 start |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
+| Parallel documentation branch | `docs/wiki-maintenance-2026-08` exists separately, has no package authority, and is not being modified by the ES-P05 worker |
 
-## ES-P04 completion evidence
+## ES-P05 selection evidence
+
+- Legitimate `main` at selection: `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`.
+- Live open PRs: only PR #70 for ES-P02; it remains parked on the unchanged private Actions Billing & plans blocker and therefore is not an actionable continuation.
+- Live branches at selection: `main`, parked `package/es-p02-runtime-db-recovery`, and separate documentation branch `docs/wiki-maintenance-2026-08`; no ES-P05 branch or competing package branch existed.
+- Dependencies ES-P03 and ES-P04 are complete. ES-P05 was the lowest-priority-number dependency-complete READY package, ahead of ES-P09 and ES-P10.
+- Included scope: provider-independent report submission, durable cooldown/merge/duplicate behavior, queue/detail and text fallback, notes/status revision safety, bounded chat/coordinate/client evidence, retention/privacy, attachment boundary decision, restart/concurrency proof, documentation and validation.
+- Preserved exclusions: RoseChat private-message evidence remains ES-X01; Discord route delivery remains ES-P06; production evidence/routes and issue #43 remain excluded.
+- No prior ES-P05 package handoff existed.
+
+## ES-P04 completion evidence retained
 
 - Starting legitimate aggregate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
 - ES-P04 was selected ahead of ES-P09 after ES-P02 remained parked on its unchanged external blocker; existing PR #79 was resumed rather than duplicated.
@@ -36,8 +49,8 @@ Live GitHub state overrides stale records, but persistent package state must be 
 
 ## Next routing
 
-ES-P04 is complete. Dependency-derived statuses may advance, but this worker does not activate or implement another package. A later sequential worker must reconcile live GitHub first; absent a higher-priority actionable continuation, ES-P05 is now the lowest-priority-number newly READY package.
+ES-P05 is active. This worker must complete or correctly park ES-P05, persist its state, and stop. It must not activate ES-P09, ES-P10, ES-P06, or any other package in this session.
 
 ## Safety boundaries
 
-No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation was performed.
+No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation is authorized.
