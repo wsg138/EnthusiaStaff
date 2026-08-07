@@ -1,13 +1,9 @@
 package net.enthusia.staff.paper.tester;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -41,10 +37,10 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final CheatTesterSnapshotCodec snapshots;
     private final CheatTesterEvidence evidence;
     private final CheatTesterJournalCompletion completion;
-    private final ObjectMapper json = new ObjectMapper();
     private final Map<UUID, CheatTesterSession> activeByTarget = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
     private final CheatTesterFakeEntityState fakeEntityState;
+    private final CheatTesterFakeEntitySupport fakeEntitySupport;
     private final FakeEntityAdapter fakeEntities;
     private final CheatTesterProbeEngine probes;
     private final CheatTesterControlState controls;
@@ -71,7 +67,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.evidence = new CheatTesterEvidence(clock, settings);
         this.completion = new CheatTesterJournalCompletion(clock);
         this.fakeEntityState = new CheatTesterFakeEntityState(clock, activeByTarget);
-        this.fakeEntities = installFakeEntityAdapter();
+        this.fakeEntitySupport = new CheatTesterFakeEntitySupport(plugin, fakeEntityState, this::fakeAdapterFailed);
+        this.fakeEntities = fakeEntitySupport.install();
         this.controls = new CheatTesterControlState(clock, staffMode::active, settings, activeByTarget);
         this.probes = new CheatTesterProbeEngine(
                 plugin,
@@ -625,7 +622,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private void recoverFakeEntity(Player target, CheatTesterSession session, CheatTesterJournalRecord record) {
-        session.fakeHandle = handleFromConfiguration(record.configuration()).orElse(null);
+        session.fakeHandle = fakeEntitySupport.decodeHandle(record.configuration()).orElse(null);
         if (session.fakeHandle == null || !fakeEntities.available()) {
             retireForRecovery(session, "Fake-entity recovery is waiting for healthy ProtocolLib support");
             return;
@@ -648,21 +645,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private void recoveryFailed(CheatTesterSession session, Throwable failure) {
         plugin.getLogger().log(Level.SEVERE, "Cheat tester recovery failed; durable row remains active", failure);
         retireForRecovery(session, "Recovery attempt failed");
-    }
-
-    private Optional<FakeEntityAdapter.Handle> handleFromConfiguration(String configuration) {
-        try {
-            JsonNode node = json.readTree(configuration);
-            JsonNode id = node.get("fakeEntityId");
-            JsonNode uuid = node.get("fakeEntityUuid");
-            if (id == null || uuid == null) {
-                return Optional.empty();
-            }
-            return Optional.of(new FakeEntityAdapter.Handle(id.asInt(), UUID.fromString(uuid.asText())));
-        } catch (RuntimeException | JsonProcessingException exception) {
-            plugin.getLogger().log(Level.WARNING, "Unable to decode recovered fake-entity handle", exception);
-            return Optional.empty();
-        }
     }
 
     void recover(Player player) {
@@ -741,23 +723,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     private boolean sessionCurrent(CheatTesterSession session) {
         return activeByTarget.get(session.targetId) == session;
-    }
-
-    private FakeEntityAdapter installFakeEntityAdapter() {
-        if (!plugin.getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
-            plugin.getLogger().warning("ProtocolLib is unavailable; fake-entity Cheat Tester is disabled fail-closed");
-            return FakeEntityAdapter.unavailable();
-        }
-        try {
-            return ProtocolLibFakeEntityAdapter.install(plugin, fakeEntityState::recordInteraction, this::fakeAdapterFailed);
-        } catch (RuntimeException | LinkageError failure) {
-            plugin.getLogger().log(
-                    Level.SEVERE,
-                    "ProtocolLib fake-entity adapter could not start; fake-entity Cheat Tester is disabled",
-                    failure
-            );
-            return FakeEntityAdapter.unavailable();
-        }
     }
 
     CheatTesterSession activeSession(UUID playerId) {
