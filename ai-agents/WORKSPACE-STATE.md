@@ -10,13 +10,17 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | --- | --- |
 | Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-X05 — Website UX, authentication, and appeals` |
 | Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Active implementation package | `ES-P04 — Staff-mode operational tools`; branch `package/es-p04-staff-mode-tools`; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker |
+| Active implementation package | `ES-P04 — Staff-mode operational tools`; branch `package/es-p04-staff-mode-tools`; PR #79 ready for review; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker |
+| ES-P04 intended terminal outcome | `COMPLETE` only after every required exact-head gate and normal merge; otherwise `BLOCKED` / `PARKED_BLOCKED` if the configured Pi gate remains unavailable without an owner-approved ES-P04 infrastructure exception |
 | Other dependency-ready package | `ES-P09 — Alt and network-identity completion` at priority 55; unassigned and not started |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c` |
 | ES-P02 hosted evidence | exact product head `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`; Coverage run `31138550369`, job `92743341861`, success |
 | ES-P02 blocker recheck | newest inspected private `plugin-live-test.yml` run `31141797380`; Ubuntu build `92753075216` received runner ID `0`, empty runner name and steps `[]`, with the same Billing & plans payment/spending-limit annotation; Pi `92753100652` skipped |
-| ES-P04 status | `ACTIVE` / `ACTIONABLE_CONTINUATION`; selected after ES-P02 blocker was proven unchanged |
+| ES-P04 status | `ACTIVE` / `ACTIONABLE_CONTINUATION`; implementation and documentation complete; final review repairs applied; exact-head validation and Pi disposition remain |
 | ES-P04 branch | `package/es-p04-staff-mode-tools`, created from exact legitimate `main` `5c820c29c2fe5a498ea7f80454579953ac05b436` |
+| ES-P04 completed work | authenticated staff-tool dispatch, stale/spoofed/session/rank checks, random teleport suitability, cooldowns, operational command/service reuse, Bedrock text/command fallback, review fixes preventing deferred Cheat Tester issuance and correcting follow/spectate messaging, plus cooldown-boundary coverage |
+| ES-P04 next work | freeze this records checkpoint; require exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/provider-leak/Codacy/CodeRabbit evidence; record exact Pi disposition; then normal merge or blocked-state publication |
+| ES-P04 blocker risk | configured private Pi path has repeatedly failed before runner allocation under the private repository Billing & plans restriction; no owner-approved ES-P04 infrastructure exception exists in inspected state |
 | ES-P04 handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md` |
 | ES-X05 status | `COMPLETE` |
 | ES-X05 frozen validated head | `ab59b8357b8e2eb146b60ff122e316112906746f` |
@@ -25,16 +29,17 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-X05 parity | aggregate `2bcf5d46ca6471fddac600f85020c66105b1c0f2` equals standalone `2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2`; hash `780269847698d37c470cb7c241539b1c7387014225cc7eee9598548c9dc97f8b`; parity run `31140896890`, job `92750376952`, artifact `8979748083` |
 | ES-X05 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; not a pass |
 | ES-P03 status | `COMPLETE`; product head `15608bc3099dc34aa080c80ca8e824ffd51cdae4`; merge `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
-| Migration boundary | immutable V17; no ES-P04 migration is currently expected |
+| Migration boundary | immutable V17; ES-P04 adds no migration |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
-## ES-P04 selection evidence
+## ES-P04 selection and continuation evidence
 
 - Starting legitimate aggregate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- Live PR reconciliation found only ES-P02 PR #70 open; no ES-P04 branch or competing work existed.
-- ES-P02 retained priority for continuation only if its exact unblock condition changed. It did not: private workflow `31141797380` again failed before ordinary Ubuntu runner allocation in job `92753075216`, with runner ID `0`, empty runner name, zero steps, and GitHub's explicit Billing & plans restriction; the Pi job was skipped. No redundant rerun was requested.
-- ES-P04 is dependency-complete through ES-P03 and has priority 40, ahead of ES-P09 priority 55. It was therefore selected as the next `READY` package and claimed on the required branch.
-- The package is limited to non-excluded staff-mode operational tools and their safety/recovery behavior. Cheat testers/fake entities and fake bases remain assigned to later packages.
+- Initial live reconciliation proved ES-P02's external blocker unchanged, so ES-P04 was selected as the priority-40 dependency-complete READY package ahead of ES-P09 priority 55.
+- Live GitHub now has the single ES-P04 implementation PR #79 on `package/es-p04-staff-mode-tools`; this worker resumed that existing actionable continuation rather than opening competing work.
+- ES-P04 is limited to non-excluded staff-mode operational tools and shared safety/recovery behavior. Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
+- Implementation and documentation are complete. Review fixes applied after the first green exact-head hosted run prevent the deferred Cheat Tester from being issued at any rank, add inclusive cooldown-boundary tests for 0 and 60000 ms with rejection at -1 and 60001 ms, and remove an incorrect creative-mode assertion from follow/spectate feedback.
+- The remaining work is validation and terminal-state disposition only. Do not reopen completed implementation unless a new valid review or test defect appears.
 
 ## Preserved completed-package evidence
 
@@ -46,7 +51,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 
 ## Current ES-P04 next action
 
-Map the existing tagged tool IDs to the current command/managers and service-boundary permissions, inspect listener registration/configuration/tests, then implement one coherent dispatcher and stale/spoofed-tool safety slice. Checkpoint all durable package state before broader tool integration.
+Freeze this records checkpoint and validate that exact PR #79 head. Require all ordinary hosted/static/review gates, record the configured Pi result without relabeling unavailable infrastructure as success, then either merge PR #79 normally and finalize `COMPLETE` or preserve PR #79 and publish `BLOCKED` / `PARKED_BLOCKED` through the required documentation-only status-publication PR if Pi remains externally unavailable and unapproved.
 
 ## Safety boundaries
 
