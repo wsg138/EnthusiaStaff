@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`. `ES-P05`, `ES-P09`, and `ES-P10` are dependency-derived `READY` and unassigned. No package is active. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. `ES-P09` and `ES-P10` are dependency-derived `READY` and unassigned. No package is active. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -23,13 +23,13 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `READY` | `READY` | 50 | `ES-P03`, `ES-P04` | unassigned |
+| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; private staging Billing & plans blocker |
 | `ES-P09` | Alt and network-identity completion | `READY` | `READY` | 55 | `ES-P03` | unassigned |
-| `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | unassigned |
+| `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
 | `ES-P10` | Cheat tester and fake-entity system | `READY` | `READY` | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 implementation |
 | `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | unassigned |
-| `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency on ES-P05 incomplete |
+| `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | unassigned |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | unassigned |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | unassigned |
@@ -58,6 +58,20 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 - Internal follow-up: when the private Actions billing/runner path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that later test exposes a real defect.
 - V17 remains immutable; ES-P04 added no migration.
 
+## `ES-P05`
+
+- Selected on 2026-08-07 from legitimate `main` `bf9b305ba96d9536f3d111c79eef674bd2e11dc5` after ES-P02 remained unchanged `PARKED_BLOCKED`; no competing ES-P05 package work existed.
+- Implementation PR #81 remains open on `package/es-p05-report-workflow`; it must not merge while the required private staging gate is unavailable.
+- Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
+- Implemented provider-independent report review completion: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence` presentation, coordinate/privacy separation from broad GUI triage, strict client-evidence allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation. Existing durable cooldown/merge/replay/stale-revision/concurrency/rollback/purge foundations were preserved and revalidated.
+- Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
+- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI exact-coordinate exposure, raw nested AutoClicker metadata rendering, and oldest-snapshot default selection. Zero inline review threads remain. CodeRabbit was quota-limited and produced no review; it must rerun on resume.
+- Required private staging did not execute product code. Latest public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. An earlier automatic exact-head dispatch produced the same infrastructure result; no manual duplicate retry followed the unchanged blocker.
+- This is not a staging pass and no ES-P05-specific exception exists. The ES-P04 exception is package-specific and cannot be reused.
+- Exact unblock: resolve the GitHub Actions payment/spending-limit restriction for private `wsg138/EnthusiaStaff-Staging`, then resume PR #81, reconcile newer `main`, rerun every exact-head review/static/hosted/staging gate (including CodeRabbit), require successful trusted private build plus Pi safe boot/restart, merge normally, verify containment, finalize records/cleanup, and stop.
+- V17 remains immutable; ES-P05 added no migration. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md`.
+
 ## Next-worker boundary
 
-ES-P04 is complete and no package is active. A later worker must reconcile live state before selection. Absent a higher-priority actionable continuation, ES-P05 is now the lowest-priority-number READY package. This worker does not start it.
+No package is active. ES-P02 and ES-P05 are parked on the same unchanged private Actions Billing & plans condition and must not be retried without a material unblock. A later sequential worker must reconcile live GitHub before selection. Absent a material unblock that makes an existing parked package actionable, `ES-P09` is the lowest-priority-number READY package. This worker does not start it.
