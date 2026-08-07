@@ -30,6 +30,8 @@ public record RestartRequiredConfiguration(
         }
     }
 
+    /** Compatibility constructor for existing test/runtime fixtures that predate ES-P10 settings. */
+    @SuppressWarnings("PMD.ExcessiveParameterList")
     public RestartRequiredConfiguration(
             String storageJdbcUrlEnvironment,
             String storageUsernameEnvironment,
