@@ -9,7 +9,7 @@ percentages, source files and remaining development, use
 > inventory workflow and text-based `/reports` fallbacks. The RoseChat
 > private-message bridge and production-like multi-server staging remain
 > unfinished. Follow only the live-server procedure separately approved for
->deployment.
+> deployment.
 
 ## Quick navigation
 
