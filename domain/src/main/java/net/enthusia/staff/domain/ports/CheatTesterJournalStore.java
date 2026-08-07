@@ -11,6 +11,10 @@ import net.enthusia.staff.domain.tester.CheatTesterSessionState;
 public interface CheatTesterJournalStore {
     CheatTesterJournalRecord start(CheatTesterJournalStart start);
 
+    /** Reads the globally active tester row for a target, regardless of backend ownership. */
+    Optional<CheatTesterJournalRecord> activeForTarget(UUID targetId);
+
+    /** Reads the active tester row only when it belongs to the supplied backend. */
     Optional<CheatTesterJournalRecord> activeForTarget(String serverId, UUID targetId);
 
     List<CheatTesterJournalRecord> activeForServer(String serverId, int limit);
