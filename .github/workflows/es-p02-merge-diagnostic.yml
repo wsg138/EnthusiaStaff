@@ -1,60 +1,63 @@
-name: ES-P02 merge diagnostic
+name: ES-P02 synchronize main
 
 on:
   push:
     branches:
       - package/es-p02-runtime-db-recovery
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  synchronize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Attempt no-commit merge
-        id: merge
+      - name: Merge current main and resolve package records
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           git config user.name "EnthusiaStaff package worker"
           git config user.email "noreply@enthusia.invalid"
           git fetch origin main
-          git merge --no-commit --no-ff origin/main > merge-output.txt 2>&1
+          set +e
+          git merge --no-commit --no-ff origin/main
           merge_exit=$?
-          git diff --name-only --diff-filter=U | tee conflict-files.txt
-          git status --short >> merge-output.txt
-          echo "merge_exit=${merge_exit}" >> "$GITHUB_OUTPUT"
-          exit 0
+          set -e
 
-      - name: Collect conflict snapshot
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p conflict-snapshot
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            mkdir -p "conflict-snapshot/$(dirname "$file")"
-            cp "$file" "conflict-snapshot/$file"
-          done < conflict-files.txt
-          cp merge-output.txt conflict-files.txt conflict-snapshot/
+          if [ "$merge_exit" -ne 0 ]; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            expected=(
+              "ai-agents/AGENTS.md"
+              "ai-agents/UNIVERSAL-AGENT-PROMPT.md"
+              "ai-agents/WORKSPACE-STATE.md"
+              "ai-agents/reports/agent-handoffs/latest.md"
+              "ai-agents/reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md"
+              "ai-agents/work-packages/PACKAGE-REGISTRY.md"
+              "ai-agents/work-packages/WORKER-PROTOCOL.md"
+              "ai-agents/work-packages/packages/ES-P02.md"
+            )
+            if [ "${conflicts[*]}" != "${expected[*]}" ]; then
+              printf 'Unexpected conflict set:\n%s\n' "${conflicts[*]}"
+              exit 1
+            fi
 
-      - name: Upload merge diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: es-p02-merge-diagnostic
-          path: conflict-snapshot
-          if-no-files-found: error
+            git checkout --theirs -- \
+              ai-agents/AGENTS.md \
+              ai-agents/UNIVERSAL-AGENT-PROMPT.md \
+              ai-agents/WORKSPACE-STATE.md \
+              ai-agents/reports/agent-handoffs/latest.md \
+              ai-agents/work-packages/PACKAGE-REGISTRY.md \
+              ai-agents/work-packages/WORKER-PROTOCOL.md
+            git checkout --ours -- \
+              ai-agents/reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md \
+              ai-agents/work-packages/packages/ES-P02.md
+          fi
 
-      - name: Fail on conflicts
-        if: steps.merge.outputs.merge_exit != '0'
-        shell: bash
-        run: |
-          echo "The main-to-ES-P02 merge has conflicts; see the diagnostic artifact."
-          exit 1
+          git rm .github/workflows/es-p02-merge-diagnostic.yml
+          git add -A
+          git commit -m "merge(main): synchronize ES-P02 recovery branch"
+          git push origin HEAD:package/es-p02-runtime-db-recovery
