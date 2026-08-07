@@ -63,7 +63,7 @@ final class ReportEvidenceFormatterTest {
     }
 
     @Test
-    void clientEvidenceUsesAllowlistAndWithholdsOpaquePolarMetadata() {
+    void clientEvidenceUsesAllowlistAndWithholdsOpaqueMetadata() {
         String stored = "{"
                 + "\"capturedAt\":\"2026-08-07T12:00:00Z\","
                 + "\"platform\":\"BEDROCK\","
@@ -74,7 +74,9 @@ final class ReportEvidenceFormatterTest {
                 + "\"floodgateStatus\":\"AVAILABLE\","
                 + "\"floodgatePlayer\":true,"
                 + "\"geyserStatus\":\"AVAILABLE\","
-                + "\"autoClickerStatus\":\"UNAVAILABLE\","
+                + "\"autoClickerStatus\":\"AVAILABLE\","
+                + "\"autoClickerHandshake\":{\"modVersion\":\"1.2.3\","
+                + "\"futureSecret\":\"must-not-render\"},"
                 + "\"polarStatus\":\"AVAILABLE\","
                 + "\"polarMetadata\":\"opaque-private-provider-value\"}"
                 ;
@@ -95,8 +97,10 @@ final class ReportEvidenceFormatterTest {
 
         assertTrue(all.stream().anyMatch(line -> line.equals("Platform: BEDROCK")));
         assertTrue(all.stream().anyMatch(line -> line.equals("ViaVersion: AVAILABLE")));
+        assertTrue(all.stream().anyMatch(line -> line.equals("AutoClicker mod version: 1.2.3")));
         assertTrue(all.stream().anyMatch(line -> line.equals("Polar metadata: withheld from chat presentation")));
         assertFalse(all.stream().anyMatch(line -> line.contains("opaque-private-provider-value")));
+        assertFalse(all.stream().anyMatch(line -> line.contains("must-not-render")));
     }
 
     @Test
