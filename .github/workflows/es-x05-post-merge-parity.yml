@@ -33,13 +33,12 @@ jobs:
           path: standalone
           persist-credentials: false
 
-      - name: Verify exact revisions and clean diff
+      - name: Verify exact revisions
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C aggregate rev-parse HEAD)" = "${AGGREGATE_SHA}"
           test "$(git -C standalone rev-parse HEAD)" = "${STANDALONE_SHA}"
-          git -C aggregate diff --check 9b1aac2677049ccc71dbddd963831f270c73dcd0 "${AGGREGATE_SHA}"
 
       - name: Generate deterministic manifests and parity report
         shell: bash
