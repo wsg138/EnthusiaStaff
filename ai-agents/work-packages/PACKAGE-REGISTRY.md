@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` after canonical selection; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` on draft PR #79 with implementation/documentation complete and exact-head validation in progress; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -26,7 +26,7 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c`; private Actions billing blocker unchanged |
 | `ES-P03` | Bedrock identity correctness | Internal | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | PR #75 merged as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` | — | 35 | `ES-P01` | implementation integrated; finalization PR #74 merged as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; parity proven |
-| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; started from `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; PR pending first coherent implementation checkpoint |
+| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; draft PR #79; implementation/docs complete; product-code head `e7321ff2858f06da6d4daeca073fcb5a96bf4246`; exact-head validation checkpoint being frozen after registry reconciliation |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned; dependency blocked |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
 | `ES-P09` | Alt and network-identity completion | Internal | `READY` | `READY` | 55 | `ES-P03` | unassigned; not activated by ES-P04 worker |
@@ -87,16 +87,21 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 
 ### `ES-P04`
 
-- Status: `ACTIVE` / `ACTIONABLE_CONTINUATION` after claim.
-- Selection: ES-P02's exact external unblock condition was proven unchanged; among dependency-complete `READY` packages ES-P04 has the lowest numerical priority, 40.
-- Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- Branch: `package/es-p04-staff-mode-tools`.
-- Worker: generic sequential package worker.
-- Current package scope: authorized dispatch for random teleport, inspector, freeze, reports, spectate/follow, vanish, staff chat, and tools menu plus stale/spoofed-tool rejection and existing staff-session safety/recovery. Cheat testers/fake entities and fake bases remain excluded.
-- Baseline finding: `StaffModeManager` creates PDC-tagged staff tools and `StaffToolTransferListener` protects transfers, but no interaction dispatcher consumes the tag; current tag presence alone is not sufficient authority for stale/spoofed-tool acceptance.
-- Migration boundary: V17; no migration expected.
+- Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`.
+- Selection: ES-P02's exact external unblock condition was proven unchanged; among dependency-complete `READY` packages ES-P04 has priority 40 ahead of ES-P09 priority 55.
+- Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`; live `main` remained unchanged at the latest reconciliation.
+- Branch/PR: `package/es-p04-staff-mode-tools`; draft PR #79; mergeable while draft.
+- Latest product-code commit: `e7321ff2858f06da6d4daeca073fcb5a96bf4246`; product implementation and Wiki/reference documentation are complete.
+- Implemented non-excluded actions: random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester remains explicitly deferred to `ES-P10`; fake bases remain `ES-P11`.
+- Security: server-issued tools are bound to owner + random current-profile token and fixed canonical slot/material, then current active session/rank/action permission is rechecked. Unknown, stale, transferred, old-session, rank-invalid, wrong-slot, and wrong-material tools fail closed.
+- Existing durable snapshot/restoration/reconnect/rank/inventory/world/damage machinery remains intact; durable moderation tool actions reuse existing command/service boundaries.
+- Focused tests cover definitions/slots, session forgery/staleness, cooldowns, random-target suitability, and settings. No migration change; V17 remains the boundary.
+- Documentation: `Staff-Mode-Vanish-and-Freeze.md` and `Commands-and-Permissions.md` now document tool behavior, permissions, recovery/troubleshooting, restart-scoped settings, and Bedrock command/text fallbacks.
+- Static analysis: superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4` produced 14 Codacy findings; all were addressed in `b83d060b97f9dc46f59fc7d137e0d01672f407fb`, followed by Paper interaction-event hardening in `e7321ff2858f06da6d4daeca073fcb5a96bf4246`. Exact-head Codacy rerun remains required.
+- Prior exact tracked checkpoint `81864727115d2bf5a3ce5648449afb6c31e550e5` proved Wiki validation success in run `31172287844` / job `92846540959`. Its configured Pi wrapper `31172285052` / job `92846532734` failed because private staging run `31172290058`, Ubuntu prerequisite job `92846552461`, had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi job `92846587813` skipped. This is infrastructure-unavailable evidence, not a pass. The same disposition must be confirmed for the final frozen head.
+- PR review threads at latest checkpoint: zero; submitted PR reviews: zero.
 - Handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
-- Exact next action: map existing command/manager/permission/provider contracts and tests, then implement and checkpoint the first coherent dispatcher/security slice before opening the draft PR.
+- Exact next action: freeze the registry-reconciled head, obtain every ordinary exact-head hosted/static/review gate, record the exact Pi staging disposition, then either merge normally if all gates are satisfied or publish `BLOCKED` / `PARKED_BLOCKED` if the unavailable Pi gate remains unapproved.
 
 ## Next-worker boundary
 
