@@ -453,6 +453,7 @@ class NetworkIdentityStoreIntegrationTest {
             statement.executeUpdate("DELETE FROM discord_outbox");
             statement.executeUpdate("DELETE FROM network_outbox");
             statement.executeUpdate("DELETE FROM sanction_events");
+            statement.executeUpdate("UPDATE sanctions SET inherited_from = NULL WHERE inherited_from IS NOT NULL");
             statement.executeUpdate("DELETE FROM sanctions");
             statement.executeUpdate("DELETE FROM audit_events");
             statement.executeUpdate("DELETE FROM alt_evidence");
