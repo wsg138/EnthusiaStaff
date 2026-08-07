@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`. `ES-P05`, `ES-P09`, and `ES-P10` are dependency-derived `READY` and unassigned. No package is active. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`. `ES-P05` is `ACTIVE` on `package/es-p05-report-workflow`; `ES-P09` and `ES-P10` remain dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -23,7 +23,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `READY` | `READY` | 50 | `ES-P03`, `ES-P04` | unassigned |
+| `ES-P05` | Report evidence and staff workflow completion | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 50 | `ES-P03`, `ES-P04` | generic sequential worker; branch `package/es-p05-report-workflow`; start `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`; draft PR pending first checkpoint |
 | `ES-P09` | Alt and network-identity completion | `READY` | `READY` | 55 | `ES-P03` | unassigned |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | unassigned |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
@@ -58,6 +58,16 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLET
 - Internal follow-up: when the private Actions billing/runner path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that later test exposes a real defect.
 - V17 remains immutable; ES-P04 added no migration.
 
+## `ES-P05`
+
+- Selected on 2026-08-07 after live reconciliation classified ES-P02 as unchanged `PARKED_BLOCKED` and ES-P05 as the lowest-priority dependency-complete `READY` package.
+- Starting legitimate `main`: `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`.
+- Branch: `package/es-p05-report-workflow`.
+- No prior ES-P05 branch, PR, or package handoff existed. The separate `docs/wiki-maintenance-2026-08` branch is non-package documentation work and is not being modified by this package worker.
+- Included scope is provider-independent report submission, queue/detail, notes/status revision safety, bounded evidence/privacy/retention, attachment decision, text/Bedrock fallback, restart and concurrency proof. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; production evidence/routes remain excluded.
+- Migration boundary at package start is immutable V17. Issue #43 remains open/deferred; LiteBans remains authoritative.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md`.
+
 ## Next-worker boundary
 
-ES-P04 is complete and no package is active. A later worker must reconcile live state before selection. Absent a higher-priority actionable continuation, ES-P05 is now the lowest-priority-number READY package. This worker does not start it.
+ES-P05 is the only active implementation package. Do not activate ES-P09, ES-P10, or another package while ES-P05 is in progress. ES-P02 remains parked unless its exact external unblock condition materially changes.
