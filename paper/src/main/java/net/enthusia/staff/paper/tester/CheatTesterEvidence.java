@@ -46,6 +46,15 @@ final class CheatTesterEvidence {
         return serialize(values);
     }
 
+    String withoutProbe(CheatTesterSession session, String reason) {
+        Map<String, Object> values = base(session, reason);
+        values.put("probeStarted", false);
+        if (session.type == CheatTesterType.FAKE_ENTITY) {
+            addFake(values, session);
+        }
+        return serialize(values);
+    }
+
     String configuration(CheatTesterSession session) {
         Map<String, Object> configuration = new LinkedHashMap<>();
         configuration.put("schemaVersion", 1);
