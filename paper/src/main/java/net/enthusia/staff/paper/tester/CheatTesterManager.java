@@ -30,18 +30,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -106,6 +98,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 this::sampleActive,
                 this::retireForRecovery
         );
+        plugin.getServer().getPluginManager().registerEvents(new CheatTesterMutationGuard(this), plugin);
     }
 
     public boolean packetSupportAvailable() {
@@ -308,30 +301,46 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private void prepareAndJournal(UUID staffId, Player target, CheatTesterSession session) {
-        if (!sessionCurrent(session) || closed.get() || session.finishing.get()) {
+        if (!readyForPreparation(session)) {
             retireWithoutJournal(session);
             return;
         }
         try {
-            session.probe = probes.prepare(target, session.type);
-            session.startPoint = CheatTesterSession.StartPoint.capture(target.getLocation());
-            if (session.type == CheatTesterType.FAKE_ENTITY) {
-                session.fakeHandle = fakeEntities.create();
-            }
-            session.snapshot = session.type.mutatesTargetState() ? snapshots.capture(target) : FAKE_SNAPSHOT;
-            CheatTesterJournalStart start = journalStart(staffId, target, session);
-            if (!session.beginJournalSubmission()) {
-                retireWithoutJournal(session);
-                return;
-            }
-            if (!submit(() -> persistStart(session, start))) {
-                session.cancelJournalSubmission();
-                failBeforeMutation(session, "The bounded work queue is full; tester did not start.");
-            }
+            CheatTesterJournalStart start = prepareJournalStart(staffId, target, session);
+            submitJournalStart(session, start);
         } catch (RuntimeException exception) {
             session.cancelJournalSubmission();
             plugin.getLogger().log(Level.WARNING, "Cheat tester preparation failed before durable mutation", exception);
             failBeforeMutation(session, safePreparationMessage(exception));
+        }
+    }
+
+    private boolean readyForPreparation(CheatTesterSession session) {
+        return sessionCurrent(session) && !closed.get() && !session.finishing.get();
+    }
+
+    private CheatTesterJournalStart prepareJournalStart(
+            UUID staffId,
+            Player target,
+            CheatTesterSession session
+    ) {
+        session.probe = probes.prepare(target, session.type);
+        session.startPoint = CheatTesterSession.StartPoint.capture(target.getLocation());
+        if (session.type == CheatTesterType.FAKE_ENTITY) {
+            session.fakeHandle = fakeEntities.create();
+        }
+        session.snapshot = session.type.mutatesTargetState() ? snapshots.capture(target) : FAKE_SNAPSHOT;
+        return journalStart(staffId, target, session);
+    }
+
+    private void submitJournalStart(CheatTesterSession session, CheatTesterJournalStart start) {
+        if (!session.beginJournalSubmission()) {
+            retireWithoutJournal(session);
+            return;
+        }
+        if (!submit(() -> persistStart(session, start))) {
+            session.cancelJournalSubmission();
+            failBeforeMutation(session, "The bounded work queue is full; tester did not start.");
         }
     }
 
@@ -962,62 +971,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onInventoryOpen(InventoryOpenEvent event) {
-        if (event.getPlayer() instanceof Player player && mutating(player.getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onDrop(PlayerDropItemEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onPickup(EntityPickupItemEvent event) {
-        if (event.getEntity() instanceof Player player && mutating(player.getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onAttemptPickup(PlayerAttemptPickupItemEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onConsume(PlayerItemConsumeEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onInteract(PlayerInteractEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onSwapHands(PlayerSwapHandItemsEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onPlace(BlockPlaceEvent event) {
-        if (mutating(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-        }
-    }
-
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDeath(PlayerDeathEvent event) {
         CheatTesterSession session = activeByTarget.get(event.getPlayer().getUniqueId());
@@ -1078,7 +1031,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
     }
 
-    private boolean mutating(UUID playerId) {
+    boolean mutating(UUID playerId) {
         CheatTesterSession session = activeByTarget.get(playerId);
         return session != null && session.startedMutation.get() && session.type.mutatesTargetState();
     }
