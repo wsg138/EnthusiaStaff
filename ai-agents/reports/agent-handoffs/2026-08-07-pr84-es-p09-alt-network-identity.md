@@ -48,4 +48,4 @@ ES-P03 remains authoritative for Java/Floodgate platform identity. Production/pr
 
 ## Finalization
 
-A documentation-only post-merge PR publishes the terminal package/registry/workspace/handoff state. After that publication is verified on `main`, ES-P09 is terminal and this sequential worker stops.
+Documentation-only PR #85 publishes the terminal package/registry/workspace/handoff state and contains no product/runtime/schema/configuration changes. Once PR #85 is verified merged on `main`, this sequential worker stops.
