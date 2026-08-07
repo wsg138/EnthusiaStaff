@@ -78,7 +78,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().plugin(),
                 ignored -> cheatTester.recoverOnlinePlayers(),
                 40L,
-                100L
+                6000L
         );
         return new PaperRuntimeComponents(
                 evidence,
