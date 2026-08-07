@@ -1,5 +1,7 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -9,6 +11,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -26,12 +29,18 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
     private static final int EXACTLY_ONE_ROW = 1;
 
     private final DataSource dataSource;
+    private final ObjectMapper json;
 
     public JdbcCheatTesterJournalStore(DataSource dataSource) {
-        if (dataSource == null) {
-            throw new IllegalArgumentException("dataSource must be present");
+        this(dataSource, new ObjectMapper());
+    }
+
+    public JdbcCheatTesterJournalStore(DataSource dataSource, ObjectMapper json) {
+        if (dataSource == null || json == null) {
+            throw new IllegalArgumentException("dataSource and json must be present");
         }
         this.dataSource = dataSource;
+        this.json = json;
     }
 
     @Override
@@ -250,7 +259,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             statement.setBytes(3, UuidBytes.toBytes(start.staffId()));
             statement.setBytes(4, UuidBytes.toBytes(start.targetId()));
             statement.setString(5, start.targetId().toString());
-            statement.setString(6, start.testerType().name());
+            statement.setString(6, start.testerType().id());
             statement.setString(7, start.snapshot());
             statement.setString(8, start.configuration());
             statement.setTimestamp(9, Timestamp.from(start.startedAt()));
@@ -313,12 +322,14 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
 
     private static CheatTesterJournalRecord read(ResultSet result) throws SQLException {
         Timestamp completed = result.getTimestamp("completed_at");
+        CheatTesterType testerType = CheatTesterType.fromId(result.getString("tester_type"))
+                .orElseThrow(() -> new SQLException("tester journal contains an unknown tester type"));
         return new CheatTesterJournalRecord(
                 UuidBytes.fromBytes(result.getBytes("session_id")),
                 result.getString("server_id"),
                 UuidBytes.fromBytes(result.getBytes("staff_id")),
                 UuidBytes.fromBytes(result.getBytes("target_id")),
-                CheatTesterType.valueOf(result.getString("tester_type")),
+                testerType,
                 result.getString("snapshot_text"),
                 result.getString("configuration_text"),
                 result.getString("evidence_text"),
@@ -331,7 +342,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
         );
     }
 
-    private static void insertAudit(
+    private void insertAudit(
             Connection connection,
             UUID sessionId,
             UUID staffId,
@@ -350,12 +361,19 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             statement.setBytes(3, UuidBytes.toBytes(staffId));
             statement.setBytes(4, UuidBytes.toBytes(targetId));
             statement.setString(5, eventType);
-            statement.setString(6, "{\"sessionId\":\"" + sessionId + "\",\"detail\":\""
-                    + escape(detail) + "\"}");
+            statement.setString(6, auditJson(sessionId, detail));
             statement.setTimestamp(7, Timestamp.from(now));
             if (statement.executeUpdate() != EXACTLY_ONE_ROW) {
                 throw new SQLException("tester audit insert did not affect exactly one row");
             }
+        }
+    }
+
+    private String auditJson(UUID sessionId, String detail) throws SQLException {
+        try {
+            return json.writeValueAsString(Map.of("sessionId", sessionId.toString(), "detail", detail));
+        } catch (JsonProcessingException exception) {
+            throw new SQLException("tester audit payload could not be serialized", exception);
         }
     }
 
@@ -412,11 +430,6 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
 
     private static boolean validEvidence(String evidence) {
         return evidence != null && evidence.length() <= MAX_EVIDENCE;
-    }
-
-    private static String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\r", "\\r").replace("\n", "\\n");
     }
 
     private static void rollback(Connection connection, SQLException original) {
