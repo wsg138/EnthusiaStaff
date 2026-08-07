@@ -42,8 +42,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final CheatTesterEvidence evidence;
     private final ObjectMapper json = new ObjectMapper();
     private final Map<UUID, CheatTesterSession> activeByTarget = new ConcurrentHashMap<>();
-    private final Map<Integer, UUID> fakeEntityTargets = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
+    private final CheatTesterFakeEntityState fakeEntityState;
     private final FakeEntityAdapter fakeEntities;
     private final CheatTesterProbeEngine probes;
     private final CheatTesterControlState controls;
@@ -68,13 +68,14 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.runtime = new CheatTesterRuntimeSupport(plugin, workers, settings, closed);
         this.snapshots = new CheatTesterSnapshotCodec(plugin);
         this.evidence = new CheatTesterEvidence(clock, settings);
+        this.fakeEntityState = new CheatTesterFakeEntityState(clock, activeByTarget);
         this.fakeEntities = installFakeEntityAdapter();
-        this.controls = new CheatTesterControlState(clock, staffMode, settings, activeByTarget);
+        this.controls = new CheatTesterControlState(clock, staffMode::active, settings, activeByTarget);
         this.probes = new CheatTesterProbeEngine(
                 plugin,
                 settings,
                 fakeEntities,
-                fakeEntityTargets,
+                fakeEntityState,
                 this::sampleActive,
                 this::retireForRecovery
         );
@@ -573,39 +574,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             String reason
     ) {
         probes.scheduleHideForStaff(session);
-        removeFakeTarget(session);
+        fakeEntityState.remove(session);
         persistCompletion(session, terminalState, reason, evidence.withoutTarget(session, reason), false);
-    }
-
-    private boolean recordFakeInteraction(UUID viewerId, int entityId, String action) {
-        CheatTesterSession session = fakeSession(entityId);
-        if (session == null) {
-            return fakeEntityTargets.containsKey(entityId);
-        }
-        if (viewerId.equals(session.staffId) || !viewerId.equals(session.targetId)) {
-            return true;
-        }
-        session.fakeInteractions.incrementAndGet();
-        if ("ATTACK".equals(action)) {
-            session.fakeAttacks.incrementAndGet();
-        }
-        session.firstInteractionMillis.compareAndSet(
-                -1L,
-                Math.max(0L, clock.instant().toEpochMilli() - session.startedAt.toEpochMilli())
-        );
-        return true;
-    }
-
-    private CheatTesterSession fakeSession(int entityId) {
-        UUID targetId = fakeEntityTargets.get(entityId);
-        if (targetId == null) {
-            return null;
-        }
-        CheatTesterSession session = activeByTarget.get(targetId);
-        if (session == null || session.fakeHandle == null || session.fakeHandle.entityId() != entityId) {
-            return null;
-        }
-        return session;
     }
 
     private void fakeAdapterFailed() {
@@ -746,7 +716,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
         if (activeByTarget.remove(session.targetId, session)) {
             releaseAssetLock(session);
-            removeFakeTarget(session);
+            fakeEntityState.remove(session);
             runtime.message(session.staffId, Component.text(failureMessage, NamedTextColor.RED));
         }
     }
@@ -759,26 +729,19 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     private void retireCompleted(CheatTesterSession session) {
         activeByTarget.remove(session.targetId, session);
-        removeFakeTarget(session);
+        fakeEntityState.remove(session);
         cancelSessionTasks(session);
         releaseAssetLock(session);
     }
 
     void retireForRecovery(CheatTesterSession session, String reason) {
         activeByTarget.remove(session.targetId, session);
-        removeFakeTarget(session);
+        fakeEntityState.remove(session);
         cancelSessionTasks(session);
         releaseAssetLock(session);
         plugin.getLogger().warning(
                 "Cheat tester session " + session.sessionId + " remains durably recoverable: " + reason
         );
-    }
-
-    private void removeFakeTarget(CheatTesterSession session) {
-        if (session.fakeHandle != null) {
-            fakeEntityTargets.remove(session.fakeHandle.entityId());
-        }
-        fakeEntityTargets.entrySet().removeIf(entry -> entry.getValue().equals(session.targetId));
     }
 
     private static void cancelSessionTasks(CheatTesterSession session) {
@@ -803,7 +766,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return FakeEntityAdapter.unavailable();
         }
         try {
-            return ProtocolLibFakeEntityAdapter.install(plugin, this::recordFakeInteraction, this::fakeAdapterFailed);
+            return ProtocolLibFakeEntityAdapter.install(plugin, fakeEntityState::recordInteraction, this::fakeAdapterFailed);
         } catch (RuntimeException | LinkageError failure) {
             plugin.getLogger().log(
                     Level.SEVERE,
@@ -843,12 +806,12 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
         for (CheatTesterSession session : List.copyOf(activeByTarget.values())) {
             cancelSessionTasks(session);
-            removeFakeTarget(session);
+            fakeEntityState.remove(session);
             releaseAssetLock(session);
         }
         activeByTarget.clear();
         controls.clear();
-        fakeEntityTargets.clear();
+        fakeEntityState.clear();
         fakeEntities.close();
         // Durable ACTIVE rows remain authoritative until the next healthy runtime verifies cleanup/restoration.
     }
