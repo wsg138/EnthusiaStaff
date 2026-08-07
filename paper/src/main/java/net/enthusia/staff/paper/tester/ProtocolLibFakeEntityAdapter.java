@@ -63,12 +63,12 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
     }
 
     private static PacketListener listener(
-            JavaPlugin plugin,
+            JavaPlugin ownerPlugin,
             InteractionHandler interactionHandler,
             Runnable failureHandler,
             AtomicBoolean healthy
     ) {
-        return new PacketAdapter(plugin, ListenerPriority.HIGHEST, PacketType.Play.Client.USE_ENTITY) {
+        return new PacketAdapter(ownerPlugin, ListenerPriority.HIGHEST, PacketType.Play.Client.USE_ENTITY) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
                 if (!healthy.get()) {
@@ -86,7 +86,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
                         event.setCancelled(true);
                     }
                 } catch (RuntimeException exception) {
-                    disableAfterFailure(plugin, failureHandler, healthy, exception);
+                    disableAfterFailure(ownerPlugin, failureHandler, healthy, exception);
                 }
             }
         };
