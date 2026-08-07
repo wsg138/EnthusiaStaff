@@ -23,6 +23,9 @@ final class ReportWorkflowWiringTest {
     private static final Path REPORTS_COMMAND_SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/command/ReportsCommand.java"
     );
+    private static final Path REPORT_GUI_RENDERER_SOURCE = Path.of(
+            "src/main/java/net/enthusia/staff/paper/report/ReportGuiRenderer.java"
+    );
 
     @Test
     void registrarBindsPlayerAndStaffReportCommandsToOneDurableStore() throws IOException {
@@ -60,6 +63,17 @@ final class ReportWorkflowWiringTest {
         assertFalse(source.contains("send(sender, details.publicChatSnapshots().toString())"));
         assertFalse(source.contains("send(sender, details.privateMessageSnapshots().toString())"));
         assertFalse(source.contains("send(sender, details.clientEvidenceSnapshots().toString())"));
+    }
+
+    @Test
+    void broadGuiTriageDoesNotRenderExactCoordinatesOrRawSnapshots() throws IOException {
+        String source = normalizedSource(REPORT_GUI_RENDERER_SOURCE);
+
+        assertTrue(source.contains("Exact coordinates require the sensitive evidence permission and text view."));
+        assertFalse(source.contains("details.reporterCoordinates().orElse"));
+        assertFalse(source.contains("details.targetCoordinates().orElse"));
+        assertFalse(source.contains("Component.text(snapshots.get"));
+        assertTrue(source.contains("snapshot-protected"));
     }
 
     @Test
