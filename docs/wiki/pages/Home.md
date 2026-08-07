@@ -8,8 +8,8 @@ EnthusiaStaff is the distributed moderation and staff platform for the Enthusia 
 
 | I am... | Start here | Then continue to... |
 | --- | --- | --- |
-| **Staff** | [[Staff Handbook]] | [[Staff Quick Start|Moderator-Quick-Start]], [[Punishment System]], [[Reports and Evidence]], [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] |
-| **Administrator** | [[Commands and Permissions]] | [[Roles and Permissions|Rank-Authority]], [[Configuration]], [[Integrations]] |
+| **Staff** | [[Staff Handbook]] | [[Moderator-Quick-Start]], [[Punishment System]], [[Reports and Evidence]], [[Staff-Mode-Vanish-and-Freeze]] |
+| **Administrator** | [[Commands and Permissions]] | [[Rank-Authority]], [[Configuration]], [[Integrations]] |
 | **Operator** | [[Installation]] | [[Implementation Status]], [[Recovery and Troubleshooting]], [[LiteBans Migration]], [[Shadow Mode and Cutover]] |
 | **Developer** | [[Developer Guide Index]] | [[Development Setup]], [[Architecture]], [[Developer Code Guide]], [[Build and Testing]] |
 | **Code reviewer** | [[Code Review Guide]] | [[Architecture]], [[Developer Code Guide]], [[Build and Testing]] |
