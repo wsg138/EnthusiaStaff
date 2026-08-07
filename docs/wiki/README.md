@@ -1,105 +1,99 @@
 # Repository-managed Wiki
 
-The live GitHub Wiki is generated from the Markdown files in `docs/wiki/pages/`.
-The main repository is the reviewable source of truth; the separate `.wiki.git`
-repository is only the publication target.
+The live GitHub Wiki is generated from Markdown under `docs/wiki/pages/`. The main repository is the reviewable authoring source; the separate `.wiki.git` repository is only the publication target.
 
-## Why this exists
+## Workflow
 
-GitHub stores the Wiki in a separate Git repository. That makes direct edits easy,
-but it separates operational and developer documentation from the code,
-permissions, configuration, and tests that it describes.
-
-This directory keeps changes reviewable:
-
-1. Edit pages in `docs/wiki/pages/`.
+1. Edit repository-managed pages.
 2. Run `python scripts/wiki/validate_wiki.py`.
-3. Open and review a pull request.
-4. Merge the approved documentation change.
-5. Run the **Publish Wiki** workflow manually from `main`.
+3. Open and review a documentation pull request.
+4. Merge the approved source change to `main`.
+5. Run **Publish Wiki** manually from `main` with the required `PUBLISH` confirmation.
+6. Verify the live Home, sidebar and changed pages.
 
-The publish workflow does not run automatically. Before replacing live Wiki
-Markdown, it creates and pushes a timestamped backup branch in the Wiki
-repository and uploads a Git bundle as a workflow artifact.
+The publisher validates first, then creates a timestamped live-Wiki backup branch and Git bundle before replacing Markdown.
 
 ## Directory layout
 
 ```text
 docs/wiki/
 ├── README.md
-├── pages/                       # Files published to the live Wiki root
+├── pages/                       # published to the live Wiki root
 │   ├── Home.md
 │   ├── _Sidebar.md
-│   ├── Staff-Handbook.md
+│   ├── Developer-Guide-Index.md
 │   ├── Developer-Code-Guide.md
+│   ├── Code-Review-Guide.md
 │   └── ...
 └── legacy/
-    └── ea4f929/                 # Exact pre-migration Wiki snapshot
+    └── ea4f929/                 # preserved pre-migration Wiki snapshot
 ```
 
-GitHub Wiki pages are flat. Keep every publishable page directly inside
-`docs/wiki/pages/`; use page names and the sidebar for organization instead of
-subdirectories.
+GitHub Wiki pages are flat. Keep publishable pages directly in `docs/wiki/pages/`; organize them through filenames, hubs and links rather than subdirectories.
 
-## Audience sections
+## Audience and progressive disclosure
 
-The Wiki separates:
+The Wiki supports:
 
-- staff procedures and moderation guidance;
-- commands, permissions, integrations, and implementation status;
-- installation, migration, cutover, and recovery operations;
-- developer architecture, source navigation, tests, and code-review guidance.
+- staff procedures;
+- administrator configuration/reference;
+- operations, release and recovery;
+- developer setup/architecture/source navigation;
+- code review;
+- quick answers that can continue into deep implementation detail.
 
-`Developer-Code-Guide.md` is the practical source map for reviewers. Update it
-whenever important entry points, packages, stores, feature flows, or test
-locations change.
+Keep the primary page readable. Put exhaustive source maps in `Developer-Code-Guide.md`, cross-cutting review discipline in `Code-Review-Guide.md`, validation/evidence interpretation in `Build-and-Testing.md`, and complex internals on focused deep-dive pages.
+
+`Developer-Guide-Index.md` is the developer task router; it should not grow into a second source map.
 
 ## Source hierarchy
 
-When documents disagree, use this order:
+When documents disagree:
 
-1. `ENTHUSIASTAFF-GOALS.md` for intended finished behavior.
-2. Current code, configuration, tests, and runtime evidence for implemented behavior.
-3. `reports/REQUIREMENTS-MATRIX.md` for conservative implementation status.
-4. The Wiki for staff, operator, and developer instructions.
+1. `ENTHUSIASTAFF-GOALS.md` defines intended finished behavior.
+2. Current merged code, configuration, migrations, tests and runtime evidence define implemented behavior.
+3. `reports/REQUIREMENTS-MATRIX.md` plus current legitimate review/runtime evidence describe conservative proof/blockers; reconcile them with live `main` after recent merges.
+4. The Wiki explains the result for staff, operators, developers and reviewers.
 
-The Wiki must never claim a feature is production-ready merely because a command,
-class, configuration key, or unit test exists.
+The Wiki must not claim production readiness merely because a class, command, configuration key, unit test or merged PR exists.
 
 ## Status labels
 
-Use these labels consistently:
+Use these consistently:
 
-- **Available** — implemented and verified in the relevant environment.
-- **Available with limitations** — usable, but the listed limitations matter.
-- **Implemented, not staging-verified** — code and tests exist, but live behavior is unproven.
-- **Partial** — only part of the documented workflow exists.
-- **Blocked** — an external dependency, provider, or required environment is missing.
-- **Planned** — required by the goals document but not implemented.
-- **Deprecated** — retained only for migration or compatibility.
+- **Available** — implemented and verified in the environment relevant to the claim.
+- **Available with limitations** — usable for the stated scope, with material limitations listed.
+- **Implemented, not staging-verified** — merged code and relevant automated evidence exist, but representative runtime staging has not established the full claim.
+- **Partial** — meaningful foundations exist, but the documented workflow is incomplete.
+- **Blocked** — a required dependency, environment or authority gate is unavailable.
+- **Planned** — required by the goals but not implemented.
+- **Deprecated** — retained only for migration/compatibility.
+
+Prefer these meaningful states and an explicit remaining-work sentence over invented exact percentages.
 
 ## Editing rules
 
-- Preserve stable page filenames when possible; changing a filename breaks Wiki links.
-- Use `[[Page Name]]` links for Wiki pages.
-- Link source-controlled technical documents to the exact repository path.
-- Put staff-facing procedures before implementation detail.
-- State required rank, permission, confirmation text, evidence, and failure behavior.
-- Never include secrets, raw network addresses, private-message evidence, or real case data.
-- Update `Implementation-Status.md` whenever a feature becomes available, blocked, or removed.
-- Update command and permission pages when `plugin.yml` changes.
-- Update the developer guide when code ownership or important review paths change.
-- Update the Wiki in the same pull request as a behavior change whenever practical.
+- Preserve stable page filenames when practical.
+- Use `[[Page Name]]` or `[[Label|Page-Filename]]` for internal Wiki navigation.
+- Put staff-facing procedure before implementation detail.
+- Link source-controlled technical documents to current repository paths.
+- Never include secrets, raw network addresses, private-message evidence, real case/punishment data, credentials or private server information.
+- Describe unmerged work as development/in-progress if it must be mentioned at all.
+- Update `Implementation-Status.md` when the merged product/evidence state materially changes.
+- Update commands/permissions/configuration pages when their authoritative source changes.
+- Update `Developer-Code-Guide.md` when important code ownership or traces move.
+- Update `Code-Review-Guide.md` only for genuinely cross-cutting review concerns, not every feature-specific implementation detail.
+- Keep transient package/worker routing in `ai-agents/`, not general Wiki product pages.
+- Update the Wiki in the same PR as a behavior change when practical; documentation-only reconciliation is also valid when it does not modify package state.
 
-## Local validation
+## Validation
 
 ```bash
 python scripts/wiki/validate_wiki.py
 ```
 
-The validator checks required pages, flat layout, duplicate page names, UTF-8 and
-line endings, headings, page size, Wiki links, relative Markdown links, and common
-placeholder mistakes.
+The validator checks required pages, flat layout, duplicate normalized page names, UTF-8/LF, H1 headings, page size, internal Wiki links, relative Markdown links and placeholder mistakes.
 
-See `pages/Wiki-Maintenance.md` for the one-time GitHub environment and token
-setup, manual publication, verification, and restore procedure.
+It does not prove technical truth, source-link freshness, privacy judgment, staging or production readiness. Those still require manual review.
+
+See `pages/Wiki-Maintenance.md` for page ownership, writing/navigation rules, protected publication, verification and restore.
