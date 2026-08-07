@@ -198,7 +198,7 @@ public final class MariaDbRuntime implements AutoCloseable {
                     clock.instant().minus(NETWORK_IDENTITY_RETENTION),
                     NETWORK_IDENTITY_RETENTION_BATCH_SIZE
             );
-            if (result.totalDeleted() > 0) {
+            if (result.totalDeleted() > 0 && LOGGER.isInfoEnabled()) {
                 LOGGER.info(
                         "Network identity retention removed {} protected token rows and {} evidence rows",
                         result.identityTokensDeleted(),
