@@ -7,11 +7,9 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
-import net.enthusia.staff.paper.tester.CheatTesterSettings;
 
 public final class PaperConfigurationLoader {
     public static final int SUPPORTED_VERSION = 1;
@@ -75,7 +73,7 @@ public final class PaperConfigurationLoader {
                 ConfigurationNodes.text(channel, "proxy-secret-environment", "channel.proxy-secret-environment", "ES_CHANNEL_PROXY_SECRET", errors),
                 ConfigurationNodes.text(tls, "trust-store", "channel.tls.trust-store", "channel-trust.p12", errors),
                 ConfigurationNodes.text(tls, "trust-store-password-environment", "channel.tls.trust-store-password-environment", "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD", errors),
-                parseCheatTesterSettings(root, errors)
+                new CheatTesterConfigurationParser().parse(root, errors)
         );
         validateChannel(restart, dataDirectory, errors);
 
@@ -91,109 +89,6 @@ public final class PaperConfigurationLoader {
             throw new PaperConfigurationValidationException(errors);
         }
         return new PaperConfigurationSnapshot(version, restart, alerts, moderationFeatures);
-    }
-
-    private static CheatTesterSettings parseCheatTesterSettings(JsonNode root, List<String> errors) {
-        CheatTesterSettings defaults = CheatTesterSettings.defaults();
-        JsonNode staffTools = ConfigurationNodes.optionalMapping(root, "staff-tools", "staff-tools", errors);
-        JsonNode tester = ConfigurationNodes.optionalMapping(
-                staffTools,
-                "cheat-tester",
-                "staff-tools.cheat-tester",
-                errors
-        );
-        JsonNode velocity = ConfigurationNodes.optionalMapping(
-                tester,
-                "velocity",
-                "staff-tools.cheat-tester.velocity",
-                errors
-        );
-        JsonNode noFall = ConfigurationNodes.optionalMapping(
-                tester,
-                "no-fall",
-                "staff-tools.cheat-tester.no-fall",
-                errors
-        );
-        int global = ConfigurationNodes.boundedInteger(
-                tester,
-                "maximum-active-global",
-                "staff-tools.cheat-tester.maximum-active-global",
-                defaults.maximumActiveGlobal(),
-                1,
-                32,
-                errors
-        );
-        int perStaff = ConfigurationNodes.boundedInteger(
-                tester,
-                "maximum-active-per-staff",
-                "staff-tools.cheat-tester.maximum-active-per-staff",
-                defaults.maximumActivePerStaff(),
-                1,
-                32,
-                errors
-        );
-        if (perStaff > global) {
-            errors.add("staff-tools.cheat-tester.maximum-active-per-staff must not exceed maximum-active-global");
-            perStaff = Math.min(defaults.maximumActivePerStaff(), global);
-        }
-        return new CheatTesterSettings(
-                Duration.ofMillis(ConfigurationNodes.boundedLong(
-                        tester,
-                        "timeout-millis",
-                        "staff-tools.cheat-tester.timeout-millis",
-                        defaults.sessionTimeout().toMillis(),
-                        1_000,
-                        15_000,
-                        errors
-                )),
-                global,
-                perStaff,
-                ConfigurationNodes.boundedDouble(
-                        tester,
-                        "fake-entity-distance",
-                        "staff-tools.cheat-tester.fake-entity-distance",
-                        defaults.fakeEntityDistance(),
-                        1.0D,
-                        8.0D,
-                        errors
-                ),
-                ConfigurationNodes.boundedDouble(
-                        velocity,
-                        "horizontal",
-                        "staff-tools.cheat-tester.velocity.horizontal",
-                        defaults.velocityHorizontal(),
-                        0.0D,
-                        2.0D,
-                        errors
-                ),
-                ConfigurationNodes.boundedDouble(
-                        velocity,
-                        "vertical",
-                        "staff-tools.cheat-tester.velocity.vertical",
-                        defaults.velocityVertical(),
-                        0.0D,
-                        2.0D,
-                        errors
-                ),
-                ConfigurationNodes.boundedDouble(
-                        noFall,
-                        "vertical",
-                        "staff-tools.cheat-tester.no-fall.vertical",
-                        defaults.noFallVertical(),
-                        0.1D,
-                        2.0D,
-                        errors
-                ),
-                ConfigurationNodes.boundedInteger(
-                        tester,
-                        "probe-ticks",
-                        "staff-tools.cheat-tester.probe-ticks",
-                        defaults.probeTicks(),
-                        10,
-                        300,
-                        errors
-                )
-        );
     }
 
     private static void validateChannel(
