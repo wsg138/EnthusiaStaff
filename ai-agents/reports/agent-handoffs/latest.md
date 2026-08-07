@@ -16,4 +16,4 @@ Exact frozen-head development evidence is green: Wiki/package validation `311937
 
 Private staging remains **NOT A PASS** and is deferred by the ES-P09 contract to `ES-V02`: public wrapper `31193762319`, private run `31193769314`, Ubuntu build `92916864019` runner ID `0`, empty runner name, steps `[]`, Billing & plans rejection; Pi `92916876057` skipped. No product build/test/boot step executed in that private run.
 
-ES-P02 PR #70 and ES-P05 PR #81 remain parked on their unchanged private Actions blocker. ES-P10 remains READY and unassigned. This worker must publish the terminal documentation-only finalization record to `main` and then stop; do not select or activate another package.
+Terminal state is published through documentation-only PR #85. ES-P02 PR #70 and ES-P05 PR #81 remain parked on their unchanged private Actions blocker. ES-P10 remains READY and unassigned. This worker stops after verifying PR #85 reached `main`; it does not select or activate another package.
