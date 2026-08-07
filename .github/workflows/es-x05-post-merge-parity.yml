@@ -60,7 +60,7 @@ jobs:
           from pathlib import Path
           data = json.loads(Path('parity.json').read_text(encoding='utf-8'))
           assert data['parity'] is True, data
-          assert data['added_in_aggregate'] == [], data
+          assert data['added_to_aggregate'] == [], data
           assert data['missing_from_aggregate'] == [], data
           assert data['modified'] == [], data
           assert data['aggregate_hash'] == data['standalone_hash'], data
