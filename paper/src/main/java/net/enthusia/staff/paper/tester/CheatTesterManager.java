@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,34 +26,17 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Evidence-only cheat tester runtime with durable exact-state recovery. */
 public final class CheatTesterManager implements Listener, AutoCloseable {
-    private static final String PERMISSION = "enthusiastaff.cheattester";
-    private static final String CANCEL_ANY_PERMISSION = "enthusiastaff.cheattester.cancel-any";
     private static final int MAX_RECOVERY_ROWS = 256;
     private static final String FAKE_SNAPSHOT = "{\"schemaVersion\":1,\"kind\":\"fake-entity\"}";
-    private static final List<CheatTesterType> SELECTABLE = List.of(
-            CheatTesterType.TOTEM_REFILL,
-            CheatTesterType.NO_FALL,
-            CheatTesterType.VELOCITY,
-            CheatTesterType.AUTO_ARMOR,
-            CheatTesterType.FAKE_ENTITY
-    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
     private final String serverId;
-    private final StaffModeManager staffMode;
     private final InventoryCoordinator inventory;
     private final Supplier<CheatTesterJournalStore> store;
     private final ExecutorService workers;
@@ -62,12 +44,12 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final CheatTesterSnapshotCodec snapshots;
     private final CheatTesterEvidence evidence;
     private final ObjectMapper json = new ObjectMapper();
-    private final Map<UUID, CheatTesterType> selections = new ConcurrentHashMap<>();
     private final Map<UUID, CheatTesterSession> activeByTarget = new ConcurrentHashMap<>();
     private final Map<Integer, UUID> fakeEntityTargets = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
     private final FakeEntityAdapter fakeEntities;
     private final CheatTesterProbeEngine probes;
+    private final CheatTesterControlState controls;
 
     public CheatTesterManager(
             JavaPlugin plugin,
@@ -82,7 +64,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.serverId = requireServerId(serverId);
-        this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.inventory = java.util.Objects.requireNonNull(inventory, "inventory");
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
@@ -90,6 +71,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.snapshots = new CheatTesterSnapshotCodec(plugin);
         this.evidence = new CheatTesterEvidence(clock, settings);
         this.fakeEntities = installFakeEntityAdapter();
+        this.controls = new CheatTesterControlState(clock, staffMode, settings, activeByTarget);
         this.probes = new CheatTesterProbeEngine(
                 plugin,
                 settings,
@@ -99,6 +81,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 this::retireForRecovery
         );
         plugin.getServer().getPluginManager().registerEvents(new CheatTesterMutationGuard(this), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new CheatTesterLifecycleListener(plugin, this), plugin);
     }
 
     public boolean packetSupportAvailable() {
@@ -106,33 +89,19 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public CheatTesterType selected(UUID staffId) {
-        return selections.getOrDefault(staffId, CheatTesterType.TOTEM_REFILL);
+        return controls.selected(staffId);
     }
 
     public void select(Player staff, CheatTesterType type) {
-        if (!authorized(staff) || !providerAvailable(staff, type)) {
-            return;
-        }
-        selections.put(staff.getUniqueId(), type);
-        staff.sendMessage(Component.text("Cheat Tester selected: " + type.displayName(), NamedTextColor.AQUA));
+        controls.select(staff, type, fakeEntities.available());
     }
 
     public void cycleSelection(Player staff) {
-        if (!authorized(staff)) {
-            return;
-        }
-        int nextIndex = (SELECTABLE.indexOf(selected(staff.getUniqueId())) + 1) % SELECTABLE.size();
-        for (int attempts = 0; attempts < SELECTABLE.size(); attempts++) {
-            CheatTesterType next = SELECTABLE.get((nextIndex + attempts) % SELECTABLE.size());
-            if (next != CheatTesterType.FAKE_ENTITY || fakeEntities.available()) {
-                select(staff, next);
-                return;
-            }
-        }
+        controls.cycle(staff, fakeEntities.available());
     }
 
     public void showConfiguration(Player staff) {
-        if (!authorized(staff)) {
+        if (!controls.authorized(staff)) {
             return;
         }
         CheatTesterType selected = selected(staff.getUniqueId());
@@ -152,7 +121,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public void run(Player staff, Player target, CheatTesterType type) {
-        if (!canStart(staff, target, type)) {
+        if (!controls.canStart(staff, target, type, fakeEntities.available(), closed.get())) {
             return;
         }
         boolean assetLock = type.mutatesTargetState();
@@ -171,54 +140,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         if (registerSession(staff, session)) {
             schedulePreparation(staff, target, session);
         }
-    }
-
-    private boolean canStart(Player staff, Player target, CheatTesterType type) {
-        return validParticipants(staff, target, type)
-                && providerAvailable(staff, type)
-                && capacityAvailable(staff);
-    }
-
-    private boolean validParticipants(Player staff, Player target, CheatTesterType type) {
-        if (!authorized(staff) || target == null || type == null || closed.get()) {
-            return false;
-        }
-        if (staff.getUniqueId().equals(target.getUniqueId())) {
-            staff.sendMessage(Component.text("Cheat Tester cannot target the controlling staff member."));
-            return false;
-        }
-        if (!target.isOnline()) {
-            staff.sendMessage(Component.text("The target must be online on this backend."));
-            return false;
-        }
-        return true;
-    }
-
-    private boolean providerAvailable(Player staff, CheatTesterType type) {
-        if (type != CheatTesterType.FAKE_ENTITY || fakeEntities.available()) {
-            return true;
-        }
-        staff.sendMessage(Component.text(
-                "Fake-entity testing is unavailable; ProtocolLib packet support failed closed.",
-                NamedTextColor.RED
-        ));
-        return false;
-    }
-
-    private boolean capacityAvailable(Player staff) {
-        if (activeByTarget.size() >= settings.maximumActiveGlobal()) {
-            staff.sendMessage(Component.text("The global cheat-tester session limit is active."));
-            return false;
-        }
-        if (activeForStaff(staff.getUniqueId()) >= settings.maximumActivePerStaff()) {
-            staff.sendMessage(Component.text("You already control the maximum number of cheat-tester sessions."));
-            return false;
-        }
-        return true;
-    }
-
-    private long activeForStaff(UUID staffId) {
-        return activeByTarget.values().stream().filter(session -> session.staffId.equals(staffId)).count();
     }
 
     private boolean registerSession(Player staff, CheatTesterSession session) {
@@ -245,31 +166,19 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public void cancel(Player staff, UUID targetId) {
-        if (!authorized(staff)) {
+        if (!controls.authorized(staff)) {
             return;
         }
         CheatTesterSession session = activeByTarget.get(targetId);
-        if (!controllable(staff, session)) {
+        if (!controls.controllable(staff, session)) {
             staff.sendMessage(Component.text("No controllable active tester exists for that target."));
             return;
         }
         finish(session, CheatTesterSessionState.CANCELLED, "cancelled by staff");
     }
 
-    private static boolean controllable(Player staff, CheatTesterSession session) {
-        return session != null
-                && (session.staffId.equals(staff.getUniqueId()) || staff.hasPermission(CANCEL_ANY_PERMISSION));
-    }
-
     public List<String> statusLines(UUID staffId, boolean includeAll) {
-        List<String> lines = new ArrayList<>();
-        for (CheatTesterSession session : activeByTarget.values()) {
-            if (includeAll || session.staffId.equals(staffId)) {
-                lines.add(session.type.id() + " target=" + session.targetId + " age="
-                        + Math.max(0L, clock.instant().toEpochMilli() - session.startedAt.toEpochMilli()) + "ms");
-            }
-        }
-        return List.copyOf(lines);
+        return controls.statusLines(staffId, includeAll);
     }
 
     public void recoverOnlinePlayers() {
@@ -450,7 +359,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         return sessionCurrent(session) && !session.finishing.get();
     }
 
-    private void finish(CheatTesterSession session, CheatTesterSessionState terminalState, String reason) {
+    void finish(CheatTesterSession session, CheatTesterSessionState terminalState, String reason) {
         if (session == null) {
             return;
         }
@@ -805,7 +714,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
     }
 
-    private void recover(Player player) {
+    void recover(Player player) {
         if (!closed.get()) {
             submit(() -> recoverById(player.getUniqueId()));
         }
@@ -857,7 +766,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         releaseAssetLock(session);
     }
 
-    private void retireForRecovery(CheatTesterSession session, String reason) {
+    void retireForRecovery(CheatTesterSession session, String reason) {
         activeByTarget.remove(session.targetId, session);
         removeFakeTarget(session);
         cancelSessionTasks(session);
@@ -888,20 +797,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
 
     private boolean sessionCurrent(CheatTesterSession session) {
         return activeByTarget.get(session.targetId) == session;
-    }
-
-    private boolean authorized(Player staff) {
-        if (staff == null || !staff.hasPermission(PERMISSION)) {
-            if (staff != null) {
-                staff.sendMessage(Component.text("You do not have permission to use Cheat Tester."));
-            }
-            return false;
-        }
-        if (!staffMode.active(staff.getUniqueId())) {
-            staff.sendMessage(Component.text("Enter staff mode before using Cheat Tester."));
-            return false;
-        }
-        return true;
     }
 
     private void scheduleTarget(UUID targetId, Runnable operation, Runnable retired) {
@@ -971,64 +866,21 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onDeath(PlayerDeathEvent event) {
-        CheatTesterSession session = activeByTarget.get(event.getPlayer().getUniqueId());
-        if (session == null || !session.type.mutatesTargetState()) {
-            return;
-        }
-        event.setKeepInventory(true);
-        event.getDrops().clear();
-        retireForRecovery(session, "Target died during tester; exact restore deferred to respawn");
+    CheatTesterSession activeSession(UUID playerId) {
+        return activeByTarget.get(playerId);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onRespawn(PlayerRespawnEvent event) {
-        Player player = event.getPlayer();
-        player.getScheduler().execute(plugin, () -> recover(player), null, 1L);
+    List<CheatTesterSession> activeSessions() {
+        return List.copyOf(activeByTarget.values());
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onJoin(PlayerJoinEvent event) {
-        recover(event.getPlayer());
+    void clearSelection(UUID playerId) {
+        controls.clearSelection(playerId);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onQuit(PlayerQuitEvent event) {
-        UUID playerId = event.getPlayer().getUniqueId();
-        selections.remove(playerId);
-        finishTargetDisconnect(playerId);
-        finishStaffDisconnect(playerId);
-    }
-
-    private void finishTargetDisconnect(UUID playerId) {
-        CheatTesterSession targetSession = activeByTarget.get(playerId);
-        if (targetSession == null) {
-            return;
-        }
-        if (targetSession.type == CheatTesterType.FAKE_ENTITY) {
-            finish(targetSession, CheatTesterSessionState.CANCELLED, "target disconnected");
-        } else {
-            retireForRecovery(targetSession, "Target disconnected during tester");
-        }
-    }
-
-    private void finishStaffDisconnect(UUID playerId) {
-        for (CheatTesterSession session : List.copyOf(activeByTarget.values())) {
-            if (session.staffId.equals(playerId)) {
-                finish(session, CheatTesterSessionState.CANCELLED, "controlling staff disconnected");
-            }
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onPluginDisable(PluginDisableEvent event) {
-        if (event.getPlugin() == plugin) {
-            close();
-        } else if (event.getPlugin().getName().equals("ProtocolLib")) {
-            fakeEntities.close();
-            fakeAdapterFailed();
-        }
+    void protocolLibDisabled() {
+        fakeEntities.close();
+        fakeAdapterFailed();
     }
 
     boolean mutating(UUID playerId) {
@@ -1058,7 +910,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             releaseAssetLock(session);
         }
         activeByTarget.clear();
-        selections.clear();
+        controls.clear();
         fakeEntityTargets.clear();
         fakeEntities.close();
         // Durable ACTIVE rows remain authoritative until the next healthy runtime verifies cleanup/restoration.
