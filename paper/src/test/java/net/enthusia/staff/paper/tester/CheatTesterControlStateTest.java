@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
 import java.time.Duration;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 class CheatTesterControlStateTest {
     private static final Instant NOW = Instant.parse("2026-08-07T12:00:10Z");
+    private static final String TESTER_PERMISSION = "enthusiastaff.cheattester";
 
     @Test
     void selectionRequiresAuthorizationAndProviderAvailability() {
@@ -27,7 +29,7 @@ class CheatTesterControlStateTest {
         Set<UUID> staffMode = new HashSet<>();
         CheatTesterControlState state = state(staffMode, new ConcurrentHashMap<>(), settings(8, 2));
         Player denied = player(staffId, Set.of(), true);
-        Player staff = player(staffId, Set.of("enthusiastaff.cheattester"), true);
+        Player staff = player(staffId, Set.of(TESTER_PERMISSION), true);
 
         assertFalse(state.authorized(null));
         assertFalse(state.select(denied, CheatTesterType.VELOCITY, true));
@@ -51,7 +53,7 @@ class CheatTesterControlStateTest {
         UUID staffId = UUID.randomUUID();
         Set<UUID> staffMode = new HashSet<>(Set.of(staffId));
         CheatTesterControlState state = state(staffMode, new ConcurrentHashMap<>(), settings(8, 2));
-        Player staff = player(staffId, Set.of("enthusiastaff.cheattester"), true);
+        Player staff = player(staffId, Set.of(TESTER_PERMISSION), true);
 
         assertTrue(state.select(staff, CheatTesterType.AUTO_ARMOR, true));
         state.cycle(staff, false);
@@ -69,7 +71,7 @@ class CheatTesterControlStateTest {
         Set<UUID> staffMode = new HashSet<>(Set.of(staffId));
         Map<UUID, CheatTesterSession> active = new ConcurrentHashMap<>();
         CheatTesterControlState state = state(staffMode, active, settings(2, 1));
-        Player staff = player(staffId, Set.of("enthusiastaff.cheattester"), true);
+        Player staff = player(staffId, Set.of(TESTER_PERMISSION), true);
         Player target = player(targetId, Set.of(), true);
 
         assertFalse(state.canStart(staff, null, CheatTesterType.VELOCITY, true, false));
@@ -103,10 +105,10 @@ class CheatTesterControlStateTest {
         active.put(own.targetId, own);
         active.put(other.targetId, other);
         CheatTesterControlState state = state(Set.of(staffId), active, settings(8, 2));
-        Player staff = player(staffId, Set.of("enthusiastaff.cheattester"), true);
+        Player staff = player(staffId, Set.of(TESTER_PERMISSION), true);
         Player cancelAny = player(
                 UUID.randomUUID(),
-                Set.of("enthusiastaff.cheattester", "enthusiastaff.cheattester.cancel-any"),
+                Set.of(TESTER_PERMISSION, "enthusiastaff.cheattester.cancel-any"),
                 true
         );
 
@@ -157,7 +159,7 @@ class CheatTesterControlStateTest {
 
     private static Player player(UUID id, Set<String> permissions, boolean online) {
         return (Player) Proxy.newProxyInstance(
-                Player.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Player.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
                     case "getUniqueId" -> id;
@@ -173,33 +175,9 @@ class CheatTesterControlStateTest {
     }
 
     private static Object defaultValue(Class<?> type) {
-        if (!type.isPrimitive()) {
+        if (!type.isPrimitive() || type == void.class) {
             return null;
         }
-        if (type == boolean.class) {
-            return false;
-        }
-        if (type == char.class) {
-            return '\0';
-        }
-        if (type == byte.class) {
-            return (byte) 0;
-        }
-        if (type == short.class) {
-            return (short) 0;
-        }
-        if (type == int.class) {
-            return 0;
-        }
-        if (type == long.class) {
-            return 0L;
-        }
-        if (type == float.class) {
-            return 0.0F;
-        }
-        if (type == double.class) {
-            return 0.0D;
-        }
-        return null;
+        return Array.get(Array.newInstance(type, 1), 0);
     }
 }
