@@ -211,7 +211,13 @@ Before publishing Wiki changes also check:
 - headings and sidebar destinations are readable;
 - source links still name real current files;
 - no secret/private evidence was copied into documentation;
-- no unmerged feature is described as available.
+- no unmerged feature is described as available;
+- every reviewer finding was inspected and every valid finding was resolved;
+- every active PR was rechecked for overlapping Wiki files, with active-worker ownership preserved;
+- the documentation branch is synchronized with the newest legitimate `main` and any newer merged product facts are retained;
+- the final diff is still documentation-only.
+
+Do not publish until all applicable validation, review, overlap, synchronization, and merge gates above have completed. [[Wiki Maintenance]] owns the full merge/publish procedure.
 
 ## Related pages
 
