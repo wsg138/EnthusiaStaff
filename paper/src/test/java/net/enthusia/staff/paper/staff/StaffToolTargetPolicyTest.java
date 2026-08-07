@@ -13,47 +13,74 @@ class StaffToolTargetPolicyTest {
 
     @Test
     void normalSurvivalPlayerIsEligible() {
-        assertTrue(eligible(TARGET, false, false, false, false, false, false, false, GameMode.SURVIVAL, true));
+        assertTrue(eligible(TARGET, safeState(), safeEnvironment()));
     }
 
     @Test
-    void randomTeleportExcludesSelfStaffHiddenFrozenExemptAndUnsafeStates() {
-        assertFalse(eligible(ACTOR, false, false, false, false, false, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, true, false, false, false, false, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, true, false, false, false, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, true, false, false, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, false, true, false, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, false, false, true, false, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, false, false, false, true, false, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, false, false, false, false, true, GameMode.SURVIVAL, true));
-        assertFalse(eligible(TARGET, false, false, false, false, false, false, false, GameMode.SPECTATOR, true));
-        assertFalse(eligible(TARGET, false, false, false, false, false, false, false, GameMode.SURVIVAL, false));
+    void randomTeleportExcludesSelfAndUnsafeIdentity() {
+        assertFalse(eligible(ACTOR, safeState(), safeEnvironment()));
+        assertFalse(StaffToolTargetPolicy.eligibleRandomTarget(new StaffToolTargetPolicy.Candidate(
+                new StaffToolTargetPolicy.Identity(null, TARGET),
+                safeState(),
+                safeEnvironment()
+        )));
+    }
+
+    @Test
+    void randomTeleportExcludesStaffHiddenFrozenExemptAndUnsafePlayerStates() {
+        assertFalse(eligible(TARGET, state(true, false, false, false, false, false, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, true, false, false, false, false, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, false, true, false, false, false, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, false, false, true, false, false, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, false, false, false, true, false, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, false, false, false, false, true, false), safeEnvironment()));
+        assertFalse(eligible(TARGET, state(false, false, false, false, false, false, true), safeEnvironment()));
+    }
+
+    @Test
+    void randomTeleportExcludesSpectatorsAndDisabledWorlds() {
+        assertFalse(eligible(TARGET, safeState(), new StaffToolTargetPolicy.Environment(GameMode.SPECTATOR, true)));
+        assertFalse(eligible(TARGET, safeState(), new StaffToolTargetPolicy.Environment(GameMode.SURVIVAL, false)));
+        assertFalse(eligible(TARGET, safeState(), new StaffToolTargetPolicy.Environment(null, true)));
     }
 
     private static boolean eligible(
-            UUID target,
+            UUID targetId,
+            StaffToolTargetPolicy.State state,
+            StaffToolTargetPolicy.Environment environment
+    ) {
+        return StaffToolTargetPolicy.eligibleRandomTarget(new StaffToolTargetPolicy.Candidate(
+                new StaffToolTargetPolicy.Identity(ACTOR, targetId),
+                state,
+                environment
+        ));
+    }
+
+    private static StaffToolTargetPolicy.State safeState() {
+        return state(false, false, false, false, false, false, false);
+    }
+
+    private static StaffToolTargetPolicy.State state(
             boolean staffMode,
             boolean vanished,
             boolean frozen,
             boolean exempt,
             boolean dead,
             boolean sleeping,
-            boolean vehicle,
-            GameMode gameMode,
-            boolean worldEnabled
+            boolean vehicle
     ) {
-        return StaffToolTargetPolicy.eligibleRandomTarget(
-                ACTOR,
-                target,
+        return new StaffToolTargetPolicy.State(
                 staffMode,
                 vanished,
                 frozen,
                 exempt,
                 dead,
                 sleeping,
-                vehicle,
-                gameMode,
-                worldEnabled
+                vehicle
         );
+    }
+
+    private static StaffToolTargetPolicy.Environment safeEnvironment() {
+        return new StaffToolTargetPolicy.Environment(GameMode.SURVIVAL, true);
     }
 }

@@ -3,8 +3,10 @@ package net.enthusia.staff.paper.staff;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
@@ -43,6 +45,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class StaffToolDispatcher implements Listener, CommandExecutor, TabCompleter {
     private static final String RANDOM_EXEMPT_PERMISSION = "enthusiastaff.stafftools.random-exempt";
     private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
+    private static final int NO_ARGUMENTS = 0;
+    private static final int ACTION_ARGUMENTS = 1;
+    private static final int TARGET_ARGUMENTS = 2;
 
     private final JavaPlugin plugin;
     private final String serverId;
@@ -51,6 +56,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     private final FreezeManager freeze;
     private final StaffToolSettings settings;
     private final StaffToolCooldowns cooldowns;
+    private final Map<StaffToolDefinition, ToolAction> actions;
 
     public StaffToolDispatcher(
             JavaPlugin plugin,
@@ -67,12 +73,31 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         this.freeze = java.util.Objects.requireNonNull(freeze, "freeze");
         this.settings = StaffToolSettings.load(plugin.getConfig());
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
+        this.actions = createActions();
+    }
+
+    private Map<StaffToolDefinition, ToolAction> createActions() {
+        EnumMap<StaffToolDefinition, ToolAction> configured = new EnumMap<>(StaffToolDefinition.class);
+        configured.put(StaffToolDefinition.RANDOM_TELEPORT, (player, ignored) -> beginRandomTeleport(player));
+        configured.put(
+                StaffToolDefinition.PLAYER_INSPECTOR,
+                (player, targetId) -> runTargetCommand(player, "inspect", targetId, null)
+        );
+        configured.put(
+                StaffToolDefinition.FREEZE,
+                (player, targetId) -> runTargetCommand(player, "freeze", targetId, "Staff-mode tool investigation")
+        );
+        configured.put(StaffToolDefinition.REPORTS, (player, ignored) -> runCommand(player, "reports"));
+        configured.put(StaffToolDefinition.SPECTATE, this::beginFollowOrSpectate);
+        configured.put(StaffToolDefinition.VANISH, (player, ignored) -> runCommand(player, "vanish"));
+        configured.put(StaffToolDefinition.STAFF_CHAT, (player, ignored) -> runCommand(player, "staffchat"));
+        configured.put(StaffToolDefinition.STAFF_TOOLS, (player, ignored) -> openTextMenu(player));
+        return Map.copyOf(configured);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND
-                || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+        if (!isPrimaryToolClick(event)) {
             return;
         }
         Player player = event.getPlayer();
@@ -82,6 +107,13 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         event.setCancelled(true);
         dispatchResolved(player, resolution, null);
+    }
+
+    private static boolean isPrimaryToolClick(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return false;
+        }
+        return event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK;
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -124,79 +156,103 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void dispatchResolved(Player player, StaffToolResolution resolution, Player target) {
         if (!resolution.valid()) {
-            player.sendMessage(Component.text(rejectionMessage(resolution.status()), NamedTextColor.RED));
+            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
             return;
         }
         dispatch(player, resolution.tool(), target == null ? null : target.getUniqueId());
     }
 
     private void dispatch(Player player, StaffToolDefinition tool, UUID targetId) {
+        if (tool == StaffToolDefinition.CHEAT_TESTER) {
+            sendCheatTesterDeferred(player);
+            return;
+        }
+        if (!hasToolAuthority(player, tool) || !hasValidTarget(player, tool, targetId)) {
+            return;
+        }
+        if (!acquireCooldown(player, tool)) {
+            return;
+        }
+        ToolAction action = actions.get(tool);
+        if (action == null) {
+            player.sendMessage(Component.text("That staff tool is unavailable on this runtime.", NamedTextColor.RED));
+            return;
+        }
+        action.execute(player, targetId);
+    }
+
+    private void sendCheatTesterDeferred(Player player) {
+        player.sendMessage(Component.text(
+                "Cheat Tester is intentionally unavailable until package ES-P10 is completed.",
+                NamedTextColor.YELLOW
+        ));
+    }
+
+    private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {
         if (!staffMode.authorizedForTool(player, tool)) {
             player.sendMessage(Component.text(
                     "That staff tool is no longer authorized for your active staff session.",
                     NamedTextColor.RED
             ));
-            return;
+            return false;
         }
-        if (!player.hasPermission(tool.permission())) {
-            player.sendMessage(Component.text(
-                    "You do not have permission to use " + tool.displayName() + '.',
-                    NamedTextColor.RED
-            ));
-            return;
+        if (player.hasPermission(tool.permission())) {
+            return true;
         }
-        if (tool.targetRequired() && targetId == null) {
+        player.sendMessage(Component.text(
+                "You do not have permission to use " + tool.displayName() + '.',
+                NamedTextColor.RED
+        ));
+        return false;
+    }
+
+    private static boolean hasValidTarget(Player player, StaffToolDefinition tool, UUID targetId) {
+        if (!tool.targetRequired()) {
+            return true;
+        }
+        if (targetId == null) {
             player.sendMessage(Component.text(
                     "Right-click a player with " + tool.displayName() + " or use the documented command fallback.",
                     NamedTextColor.YELLOW
             ));
-            return;
+            return false;
         }
-        if (targetId != null && targetId.equals(player.getUniqueId())) {
-            player.sendMessage(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED));
-            return;
+        if (!targetId.equals(player.getUniqueId())) {
+            return true;
         }
-        StaffToolCooldowns.Result cooldown = cooldowns.acquire(
+        player.sendMessage(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED));
+        return false;
+    }
+
+    private boolean acquireCooldown(Player player, StaffToolDefinition tool) {
+        StaffToolCooldowns.Result result = cooldowns.acquire(
                 player.getUniqueId(),
                 tool,
                 settings.cooldownFor(tool)
         );
-        if (!cooldown.allowed()) {
-            player.sendMessage(Component.text(
-                    "That staff tool is cooling down for about " + cooldown.remainingMillis() + " ms.",
-                    NamedTextColor.YELLOW
-            ));
-            return;
+        if (result.allowed()) {
+            return true;
         }
-        switch (tool) {
-            case RANDOM_TELEPORT -> beginRandomTeleport(player);
-            case PLAYER_INSPECTOR -> runTargetCommand(player, "inspect", targetId, null);
-            case FREEZE -> runTargetCommand(player, "freeze", targetId, "Staff-mode tool investigation");
-            case REPORTS -> runCommand(player, "reports");
-            case CHEAT_TESTER -> player.sendMessage(Component.text(
-                    "Cheat Tester is intentionally unavailable until package ES-P10 is completed.",
-                    NamedTextColor.YELLOW
-            ));
-            case SPECTATE -> beginFollowOrSpectate(player, targetId);
-            case VANISH -> runCommand(player, "vanish");
-            case STAFF_CHAT -> runCommand(player, "staffchat");
-            case STAFF_TOOLS -> openTextMenu(player);
-        }
+        player.sendMessage(Component.text(
+                "That staff tool is cooling down for about " + result.remainingMillis() + " ms.",
+                NamedTextColor.YELLOW
+        ));
+        return false;
     }
 
     private void runTargetCommand(Player actor, String command, UUID targetId, String suffix) {
-        if (targetId == null) {
-            actor.sendMessage(Component.text("That staff tool requires an online player target."));
-            return;
-        }
         UUID actorId = actor.getUniqueId();
         onEntity(targetId, target -> {
             StringBuilder built = new StringBuilder(command).append(' ').append(target.getName());
-            if (suffix != null && !suffix.isBlank()) {
-                built.append(' ').append(suffix);
-            }
+            appendSuffix(built, suffix);
             onEntity(actorId, current -> runCommand(current, built.toString()));
         }, () -> message(actorId, "That player is no longer online."));
+    }
+
+    private static void appendSuffix(StringBuilder command, String suffix) {
+        if (suffix != null && !suffix.isBlank()) {
+            command.append(' ').append(suffix);
+        }
     }
 
     private void runCommand(Player player, String commandLine) {
@@ -217,25 +273,33 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         UUID actorId = actor.getUniqueId();
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            List<UUID> candidates = plugin.getServer().getOnlinePlayers().stream()
-                    .map(Player::getUniqueId)
-                    .toList();
-            if (candidates.isEmpty()) {
-                message(actorId, "No suitable random-teleport target is online.");
-                return;
-            }
-            ConcurrentLinkedQueue<TargetSnapshot> eligible = new ConcurrentLinkedQueue<>();
-            AtomicInteger remaining = new AtomicInteger(candidates.size());
-            Runnable finishedOne = () -> {
-                if (remaining.decrementAndGet() == 0) {
-                    finishRandomTeleport(actorId, eligible);
-                }
-            };
-            for (UUID candidateId : candidates) {
-                snapshotRandomCandidate(actorId, candidateId, eligible, finishedOne);
-            }
-        });
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> collectRandomCandidates(actorId));
+    }
+
+    private void collectRandomCandidates(UUID actorId) {
+        List<UUID> candidates = plugin.getServer().getOnlinePlayers().stream()
+                .map(Player::getUniqueId)
+                .toList();
+        if (candidates.isEmpty()) {
+            message(actorId, "No suitable random-teleport target is online.");
+            return;
+        }
+        ConcurrentLinkedQueue<TargetSnapshot> eligible = new ConcurrentLinkedQueue<>();
+        AtomicInteger remaining = new AtomicInteger(candidates.size());
+        Runnable finishedOne = () -> finishCandidateCollection(actorId, eligible, remaining);
+        for (UUID candidateId : candidates) {
+            snapshotRandomCandidate(actorId, candidateId, eligible, finishedOne);
+        }
+    }
+
+    private void finishCandidateCollection(
+            UUID actorId,
+            Collection<TargetSnapshot> eligible,
+            AtomicInteger remaining
+    ) {
+        if (remaining.decrementAndGet() == 0) {
+            finishRandomTeleport(actorId, eligible);
+        }
     }
 
     private void snapshotRandomCandidate(
@@ -246,20 +310,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     ) {
         onEntity(targetId, target -> {
             try {
-                boolean allowed = StaffToolTargetPolicy.eligibleRandomTarget(
-                        actorId,
-                        targetId,
-                        staffMode.active(targetId),
-                        vanish.isVanished(targetId),
-                        freeze.isRestricted(targetId),
-                        target.hasPermission(RANDOM_EXEMPT_PERMISSION),
-                        target.isDead(),
-                        target.isSleeping(),
-                        target.isInsideVehicle(),
-                        target.getGameMode(),
-                        settings.worldEnabled(target.getWorld().getName())
-                );
-                if (allowed) {
+                if (eligibleRandomCandidate(actorId, target)) {
                     eligible.add(new TargetSnapshot(targetId, target.getName(), target.getLocation().clone()));
                 }
             } finally {
@@ -268,14 +319,30 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }, finished);
     }
 
+    private boolean eligibleRandomCandidate(UUID actorId, Player target) {
+        UUID targetId = target.getUniqueId();
+        StaffToolTargetPolicy.Candidate candidate = new StaffToolTargetPolicy.Candidate(
+                new StaffToolTargetPolicy.Identity(actorId, targetId),
+                new StaffToolTargetPolicy.State(
+                        staffMode.active(targetId),
+                        vanish.isVanished(targetId),
+                        freeze.isRestricted(targetId),
+                        target.hasPermission(RANDOM_EXEMPT_PERMISSION),
+                        target.isDead(),
+                        target.isSleeping(),
+                        target.isInsideVehicle()
+                ),
+                new StaffToolTargetPolicy.Environment(
+                        target.getGameMode(),
+                        settings.worldEnabled(target.getWorld().getName())
+                )
+        );
+        return StaffToolTargetPolicy.eligibleRandomTarget(candidate);
+    }
+
     private void finishRandomTeleport(UUID actorId, Collection<TargetSnapshot> candidates) {
         onEntity(actorId, actor -> {
-            if (!staffMode.authorizedForTool(actor, StaffToolDefinition.RANDOM_TELEPORT)
-                    || !actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission())) {
-                actor.sendMessage(Component.text(
-                        "Random teleport was cancelled because your staff session or permission changed.",
-                        NamedTextColor.RED
-                ));
+            if (!canContinueRandomTeleport(actor)) {
                 return;
             }
             List<TargetSnapshot> shuffled = new ArrayList<>(candidates);
@@ -284,43 +351,55 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 return;
             }
             TargetSnapshot target = shuffled.get(ThreadLocalRandom.current().nextInt(shuffled.size()));
-            actor.teleportAsync(target.location()).whenComplete((success, failure) -> {
-                if (failure != null || !Boolean.TRUE.equals(success)) {
-                    message(actorId, "Random staff teleport failed safely; no state was changed.");
-                    return;
-                }
-                message(actorId, "Teleported to a suitable random player: " + target.name() + '.');
-            });
+            actor.teleportAsync(target.location()).whenComplete(
+                    (success, failure) -> finishRandomTeleport(actorId, target, success, failure)
+            );
         });
     }
 
-    private void beginFollowOrSpectate(Player actor, UUID targetId) {
-        if (targetId == null) {
-            actor.sendMessage(Component.text("Follow/Spectate requires an online player target."));
+    private boolean canContinueRandomTeleport(Player actor) {
+        if (staffMode.authorizedForTool(actor, StaffToolDefinition.RANDOM_TELEPORT)
+                && actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission())) {
+            return true;
+        }
+        actor.sendMessage(Component.text(
+                "Random teleport was cancelled because your staff session or permission changed.",
+                NamedTextColor.RED
+        ));
+        return false;
+    }
+
+    private void finishRandomTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
+        if (failure != null || !Boolean.TRUE.equals(success)) {
+            message(actorId, "Random staff teleport failed safely; no state was changed.");
             return;
         }
+        message(actorId, "Teleported to a suitable random player: " + target.name() + '.');
+    }
+
+    private void beginFollowOrSpectate(Player actor, UUID targetId) {
         UUID actorId = actor.getUniqueId();
-        onEntity(targetId, target -> {
-            if (vanish.isVanished(targetId)) {
-                message(actorId, "That target is vanished and cannot be selected through this tool.");
-                return;
-            }
-            if (target.hasPermission(SPECTATE_EXEMPT_PERMISSION)) {
-                message(actorId, "That target is exempt from staff follow/spectate tools.");
-                return;
-            }
-            TargetSnapshot snapshot = new TargetSnapshot(targetId, target.getName(), target.getLocation().clone());
-            onEntity(actorId, current -> followSnapshot(current, snapshot));
-        }, () -> message(actorId, "That player is no longer online."));
+        onEntity(targetId, target -> inspectSpectateTarget(actorId, target),
+                () -> message(actorId, "That player is no longer online."));
+    }
+
+    private void inspectSpectateTarget(UUID actorId, Player target) {
+        UUID targetId = target.getUniqueId();
+        if (vanish.isVanished(targetId)) {
+            message(actorId, "That target is vanished and cannot be selected through this tool.");
+            return;
+        }
+        if (target.hasPermission(SPECTATE_EXEMPT_PERMISSION)) {
+            message(actorId, "That target is exempt from staff follow/spectate tools.");
+            return;
+        }
+        TargetSnapshot snapshot = new TargetSnapshot(targetId, target.getName(), target.getLocation().clone());
+        onEntity(actorId, current -> followSnapshot(current, snapshot));
     }
 
     private void beginNamedFollowOrSpectate(UUID actorId, String targetName) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            UUID targetId = plugin.getServer().getOnlinePlayers().stream()
-                    .filter(player -> player.getName().equalsIgnoreCase(targetName))
-                    .map(Player::getUniqueId)
-                    .findFirst()
-                    .orElse(null);
+            UUID targetId = findOnlinePlayerId(targetName);
             if (targetId == null) {
                 message(actorId, "That player is not online on this backend.");
                 return;
@@ -329,49 +408,82 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         });
     }
 
+    private UUID findOnlinePlayerId(String targetName) {
+        return plugin.getServer().getOnlinePlayers().stream()
+                .filter(player -> player.getName().equalsIgnoreCase(targetName))
+                .map(Player::getUniqueId)
+                .findFirst()
+                .orElse(null);
+    }
+
     private void followSnapshot(Player actor, TargetSnapshot target) {
-        if (!staffMode.authorizedForTool(actor, StaffToolDefinition.SPECTATE)
-                || !actor.hasPermission(StaffToolDefinition.SPECTATE.permission())) {
+        if (!canContinueSpectate(actor)) {
+            return;
+        }
+        UUID actorId = actor.getUniqueId();
+        actor.teleportAsync(target.location()).whenComplete(
+                (success, failure) -> finishFollowTeleport(actorId, target, success, failure)
+        );
+    }
+
+    private boolean canContinueSpectate(Player actor) {
+        if (staffMode.authorizedForTool(actor, StaffToolDefinition.SPECTATE)
+                && actor.hasPermission(StaffToolDefinition.SPECTATE.permission())) {
+            return true;
+        }
+        actor.sendMessage(Component.text(
+                "Follow/Spectate was cancelled because your staff session or permission changed.",
+                NamedTextColor.RED
+        ));
+        return false;
+    }
+
+    private void finishFollowTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
+        if (failure != null || !Boolean.TRUE.equals(success)) {
+            message(actorId, "Follow/Spectate teleport failed safely.");
+            return;
+        }
+        onEntity(actorId, actor -> finishFollowOnActor(actor, target));
+    }
+
+    private void finishFollowOnActor(Player actor, TargetSnapshot target) {
+        if (!canContinueSpectate(actor)) {
+            return;
+        }
+        if (actor.getGameMode() != GameMode.SPECTATOR) {
             actor.sendMessage(Component.text(
-                    "Follow/Spectate was cancelled because your staff session or permission changed.",
-                    NamedTextColor.RED
+                    "Teleported to " + target.name()
+                            + ". Your current staff-rank profile remains in creative mode.",
+                    NamedTextColor.GREEN
             ));
             return;
         }
         UUID actorId = actor.getUniqueId();
-        actor.teleportAsync(target.location()).whenComplete((success, failure) -> {
-            if (failure != null || !Boolean.TRUE.equals(success)) {
-                message(actorId, "Follow/Spectate teleport failed safely.");
-                return;
-            }
-            onEntity(actorId, current -> {
-                if (current.getGameMode() != GameMode.SPECTATOR) {
-                    current.sendMessage(Component.text(
-                            "Teleported to " + target.name()
-                                    + ". Your current staff-rank profile remains in creative mode.",
-                            NamedTextColor.GREEN
-                    ));
-                    return;
-                }
-                Player liveTarget = plugin.getServer().getPlayer(target.playerId());
-                if (liveTarget == null || vanish.isVanished(target.playerId())) {
-                    current.sendMessage(Component.text(
-                            "Teleported to the last safe target location; direct spectating is no longer available.",
-                            NamedTextColor.YELLOW
-                    ));
-                    return;
-                }
-                try {
-                    current.setSpectatorTarget(liveTarget);
-                    current.sendMessage(Component.text("Now spectating " + liveTarget.getName() + '.', NamedTextColor.GREEN));
-                } catch (IllegalArgumentException | IllegalStateException exception) {
-                    current.sendMessage(Component.text(
-                            "Teleported to " + target.name() + "; direct spectator attachment was unavailable.",
-                            NamedTextColor.YELLOW
-                    ));
-                }
-            });
-        });
+        onEntity(target.playerId(), liveTarget -> prepareSpectatorAttachment(actorId, target, liveTarget),
+                () -> message(actorId, "Teleported to the last safe target location; direct spectating is unavailable."));
+    }
+
+    private void prepareSpectatorAttachment(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
+        if (vanish.isVanished(liveTarget.getUniqueId())) {
+            message(actorId, "Teleported to the last safe target location; direct spectating is no longer available.");
+            return;
+        }
+        onEntity(actorId, actor -> attachSpectator(actor, snapshot, liveTarget));
+    }
+
+    private void attachSpectator(Player actor, TargetSnapshot snapshot, Player liveTarget) {
+        if (!canContinueSpectate(actor)) {
+            return;
+        }
+        try {
+            actor.setSpectatorTarget(liveTarget);
+            actor.sendMessage(Component.text("Now spectating " + snapshot.name() + '.', NamedTextColor.GREEN));
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            actor.sendMessage(Component.text(
+                    "Teleported to " + snapshot.name() + "; direct spectator attachment was unavailable.",
+                    NamedTextColor.YELLOW
+            ));
+        }
     }
 
     public void openTextMenu(Player player) {
@@ -406,27 +518,42 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             sender.sendMessage("Staff tools require an in-game staff session.");
             return true;
         }
+        handlePlayerCommand(player, label, arguments);
+        return true;
+    }
+
+    private void handlePlayerCommand(Player player, String label, String[] arguments) {
         if (!staffMode.active(player.getUniqueId())) {
             player.sendMessage(Component.text("Enter staff mode before using /" + label + '.'));
-            return true;
+            return;
         }
-        if (arguments.length == 0) {
+        if (arguments.length == NO_ARGUMENTS) {
             dispatch(player, StaffToolDefinition.STAFF_TOOLS, null);
-            return true;
+            return;
         }
-        if (arguments.length == 1 && arguments[0].equalsIgnoreCase("random")) {
+        if (isRandomCommand(arguments)) {
             dispatch(player, StaffToolDefinition.RANDOM_TELEPORT, null);
-            return true;
+            return;
         }
-        if (arguments.length == 2
-                && (arguments[0].equalsIgnoreCase("spectate") || arguments[0].equalsIgnoreCase("follow"))) {
+        if (isFollowCommand(arguments)) {
             beginNamedFollowOrSpectate(player.getUniqueId(), arguments[1]);
-            return true;
+            return;
         }
         player.sendMessage(Component.text(
                 "Usage: /" + label + " | /" + label + " random | /" + label + " spectate <player>"
         ));
-        return true;
+    }
+
+    private static boolean isRandomCommand(String[] arguments) {
+        return arguments.length == ACTION_ARGUMENTS && arguments[0].equalsIgnoreCase("random");
+    }
+
+    private static boolean isFollowCommand(String[] arguments) {
+        return arguments.length == TARGET_ARGUMENTS && isFollowAction(arguments[0]);
+    }
+
+    private static boolean isFollowAction(String argument) {
+        return argument.equalsIgnoreCase("spectate") || argument.equalsIgnoreCase("follow");
     }
 
     @Override
@@ -439,13 +566,13 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         if (!(sender instanceof Player player) || !staffMode.active(player.getUniqueId())) {
             return List.of();
         }
-        if (arguments.length == 1) {
-            String prefix = arguments[0].toLowerCase(Locale.ROOT);
-            return List.of("random", "spectate", "follow").stream()
-                    .filter(value -> value.startsWith(prefix))
-                    .toList();
+        if (arguments.length != ACTION_ARGUMENTS) {
+            return List.of();
         }
-        return List.of();
+        String prefix = arguments[0].toLowerCase(Locale.ROOT);
+        return List.of("random", "spectate", "follow").stream()
+                .filter(value -> value.startsWith(prefix))
+                .toList();
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
@@ -476,17 +603,9 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
-    private static String rejectionMessage(StaffToolSessionPolicy.Status status) {
-        return switch (status) {
-            case UNKNOWN_TOOL -> "Unknown staff tool tag; the item is stale or spoofed.";
-            case STALE_SESSION -> "That staff tool belongs to a stale or inactive staff session.";
-            case RANK_UNAVAILABLE -> "That staff tool is not available to your current explicit staff rank.";
-            case OWNER_MISMATCH -> "That staff tool belongs to another staff player and cannot be used.";
-            case SESSION_MISMATCH -> "That staff tool belongs to an older staff session and cannot be used.";
-            case SLOT_MISMATCH -> "That staff tool is outside its protected hotbar slot and cannot be used.";
-            case MATERIAL_MISMATCH -> "That staff tool does not match the server-issued tool definition.";
-            case VALID -> "The staff tool is valid.";
-        };
+    @FunctionalInterface
+    private interface ToolAction {
+        void execute(Player player, UUID targetId);
     }
 
     private record TargetSnapshot(UUID playerId, String name, Location location) {
