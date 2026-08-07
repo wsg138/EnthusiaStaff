@@ -1,8 +1,8 @@
 # Package registry
 
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` and `ES-P09` are dependency-derived `READY` but unassigned. No package is active. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` after canonical selection; `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -26,13 +26,13 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; records head `99da4103773e0c2ae43e0b0253200cd0d3d2c65c`; private Actions billing blocker unchanged |
 | `ES-P03` | Bedrock identity correctness | Internal | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | PR #75 merged as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `COMPLETE` | — | 35 | `ES-P01` | implementation integrated; finalization PR #74 merged as `2bcf5d46ca6471fddac600f85020c66105b1c0f2`; parity proven |
-| `ES-P04` | Staff-mode operational tools | Internal | `READY` | `READY` | 40 | `ES-P03` | unassigned; not activated by recovery worker |
+| `ES-P04` | Staff-mode operational tools | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential package worker; branch `package/es-p04-staff-mode-tools`; started from `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; PR pending first coherent implementation checkpoint |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned; dependency blocked |
 | `ES-P05` | Report evidence and staff workflow completion | Internal | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
-| `ES-P09` | Alt and network-identity completion | Internal | `READY` | `READY` | 55 | `ES-P03` | unassigned; not activated by recovery worker |
+| `ES-P09` | Alt and network-identity completion | Internal | `READY` | `READY` | 55 | `ES-P03` | unassigned; not activated by ES-P04 worker |
 | `ES-P06` | Discord notification delivery completion | Internal | `PLANNED` | — | 60 | `ES-P05` | unassigned |
 | `ES-P08` | Item confiscation and restoration | Internal | `PLANNED` | — | 70 | `ES-P07` | unassigned |
-| `ES-P10` | Cheat tester and fake-entity system | Internal | `PLANNED` | — | 80 | `ES-P04` | unassigned |
+| `ES-P10` | Cheat tester and fake-entity system | Internal | `PLANNED` | — | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 |
 | `ES-P11` | Fake-base generation and cleanup | Internal | `PLANNED` | — | 90 | `ES-P10` | unassigned |
 | `ES-X01` | RoseChat provider and communication integration | External/multi-repository | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | unassigned; repository unresolved |
 | `ES-X02` | EnthusiaCurrency destructive provider | External/multi-repository | `PLANNED` | — | 110 | `ES-P08` | unassigned |
@@ -54,7 +54,7 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 - Synchronized-main merge: `b21cb81b81fdcf0bac5027ae6f6b7901f6b0c175`.
 - Exact hosted-validation product head: `d671fef9fd14f0c4ae711c83edb29bc9b08ea002`.
 - Hosted validation: Coverage run `31138550369`, job `92743341861`, success for Java 21 build/tests, MariaDB/Testcontainers and migrations, coverage, runtime-JAR/provider-leak checks, artifact upload, and Codacy coverage. CodeRabbit and Codacy are clean with zero valid unresolved threads.
-- Latest package-specific private staging: run `31139079620`; ordinary Ubuntu build job `92744901730` failed before runner allocation with runner ID `0`, empty runner name, steps `[]`; Pi job `92744908539` skipped. GitHub explicitly reported recent account payments failed or the Actions spending limit must be increased under Billing & plans.
+- Package-specific private staging `31139079620` failed before ordinary Ubuntu allocation. A newer private `plugin-live-test.yml` run `31141797380` was inspected during ES-P04 routing and independently confirmed the condition is unchanged: build job `92753075216` used label `ubuntu-latest` but had runner ID `0`, empty runner name and steps `[]`; GitHub again reported recent account payments failed or the Actions spending limit must be increased under Billing & plans. Pi job `92753100652` skipped.
 - Exact unblock: resolve the private-repository Billing & plans restriction, then resume PR #70, reconcile any newer legitimate `main`, freeze one exact head, rerun every applicable hosted/review gate, obtain a successful ordinary private build followed by Pi safe Paper boot/restart for the same source revision, merge normally, verify containment, publish `COMPLETE`, and stop.
 - Handoff: [`2026-08-05-es-p02-runtime-db-recovery.md`](../reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md).
 
@@ -81,11 +81,23 @@ The ordinary graph requires ES-P02 complete before ES-P03. ES-P02 remains `BLOCK
 - Runtime artifacts: Paper SHA-256 `9880457c88f445de6f813f9bbee15544b59abc344d65420a6ae100d4ef5ab9d4`; Velocity SHA-256 `74e0105a94c7f10fc371fe033f07ab46588a01c18bfeea832af3179e72f986d6`; validation artifact `8979625925`, archive SHA-256 `42c9f835001de4847cd26961dbbe185a671b0239511d872a9553efeba44680f4`.
 - Finalization PR/merge: #74 / `2bcf5d46ca6471fddac600f85020c66105b1c0f2`. Frozen head is contained with zero file differences and no unique branch work.
 - Post-merge component parity: run `31140896890`, job `92750376952`, artifact `8979748083`; aggregate and standalone hashes both `780269847698d37c470cb7c241539b1c7387014225cc7eee9598548c9dc97f8b`; added `[]`, missing `[]`, modified `[]`, parity `true`.
-- Parity harness history: `31140685623` / `92749749317` failed before compare because shallow checkout lacked an unrelated parent; `31140785772` / `92750046294` produced parity `true` but wrapper used the wrong JSON field name; corrected run above passed. These were harness-only faults, not product or parity defects.
-- Staging: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; no staging pass is claimed. Original private evidence remained unavailable. No manual rerun was requested; PR automation later dispatched wrapper `31140187754` / `92748257022`, private run `31140197043`, build `92748287250` runner ID `0`/no steps/same Billing & plans restriction, Pi `92748295072` skipped. It remains unavailable evidence only.
+- Staging: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED** to `ES-V02`; no staging pass is claimed. Private runs continued to receive no ordinary Ubuntu runner under the Billing & plans restriction; Pi was skipped behind that prerequisite.
 - V17 remains the sole ES-X05 migration; Flyway history was not rewritten.
 - Handoff: [`2026-08-06-es-x05-website-auth-appeals.md`](../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md).
 
+### `ES-P04`
+
+- Status: `ACTIVE` / `ACTIONABLE_CONTINUATION` after claim.
+- Selection: ES-P02's exact external unblock condition was proven unchanged; among dependency-complete `READY` packages ES-P04 has the lowest numerical priority, 40.
+- Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
+- Branch: `package/es-p04-staff-mode-tools`.
+- Worker: generic sequential package worker.
+- Current package scope: authorized dispatch for random teleport, inspector, freeze, reports, spectate/follow, vanish, staff chat, and tools menu plus stale/spoofed-tool rejection and existing staff-session safety/recovery. Cheat testers/fake entities and fake bases remain excluded.
+- Baseline finding: `StaffModeManager` creates PDC-tagged staff tools and `StaffToolTransferListener` protects transfers, but no interaction dispatcher consumes the tag; current tag presence alone is not sufficient authority for stale/spoofed-tool acceptance.
+- Migration boundary: V17; no migration expected.
+- Handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
+- Exact next action: map existing command/manager/permission/provider contracts and tests, then implement and checkpoint the first coherent dispatcher/security slice before opening the draft PR.
+
 ## Next-worker boundary
 
-This outage-recovery worker completes exactly ES-X05 and stops. ES-P02 remains parked. After this completion publication reaches `main`, the normal sequential package system may resume. Live continuation classification still comes first; absent a newly actionable continuation, the expected next new implementation package is `ES-P04 — Staff-mode operational tools` at priority 40. `ES-P09` is also ready at priority 55. Neither is activated here.
+ES-P04 is the only package this worker may implement. ES-P09 remains `READY` but unassigned. Do not start it when ES-P04 reaches a terminal state; only update dependency-derived statuses after ES-P04 completion. ES-P02 remains parked until its exact Billing & plans unblock condition changes.
