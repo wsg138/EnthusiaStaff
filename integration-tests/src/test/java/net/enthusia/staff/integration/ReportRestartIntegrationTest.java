@@ -36,12 +36,12 @@ class ReportRestartIntegrationTest {
         UUID reporterId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        insertPlayer(DATABASE, reporterId, "RestartReporter", NOW);
-        insertPlayer(DATABASE, targetId, "RestartTarget", NOW);
-        insertPlayer(DATABASE, actorId, "RestartStaff", NOW);
 
         UUID reportId;
         try (MariaDbRuntime firstRuntime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, reporterId, "RestartReporter", NOW);
+            insertPlayer(DATABASE, targetId, "RestartTarget", NOW);
+            insertPlayer(DATABASE, actorId, "RestartStaff", NOW);
             ReportStore store = firstRuntime.reportStore();
             reportId = accepted(store.submit(requestWithEvidence(
                     reporterId,
