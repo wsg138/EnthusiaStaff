@@ -16,7 +16,7 @@ CREATE TABLE cheat_tester_sessions (
     updated_at TIMESTAMP(6) NOT NULL,
     revision BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (session_id),
-    UNIQUE KEY uq_cheat_tester_active_target (server_id, active_target_uuid),
+    UNIQUE KEY uq_cheat_tester_active_target (active_target_uuid),
     KEY idx_cheat_tester_recovery (server_id, state, expires_at),
     KEY idx_cheat_tester_staff (staff_id, state, started_at),
     CONSTRAINT chk_cheat_tester_state CHECK (state IN ('ACTIVE', 'RESTORED', 'CANCELLED', 'FAILED')),
