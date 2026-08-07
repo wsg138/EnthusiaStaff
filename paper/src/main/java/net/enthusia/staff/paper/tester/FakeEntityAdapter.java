@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.tester;
 
-import java.util.Collection;
 import java.util.UUID;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -16,9 +15,11 @@ interface FakeEntityAdapter extends AutoCloseable {
 
     boolean available();
 
-    Handle spawn(Collection<Player> viewers, Location location);
+    Handle create();
 
-    void destroy(Collection<Player> viewers, Handle handle);
+    void show(Player viewer, Handle handle, Location location);
+
+    void destroy(Player viewer, Handle handle);
 
     @Override
     void close();
@@ -31,12 +32,17 @@ interface FakeEntityAdapter extends AutoCloseable {
             }
 
             @Override
-            public Handle spawn(Collection<Player> viewers, Location location) {
+            public Handle create() {
                 throw new IllegalStateException("fake-entity packet support is unavailable");
             }
 
             @Override
-            public void destroy(Collection<Player> viewers, Handle handle) {
+            public void show(Player viewer, Handle handle, Location location) {
+                throw new IllegalStateException("fake-entity packet support is unavailable");
+            }
+
+            @Override
+            public void destroy(Player viewer, Handle handle) {
                 // Nothing was emitted.
             }
 
