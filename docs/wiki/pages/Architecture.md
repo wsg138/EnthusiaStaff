@@ -36,19 +36,20 @@ Root references: [build](https://github.com/wsg138/EnthusiaStaff/blob/main/build
 ## Dependency direction
 
 ```text
-Paper / Velocity / website / provider adapters
-                    |
-                    v
-         domain application services
-                    |
-                    v
-             domain ports/models
-                    ^
-                    |
-       persistence / protocol adapters
+Paper / Velocity / website adapters
+              |                  provider adapters
+              |                       |        \
+              v                       v         v
+     domain application services  domain   integration-contracts
+              |                            (compile-time contracts)
+              v
+         domain ports/models
+              ^
+              |
+     persistence / protocol adapters
 ```
 
-The practical rule is: **domain policy decides; platform adapters translate/apply runtime effects; persistence implements durable ports.**
+The practical rule is: **domain policy decides; platform adapters translate/apply runtime effects; persistence implements durable ports.** `integration-contracts` is the explicit compile-time boundary used by supported Enthusia-owned provider adapters; it does not become a second home for business policy.
 
 A command, GUI, event listener, website route or provider adapter should not gain its own copy of punishment ladders, rank hierarchy, transaction policy or recovery decisions.
 
