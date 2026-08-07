@@ -9,14 +9,12 @@ import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.events.PacketListener;
 import com.comphenix.protocol.wrappers.WrappedEnumEntityUseAction;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
-import org.bukkit.EntityEffect;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -100,44 +98,44 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
     }
 
     @Override
-    public Handle spawn(Collection<Player> viewers, Location location) {
+    public Handle create() {
         requireAvailable();
-        Objects.requireNonNull(viewers, "viewers");
-        Objects.requireNonNull(location, "location");
         int entityId = nextEntityId.getAndDecrement();
         if (entityId < 1_500_000_000) {
             nextEntityId.compareAndSet(entityId - 1, FIRST_SYNTHETIC_ENTITY_ID);
         }
-        UUID entityUuid = UUID.randomUUID();
+        return new Handle(entityId, UUID.randomUUID());
+    }
+
+    @Override
+    public void show(Player viewer, Handle handle, Location location) {
+        requireAvailable();
+        Objects.requireNonNull(viewer, "viewer");
+        Objects.requireNonNull(handle, "handle");
+        Objects.requireNonNull(location, "location");
+        if (!viewer.isOnline() || !viewer.getWorld().equals(location.getWorld())) {
+            return;
+        }
         PacketContainer packet = manager.createPacket(PacketType.Play.Server.SPAWN_ENTITY, true);
-        packet.getIntegers().write(0, entityId);
-        packet.getUUIDs().write(0, entityUuid);
+        packet.getIntegers().write(0, handle.entityId());
+        packet.getUUIDs().write(0, handle.entityUuid());
         packet.getEntityTypeModifier().write(0, EntityType.ZOMBIE);
         packet.getDoubles()
                 .write(0, location.getX())
                 .write(1, location.getY())
                 .write(2, location.getZ());
-        for (Player viewer : viewers) {
-            if (viewer != null && viewer.isOnline() && viewer.getWorld().equals(location.getWorld())) {
-                manager.sendServerPacket(viewer, packet.shallowClone());
-            }
-        }
-        return new Handle(entityId, entityUuid);
+        manager.sendServerPacket(viewer, packet);
     }
 
     @Override
-    public void destroy(Collection<Player> viewers, Handle handle) {
-        if (handle == null || viewers == null || closed.get()) {
+    public void destroy(Player viewer, Handle handle) {
+        if (viewer == null || handle == null || closed.get() || !viewer.isOnline()) {
             return;
         }
         try {
             PacketContainer packet = manager.createPacket(PacketType.Play.Server.ENTITY_DESTROY, true);
             packet.getIntLists().write(0, List.of(handle.entityId()));
-            for (Player viewer : viewers) {
-                if (viewer != null && viewer.isOnline()) {
-                    manager.sendServerPacket(viewer, packet.shallowClone());
-                }
-            }
+            manager.sendServerPacket(viewer, packet);
         } catch (RuntimeException exception) {
             healthy.set(false);
             plugin.getLogger().log(Level.WARNING, "Failed to remove a synthetic cheat-test entity", exception);
