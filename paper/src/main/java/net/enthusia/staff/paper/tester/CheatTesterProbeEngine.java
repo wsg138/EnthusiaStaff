@@ -258,6 +258,9 @@ final class CheatTesterProbeEngine {
     }
 
     private void showFakeToStaff(Player staff, CheatTesterSession session, Location location) {
+        if (!sampleActive.test(session) || session.fakeHandle == null) {
+            return;
+        }
         if (fakeEntities.available() && staff.getWorld().equals(location.getWorld())) {
             fakeEntities.show(staff, session.fakeHandle, location);
         }
