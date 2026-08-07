@@ -4,7 +4,7 @@
 `ES-P09`; Internal; primary `COMP-STAFF`; priority 55; conditionally parallel after identity correctness.
 
 ## 2. Status
-`READY` — dependency satisfied; unassigned; not activated by the ES-X05 recovery worker. Registry is authoritative.
+`ACTIVE` — selected by the 2026-08-07 sequential package worker after live reconciliation. `ES-P02` and `ES-P05` remain parked on the unchanged private Actions Billing & plans blocker; no competing ES-P09 branch, PR, or handoff existed.
 
 ## 3. Objective
 Complete protected network identity, alt graph/confidence/manual relationships, IP/network sanction inheritance, privacy, retention, and operator workflow.
@@ -28,7 +28,7 @@ Canonical Java/Floodgate platform identity and normalization (`ES-P03`); product
 Root identity/alt/persistence/Velocity/tests/docs only. No external source import, permanent component branch, or isolated PR.
 
 ## 10. Required branches
-Temporary `package/es-p09-alt-network-identity`; delete after verified merge containment.
+Active temporary branch `package/es-p09-alt-network-identity`, created from legitimate `main` commit `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`. Integration authority: this branch and its single same-repository PR to `main`. Delete after verified merge containment when tooling permits.
 
 ## 11. Required PRs
 One PR to `wsg138/EnthusiaStaff:main`.
@@ -67,19 +67,19 @@ No external source provider required; integrate only through verified Floodgate/
 Development scope proven and merged in one exact-head PR with zero valid threads and branch cleanup; private false-positive/staging acceptance remains deferred.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Eligible for normal sequential selection after outage recovery; priority 55. Live continuation classification still precedes new selection.
+Claimed 2026-08-07 by `ChatGPT sequential package worker`. Start `main`: `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`. Branch: `package/es-p09-alt-network-identity`. No pre-existing ES-P09 work was taken over.
 
 ## 24. Last completed checkpoint
-Dependency `ES-P03` is complete; no ES-P09 product work has begun.
+Live startup reconciliation and ES-P03 handoff review are complete; package branch claimed from current legitimate `main`. Product edits have not yet been committed.
 
 ## 25. Remaining checklist
-All implementation, tests, review, validation, merge, and evidence remain.
+Implementation, tests, review, exact-head validation, merge/containment, package-state finalization, and temporary branch cleanup remain.
 
 ## 26. Known blockers
-No dependency blocker; private representative data remains unavailable by design for acceptance and is deferred to `ES-V02`.
+No dependency blocker. Production/private representative network data and false-positive acceptance remain intentionally unavailable and deferred to `ES-V02`; this does not block development-package completion.
 
 ## 27. Final evidence
-Unset: exact heads, privacy review, graph/inheritance test matrix, checks, docs.
+In progress. Claim base `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`; branch `package/es-p09-alt-network-identity`.
 
 ## 28. Merge and synchronization record
-Unset: normal merge/resulting main/containment/temporary branch cleanup; parity not applicable.
+In progress; no PR or merge yet.
