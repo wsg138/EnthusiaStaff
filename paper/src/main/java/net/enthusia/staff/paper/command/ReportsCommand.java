@@ -147,8 +147,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("Evidence kind must be public, private, or client."));
             return true;
         }
-        Integer snapshot = optionalPositiveInteger(sender, arguments, 3, "snapshot");
-        Integer page = optionalPositiveInteger(sender, arguments, 4, "page");
+        Integer snapshot = arguments.length > 3
+                ? positiveInteger(sender, arguments[3], "snapshot")
+                : 0;
+        Integer page = arguments.length > 4
+                ? positiveInteger(sender, arguments[4], "page")
+                : 1;
         if (snapshot == null || page == null) {
             return true;
         }
@@ -360,17 +364,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private static Integer optionalPositiveInteger(
-            CommandSender sender,
-            String[] arguments,
-            int index,
-            String name
-    ) {
-        if (arguments.length <= index) {
-            return 1;
-        }
+    private static Integer positiveInteger(CommandSender sender, String input, String name) {
         try {
-            int value = Integer.parseInt(arguments[index]);
+            int value = Integer.parseInt(input);
             if (value < 1) {
                 throw new NumberFormatException("not positive");
             }
