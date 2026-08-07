@@ -8,6 +8,9 @@ import java.util.regex.Pattern;
  * Candidate recognition is local-only and never performs hostname or address resolution.
  */
 public final class NetworkAddressTextGuard {
+    private static final int IPV4_OCTETS = 4;
+    private static final int IPV4_MAX_OCTET = 255;
+    private static final int IPV6_FULL_COLON_COUNT = 7;
     private static final Pattern IPV4_CANDIDATE = Pattern.compile(
             "(?<![0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![0-9])"
     );
@@ -22,7 +25,7 @@ public final class NetworkAddressTextGuard {
         if (text == null || text.isBlank()) {
             return false;
         }
-        return containsValidIpv4(text) || containsValidIpv6(text);
+        return containsValidIpv4(text) || containsIpv6AddressShape(text);
     }
 
     public static void requireNoRawAddress(String text) {
@@ -34,75 +37,44 @@ public final class NetworkAddressTextGuard {
     private static boolean containsValidIpv4(String text) {
         Matcher matcher = IPV4_CANDIDATE.matcher(text);
         while (matcher.find()) {
-            String candidate = matcher.group();
-            int octetStart = 0;
-            boolean valid = true;
-            for (int octetIndex = 0; octetIndex < 4; octetIndex++) {
-                int separator = octetIndex == 3 ? candidate.length() : candidate.indexOf('.', octetStart);
-                int value = 0;
-                for (int index = octetStart; index < separator; index++) {
-                    value = (value * 10) + (candidate.charAt(index) - '0');
-                }
-                if (value > 255) {
-                    valid = false;
-                    break;
-                }
-                octetStart = separator + 1;
-            }
-            if (valid) {
+            if (hasValidIpv4Octets(matcher.group())) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean containsValidIpv6(String text) {
-        Matcher matcher = IPV6_CANDIDATE.matcher(text);
-        while (matcher.find()) {
-            if (isValidIpv6Literal(matcher.group())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isValidIpv6Literal(String candidate) {
-        int compression = candidate.indexOf("::");
-        if (compression >= 0 && candidate.indexOf("::", compression + 2) >= 0) {
+    private static boolean hasValidIpv4Octets(String candidate) {
+        String[] octets = candidate.split("\\.", -1);
+        if (octets.length != IPV4_OCTETS) {
             return false;
         }
-        if (compression < 0 && (candidate.startsWith(":") || candidate.endsWith(":"))) {
-            return false;
-        }
-
-        int hextets = 0;
-        int segmentStart = 0;
-        for (int index = 0; index <= candidate.length(); index++) {
-            if (index < candidate.length() && candidate.charAt(index) != ':') {
-                continue;
-            }
-            if (index > segmentStart) {
-                int length = index - segmentStart;
-                if (length > 4 || !isHex(candidate, segmentStart, index)) {
-                    return false;
-                }
-                hextets++;
-            }
-            segmentStart = index + 1;
-        }
-        return compression >= 0 ? hextets < 8 : hextets == 8;
-    }
-
-    private static boolean isHex(String value, int start, int end) {
-        for (int index = start; index < end; index++) {
-            char character = value.charAt(index);
-            boolean digit = character >= '0' && character <= '9';
-            boolean lower = character >= 'a' && character <= 'f';
-            boolean upper = character >= 'A' && character <= 'F';
-            if (!digit && !lower && !upper) {
+        for (String octet : octets) {
+            if (Integer.parseInt(octet) > IPV4_MAX_OCTET) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean containsIpv6AddressShape(String text) {
+        Matcher matcher = IPV6_CANDIDATE.matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group();
+            if (candidate.contains("::") || colonCount(candidate) >= IPV6_FULL_COLON_COUNT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int colonCount(String candidate) {
+        int count = 0;
+        for (int index = 0; index < candidate.length(); index++) {
+            if (candidate.charAt(index) == ':') {
+                count++;
+            }
+        }
+        return count;
     }
 }
