@@ -320,10 +320,16 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             }
             session.snapshot = session.type.mutatesTargetState() ? snapshots.capture(target) : FAKE_SNAPSHOT;
             CheatTesterJournalStart start = journalStart(staffId, target, session);
+            if (!session.beginJournalSubmission()) {
+                retireWithoutJournal(session);
+                return;
+            }
             if (!submit(() -> persistStart(session, start))) {
+                session.cancelJournalSubmission();
                 failBeforeMutation(session, "The bounded work queue is full; tester did not start.");
             }
         } catch (RuntimeException exception) {
+            session.cancelJournalSubmission();
             plugin.getLogger().log(Level.WARNING, "Cheat tester preparation failed before durable mutation", exception);
             failBeforeMutation(session, safePreparationMessage(exception));
         }
@@ -347,19 +353,33 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private void persistStart(CheatTesterSession session, CheatTesterJournalStart start) {
         CheatTesterJournalStore loaded = store.get();
         if (loaded == null) {
+            session.cancelJournalSubmission();
             failBeforeMutation(session, "Tester storage is not ready; no target state was changed.");
             return;
         }
         try {
             CheatTesterJournalRecord record = loaded.start(start);
             if (!record.sessionId().equals(session.sessionId)) {
+                session.cancelJournalSubmission();
                 failBeforeMutation(session,
                         "A durable tester session already exists for that target on " + record.serverId() + '.');
                 return;
             }
             session.revision = record.revision();
+            boolean shouldBegin = session.markJournaledAndShouldBegin();
+            if (!shouldBegin || !sessionCurrent(session)) {
+                completeOnWorker(
+                        session,
+                        CheatTesterSessionState.CANCELLED,
+                        "tester ended before probe mutation",
+                        evidence.withoutProbe(session, "tester ended before probe mutation"),
+                        false
+                );
+                return;
+            }
             scheduleBegin(session);
         } catch (RuntimeException exception) {
+            session.cancelJournalSubmission();
             plugin.getLogger().log(Level.SEVERE, "Cheat tester journal start failed", exception);
             failBeforeMutation(session, "Tester journal could not be committed; no target state was changed.");
         }
@@ -422,19 +442,26 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private void finish(CheatTesterSession session, CheatTesterSessionState terminalState, String reason) {
-        if (!beginFinish(session)) {
+        if (session == null) {
+            return;
+        }
+        CheatTesterSession.FinishDisposition disposition = session.beginFinishing();
+        if (disposition == CheatTesterSession.FinishDisposition.ALREADY_FINISHING) {
             return;
         }
         cancel(session.timeoutTask);
         cancel(session.sampleTask);
+        if (disposition == CheatTesterSession.FinishDisposition.NO_JOURNAL) {
+            retireWithoutJournal(session);
+            return;
+        }
+        if (disposition == CheatTesterSession.FinishDisposition.WAIT_FOR_JOURNAL) {
+            return;
+        }
         plugin.getServer().getGlobalRegionScheduler().execute(
                 plugin,
                 () -> scheduleFinishOnTarget(session, terminalState, reason)
         );
-    }
-
-    private boolean beginFinish(CheatTesterSession session) {
-        return session != null && sessionCurrent(session) && session.finishing.compareAndSet(false, true);
     }
 
     private void scheduleFinishOnTarget(
