@@ -16,6 +16,9 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
+import net.enthusia.staff.paper.report.ReportEvidenceFormatter;
+import net.enthusia.staff.paper.report.ReportEvidenceFormatter.EvidenceKind;
+import net.enthusia.staff.paper.report.ReportEvidenceFormatter.EvidencePage;
 import net.enthusia.staff.paper.report.ReportGuiController;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -26,11 +29,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ReportsCommand implements CommandExecutor, TabCompleter {
+    public static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
+    public static final String EVIDENCE_PERMISSION = "enthusiastaff.reports.evidence";
+
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<ReportStore> reports;
     private final ExecutorService workers;
     private final ReportGuiController gui;
+    private final ReportEvidenceFormatter evidenceFormatter;
 
     public ReportsCommand(
             JavaPlugin plugin,
@@ -39,7 +46,19 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             ExecutorService workers,
             ReportGuiController gui
     ) {
-        if (plugin == null || clock == null || reports == null || workers == null || gui == null) {
+        this(plugin, clock, reports, workers, gui, new ReportEvidenceFormatter());
+    }
+
+    ReportsCommand(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<ReportStore> reports,
+            ExecutorService workers,
+            ReportGuiController gui,
+            ReportEvidenceFormatter evidenceFormatter
+    ) {
+        if (plugin == null || clock == null || reports == null || workers == null || gui == null
+                || evidenceFormatter == null) {
             throw new IllegalArgumentException("report command dependencies must be present");
         }
         this.plugin = plugin;
@@ -47,11 +66,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         this.reports = reports;
         this.workers = workers;
         this.gui = gui;
+        this.evidenceFormatter = evidenceFormatter;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
-        if (!sender.hasPermission("enthusiastaff.reports.manage")) {
+        if (!sender.hasPermission(MANAGE_PERMISSION)) {
             sender.sendMessage(Component.text("You do not have permission to manage reports."));
             return true;
         }
@@ -59,21 +79,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             if (sender instanceof Player player) {
                 gui.openQueue(player, ReportQueue.OPEN);
             } else {
-                submit(sender, () -> list(sender, ReportQueue.OPEN));
+                submit(sender, () -> list(sender, ReportQueue.OPEN, consoleActor()));
             }
             return true;
         }
         if (arguments[0].equalsIgnoreCase("note")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text("Only a player can complete a GUI report note."));
-                return true;
-            }
-            if (arguments.length < 2) {
-                sender.sendMessage(Component.text("Usage: /reports note <private action note>"));
-                return true;
-            }
-            gui.acceptNote(player, String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)));
-            return true;
+            return note(sender, arguments);
         }
         if (arguments[0].equalsIgnoreCase("cancel") && arguments.length == 1) {
             if (sender instanceof Player player) {
@@ -83,18 +94,69 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             }
             return true;
         }
+        if (arguments[0].equalsIgnoreCase("evidence")) {
+            return evidence(sender, arguments);
+        }
         ReportQueue queue = parseQueue(arguments[0]);
         if (queue != null && arguments.length == 1) {
-            submit(sender, () -> list(sender, queue));
+            UUID actorId = actorId(sender);
+            submit(sender, () -> list(sender, queue, actorId));
             return true;
         }
         if (arguments[0].equalsIgnoreCase("view") && arguments.length == 2) {
             UUID reportId = uuid(sender, arguments[1]);
             if (reportId != null) {
-                submit(sender, () -> details(sender, reportId));
+                boolean evidenceAccess = sender.hasPermission(EVIDENCE_PERMISSION);
+                submit(sender, () -> details(sender, reportId, evidenceAccess));
             }
             return true;
         }
+        return stateChange(sender, arguments);
+    }
+
+    private boolean note(CommandSender sender, String[] arguments) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only a player can complete a GUI report note."));
+            return true;
+        }
+        if (arguments.length < 2) {
+            sender.sendMessage(Component.text("Usage: /reports note <private action note>"));
+            return true;
+        }
+        gui.acceptNote(player, String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)));
+        return true;
+    }
+
+    private boolean evidence(CommandSender sender, String[] arguments) {
+        if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
+            sender.sendMessage(Component.text("You do not have permission to inspect sensitive report evidence."));
+            return true;
+        }
+        if (arguments.length < 3 || arguments.length > 5) {
+            sender.sendMessage(Component.text(
+                    "Usage: /reports evidence <report-id> <public|private|client> [snapshot] [page]"
+            ));
+            return true;
+        }
+        UUID reportId = uuid(sender, arguments[1]);
+        if (reportId == null) {
+            return true;
+        }
+        EvidenceKind kind = evidenceFormatter.parseKind(arguments[2]).orElse(null);
+        if (kind == null) {
+            sender.sendMessage(Component.text("Evidence kind must be public, private, or client."));
+            return true;
+        }
+        Integer snapshot = optionalPositiveInteger(sender, arguments, 3, "snapshot");
+        Integer page = optionalPositiveInteger(sender, arguments, 4, "page");
+        if (snapshot == null || page == null) {
+            return true;
+        }
+        submit(sender, () -> renderEvidence(sender, reportId, kind, snapshot, page));
+        return true;
+    }
+
+    private boolean stateChange(CommandSender sender, String[] arguments) {
         ReportAction action = parseAction(arguments[0]);
         if (action == null || arguments.length < 3) {
             usage(sender);
@@ -108,6 +170,10 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         try {
             revision = Long.parseLong(arguments[2]);
         } catch (NumberFormatException exception) {
+            sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
+            return true;
+        }
+        if (revision < 0) {
             sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
             return true;
         }
@@ -127,7 +193,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
             return true;
         }
-        UUID actorId = sender instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
+        UUID actorId = actorId(sender);
         submit(sender, () -> change(sender, new ReportStateChangeRequest(
                 reportId,
                 actorId,
@@ -140,13 +206,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private void list(CommandSender sender, ReportQueue queue) {
+    private void list(CommandSender sender, ReportQueue queue, UUID actorId) {
         ReportStore store = reports.get();
         if (store == null) {
             send(sender, "Report storage is not ready.");
             return;
         }
-        UUID actorId = sender instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
         List<ReportSummary> summaries = store.list(queue, actorId, 50);
         send(sender, queue + " reports: " + summaries.size());
         for (ReportSummary summary : summaries) {
@@ -156,7 +221,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void details(CommandSender sender, UUID reportId) {
+    private void details(CommandSender sender, UUID reportId, boolean evidenceAccess) {
         ReportStore store = reports.get();
         if (store == null) {
             send(sender, "Report storage is not ready.");
@@ -172,12 +237,54 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
                 + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
         send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
+        String reporterCoordinates = evidenceAccess ? details.reporterCoordinates().orElse("unavailable") : "restricted";
+        String targetCoordinates = evidenceAccess ? details.targetCoordinates().orElse("unavailable") : "restricted";
         send(sender, "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
-                + " reporter-coordinates=" + details.reporterCoordinates().orElse("unavailable")
-                + " target-coordinates=" + details.targetCoordinates().orElse("unavailable"));
+                + " reporter-coordinates=" + reporterCoordinates
+                + " target-coordinates=" + targetCoordinates);
         send(sender, "Evidence snapshots: public-chat=" + details.publicChatSnapshots().size()
                 + ", private-message=" + details.privateMessageSnapshots().size()
                 + ", client=" + details.clientEvidenceSnapshots().size());
+        send(sender, evidenceAccess
+                ? "Inspect retained contents with /reports evidence <report-id> <public|private|client> [snapshot] [page]."
+                : "Sensitive evidence contents and exact coordinates require " + EVIDENCE_PERMISSION + '.');
+    }
+
+    private void renderEvidence(
+            CommandSender sender,
+            UUID reportId,
+            EvidenceKind kind,
+            int requestedSnapshot,
+            int requestedPage
+    ) {
+        ReportStore store = reports.get();
+        if (store == null) {
+            send(sender, "Report storage is not ready.");
+            return;
+        }
+        ReportDetails details = store.details(reportId).orElse(null);
+        if (details == null) {
+            send(sender, "That report does not exist.");
+            return;
+        }
+        try {
+            EvidencePage page = evidenceFormatter.render(details, kind, requestedSnapshot, requestedPage);
+            if (page.totalSnapshots() == 0) {
+                send(sender, "Report " + reportId + " has no retained " + kind.commandName() + " evidence.");
+                return;
+            }
+            send(sender, "Report " + reportId + " " + kind.commandName() + " evidence: snapshot "
+                    + page.snapshot() + '/' + page.totalSnapshots() + ", page " + page.page() + '/' + page.totalPages());
+            for (String line : page.lines()) {
+                send(sender, line);
+            }
+            if (page.page() < page.totalPages()) {
+                send(sender, "Next: /reports evidence " + reportId + ' ' + kind.commandName() + ' '
+                        + page.snapshot() + ' ' + (page.page() + 1));
+            }
+        } catch (IllegalArgumentException exception) {
+            send(sender, "Invalid evidence page: " + exception.getMessage());
+        }
     }
 
     private void change(CommandSender sender, ReportStateChangeRequest request) {
@@ -236,11 +343,40 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         };
     }
 
+    private static UUID actorId(CommandSender sender) {
+        return sender instanceof Player player ? player.getUniqueId() : consoleActor();
+    }
+
+    private static UUID consoleActor() {
+        return new UUID(0L, 0L);
+    }
+
     private static UUID uuid(CommandSender sender, String input) {
         try {
             return UUID.fromString(input);
         } catch (IllegalArgumentException exception) {
             sender.sendMessage(Component.text("Report IDs use UUID format."));
+            return null;
+        }
+    }
+
+    private static Integer optionalPositiveInteger(
+            CommandSender sender,
+            String[] arguments,
+            int index,
+            String name
+    ) {
+        if (arguments.length <= index) {
+            return 1;
+        }
+        try {
+            int value = Integer.parseInt(arguments[index]);
+            if (value < 1) {
+                throw new NumberFormatException("not positive");
+            }
+            return value;
+        } catch (NumberFormatException exception) {
+            sender.sendMessage(Component.text("Evidence " + name + " must be a positive number."));
             return null;
         }
     }
@@ -251,15 +387,22 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("       /reports <open|mine|claimed|review|closed>"));
         sender.sendMessage(Component.text("       /reports view <report-id>"));
         sender.sendMessage(Component.text(
+                "       /reports evidence <report-id> <public|private|client> [snapshot] [page]"
+        ));
+        sender.sendMessage(Component.text(
                 "       /reports <claim|awaitreview|close|noviolation> <report-id> <revision> <note> [CONFIRM]"
         ));
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
-        return arguments.length == 1
-                ? List.of("note", "cancel", "open", "mine", "claimed", "review", "closed", "view", "claim",
-                        "awaitreview", "close", "noviolation")
-                : List.of();
+        if (arguments.length == 1) {
+            return List.of("note", "cancel", "evidence", "open", "mine", "claimed", "review", "closed", "view",
+                    "claim", "awaitreview", "close", "noviolation");
+        }
+        if (arguments.length == 3 && arguments[0].equalsIgnoreCase("evidence")) {
+            return List.of("public", "private", "client");
+        }
+        return List.of();
     }
 }
