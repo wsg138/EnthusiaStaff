@@ -33,7 +33,7 @@ One primary owner per information type reduces drift:
 | Core feature status and entry points | `Core-Platform-and-Infrastructure.md` |
 | Moderation feature status and entry points | `Moderation,-Punishments,-and-Reports.md` |
 | Staff/player-state feature status and entry points | `Staff-Tools,-Investigations,-and-Player-State-Safety.md` |
-| Provider/migration/release status and entry points | `Integrations,-Migration,-and-Release-Readiness.md` |
+| Provider/migration/release status and entry points | `Integrations,-Migration-and-Release-Readiness.md` |
 | Durable remaining-product map | `Development-Blueprint.md` |
 | Developer task routing | `Developer-Guide-Index.md` |
 | Detailed source map and feature traces | `Developer-Code-Guide.md` |
@@ -128,7 +128,7 @@ Before merge confirm:
 
 The publisher uses the protected `wiki-production` environment and requires write access to the Wiki repository. Repository/organization policy may require a reviewer.
 
-The workflow first tries the job's `GITHUB_TOKEN`. If Wiki push permissions require a fallback, configure the protected environment secret:
+The workflow uses the protected environment secret `WIKI_PUBLISH_TOKEN` when it is configured. Otherwise, it uses the job's `GITHUB_TOKEN`:
 
 ```text
 WIKI_PUBLISH_TOKEN
