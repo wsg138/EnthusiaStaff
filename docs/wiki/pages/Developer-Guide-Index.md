@@ -16,7 +16,7 @@ Start here when you need to change, review, debug, or validate EnthusiaStaff. Th
 | Review vanish/session scheduling deeply | [[Vanish Internals]] | Paper visibility/staff source and runtime staging |
 | Build or prove a change | [[Build and Testing]] | exact workflow evidence for the reviewed SHA |
 | Diagnose a runtime failure | [[Recovery and Troubleshooting]] | matching feature hub, source map, logs/evidence |
-| Understand remaining product work | [[Remaining Development Map|Development-Blueprint]] | goals, requirements matrix, explicitly assigned orchestration records |
+| Understand remaining product work | [[Development-Blueprint]] | goals, requirements matrix, explicitly assigned orchestration records |
 | Change or publish Wiki documentation | [[Wiki Maintenance]] | repository Wiki README and validation workflow |
 
 ## Feature ownership
