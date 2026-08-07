@@ -156,6 +156,11 @@ final class StaffToolRandomTeleportService {
         message(actorId, "Teleported to a suitable random player: " + target.name() + '.');
     }
 
+    private void onEntity(UUID playerId, Consumer<Player> operation) {
+        onEntity(playerId, operation, () -> {
+        });
+    }
+
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
@@ -176,8 +181,7 @@ final class StaffToolRandomTeleportService {
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)), () -> {
-        });
+        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
     private record TargetSnapshot(UUID playerId, String name, Location location) {
