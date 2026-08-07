@@ -131,14 +131,22 @@ public final class ReportEvidenceFormatter {
         add(lines, root, "bedrockDevice", "Bedrock device");
         add(lines, root, "geyserStatus", "Geyser");
         add(lines, root, "autoClickerStatus", "AutoClicker");
-        if (present(root, "autoClickerHandshake")) {
-            lines.add("AutoClicker handshake: " + bounded(root.path("autoClickerHandshake").toString()));
-        }
+        renderAutoClickerHandshake(lines, root.path("autoClickerHandshake"));
         add(lines, root, "polarStatus", "Polar");
         if (present(root, "polarMetadata")) {
             lines.add("Polar metadata: withheld from chat presentation");
         }
         return List.copyOf(lines);
+    }
+
+    private static void renderAutoClickerHandshake(List<String> lines, JsonNode handshake) {
+        if (!handshake.isObject()) {
+            return;
+        }
+        add(lines, handshake, "modVersion", "AutoClicker mod version");
+        add(lines, handshake, "loader", "AutoClicker loader");
+        add(lines, handshake, "minecraftVersion", "AutoClicker Minecraft");
+        add(lines, handshake, "receivedAt", "AutoClicker received");
     }
 
     private static void add(List<String> lines, JsonNode root, String field, String label) {
