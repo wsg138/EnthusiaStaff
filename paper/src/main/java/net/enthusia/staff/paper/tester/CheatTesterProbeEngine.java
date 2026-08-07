@@ -1,10 +1,12 @@
 package net.enthusia.staff.paper.tester;
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
+import net.enthusia.staff.domain.tester.CheatTesterType;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -23,32 +25,29 @@ final class CheatTesterProbeEngine {
     private final JavaPlugin plugin;
     private final CheatTesterSettings settings;
     private final FakeEntityAdapter fakeEntities;
-    private final Map<Integer, UUID> fakeEntityTargets;
+    private final CheatTesterFakeEntityState fakeEntityState;
     private final Predicate<CheatTesterSession> sampleActive;
     private final BiConsumer<CheatTesterSession, String> retirement;
-    private final Map<net.enthusia.staff.domain.tester.CheatTesterType, ProbeStarter> starters;
+    private final Map<CheatTesterType, ProbeStarter> starters;
 
     CheatTesterProbeEngine(
             JavaPlugin plugin,
             CheatTesterSettings settings,
             FakeEntityAdapter fakeEntities,
-            Map<Integer, UUID> fakeEntityTargets,
+            CheatTesterFakeEntityState fakeEntityState,
             Predicate<CheatTesterSession> sampleActive,
             BiConsumer<CheatTesterSession, String> retirement
     ) {
-        this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.settings = java.util.Objects.requireNonNull(settings, "settings");
-        this.fakeEntities = java.util.Objects.requireNonNull(fakeEntities, "fakeEntities");
-        this.fakeEntityTargets = java.util.Objects.requireNonNull(fakeEntityTargets, "fakeEntityTargets");
-        this.sampleActive = java.util.Objects.requireNonNull(sampleActive, "sampleActive");
-        this.retirement = java.util.Objects.requireNonNull(retirement, "retirement");
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.settings = Objects.requireNonNull(settings, "settings");
+        this.fakeEntities = Objects.requireNonNull(fakeEntities, "fakeEntities");
+        this.fakeEntityState = Objects.requireNonNull(fakeEntityState, "fakeEntityState");
+        this.sampleActive = Objects.requireNonNull(sampleActive, "sampleActive");
+        this.retirement = Objects.requireNonNull(retirement, "retirement");
         this.starters = createStarters();
     }
 
-    CheatTesterSession.PreparedProbe prepare(
-            Player target,
-            net.enthusia.staff.domain.tester.CheatTesterType type
-    ) {
+    CheatTesterSession.PreparedProbe prepare(Player target, CheatTesterType type) {
         if (target.getOpenInventory().getType() != org.bukkit.event.inventory.InventoryType.CRAFTING) {
             target.closeInventory();
         }
@@ -60,7 +59,7 @@ final class CheatTesterProbeEngine {
     }
 
     void begin(Player target, CheatTesterSession session) {
-        ProbeStarter starter = java.util.Objects.requireNonNull(starters.get(session.type), "cheat tester probe starter");
+        ProbeStarter starter = Objects.requireNonNull(starters.get(session.type), "cheat tester probe starter");
         starter.start(target, session);
     }
 
@@ -69,7 +68,7 @@ final class CheatTesterProbeEngine {
         if (handle == null) {
             return;
         }
-        fakeEntityTargets.remove(handle.entityId());
+        fakeEntityState.remove(session);
         fakeEntities.destroy(target, handle);
         scheduleHideForStaff(session);
     }
@@ -87,14 +86,13 @@ final class CheatTesterProbeEngine {
         });
     }
 
-    private Map<net.enthusia.staff.domain.tester.CheatTesterType, ProbeStarter> createStarters() {
-        EnumMap<net.enthusia.staff.domain.tester.CheatTesterType, ProbeStarter> configured =
-                new EnumMap<>(net.enthusia.staff.domain.tester.CheatTesterType.class);
-        configured.put(net.enthusia.staff.domain.tester.CheatTesterType.TOTEM_REFILL, this::beginTotem);
-        configured.put(net.enthusia.staff.domain.tester.CheatTesterType.AUTO_ARMOR, this::beginArmor);
-        configured.put(net.enthusia.staff.domain.tester.CheatTesterType.VELOCITY, (target, ignored) -> beginVelocity(target));
-        configured.put(net.enthusia.staff.domain.tester.CheatTesterType.NO_FALL, this::beginNoFall);
-        configured.put(net.enthusia.staff.domain.tester.CheatTesterType.FAKE_ENTITY, this::beginFake);
+    private Map<CheatTesterType, ProbeStarter> createStarters() {
+        EnumMap<CheatTesterType, ProbeStarter> configured = new EnumMap<>(CheatTesterType.class);
+        configured.put(CheatTesterType.TOTEM_REFILL, this::beginTotem);
+        configured.put(CheatTesterType.AUTO_ARMOR, this::beginArmor);
+        configured.put(CheatTesterType.VELOCITY, (target, ignored) -> beginVelocity(target));
+        configured.put(CheatTesterType.NO_FALL, this::beginNoFall);
+        configured.put(CheatTesterType.FAKE_ENTITY, this::beginFake);
         return Map.copyOf(configured);
     }
 
@@ -210,7 +208,7 @@ final class CheatTesterProbeEngine {
         }
         Location location = fakeLocation(target);
         session.fakeLocation = CheatTesterSession.StartPoint.capture(location);
-        fakeEntityTargets.put(session.fakeHandle.entityId(), session.targetId);
+        fakeEntityState.track(session.fakeHandle, session.targetId);
         fakeEntities.show(target, session.fakeHandle, location);
         scheduleShowForStaff(session, location);
         session.sampleTask = target.getScheduler().runAtFixedRate(
@@ -304,7 +302,7 @@ final class CheatTesterProbeEngine {
         return -1;
     }
 
-    private static void cancel(io.papermc.paper.threadedregions.scheduler.ScheduledTask task) {
+    private static void cancel(ScheduledTask task) {
         if (task != null) {
             try {
                 task.cancel();
