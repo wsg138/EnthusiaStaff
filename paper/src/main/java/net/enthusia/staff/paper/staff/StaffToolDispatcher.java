@@ -137,10 +137,17 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         StaffToolResolution resolution = resolveHeldTool(player);
-        if (!resolution.tagged() || !resolution.valid() || resolution.tool() != StaffToolDefinition.CHEAT_TESTER) {
+        if (!resolution.tagged()) {
             return;
         }
         event.setCancelled(true);
+        if (!resolution.valid()) {
+            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            return;
+        }
+        if (resolution.tool() != StaffToolDefinition.CHEAT_TESTER) {
+            return;
+        }
         dispatchCheatRun(player, target, resolution.tool());
     }
 
