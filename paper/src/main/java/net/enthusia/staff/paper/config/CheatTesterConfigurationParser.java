@@ -8,6 +8,7 @@ import net.enthusia.staff.paper.tester.CheatTesterSettings;
 
 final class CheatTesterConfigurationParser {
     private static final String ROOT = "staff-tools.cheat-tester";
+    private static final String VERTICAL = "vertical";
     private static final Set<String> TESTER_KEYS = Set.of(
             "timeout-millis",
             "maximum-active-global",
@@ -17,8 +18,8 @@ final class CheatTesterConfigurationParser {
             "no-fall",
             "probe-ticks"
     );
-    private static final Set<String> VELOCITY_KEYS = Set.of("horizontal", "vertical");
-    private static final Set<String> NO_FALL_KEYS = Set.of("vertical");
+    private static final Set<String> VELOCITY_KEYS = Set.of("horizontal", VERTICAL);
+    private static final Set<String> NO_FALL_KEYS = Set.of(VERTICAL);
 
     CheatTesterSettings parse(JsonNode root, List<String> errors) {
         CheatTesterSettings defaults = CheatTesterSettings.defaults();
@@ -109,8 +110,8 @@ final class CheatTesterConfigurationParser {
         );
         double vertical = boundedDouble(
                 velocity,
-                "vertical",
-                root + ".vertical",
+                VERTICAL,
+                root + "." + VERTICAL,
                 defaults.velocityVertical(),
                 0.0D,
                 2.0D,
@@ -125,8 +126,8 @@ final class CheatTesterConfigurationParser {
         ConfigurationNodes.rejectUnknown(noFall, NO_FALL_KEYS, root, errors);
         return boundedDouble(
                 noFall,
-                "vertical",
-                root + ".vertical",
+                VERTICAL,
+                root + "." + VERTICAL,
                 defaults.noFallVertical(),
                 0.1D,
                 2.0D,
