@@ -40,6 +40,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final CheatTesterSettings settings;
     private final CheatTesterSnapshotCodec snapshots;
     private final CheatTesterEvidence evidence;
+    private final CheatTesterJournalCompletion completion;
     private final ObjectMapper json = new ObjectMapper();
     private final Map<UUID, CheatTesterSession> activeByTarget = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
@@ -68,6 +69,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.runtime = new CheatTesterRuntimeSupport(plugin, workers, settings, closed);
         this.snapshots = new CheatTesterSnapshotCodec(plugin);
         this.evidence = new CheatTesterEvidence(clock, settings);
+        this.completion = new CheatTesterJournalCompletion(clock);
         this.fakeEntityState = new CheatTesterFakeEntityState(clock, activeByTarget);
         this.fakeEntities = installFakeEntityAdapter();
         this.controls = new CheatTesterControlState(clock, staffMode::active, settings, activeByTarget);
@@ -529,7 +531,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return;
         }
         try {
-            if (!completeDurably(loaded, session, terminalState, reason, captured)) {
+            if (!completion.complete(loaded, session, terminalState, reason, captured)) {
                 throw new IllegalStateException("tester completion lost its durable state transition");
             }
             retireCompleted(session);
@@ -547,25 +549,6 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             );
             retireForRecovery(session, "Durable completion failed after restoration");
         }
-    }
-
-    private boolean completeDurably(
-            CheatTesterJournalStore loaded,
-            CheatTesterSession session,
-            CheatTesterSessionState terminalState,
-            String reason,
-            String captured
-    ) {
-        String bounded = CheatTesterEvidence.boundedReason(reason);
-        if (loaded.complete(session.sessionId, session.revision, terminalState, bounded, captured, clock.instant())) {
-            return true;
-        }
-        Optional<CheatTesterJournalRecord> current = loaded.activeForTarget(session.targetId);
-        if (current.isEmpty() || !current.orElseThrow().sessionId().equals(session.sessionId)) {
-            return false;
-        }
-        session.revision = current.orElseThrow().revision();
-        return loaded.complete(session.sessionId, session.revision, terminalState, bounded, captured, clock.instant());
     }
 
     private void completeFakeWithoutTarget(
@@ -694,7 +677,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return;
         }
         try {
-            loaded.activeForTarget(serverId, playerId).ifPresent(this::scheduleRecoveredRecord);
+            loaded.activeForTarget(playerId).ifPresent(this::scheduleRecoveredRecord);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Cheat tester join recovery lookup failed", exception);
         }
