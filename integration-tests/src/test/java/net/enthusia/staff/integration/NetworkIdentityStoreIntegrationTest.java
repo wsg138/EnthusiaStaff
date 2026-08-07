@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -49,8 +50,8 @@ class NetworkIdentityStoreIntegrationTest {
 
     @BeforeAll
     static void migrate() {
-        try (MariaDbRuntime ignored = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
-            // Flyway initialization is the only purpose of this runtime.
+        try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            runtime.operationalStateStore().current();
         }
     }
 
@@ -88,7 +89,7 @@ class NetworkIdentityStoreIntegrationTest {
                 expiration
         );
         JdbcNetworkIdentityStore store = store();
-        ProtectedNetworkIdentity identity = identity((byte) 11);
+        ProtectedNetworkIdentity identity = identity(1, (byte) 11);
 
         store.observeAndInherit(source, identity, now, false);
         assertTrue(store.setRelationship(
@@ -130,7 +131,7 @@ class NetworkIdentityStoreIntegrationTest {
         MariaDbIntegrationSupport.insertPlayer(DATABASE, joining, "Joining", now.minusSeconds(60));
         setCurrentServer(source, "SMP");
         JdbcNetworkIdentityStore store = store();
-        ProtectedNetworkIdentity identity = identity((byte) 12);
+        ProtectedNetworkIdentity identity = identity(1, (byte) 12);
 
         store.observeAndInherit(source, identity, now, false);
         NetworkIdentityObservationResult observation = store.observeAndInherit(
@@ -159,7 +160,7 @@ class NetworkIdentityStoreIntegrationTest {
     @Test
     void broadSharedNetworkSuppressesAutomaticGraphExpansion() throws SQLException {
         Instant now = Instant.parse("2026-08-07T16:00:00Z");
-        ProtectedNetworkIdentity identity = identity((byte) 13);
+        ProtectedNetworkIdentity identity = identity(1, (byte) 13);
         for (int index = 0; index < 21; index++) {
             UUID player = UUID.randomUUID();
             MariaDbIntegrationSupport.insertPlayer(DATABASE, player, "Shared" + index, now.minusSeconds(60));
@@ -176,13 +177,30 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void equalityKeyVersionsDoNotCrossMatchEvenWithIdenticalTokenBytes() throws SQLException {
+        Instant now = Instant.parse("2026-08-07T16:30:00Z");
+        UUID source = UUID.randomUUID();
+        UUID joining = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "Source", now.minusSeconds(30));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, joining, "Joining", now.minusSeconds(10));
+        ProtectedNetworkIdentity oldVersion = identity(1, (byte) 18);
+        ProtectedNetworkIdentity newVersion = identity(2, (byte) 18);
+        insertToken(source, oldVersion, now.minusSeconds(20));
+
+        NetworkIdentityObservationResult result = store().observeAndInherit(joining, newVersion, now, false);
+
+        assertEquals(0, result.matchedPlayers());
+        assertEquals(0, relationshipCount(joining));
+    }
+
+    @Test
     void duplicateProxyObservationsAreIdempotentForRelationshipAndEvidence() throws Exception {
         Instant now = Instant.parse("2026-08-07T17:00:00Z");
         UUID source = UUID.randomUUID();
         UUID joining = UUID.randomUUID();
         MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "Source", now.minusSeconds(60));
         MariaDbIntegrationSupport.insertPlayer(DATABASE, joining, "Joining", now.minusSeconds(60));
-        ProtectedNetworkIdentity identity = identity((byte) 14);
+        ProtectedNetworkIdentity identity = identity(1, (byte) 14);
         store().observeAndInherit(source, identity, now.minusSeconds(1), false);
 
         JdbcNetworkIdentityStore firstStore = store();
@@ -218,10 +236,10 @@ class NetworkIdentityStoreIntegrationTest {
         MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "Source", now.minus(Duration.ofDays(200)));
         MariaDbIntegrationSupport.insertPlayer(DATABASE, joining, "Joining", now.minus(Duration.ofDays(200)));
         JdbcNetworkIdentityStore firstStore = store();
-        ProtectedNetworkIdentity currentIdentity = identity((byte) 15);
+        ProtectedNetworkIdentity currentIdentity = identity(1, (byte) 15);
         firstStore.observeAndInherit(source, currentIdentity, now.minusSeconds(2), false);
         firstStore.observeAndInherit(joining, currentIdentity, now.minusSeconds(1), false);
-        insertToken(source, identity((byte) 16), old);
+        insertToken(source, identity(1, (byte) 16), old);
         insertOldEvidence(source, joining, old);
 
         NetworkIdentityRetentionResult firstBatch = firstStore.purgeExpired(now.minus(Duration.ofDays(90)), 1);
@@ -262,12 +280,12 @@ class NetworkIdentityStoreIntegrationTest {
         return new JdbcNetworkIdentityStore(dataSource, new ObjectMapper());
     }
 
-    private static ProtectedNetworkIdentity identity(byte value) {
+    private static ProtectedNetworkIdentity identity(int keyVersion, byte value) {
         byte[] token = new byte[32];
         byte[] encrypted = new byte[32];
         Arrays.fill(token, value);
         Arrays.fill(encrypted, (byte) (value + 1));
-        return new ProtectedNetworkIdentity(1, token, 1, encrypted);
+        return new ProtectedNetworkIdentity(keyVersion, token, keyVersion, encrypted);
     }
 
     private void insertToken(UUID playerId, ProtectedNetworkIdentity identity, Instant seenAt) throws SQLException {
@@ -291,7 +309,6 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     private void insertOldEvidence(UUID first, UUID second, Instant observedAt) throws SQLException {
-        UUID relationshipId = relationshipId(first, second);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      INSERT INTO alt_evidence(
@@ -299,7 +316,7 @@ class NetworkIdentityStoreIntegrationTest {
                      ) VALUES (?, ?, 'SAME_NETWORK', 0.2500, '{\"source\":\"TEST_OLD\"}', ?)
                      """)) {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(UUID.randomUUID()));
-            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(relationshipId));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(relationshipId(first, second)));
             statement.setTimestamp(3, Timestamp.from(observedAt));
             statement.executeUpdate();
         }
@@ -316,27 +333,18 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     private int relationshipCount(UUID playerId) throws SQLException {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     SELECT COUNT(*) FROM alt_relationships
-                     WHERE lower_player_id = ? OR upper_player_id = ?
-                     """)) {
-            byte[] id = MariaDbIntegrationSupport.uuidBytes(playerId);
-            statement.setBytes(1, id);
-            statement.setBytes(2, id);
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                return result.getInt(1);
-            }
-        }
+        return intQuery(
+                "SELECT COUNT(*) FROM alt_relationships WHERE lower_player_id = ? OR upper_player_id = ?",
+                MariaDbIntegrationSupport.uuidBytes(playerId),
+                MariaDbIntegrationSupport.uuidBytes(playerId)
+        );
     }
 
     private AltRelationshipState relationshipState(UUID first, UUID second) throws SQLException {
-        UUID relationshipId = relationshipId(first, second);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT relationship_state FROM alt_relationships WHERE relationship_id = ?")) {
-            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(relationshipId));
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(relationshipId(first, second)));
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return AltRelationshipState.valueOf(result.getString(1));
@@ -359,45 +367,32 @@ class NetworkIdentityStoreIntegrationTest {
             statement.setBytes(4, firstBytes);
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
-                return uuid(result.getBytes(1));
+                ByteBuffer buffer = ByteBuffer.wrap(result.getBytes(1));
+                return new UUID(buffer.getLong(), buffer.getLong());
             }
         }
     }
 
     private int evidenceCount(UUID first, UUID second, String evidenceType) throws SQLException {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     SELECT COUNT(*) FROM alt_evidence
-                     WHERE relationship_id = ? AND evidence_type = ?
-                     """)) {
-            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(relationshipId(first, second)));
-            statement.setString(2, evidenceType);
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                return result.getInt(1);
-            }
-        }
+        return intQuery(
+                "SELECT COUNT(*) FROM alt_evidence WHERE relationship_id = ? AND evidence_type = ?",
+                MariaDbIntegrationSupport.uuidBytes(relationshipId(first, second)),
+                evidenceType
+        );
     }
 
     private int inheritedSanctionCount(UUID targetId, UUID inheritedFrom) throws SQLException {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     SELECT COUNT(*) FROM sanctions WHERE target_id = ? AND inherited_from = ?
-                     """)) {
-            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(targetId));
-            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(inheritedFrom));
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                return result.getInt(1);
-            }
-        }
+        return intQuery(
+                "SELECT COUNT(*) FROM sanctions WHERE target_id = ? AND inherited_from = ?",
+                MariaDbIntegrationSupport.uuidBytes(targetId),
+                MariaDbIntegrationSupport.uuidBytes(inheritedFrom)
+        );
     }
 
     private Instant inheritedExpiration(UUID targetId, UUID inheritedFrom) throws SQLException {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     SELECT expiration_at FROM sanctions WHERE target_id = ? AND inherited_from = ?
-                     """)) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT expiration_at FROM sanctions WHERE target_id = ? AND inherited_from = ?")) {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(targetId));
             statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(inheritedFrom));
             try (ResultSet result = statement.executeQuery()) {
@@ -424,12 +419,26 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     private int auditCount() throws SQLException {
+        return intQuery("SELECT COUNT(*) FROM audit_events WHERE event_type = 'ALT_RELATIONSHIP_CHANGED'");
+    }
+
+    private int intQuery(String sql, Object... parameters) throws SQLException {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "SELECT COUNT(*) FROM audit_events WHERE event_type = 'ALT_RELATIONSHIP_CHANGED'");
-             ResultSet result = statement.executeQuery()) {
-            result.next();
-            return result.getInt(1);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int index = 0; index < parameters.length; index++) {
+                Object parameter = parameters[index];
+                if (parameter instanceof byte[] bytes) {
+                    statement.setBytes(index + 1, bytes);
+                } else if (parameter instanceof String value) {
+                    statement.setString(index + 1, value);
+                } else {
+                    throw new IllegalArgumentException("unsupported integration-test query parameter");
+                }
+            }
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getInt(1);
+            }
         }
     }
 
@@ -459,10 +468,5 @@ class NetworkIdentityStoreIntegrationTest {
         config.setMaximumPoolSize(8);
         config.setConnectionTimeout(5_000);
         return new HikariDataSource(config);
-    }
-
-    private static UUID uuid(byte[] bytes) {
-        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
-        return new UUID(buffer.getLong(), buffer.getLong());
     }
 }
