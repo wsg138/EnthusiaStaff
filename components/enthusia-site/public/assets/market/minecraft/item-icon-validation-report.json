@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "minecraftVersion": "1.21.11",
+  "publicCatalogItems": 1487,
+  "successfullyResolvedIcons": 1487,
+  "directOfficialTextures": 586,
+  "directOfficialModelLayers": 21,
+  "stableBlockTextures": 609,
+  "stableDerivedBlockIcons": 237,
+  "temporaryIntentionalBedWoolIcons": 16,
+  "officialPotionComposites": 0,
+  "officialArmorTrimTextures": 18,
+  "unresolvedIcons": 0,
+  "unrelatedFallbackIcons": 0,
+  "barrierFallbackPublicItems": 0,
+  "paperFallbackPublicItems": 0,
+  "remainingFallbackIcons": 0,
+  "trimTemplateValidation": [
+    {
+      "id": "bolt",
+      "material": "BOLT_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/bolt_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/bolt_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "coast",
+      "material": "COAST_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/coast_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/coast_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "dune",
+      "material": "DUNE_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/dune_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/dune_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "eye",
+      "material": "EYE_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/eye_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/eye_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "flow",
+      "material": "FLOW_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/flow_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/flow_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "host",
+      "material": "HOST_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/host_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/host_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "raiser",
+      "material": "RAISER_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/raiser_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/raiser_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "rib",
+      "material": "RIB_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/rib_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/rib_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "sentry",
+      "material": "SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/sentry_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/sentry_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "shaper",
+      "material": "SHAPER_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/shaper_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/shaper_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "silence",
+      "material": "SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/silence_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/silence_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "snout",
+      "material": "SNOUT_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/snout_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/snout_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "spire",
+      "material": "SPIRE_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/spire_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/spire_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "tide",
+      "material": "TIDE_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/tide_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/tide_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "vex",
+      "material": "VEX_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/vex_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/vex_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "ward",
+      "material": "WARD_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/ward_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/ward_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "wayfinder",
+      "material": "WAYFINDER_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/wayfinder_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/wayfinder_armor_trim_smithing_template.png"
+    },
+    {
+      "id": "wild",
+      "material": "WILD_ARMOR_TRIM_SMITHING_TEMPLATE",
+      "expectedTexture": "minecraft/vanilla/textures/item/wild_armor_trim_smithing_template.png",
+      "actualTexture": "minecraft/vanilla/textures/item/wild_armor_trim_smithing_template.png"
+    }
+  ],
+  "resolutions": {
+    "DIRECT_OFFICIAL_TEXTURE": 586,
+    "DIRECT_OFFICIAL_MODEL_LAYER": 21,
+    "STABLE_BLOCK_TEXTURE": 609,
+    "STABLE_DERIVED_BLOCK_ICON": 237,
+    "TEMPORARY_INTENTIONAL_BED_WOOL_ICON": 16,
+    "OFFICIAL_POTION_COMPOSITE": 0,
+    "OFFICIAL_ARMOR_TRIM_TEXTURE": 18
+  },
+  "validatedModelItems": [
+    {
+      "material": "STONE",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_LOG",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_STAIRS",
+      "resolution": "STABLE_DERIVED_BLOCK_ICON",
+      "sourceTexture": null
+    },
+    {
+      "material": "BARREL",
+      "resolution": "STABLE_DERIVED_BLOCK_ICON",
+      "sourceTexture": null
+    },
+    {
+      "material": "CHEST",
+      "resolution": "DIRECT_OFFICIAL_TEXTURE",
+      "sourceTexture": "item/paper"
+    },
+    {
+      "material": "FURNACE",
+      "resolution": "STABLE_DERIVED_BLOCK_ICON",
+      "sourceTexture": null
+    },
+    {
+      "material": "CRAFTING_TABLE",
+      "resolution": "STABLE_DERIVED_BLOCK_ICON",
+      "sourceTexture": null
+    },
+    {
+      "material": "ANVIL",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "HOPPER",
+      "resolution": "DIRECT_OFFICIAL_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "BEACON",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_FENCE",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": "block/oak_planks"
+    },
+    {
+      "material": "OAK_DOOR",
+      "resolution": "DIRECT_OFFICIAL_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_HANGING_SIGN",
+      "resolution": "DIRECT_OFFICIAL_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_LEAVES",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_PLANKS",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": null
+    },
+    {
+      "material": "OAK_PRESSURE_PLATE",
+      "resolution": "STABLE_BLOCK_TEXTURE",
+      "sourceTexture": "block/oak_planks"
+    },
+    {
+      "material": "RED_BED",
+      "resolution": "TEMPORARY_INTENTIONAL_BED_WOOL_ICON",
+      "sourceTexture": "block/red_wool"
+    },
+    {
+      "material": "BLUE_BED",
+      "resolution": "TEMPORARY_INTENTIONAL_BED_WOOL_ICON",
+      "sourceTexture": "block/blue_wool"
+    },
+    {
+      "material": "LIGHT_BLUE_BED",
+      "resolution": "TEMPORARY_INTENTIONAL_BED_WOOL_ICON",
+      "sourceTexture": "block/light_blue_wool"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.client.PaperPlayerPlatformResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -41,6 +42,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private final Supplier<SanctionLookup> sanctions;
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
+    private final PaperPlayerPlatformResolver platforms;
     private final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
     private ScheduledTask refreshTask;
 
@@ -60,6 +62,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         this.sanctions = sanctions;
         this.players = players;
         this.workers = workers;
+        this.platforms = PaperPlayerPlatformResolver.discover(plugin);
     }
 
     public void start() {
@@ -75,14 +78,16 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        UUID playerId = player.getUniqueId();
+        String username = player.getName();
+        PlayerPlatform platform = platforms.resolve(playerId);
+        Instant seenAt = clock.instant();
         submit(() -> {
             PlayerDirectory directory = players.get();
             if (directory != null) {
-                directory.recordSeen(
-                        player.getUniqueId(), player.getName(), PlayerPlatform.JAVA, serverId, clock.instant()
-                );
+                directory.recordSeenVerified(playerId, username, platform, serverId, seenAt);
             }
-            refreshNow(player.getUniqueId());
+            refreshNow(playerId);
         });
     }
 

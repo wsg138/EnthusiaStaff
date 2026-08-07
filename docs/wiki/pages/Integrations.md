@@ -112,8 +112,29 @@ See [[Vanish Internals]].
 
 ### Floodgate and Geyser
 
-Used for Bedrock identity, `*` aliases and client compatibility. Full Bedrock GUI,
-packet and fake-system acceptance has not been completed.
+Used for Bedrock identity, `*` aliases and client compatibility.
+
+Platform persistence has an explicit evidence boundary:
+
+- Paper resolves platform from the supported Floodgate API and the observed
+  Geyser/Floodgate availability state for that player UUID.
+- A working Floodgate observation may persist `BEDROCK` or `JAVA`.
+- Geyser with missing, unavailable or incompatible Floodgate persists `UNKNOWN`;
+  provider failure is never treated as proof of Java.
+- Velocity presence observations are intentionally unverified and therefore
+  persist `UNKNOWN` until a Paper backend supplies verified provider evidence.
+  They may update UUID, name history and presence, but cannot downgrade a known
+  platform.
+- A username beginning with `*` is a supported Bedrock alias shape, not proof of
+  platform. Platform is never inferred from username text.
+- Verified Bedrock evidence repairs legacy Java/unknown rows and is not
+  overwritten by later unverified, duplicate or out-of-order proxy observations.
+- Current and historical `*` aliases remain case-insensitively resolvable and
+  searchable through the player directory.
+
+Full representative Java/Bedrock, reconnect and multi-backend acceptance remains
+owned by private validation package `ES-V02`; this source package does not claim
+that staging evidence.
 
 ### ViaVersion and ViaBackwards
 

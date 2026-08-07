@@ -2,76 +2,43 @@
 
 Last updated: 2026-08-06
 
-This is a routing record. Live GitHub and `ai-agents/work-packages/PACKAGE-REGISTRY.md` must be reconciled before acting.
+Live GitHub state overrides stale records, but persistent package state must be published to `main`.
 
-## Repository
-
-| Field | Value |
-| --- | --- |
-| Repository | `wsg138/EnthusiaStaff` |
-| Default branch | `main` |
-| Current package starting `main` | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
-| Current live `main` | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
-| Previous package implementation merge | `203b2854d5546a6d3744037c367099129654b42a` |
-| Previous package finalization merge | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
-| Plugin version | `0.1.0-SNAPSHOT` |
-| Java/runtime | Java 21; Paper/Leaf backends, Velocity, MariaDB |
-| Highest migration | `V16`; V1–V16 remain immutable |
-| Issue #43 | Open and deferred; excluded from ES-P02 |
-
-## Current package state
-
-`ES-P02 BLOCKED — implementation and hosted product validation passed for frozen product head b63fa1fa09ae4a9ea90988143ecda2cc7decbe14. Required staging run 31072794096 failed twice because the ordinary ubuntu-latest build job received no runner and executed zero steps; the Pi job was skipped. The branch is also 53 commits ahead and 5 commits behind current main.`
+## Current routing
 
 | Field | Value |
 | --- | --- |
-| Canonical package status | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
-| Active package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Starting status | `READY` |
-| Current status | `BLOCKED` |
-| Starting `main` | `d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
-| Current live `main` | `5c969901146fc5081eec14b3c089bec7b06d5f5e` |
-| Branch | `package/es-p02-runtime-db-recovery` |
-| Pull request | `#70 — open, non-draft, unmerged, currently non-mergeable` |
-| Package handoff | `ai-agents/reports/package-handoffs/2026-08-05-es-p02-runtime-db-recovery.md` |
-| Frozen product head | `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` |
-| Current checkpoint | Product scope, tests, documentation, review repair, Java 21 build/test/coverage, MariaDB/Testcontainers, migration integrity, runtime-JAR/provider-leak, Codacy, and review-thread gates passed. Staging attempts 1 and 2 failed before any step because no hosted runner was assigned. |
-| Branch divergence | `53 commits ahead, 5 commits behind; merge base d94d0219a598c9afb7e19c4ea9fddafd554d6469` |
-| Exact next action | Recheck staging only when runner allocation may have recovered or new owner authorization exists. Then merge current main into the package branch through an ordinary merge commit, resolve conflicts, freeze the synchronized head, and rerun every exact-head gate before merge. |
-| Other ready package | `ES-X05 — remains READY and unstarted; do not activate it while this worker is handling ES-P02` |
+| Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness` |
+| Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-X05 — Website UX, authentication, and appeals` |
+| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; branch `package/es-p02-runtime-db-recovery`; PR #70; package-record head `80d4ea840f34017c09afb618f623581b31c6223d`; untouched |
+| ES-X05 status | `BLOCKED` / `PARKED_BLOCKED`; implementation merged; finalization branch `package/es-x05-finalization`; PR #74; head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`; untouched |
+| ES-P03 status | `COMPLETE` |
+| ES-P03 product head | `15608bc3099dc34aa080c80ca8e824ffd51cdae4` |
+| ES-P03 implementation merge / current implementation main | `b960e91ea59627a870ff24f89c2f761d0cbb68ab` via PR #75 |
+| ES-P03 validation | Coverage run `31133176482`, job `92726659126`; Wiki run `31133176536`, job `92726609318`; CodeRabbit success; Codacy 0 issues |
+| ES-P03 containment | product head is contained by merge commit; no changed files or unique product work beyond the merge |
+| Branch cleanup | remote ref deletion unavailable through the connected tool; containment is verified and the implementation branch is inactive |
+| Migration boundary | immutable V17; V1–V17 unchanged by ES-P03 |
+| Canonical handoff | [`2026-08-06-es-p03-bedrock-identity.md`](reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
+| Active implementation package | `NONE` |
+| Next owner action | repository owner `wsg138` may direct the next sequential worker after live classification; this worker does not select or activate another package |
+| Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
-## Selection evidence
+## ES-P03 completion evidence
 
-- Live GitHub contained open PR #70 for ES-P02, so resume-first selection applied.
-- The existing package record said Pi staging had failed, but the failure reason was incomplete.
-- Staging run `31072794096` attempt 1 build job `92524048937` had `runner_id: 0`, empty runner name, and `steps: []`; Pi job `92524054852` was skipped.
-- The failed build job was rerun. Attempt 2 build job `92541148296` again had `runner_id: 0`, empty runner name, and `steps: []`; Pi job `92541160241` was skipped.
-- No product build, Pi boot, or restart executed in staging, so no product failure and no pass is claimed.
-- Because the unavailable job is an ordinary hosted build, repository policy does not permit treating it as a passing or excepted gate.
-- No second package was started.
+- Paper now records verified platform observations through supported Floodgate evidence; local provider absence or incompatibility remains `UNKNOWN`, including proxy-hosted layouts.
+- Unverified Velocity observations retain UUID/name/presence but cannot corrupt a verified platform.
+- Configured single-`*` Bedrock current/history aliases and literal prefix search are supported without username-based platform inference.
+- Verified Bedrock repairs legacy rows and cannot be downgraded.
+- Unequal timestamps use event time; equal-time observations use a stable data-derived tie-breaker; stale/equal disconnects cannot clear a tied or newer connection.
+- MariaDB/Testcontainers coverage includes aliases/history, non-downgrade, out-of-order and equal-time races, reconnect handling, literal underscores, and invalid shapes.
+- Exact head `15608bc3099dc34aa080c80ca8e824ffd51cdae4` passed the Java 21 clean build, all tests, migrations, aggregate coverage generation, runtime-JAR integrity/provider-leak inspection, Wiki validation, Codacy, and CodeRabbit with all review threads resolved.
+- PR #75 merged normally as `b960e91ea59627a870ff24f89c2f761d0cbb68ab`.
 
-## Implemented scope
+## Routing exception boundary
 
-- Paper: bounded exponential bootstrap retry, one active attempt, cleanup-before-retry, stale callback rejection, shutdown suppression, exhaustion, recovery health, and scheduler-correct startup recovery.
-- Velocity: bounded transient retry, permanent-failure/manual-retry path, complete partial-resource cleanup, BOOTSTRAP authority until publication, deterministic shutdown, and serialized terminal transitions.
-- Reload: `enthusiastaff.reload`, complete candidate validation, immutable publication of fail-closed and appeal URL settings, rollback, concurrent-reload rejection, shutdown rejection, and explicit restart-required reporting for resource-bound settings.
-- Tests: worker and scheduler rejection, recovery, exhaustion, cleanup, stale callbacks, repeated reload, invalid candidate, publication rollback, restart-required candidates, atomic health, shutdown, and race paths.
-- Documentation: `docs/runtime-database-recovery.md`.
-- Orchestration: obsolete explicit-assignment rules replaced with automatic sequential package selection.
+ES-P02 remains blocked and was not marked complete. The 2026-08-06 owner instruction was a narrow exception for ES-P03 only. It does not automatically make ES-P04, ES-P05, ES-P09, or any other later package ready, and it does not waive future dependency or validation requirements.
 
-## Review state
+## Safety boundaries
 
-CodeRabbit identified three confirmed defects: a Paper terminal-health overwrite, a Velocity lost-update/stale-mode health race, and a Velocity overlapping bootstrap race. All were fixed. Manual review fixed two additional race windows. Codacy passed with zero annotations and zero valid unresolved review threads were recorded for the frozen product head.
-
-## Validation state
-
-Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14` passed source-repository Coverage workflow run `31072792371`, job `92524077883`, including Java 21, full tests, MariaDB/Testcontainers, migration integrity, changed-code coverage threshold, runtime JAR integrity, and provider-leak checks. Codacy and CodeRabbit checks passed. Snyk was skipped and is not counted as passing evidence.
-
-Required staging remains blocked. Parent run `31072790867`, job `92524036760`, dispatched staging run `31072794096`. Attempts 1 and 2 both failed before execution because the ordinary hosted build job received no runner. The Pi job was skipped. No ES-P02 owner-approved exception exists, and a missing ordinary hosted build cannot be relabeled as passed.
-
-## Boundaries
-
-- No production database, private player data, credential, secret, or production route was accessed.
-- No migration was added; V16 remains highest and V1–V16 remain immutable.
-- LiteBans remains authoritative.
-- Issue #43, staging acceptance, the shadow period, production migration, activation, cutover, rollback, ES-X05, and every other package remain untouched.
+No production credentials, Cloudflare secrets, punishment records, player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, or authority activation was authorized or performed. Representative Java/Bedrock staging remains owned by `ES-V02`.

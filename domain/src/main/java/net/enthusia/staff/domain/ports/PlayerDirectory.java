@@ -25,7 +25,28 @@ public interface PlayerDirectory {
 
     Optional<PlayerPresence> presence(UUID playerId);
 
+    /**
+     * Records an observation whose platform argument is only an unverified compatibility hint.
+     * Production persistence must store this observation as {@link PlayerPlatform#UNKNOWN}.
+     */
     void recordSeen(UUID playerId, String username, PlayerPlatform platform, String serverId, Instant seenAt);
+
+    /**
+     * Records a platform value derived from verified runtime provider evidence.
+     *
+     * <p>The default preserves lightweight test and adapter implementations. Authoritative
+     * persistence implementations must override this method to distinguish verified evidence
+     * from the compatibility method above.</p>
+     */
+    default void recordSeenVerified(
+            UUID playerId,
+            String username,
+            PlayerPlatform platform,
+            String serverId,
+            Instant seenAt
+    ) {
+        recordSeen(playerId, username, platform, serverId, seenAt);
+    }
 
     void recordDisconnected(UUID playerId, String serverId, Instant disconnectedAt);
 }

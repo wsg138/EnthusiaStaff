@@ -1,0 +1,15 @@
+{
+  "name": "enthusia-community-site",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/validate-site.mjs",
+    "test:appeals": "node --test tests/appeal-auth.test.mjs",
+    "test:potions": "node --test tests/potion-preview.test.mjs",
+    "mask-editor": "python scripts/cinematic-mask-editor.py",
+    "validate:cinematic": "python scripts/generate-terrain-mask.py --validate-only",
+    "test": "npm run check && npm run test:appeals && npm run test:potions"
+  }
+}

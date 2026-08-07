@@ -18,6 +18,7 @@ import net.enthusia.staff.persistence.JdbcWebsiteAppealRepository.AppealRow;
 
 final class JdbcWebsiteAppealStore {
     private static final String APPEAL_PREPARED = "PREPARED";
+    private static final String APPEAL_APPROVAL_PENDING = "APPROVAL_PENDING";
     private static final String APPEAL_APPLIED = "APPLIED";
     private static final String APPEAL_REJECTED = "REJECTED";
     private static final String ELIGIBLE = "ELIGIBLE";
@@ -266,7 +267,8 @@ final class JdbcWebsiteAppealStore {
             String state,
             String outcomeCode
     ) {
-        if (APPEAL_PREPARED.equals(existing.state())) {
+        if (APPEAL_PREPARED.equals(existing.state())
+                || APPEAL_APPROVAL_PENDING.equals(existing.state())) {
             return preparedTransitionAllowed(state, outcomeCode);
         }
         if (!APPEAL_APPLIED.equals(existing.state())
