@@ -39,13 +39,22 @@ class StaffToolDefinitionTest {
     }
 
     @Test
-    void operationalToolsExcludeDeferredCheatTesterForEveryRank() {
-        assertTrue(StaffToolDefinition.RANDOM_TELEPORT.availableFor(StaffRank.HELPER));
-        assertTrue(StaffToolDefinition.STAFF_TOOLS.availableFor(StaffRank.HELPER));
-        for (StaffRank rank : StaffRank.values()) {
-            assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(rank));
-        }
+    void cheatTesterIsRestrictedToAdvancedStaffRanks() {
+        assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.HELPER));
+        assertTrue(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.MOD));
+        assertTrue(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.DEVELOPER));
+        assertTrue(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.ADMIN));
+        assertTrue(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.FOUNDER));
+        assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.SYSTEM));
         assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(null));
+        assertEquals("enthusiastaff.cheattester", StaffToolDefinition.CHEAT_TESTER.permission());
+    }
+
+    @Test
+    void ordinaryOperationalToolsRemainAvailableToHelper() {
+        assertTrue(Arrays.stream(StaffToolDefinition.values())
+                .filter(tool -> tool != StaffToolDefinition.CHEAT_TESTER)
+                .allMatch(tool -> tool.availableFor(StaffRank.HELPER)));
     }
 
     @Test
