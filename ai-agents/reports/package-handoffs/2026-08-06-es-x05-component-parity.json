@@ -1,11 +1,23 @@
 {
-  "added_to_aggregate": [],
-  "aggregate_hash": "9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2",
-  "aggregate_sha": "96912301fc425ac6f5eff9349ee3b3d543d122eb",
-  "hash_method": "tools/component-sync/component_sync.py; SHA-256 over sorted POSIX paths and raw bytes; aggregate-only COMPONENT-METADATA.md excluded",
-  "missing_from_aggregate": [],
-  "modified": [],
-  "parity": true,
-  "standalone_hash": "9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2",
-  "standalone_sha": "b385f78c522f452cc48d78ed19fd2ee82573f64d"
+  "aggregate_implementation_merge": "345b7bbcec6facb45c7f96b0e6e181ac7a38e1da",
+  "aggregate_previous_hash": "9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2",
+  "aggregate_recovery_base": "9b1aac2677049ccc71dbddd963831f270c73dcd0",
+  "aggregate_sync_delta": [
+    "delete components/enthusia-site/functions/_middleware.js"
+  ],
+  "deferred_validation_package": "ES-V02",
+  "hash_method": "tools/component-sync/component_sync.py; sha256(sorted-posix-path,path-length,raw-byte-length,raw-bytes); aggregate-only COMPONENT-METADATA.md excluded",
+  "parity_state": "PENDING_EXACT_FINALIZATION_HEAD_RECHECK",
+  "previous_parity": true,
+  "standalone_current_sha": "2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2",
+  "standalone_previous_sha": "b385f78c522f452cc48d78ed19fd2ee82573f64d",
+  "standalone_delta_from_previous": {
+    "added": [],
+    "modified": [],
+    "removed": [
+      "functions/_middleware.js"
+    ]
+  },
+  "standalone_pr3_head": "db8d4dc6836729b0558eaa2926f8bf4f362b8eaf",
+  "staging_evidence": "OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED; not a pass"
 }
