@@ -3,14 +3,14 @@
 Date: 2026-08-06
 Package: `ES-P03 — Bedrock identity correctness`
 Worker: `ChatGPT sequential package worker`
-Status: `ACTIVE — implementation complete, exact-head validation pending`
+Status: `ACTIVE — implementation and review repairs complete, exact-head validation pending`
 
 ## Selection and routing
 
 - Legitimate aggregate `main` at selection: `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
 - Temporary package branch: `package/es-p03-bedrock-identity`.
-- Aggregate PR: #75.
-- Ordinary dependency: ES-P02 complete.
+- Aggregate PR: ready PR #75.
+- Ordinary dependency: ES-P02 must be `COMPLETE`, but it remains `BLOCKED` / `PARKED_BLOCKED`.
 - Owner instruction: continue another productive package while ES-P02 and ES-X05 remain parked until GitHub-hosted runners recover.
 - Recorded disposition: narrow owner-directed routing exception selecting ES-P03, the lowest-priority next implementation package. This does not mark ES-P02 complete, import PR #70, waive ES-P03 gates, or activate another package.
 
@@ -41,9 +41,12 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Verified Bedrock evidence upgrades legacy Java/unknown records and cannot be downgraded by later unverified Java/unknown observations.
 - Verified Java upgrades only unknown records; it cannot overwrite Bedrock.
 - A single configured `*` prefix is accepted for current and historical aliases and prefix search. Username text is never used as platform proof.
-- Current name, lowercase name, current/last server, first seen, and last seen are ordered by observation time.
-- Stale disconnects cannot clear a newer same-server connection.
-- Only an available Floodgate per-player observation can prove Java or Bedrock. Missing, unavailable, or incompatible local provider evidence remains `UNKNOWN`, including when both local plugins are absent, because Geyser and Floodgate may be installed only on the Velocity proxy.
+- Only an available Floodgate per-player observation can prove Java or Bedrock. Missing, unavailable, incompatible, or absent local provider evidence remains `UNKNOWN`, including proxy-hosted layouts.
+- Unequal timestamps order identity and presence changes by event time.
+- Equal timestamps use a stable binary key built from normalized username, display username, and server ID, so database arrival order cannot choose the current identity or server.
+- Historical display-name updates use a stable binary tie-breaker at equal timestamps.
+- Disconnects must be strictly later than the matching connection; stale or equal-time disconnects cannot clear it.
+- Valid prefix searches escape SQL `LIKE` wildcards, so `_` remains literal for Java and Bedrock aliases.
 - No migration was required; V1–V17 remain unchanged.
 
 ## Regression coverage
@@ -52,10 +55,12 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - MariaDB/Testcontainers tests cover:
   - `*` current and historical aliases;
   - case-insensitive exact and prefix lookup;
+  - literal underscore prefix matching;
   - unverified proxy Java hints persisting `UNKNOWN`;
   - verified Bedrock repair and non-downgrade;
   - out-of-order current-name/presence writes;
-  - stale disconnect protection; and
+  - arrival-order-independent equal-time identity/presence ties;
+  - stale and equal-time disconnect protection; and
   - invalid double-prefix alias rejection.
 - Integration documentation records the evidence boundary and the ES-P09/ES-V02 ownership handoff.
 
@@ -64,16 +69,17 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Retrieved exact Codacy annotations rather than relying on the summary count.
 - Removed duplicated test literals.
 - Split the ordered JDBC observation method into validation, transaction, player upsert, name upsert, and rollback helpers to remove the complexity findings.
-- Identified and corrected an additional source defect not reported by the analyzer: unavailable/incompatible Floodgate plus absent local Geyser had been treated as Java, which is unsafe for proxy-hosted Geyser/Floodgate layouts.
-- Independent final review against the official GeyserMC proxy guidance found the remaining both-local-providers-absent fallback. The guidance permits Geyser and Floodgate to live only on the proxy, so that state now remains `UNKNOWN` and has a regression test.
-- External review and exact-head analysis must be green on the final frozen SHA.
+- Corrected unavailable/incompatible and both-local-providers-absent Java fallbacks for proxy-hosted Geyser/Floodgate layouts.
+- CodeRabbit identified inconsistent ES-P02 dependency wording, stale draft/ready state, missing intended terminal/next-owner state, nondeterministic equal-time persistence, and unescaped SQL `LIKE` underscores.
+- The dependency/readiness/terminal records were reconciled; equal-time ordering now uses a stable data-derived tie-breaker; disconnects require strictly later event time; prefix patterns escape SQL wildcard characters.
+- The generic CodeRabbit docstring-coverage warning is not a functional or repository-configured source defect; first-party Java build policy remains `-Xlint:all -Werror`, configured static analysis, and zero valid unresolved review findings.
 
 ## Current gate observations
 
 - PR #75 is ready for review.
-- Exact-head hosted Coverage and Wiki validation passed on superseded head `ff0a67ad21c74125f838ec0736f7f1da76b7bf38`; those results are retained as historical evidence only.
-- CodeRabbit review quota recovered and began a full review after the proxy-hosted fallback correction, but any result on a superseded head is not final evidence.
-- The final candidate is the head containing the fallback correction and this synchronized handoff; it requires fresh exact-head Coverage, Wiki, Codacy, and CodeRabbit results.
+- Exact-head runs on earlier candidates are superseded and are historical evidence only.
+- The synchronized head containing all valid review repairs must receive fresh Coverage, Wiki, Codacy, and CodeRabbit results.
+- Zero valid unresolved review threads are required before merge.
 
 ## Validation requirements
 
@@ -84,6 +90,12 @@ Status: `ACTIVE — implementation complete, exact-head validation pending`
 - Wiki/package validation and configured static analysis.
 - Zero valid unresolved review threads.
 - Missing, queued, cancelled, skipped, merge-ref-only, rate-limited, superseded, or zero-runner ordinary hosted checks are not passes.
+
+## Intended terminal state and next owner action
+
+- Intended ES-P03 terminal state: `COMPLETE` after exact-head gates, normal merge, containment, safe branch cleanup, and persistent final publication.
+- Responsible next actor: repository owner `wsg138` directs or permits the next sequential package selection after live reclassification.
+- This worker will not activate that next package, and this package's routing exception does not automatically apply to later dependency edges.
 
 ## Systems not disturbed
 

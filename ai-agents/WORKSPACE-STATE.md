@@ -17,17 +17,19 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-X05 implementation | aggregate PR #73 merged normally as current starting `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`; standalone PR `wsg138/enthusia-site#2` merged as `b385f78c522f452cc48d78ed19fd2ee82573f64d` |
 | ES-X05 remaining blocker | ordinary hosted exact-head Coverage gate for PR #74; do not rerun until material runner recovery evidence exists |
 | Active package | `ES-P03 — Bedrock identity correctness` |
-| ES-P03 status | `ACTIVE — implementation complete, exact-head validation pending` |
+| ES-P03 status | `ACTIVE — implementation and review repairs complete; exact-head validation pending` |
 | ES-P03 classification | owner-directed actionable continuation under the narrow dependency-routing exception below |
-| ES-P03 branch / PR | `package/es-p03-bedrock-identity`; PR #75 |
+| ES-P03 branch / PR | `package/es-p03-bedrock-identity`; ready PR #75 |
 | ES-P03 starting SHA | `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
+| ES-P03 intended post-merge state | `COMPLETE` only after normal merge, exact-head gate evidence, containment, safe branch cleanup, and persistent final publication |
 | Migration boundary | immutable V17 on aggregate `main`; ES-P03 adds no migration |
 | Canonical handoff | [`2026-08-06-es-p03-bedrock-identity.md`](reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
+| Next owner action after ES-P03 | repository owner `wsg138` must direct or permit the next sequential package selection after live reclassification; this worker will not activate it, and the ES-P03 routing exception does not automatically waive any later dependency |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
 
 ## Owner-directed routing exception
 
-The ordinary execution graph requires ES-P02 to be complete before ES-P03. On 2026-08-06 the repository owner explicitly directed the next sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. No other ordinary implementation package was dependency-complete. The worker therefore selected the lowest-priority next implementation package, ES-P03, and records this as a narrow owner-directed routing exception.
+The ordinary execution graph requires ES-P02 to be complete before ES-P03. ES-P02 remains `BLOCKED` / `PARKED_BLOCKED`. On 2026-08-06 the repository owner explicitly directed the next sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. No other ordinary implementation package was dependency-complete. The worker therefore selected the lowest-priority next implementation package, ES-P03, and records this as a narrow owner-directed routing exception.
 
 This exception:
 
@@ -40,17 +42,20 @@ This exception:
 
 ## ES-P03 package boundary
 
-ES-P03 owns verified Java/Floodgate platform observations, `*`-prefixed Bedrock current/history names, deterministic UUID/name resolution, duplicate and out-of-order identity writes, and the canonical identity fields later consumed by ES-P09. It excludes alt-graph confidence/inheritance, live Bedrock acceptance, provider invention, production data, and issue #43 work.
+ES-P03 owns verified Java/Floodgate platform observations, `*`-prefixed Bedrock current/history names, deterministic UUID/name resolution, duplicate and out-of-order identity writes, equal-time tie handling, and the canonical identity fields later consumed by ES-P09. It excludes alt-graph confidence/inheritance, live Bedrock acceptance, provider invention, production data, and issue #43 work.
 
 ## Implemented checkpoint
 
-- Paper join observations derive platform from supported Floodgate/Geyser evidence and use the verified directory path.
+- Paper join observations derive platform from supported Floodgate evidence and use the verified directory path.
+- Missing, unavailable, incompatible, or absent local Floodgate evidence remains `UNKNOWN`, including proxy-hosted Geyser/Floodgate layouts.
 - Velocity observations remain unverified compatibility inputs; authoritative persistence records their platform as `UNKNOWN` while retaining UUID/name/presence updates.
 - Verified Bedrock repairs legacy Java/unknown rows and cannot be downgraded by weaker later observations.
 - Single-`*` current/history aliases and prefix lookup are supported without username-based platform inference.
-- Name/presence writes are ordered by observation time, and stale disconnects cannot clear newer connections.
+- Unequal timestamps use event time; equal-time identity and presence observations use a stable data-derived tie-breaker independent of database arrival order.
+- Stale and equal-time disconnects cannot clear a newer or tied connection.
+- SQL `LIKE` wildcard characters in valid prefixes, including `_`, are escaped and matched literally.
 - Domain and MariaDB regression coverage and integration documentation are present.
-- Harsh review resolved the initial four Codacy annotations and an additional broken-provider fallback defect; the final exact-head external gates remain mandatory.
+- Harsh review resolved initial Codacy annotations, the proxy-hosted provider fallback defect, and every valid CodeRabbit finding identified before the final freeze.
 
 ## Safety boundaries
 

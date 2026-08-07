@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-06
 
-Canonical current state: `ES-P01` is `COMPLETE`; `ES-P02` and `ES-X05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P03` is the only `ACTIVE` implementation package under the narrow owner-directed dependency-routing exception recorded below. No other package is active.
+Canonical current state: `ES-P01` is `COMPLETE`; `ES-P02` and `ES-X05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P03` is the only `ACTIVE` implementation package under the narrow owner-directed dependency-routing exception recorded below. Its implementation and review repairs are complete; final exact-head gates remain. No other package is active.
 
 Live baseline: `wsg138/EnthusiaStaff:main` is `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` at ES-P03 start and includes immutable migration V17. Issue #43 remains open, deferred, and excluded.
 
@@ -19,7 +19,7 @@ Live baseline: `wsg138/EnthusiaStaff:main` is `345b7bbcec6facb45c7f96b0e6e181ac7
 
 ## Owner-directed ES-P03 routing exception
 
-The ordinary dependency graph requires `ES-P02` complete before `ES-P03`. On 2026-08-06 the repository owner explicitly directed the next sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. With no ordinary dependency-complete implementation package available, the worker selected the lowest-priority next implementation package, ES-P03.
+The ordinary dependency graph requires `ES-P02` complete before `ES-P03`; ES-P02 remains `BLOCKED` / `PARKED_BLOCKED`. On 2026-08-06 the repository owner explicitly directed the next sequential worker to continue another productive package while leaving ES-P02 and ES-X05 parked until GitHub-hosted runners recover. With no ordinary dependency-complete implementation package available, the worker selected the lowest-priority next implementation package, ES-P03.
 
 This exception permits only ES-P03 implementation from current legitimate `main`. It does not change ES-P02 or ES-X05 status, import their unmerged branches, waive ES-P03 validation, authorize a later package, or alter release/acceptance dependencies. PR #70 and PR #74 remain parked and untouched. A later real integration conflict must be reconciled through the owning package before release acceptance.
 
@@ -40,7 +40,7 @@ This exception permits only ES-P03 implementation from current legitimate `main`
 | --- | --- | --- | --- | --- | ---: | --- | --- |
 | `ES-P01` | Exact-sanction appeal isolation | Internal | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-P02` | Runtime database recovery and Velocity reload | Internal | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | branch `package/es-p02-runtime-db-recovery`; PR #70; untouched |
-| `ES-P03` | Bedrock identity correctness | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 30 | ordinarily `ES-P02`; owner-directed narrow exception | `ChatGPT sequential package worker`; branch `package/es-p03-bedrock-identity`; PR #75; implementation complete, validation pending |
+| `ES-P03` | Bedrock identity correctness | Internal | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 30 | ordinarily `ES-P02`; owner-directed narrow exception | `ChatGPT sequential package worker`; branch `package/es-p03-bedrock-identity`; ready PR #75; implementation/review repairs complete, exact-head validation pending |
 | `ES-X05` | Website UX, authentication, and appeals | External/multi-repository | `BLOCKED` | `PARKED_BLOCKED` | 35 | `ES-P01` | implementation merged; finalization branch `package/es-x05-finalization`; PR #74; untouched |
 | `ES-P04` | Staff-mode operational tools | Internal | `PLANNED` | — | 40 | `ES-P03` | unassigned |
 | `ES-P07` | Inventory and Ender editing runtime completion | Internal | `PLANNED` | — | 45 | `ES-P02` | unassigned |
@@ -95,15 +95,18 @@ This exception permits only ES-P03 implementation from current legitimate `main`
 | Assigned worker | `ChatGPT sequential package worker` |
 | Selection basis | owner-directed narrow routing exception while ES-P02 and ES-X05 remain parked |
 | Starting aggregate main | `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da` |
-| Branch / PR | `package/es-p03-bedrock-identity`; PR #75 |
+| Branch / PR | `package/es-p03-bedrock-identity`; ready PR #75 |
 | Migration boundary | V17 current and immutable; no new migration |
-| Implemented boundary | proof-bearing Java/Bedrock/unknown observations; current/history `*` aliases; deterministic lookup; ordered duplicate/out-of-order persistence; stale-disconnect protection |
+| Implemented boundary | proof-bearing Java/Bedrock/unknown observations; current/history `*` aliases; deterministic lookup; timestamp and equal-time ordering; stale/equal disconnect protection; literal prefix matching |
 | Velocity disposition | existing proxy observations are unverified and persist platform as `UNKNOWN`; they retain UUID/name/presence and cannot downgrade verified platform evidence |
-| Regression evidence | domain provider-state tests plus MariaDB/Testcontainers alias, history, non-downgrade, ordering, reconnect, and invalid-shape tests |
-| Harsh review | resolved four exact Codacy annotations and corrected broken-Floodgate/no-local-Geyser fallback to `UNKNOWN` |
+| Provider failure disposition | only an available Floodgate per-player observation proves Java or Bedrock; missing/incompatible/absent local providers remain `UNKNOWN`, including proxy-hosted layouts |
+| Regression evidence | domain provider-state tests plus MariaDB/Testcontainers alias, history, non-downgrade, unequal/equal ordering, reconnect, literal underscore-prefix, and invalid-shape tests |
+| Review repairs | resolved initial Codacy annotations; corrected proxy-hosted provider fallbacks; reconciled dependency/readiness records; added stable equal-time ordering and SQL `LIKE` escaping |
+| Intended terminal state | `COMPLETE` after exact-head gates, normal merge, containment, safe branch cleanup, and final publication |
+| Next owner action | `wsg138` directs or permits the next sequential selection after live reclassification; no next package is activated here |
 | Exclusions | ES-P09 alt graph/inheritance; representative client staging; provider invention; production/cutover work |
 | Handoff | [`2026-08-06-es-p03-bedrock-identity.md`](../reports/package-handoffs/2026-08-06-es-p03-bedrock-identity.md) |
-| Exact next action | freeze PR #75, run exact-head Codacy/GitHub Actions/external review, then merge normally or publish the precise blocker |
+| Exact next action | freeze the synchronized PR #75 head; require successful exact-head Coverage, Wiki, Codacy, CodeRabbit, and zero unresolved valid threads; merge normally or publish the precise blocker |
 
 ### `ES-X05` — Website UX, authentication, and appeals
 
