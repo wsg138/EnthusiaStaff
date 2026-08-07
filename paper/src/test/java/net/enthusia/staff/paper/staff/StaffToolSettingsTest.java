@@ -11,12 +11,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
 class StaffToolSettingsTest {
-    private static final String[] COOLDOWN_PATHS = {
-            "staff-tools.cooldowns.random-teleport-millis",
-            "staff-tools.cooldowns.target-tool-millis",
-            "staff-tools.cooldowns.toggle-tool-millis",
-            "staff-tools.cooldowns.menu-millis"
-    };
+    private static final String RANDOM_COOLDOWN = "staff-tools.cooldowns.random-teleport-millis";
+    private static final String TARGET_COOLDOWN = "staff-tools.cooldowns.target-tool-millis";
+    private static final String TOGGLE_COOLDOWN = "staff-tools.cooldowns.toggle-tool-millis";
+    private static final String MENU_COOLDOWN = "staff-tools.cooldowns.menu-millis";
 
     @Test
     void disabledServersAndWorldsAreCaseInsensitive() {
@@ -54,27 +52,63 @@ class StaffToolSettingsTest {
 
     @Test
     void cooldownConfigurationAcceptsInclusiveBoundaries() {
-        for (String path : COOLDOWN_PATHS) {
-            YamlConfiguration zero = new YamlConfiguration();
-            zero.set(path, 0L);
-            StaffToolSettings.load(zero);
-
-            YamlConfiguration maximum = new YamlConfiguration();
-            maximum.set(path, 60_000L);
-            StaffToolSettings.load(maximum);
-        }
+        assertEquals(
+                Duration.ZERO,
+                StaffToolSettings.load(configuration(RANDOM_COOLDOWN, 0L))
+                        .cooldownFor(StaffToolDefinition.RANDOM_TELEPORT)
+        );
+        assertEquals(
+                Duration.ofMinutes(1),
+                StaffToolSettings.load(configuration(RANDOM_COOLDOWN, 60_000L))
+                        .cooldownFor(StaffToolDefinition.RANDOM_TELEPORT)
+        );
+        assertEquals(
+                Duration.ZERO,
+                StaffToolSettings.load(configuration(TARGET_COOLDOWN, 0L))
+                        .cooldownFor(StaffToolDefinition.FREEZE)
+        );
+        assertEquals(
+                Duration.ofMinutes(1),
+                StaffToolSettings.load(configuration(TARGET_COOLDOWN, 60_000L))
+                        .cooldownFor(StaffToolDefinition.FREEZE)
+        );
+        assertEquals(
+                Duration.ZERO,
+                StaffToolSettings.load(configuration(TOGGLE_COOLDOWN, 0L))
+                        .cooldownFor(StaffToolDefinition.VANISH)
+        );
+        assertEquals(
+                Duration.ofMinutes(1),
+                StaffToolSettings.load(configuration(TOGGLE_COOLDOWN, 60_000L))
+                        .cooldownFor(StaffToolDefinition.VANISH)
+        );
+        assertEquals(
+                Duration.ZERO,
+                StaffToolSettings.load(configuration(MENU_COOLDOWN, 0L))
+                        .cooldownFor(StaffToolDefinition.STAFF_TOOLS)
+        );
+        assertEquals(
+                Duration.ofMinutes(1),
+                StaffToolSettings.load(configuration(MENU_COOLDOWN, 60_000L))
+                        .cooldownFor(StaffToolDefinition.STAFF_TOOLS)
+        );
     }
 
     @Test
     void cooldownConfigurationRejectsValuesOutsideInclusiveBoundaries() {
-        for (String path : COOLDOWN_PATHS) {
-            YamlConfiguration negative = new YamlConfiguration();
-            negative.set(path, -1L);
-            assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(negative));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(RANDOM_COOLDOWN, -1L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(RANDOM_COOLDOWN, 60_001L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(TARGET_COOLDOWN, -1L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(TARGET_COOLDOWN, 60_001L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(TOGGLE_COOLDOWN, -1L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(TOGGLE_COOLDOWN, 60_001L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(MENU_COOLDOWN, -1L)));
+        assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(MENU_COOLDOWN, 60_001L)));
+    }
 
-            YamlConfiguration aboveMaximum = new YamlConfiguration();
-            aboveMaximum.set(path, 60_001L);
-            assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(aboveMaximum));
-        }
+    private static YamlConfiguration configuration(String path, long value) {
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set(path, value);
+        return configuration;
     }
 }
