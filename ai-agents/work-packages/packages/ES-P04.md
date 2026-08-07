@@ -4,7 +4,7 @@
 `ES-P04`; Internal; primary `COMP-STAFF`; priority 40; not parallel-safe around staff-mode dispatch/state.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`READY` — dependency satisfied; unassigned; not activated by the ES-X05 recovery worker. Registry is authoritative.
 
 ## 3. Objective
 Make staff-mode hotbar tools functional and complete safe operational entry, use, restoration, and recovery behavior.
@@ -22,7 +22,7 @@ Implement authorized tool dispatch for teleport, inspect, freeze, reports, spect
 Cheat testers/fake entities (`ES-P10`); fake bases (`ES-P11`); production deployment; unrelated vanish/freeze redesign.
 
 ## 8. Dependencies
-`ES-P03` must be `COMPLETE`.
+`ES-P03` must be `COMPLETE`; satisfied by merge `b960e91ea59627a870ff24f89c2f761d0cbb68ab` and canonical completion publication.
 
 ## 9. Component and repository boundaries
 Root Paper/domain/persistence/tests/resources/docs needed for staff mode. No external source import, permanent component branch, or isolated PR.
@@ -52,7 +52,7 @@ Commands, permissions, tool behavior, recovery/troubleshooting, Bedrock fallback
 Service-boundary authorization; reject forged PDC items and stale sessions; do not expose private evidence or hidden staff state.
 
 ## 18. Migration impact
-No migration expected; any essential schema change uses a new post-V16 migration with upgrade/checksum tests.
+No migration expected; any essential schema change uses a new post-V17 migration with upgrade/checksum tests.
 
 ## 19. Bedrock considerations
 Every GUI/tool action needs a usable command/text fallback; representative acceptance remains `ES-V02`.
@@ -67,16 +67,16 @@ Existing provider actions must be version-checked and explicitly unavailable whe
 All non-excluded tools and safety criteria are proven; one exact-head PR merges normally; zero valid threads; temporary branch removed when safe.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Do not start before `ES-P03` completion and assignment.
+Unassigned; no branch/PR/handoff. Eligible for normal sequential selection after outage recovery; priority 40. Live continuation classification still precedes new selection.
 
 ## 24. Last completed checkpoint
-Definition only; no product work began.
+Dependency `ES-P03` is complete; no ES-P04 product work has begun.
 
 ## 25. Remaining checklist
 All implementation, tests, review, validation, merge, and evidence remain.
 
 ## 26. Known blockers
-Dependency `ES-P03`; provider-specific actions may degrade safely but must not be invented.
+No dependency blocker. Provider-specific actions may degrade safely but must not be invented.
 
 ## 27. Final evidence
 Unset: exact heads, tool coverage matrix, test/check IDs, review disposition, and docs.
