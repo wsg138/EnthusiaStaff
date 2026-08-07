@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; no implementation package is active; `ES-P10` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P10` is `ACTIVE` on `package/es-p10-cheat-testers` after automatic sequential selection from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736`. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -27,22 +27,23 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
-| `ES-P10` | Cheat tester and fake-entity system | `READY` | `READY` | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 and not activated by the ES-P09 worker |
-| `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | unassigned |
+| `ES-P10` | Cheat tester and fake-entity system | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 80 | `ES-P04` | ChatGPT sequential package worker; branch `package/es-p10-cheat-testers`; starting main `83302749b3247f7a05157f1625fc99da6aa43736`; handoff `2026-08-07-es-p10-cheat-testers.md` |
+| `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | dependency blocked while ES-P10 is active |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
-| `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | unassigned |
-| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | unassigned |
-| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | unassigned |
+| `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | dependency blocked |
+| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | dependency blocked |
+| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | dependency blocked |
 | `ES-V01` | Private LiteBans representative-data verification | `DEFERRED` | — | 200 | — | private/local environment required |
-| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | private validation; retains ES-P09 representative-network false-positive/distributed acceptance |
+| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | — | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | private validation; retains ES-P09 representative-network false-positive/distributed acceptance and ES-P10 Java/Bedrock/distributed acceptance |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | — | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | private validation |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | — | 300 | `ES-V01`, `ES-V02`, `ES-V03` | owner authorization and issue #43 required |
-| `ES-QA01` | Final repository and workflow audit | `PLANNED` | — | 400 | `ES-A01` | unassigned |
+| `ES-QA01` | Final repository and workflow audit | `PLANNED` | — | 400 | `ES-A01` | dependency blocked |
 
 ## `ES-P02`
 
 - Remains `BLOCKED` / `PARKED_BLOCKED` on PR #70.
-- Latest inspected private build `92753075216` received runner ID `0`, empty runner name, steps `[]`, and the Billing & plans payment/spending-limit rejection; Pi `92753100652` skipped.
+- Latest package-record private build `92753075216` received runner ID `0`, empty runner name, steps `[]`, and the Billing & plans payment/spending-limit rejection; Pi `92753100652` skipped.
+- A fresh private staging run at 2026-08-07 16:10 UTC for current EnthusiaStaff source again produced required Ubuntu build `92925059857` with runner ID `0`, empty runner name, and `steps: []`; Pi `92925074453` skipped. This confirms the same external blocker remains and does not make ES-P02 actionable.
 - Unblock: resolve that account-level restriction, then resume and rerun all required exact-head gates.
 
 ## `ES-P04`
@@ -65,8 +66,8 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 - Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
 - Implemented provider-independent report review completion: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence` presentation, coordinate/privacy separation from broad GUI triage, strict client-evidence allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation. Existing durable cooldown/merge/replay/stale-revision/concurrency/rollback/purge foundations were preserved and revalidated.
 - Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
-- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI exact-coordinate exposure, raw nested AutoClicker metadata rendering, and oldest-snapshot default selection. Zero inline review threads remain. CodeRabbit was quota-limited and produced no review; it must rerun on resume.
-- Required private staging did not execute product code. Latest public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. An earlier automatic exact-head dispatch produced the same infrastructure result; no manual duplicate retry followed the unchanged blocker.
+- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI coordinate exposure, raw nested AutoClicker serialization, and oldest-snapshot default selection. Zero inline review threads remain. CodeRabbit was quota-limited and produced no review; it must rerun on resume.
+- Required private staging did not execute product code. Latest package-record public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. The fresh 16:10 UTC private run described above confirms that the same account-level condition remains unchanged.
 - This is not a staging pass and no ES-P05-specific exception exists. The ES-P04 exception is package-specific and cannot be reused.
 - Exact unblock: resolve the GitHub Actions payment/spending-limit restriction for private `wsg138/EnthusiaStaff-Staging`, then resume PR #81, reconcile newer `main`, rerun every exact-head review/static/hosted/staging gate (including CodeRabbit), require successful trusted private build plus Pi safe boot/restart, merge normally, verify containment, finalize records/cleanup, and stop.
 - V17 remains immutable; ES-P05 added no migration. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
@@ -85,6 +86,20 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 - V17 remains current and immutable; ES-P09 added no migration.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p09-alt-network-identity.md`.
 
+## `ES-P10`
+
+- Selected automatically on 2026-08-07 after fresh live reconciliation found no actionable continuation: ES-P02 and ES-P05 remain unchanged `PARKED_BLOCKED`, and no competing ES-P10 branch/PR/handoff existed.
+- Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736` (merge PR #85).
+- Active branch: `package/es-p10-cheat-testers`.
+- Worker: `ChatGPT sequential package worker`.
+- Included scope: `AUD-TESTER-001` and `AUD-TESTER-002` only — authorized cheat tester workflow, four release tester types, exact temporary target-state restoration, bounded evidence/audit, fake-entity creation/visibility/interaction capture, deterministic cleanup, duplicate/limit enforcement, commands/staff-tool controls, configuration, tests, and documentation.
+- Explicit exclusions remain: fake bases / `AUD-TESTER-003` (`ES-P11`), automatic punishment, production use, unsupported packet/NMS internals, deployment/cutover/private data.
+- Protocol/API decision: use the repository's existing ProtocolLib 5.4.0 compile-only dependency behind a focused optional adapter. Fail closed when ProtocolLib is unavailable or unhealthy; introduce no unisolated NMS dependency.
+- Migration boundary: V17 current and immutable at package selection. No migration is assumed; if essential durable state is required, add V18 with clean-install, upgrade, and checksum coverage.
+- Representative distributed/Java/Bedrock acceptance remains `ES-V02`; ordinary development evidence must not relabel unavailable private staging as passed.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
+- Exact next action: implement the full selected package, checkpoint the branch/PR/state, harshly review, freeze and run all applicable exact-head validation, merge normally only if gates pass, verify containment/cleanup, publish terminal records, and stop without activating ES-P11.
+
 ## Next-worker boundary
 
-No implementation package is active after ES-P09 terminal publication. This ES-P09 worker must stop and must not select or activate another package. A future sequential worker must freshly reconcile live GitHub and canonical state; `ES-P10` remains READY but unassigned, while ES-P02 and ES-P05 remain parked on their unchanged external blocker.
+ES-P10 is the sole active implementation package. This worker must complete or correctly park ES-P10, publish persistent state, recompute dependency-derived statuses without activating another package, and stop. ES-P02 and ES-P05 remain parked unless their exact external unblock condition changes.
