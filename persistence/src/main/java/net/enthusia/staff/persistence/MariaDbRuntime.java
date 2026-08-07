@@ -16,6 +16,7 @@ import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
+import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -76,6 +77,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final EconomyJournalStore economyJournalStore;
     private final ClientEvidenceStore clientEvidenceStore;
     private final PunishmentDraftStore punishmentDraftStore;
+    private final CheatTesterJournalStore cheatTesterJournalStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this(dataSource, ReportPolicyRuntime::current, Clock.systemUTC());
@@ -132,6 +134,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
         this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, json);
+        this.cheatTesterJournalStore = new JdbcCheatTesterJournalStore(dataSource);
     }
 
     public ModerationStore moderationStore() { return moderationStore; }
@@ -155,6 +158,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
     public ClientEvidenceStore clientEvidenceStore() { return clientEvidenceStore; }
     public PunishmentDraftStore punishmentDraftStore() { return punishmentDraftStore; }
+    public CheatTesterJournalStore cheatTesterJournalStore() { return cheatTesterJournalStore; }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {
         return new JdbcWebsiteModerationStore(dataSource, codeProtector, jsonMapper());
