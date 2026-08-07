@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`; `ES-P04` is `ACTIVE` / `ACTIONABLE_CONTINUATION` on PR #79 with implementation, documentation, review repairs, and test-quality cleanup complete; only final exact-head validation, Pi disposition, and terminal publication remain. `ES-P09` remains dependency-derived `READY` and unassigned. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, and `ES-X05` are `COMPLETE`; `ES-P02` is `BLOCKED` / `PARKED_BLOCKED`. `ES-P05`, `ES-P09`, and `ES-P10` are dependency-derived `READY` and unassigned. No package is active. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -11,7 +11,7 @@ Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P0
 - Existing actionable continuation work takes priority over new implementation work.
 - Park unchanged external blockers; do not repeat identical zero-runner attempts without a material condition change.
 - Use normal merge commits only. Missing, skipped, cancelled, superseded, wrong-revision, billing-blocked, or zero-runner gates are not passes.
-- Owner-directed exceptions must be explicit and package-specific.
+- Owner-directed infrastructure exceptions must be explicit, package-specific, and recorded as deferred/skipped evidence rather than a false pass.
 
 ## Canonical package index
 
@@ -21,15 +21,15 @@ Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P0
 | `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; unchanged private Actions Billing & plans blocker |
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
-| `ES-P04` | Staff-mode operational tools | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 40 | `ES-P03` | generic sequential worker; branch `package/es-p04-staff-mode-tools`; PR #79; latest product/test head `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1`; final records head is the last commit from this checkpoint |
+| `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `PLANNED` | — | 50 | `ES-P03`, `ES-P04` | unassigned |
-| `ES-P09` | Alt and network-identity completion | `READY` | `READY` | 55 | `ES-P03` | unassigned; must not be started by ES-P04 worker |
+| `ES-P05` | Report evidence and staff workflow completion | `READY` | `READY` | 50 | `ES-P03`, `ES-P04` | unassigned |
+| `ES-P09` | Alt and network-identity completion | `READY` | `READY` | 55 | `ES-P03` | unassigned |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | unassigned |
-| `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | unassigned |
-| `ES-P10` | Cheat tester and fake-entity system | `PLANNED` | — | 80 | `ES-P04` | explicitly excluded from ES-P04 |
+| `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
+| `ES-P10` | Cheat tester and fake-entity system | `READY` | `READY` | 80 | `ES-P04` | unassigned; explicitly excluded from ES-P04 implementation |
 | `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | unassigned |
-| `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | unassigned |
+| `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency on ES-P05 incomplete |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | unassigned |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | unassigned |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | — | 125 | `ES-P08`, `ES-X02` | unassigned |
@@ -48,15 +48,16 @@ Canonical current state: `ES-P01`, `ES-P03`, and `ES-X05` are `COMPLETE`; `ES-P0
 ## `ES-P04`
 
 - Starting legitimate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- Branch/PR: `package/es-p04-staff-mode-tools`; #79; mergeable at the latest pre-checkpoint reconciliation.
-- Implementation scope is complete for random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu. Cheat Tester stays deferred to `ES-P10`; fake bases stay `ES-P11`.
-- Review repairs: deferred Cheat Tester is unavailable for every rank; cooldown settings are tested at 0/60000 accepted and -1/60001 rejected; follow/spectate no longer makes a false creative-mode claim. Every review thread through records head `7c32b823919fc276f5b8c40a80a5de2893956564` was resolved; CodeRabbit explicitly withdrew scheduler-helper consolidation as optional maintainability follow-up.
-- Superseded green hosted evidence: records head `4cc0178a8f908c43aafc6a88cf3014e81f5756f2` passed Wiki `31173610733` / `92850645081`, Coverage `31173610764` / `92850703180`, Codacy static `92850885117`, variation `92852019542`, and diff coverage `92852019707`.
-- Later records head `7c32b823919fc276f5b8c40a80a5de2893956564` proved the exact private gate remained externally unavailable: staging run `31177702607`; Ubuntu build `92863344441` runner ID `0`, empty runner name, zero steps, explicit Billing & plans failure; Pi `92863355649` skipped. This is not a pass.
-- Codacy on `7c32...` then reported five test-structure warnings in the newly added boundary test. Commit `7642b7fd56e01cfc678ac615d5fd32a18bd32bc1` replaces loop/no-assert structure with explicit assertions and no loop allocations. All final gates therefore must be rerun on the records head produced by this checkpoint.
-- No owner-approved ES-P04 infrastructure exception exists. V17 remains immutable; no migration was added.
-- Exact next action: validate the final frozen PR #79 head. If every gate including Pi succeeds, normal-merge PR #79 and publish `COMPLETE`. If ordinary gates succeed but Pi again fails before product execution under the unapproved Billing & plans restriction, preserve PR #79/branch and publish `BLOCKED` / `PARKED_BLOCKED` on `main` via a documentation-only status-publication PR.
+- Frozen reviewed/validated head: `15d9428eba454e9ae4a905752129bd18676acdb1`.
+- PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`.
+- Scope completed for random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, tools menu, and shared staff-mode safety/recovery. Cheat Tester remains ES-P10; fake bases remain ES-P11.
+- Review: zero valid unresolved threads. Deferred Cheat Tester issuance, cooldown boundaries, follow/spectate feedback, compile drift, and Codacy test-structure findings were resolved. Scheduler-helper consolidation was explicitly withdrawn as optional maintainability follow-up.
+- Exact-head hosted evidence: Wiki run `31178353549`, job `92865432750`, success; Coverage run `31178353504`, job `92865439305`, success on GitHub-hosted Java 21 including full build/tests/coverage/runtime-JAR inspection; Codacy static `92865800728` success with zero issues; coverage variation `92867049954` and diff coverage `92867049338` success.
+- Exact-head private staging did not execute product code: public wrapper `31178352312` dispatched private run `31178359804`; required Ubuntu build `92865456267` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92865494913` skipped.
+- **Owner-approved ES-P04 infrastructure exception:** on 2026-08-07 the owner instructed the worker to continue, mark Pi staging skipped/deferred, and record an internal follow-up to run it later when available. This is not a staging pass and does not generalize to other packages.
+- Internal follow-up: when the private Actions billing/runner path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that later test exposes a real defect.
+- V17 remains immutable; ES-P04 added no migration.
 
 ## Next-worker boundary
 
-This worker owns only ES-P04. ES-P09 remains `READY` but unassigned. Do not start it during this worker.
+ES-P04 is complete and no package is active. A later worker must reconcile live state before selection. Absent a higher-priority actionable continuation, ES-P05 is now the lowest-priority-number READY package. This worker does not start it.
