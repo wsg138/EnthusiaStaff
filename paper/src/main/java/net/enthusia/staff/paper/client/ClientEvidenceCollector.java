@@ -9,6 +9,7 @@ import java.util.Optional;
 import net.enthusia.staff.domain.evidence.ClientEvidenceSnapshot;
 import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.player.PlayerPlatform;
+import net.enthusia.staff.domain.player.PlayerPlatformDetection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -99,12 +100,11 @@ public final class ClientEvidenceCollector {
         if (protocol.isEmpty() && player.getProtocolVersion() >= 0) {
             protocol = Optional.of(player.getProtocolVersion());
         }
-        PlayerPlatform platform = bedrock.floodgatePlayer()
-                ? PlayerPlatform.BEDROCK
-                : (floodgate.availability() == IntegrationAvailability.AVAILABLE
-                        || geyser == IntegrationAvailability.NOT_INSTALLED)
-                        ? PlayerPlatform.JAVA
-                        : PlayerPlatform.UNKNOWN;
+        PlayerPlatform platform = PlayerPlatformDetection.resolve(
+                bedrock.availability(),
+                bedrock.floodgatePlayer(),
+                geyser
+        );
         Optional<String> minecraftVersion = bedrock.floodgatePlayer()
                 ? bedrock.bedrockVersion().or(() -> via.minecraftVersion())
                 : via.minecraftVersion();

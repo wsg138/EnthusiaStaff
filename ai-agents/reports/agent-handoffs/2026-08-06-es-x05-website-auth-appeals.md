@@ -1,71 +1,99 @@
 # ES-X05 handoff — Website UX, authentication, and appeals
 
 Date: 2026-08-06
-Status: `BLOCKED`
-Classification: `PARKED_BLOCKED`
+Status: `MERGE_PENDING`
+Classification: `ACTIONABLE_CONTINUATION`
 Owner priority: `35`
 Canonical package: `ES-X05`
 
-## Selection and scope
+## Selection
 
-ES-P02 remained parked in PR #70 because its external runner/authorization condition did not change. ES-X05 was the highest-priority actionable continuation. Exactly one package was selected; no second package was begun.
+ES-P02 remains `BLOCKED` / `PARKED_BLOCKED` in preserved branch `package/es-p02-runtime-db-recovery` and open PR #70. Its external staging runner/authorization condition has not changed, so it was left untouched. Live GitHub exposed ES-X05 as the highest-priority actionable continuation through existing standalone and aggregate work; no second package was selected.
 
-## Completed repositories
+## Standalone completion
 
-- Standalone `wsg138/enthusia-site`: reviewed head `1a45b32e372cf6939c078a0d7986655e7ed639d6`, validation run `31113188453` success, production/preview deployments and Codacy success, zero unresolved review threads, PR #2 normal merge/current `main` `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
-- Aggregate `wsg138/EnthusiaStaff`: frozen product head `96912301fc425ac6f5eff9349ee3b3d543d122eb`, exact hosted-validation/review product head `4c818bb3aea953d3f877efc8a48a9175ba219d38`, PR #73 normal merge/current `main` `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
-- V17 is the only new migration; V1–V16 remain unchanged.
-- Finalization: branch `package/es-x05-finalization`, open PR #74. Its current head and automatically generated check state are recorded in the PR description/final report rather than a self-referential tracked file.
+- Repository: `wsg138/enthusia-site`.
+- Baseline PR #1 merged normally as `042b503b7a4adc2627f2259a09e7d7394ced06ce`.
+- Continuation PR #2 final reviewed head: `1a45b32e372cf6939c078a0d7986655e7ed639d6`.
+- Site validation run `31113188453`: success.
+- Production `enthusia-site` Cloudflare deployment: success.
+- `enthusia-market-preview` Cloudflare deployment: success.
+- Codacy: success with zero annotations.
+- CodeRabbit: zero unresolved review threads.
+- PR #2 merged normally as `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Standalone `main` currently points to that merge commit.
 
-The site and aggregate implement verified identity, same-origin and bounded request controls, fixed-origin bearer-plus-HMAC private routes, persistent nonce replay controls, durable exact-punishment eligibility/submission/review, atomic rate limiting, scoped idempotency, optimistic revisions, reviewer authorization, audit events, and exact-sanction approval delegation.
+## Standalone behavior
 
-## Successful validation and review
+- Verifies Cloudflare Access JWT signature, issuer, audience, expiry, and not-before claims.
+- Derives immutable linked Minecraft UUID/name only from verified claims.
+- Keeps appeal and reviewer pages available only by direct URL rather than main-site navigation.
+- Requires same-origin browser mutations and canonical UUIDs.
+- Sends only allowlisted POST requests to fixed origin `https://staff-api.enthusia.info`.
+- Uses a minimum-length bearer token and HMAC secret; signs method, exact path, timestamp, nonce, and SHA-256 body hash.
+- Bounds Staff API requests to seven seconds and fails closed on missing configuration or upstream failure.
+- Handles exact eligible punishments, duplicate-safe submissions, versioned reviewer decisions, stale updates, and client retry states.
+- Normalizes exact vanilla potion IDs and tint colors recursively inside shulker boxes and bundles, serializes live updates, and retries after transient manifest failures.
 
-- Aggregate Coverage run `31116854096`, job `92668751419`, checked out exact product head `4c818bb3aea953d3f877efc8a48a9175ba219d38` and passed Java 21 `clean build`, all unit and MariaDB/Testcontainers migration/integration tests, JaCoCo, runtime-JAR/provider-leak inspection, artifact upload, and Codacy coverage upload.
-- JaCoCo: lines `47.50%`, branches `38.47%`, instructions `50.16%`.
-- CodeRabbit succeeded and all valid aggregate review threads were resolved.
-- Aggregate and standalone implementation containment passed.
+## Aggregate implementation
+
+- Repository: `wsg138/EnthusiaStaff`.
+- Aggregate branch: `package/es-x05-state-publication`.
+- Aggregate PR: #73.
+- Starting aggregate `main`: `515bd9a8591505c043b413f5b9ecb3e272c6d6f2` for this continuation pass.
+- Frozen product head before state reconciliation: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
+- Migration boundary: V1–V16 remain unchanged; PR #73 adds `V17__website_appeal_workflow.sql`.
+
+The aggregate adds a durable exact-punishment appeal workflow, MariaDB-backed atomic rate limiting, account and punishment binding, identity-scoped submission idempotency, appeal-scoped reviewer decision replay protection, optimistic revisions, audit events, role authorization, signed private API routes, bounded request bodies, nonce replay protection, and exact-sanction acceptance delegation.
+
+## Contract verification
+
+The standalone site and aggregate Velocity API match on exact POST route and JSON contracts:
+
+- `/v1/website/appeals/eligible` — `accountId`.
+- `/v1/website/appeals/submit` — `punishmentId`, `accountId`, `username`, `reason`, `idempotencyKey`.
+- `/v1/website/appeals/reviewer/list` — `actorAccountId`, `actorRank`, `status`, `cursor`, `limit`.
+- `/v1/website/appeals/reviewer/{appealId}/decision` — `actorAccountId`, `actorRank`, `decision`, `expectedVersion`, `note`, `idempotencyKey`.
+
+The site signs the exact request target used by the Velocity authenticator. Velocity validates bearer value, timestamp skew, nonce form and persistent replay state, body hash, HMAC, canonical UUIDs, fixed allowed fields, and service-boundary reviewer authorization. The Java server is loopback-only and therefore requires the deployment proxy for the fixed public origin; no direct public listener is introduced.
 
 ## Component parity
 
-Standalone and aggregate hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`. Added, missing, and modified paths: none. Evidence: [`2026-08-06-es-x05-component-parity.json`](../package-handoffs/2026-08-06-es-x05-component-parity.json).
+- Standalone source SHA: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Aggregate component path: `components/enthusia-site/`.
+- Standalone hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`.
+- Aggregate hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`.
+- Added paths: none.
+- Missing paths: none.
+- Modified paths: none.
+- Parity: true.
+- Evidence: [`2026-08-06-es-x05-component-parity.json`](../package-handoffs/2026-08-06-es-x05-component-parity.json).
 
-## Owner-approved staging deferral
+## Review findings addressed
 
-Evidence label: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED**.
+- Removed a temporary write-capable remediation workflow.
+- Mapped unavailable default appeal operations to the defined 503 domain error.
+- Scoped submission idempotency and rate-limit replay keys to account and exact punishment.
+- Evaluated/cleared expired rate-limit windows before granting replay exemptions.
+- Stored reviewer decision keys in the decision field and scoped them by exact appeal and reviewer.
+- Added coverage proving the same reviewer key may be used independently on different appeals.
+- Reconciled the canonical package registry and routing state.
+- Added this required canonical per-PR handoff under `reports/agent-handoffs/` and recorded migration, priority, intended post-merge status, and handoff fields explicitly.
 
-- Owner/approval source/date: repository owner `wsg138`, explicit current ChatGPT project-conversation instruction on 2026-08-06 to skip the current ES-X05 live staging test, continue development, and run a larger combined test later using the developing PySentinel system.
-- Named deferred package: `ES-V02 — Distributed and Java/Bedrock staging`.
-- Original aggregate parent dispatcher run `31116852061`, job `92668521113`, successfully authorized and dispatched exact product head `4c818bb3aea953d3f877efc8a48a9175ba219d38`.
-- Original private `wsg138/EnthusiaStaff-Staging` run `31116860919` build job `92668551209` had runner ID `0`, empty runner name, and executed-step list `[]`; downstream Pi boot/restart job `92668600472` was skipped.
-- No private checkout, build, test, artifact validation, Paper boot, restart, migration, or other product-validation step executed. The unavailable gate is not labeled `PASS`.
+## Current validation state
 
-`ES-V02` must pin the combined implementation heads and perform the deferred acceptance matrix: exact-head build/artifact verification, clean Paper boot/restart, V17 and later clean-install/upgrade/checksum migration paths, config changes and reload/restart, appeal/auth API and persistence, failure/recovery, provider and distributed behavior, representative Java/Bedrock clients, safely implemented automated client actions, and complete sandbox/database/process cleanup. Product defects found there must be routed to separate repair packages.
+Coverage run `31115480613` for aggregate product head `96912301fc425ac6f5eff9349ee3b3d543d122eb` failed during runner setup because GitHub returned `Service Unavailable` while resolving action downloads. Checkout and product code did not execute. This is neither a product failure nor a pass. State reconciliation commits require a new exact-head run before merge.
 
-This approval does not authorize production credentials, production accounts, production player data/routes, LiteBans replacement, issue #43, or authority activation. Automated Minecraft-account credential handling requires separate safe implementation, security review, and owner authorization.
+## Exact completion steps
 
-## Recovery attempt and current blocker
+1. Run the full applicable aggregate hosted build/test/migration/coverage/runtime-JAR checks on the exact final PR head.
+2. Confirm applicable static analysis and zero valid unresolved review threads.
+3. Reconfirm standalone `main` at `b385f78c522f452cc48d78ed19fd2ee82573f64d` and unchanged component hash parity.
+4. Merge PR #73 with a normal merge commit and the reviewed head unchanged.
+5. Verify aggregate-main containment and no unique temporary-branch work.
+6. Publish final merge SHA and `COMPLETE` state in the registry, package file, workspace state, component metadata, and handoff pointer.
+7. Delete temporary branches where tooling permits and stop without activating another package.
 
-After GitHub Status reported Actions operational and the owner directed continuation, a tree-identical retrigger created exact finalization attempt head `e4be594d8dd811bd27b13c3a2207fcdb06a0a769`.
+## Safety and exclusions
 
-1. Coverage run `31122594623`, job `92686159333`, waited from `2026-08-06T17:15:27Z` through `17:30:28Z`, then was cancelled with runner ID `0`, empty runner name, and steps `[]`.
-2. Exact-head Pi wrapper run `31122594379` allocated a runner, passed dispatch/auth steps, and dispatched private run `31122730837`.
-3. Private build job `92686599218` waited from `17:18:15Z` through `17:33:16Z`, then was cancelled with runner ID `0`, empty runner name, and steps `[]`.
-4. Downstream Pi boot/restart job `92688928718` was skipped, and the wrapper published failure.
-5. No checkout, ordinary hosted build, package validation, product test, artifact validation, Paper boot, restart, or migration step executed in either ordinary hosted job.
-
-These are infrastructure-unavailable results, not product failures or passes. The owner's staging deferral remains valid for the private/Pi evidence, but it cannot excuse the missing ordinary hosted Coverage gate. The assertion that testing was back did not produce standard Ubuntu hosted-runner allocation.
-
-## Exact resume instructions
-
-Do not run another identical retry until there is new evidence of ordinary Ubuntu hosted-runner recovery or another material runner, billing, authorization, or configuration change. Then:
-
-1. Reconcile current aggregate and standalone heads, PR #74, branch heads, reviews, scope, and parity.
-2. Synchronize only if real drift requires it and freeze one exact finalization head.
-3. Obtain successful ordinary hosted Coverage for that exact head; retain the ES-V02 staging deferral and never call it a staging pass.
-4. Reconfirm zero valid unresolved findings, unchanged eight-file documentation-only scope, mergeability, and deterministic parity.
-5. Merge PR #74 normally, verify `main` containment/no unique work, publish `COMPLETE`, clean safe temporary branches, and stop without selecting another package.
-
-## Final boundaries and stop
-
-LiteBans remains authoritative. Production cutover, Flyway repair/history rewriting, and ES-P02 changes remain excluded. ES-X05 is correctly parked while the ordinary hosted runner condition remains unchanged. No follow-on package was selected or activated.
+No production credentials, Access tokens, punishment records, player records, or private database data were committed. Authentication, identity, rank, origin, timeout, body size, replay, and rate-limit boundaries fail closed. LiteBans remains authoritative. Issue #43 remains open and deferred. No production cutover, Flyway repair/rewrite, private-data validation, authority activation, or ES-P02 change is included.
