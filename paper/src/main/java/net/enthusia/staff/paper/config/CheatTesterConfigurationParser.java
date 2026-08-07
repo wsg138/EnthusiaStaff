@@ -3,15 +3,28 @@ package net.enthusia.staff.paper.config;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import net.enthusia.staff.paper.tester.CheatTesterSettings;
 
 final class CheatTesterConfigurationParser {
     private static final String ROOT = "staff-tools.cheat-tester";
+    private static final Set<String> TESTER_KEYS = Set.of(
+            "timeout-millis",
+            "maximum-active-global",
+            "maximum-active-per-staff",
+            "fake-entity-distance",
+            "velocity",
+            "no-fall",
+            "probe-ticks"
+    );
+    private static final Set<String> VELOCITY_KEYS = Set.of("horizontal", "vertical");
+    private static final Set<String> NO_FALL_KEYS = Set.of("vertical");
 
     CheatTesterSettings parse(JsonNode root, List<String> errors) {
         CheatTesterSettings defaults = CheatTesterSettings.defaults();
         JsonNode staffTools = ConfigurationNodes.optionalMapping(root, "staff-tools", "staff-tools", errors);
         JsonNode tester = ConfigurationNodes.optionalMapping(staffTools, "cheat-tester", ROOT, errors);
+        ConfigurationNodes.rejectUnknown(tester, TESTER_KEYS, ROOT, errors);
         Limits limits = parseLimits(tester, defaults, errors);
         Velocity velocity = parseVelocity(tester, defaults, errors);
         return new CheatTesterSettings(
@@ -84,6 +97,7 @@ final class CheatTesterConfigurationParser {
     private static Velocity parseVelocity(JsonNode tester, CheatTesterSettings defaults, List<String> errors) {
         String root = ROOT + ".velocity";
         JsonNode velocity = ConfigurationNodes.optionalMapping(tester, "velocity", root, errors);
+        ConfigurationNodes.rejectUnknown(velocity, VELOCITY_KEYS, root, errors);
         double horizontal = boundedDouble(
                 velocity,
                 "horizontal",
@@ -108,6 +122,7 @@ final class CheatTesterConfigurationParser {
     private static double parseNoFall(JsonNode tester, CheatTesterSettings defaults, List<String> errors) {
         String root = ROOT + ".no-fall";
         JsonNode noFall = ConfigurationNodes.optionalMapping(tester, "no-fall", root, errors);
+        ConfigurationNodes.rejectUnknown(noFall, NO_FALL_KEYS, root, errors);
         return boundedDouble(
                 noFall,
                 "vertical",
