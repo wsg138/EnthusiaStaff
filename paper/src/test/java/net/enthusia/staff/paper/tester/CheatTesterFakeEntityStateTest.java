@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 class CheatTesterFakeEntityStateTest {
     private static final Instant STARTED = Instant.parse("2026-08-07T12:00:00Z");
+    private static final String ATTACK = "ATTACK";
 
     @Test
     void onlyTargetInteractionsContributeEvidence() {
@@ -30,8 +31,8 @@ class CheatTesterFakeEntityStateTest {
         );
         state.track(session.fakeHandle, targetId);
 
-        assertTrue(state.recordInteraction(staffId, 42, "ATTACK"));
-        assertTrue(state.recordInteraction(observerId, 42, "ATTACK"));
+        assertTrue(state.recordInteraction(staffId, 42, ATTACK));
+        assertTrue(state.recordInteraction(observerId, 42, ATTACK));
         assertEquals(0, session.fakeInteractions.get());
         assertEquals(0, session.fakeAttacks.get());
 
@@ -40,7 +41,7 @@ class CheatTesterFakeEntityStateTest {
         assertEquals(0, session.fakeAttacks.get());
         assertEquals(750L, session.firstInteractionMillis.get());
 
-        assertTrue(state.recordInteraction(targetId, 42, "ATTACK"));
+        assertTrue(state.recordInteraction(targetId, 42, ATTACK));
         assertEquals(2, session.fakeInteractions.get());
         assertEquals(1, session.fakeAttacks.get());
         assertEquals(750L, session.firstInteractionMillis.get());
@@ -58,16 +59,16 @@ class CheatTesterFakeEntityStateTest {
                 sessions
         );
 
-        assertFalse(state.recordInteraction(targetId, 77, "ATTACK"));
+        assertFalse(state.recordInteraction(targetId, 77, ATTACK));
         state.track(session.fakeHandle, targetId);
         sessions.remove(targetId);
-        assertTrue(state.recordInteraction(targetId, 77, "ATTACK"));
+        assertTrue(state.recordInteraction(targetId, 77, ATTACK));
 
         state.remove(session);
-        assertFalse(state.recordInteraction(targetId, 77, "ATTACK"));
+        assertFalse(state.recordInteraction(targetId, 77, ATTACK));
         state.track(session.fakeHandle, targetId);
         state.clear();
-        assertFalse(state.recordInteraction(targetId, 77, "ATTACK"));
+        assertFalse(state.recordInteraction(targetId, 77, ATTACK));
     }
 
     private static CheatTesterSession session(UUID staffId, UUID targetId, int entityId) {
