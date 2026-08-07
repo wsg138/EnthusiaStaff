@@ -207,7 +207,7 @@ The validator checks repository-managed `docs/wiki/pages/` content. It does not 
 Before publishing Wiki changes also check:
 
 - every new page is reachable from Home, the sidebar, or an owning index;
-- `[[Wiki Links]]` and Markdown links point where intended;
+- internal Wiki links and Markdown links point where intended;
 - headings and sidebar destinations are readable;
 - source links still name real current files;
 - no secret/private evidence was copied into documentation;
