@@ -39,12 +39,13 @@ class StaffToolDefinitionTest {
     }
 
     @Test
-    void helperGetsOperationalToolsButNotDeferredCheatTester() {
+    void operationalToolsExcludeDeferredCheatTesterForEveryRank() {
         assertTrue(StaffToolDefinition.RANDOM_TELEPORT.availableFor(StaffRank.HELPER));
         assertTrue(StaffToolDefinition.STAFF_TOOLS.availableFor(StaffRank.HELPER));
-        assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.HELPER));
-        assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.SYSTEM));
-        assertTrue(StaffToolDefinition.CHEAT_TESTER.availableFor(StaffRank.DEVELOPER));
+        for (StaffRank rank : StaffRank.values()) {
+            assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(rank));
+        }
+        assertFalse(StaffToolDefinition.CHEAT_TESTER.availableFor(null));
     }
 
     @Test
