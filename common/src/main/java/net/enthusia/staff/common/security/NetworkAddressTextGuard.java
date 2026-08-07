@@ -11,6 +11,7 @@ public final class NetworkAddressTextGuard {
     private static final int IPV4_OCTETS = 4;
     private static final int IPV4_MAX_OCTET = 255;
     private static final int IPV6_FULL_COLON_COUNT = 7;
+    private static final char IPV6_SEPARATOR = ':';
     private static final String IPV6_COMPRESSED_SEPARATOR = "::";
     private static final Pattern IPV4_CANDIDATE = Pattern.compile(
             "(?<![0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![0-9])"
@@ -72,7 +73,7 @@ public final class NetworkAddressTextGuard {
     private static int colonCount(String candidate) {
         int count = 0;
         for (int index = 0; index < candidate.length(); index++) {
-            if (candidate.charAt(index) == ':') {
+            if (candidate.charAt(index) == IPV6_SEPARATOR) {
                 count++;
             }
         }
