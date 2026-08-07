@@ -4,7 +4,7 @@
 `ES-P04`; Internal; primary `COMP-STAFF`; priority 40; not parallel-safe around staff-mode dispatch/state.
 
 ## 2. Status
-`ACTIVE` / `ACTIONABLE_CONTINUATION` — implementation and documentation are complete on draft PR #79; exact-head validation and terminal publication remain.
+`ACTIVE` / `ACTIONABLE_CONTINUATION` — implementation and documentation are complete on draft PR #79; final exact-head validation and terminal publication remain.
 
 ## 3. Objective
 Make staff-mode hotbar tools functional and complete safe operational entry, use, restoration, and recovery behavior.
@@ -42,9 +42,10 @@ Draft PR #79 to `wsg138/EnthusiaStaff:main`.
 - [x] Implement dispatcher and safe state transitions without duplicating existing moderation/service boundaries.
 - [x] Add focused policy tests for tool identity/session binding, fixed slots/ranks, cooldowns, target suitability, and settings.
 - [x] Document commands/permissions, tool behavior, recovery, troubleshooting, Bedrock fallbacks, target filtering, and restart-scoped settings.
-- [x] Review the full product diff and resolve the first Codacy finding set; 14 issues on superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4` were refactored away in `b83d060b97f9dc46f59fc7d137e0d01672f407fb`.
-- [x] Harden Paper interaction-event behavior after API review so predicted-cancelled air clicks are accepted and redundant precise entity packets do not double-dispatch; product-code head `e7321ff2858f06da6d4daeca073fcb5a96bf4246`.
-- [ ] Freeze one exact tracked head and complete every applicable validation/review gate.
+- [x] Resolve all 14 Codacy findings from superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4`.
+- [x] Harden Paper interaction-event behavior so predicted-cancelled air clicks are accepted and redundant precise entity packets do not double-dispatch.
+- [x] Resolve the final file-size Codacy finding from superseded records head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` by extracting random teleport execution into `StaffToolRandomTeleportService`; latest product-code head `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`.
+- [ ] Freeze the resulting records checkpoint and complete every applicable validation/review gate on that exact head.
 - [ ] Resolve the configured Pi staging disposition without treating unavailable infrastructure as a pass.
 - [ ] Merge normally if all completion gates are satisfied, verify containment, publish completion state, and clean the branch when safe.
 
@@ -79,17 +80,17 @@ Inspector, freeze, reports, vanish, and staff-chat hotbar actions reuse existing
 All non-excluded tools and safety criteria are proven; one exact-head PR merges normally; zero valid threads; temporary branch removed when safe.
 
 ## 23. Resume state
-Active branch `package/es-p04-staff-mode-tools`; draft PR #79; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker. Latest product-code commit before this checkpoint: `e7321ff2858f06da6d4daeca073fcb5a96bf4246`. Canonical handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
+Active branch `package/es-p04-staff-mode-tools`; draft PR #79; starting `main` `5c820c29c2fe5a498ea7f80454579953ac05b436`; generic sequential package worker. Latest product-code commit before this checkpoint: `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`. Canonical handoff: [`2026-08-07-es-p04-staff-mode-tools.md`](../../reports/package-handoffs/2026-08-07-es-p04-staff-mode-tools.md).
 
 ## 24. Last completed checkpoint
-The non-excluded operational tools are implemented and documented. Staff tools use fixed canonical slots and carry owner/session PDC bindings that are revalidated against the active staff session, current rank, slot, material, and action permission. Durable moderation actions reuse existing commands. Random teleport filters active staff, vanished/frozen/exempt/unsafe targets and disabled worlds; follow/spectate uses scheduler-safe target snapshots and preserves the rank-required game mode. `/stafftools` provides text/command fallbacks for Bedrock clients. Cheat Tester remains explicitly unavailable and assigned to ES-P10.
+The non-excluded operational tools are implemented and documented. Staff tools use fixed canonical slots and owner/session PDC bindings revalidated against the active staff session, current rank, slot, material, and action permission. Durable moderation actions reuse existing commands. Random teleport filters active staff, vanished/frozen/exempt/unsafe targets and disabled worlds; follow/spectate uses scheduler-safe target snapshots and preserves the rank-required game mode. `/stafftools` provides text/command fallbacks for Bedrock clients. Cheat Tester remains explicitly unavailable and assigned to ES-P10.
 
-Static analysis on superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4` reported 14 issues, all addressed by structural refactoring. Wiki validation already passed on that superseded head. PR #79 currently has zero inline review threads and zero submitted reviews.
+Static analysis history is fully remediated in product code. Superseded head `c1db641169a40d0be64ad48b4672d3dce3da72c4` reported 14 issues, fixed by structural refactoring. Superseded records head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5` then reported one remaining file-length issue for the dispatcher, fixed in `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8` by extracting random teleport into a focused service. Final exact-head Codacy rerun is still required.
 
-Configured Pi staging remains externally unavailable: prior PR heads reached the aggregate wrapper, whose private ordinary `ubuntu-latest` prerequisite received runner ID `0`, empty runner name, zero product steps, and the GitHub Billing & plans payment/spending-limit annotation; the downstream self-hosted Pi job was skipped. The same condition must be re-evidenced on the frozen exact head if it remains applicable. It is not a pass.
+Configured Pi staging remains externally unavailable. On superseded exact head `501cb2a90fab0c28a080a64ce51e81d10f2f0da5`, aggregate wrapper `31172658131` identified private staging run `31172664638`; its ordinary `ubuntu-latest` job `92847691164` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans payment/spending-limit annotation, while Pi job `92847702006` skipped. No product code ran there. This is not a pass and must be re-evidenced for the final records head.
 
 ## 25. Remaining checklist
-Publish this checkpoint, freeze the resulting exact head if no new review/static-analysis finding appears, obtain successful exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/static-analysis/review evidence, record the exact Pi staging disposition, and then either merge normally or park the package on the remaining external gate. Do not start ES-P09 or another package.
+Freeze the records checkpoint produced with this state update, obtain successful exact-head Wiki/Java 21/full-suite/MariaDB-migration/coverage/runtime-JAR/static-analysis/review evidence, record the exact Pi staging disposition, and then either merge normally or park the package on the remaining external gate. Do not start ES-P09 or another package.
 
 ## 26. Known blockers
 No dependency or known product blocker. The configured Pi staging path is currently blocked before product execution by the private repository Billing & plans restriction. Completion cannot claim that gate passed; if ordinary hosted/review gates all pass but Pi remains unavailable, the terminal outcome must follow `VALIDATION-POLICY.md` exactly, including explicit owner approval if an infrastructure exception is used.
@@ -99,11 +100,13 @@ No dependency or known product blocker. The configured Pi staging path is curren
 - Draft PR: #79.
 - First coherent product commit: `b70c6c48976ca176a3ed5c9c327a31d9422ed934`.
 - Documentation commit: `c1db641169a40d0be64ad48b4672d3dce3da72c4`.
-- Static-analysis remediation: `b83d060b97f9dc46f59fc7d137e0d01672f407fb`.
-- Interaction-event hardening / latest product-code commit: `e7321ff2858f06da6d4daeca073fcb5a96bf4246`.
-- Superseded Wiki run `31171631905`, job `92844514821`: success.
-- Superseded Codacy check `92844755477`: 14 findings, all addressed in later commits; not final evidence.
-- PR review threads at checkpoint: zero.
+- First static-analysis remediation: `b83d060b97f9dc46f59fc7d137e0d01672f407fb`.
+- Interaction-event hardening: `e7321ff2858f06da6d4daeca073fcb5a96bf4246`.
+- Final product-code refactor: `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`.
+- Superseded exact-head Wiki run `31172662371`, job `92847679913`: success.
+- Superseded Codacy check `92848009322`: one dispatcher file-length finding, fixed in `8c9a3f2c8220c36e84a275dac0c9f3ee4c59d0d8`; not final evidence.
+- Superseded exact-head Pi private build `92847691164`: zero-runner Billing & plans failure; Pi `92847702006` skipped; not a pass.
+- PR review threads at latest inspection: zero; submitted reviews: zero.
 - No migration changes; V1-V17 unchanged.
 
 ## 28. Merge and synchronization record
