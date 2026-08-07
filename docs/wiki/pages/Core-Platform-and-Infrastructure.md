@@ -38,16 +38,17 @@ Primary paths:
 Internal module responsibilities:
 
 ```text
-common              shared primitives
-  ^
-domain              business policy and ports
-  ^
-persistence         MariaDB/Flyway adapters
-protocol            authenticated distributed transport
-paper               Bukkit/Paper runtime adapters
-velocity            proxy/runtime adapters
-integration-tests   validation only; never deployed
+common                 shared primitives
+domain                 business policy and ports
+integration-contracts  compile-time contracts for supported Enthusia providers
+persistence            MariaDB/Flyway adapters
+protocol               authenticated distributed transport
+paper                  Bukkit/Paper runtime adapters
+velocity               proxy/runtime adapters
+integration-tests      validation only; never deployed
 ```
+
+`integration-contracts` is a first-class compile-time provider boundary. It does not own moderation policy; provider adapters use it to reach supported provider contracts while application policy remains in `domain`.
 
 The actual dependency graph is described in [[Architecture]]. Reviewer rule: policy belongs in `domain`; commands, GUIs, HTTP handlers and provider adapters should not become alternate business-rule implementations.
 
