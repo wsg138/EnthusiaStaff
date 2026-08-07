@@ -174,15 +174,16 @@ final class CheatTesterSnapshotCodec {
     }
 
     private static void applyInventory(Player player, Snapshot snapshot) {
-        PlayerInventory inventory = player.getInventory();
-        ItemStack[] storage = decodeItems(snapshot.storage(), inventory.getStorageContents().length);
-        ItemStack[] armor = decodeItems(snapshot.armor(), inventory.getArmorContents().length);
-        inventory.setStorageContents(storage);
-        inventory.setArmorContents(armor);
-        inventory.setItemInOffHand(decodeItem(snapshot.offhand()));
         if (snapshot.heldSlot() < 0 || snapshot.heldSlot() >= HOTBAR_SIZE) {
             throw new IllegalArgumentException("tester snapshot held slot is invalid");
         }
+        PlayerInventory inventory = player.getInventory();
+        ItemStack[] storage = decodeItems(snapshot.storage(), inventory.getStorageContents().length);
+        ItemStack[] armor = decodeItems(snapshot.armor(), inventory.getArmorContents().length);
+        ItemStack offhand = decodeItem(snapshot.offhand());
+        inventory.setStorageContents(storage);
+        inventory.setArmorContents(armor);
+        inventory.setItemInOffHand(offhand);
         inventory.setHeldItemSlot(snapshot.heldSlot());
         player.updateInventory();
     }
