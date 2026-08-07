@@ -10,22 +10,36 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | --- | --- |
 | Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-P04 — Staff-mode operational tools`; `ES-P09 — Alt and network-identity completion`; `ES-X05 — Website UX, authentication, and appeals` |
 | Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
-| Active implementation package | None. ES-P09 reached terminal `COMPLETE`; this worker stops with terminal-record publication. |
-| Ready packages | `ES-P10 — Cheat tester and fake-entity system` at priority 80; unassigned and not activated by the ES-P09 worker |
+| Active implementation package | `ES-P10 — Cheat tester and fake-entity system`; branch `package/es-p10-cheat-testers`; selected from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` by the ChatGPT sequential package worker |
+| Ready packages | None after ES-P10 claim. Dependency-derived statuses must be recomputed after ES-P10 reaches a terminal state; do not activate another package in this worker. |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; private Actions Billing & plans blocker unchanged |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; required private staging unavailable under the same Billing & plans condition |
+| Fresh blocker confirmation | Private staging run `31196247124` created 2026-08-07 16:10 UTC for current EnthusiaStaff source; required Ubuntu build `92925059857` had runner ID `0`, empty runner name, and `steps: []`; Pi `92925074453` skipped. This confirms the same external condition still exists and is not a product pass. |
 | ES-P05 hosted validation | Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on Java 21 including build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742` digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; variation `92882989470` and diff coverage `92882989439` success |
 | ES-P05 staging blocker | Public wrapper `31183283525` / `92881545286`; private run `31183290816`; required Ubuntu build `92881577147` runner ID `0`, empty runner name, steps `[]`, Billing & plans failure; Pi `92881591391` skipped. This is not a pass. |
 | ES-P05 review | Harsh self-review completed with three pre-freeze fixes; zero inline review threads; CodeRabbit quota-limited and must rerun when package resumes |
 | ES-P04 status | `COMPLETE` under its explicit owner-approved package-specific infrastructure exception for Pi staging |
 | ES-P04 validated head | `15d9428eba454e9ae4a905752129bd18676acdb1` |
 | ES-P04 merge | PR #79; normal merge `a530b992232a8a08cbbd13b0eed6606228ceb652` |
-| ES-P04 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — PI STAGING SKIPPED/DEFERRED**; private staging `31178359804`, Ubuntu build `92865456267` runner ID `0`, steps `[]`, Billing & plans failure; Pi `92865494913` skipped. This is not a staging pass and does not apply to ES-P05 or ES-P09. |
+| ES-P04 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — PI STAGING SKIPPED/DEFERRED**; private staging `31178359804`, Ubuntu build `92865456267` runner ID `0`, steps `[]`, Billing & plans failure; Pi `92865494913` skipped. This is not a staging pass and does not apply to ES-P05 or ES-P10. |
 | ES-P09 status | `COMPLETE`; PR #84; frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; normal merge `a88201524690848f778297f140f7ee2ba5b6ce36`; implementation branch deleted; terminal records published through docs-only PR #85 |
 | ES-P09 hosted validation | Wiki `31193764800` / `92916829444` success; Coverage `31193765341` / `92916907616` success on Java 21 with build/tests/MariaDB-Testcontainers/aggregate JaCoCo/runtime-JAR inspection; Codacy `92917176627` success with zero annotations; repository CodeRabbit status success; zero valid unresolved review threads |
 | ES-P09 private staging | **NOT A PASS**. Public wrapper `31193762319`; private run `31193769314`; Ubuntu build `92916864019` runner ID `0`, empty runner name, steps `[]`, Billing & plans rejection; Pi `92916876057` skipped. Private representative-network/distributed acceptance remains `ES-V02`. |
-| Migration boundary | V17 remains current and immutable; ES-P09 added no schema migration |
+| ES-P10 status | `ACTIVE`; starting main `83302749b3247f7a05157f1625fc99da6aa43736`; internal package; ProtocolLib 5.4.0 selected as the supported isolated packet adapter; fake bases remain ES-P11 |
+| Migration boundary | V17 remains current and immutable at ES-P10 selection; any required schema addition must begin at V18 |
 | Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
+
+## ES-P10 active worker record
+
+- Fresh live reconciliation classified ES-P02 and ES-P05 as unchanged `PARKED_BLOCKED`; no actionable continuation existed.
+- ES-P04 is `COMPLETE`; ES-P10 was the dependency-complete `READY` package with the lowest numerical priority and was selected automatically.
+- Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736`.
+- Active branch: `package/es-p10-cheat-testers`.
+- No pre-existing ES-P10 branch, PR, or package handoff existed at selection.
+- Included package scope is `AUD-TESTER-001` and `AUD-TESTER-002`: authorized cheat tester workflow, bounded client-side fake entity tooling, evidence/audit, exact temporary player-state restoration, lifecycle cleanup, duplicate/limit enforcement, configuration, commands/staff-tool controls, and tests.
+- Fake bases (`AUD-TESTER-003`) remain exclusively `ES-P11`. No automatic punishment, production use, unisolated NMS, deployment, cutover, or private-data work is authorized.
+- ProtocolLib 5.4.0 is already the repository-supported compile-only Paper dependency; ES-P10 will keep packet behavior behind a focused optional adapter and fail closed when unavailable.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
 
 ## ES-P09 terminal worker record
 
@@ -37,7 +51,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 - ES-P09 preserves protected network identity, bounds shared-network/active-sanction scans, suppresses broad-network automation, lowers automatic confidence on simultaneous play, preserves manual decisions, keeps the narrow authoritative inheritance rule only for unambiguous new-account evidence, adds duplicate-evidence throttling and bounded retention from a trusted runtime clock behind the authority fence, and rejects raw address literals from manual audit reasons.
 - ES-P03 remains authoritative for Java/Floodgate platform identity; ES-P09 does not redefine it.
 - Production/private representative network data, false-positive acceptance, distributed Java/Bedrock staging, production key rotation, and cutover remain outside ES-P09. `ES-V02` owns the deferred private acceptance.
-- Documentation-only PR #85 is the terminal publication vehicle for this record; it does not alter product behavior or activate another package.
+- Documentation-only PR #85 published the terminal record and did not alter product behavior.
 
 ## Exact parked-package boundary
 
@@ -45,8 +59,8 @@ ES-P02 and ES-P05 remain on the same account-level GitHub Actions payment/spendi
 
 ## Next routing
 
-This sequential worker is terminal with ES-P09 finalization publication and stops. It does not select or activate `ES-P10`. A future sequential worker must perform a fresh live reconciliation and then follow canonical routing rules.
+ES-P10 is the only active implementation package for this sequential worker. Complete or correctly park ES-P10, publish its durable state, update dependency-derived statuses, and stop. Do not activate ES-P11 or any other newly ready package in this worker.
 
 ## Safety boundaries
 
-No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation was authorized by ES-P09.
+No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation is authorized by ES-P10.
