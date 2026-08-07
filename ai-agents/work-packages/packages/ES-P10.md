@@ -4,7 +4,7 @@
 `ES-P10`; Internal; primary `COMP-STAFF`; priority 80; conditional parallel safety only after staff-tool dispatch.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`ACTIVE` as of 2026-08-07; selected automatically by the sequential package worker after fresh live reconciliation. Registry is authoritative.
 
 ## 3. Objective
 Implement an auditable staff cheat-tester workflow and bounded fake-player/entity tooling with deterministic lifecycle and cleanup.
@@ -52,7 +52,7 @@ Commands, permissions, configuration, operational limits, evidence/privacy, clea
 Strict authorization; bounded entities/evidence; no hidden staff/private data leakage; fail closed if packet/provider support is absent.
 
 ## 18. Migration impact
-No migration assumed; essential durable state requires a new immutable post-V16 migration and upgrade/checksum tests.
+No migration assumed. The live migration boundary at package selection is immutable V17; essential durable state would require a new immutable V18 migration plus clean-install, upgrade, and checksum tests.
 
 ## 19. Bedrock considerations
 Staff controls require text fallback; fake-entity visibility semantics must be tested without assuming Java client UI; acceptance remains `ES-V02`.
@@ -67,19 +67,19 @@ Use only verified supported packet APIs; isolate version-specific adapters; expl
 Tester/fake-entity scope fully implemented/tested/documented; one exact-head PR merges normally; zero valid threads; branch cleanup verified.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after `ES-P04` and assignment.
+Selected from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` by `ChatGPT sequential package worker`. Active branch: `package/es-p10-cheat-testers`. No competing ES-P10 branch, PR, or prior package handoff existed at selection. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
 
 ## 24. Last completed checkpoint
-Definition only; no product implementation began.
+Package claim and API preflight. `ES-P02` and `ES-P05` were freshly confirmed `PARKED_BLOCKED` by a private staging run on 2026-08-07 whose required Ubuntu job received runner ID `0`, no runner name, and no steps; Pi was skipped. `ES-P04` is complete, so ES-P10 was the lowest-priority dependency-complete `READY` package. ProtocolLib 5.4.0 is already the supported compile-only Paper packet dependency and exposes supported packet/listener wrappers required for a version-isolated fake-entity adapter; no NMS dependency will be introduced.
 
 ## 25. Remaining checklist
-All design, implementation, tests, review, validation, merge, and evidence remain.
+Implement the bounded tester domain/runtime, safe player-state mutation and restoration, fake-entity packet adapter and interaction capture, staff command/tool controls including text fallback, configuration, audit/evidence, lifecycle cleanup, tests, documentation, harsh review, exact-head validation, normal merge, containment verification, branch cleanup, and terminal state publication.
 
 ## 26. Known blockers
-Dependency `ES-P04`; packet API decision must use supported repository/runtime evidence.
+No package-start blocker. Private representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02` and is not a prerequisite for beginning this ordinary development package. The account-level private Actions billing/spending-limit condition remains unchanged for parked ES-P02/ES-P05 and must not be treated as ES-P10 staging success.
 
 ## 27. Final evidence
-Unset: API decision, exact heads, lifecycle matrix, tests/checks, review, docs.
+Starting main: `83302749b3247f7a05157f1625fc99da6aa43736`. Starting migration boundary: V17. Protocol API decision: ProtocolLib 5.4.0 through a focused adapter; no unisolated NMS. Final exact heads, lifecycle matrix, tests/checks, review, coverage, and documentation evidence remain pending.
 
 ## 28. Merge and synchronization record
-Unset: merge/resulting main/containment/temporary branch deletion; parity not applicable.
+Pending: PR/merge/resulting main/containment/temporary branch deletion. External parity is not applicable.
