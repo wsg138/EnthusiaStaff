@@ -1,0 +1,139 @@
+package net.enthusia.staff.integration;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.UUID;
+import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
+import net.enthusia.staff.domain.tester.CheatTesterJournalRecord;
+import net.enthusia.staff.domain.tester.CheatTesterJournalStart;
+import net.enthusia.staff.domain.tester.CheatTesterSessionState;
+import net.enthusia.staff.domain.tester.CheatTesterType;
+import net.enthusia.staff.persistence.MariaDb;
+import net.enthusia.staff.persistence.MariaDbRuntime;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.MariaDBContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@Testcontainers
+class CheatTesterJournalIntegrationTest {
+    private static final Instant NOW = Instant.parse("2026-08-07T17:00:00Z");
+    private static final UUID STAFF = UUID.fromString("9a000000-0000-0000-0000-000000000001");
+    private static final UUID TARGET = UUID.fromString("9a000000-0000-0000-0000-000000000002");
+    private static final UUID SESSION = UUID.fromString("9a000000-0000-0000-0000-000000000003");
+    private static final UUID SECOND_SESSION = UUID.fromString("9a000000-0000-0000-0000-000000000004");
+
+    @Container
+    private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
+            .withDatabaseName("enthusia_staff_cheat_tester_test")
+            .withUsername("enthusia_test")
+            .withPassword("enthusia_test_password");
+
+    @Test
+    void journalEnforcesOneActiveTargetSurvivesRestartAndAuditsTerminalState() throws Exception {
+        CheatTesterJournalRecord first;
+        try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            MariaDbIntegrationSupport.insertPlayer(DATABASE, STAFF, "TesterStaff", NOW);
+            MariaDbIntegrationSupport.insertPlayer(DATABASE, TARGET, "TesterTarget", NOW);
+            CheatTesterJournalStore store = runtime.cheatTesterJournalStore();
+
+            first = store.start(start(SESSION, CheatTesterType.AUTO_ARMOR));
+            assertEquals(SESSION, first.sessionId());
+            assertEquals(0L, first.revision());
+            assertTrue(first.active());
+
+            CheatTesterJournalRecord duplicate = store.start(start(SECOND_SESSION, CheatTesterType.NO_FALL));
+            assertEquals(SESSION, duplicate.sessionId(), "duplicate target must return the authoritative active row");
+            assertNotEquals(SECOND_SESSION, duplicate.sessionId());
+
+            CheatTesterJournalRecord checkpoint = store.checkpointEvidence(
+                    SESSION,
+                    first.revision(),
+                    "{\"observed\":true}",
+                    NOW.plusSeconds(1)
+            ).orElseThrow();
+            assertEquals(1L, checkpoint.revision());
+            assertEquals("{\"observed\":true}", checkpoint.evidence());
+        }
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            CheatTesterJournalStore store = runtime.cheatTesterJournalStore();
+            CheatTesterJournalRecord recovered = store.activeForTarget("SMP", TARGET).orElseThrow();
+            assertEquals(SESSION, recovered.sessionId());
+            assertEquals(1L, recovered.revision());
+            assertEquals(1, store.activeForServer("SMP", 10).size());
+
+            assertTrue(store.complete(
+                    SESSION,
+                    recovered.revision(),
+                    CheatTesterSessionState.RESTORED,
+                    "exact state restored",
+                    recovered.evidence(),
+                    NOW.plusSeconds(2)
+            ));
+            assertFalse(store.activeForTarget("SMP", TARGET).isPresent());
+
+            CheatTesterJournalRecord second = store.start(start(SECOND_SESSION, CheatTesterType.FAKE_ENTITY));
+            assertEquals(SECOND_SESSION, second.sessionId(), "terminal rows must release active-target uniqueness");
+            assertTrue(store.complete(
+                    SECOND_SESSION,
+                    second.revision(),
+                    CheatTesterSessionState.CANCELLED,
+                    "fake entity removed",
+                    "{\"attacks\":0}",
+                    NOW.plusSeconds(3)
+            ));
+        }
+
+        assertEquals(4, testerAuditCount());
+        assertEquals(18, latestMigrationVersion());
+    }
+
+    private static CheatTesterJournalStart start(UUID sessionId, CheatTesterType type) {
+        return new CheatTesterJournalStart(
+                sessionId,
+                "SMP",
+                STAFF,
+                TARGET,
+                type,
+                "{\"snapshot\":\"opaque\"}",
+                "{\"tester\":\"" + type.id() + "\"}",
+                NOW,
+                NOW.plus(Duration.ofSeconds(10))
+        );
+    }
+
+    private static int testerAuditCount() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*)
+                     FROM audit_events
+                     WHERE event_type LIKE 'CHEAT_TESTER_%'
+                     """)) {
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
+        }
+    }
+
+    private static int latestMigrationVersion() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success = 1
+                     """)) {
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
+        }
+    }
+}
