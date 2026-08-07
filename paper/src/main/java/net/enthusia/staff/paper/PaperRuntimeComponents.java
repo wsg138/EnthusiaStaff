@@ -74,7 +74,12 @@ record PaperRuntimeComponents(
         );
         staffMode.startRankReconciliation();
         vanish.startRankReconciliation();
-        cheatTester.startRecoveryReconciliation();
+        dependencies.environment().plugin().getServer().getGlobalRegionScheduler().runAtFixedRate(
+                dependencies.environment().plugin(),
+                ignored -> cheatTester.recoverOnlinePlayers(),
+                40L,
+                100L
+        );
         return new PaperRuntimeComponents(
                 evidence,
                 freeze,
