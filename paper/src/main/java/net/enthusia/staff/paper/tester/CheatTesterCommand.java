@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 import net.enthusia.staff.domain.tester.CheatTesterType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -16,6 +15,19 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
+    private static final int NO_ARGUMENTS = 0;
+    private static final int ACTION_ARGUMENT = 1;
+    private static final int TARGET_ARGUMENT = 2;
+    private static final int TYPE_ARGUMENT = 3;
+    private static final String SELECT = "select";
+    private static final String RUN = "run";
+    private static final String CANCEL = "cancel";
+    private static final String STATUS = "status";
+    private static final String CONFIG = "config";
+    private static final List<String> ROOT_COMPLETIONS = List.of(SELECT, RUN, CANCEL, STATUS, CONFIG);
+    private static final List<String> TYPE_COMPLETIONS =
+            Arrays.stream(CheatTesterType.values()).map(CheatTesterType::id).toList();
+
     private final JavaPlugin plugin;
     private final CheatTesterManager manager;
 
@@ -30,27 +42,33 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("Cheat Tester requires an in-game staff session.");
             return true;
         }
-        if (args.length == 0 || "config".equalsIgnoreCase(args[0])) {
+        if (args.length == NO_ARGUMENTS || CONFIG.equalsIgnoreCase(args[0])) {
             manager.showConfiguration(player);
             return true;
         }
+        return dispatch(player, args);
+    }
+
+    private boolean dispatch(Player player, String[] args) {
         return switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "select" -> select(player, args);
-            case "run" -> run(player, args);
-            case "cancel" -> cancel(player, args);
-            case "status" -> status(player);
-            default -> {
-                player.sendMessage(Component.text(
-                        "Usage: /cheattester <select|run|cancel|status|config>",
-                        NamedTextColor.YELLOW
-                ));
-                yield true;
-            }
+            case SELECT -> select(player, args);
+            case RUN -> run(player, args);
+            case CANCEL -> cancel(player, args);
+            case STATUS -> status(player);
+            default -> usage(player);
         };
     }
 
+    private boolean usage(Player player) {
+        player.sendMessage(Component.text(
+                "Usage: /cheattester <select|run|cancel|status|config>",
+                NamedTextColor.YELLOW
+        ));
+        return true;
+    }
+
     private boolean select(Player player, String[] args) {
-        if (args.length != 2) {
+        if (args.length != TARGET_ARGUMENT) {
             player.sendMessage(Component.text("Usage: /cheattester select <totem-refill|no-fall|velocity|auto-armor|fake-entity>"));
             return true;
         }
@@ -62,16 +80,15 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean run(Player player, String[] args) {
-        if (args.length < 2 || args.length > 3) {
+        if (args.length < TARGET_ARGUMENT || args.length > TYPE_ARGUMENT) {
             player.sendMessage(Component.text("Usage: /cheattester run <player> [type]"));
             return true;
         }
-        Player target = plugin.getServer().getPlayerExact(args[1]);
+        Player target = onlineTarget(player, args[1]);
         if (target == null) {
-            player.sendMessage(Component.text("That player is not online on this backend.", NamedTextColor.RED));
             return true;
         }
-        if (args.length == 2) {
+        if (args.length == TARGET_ARGUMENT) {
             manager.runSelected(player, target);
             return true;
         }
@@ -83,17 +100,23 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean cancel(Player player, String[] args) {
-        if (args.length != 2) {
+        if (args.length != TARGET_ARGUMENT) {
             player.sendMessage(Component.text("Usage: /cheattester cancel <player>"));
             return true;
         }
-        Player target = plugin.getServer().getPlayerExact(args[1]);
+        Player target = onlineTarget(player, args[1]);
+        if (target != null) {
+            manager.cancel(player, target.getUniqueId());
+        }
+        return true;
+    }
+
+    private Player onlineTarget(Player player, String name) {
+        Player target = plugin.getServer().getPlayerExact(name);
         if (target == null) {
             player.sendMessage(Component.text("That player is not online on this backend.", NamedTextColor.RED));
-            return true;
         }
-        manager.cancel(player, target.getUniqueId());
-        return true;
+        return target;
     }
 
     private boolean status(Player player) {
@@ -115,22 +138,29 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
         if (!(sender instanceof Player player) || !player.hasPermission("enthusiastaff.cheattester")) {
             return List.of();
         }
-        if (args.length == 1) {
-            return filter(List.of("select", "run", "cancel", "status", "config"), args[0]);
+        return switch (args.length) {
+            case ACTION_ARGUMENT -> filter(ROOT_COMPLETIONS, args[0]);
+            case TARGET_ARGUMENT -> secondArgumentCompletions(args);
+            case TYPE_ARGUMENT -> thirdArgumentCompletions(args);
+            default -> List.of();
+        };
+    }
+
+    private List<String> secondArgumentCompletions(String[] args) {
+        if (SELECT.equalsIgnoreCase(args[0])) {
+            return filter(TYPE_COMPLETIONS, args[1]);
         }
-        if (args.length == 2 && "select".equalsIgnoreCase(args[0])) {
-            return filter(Arrays.stream(CheatTesterType.values()).map(CheatTesterType::id).toList(), args[1]);
-        }
-        if (args.length == 2 && ("run".equalsIgnoreCase(args[0]) || "cancel".equalsIgnoreCase(args[0]))) {
+        if (RUN.equalsIgnoreCase(args[0]) || CANCEL.equalsIgnoreCase(args[0])) {
             return filter(plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(), args[1]);
-        }
-        if (args.length == 3 && "run".equalsIgnoreCase(args[0])) {
-            return filter(Arrays.stream(CheatTesterType.values()).map(CheatTesterType::id).toList(), args[2]);
         }
         return List.of();
     }
 
-    private static List<String> filter(List<String> values, String prefix) {
+    private static List<String> thirdArgumentCompletions(String[] args) {
+        return RUN.equalsIgnoreCase(args[0]) ? filter(TYPE_COMPLETIONS, args[2]) : List.of();
+    }
+
+    static List<String> filter(List<String> values, String prefix) {
         String normalized = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
         for (String value : values) {
