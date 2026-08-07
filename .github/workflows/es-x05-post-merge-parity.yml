@@ -1,0 +1,92 @@
+name: ES-X05 post-merge parity
+
+on:
+  push:
+    branches:
+      - package/es-x05-completion-publication
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: Verify exact aggregate/standalone parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AGGREGATE_SHA: 2bcf5d46ca6471fddac600f85020c66105b1c0f2
+      STANDALONE_SHA: 2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2
+    steps:
+      - name: Check out exact aggregate main
+        uses: actions/checkout@v6
+        with:
+          repository: wsg138/EnthusiaStaff
+          ref: ${{ env.AGGREGATE_SHA }}
+          path: aggregate
+          persist-credentials: false
+
+      - name: Check out exact standalone main
+        uses: actions/checkout@v6
+        with:
+          repository: wsg138/enthusia-site
+          ref: ${{ env.STANDALONE_SHA }}
+          path: standalone
+          persist-credentials: false
+
+      - name: Verify exact revisions and clean diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C aggregate rev-parse HEAD)" = "${AGGREGATE_SHA}"
+          test "$(git -C standalone rev-parse HEAD)" = "${STANDALONE_SHA}"
+          git -C aggregate diff --check 9b1aac2677049ccc71dbddd963831f270c73dcd0 "${AGGREGATE_SHA}"
+
+      - name: Generate deterministic manifests and parity report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 aggregate/tools/component-sync/component_sync.py manifest \
+            aggregate/components/enthusia-site \
+            --revision "${AGGREGATE_SHA}" > aggregate-manifest.json
+          python3 aggregate/tools/component-sync/component_sync.py manifest \
+            standalone \
+            --revision "${STANDALONE_SHA}" > standalone-manifest.json
+          python3 aggregate/tools/component-sync/component_sync.py compare \
+            aggregate/components/enthusia-site standalone \
+            --aggregate-sha "${AGGREGATE_SHA}" \
+            --standalone-sha "${STANDALONE_SHA}" > parity.json
+          cat parity.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('parity.json').read_text(encoding='utf-8'))
+          assert data['parity'] is True, data
+          assert data['added_in_aggregate'] == [], data
+          assert data['missing_from_aggregate'] == [], data
+          assert data['modified'] == [], data
+          assert data['aggregate_hash'] == data['standalone_hash'], data
+          print('PARITY_OK', data['aggregate_hash'])
+          PY
+
+      - name: Validate recovery record files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool aggregate/ai-agents/reports/package-handoffs/2026-08-06-es-x05-component-parity.json >/dev/null
+          test -f aggregate/ai-agents/work-packages/PACKAGE-REGISTRY.md
+          test -f aggregate/ai-agents/work-packages/packages/ES-X05.md
+          test -f aggregate/ai-agents/WORKSPACE-STATE.md
+          test -f aggregate/ai-agents/reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md
+          test -f aggregate/ai-agents/reports/agent-handoffs/latest.md
+          test -f aggregate/components/enthusia-site/COMPONENT-METADATA.md
+
+      - name: Upload parity evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: es-x05-post-merge-parity
+          path: |
+            aggregate-manifest.json
+            standalone-manifest.json
+            parity.json
+          if-no-files-found: error
+          retention-days: 14
