@@ -19,6 +19,8 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     private static final int ACTION_ARGUMENT = 1;
     private static final int TARGET_ARGUMENT = 2;
     private static final int TYPE_ARGUMENT = 3;
+    private static final String PERMISSION = "enthusiastaff.cheattester";
+    private static final String CANCEL_ANY_PERMISSION = "enthusiastaff.cheattester.cancel-any";
     private static final String SELECT = "select";
     private static final String RUN = "run";
     private static final String CANCEL = "cancel";
@@ -120,7 +122,11 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean status(Player player) {
-        boolean includeAll = player.hasPermission("enthusiastaff.cheattester.cancel-any");
+        if (!player.hasPermission(PERMISSION)) {
+            player.sendMessage(Component.text("You do not have permission to use Cheat Tester.", NamedTextColor.RED));
+            return true;
+        }
+        boolean includeAll = player.hasPermission(CANCEL_ANY_PERMISSION);
         List<String> lines = manager.statusLines(player.getUniqueId(), includeAll);
         if (lines.isEmpty()) {
             player.sendMessage(Component.text("No matching Cheat Tester sessions are active."));
@@ -135,7 +141,7 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!(sender instanceof Player player) || !player.hasPermission("enthusiastaff.cheattester")) {
+        if (!(sender instanceof Player player) || !player.hasPermission(PERMISSION)) {
             return List.of();
         }
         return switch (args.length) {
