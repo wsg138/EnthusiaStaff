@@ -34,9 +34,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final int MAX_AUTOMATED_MATCHES = 20;
     private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
     private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
-    private static final int AUTOMATIC_RETENTION_BATCH_SIZE = 500;
-    private static final Duration SENSITIVE_RETENTION = Duration.ofDays(90);
-    private static final Duration AUTOMATIC_RETENTION_INTERVAL = Duration.ofHours(1);
     private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
             .filter(SanctionType::inheritsAcrossAltRelationships)
@@ -45,8 +42,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final AltInheritancePolicy inheritancePolicy = new AltInheritancePolicy();
-    private final Object retentionLock = new Object();
-    private Instant nextAutomaticRetentionAt = Instant.EPOCH;
 
     public JdbcNetworkIdentityStore(DataSource dataSource, ObjectMapper json) {
         if (dataSource == null || json == null) {
@@ -66,7 +61,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         if (joiningPlayerId == null || identity == null || observedAt == null) {
             throw new IllegalArgumentException("network identity observation fields must be present");
         }
-        boolean automaticRetentionReserved = false;
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -75,15 +69,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 if (suppressAutomatedEvidence) {
                     connection.commit();
                     return new NetworkIdentityObservationResult(0, 0, 0, true);
-                }
-
-                automaticRetentionReserved = reserveAutomaticRetention(observedAt);
-                if (automaticRetentionReserved) {
-                    purgeExpired(
-                            connection,
-                            observedAt.minus(SENSITIVE_RETENTION),
-                            AUTOMATIC_RETENTION_BATCH_SIZE
-                    );
                 }
 
                 Optional<Instant> cutoverAt = latestCutover(connection);
@@ -165,18 +150,12 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 connection.commit();
                 return new NetworkIdentityObservationResult(matches.size(), inherited, alerts, false);
             } catch (SQLException | JsonProcessingException exception) {
-                if (automaticRetentionReserved) {
-                    releaseAutomaticRetentionReservation(observedAt);
-                }
                 rollback(connection, exception);
                 throw new ModerationPersistenceException("Network identity observation transaction failed", exception);
             } finally {
                 restoreAutoCommit(connection);
             }
         } catch (SQLException exception) {
-            if (automaticRetentionReserved) {
-                releaseAutomaticRetentionReservation(observedAt);
-            }
             throw new ModerationPersistenceException("Unable to open network identity transaction", exception);
         }
     }
@@ -873,24 +852,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             tokensDeleted = statement.executeUpdate();
         }
         return new NetworkIdentityRetentionResult(tokensDeleted, evidenceDeleted);
-    }
-
-    private boolean reserveAutomaticRetention(Instant now) {
-        synchronized (retentionLock) {
-            if (now.isBefore(nextAutomaticRetentionAt)) {
-                return false;
-            }
-            nextAutomaticRetentionAt = now.plus(AUTOMATIC_RETENTION_INTERVAL);
-            return true;
-        }
-    }
-
-    private void releaseAutomaticRetentionReservation(Instant observedAt) {
-        synchronized (retentionLock) {
-            if (!nextAutomaticRetentionAt.isAfter(observedAt.plus(AUTOMATIC_RETENTION_INTERVAL))) {
-                nextAutomaticRetentionAt = observedAt;
-            }
-        }
     }
 
     private static double confidence(AltRelationshipState state) {
