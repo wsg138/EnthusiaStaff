@@ -55,10 +55,11 @@ This is infrastructure-unavailable evidence only, never a staging pass and never
 ## Merge, containment, and cleanup
 
 - PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36`.
-- Post-merge `main` is `a88201524690848f778297f140f7ee2ba5b6ce36`.
+- Post-merge `main` is `a88201524690848f778297f140f7ee2ba5b6ce36` before terminal-record publication.
 - The merge has parents `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7` and frozen implementation head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`.
 - Comparing frozen implementation head to merged `main` reports `ahead_by=1`, `behind_by=0`, and no file differences, so product containment is exact.
 - `package/es-p09-alt-network-identity` no longer exists after merge; cleanup is complete.
+- Documentation-only PR #85 publishes these terminal records; it contains no product/runtime/schema/configuration changes.
 
 ## Boundaries carried forward
 
@@ -66,4 +67,4 @@ ES-P03 remains authoritative for Java/Floodgate platform identity. Production/pr
 
 ## Terminal handoff
 
-ES-P09 development is complete. The only remaining action by this worker is publication of these terminal records through the documentation-only finalization PR, verification that those records reached `main`, then stop. Do not select or activate another package.
+ES-P09 development is complete. PR #85 is the terminal publication vehicle for canonical package/registry/workspace/handoff state. After its merge is verified on `main`, this worker stops. Do not select or activate another package.
