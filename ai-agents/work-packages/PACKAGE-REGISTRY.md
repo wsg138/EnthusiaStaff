@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P10` is `ACTIVE` on `package/es-p10-cheat-testers` after automatic sequential selection from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736`. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P10` is `MERGE_PENDING` on `package/es-p10-cheat-testers` / PR #86 after implementing its owned scope. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -27,8 +27,8 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
-| `ES-P10` | Cheat tester and fake-entity system | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 80 | `ES-P04` | ChatGPT sequential package worker; branch `package/es-p10-cheat-testers`; starting main `83302749b3247f7a05157f1625fc99da6aa43736`; handoff `2026-08-07-es-p10-cheat-testers.md` |
-| `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | dependency blocked while ES-P10 is active |
+| `ES-P10` | Cheat tester and fake-entity system | `MERGE_PENDING` | `ACTIONABLE_CONTINUATION` | 80 | `ES-P04` | PR #86; branch `package/es-p10-cheat-testers`; implementation/pre-freeze review complete; exact-head gates, normal merge, containment, branch cleanup, and terminal publication remain |
+| `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | dependency remains blocked until ES-P10 terminal publication; do not activate in this worker |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | dependency blocked |
@@ -82,7 +82,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 - Completed protected-token graph hardening: bounded shared-network matching and sanction reads; broad-network suppression; simultaneous-play ambiguity; preserved manual decisions; unambiguous-only narrow automatic inheritance; evidence throttling; trusted-clock, authority-fenced bounded retention; raw-address rejection before manual audit persistence; direct concurrency/restart/privacy/key-version tests; Wiki updates.
 - Exact frozen-head evidence: Wiki `31193764800` / `92916829444` success; Coverage `31193765341` / `92916907616` success on Java 21 including full build/tests/MariaDB-Testcontainers/aggregate JaCoCo/runtime-JAR inspection; Codacy `92917176627` success with zero annotations; repository CodeRabbit status success; all four actionable threads resolved/outdated and zero valid unresolved review threads at merge.
 - Private staging remains **NOT A PASS** and is assigned to ES-V02. Public wrapper `31193762319` dispatched private run `31193769314`; required Ubuntu build `92916864019` had runner ID `0`, empty runner name, steps `[]`, and the Billing & plans rejection; Pi `92916876057` skipped. No product validation step executed in that private run.
-- ES-P03 remains the canonical platform-identity boundary. Production/private representative network data, production key rotation, false-positive/distributed acceptance, deployment/cutover, and issue #43 remain excluded/deferred.
+- ES-P03 remains the canonical platform-identity boundary. Production/private representative network data, false-positive/distributed acceptance, deployment/cutover, and issue #43 remain excluded/deferred.
 - V17 remains current and immutable; ES-P09 added no migration.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p09-alt-network-identity.md`.
 
@@ -90,16 +90,16 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 
 - Selected automatically on 2026-08-07 after fresh live reconciliation found no actionable continuation: ES-P02 and ES-P05 remain unchanged `PARKED_BLOCKED`, and no competing ES-P10 branch/PR/handoff existed.
 - Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736` (merge PR #85).
-- Active branch: `package/es-p10-cheat-testers`.
-- Worker: `ChatGPT sequential package worker`.
-- Included scope: `AUD-TESTER-001` and `AUD-TESTER-002` only — authorized cheat tester workflow, four release tester types, exact temporary target-state restoration, bounded evidence/audit, fake-entity creation/visibility/interaction capture, deterministic cleanup, duplicate/limit enforcement, commands/staff-tool controls, configuration, tests, and documentation.
+- Status: `MERGE_PENDING`; PR #86 on `package/es-p10-cheat-testers`.
+- Implemented `AUD-TESTER-001` and `AUD-TESTER-002`: authenticated staff-mode tool and `/cheattester` fallback; Totem refill, No-fall, Velocity/anti-knockback, and Auto-armor release probes; exact temporary state restoration; V18 durable recovery journal; globally unique active-target fencing; inventory-lock participation; bounded evidence/audit; target/staff-scoped client-side fake entity; target-only suspect interaction counts; lifecycle cleanup/recovery; limits/configuration/tests/Wiki.
+- Harsh review fixed a pre-mutation cancellation/journal race and excluded controlling-staff fake-entity interactions from suspect evidence. Static-analysis findings were resolved by splitting lifecycle/session, probe mechanics, evidence, mutation guards, snapshot restoration, command parsing, and persistence validation into focused responsibilities rather than broad suppressions.
 - Explicit exclusions remain: fake bases / `AUD-TESTER-003` (`ES-P11`), automatic punishment, production use, unsupported packet/NMS internals, deployment/cutover/private data.
-- Protocol/API decision: use the repository's existing ProtocolLib 5.4.0 compile-only dependency behind a focused optional adapter. Fail closed when ProtocolLib is unavailable or unhealthy; introduce no unisolated NMS dependency.
-- Migration boundary: V17 current and immutable at package selection. No migration is assumed; if essential durable state is required, add V18 with clean-install, upgrade, and checksum coverage.
-- Representative distributed/Java/Bedrock acceptance remains `ES-V02`; ordinary development evidence must not relabel unavailable private staging as passed.
+- Protocol/API decision: use ProtocolLib 5.4.0 behind `FakeEntityAdapter`; fail closed when unavailable/unhealthy; no unisolated NMS dependency.
+- Migration boundary: ES-P10 adds immutable V18; V1–V17 are unchanged. `main` remains V17 until PR #86 merges.
+- Private Pi/distributed staging attempts that receive runner ID `0` and execute no product steps are **NOT A PASS**. The package contract explicitly retains representative Java/Bedrock/distributed acceptance in `ES-V02`; no owner-approved ES-P10 staging exception is being claimed.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
-- Exact next action: implement the full selected package, checkpoint the branch/PR/state, harshly review, freeze and run all applicable exact-head validation, merge normally only if gates pass, verify containment/cleanup, publish terminal records, and stop without activating ES-P11.
+- Exact next action: freeze the final content head, require all applicable hosted/static/review gates and zero valid threads, merge PR #86 normally, verify containment, delete the temporary implementation branch, publish terminal state, recompute dependency-derived statuses without activating ES-P11, and stop.
 
 ## Next-worker boundary
 
-ES-P10 is the sole active implementation package. This worker must complete or correctly park ES-P10, publish persistent state, recompute dependency-derived statuses without activating another package, and stop. ES-P02 and ES-P05 remain parked unless their exact external unblock condition changes.
+ES-P10 is `MERGE_PENDING` and remains the sole package owned by this worker. Do not start another package until PR #86 merges, terminal publication reaches `main`, dependency-derived statuses are recomputed, and temporary ES-P10 branches are removed.
