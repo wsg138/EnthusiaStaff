@@ -22,9 +22,13 @@ public record CheatTesterSettings(
                 || sessionTimeout.toMillis() > MAX_TIMEOUT_MILLIS
                 || maximumActiveGlobal < 1 || maximumActiveGlobal > 32
                 || maximumActivePerStaff < 1 || maximumActivePerStaff > maximumActiveGlobal
+                || !Double.isFinite(fakeEntityDistance)
                 || fakeEntityDistance < 1.0 || fakeEntityDistance > 8.0
+                || !Double.isFinite(velocityHorizontal)
                 || velocityHorizontal < 0.0 || velocityHorizontal > 2.0
+                || !Double.isFinite(velocityVertical)
                 || velocityVertical < 0.0 || velocityVertical > 2.0
+                || !Double.isFinite(noFallVertical)
                 || noFallVertical < 0.1 || noFallVertical > 2.0
                 || probeTicks < 10 || probeTicks > 300) {
             throw new IllegalArgumentException("cheat tester settings are outside safe bounds");
