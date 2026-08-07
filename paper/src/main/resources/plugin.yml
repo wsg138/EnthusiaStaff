@@ -98,6 +98,10 @@ commands:
     description: Use the staff-mode operational tool menu and text fallbacks
     usage: /stafftools | /stafftools random | /stafftools spectate <player>
     permission: enthusiastaff.stafftools.menu
+  cheattester:
+    description: Configure and run bounded evidence-only cheat tester probes
+    usage: /cheattester <select|run|cancel|status|config>
+    permission: enthusiastaff.cheattester
   vanish:
     description: Toggle durable rank-aware vanish or spectator tab presentation
     usage: /vanish | /vanish tab <show|hide>
@@ -204,6 +208,10 @@ permissions:
     default: false
   enthusiastaff.stafftools.spectate-exempt:
     default: false
+  enthusiastaff.cheattester:
+    default: false
+  enthusiastaff.cheattester.cancel-any:
+    default: false
   enthusiastaff.vanish:
     default: false
   enthusiastaff.staffchat:
@@ -271,6 +279,7 @@ permissions:
       enthusiastaff.stafftools.teleport: true
       enthusiastaff.stafftools.spectate: true
       enthusiastaff.stafftools.menu: true
+      enthusiastaff.cheattester: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
       enthusiastaff.client: true
@@ -295,6 +304,7 @@ permissions:
       enthusiastaff.inventory.edit: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
+      enthusiastaff.cheattester: true
   enthusiastaff.rank.admin:
     default: false
     children:
@@ -310,6 +320,7 @@ permissions:
       enthusiastaff.sanction.overturn.appeal: true
       enthusiastaff.market.restrict: true
       enthusiastaff.reputation.restrict: true
+      enthusiastaff.cheattester.cancel-any: true
   enthusiastaff.rank.founder:
     default: false
     children:
