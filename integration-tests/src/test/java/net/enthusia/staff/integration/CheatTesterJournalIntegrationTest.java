@@ -25,6 +25,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class CheatTesterJournalIntegrationTest {
+    private static final String SMP_SERVER = "SMP";
+    private static final String HUB_SERVER = "HUB";
     private static final Instant NOW = Instant.parse("2026-08-07T17:00:00Z");
     private static final UUID STAFF = UUID.fromString("9a000000-0000-0000-0000-000000000001");
     private static final UUID TARGET = UUID.fromString("9a000000-0000-0000-0000-000000000002");
@@ -39,27 +41,20 @@ class CheatTesterJournalIntegrationTest {
 
     @Test
     void journalGloballyFencesTargetSurvivesRestartAndAuditsTerminalState() throws Exception {
-        CheatTesterJournalRecord first;
+        createActiveSessionAndCheckpointEvidence();
+        recoverCompleteAndReuseTarget();
+        assertEquals(4, testerAuditCount());
+        assertEquals(18, latestMigrationVersion());
+    }
+
+    private static void createActiveSessionAndCheckpointEvidence() {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             MariaDbIntegrationSupport.insertPlayer(DATABASE, STAFF, "TesterStaff", NOW);
             MariaDbIntegrationSupport.insertPlayer(DATABASE, TARGET, "TesterTarget", NOW);
             CheatTesterJournalStore store = runtime.cheatTesterJournalStore();
-
-            first = store.start(start(SESSION, "SMP", CheatTesterType.AUTO_ARMOR));
-            assertEquals(SESSION, first.sessionId());
-            assertEquals(0L, first.revision());
-            assertTrue(first.active());
-            assertEquals(first, store.activeForTarget(TARGET).orElseThrow());
-            assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, "SMP", NOW));
-            assertEquals("SMP", runtime.inventoryJournalStore().lockedOwningServer(TARGET, NOW).orElseThrow());
-
-            CheatTesterJournalRecord duplicate = store.start(start(SECOND_SESSION, "HUB", CheatTesterType.NO_FALL));
-            assertEquals(SESSION, duplicate.sessionId(),
-                    "another backend must receive the globally authoritative active row");
-            assertEquals("SMP", duplicate.serverId());
-            assertNotEquals(SECOND_SESSION, duplicate.sessionId());
-            assertFalse(store.activeForTarget("HUB", TARGET).isPresent());
-
+            CheatTesterJournalRecord first = store.start(start(SESSION, SMP_SERVER, CheatTesterType.AUTO_ARMOR));
+            assertInitialSession(runtime, store, first);
+            assertGlobalDuplicateFence(store);
             CheatTesterJournalRecord checkpoint = store.checkpointEvidence(
                     SESSION,
                     first.revision(),
@@ -69,16 +64,35 @@ class CheatTesterJournalIntegrationTest {
             assertEquals(1L, checkpoint.revision());
             assertEquals("{\"observed\":true}", checkpoint.evidence());
         }
+    }
 
+    private static void assertInitialSession(
+            MariaDbRuntime runtime,
+            CheatTesterJournalStore store,
+            CheatTesterJournalRecord first
+    ) {
+        assertEquals(SESSION, first.sessionId());
+        assertEquals(0L, first.revision());
+        assertTrue(first.active());
+        assertEquals(first, store.activeForTarget(TARGET).orElseThrow());
+        assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, SMP_SERVER, NOW));
+        assertEquals(SMP_SERVER, runtime.inventoryJournalStore().lockedOwningServer(TARGET, NOW).orElseThrow());
+    }
+
+    private static void assertGlobalDuplicateFence(CheatTesterJournalStore store) {
+        CheatTesterJournalRecord duplicate = store.start(start(SECOND_SESSION, HUB_SERVER, CheatTesterType.NO_FALL));
+        assertEquals(SESSION, duplicate.sessionId(),
+                "another backend must receive the globally authoritative active row");
+        assertEquals(SMP_SERVER, duplicate.serverId());
+        assertNotEquals(SECOND_SESSION, duplicate.sessionId());
+        assertFalse(store.activeForTarget(HUB_SERVER, TARGET).isPresent());
+    }
+
+    private static void recoverCompleteAndReuseTarget() {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             CheatTesterJournalStore store = runtime.cheatTesterJournalStore();
-            CheatTesterJournalRecord recovered = store.activeForTarget("SMP", TARGET).orElseThrow();
-            assertEquals(SESSION, recovered.sessionId());
-            assertEquals(1L, recovered.revision());
-            assertEquals(1, store.activeForServer("SMP", 10).size());
-            assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, "HUB", NOW.plusSeconds(2)),
-                    "the durable tester row must block offline asset work regardless of requested scope");
-
+            CheatTesterJournalRecord recovered = store.activeForTarget(SMP_SERVER, TARGET).orElseThrow();
+            assertRecoveredLock(runtime, store, recovered);
             assertTrue(store.complete(
                     SESSION,
                     recovered.revision(),
@@ -88,23 +102,35 @@ class CheatTesterJournalIntegrationTest {
                     NOW.plusSeconds(2)
             ));
             assertFalse(store.activeForTarget(TARGET).isPresent());
-            assertFalse(runtime.inventoryJournalStore().isLocked(TARGET, "SMP", NOW.plusSeconds(2)));
-
-            CheatTesterJournalRecord second = store.start(start(SECOND_SESSION, "HUB", CheatTesterType.FAKE_ENTITY));
-            assertEquals(SECOND_SESSION, second.sessionId(), "terminal rows must release active-target uniqueness");
-            assertEquals("HUB", second.serverId());
-            assertTrue(store.complete(
-                    SECOND_SESSION,
-                    second.revision(),
-                    CheatTesterSessionState.CANCELLED,
-                    "fake entity removed",
-                    "{\"attacks\":0}",
-                    NOW.plusSeconds(3)
-            ));
+            assertFalse(runtime.inventoryJournalStore().isLocked(TARGET, SMP_SERVER, NOW.plusSeconds(2)));
+            completeSecondSession(store);
         }
+    }
 
-        assertEquals(4, testerAuditCount());
-        assertEquals(18, latestMigrationVersion());
+    private static void assertRecoveredLock(
+            MariaDbRuntime runtime,
+            CheatTesterJournalStore store,
+            CheatTesterJournalRecord recovered
+    ) {
+        assertEquals(SESSION, recovered.sessionId());
+        assertEquals(1L, recovered.revision());
+        assertEquals(1, store.activeForServer(SMP_SERVER, 10).size());
+        assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, HUB_SERVER, NOW.plusSeconds(2)),
+                "the durable tester row must block offline asset work regardless of requested scope");
+    }
+
+    private static void completeSecondSession(CheatTesterJournalStore store) {
+        CheatTesterJournalRecord second = store.start(start(SECOND_SESSION, HUB_SERVER, CheatTesterType.FAKE_ENTITY));
+        assertEquals(SECOND_SESSION, second.sessionId(), "terminal rows must release active-target uniqueness");
+        assertEquals(HUB_SERVER, second.serverId());
+        assertTrue(store.complete(
+                SECOND_SESSION,
+                second.revision(),
+                CheatTesterSessionState.CANCELLED,
+                "fake entity removed",
+                "{\"attacks\":0}",
+                NOW.plusSeconds(3)
+        ));
     }
 
     private static CheatTesterJournalStart start(UUID sessionId, String serverId, CheatTesterType type) {
