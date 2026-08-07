@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P10` is `MERGE_PENDING` on `package/es-p10-cheat-testers` / PR #86 after implementing its owned scope. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P11` is dependency-complete and `READY`. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -27,8 +27,8 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
-| `ES-P10` | Cheat tester and fake-entity system | `MERGE_PENDING` | `ACTIONABLE_CONTINUATION` | 80 | `ES-P04` | PR #86; branch `package/es-p10-cheat-testers`; implementation/pre-freeze review complete; exact-head gates, normal merge, containment, branch cleanup, and terminal publication remain |
-| `ES-P11` | Fake-base generation and cleanup | `PLANNED` | — | 90 | `ES-P10` | dependency remains blocked until ES-P10 terminal publication; do not activate in this worker |
+| `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d` from frozen head `1997caa864847049d51bfc58402f019e0a0d65c6`; exact containment verified; implementation branch deleted; representative Java/Bedrock/distributed acceptance remains ES-V02 |
+| `ES-P11` | Fake-base generation and cleanup | `READY` | `READY` | 90 | `ES-P10` | dependency is now complete; eligible for a future worker after fresh live reconciliation; not activated by the ES-P10 worker |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | dependency blocked |
@@ -88,18 +88,21 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, and `ES-X05` ar
 
 ## `ES-P10`
 
-- Selected automatically on 2026-08-07 after fresh live reconciliation found no actionable continuation: ES-P02 and ES-P05 remain unchanged `PARKED_BLOCKED`, and no competing ES-P10 branch/PR/handoff existed.
+- Live reconciliation selected ES-P10 as the highest-priority `ACTIONABLE_CONTINUATION` because PR #86 / `package/es-p10-cheat-testers` already existed with unfinished exact-head quality/review work. ES-P02 and ES-P05 remained unchanged `PARKED_BLOCKED` and were not resumed.
 - Starting legitimate `main`: `83302749b3247f7a05157f1625fc99da6aa43736` (merge PR #85).
-- Status: `MERGE_PENDING`; PR #86 on `package/es-p10-cheat-testers`.
-- Implemented `AUD-TESTER-001` and `AUD-TESTER-002`: authenticated staff-mode tool and `/cheattester` fallback; Totem refill, No-fall, Velocity/anti-knockback, and Auto-armor release probes; exact temporary state restoration; V18 durable recovery journal; globally unique active-target fencing; inventory-lock participation; bounded evidence/audit; target/staff-scoped client-side fake entity; target-only suspect interaction counts; lifecycle cleanup/recovery; limits/configuration/tests/Wiki.
-- Harsh review fixed a pre-mutation cancellation/journal race and excluded controlling-staff fake-entity interactions from suspect evidence. Static-analysis findings were resolved by splitting lifecycle/session, probe mechanics, evidence, mutation guards, snapshot restoration, command parsing, and persistence validation into focused responsibilities rather than broad suppressions.
+- Frozen implementation head: `1997caa864847049d51bfc58402f019e0a0d65c6`.
+- PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d`.
+- Post-merge containment is exact: merged `main` is one merge commit ahead of the frozen implementation head, zero behind, with no file differences. The implementation branch `package/es-p10-cheat-testers` was automatically deleted and returns 404.
+- Completed `AUD-TESTER-001` and `AUD-TESTER-002`: authenticated staff-mode tool and `/cheattester` fallback; Totem refill, No-fall, Velocity/anti-knockback, and Auto-armor release probes; exact temporary state restoration; immutable V18 durable recovery journal; globally unique active-target fencing; cross-backend login recovery; inventory-lock participation; bounded evidence/audit; target/staff-scoped client-side fake entity; target-only suspect interaction counts; lifecycle cleanup/recovery; limits/configuration/tests/Wiki.
+- Continuation review resolved strict nested configuration handling, recovery polling load, tagged-tool damage leakage, status privacy, inventory mutation guards, non-finite settings, snapshot validation ordering, ProtocolLib runtime/linkage/cleanup failure semantics, stale delayed fake spawns, cross-backend durable recovery, persistence IDs/JSON/payload sizing, cancellation/journal ordering, controlling-staff evidence contamination, and static size/direct-coverage findings. Zero valid unresolved review threads remained at merge.
+- Protocol/API decision: ProtocolLib 5.4.0 behind `FakeEntityAdapter`; provider/packet/cleanup failures fail closed; no unisolated NMS dependency.
+- Exact frozen-head hosted evidence: Wiki check `93015435354` success; workflow run `31224336640` successful unchanged-head rerun job `93016497496` on Java 21 with build/tests/MariaDB/Testcontainers/migrations/aggregate JaCoCo/runtime-JAR inspection/artifact/Codacy coverage upload; artifact `9011777818`, digest `sha256:4557877edff2589065483f4d2d81f0c231511001ad04ea82d5b36cfbba1c762a`; aggregate coverage 2,576/5,427 lines and 796/1,887 branches; Codacy static `93015840928` success with zero issues; coverage variation `93017546035` success at `-0.98%` against the `-1.0%` limit; diff coverage `93017545807` success at `29.91%` with no defined gate.
+- The first attempt of workflow run `31224336640` hit an unrelated MariaDB concurrent-update failure in the already-merged punishment-request-alert integration test. No ES-P10 code changed in response; failed jobs were rerun on the exact unchanged SHA and the complete hosted job then succeeded. Only the clean unchanged-head rerun is counted as passing evidence.
+- Exact frozen-head private staging remains **NOT A PASS** and is assigned to ES-V02: private run `31224339373`; Ubuntu build `93015447468` runner ID `0`, empty runner name, steps `[]`; Pi `93015487565` skipped. No ES-P10 owner-approved infrastructure exception was claimed and no unavailable gate was relabeled as success.
+- V18 is now the aggregate `main` migration boundary; V1–V17 remain unchanged.
 - Explicit exclusions remain: fake bases / `AUD-TESTER-003` (`ES-P11`), automatic punishment, production use, unsupported packet/NMS internals, deployment/cutover/private data.
-- Protocol/API decision: use ProtocolLib 5.4.0 behind `FakeEntityAdapter`; fail closed when unavailable/unhealthy; no unisolated NMS dependency.
-- Migration boundary: ES-P10 adds immutable V18; V1–V17 are unchanged. `main` remains V17 until PR #86 merges.
-- Private Pi/distributed staging attempts that receive runner ID `0` and execute no product steps are **NOT A PASS**. The package contract explicitly retains representative Java/Bedrock/distributed acceptance in `ES-V02`; no owner-approved ES-P10 staging exception is being claimed.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
-- Exact next action: freeze the final content head, require all applicable hosted/static/review gates and zero valid threads, merge PR #86 normally, verify containment, delete the temporary implementation branch, publish terminal state, recompute dependency-derived statuses without activating ES-P11, and stop.
 
 ## Next-worker boundary
 
-ES-P10 is `MERGE_PENDING` and remains the sole package owned by this worker. Do not start another package until PR #86 merges, terminal publication reaches `main`, dependency-derived statuses are recomputed, and temporary ES-P10 branches are removed.
+ES-P10 is terminal `COMPLETE`; this worker owns no further package. Dependency recomputation makes ES-P11 `READY`, but it was not activated or modified by the ES-P10 worker. A future worker must begin with fresh live GitHub reconciliation and the canonical selection rules. ES-P02 and ES-P05 remain parked until their exact external unblock condition changes.
