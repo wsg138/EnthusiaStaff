@@ -23,6 +23,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
     private static final int MAX_ACTIVE_READ = 256;
     private static final int MAX_EVIDENCE = 32 * 1024;
     private static final int MAX_REASON = 255;
+    private static final int EXACTLY_ONE_ROW = 1;
 
     private final DataSource dataSource;
 
@@ -129,19 +130,8 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                int changed;
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE cheat_tester_sessions
-                        SET evidence_text = ?, updated_at = ?, revision = revision + 1
-                        WHERE session_id = ? AND state = 'ACTIVE' AND revision = ?
-                        """)) {
-                    statement.setString(1, evidence);
-                    statement.setTimestamp(2, Timestamp.from(now));
-                    statement.setBytes(3, UuidBytes.toBytes(sessionId));
-                    statement.setLong(4, expectedRevision);
-                    changed = statement.executeUpdate();
-                }
-                if (changed != 1) {
+                int changed = checkpoint(connection, sessionId, expectedRevision, evidence, now);
+                if (changed != EXACTLY_ONE_ROW) {
                     connection.rollback();
                     return Optional.empty();
                 }
@@ -160,6 +150,26 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
         }
     }
 
+    private static int checkpoint(
+            Connection connection,
+            UUID sessionId,
+            long expectedRevision,
+            String evidence,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE cheat_tester_sessions
+                SET evidence_text = ?, updated_at = ?, revision = revision + 1
+                WHERE session_id = ? AND state = 'ACTIVE' AND revision = ?
+                """)) {
+            statement.setString(1, evidence);
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setBytes(3, UuidBytes.toBytes(sessionId));
+            statement.setLong(4, expectedRevision);
+            return statement.executeUpdate();
+        }
+    }
+
     @Override
     public boolean complete(
             UUID sessionId,
@@ -174,27 +184,14 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             connection.setAutoCommit(false);
             try {
                 CheatTesterJournalRecord current = byId(connection, sessionId, true).orElse(null);
-                if (current == null || !current.active() || current.revision() != expectedRevision) {
+                if (!matchesActiveRevision(current, expectedRevision)) {
                     connection.rollback();
                     return false;
                 }
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE cheat_tester_sessions
-                        SET active_target_uuid = NULL, evidence_text = ?, state = ?, completion_reason = ?,
-                            completed_at = ?, updated_at = ?, revision = revision + 1
-                        WHERE session_id = ? AND state = 'ACTIVE' AND revision = ?
-                        """)) {
-                    statement.setString(1, evidence);
-                    statement.setString(2, terminalState.name());
-                    statement.setString(3, reason);
-                    statement.setTimestamp(4, Timestamp.from(now));
-                    statement.setTimestamp(5, Timestamp.from(now));
-                    statement.setBytes(6, UuidBytes.toBytes(sessionId));
-                    statement.setLong(7, expectedRevision);
-                    if (statement.executeUpdate() != 1) {
-                        connection.rollback();
-                        return false;
-                    }
+                if (updateCompletion(connection, sessionId, expectedRevision, terminalState, reason, evidence, now)
+                        != EXACTLY_ONE_ROW) {
+                    connection.rollback();
+                    return false;
                 }
                 insertAudit(connection, sessionId, current.staffId(), current.targetId(),
                         "CHEAT_TESTER_" + terminalState.name(), reason, now);
@@ -208,6 +205,36 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open tester completion transaction", exception);
+        }
+    }
+
+    private static boolean matchesActiveRevision(CheatTesterJournalRecord current, long expectedRevision) {
+        return current != null && current.active() && current.revision() == expectedRevision;
+    }
+
+    private static int updateCompletion(
+            Connection connection,
+            UUID sessionId,
+            long expectedRevision,
+            CheatTesterSessionState terminalState,
+            String reason,
+            String evidence,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE cheat_tester_sessions
+                SET active_target_uuid = NULL, evidence_text = ?, state = ?, completion_reason = ?,
+                    completed_at = ?, updated_at = ?, revision = revision + 1
+                WHERE session_id = ? AND state = 'ACTIVE' AND revision = ?
+                """)) {
+            statement.setString(1, evidence);
+            statement.setString(2, terminalState.name());
+            statement.setString(3, reason);
+            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setTimestamp(5, Timestamp.from(now));
+            statement.setBytes(6, UuidBytes.toBytes(sessionId));
+            statement.setLong(7, expectedRevision);
+            return statement.executeUpdate();
         }
     }
 
@@ -229,7 +256,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             statement.setTimestamp(9, Timestamp.from(start.startedAt()));
             statement.setTimestamp(10, Timestamp.from(start.expiresAt()));
             statement.setTimestamp(11, Timestamp.from(start.startedAt()));
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXACTLY_ONE_ROW) {
                 throw new SQLException("tester journal insert did not affect exactly one row");
             }
         }
@@ -326,7 +353,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             statement.setString(6, "{\"sessionId\":\"" + sessionId + "\",\"detail\":\""
                     + escape(detail) + "\"}");
             statement.setTimestamp(7, Timestamp.from(now));
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXACTLY_ONE_ROW) {
                 throw new SQLException("tester audit insert did not affect exactly one row");
             }
         }
@@ -350,7 +377,7 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
     }
 
     private static void validateCheckpoint(UUID sessionId, long revision, String evidence, Instant now) {
-        if (sessionId == null || revision < 0 || now == null || evidence == null || evidence.length() > MAX_EVIDENCE) {
+        if (!validIdentity(sessionId, revision, now) || !validEvidence(evidence)) {
             throw new IllegalArgumentException("tester evidence checkpoint is invalid");
         }
     }
@@ -363,11 +390,28 @@ public final class JdbcCheatTesterJournalStore implements CheatTesterJournalStor
             String evidence,
             Instant now
     ) {
-        if (sessionId == null || revision < 0 || state == null || state == CheatTesterSessionState.ACTIVE
-                || reason == null || reason.isBlank() || reason.length() > MAX_REASON
-                || evidence == null || evidence.length() > MAX_EVIDENCE || now == null) {
+        if (!validIdentity(sessionId, revision, now)
+                || !validTerminalState(state)
+                || !validReason(reason)
+                || !validEvidence(evidence)) {
             throw new IllegalArgumentException("tester completion is invalid");
         }
+    }
+
+    private static boolean validIdentity(UUID sessionId, long revision, Instant now) {
+        return sessionId != null && revision >= 0 && now != null;
+    }
+
+    private static boolean validTerminalState(CheatTesterSessionState state) {
+        return state != null && state != CheatTesterSessionState.ACTIVE;
+    }
+
+    private static boolean validReason(String reason) {
+        return reason != null && !reason.isBlank() && reason.length() <= MAX_REASON;
+    }
+
+    private static boolean validEvidence(String evidence) {
+        return evidence != null && evidence.length() <= MAX_EVIDENCE;
     }
 
     private static String escape(String value) {
