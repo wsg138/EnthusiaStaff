@@ -54,34 +54,42 @@ final class CheatTesterSession {
         this.startedAt = java.util.Objects.requireNonNull(startedAt, "startedAt");
     }
 
-    synchronized boolean beginJournalSubmission() {
-        if (finishing.get()) {
-            return false;
-        }
-        journalSubmission = true;
-        return true;
-    }
-
-    synchronized void cancelJournalSubmission() {
-        if (!journaled) {
-            journalSubmission = false;
+    boolean beginJournalSubmission() {
+        synchronized (this) {
+            if (finishing.get()) {
+                return false;
+            }
+            journalSubmission = true;
+            return true;
         }
     }
 
-    synchronized boolean markJournaledAndShouldBegin() {
-        journalSubmission = true;
-        journaled = true;
-        return !finishing.get();
+    void cancelJournalSubmission() {
+        synchronized (this) {
+            if (!journaled) {
+                journalSubmission = false;
+            }
+        }
     }
 
-    synchronized FinishDisposition beginFinishing() {
-        if (!finishing.compareAndSet(false, true)) {
-            return FinishDisposition.ALREADY_FINISHING;
+    boolean markJournaledAndShouldBegin() {
+        synchronized (this) {
+            journalSubmission = true;
+            journaled = true;
+            return !finishing.get();
         }
-        if (!journalSubmission) {
-            return FinishDisposition.NO_JOURNAL;
+    }
+
+    FinishDisposition beginFinishing() {
+        synchronized (this) {
+            if (!finishing.compareAndSet(false, true)) {
+                return FinishDisposition.ALREADY_FINISHING;
+            }
+            if (!journalSubmission) {
+                return FinishDisposition.NO_JOURNAL;
+            }
+            return journaled ? FinishDisposition.JOURNALED : FinishDisposition.WAIT_FOR_JOURNAL;
         }
-        return journaled ? FinishDisposition.JOURNALED : FinishDisposition.WAIT_FOR_JOURNAL;
     }
 
     static CheatTesterSession recovered(CheatTesterJournalRecord record) {
