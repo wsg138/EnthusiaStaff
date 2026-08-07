@@ -32,6 +32,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
     private final JavaPlugin plugin;
     private final ProtocolManager manager;
     private final PacketListener listener;
+    private final Runnable failureHandler;
     private final AtomicInteger nextEntityId = new AtomicInteger(FIRST_SYNTHETIC_ENTITY_ID);
     private final AtomicBoolean healthy;
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -40,11 +41,13 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
             JavaPlugin plugin,
             ProtocolManager manager,
             PacketListener listener,
+            Runnable failureHandler,
             AtomicBoolean healthy
     ) {
         this.plugin = plugin;
         this.manager = manager;
         this.listener = listener;
+        this.failureHandler = failureHandler;
         this.healthy = healthy;
     }
 
@@ -60,7 +63,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
         AtomicBoolean healthy = new AtomicBoolean(true);
         PacketListener listener = listener(plugin, interactionHandler, failureHandler, healthy);
         protocolManager.addPacketListener(listener);
-        return new ProtocolLibFakeEntityAdapter(plugin, protocolManager, listener, healthy);
+        return new ProtocolLibFakeEntityAdapter(plugin, protocolManager, listener, failureHandler, healthy);
     }
 
     private static PacketListener listener(
@@ -86,7 +89,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
                     if (interactionHandler.handle(event.getPlayer().getUniqueId(), entityId, actionName)) {
                         event.setCancelled(true);
                     }
-                } catch (RuntimeException exception) {
+                } catch (RuntimeException | LinkageError exception) {
                     disableAfterFailure(ownerPlugin, failureHandler, healthy, exception);
                 }
             }
@@ -117,15 +120,20 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
         if (!viewer.isOnline() || !viewer.getWorld().equals(location.getWorld())) {
             return;
         }
-        PacketContainer packet = manager.createPacket(PacketType.Play.Server.SPAWN_ENTITY, true);
-        packet.getIntegers().write(0, handle.entityId());
-        packet.getUUIDs().write(0, handle.entityUuid());
-        packet.getEntityTypeModifier().write(0, EntityType.ZOMBIE);
-        packet.getDoubles()
-                .write(0, location.getX())
-                .write(1, location.getY())
-                .write(2, location.getZ());
-        manager.sendServerPacket(viewer, packet);
+        try {
+            PacketContainer packet = manager.createPacket(PacketType.Play.Server.SPAWN_ENTITY, true);
+            packet.getIntegers().write(0, handle.entityId());
+            packet.getUUIDs().write(0, handle.entityUuid());
+            packet.getEntityTypeModifier().write(0, EntityType.ZOMBIE);
+            packet.getDoubles()
+                    .write(0, location.getX())
+                    .write(1, location.getY())
+                    .write(2, location.getZ());
+            manager.sendServerPacket(viewer, packet);
+        } catch (RuntimeException | LinkageError exception) {
+            disableAfterFailure(plugin, failureHandler, healthy, exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -137,8 +145,8 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
             PacketContainer packet = manager.createPacket(PacketType.Play.Server.ENTITY_DESTROY, true);
             packet.getIntLists().write(0, List.of(handle.entityId()));
             manager.sendServerPacket(viewer, packet);
-        } catch (RuntimeException exception) {
-            healthy.set(false);
+        } catch (RuntimeException | LinkageError exception) {
+            disableAfterFailure(plugin, failureHandler, healthy, exception);
             plugin.getLogger().log(Level.WARNING, "Failed to remove a synthetic cheat-test entity", exception);
         }
     }
@@ -153,7 +161,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
             JavaPlugin plugin,
             Runnable failureHandler,
             AtomicBoolean healthy,
-            RuntimeException exception
+            Throwable exception
     ) {
         if (!healthy.compareAndSet(true, false)) {
             return;
