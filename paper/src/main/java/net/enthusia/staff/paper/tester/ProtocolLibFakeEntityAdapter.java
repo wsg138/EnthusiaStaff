@@ -22,6 +22,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
     private static final int FIRST_SYNTHETIC_ENTITY_ID = 2_000_000_000;
+    private static final int MINIMUM_SYNTHETIC_ENTITY_ID = 1_500_000_000;
 
     interface InteractionHandler {
         /** @return true when the packet belongs to a managed synthetic entity and must be cancelled. */
@@ -101,7 +102,7 @@ final class ProtocolLibFakeEntityAdapter implements FakeEntityAdapter {
     public Handle create() {
         requireAvailable();
         int entityId = nextEntityId.getAndDecrement();
-        if (entityId < 1_500_000_000) {
+        if (entityId < MINIMUM_SYNTHETIC_ENTITY_ID) {
             nextEntityId.compareAndSet(entityId - 1, FIRST_SYNTHETIC_ENTITY_ID);
         }
         return new Handle(entityId, UUID.randomUUID());
