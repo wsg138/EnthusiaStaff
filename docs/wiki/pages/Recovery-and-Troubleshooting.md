@@ -8,7 +8,7 @@ Recovery begins by preserving evidence and stopping conflicting work. It does **
 | --- | --- | --- |
 | Startup, MariaDB, protocol, modes, reload or identity | [[Core Platform and Infrastructure]] | [[Configuration]], [[Protocol and Network Traffic]] |
 | Punishment, request, history, report or evidence | [[Moderation, Punishments, and Reports]] | [[Punishment System]], [[Reports and Evidence]] |
-| Staff mode, vanish, freeze, inventory, confiscation, economy or alts | [[Staff Tools, Investigations, and Player-State Safety]] | [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]], [[Inventory and Confiscation Safety]], [[Vanish Internals]] |
+| Staff mode, vanish, freeze, inventory, confiscation, economy or alts | [[Staff Tools, Investigations, and Player-State Safety]] | [[Staff-Mode-Vanish-and-Freeze]], [[Inventory and Confiscation Safety]], [[Vanish Internals]] |
 | Discord, website, provider, migration, shadow or cutover | [[Integrations, Migration, and Release Readiness]] | [[Integrations]], [[LiteBans Migration]], [[Shadow Mode and Cutover]] |
 | I am debugging the code behind the failure | [[Developer Code Guide]] | [[Code Review Guide]], [[Build and Testing]] |
 
