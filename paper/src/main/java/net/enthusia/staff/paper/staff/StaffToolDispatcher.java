@@ -333,7 +333,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         if (actor.getGameMode() != GameMode.SPECTATOR) {
             actor.sendMessage(Component.text(
                     "Teleported to " + target.name()
-                            + ". Your current staff-rank profile remains in creative mode.",
+                            + ". Direct spectating requires spectator mode; your game mode was not changed.",
                     NamedTextColor.GREEN
             ));
             return;
