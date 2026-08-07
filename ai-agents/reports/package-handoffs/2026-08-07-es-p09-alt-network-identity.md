@@ -9,6 +9,7 @@ Status: `ACTIVE`
 
 - Legitimate aggregate `main` at selection: `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7` (merge PR #82).
 - Implementation branch/integration authority: `package/es-p09-alt-network-identity`.
+- PR: #84 to primary `main`.
 - No pre-existing ES-P09 branch, PR, or package handoff existed before claim.
 - ES-P02 PR #70 and ES-P05 PR #81 remain `BLOCKED` / `PARKED_BLOCKED` on the unchanged private Actions Billing & plans zero-runner condition; they were not retried or modified.
 - ES-P10 remains READY but unassigned. No second package is activated.
@@ -27,8 +28,8 @@ Status: `ACTIVE`
 - Velocity already zeroes the temporary raw address byte buffer after protection.
 - `JdbcNetworkIdentityStore` already persists protected observations, creates same-network evidence, models manual relationship states, and contains sanction inheritance plumbing.
 - Velocity already registers `/alts` and manual `/alt` relationship commands.
-- The audit still classifies graph/ambiguity/retention/restart proof as incomplete or weakly verified, so ES-P09 must harden rather than replace these foundations.
+- ES-P09 hardens these foundations rather than replacing them.
 
 ## Active checkpoint
 
-Package state is claimed and published on the canonical branch. Product implementation, tests, review, exact-head validation, merge/containment, terminal state publication, and cleanup remain.
+Package state is claimed and published on `package/es-p09-alt-network-identity`; `main` publication awaits PR #84 merge. Product implementation and package documentation are in final review/validation. Merge/containment, terminal-state publication, and cleanup remain.
