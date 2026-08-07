@@ -38,21 +38,27 @@ class CheatTesterJournalIntegrationTest {
             .withPassword("enthusia_test_password");
 
     @Test
-    void journalEnforcesOneActiveTargetSurvivesRestartAndAuditsTerminalState() throws Exception {
+    void journalGloballyFencesTargetSurvivesRestartAndAuditsTerminalState() throws Exception {
         CheatTesterJournalRecord first;
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             MariaDbIntegrationSupport.insertPlayer(DATABASE, STAFF, "TesterStaff", NOW);
             MariaDbIntegrationSupport.insertPlayer(DATABASE, TARGET, "TesterTarget", NOW);
             CheatTesterJournalStore store = runtime.cheatTesterJournalStore();
 
-            first = store.start(start(SESSION, CheatTesterType.AUTO_ARMOR));
+            first = store.start(start(SESSION, "SMP", CheatTesterType.AUTO_ARMOR));
             assertEquals(SESSION, first.sessionId());
             assertEquals(0L, first.revision());
             assertTrue(first.active());
+            assertEquals(first, store.activeForTarget(TARGET).orElseThrow());
+            assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, "SMP", NOW));
+            assertEquals("SMP", runtime.inventoryJournalStore().lockedOwningServer(TARGET, NOW).orElseThrow());
 
-            CheatTesterJournalRecord duplicate = store.start(start(SECOND_SESSION, CheatTesterType.NO_FALL));
-            assertEquals(SESSION, duplicate.sessionId(), "duplicate target must return the authoritative active row");
+            CheatTesterJournalRecord duplicate = store.start(start(SECOND_SESSION, "HUB", CheatTesterType.NO_FALL));
+            assertEquals(SESSION, duplicate.sessionId(),
+                    "another backend must receive the globally authoritative active row");
+            assertEquals("SMP", duplicate.serverId());
             assertNotEquals(SECOND_SESSION, duplicate.sessionId());
+            assertFalse(store.activeForTarget("HUB", TARGET).isPresent());
 
             CheatTesterJournalRecord checkpoint = store.checkpointEvidence(
                     SESSION,
@@ -70,6 +76,8 @@ class CheatTesterJournalIntegrationTest {
             assertEquals(SESSION, recovered.sessionId());
             assertEquals(1L, recovered.revision());
             assertEquals(1, store.activeForServer("SMP", 10).size());
+            assertTrue(runtime.inventoryJournalStore().isLocked(TARGET, "HUB", NOW.plusSeconds(2)),
+                    "the durable tester row must block offline asset work regardless of requested scope");
 
             assertTrue(store.complete(
                     SESSION,
@@ -79,10 +87,12 @@ class CheatTesterJournalIntegrationTest {
                     recovered.evidence(),
                     NOW.plusSeconds(2)
             ));
-            assertFalse(store.activeForTarget("SMP", TARGET).isPresent());
+            assertFalse(store.activeForTarget(TARGET).isPresent());
+            assertFalse(runtime.inventoryJournalStore().isLocked(TARGET, "SMP", NOW.plusSeconds(2)));
 
-            CheatTesterJournalRecord second = store.start(start(SECOND_SESSION, CheatTesterType.FAKE_ENTITY));
+            CheatTesterJournalRecord second = store.start(start(SECOND_SESSION, "HUB", CheatTesterType.FAKE_ENTITY));
             assertEquals(SECOND_SESSION, second.sessionId(), "terminal rows must release active-target uniqueness");
+            assertEquals("HUB", second.serverId());
             assertTrue(store.complete(
                     SECOND_SESSION,
                     second.revision(),
@@ -97,10 +107,10 @@ class CheatTesterJournalIntegrationTest {
         assertEquals(18, latestMigrationVersion());
     }
 
-    private static CheatTesterJournalStart start(UUID sessionId, CheatTesterType type) {
+    private static CheatTesterJournalStart start(UUID sessionId, String serverId, CheatTesterType type) {
         return new CheatTesterJournalStart(
                 sessionId,
-                "SMP",
+                serverId,
                 STAFF,
                 TARGET,
                 type,
