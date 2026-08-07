@@ -1,8 +1,6 @@
 # Build and Testing
 
-Read [[Development Blueprint]] before selecting the next major workstream. This
-page explains how to prove one exact checkpoint; the blueprint explains where
-that checkpoint belongs on the road to production.
+Use this page to build one exact revision and to understand what each validation layer can prove. For review invariants, use [[Code Review Guide]]. For remaining product status, use [[Implementation Status]].
 
 ## Complete local validation
 
@@ -18,46 +16,13 @@ Linux/macOS:
 ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
 ```
 
-This must build the two runtime jars, run unit and integration tests and perform
-configured verification tasks. Docker must be available because the MariaDB
-Testcontainers suites are part of complete validation. A run that skips
-container tests is not a complete checkpoint.
+Docker must be available for the MariaDB Testcontainers suites. A run that skips required container tests is not a complete repository checkpoint.
 
-Record:
+Record the exact commit SHA, command, test/suite counts, skipped/unavailable groups, runtime-jar names/hashes, hosted analysis results, and any staging workflow/run identifiers. Evidence from different commits must not be combined into one exact-head claim.
 
-- exact commit SHA and command;
-- total suite/test count;
-- MariaDB suite/test count;
-- skipped, disabled or unavailable groups;
-- runtime jar names, sizes and hashes;
-- hosted Codacy result, total baseline and issue delta; and
-- staging workflow/run identifiers.
+## Focused development tests
 
-Do not combine successful evidence from different commits into one claimed
-release candidate.
-
-## Runtime artifacts
-
-Expected deployables:
-
-```text
-paper/build/libs/EnthusiaStaff-Paper-<version>.jar
-velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar
-```
-
-Inspect jar contents for:
-
-- intended entrypoints and resources;
-- no provider-owned API duplication;
-- no private jars, secrets or local configuration;
-- no test fixtures, development servers, databases, logs or generated reports;
-- correct service metadata; and
-- no accidental third runtime plugin.
-
-## Focused checks
-
-Use focused module tests while developing, then rerun the complete build before a
-checkpoint:
+Use focused module tests while editing, then rerun the complete clean gate before treating the revision as a coherent checkpoint:
 
 ```bash
 ./gradlew :domain:test
@@ -68,102 +33,197 @@ checkpoint:
 ./gradlew :integration-tests:test
 ```
 
-Focused tests speed development but do not replace the clean complete gate. Do
-not claim a test passed unless it ran successfully at the exact reviewed commit.
+Run the tests closest to the changed boundary first. A persistence change normally needs MariaDB integration coverage; a scheduler/player-state change needs platform-focused tests and later runtime evidence; a migration needs clean-install and upgrade coverage.
 
-## Test categories
+## What each evidence layer proves
 
-Required coverage includes:
+| Evidence | It can support claims about... | It cannot establish by itself... |
+| --- | --- | --- |
+| Unit tests | pure policy, parsing, authorization predicates, deterministic state transitions | real JDBC, scheduler, network, provider, classloader or client behavior |
+| Module/component tests | one adapter/service with controlled collaborators | representative distributed runtime behavior |
+| MariaDB/Testcontainers | SQL, constraints, transactions, migrations, concurrency/restart scenarios explicitly exercised | production volume/latency or arbitrary process-kill timing |
+| Concurrency/failure-injection tests | the races/failures actually simulated | every real scheduler/network/process race |
+| Runtime-JAR checks | expected deployables, archive integrity and scanned provider-API leakage | provider discovery/classloader compatibility with real plugins |
+| Static analysis | issues detectable by configured analyzers | behavioral correctness or absence of all security defects |
+| Coverage | which code lines/branches were executed by measured tests | assertion quality, scenario completeness or staging correctness |
+| Wiki validation | Wiki structure, internal links and format rules | factual correctness of product claims |
+| Private Paper boot/restart staging | the exact jar boots/restarts in the recorded Paper environment | Velocity, multi-backend, all providers, Bedrock, Folia or production readiness |
+| Distributed Java/Bedrock/provider staging | behavior exercised in the representative recorded topology | untested load, production data, migration/cutover or later revisions |
+| Production acceptance | the explicit release/cutover claim accepted for one pinned artifact/config/evidence set | future code/config changes |
 
-- punishment ladders, decay, combined sanctions, history, removal and overturn;
-- every rank boundary, especially Developer request-only behavior;
-- punishment-request claims, decisions, fencing, notifications, restart,
-  offline recipients and multi-server contention;
-- reports, semantic merge/replay, privacy, retention, GUI and provider context;
-- alt confidence, inheritance, exceptions, rotation and unread alerts;
-- inventory revisions, concurrent viewers, nested containers, offline patches
-  and restoration;
-- economy rollback, provider conflicts, ambiguous outcomes and quarantine;
-- staff mode crash/reconnect, checksums, restore and item leakage;
-- vanish hierarchy, packets, schedulers, tab, commands, chat, voice, effects,
-  providers, Java, Bedrock and Folia;
-- freeze restrictions, offline behavior, reconnect and staff-only communication;
-- Discord/network outbox lease, duplicate handling, backpressure and circuit breaking;
-- LiteBans variants, dry run, replay, shadow dimensions, seven-day evidence,
-  activation, emergency freeze and rollback;
-- website authentication, signatures, codes, appeals, roles, rate limits,
-  uploads and privacy; and
-- database, network, process-kill, load and partial-dependency failure injection.
+A passing unit test is not staging evidence. A skipped or unavailable staging workflow is not a pass. “Plugin present” is not proof that its provider API works correctly.
 
-## Current checkpoint interpretation
+## Runtime artifacts
 
-PR #36 final head `3afeffc926571170e8df18c7d096ca7f4d89ec1b`
-completed:
+Expected deployables:
 
-- 40/40 clean Java 21 tasks;
-- 99 suites / 398 tests with no failures, errors or skips;
-- 15 MariaDB 11.8.3 Testcontainers suites / 68 tests;
-- hosted Codacy with zero new and three fixed findings, 92.59% diff coverage and
-  no clone increase;
-- Wiki validation for 29 pages; and
-- exact-SHA Pi run `30709333535`.
+```text
+paper/build/libs/EnthusiaStaff-Paper-<version>.jar
+velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar
+```
 
-This proves that checkpoint's recorded scope. It does not prove full provider,
-Velocity, multi-backend, Bedrock, Folia, load, process-kill, real-data migration
-or 168-hour shadow acceptance.
+Inspect both for:
 
-## Coverage targets
+- intended entry points/resources only;
+- no provider-owned API duplication;
+- no private jars, secrets or local configuration;
+- no test fixtures, server runtime directories, databases, logs or generated reports;
+- correct service/plugin metadata;
+- no accidental third runtime plugin.
 
-Authoritative goals specify:
+A clean artifact scanner is still not a substitute for installing supported providers together and exercising service discovery/classloader behavior.
 
-- Critical code: 80% line / 70% branch
-- Overall Java: 70% line / 60% branch
+## MariaDB and migration validation
 
-Getter-only or assertion-free tests do not satisfy the intent. Coverage floors
-must represent meaningful behavior rather than low-value line inflation.
+Persistence changes should exercise the applicable combination of:
+
+- clean schema creation;
+- upgrade from the immediately relevant previous schema;
+- constraint/index behavior;
+- transaction rollback;
+- idempotent replay;
+- optimistic revision conflict;
+- lease/fence claim, renewal and release;
+- restart recovery;
+- duplicate/out-of-order delivery;
+- concurrent runtimes where the workflow can contend.
+
+Current merged `main` includes Flyway migrations through `V17__website_appeal_workflow.sql`. V1-V17 are immutable history; new schema work adds a new forward migration.
+
+Do not use Flyway repair or migration-history edits merely to make a changed historical migration pass.
+
+## Paper, Leaf and Folia validation
+
+Automated Paper-side tests should verify policy and scheduler handoff where possible, but real runtime acceptance is still required for claims involving:
+
+- entity/region ownership;
+- reconnect racing with queued callbacks;
+- inventory/Ender mutations;
+- staff-mode restoration;
+- vanish visual/tab/packet behavior;
+- freeze bypasses;
+- asynchronous teleport/follow/spectate;
+- plugin disable/restart recovery;
+- supported Paper/Leaf/Folia versions.
+
+A standalone Paper boot test does not prove Folia scheduler correctness.
+
+## Velocity and distributed validation
+
+Representative runtime validation should cover:
+
+- non-blocking login/server-switch event behavior;
+- Paper/Velocity startup and shutdown order;
+- backend reconnect and replacement sessions;
+- no-online-player transport;
+- durable ACK/outbox/inbox semantics;
+- proxy/backend partial outage;
+- queue/backpressure/retry bounds;
+- network identity observations and out-of-order presence updates;
+- multi-backend authority/degradation behavior.
+
+See [[Protocol and Network Traffic]] and [[Code Review Guide]].
+
+## Java and Bedrock validation
+
+Automated identity tests should cover verified Java, verified Bedrock, `UNKNOWN`, missing/incompatible Floodgate, aliases, historical names, duplicate observations and out-of-order proxy/backend updates.
+
+Representative Geyser/Floodgate staging must still verify:
+
+- Java and Bedrock login/reconnect;
+- `*` alias resolution without treating the prefix as platform proof;
+- GUI/text fallback behavior;
+- click/hover assumptions;
+- packet/tab/visibility behavior;
+- server switching and provider absence/failure.
+
+## Provider and integration validation
+
+For every optional provider, test at least:
+
+1. present and compatible;
+2. missing;
+3. present but incompatible/unavailable;
+4. dependency failure during use;
+5. reload/restart boundary where applicable.
+
+Verify that unrelated features remain available when safe, dependent actions fail clearly, external effects are idempotent/verified, and provider-owned classes are not shaded into EnthusiaStaff.
+
+See [[Integrations]].
+
+## Coverage expectations
+
+The authoritative goals set these targets:
+
+- Critical code: **80% line / 70% branch**
+- Overall Java: **70% line / 60% branch**
+
+Coverage is a diagnostic, not a substitute for meaningful assertions. Getter-only or assertion-free tests do not satisfy the intent of these targets.
 
 ## Static analysis
 
-The target is Codacy grade A with zero unresolved first-party findings. Do not
-reach it by disabling tools, excluding source, blanket suppressing or lowering
-thresholds. Narrow suppressions require documented false-positive evidence.
+The target remains Codacy grade A with zero unresolved first-party findings. Do not reach that state by weakening analyzers, blanket exclusions/suppressions, lowering thresholds, or hiding legitimate findings.
 
-A zero-new-issues result means the branch did not worsen the baseline; it does
-not mean the repository backlog is empty.
+A “zero new issues” result means the branch did not worsen the measured baseline. It does not mean every older issue or every behavioral defect is gone.
 
-## Exact-SHA Pi gate
+## Private Paper exact-SHA gate
 
-The Pi staging workflow is a merge-candidate gate, not a general
-production-readiness claim. It independently builds with Java 21, inspects the
-Paper runtime jar and provider-API packaging, loads the plugin on Paper,
-exercises two boot/storage/command/shutdown cycles and scans sanitized evidence
-for critical failures.
+The repository has used an exact-SHA private Paper boot/restart gate to independently build, inspect the Paper runtime JAR and exercise startup/storage/commands/shutdown.
 
-A passing result applies only to the recorded SHA. It does not replace Velocity,
-multi-backend, provider-plugin, Bedrock, Folia, live Discord, production data,
-load, process-kill, migration or shadow acceptance testing.
+Interpret it narrowly:
 
-## Full staging evidence
+- **pass on SHA X** — evidence for the exact recorded Paper scenario on SHA X;
+- **not run / infrastructure unavailable / skipped** — no runtime evidence for that gate;
+- **pass on an older SHA** — historical evidence, not proof for a newer source revision.
 
-Record:
+It does not replace Velocity, multi-backend, providers, Bedrock, Folia, real migration data, load, process-kill, 168-hour shadow, or production acceptance.
 
-- exact commit and jar hashes;
+## Full staging record
+
+For a staging claim, record:
+
+- exact source commit and runtime-jar hashes;
 - configuration versions/checksums;
-- Java, Paper/Leaf, Velocity, MariaDB, provider, Geyser/Floodgate and Folia versions;
-- topology, accounts, steps and expected outcomes;
-- failure injection and recovery observations;
-- logs and sanitized evidence locations;
-- unresolved mismatches; and
-- rollback result.
+- Java, Paper/Leaf/Folia, Velocity, MariaDB, provider and Geyser/Floodgate versions;
+- topology/accounts/data scope;
+- steps and expected outcomes;
+- failure/restart/reconnect observations;
+- sanitized logs/evidence locations;
+- unresolved mismatches;
+- rollback/recovery result.
 
-A final release candidate must use one coherent evidence set. A source change
-invalidates affected groups until they run again.
+A source, migration, runtime configuration, or provider-contract change invalidates the affected evidence until it is rerun for the new candidate.
 
 ## Wiki validation
+
+Run from the repository root:
 
 ```bash
 python scripts/wiki/validate_wiki.py
 ```
 
-Wiki checks run separately from Java tests and must pass before publishing. The
-canonical Wiki source is `docs/wiki/pages/`, not the live Wiki editor.
+The validator checks repository-managed `docs/wiki/pages/` content. It does not validate technical truth, external source existence, privacy judgment, or whether a status claim is supported, so those still require manual review.
+
+Before publishing Wiki changes also check:
+
+- every new page is reachable from Home, the sidebar, or an owning index;
+- internal Wiki links and Markdown links point where intended;
+- headings and sidebar destinations are readable;
+- source links still name real current files;
+- no secret/private evidence was copied into documentation;
+- no unmerged feature is described as available;
+- every reviewer finding was inspected and every valid finding was resolved;
+- every active PR was rechecked for overlapping Wiki files, with active-worker ownership preserved;
+- the documentation branch is synchronized with the newest legitimate `main` and any newer merged product facts are retained;
+- the final diff is still documentation-only.
+
+Do not publish until all applicable validation, review, overlap, synchronization, and merge gates above have completed. [[Wiki Maintenance]] owns the full merge/publish procedure.
+
+## Related pages
+
+- [[Code Review Guide]]
+- [[Developer Guide Index]]
+- [[Architecture]]
+- [[Developer Code Guide]]
+- [[Implementation Status]]
+- [[Wiki Maintenance]]
