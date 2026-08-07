@@ -277,7 +277,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         storageBootstrap = new StorageBootstrapCoordinator<>(
                 this::submitWorker,
                 this::scheduleGlobal,
-                this::scheduleBootstrapCleanupRetry,
+                this::scheduleBootstrapRetry,
                 new StorageBootstrapCoordinator.StoragePhase<>() {
                     @Override
                     public StorageBootstrapContext openAndPublish() {
@@ -301,7 +301,32 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     public void failed(RuntimeException failure) {
                         if (!lifecycle.stopping()) {
                             setDegraded("mariadb",
-                                    "Connection, schema, or startup recovery failed; see the sanitized console error");
+                                    "Connection, schema, or startup recovery failed after bounded retries; "
+                                            + "see the sanitized console error");
+                        }
+                    }
+
+                    @Override
+                    public void retrying(
+                            int nextAttempt,
+                            int maximumAttempts,
+                            long delayMillis,
+                            RuntimeException failure
+                    ) {
+                        lifecycle.runIfRunning(() -> {
+                            mode.set(OperationalMode.BOOTSTRAP);
+                            publishHealth(OperationalMode.BOOTSTRAP, Map.of(
+                                    "mariadb-retrying",
+                                    "Storage startup attempt " + nextAttempt + " of " + maximumAttempts
+                                            + " is scheduled after " + delayMillis + " ms"
+                            ));
+                        });
+                    }
+
+                    @Override
+                    public void recovered(int attemptCount) {
+                        if (attemptCount > 1 && getLogger().isLoggable(Level.INFO)) {
+                            getLogger().info("MariaDB startup recovered on bounded attempt " + attemptCount);
                         }
                     }
                 },
@@ -369,8 +394,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 lifecycle::stopping,
                 getLogger()
         );
-        if (!storageBootstrap.start()) {
-            setDegraded("workers", "Storage bootstrap could not be submitted to the bounded worker executor");
+        if (!storageBootstrap.start() && storageBootstrap.retryScheduled()) {
+            publishHealth(OperationalMode.BOOTSTRAP, Map.of(
+                    "mariadb-retrying",
+                    "The initial bounded-worker submission was rejected; storage retry scheduling is in progress"
+            ));
         }
     }
 
@@ -512,7 +540,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
-    private boolean scheduleBootstrapCleanupRetry(Runnable operation) {
+    private boolean scheduleBootstrapRetry(Runnable operation, long delayMillis) {
         if (lifecycle.stopping()) {
             return false;
         }
@@ -520,12 +548,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getAsyncScheduler().runDelayed(
                     this,
                     ignored -> operation.run(),
-                    50,
+                    Math.max(1L, delayMillis),
                     TimeUnit.MILLISECONDS
             );
             return true;
         } catch (RuntimeException exception) {
-            getLogger().log(Level.WARNING, "Bootstrap cleanup retry scheduling failed", exception);
+            getLogger().log(Level.WARNING, "Bootstrap retry scheduling failed", exception);
             return false;
         }
     }

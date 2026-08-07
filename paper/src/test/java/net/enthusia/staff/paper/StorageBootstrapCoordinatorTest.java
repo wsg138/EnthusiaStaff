@@ -29,12 +29,12 @@ class StorageBootstrapCoordinatorTest {
         assertTrue(harness.events.isEmpty());
 
         harness.workers.runNext();
-        assertEquals(List.of("WORKER:open"), harness.events);
+        assertEquals(List.of("WORKER:open:1"), harness.events);
         assertEquals(1, harness.global.size());
 
         harness.global.runNext();
         assertEquals(List.of(
-                "WORKER:open",
+                "WORKER:open:1",
                 "GLOBAL:online-ids",
                 "GLOBAL:capture:" + FIRST,
                 "GLOBAL:capture:" + SECOND
@@ -53,7 +53,7 @@ class StorageBootstrapCoordinatorTest {
         harness.workers.runNext();
 
         assertEquals(List.of(
-                "WORKER:open",
+                "WORKER:open:1",
                 "GLOBAL:online-ids",
                 "GLOBAL:capture:" + FIRST,
                 "GLOBAL:capture:" + SECOND,
@@ -66,8 +66,117 @@ class StorageBootstrapCoordinatorTest {
                 "GLOBAL:vanish",
                 "GLOBAL:alerts",
                 "GLOBAL:health",
-                "WORKER:follow-up"
+                "WORKER:follow-up",
+                "WORKER:recovered:1"
         ), harness.events);
+    }
+
+    @Test
+    void transientOpenFailureUsesCappedDelayedRetryAndRecoversWithoutRestart() {
+        Harness harness = new Harness(new StorageBootstrapCoordinator.RetryPolicy(3, 100L, 500L));
+        harness.openFailuresRemaining = 1;
+
+        assertTrue(harness.coordinator.start());
+        harness.workers.runNext();
+
+        assertEquals(1, harness.coordinator.attempts());
+        assertTrue(harness.coordinator.retryScheduled());
+        assertEquals(List.of(100L), harness.retryDelays);
+        assertTrue(harness.events.contains("WORKER:retrying:2:3:100"));
+        assertEquals(1, harness.retries.size());
+        assertFalse(harness.published.get());
+
+        harness.retries.runNext();
+        assertFalse(harness.coordinator.retryScheduled());
+        assertEquals(1, harness.workers.size());
+        harness.workers.runNext();
+        harness.runSuccessfulRecovery();
+
+        assertEquals(2, harness.coordinator.attempts());
+        assertTrue(harness.published.get());
+        assertTrue(harness.recoveryPublished.get());
+        assertTrue(harness.events.contains("WORKER:recovered:2"));
+        assertFalse(harness.events.stream().anyMatch(value -> value.endsWith(":failed")));
+    }
+
+    @Test
+    void rejectedInitialWorkerSubmissionUsesSameRetryBudget() {
+        Harness harness = new Harness(new StorageBootstrapCoordinator.RetryPolicy(2, 75L, 75L));
+        harness.workers.rejectNext = true;
+
+        assertFalse(harness.coordinator.start());
+        assertEquals(1, harness.coordinator.attempts());
+        assertTrue(harness.coordinator.retryScheduled());
+        assertEquals(List.of(75L), harness.retryDelays);
+        assertTrue(harness.events.contains("NONE:retrying:2:2:75"));
+
+        harness.retries.runNext();
+        harness.workers.runNext();
+        harness.runSuccessfulRecovery();
+
+        assertEquals(2, harness.coordinator.attempts());
+        assertTrue(harness.published.get());
+        assertTrue(harness.events.contains("WORKER:recovered:2"));
+    }
+
+    @Test
+    void retryExhaustionStopsAfterConfiguredAttemptCount() {
+        Harness harness = new Harness(new StorageBootstrapCoordinator.RetryPolicy(3, 100L, 500L));
+        harness.openFailuresRemaining = 3;
+
+        harness.coordinator.start();
+        harness.workers.runNext();
+        harness.retries.runNext();
+        harness.workers.runNext();
+        harness.retries.runNext();
+        harness.workers.runNext();
+
+        assertEquals(3, harness.coordinator.attempts());
+        assertEquals(List.of(100L, 200L), harness.retryDelays);
+        assertTrue(harness.events.contains("WORKER:failed"));
+        assertEquals(0, harness.retries.size());
+        assertEquals(0, harness.global.size());
+        assertFalse(harness.published.get());
+    }
+
+    @Test
+    void shutdownBeforeScheduledRetryPreventsAnotherWorkerAttempt() {
+        Harness harness = new Harness(new StorageBootstrapCoordinator.RetryPolicy(3, 100L, 500L));
+        harness.openFailuresRemaining = 1;
+
+        harness.coordinator.start();
+        harness.workers.runNext();
+        harness.stopping.set(true);
+        harness.retries.runNext();
+
+        assertEquals(1, harness.coordinator.attempts());
+        assertEquals(0, harness.workers.size());
+        assertFalse(harness.published.get());
+    }
+
+    @Test
+    void recoveryFailureClosesPublishedStorageBeforeRetrying() {
+        Harness harness = new Harness(new StorageBootstrapCoordinator.RetryPolicy(2, 75L, 75L));
+        harness.freezeFailuresRemaining = 1;
+
+        harness.coordinator.start();
+        harness.workers.runNext();
+        harness.global.runNext();
+        harness.entities.runAll();
+        harness.global.runNext();
+        harness.workers.runNext();
+
+        assertEquals(1, harness.closeCalls);
+        assertFalse(harness.published.get());
+        assertEquals(List.of(75L), harness.retryDelays);
+
+        harness.retries.runNext();
+        harness.workers.runNext();
+        harness.runSuccessfulRecovery();
+
+        assertTrue(harness.published.get());
+        assertTrue(harness.events.contains("WORKER:recovered:2"));
+        assertEquals(1, harness.closeCalls);
     }
 
     @Test
@@ -109,7 +218,7 @@ class StorageBootstrapCoordinatorTest {
     @Test
     void bukkitRecoveryFailureDetachesBeforeAsynchronousStorageCloseAndLateCallbacksDoNothing() {
         Harness harness = new Harness();
-        harness.failFreeze = true;
+        harness.freezeFailuresRemaining = 1;
         harness.coordinator.start();
         harness.workers.runNext();
         harness.global.runNext();
@@ -129,12 +238,13 @@ class StorageBootstrapCoordinatorTest {
         harness.workers.runAll();
         assertEquals(1, harness.closeCalls);
         assertFalse(harness.events.contains("WORKER:follow-up"));
+        assertTrue(harness.events.contains("WORKER:failed"));
     }
 
     @Test
     void rejectedWorkerCleanupIsRetriedWithoutClosingMariaDbOnBukkitScheduler() {
         Harness harness = new Harness();
-        harness.failFreeze = true;
+        harness.freezeFailuresRemaining = 1;
         harness.coordinator.start();
         harness.workers.runNext();
         harness.global.runNext();
@@ -146,14 +256,22 @@ class StorageBootstrapCoordinatorTest {
 
         assertEquals(0, harness.closeCalls);
         assertEquals(1, harness.retries.size());
+        assertEquals(List.of(50L), harness.retryDelays);
         harness.retries.runNext();
         assertEquals(1, harness.workers.size());
         harness.workers.runNext();
         assertEquals(1, harness.closeCalls);
         assertTrue(harness.events.contains("WORKER:remove-close"));
+        assertTrue(harness.events.contains("WORKER:failed"));
     }
 
-    private enum Role { NONE, WORKER, GLOBAL, ENTITY, RETRY }
+    private enum Role {
+        NONE,
+        WORKER,
+        GLOBAL,
+        ENTITY,
+        RETRY
+    }
 
     private static final class Harness {
         private final AtomicReference<Role> role = new AtomicReference<>(Role.NONE);
@@ -165,127 +283,178 @@ class StorageBootstrapCoordinatorTest {
         private final AtomicBoolean published = new AtomicBoolean();
         private final AtomicBoolean recoveryPublished = new AtomicBoolean();
         private final List<String> events = new ArrayList<>();
+        private final List<Long> retryDelays = new ArrayList<>();
         private boolean retireSecond;
-        private boolean failFreeze;
+        private int openFailuresRemaining;
+        private int freezeFailuresRemaining;
+        private int openCalls;
         private int closeCalls;
-        private final StorageBootstrapCoordinator<String> coordinator = new StorageBootstrapCoordinator<>(
-                workers::offer,
-                global::offer,
-                retries::offer,
-                new StorageBootstrapCoordinator.StoragePhase<>() {
-                    @Override
-                    public String openAndPublish() {
-                        require(Role.WORKER);
-                        events.add("WORKER:open");
-                        published.set(true);
-                        return "storage";
-                    }
+        private final StorageBootstrapCoordinator<String> coordinator;
 
-                    @Override
-                    public boolean isPublished(String storage) {
-                        return published.get();
-                    }
+        private Harness() {
+            this(new StorageBootstrapCoordinator.RetryPolicy(1, 1L, 1L));
+        }
 
-                    @Override
-                    public void removeAndClose(String storage) {
-                        require(Role.WORKER);
-                        if (published.compareAndSet(true, false)) {
-                            closeCalls++;
-                        }
-                        events.add("WORKER:remove-close");
-                    }
+        private Harness(StorageBootstrapCoordinator.RetryPolicy retryPolicy) {
+            coordinator = new StorageBootstrapCoordinator<>(
+                    workers::offer,
+                    global::offer,
+                    this::scheduleRetry,
+                    new StoragePhaseStub(),
+                    new RecoveryStub(),
+                    new FollowUpStub(),
+                    stopping::get,
+                    Logger.getLogger("StorageBootstrapCoordinatorTest"),
+                    retryPolicy
+            );
+        }
 
-                    @Override
-                    public void failed(RuntimeException failure) {
-                        events.add(role.get() + ":failed");
-                    }
-                },
-                new StorageBootstrapCoordinator.BukkitRecovery<>() {
-                    @Override
-                    public List<UUID> onlinePlayerIds() {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:online-ids");
-                        return List.of(FIRST, SECOND);
-                    }
+        private boolean scheduleRetry(Runnable operation, long delayMillis) {
+            retryDelays.add(delayMillis);
+            return retries.offer(operation);
+        }
 
-                    @Override
-                    public void capturePlayer(
-                            UUID playerId,
-                            Consumer<StorageBootstrapCoordinator.PlayerSnapshot> captured,
-                            Runnable retired
-                    ) {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:capture:" + playerId);
-                        entities.offer(() -> {
-                            require(Role.ENTITY);
-                            if (retireSecond && playerId.equals(SECOND)) {
-                                retired.run();
-                                return;
-                            }
-                            events.add("ENTITY:snapshot:" + playerId);
-                            captured.accept(new StorageBootstrapCoordinator.PlayerSnapshot(
-                                    playerId, "Player", StaffRank.MOD));
-                        });
-                    }
-
-                    @Override
-                    public void verifyFreeze(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:freeze:" + snapshot.playerId());
-                        if (failFreeze) {
-                            throw new IllegalStateException("freeze failure");
-                        }
-                    }
-
-                    @Override
-                    public void recoverStaffMode(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:staff:" + snapshot.playerId());
-                    }
-
-                    @Override
-                    public void initializeVanish() {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:vanish");
-                    }
-
-                    @Override
-                    public void attachAlerts(String storage) {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:alerts");
-                    }
-
-                    @Override
-                    public void detachAlerts() {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:detach-alerts");
-                    }
-
-                    @Override
-                    public void publishOperationalState(String storage) {
-                        require(Role.GLOBAL);
-                        events.add("GLOBAL:health");
-                        recoveryPublished.set(true);
-                    }
-                },
-                new StorageBootstrapCoordinator.FollowUp<>() {
-                    @Override
-                    public void run(String storage) {
-                        require(Role.WORKER);
-                        events.add("WORKER:follow-up");
-                    }
-
-                    @Override
-                    public void failed(RuntimeException failure) {
-                        events.add(role.get() + ":follow-up-failed");
-                    }
-                },
-                stopping::get,
-                Logger.getLogger("StorageBootstrapCoordinatorTest")
-        );
+        private void runSuccessfulRecovery() {
+            global.runNext();
+            entities.runAll();
+            global.runNext();
+            workers.runNext();
+        }
 
         private void require(Role expected) {
             assertEquals(expected, role.get());
+        }
+
+        private final class StoragePhaseStub implements StorageBootstrapCoordinator.StoragePhase<String> {
+            @Override
+            public String openAndPublish() {
+                require(Role.WORKER);
+                openCalls++;
+                events.add("WORKER:open:" + openCalls);
+                if (openFailuresRemaining > 0) {
+                    openFailuresRemaining--;
+                    throw new IllegalStateException("transient open failure");
+                }
+                published.set(true);
+                return "storage";
+            }
+
+            @Override
+            public boolean isPublished(String storage) {
+                return published.get();
+            }
+
+            @Override
+            public void removeAndClose(String storage) {
+                require(Role.WORKER);
+                if (published.compareAndSet(true, false)) {
+                    closeCalls++;
+                }
+                events.add("WORKER:remove-close");
+            }
+
+            @Override
+            public void failed(RuntimeException failure) {
+                events.add(role.get() + ":failed");
+            }
+
+            @Override
+            public void retrying(
+                    int nextAttempt,
+                    int maximumAttempts,
+                    long delayMillis,
+                    RuntimeException failure
+            ) {
+                events.add(role.get() + ":retrying:" + nextAttempt + ':' + maximumAttempts + ':' + delayMillis);
+            }
+
+            @Override
+            public void recovered(int attempts) {
+                events.add(role.get() + ":recovered:" + attempts);
+            }
+        }
+
+        private final class RecoveryStub implements StorageBootstrapCoordinator.BukkitRecovery<String> {
+            @Override
+            public List<UUID> onlinePlayerIds() {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:online-ids");
+                return List.of(FIRST, SECOND);
+            }
+
+            @Override
+            public void capturePlayer(
+                    UUID playerId,
+                    Consumer<StorageBootstrapCoordinator.PlayerSnapshot> captured,
+                    Runnable retired
+            ) {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:capture:" + playerId);
+                entities.offer(() -> {
+                    require(Role.ENTITY);
+                    if (retireSecond && playerId.equals(SECOND)) {
+                        retired.run();
+                        return;
+                    }
+                    events.add("ENTITY:snapshot:" + playerId);
+                    captured.accept(new StorageBootstrapCoordinator.PlayerSnapshot(
+                            playerId, "Player", StaffRank.MOD));
+                });
+            }
+
+            @Override
+            public void verifyFreeze(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:freeze:" + snapshot.playerId());
+                if (freezeFailuresRemaining > 0) {
+                    freezeFailuresRemaining--;
+                    throw new IllegalStateException("freeze failure");
+                }
+            }
+
+            @Override
+            public void recoverStaffMode(StorageBootstrapCoordinator.PlayerSnapshot snapshot) {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:staff:" + snapshot.playerId());
+            }
+
+            @Override
+            public void initializeVanish() {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:vanish");
+            }
+
+            @Override
+            public void attachAlerts(String storage) {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:alerts");
+            }
+
+            @Override
+            public void detachAlerts() {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:detach-alerts");
+            }
+
+            @Override
+            public void publishOperationalState(String storage) {
+                require(Role.GLOBAL);
+                events.add("GLOBAL:health");
+                recoveryPublished.set(true);
+            }
+        }
+
+        private final class FollowUpStub implements StorageBootstrapCoordinator.FollowUp<String> {
+            @Override
+            public void run(String storage) {
+                require(Role.WORKER);
+                events.add("WORKER:follow-up");
+            }
+
+            @Override
+            public void failed(RuntimeException failure) {
+                events.add(role.get() + ":follow-up-failed");
+            }
         }
     }
 
