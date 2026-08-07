@@ -1,16 +1,11 @@
 package net.enthusia.staff.paper.staff;
 
 import java.time.Clock;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -42,19 +37,17 @@ import org.bukkit.plugin.java.JavaPlugin;
  * availability behavior.
  */
 public final class StaffToolDispatcher implements Listener, CommandExecutor, TabCompleter {
-    private static final String RANDOM_EXEMPT_PERMISSION = "enthusiastaff.stafftools.random-exempt";
     private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
     private static final int NO_ARGUMENTS = 0;
     private static final int ACTION_ARGUMENTS = 1;
     private static final int TARGET_ARGUMENTS = 2;
 
     private final JavaPlugin plugin;
-    private final String serverId;
     private final StaffModeManager staffMode;
     private final VanishManager vanish;
-    private final FreezeManager freeze;
     private final StaffToolSettings settings;
     private final StaffToolCooldowns cooldowns;
+    private final StaffToolRandomTeleportService randomTeleport;
     private final Map<StaffToolDefinition, ToolAction> actions;
 
     public StaffToolDispatcher(
@@ -66,18 +59,24 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             FreezeManager freeze
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.serverId = java.util.Objects.requireNonNull(serverId, "serverId");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
-        this.freeze = java.util.Objects.requireNonNull(freeze, "freeze");
         this.settings = StaffToolSettings.load(plugin.getConfig());
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
+        this.randomTeleport = new StaffToolRandomTeleportService(
+                plugin,
+                serverId,
+                staffMode,
+                vanish,
+                java.util.Objects.requireNonNull(freeze, "freeze"),
+                settings
+        );
         this.actions = createActions();
     }
 
     private Map<StaffToolDefinition, ToolAction> createActions() {
         EnumMap<StaffToolDefinition, ToolAction> configured = new EnumMap<>(StaffToolDefinition.class);
-        configured.put(StaffToolDefinition.RANDOM_TELEPORT, (player, ignored) -> beginRandomTeleport(player));
+        configured.put(StaffToolDefinition.RANDOM_TELEPORT, (player, ignored) -> randomTeleport.begin(player));
         configured.put(
                 StaffToolDefinition.PLAYER_INSPECTOR,
                 (player, targetId) -> runTargetCommand(player, "inspect", targetId, null)
@@ -256,119 +255,6 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                     NamedTextColor.RED
             ));
         }
-    }
-
-    private void beginRandomTeleport(Player actor) {
-        if (!settings.randomTeleportEnabledOn(serverId)) {
-            actor.sendMessage(Component.text(
-                    "Random staff teleport is disabled on backend " + serverId + '.',
-                    NamedTextColor.YELLOW
-            ));
-            return;
-        }
-        UUID actorId = actor.getUniqueId();
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> collectRandomCandidates(actorId));
-    }
-
-    private void collectRandomCandidates(UUID actorId) {
-        List<UUID> candidates = plugin.getServer().getOnlinePlayers().stream()
-                .map(Player::getUniqueId)
-                .toList();
-        if (candidates.isEmpty()) {
-            message(actorId, "No suitable random-teleport target is online.");
-            return;
-        }
-        ConcurrentLinkedQueue<TargetSnapshot> eligible = new ConcurrentLinkedQueue<>();
-        AtomicInteger remaining = new AtomicInteger(candidates.size());
-        Runnable finishedOne = () -> finishCandidateCollection(actorId, eligible, remaining);
-        for (UUID candidateId : candidates) {
-            snapshotRandomCandidate(actorId, candidateId, eligible, finishedOne);
-        }
-    }
-
-    private void finishCandidateCollection(
-            UUID actorId,
-            Collection<TargetSnapshot> eligible,
-            AtomicInteger remaining
-    ) {
-        if (remaining.decrementAndGet() == 0) {
-            finishRandomTeleport(actorId, eligible);
-        }
-    }
-
-    private void snapshotRandomCandidate(
-            UUID actorId,
-            UUID targetId,
-            Collection<TargetSnapshot> eligible,
-            Runnable finished
-    ) {
-        onEntity(targetId, target -> {
-            try {
-                if (eligibleRandomCandidate(actorId, target)) {
-                    eligible.add(new TargetSnapshot(targetId, target.getName(), target.getLocation().clone()));
-                }
-            } finally {
-                finished.run();
-            }
-        }, finished);
-    }
-
-    private boolean eligibleRandomCandidate(UUID actorId, Player target) {
-        UUID targetId = target.getUniqueId();
-        StaffToolTargetPolicy.Candidate candidate = new StaffToolTargetPolicy.Candidate(
-                new StaffToolTargetPolicy.Identity(actorId, targetId),
-                new StaffToolTargetPolicy.State(
-                        staffMode.active(targetId),
-                        vanish.isVanished(targetId),
-                        freeze.isRestricted(targetId),
-                        target.hasPermission(RANDOM_EXEMPT_PERMISSION),
-                        target.isDead(),
-                        target.isSleeping(),
-                        target.isInsideVehicle()
-                ),
-                new StaffToolTargetPolicy.Environment(
-                        target.getGameMode(),
-                        settings.worldEnabled(target.getWorld().getName())
-                )
-        );
-        return StaffToolTargetPolicy.eligibleRandomTarget(candidate);
-    }
-
-    private void finishRandomTeleport(UUID actorId, Collection<TargetSnapshot> candidates) {
-        onEntity(actorId, actor -> {
-            if (!canContinueRandomTeleport(actor)) {
-                return;
-            }
-            List<TargetSnapshot> shuffled = new ArrayList<>(candidates);
-            if (shuffled.isEmpty()) {
-                actor.sendMessage(Component.text("No suitable random-teleport target is online."));
-                return;
-            }
-            TargetSnapshot target = shuffled.get(ThreadLocalRandom.current().nextInt(shuffled.size()));
-            actor.teleportAsync(target.location()).whenComplete(
-                    (success, failure) -> finishRandomTeleport(actorId, target, success, failure)
-            );
-        });
-    }
-
-    private boolean canContinueRandomTeleport(Player actor) {
-        if (staffMode.authorizedForTool(actor, StaffToolDefinition.RANDOM_TELEPORT)
-                && actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission())) {
-            return true;
-        }
-        actor.sendMessage(Component.text(
-                "Random teleport was cancelled because your staff session or permission changed.",
-                NamedTextColor.RED
-        ));
-        return false;
-    }
-
-    private void finishRandomTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
-        if (failure != null || !Boolean.TRUE.equals(success)) {
-            message(actorId, "Random staff teleport failed safely; no state was changed.");
-            return;
-        }
-        message(actorId, "Teleported to a suitable random player: " + target.name() + '.');
     }
 
     private void beginFollowOrSpectate(Player actor, UUID targetId) {
