@@ -47,7 +47,7 @@ class CheatTesterJournalIntegrationTest {
         assertEquals(18, latestMigrationVersion());
     }
 
-    private static void createActiveSessionAndCheckpointEvidence() {
+    private static void createActiveSessionAndCheckpointEvidence() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             MariaDbIntegrationSupport.insertPlayer(DATABASE, STAFF, "TesterStaff", NOW);
             MariaDbIntegrationSupport.insertPlayer(DATABASE, TARGET, "TesterTarget", NOW);
