@@ -33,7 +33,7 @@ One primary owner per information type reduces drift:
 | Core feature status and entry points | `Core-Platform-and-Infrastructure.md` |
 | Moderation feature status and entry points | `Moderation,-Punishments,-and-Reports.md` |
 | Staff/player-state feature status and entry points | `Staff-Tools,-Investigations,-and-Player-State-Safety.md` |
-| Provider/migration/release status and entry points | `Integrations,-Migration-and-Release-Readiness.md` |
+| Provider/migration/release status and entry points | `Integrations,-Migration,-and-Release-Readiness.md` |
 | Durable remaining-product map | `Development-Blueprint.md` |
 | Developer task routing | `Developer-Guide-Index.md` |
 | Detailed source map and feature traces | `Developer-Code-Guide.md` |
