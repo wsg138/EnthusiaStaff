@@ -88,6 +88,18 @@ final class FakeBaseOperation {
         return true;
     }
 
+    /**
+     * Reconciles the viewer after the client render. If a close won the race after
+     * admission, remove the viewer so the caller can immediately restore real blocks.
+     */
+    boolean retainViewerAfterRender(UUID viewerId) {
+        if (open()) {
+            return true;
+        }
+        viewers.remove(viewerId);
+        return false;
+    }
+
     void removeViewer(UUID viewerId) {
         viewers.remove(viewerId);
     }
