@@ -31,14 +31,14 @@ Root fake-base/world-safety/tester/tests/resources/docs only. No external compon
 Active temporary branch: `package/es-p11-fake-bases`; delete after verified merge containment.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`.
+PR #88: `ES-P11: fake-base generation and cleanup` targeting `main`; currently draft while implementation/review/validation continue.
 
 ## 12. Implementation checklist
 - [x] Fresh live GitHub reconciliation and dependency/branch/migration ownership check.
 - [x] Activate package from exact legitimate `main`.
-- [ ] Reconcile world APIs; define templates/bounds/safety/recovery.
-- [ ] Implement generation and cleanup state machine.
-- [ ] Add failure/lifecycle/access/scheduler tests.
+- [x] Reconcile Paper/Folia world APIs; define templates/bounds/safety/recovery.
+- [x] Implement generation and cleanup state machine.
+- [ ] Add complete failure/lifecycle/access/scheduler tests. Pure template, placement, lifecycle, and audit-model tests are committed; runtime wiring/permission/shutdown coverage remains.
 - [ ] Document commands/limits/recovery and update requirement evidence.
 - [ ] Review, freeze exact head, validate, merge normally, verify containment, publish terminal state, delete temporary branch.
 
@@ -58,34 +58,36 @@ Commands/permissions/templates/limits, world-safety and recovery runbook, exclus
 Strict staff authorization; no player-base targeting or private-coordinate evidence; fail closed when ownership/safety is uncertain.
 
 ## 18. Migration impact
-No migration assumed; durable operation state, if required, uses a new immutable post-V18 migration with upgrade/checksum tests.
+No migration added. ES-P11 uses the existing `audit_events` ledger for coordinate-free lifecycle evidence and keeps virtual-operation state in memory because client-only blocks cannot persist a process/server interruption. V18 remains immutable.
 
 ## 19. Bedrock considerations
-Staff control must have command/text fallback; player-facing fake content must not depend on Java-only packets unless safely isolated.
+Staff controls have command/text fallback through `/cheattester base`; the suspect-facing implementation uses Paper's supported multi-block-change API rather than Java-only NMS/ProtocolLib packet internals. Representative Java/Bedrock acceptance remains ES-V02.
 
 ## 20. Distributed-runtime considerations
-Server/world ownership, duplicate generation, chunk lifecycle, restart, and cross-backend control must be fenced.
+Operations require the target to be online on the local backend, stay within one already-loaded target chunk, never load/generate chunks, are locally target-fenced, and make no shared-world mutation. Backend transfer/disconnect clears the client-only view and terminates local ownership.
 
 ## 21. External-provider considerations
-Use only verified world/protection APIs; missing integrations must fail safe and never bypass placement protections.
+No protection-provider bypass is used because ES-P11 never changes world blocks. Placement reads authoritative real block state and refuses any occupied template cell or unsafe floor; missing durable audit storage fails creation closed.
 
 ## 22. Completion definition
 All generation/cleanup safety criteria proven; one exact-head PR merged normally; no valid threads; temporary branch cleanup verified.
 
 ## 23. Resume state
-Assigned to the current sequential package worker on `package/es-p11-fake-bases`. No pre-existing ES-P11 implementation branch, PR, or handoff existed at selection time.
+Current worker owns PR #88 / `package/es-p11-fake-bases`. Implementation head at this checkpoint is `9a0b698d71c1a620f328634b3f0c3b33cb0fc00f`; newer test/documentation commits may follow and live GitHub remains authoritative.
 
 ## 24. Last completed checkpoint
-Package selected and branch created from exact legitimate `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`; ES-P02/ES-P05 remain unchanged parked external blockers and were not resumed.
+Implemented a fixed bounded 7x7 client-only template, one-loaded-chunk conflict/safe-floor planner, five-minute lifecycle with four-minute warning, Extend/Clear/Teleport controls, strict staff-mode permissions, exact global/per-staff registration bounds, distance/world/disconnect/staff-exit/plugin-disable cleanup, real-block restoration, and coordinate-free durable audit events using the existing audit ledger. Direct pure tests cover template bounds, placement conflicts/chunk/world-height constraints, lifecycle warning/expiry/extension/idempotency, and audit-model bounds. Draft PR #88 is open. First pre-test workflow attempts were superseded/cancelled by subsequent commits and are not validation evidence.
 
 ## 25. Remaining checklist
-World-safety design, implementation, tests, documentation, review, exact-head validation, normal merge, containment verification, terminal state publication, and temporary branch deletion.
+Complete runtime permission/scheduler/shutdown tests, resolve compile/test findings, document Wiki/runbook/requirements/audit evidence, harsh self-review, freeze exact head, run required exact-head hosted/static/review gates, merge normally, verify containment, publish terminal state, and delete the temporary branch.
 
 ## 26. Known blockers
 None for implementation. Private representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02`; unchanged account-level private staging failures are external evidence and are not retried here without a material condition change.
 
 ## 27. Final evidence
-Pending: world-safety design, exact heads, lifecycle/failure matrix, checks, review, docs.
+Pending final exact head. Current design/API evidence: Paper 1.21.11 supported `Player.sendMultiBlockChange`, entity scheduler, region scheduler, and async teleport APIs; V18 remains migration boundary; client-only virtual blocks are restored from authoritative real block data. CI/review evidence is not yet frozen.
 
 ## 28. Merge and synchronization record
 Pending: merge/resulting main/containment/temporary branch deletion; parity not applicable.
+
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md`.
