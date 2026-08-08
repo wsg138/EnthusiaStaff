@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -107,16 +108,18 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         if (operation == null) {
             return;
         }
+        UUID staffId = staff.getUniqueId();
+        String targetName = target.getName();
         auditThen(
                 operation,
-                staff.getUniqueId(),
+                staffId,
                 FakeBaseAuditAction.EXTENDED,
                 "ACCEPTED",
                 "STAFF_EXTEND",
                 () -> {
                     if (operation.extend(clock.instant(), LIFETIME)) {
-                        message(staff.getUniqueId(), controls(
-                                "Fake base extended for 5 minutes.", target.getName(), NamedTextColor.GREEN));
+                        message(staffId, controls(
+                                "Fake base extended for 5 minutes.", targetName, NamedTextColor.GREEN));
                     }
                 }
         );
@@ -127,13 +130,14 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         if (operation == null) {
             return;
         }
+        UUID staffId = staff.getUniqueId();
         auditThen(
                 operation,
-                staff.getUniqueId(),
+                staffId,
                 FakeBaseAuditAction.TELEPORTED,
                 "ACCEPTED",
                 "STAFF_TELEPORT",
-                () -> onEntity(staff.getUniqueId(), current -> teleportViewer(current, operation))
+                () -> onEntity(staffId, current -> teleportViewer(current, operation))
         );
     }
 
@@ -230,25 +234,29 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
         WorldBlockView blocks = new WorldBlockView(target.getWorld());
         if (!planner.safe(operation.anchor, blocks, template)) {
+            rejectBeforeRender(operation, "PLACEMENT_CHANGED",
+                    "Real blocks changed before rendering; fake base was cancelled safely.");
+            return;
+        }
+        if (!operation.addViewerIfOpen(target.getUniqueId())) {
+            return;
+        }
+        if (!renderer.show(target, operation.worldId, operation.anchor)) {
             auditBestEffort(event(
                     operation.operationId,
                     operation.staffId,
                     operation.targetId,
                     FakeBaseAuditAction.CREATE_REJECTED,
                     "REJECTED",
-                    "PLACEMENT_CHANGED"
+                    "RENDER_FAILED"
             ));
-            closeWithoutClear(operation);
+            closeOperation(operation, operation.staffId, "RENDER_FAILED");
             message(operation.staffId, Component.text(
-                    "Real blocks changed before rendering; fake base was cancelled safely.",
+                    "Virtual fake-base rendering failed; the operation was cleared safely.",
                     NamedTextColor.RED
             ));
             return;
         }
-        if (!operation.addViewerIfOpen(target.getUniqueId())) {
-            return;
-        }
-        renderer.show(target, operation.worldId, operation.anchor);
         auditBestEffort(event(
                 operation.operationId,
                 operation.staffId,
@@ -257,18 +265,37 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 "COMMITTED",
                 "VIRTUAL_RENDERED"
         ));
-        operation.setLifecycleTask(target.getScheduler().runAtFixedRate(
+        ScheduledTask lifecycleTask = target.getScheduler().runAtFixedRate(
                 plugin,
                 ignored -> tick(target, operation),
                 () -> closeOperation(operation, operation.staffId, "TARGET_RETIRED"),
                 20L,
                 20L
-        ));
+        );
+        if (lifecycleTask == null) {
+            closeOperation(operation, operation.staffId, "LIFECYCLE_SCHEDULER_RETIRED");
+            return;
+        }
+        operation.setLifecycleTask(lifecycleTask);
+        String targetName = target.getName();
         message(operation.staffId, controls(
-                "Fake base shown to " + target.getName() + " for 5 minutes.",
-                target.getName(),
+                "Fake base shown to " + targetName + " for 5 minutes.",
+                targetName,
                 NamedTextColor.AQUA
         ));
+    }
+
+    private void rejectBeforeRender(FakeBaseOperation operation, String reason, String message) {
+        auditBestEffort(event(
+                operation.operationId,
+                operation.staffId,
+                operation.targetId,
+                FakeBaseAuditAction.CREATE_REJECTED,
+                "REJECTED",
+                reason
+        ));
+        closeWithoutClear(operation);
+        message(operation.staffId, Component.text(message, NamedTextColor.RED));
     }
 
     private void tick(Player target, FakeBaseOperation operation) {
@@ -325,16 +352,23 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 operation.anchor.y(),
                 operation.anchor.z() + 0.5D
         );
-        staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staff.getUniqueId(), current -> {
+        UUID staffId = staff.getUniqueId();
+        staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staffId, current -> {
             if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation)
                     || !current.getWorld().getUID().equals(operation.worldId)) {
                 current.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
                 return;
             }
-            if (operation.addViewerIfOpen(current.getUniqueId())) {
-                renderer.show(current, operation.worldId, operation.anchor);
-                current.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
+            if (!operation.addViewerIfOpen(current.getUniqueId())) {
+                return;
             }
+            if (!renderer.show(current, operation.worldId, operation.anchor)) {
+                operation.removeViewer(current.getUniqueId());
+                renderer.clear(current, operation.worldId, operation.anchor);
+                current.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
+                return;
+            }
+            current.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
         }));
     }
 
@@ -409,11 +443,11 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 loaded.record(event);
                 success.run();
             } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Fake-base durable audit failed", exception);
+                plugin.getLogger().log(Level.SEVERE, "Fake-base durable audit/action failed", exception);
                 if (action == FakeBaseAuditAction.CREATED) {
                     closeWithoutClear(operation);
                 }
-                message(actorId, Component.text("Fake-base audit failed; action was not applied.", NamedTextColor.RED));
+                message(actorId, Component.text("Fake-base audit/action failed; action was not applied.", NamedTextColor.RED));
             }
         })) {
             if (action == FakeBaseAuditAction.CREATED) {
