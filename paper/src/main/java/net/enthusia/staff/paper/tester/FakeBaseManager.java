@@ -116,12 +116,23 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 FakeBaseAuditAction.EXTENDED,
                 "ACCEPTED",
                 "STAFF_EXTEND",
-                () -> {
+                () -> onEntity(staffId, currentStaff -> {
+                    if (!authorized(currentStaff) || !current(operation)) {
+                        return;
+                    }
                     if (operation.extend(clock.instant(), LIFETIME)) {
-                        message(staffId, controls(
+                        auditBestEffort(event(
+                                operation.operationId,
+                                staffId,
+                                operation.targetId,
+                                FakeBaseAuditAction.EXTENDED,
+                                "COMMITTED",
+                                "STAFF_EXTEND"
+                        ));
+                        currentStaff.sendMessage(controls(
                                 "Fake base extended for 5 minutes.", targetName, NamedTextColor.GREEN));
                     }
-                }
+                })
         );
     }
 
@@ -228,8 +239,19 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void activate(Player target, FakeBaseOperation operation) {
-        if (!current(operation) || !target.isOnline() || !target.getWorld().getUID().equals(operation.worldId)) {
-            closeOperation(operation, operation.staffId, "TARGET_UNAVAILABLE");
+        if (!current(operation) || !target.isOnline() || !target.getWorld().getUID().equals(operation.worldId)
+                || !staffMode.active(operation.staffId)) {
+            closeOperation(operation, operation.staffId, "TARGET_OR_CONTROLLER_UNAVAILABLE");
+            return;
+        }
+        Location targetLocation = target.getLocation();
+        if ((targetLocation.getBlockX() >> 4) != operation.anchor.chunkX()
+                || (targetLocation.getBlockZ() >> 4) != operation.anchor.chunkZ()) {
+            rejectBeforeRender(
+                    operation,
+                    "TARGET_MOVED_CHUNK",
+                    "Target changed region before rendering; fake base was cancelled safely."
+            );
             return;
         }
         WorldBlockView blocks = new WorldBlockView(target.getWorld());
@@ -353,22 +375,30 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 operation.anchor.z() + 0.5D
         );
         UUID staffId = staff.getUniqueId();
-        staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staffId, current -> {
-            if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation)
-                    || !current.getWorld().getUID().equals(operation.worldId)) {
-                current.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
+        staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staffId, currentStaff -> {
+            if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation) || !authorized(currentStaff)
+                    || !currentStaff.getWorld().getUID().equals(operation.worldId)) {
+                currentStaff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
                 return;
             }
-            if (!operation.addViewerIfOpen(current.getUniqueId())) {
+            if (!operation.addViewerIfOpen(currentStaff.getUniqueId())) {
                 return;
             }
-            if (!renderer.show(current, operation.worldId, operation.anchor)) {
-                operation.removeViewer(current.getUniqueId());
-                renderer.clear(current, operation.worldId, operation.anchor);
-                current.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
+            if (!renderer.show(currentStaff, operation.worldId, operation.anchor)) {
+                operation.removeViewer(currentStaff.getUniqueId());
+                renderer.clear(currentStaff, operation.worldId, operation.anchor);
+                currentStaff.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
                 return;
             }
-            current.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
+            auditBestEffort(event(
+                    operation.operationId,
+                    staffId,
+                    operation.targetId,
+                    FakeBaseAuditAction.TELEPORTED,
+                    "COMMITTED",
+                    "STAFF_TELEPORT"
+            ));
+            currentStaff.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
         }));
     }
 
