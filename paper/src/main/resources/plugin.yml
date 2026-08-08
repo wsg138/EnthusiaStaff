@@ -99,8 +99,8 @@ commands:
     usage: /stafftools | /stafftools random | /stafftools spectate <player>
     permission: enthusiastaff.stafftools.menu
   cheattester:
-    description: Configure and run bounded evidence-only cheat tester probes
-    usage: /cheattester <select|run|cancel|status|config>
+    description: Configure and run bounded evidence-only cheat tester probes and virtual fake bases
+    usage: /cheattester <select|run|cancel|status|config|base>
     permission: enthusiastaff.cheattester
   vanish:
     description: Toggle durable rank-aware vanish or spectator tab presentation
@@ -212,6 +212,12 @@ permissions:
     default: false
   enthusiastaff.cheattester.cancel-any:
     default: false
+  enthusiastaff.cheattester.fake-base:
+    default: false
+  enthusiastaff.cheattester.fake-base.manage-any:
+    default: false
+    children:
+      enthusiastaff.cheattester.fake-base: true
   enthusiastaff.vanish:
     default: false
   enthusiastaff.staffchat:
@@ -280,6 +286,7 @@ permissions:
       enthusiastaff.stafftools.spectate: true
       enthusiastaff.stafftools.menu: true
       enthusiastaff.cheattester: true
+      enthusiastaff.cheattester.fake-base: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
       enthusiastaff.client: true
@@ -305,6 +312,7 @@ permissions:
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
       enthusiastaff.cheattester: true
+      enthusiastaff.cheattester.fake-base: true
   enthusiastaff.rank.admin:
     default: false
     children:
@@ -321,6 +329,7 @@ permissions:
       enthusiastaff.market.restrict: true
       enthusiastaff.reputation.restrict: true
       enthusiastaff.cheattester.cancel-any: true
+      enthusiastaff.cheattester.fake-base.manage-any: true
   enthusiastaff.rank.founder:
     default: false
     children:

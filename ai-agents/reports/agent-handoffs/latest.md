@@ -2,22 +2,20 @@
 
 Current package handoff:
 
-[`2026-08-07-es-p10-cheat-testers.md`](../package-handoffs/2026-08-07-es-p10-cheat-testers.md)
+[`2026-08-07-es-p11-fake-bases.md`](../package-handoffs/2026-08-07-es-p11-fake-bases.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P10 — Cheat tester and fake-entity system` is terminal `COMPLETE`.
+`ES-P11 — Fake-base generation and cleanup` is the selected package and remains in `REVIEW` on PR #88 / `package/es-p11-fake-bases`.
 
-The sequential worker resumed ES-P10 as the highest-priority `ACTIONABLE_CONTINUATION` after live reconciliation from legitimate `main` `83302749b3247f7a05157f1625fc99da6aa43736` found PR #86 / `package/es-p10-cheat-testers` already advancing the package with unresolved exact-head static/coverage and review work. ES-P02 PR #70 and ES-P05 PR #81 remained unchanged `BLOCKED` / `PARKED_BLOCKED` and were not resumed. Exactly one package was worked.
+This sequential worker resumed ES-P11 as the only live `ACTIONABLE_CONTINUATION`. ES-P02 PR #70 and ES-P05 PR #81 remain unchanged `PARKED_BLOCKED`; exactly one package is being worked. Legitimate `main` remained `68a6d936066383f5b8139304f40b2d01d0dfe036` at the latest pre-checkpoint reconciliation, issue #43 remains deferred, LiteBans remains authoritative, and ES-P11 adds no migration beyond immutable V18.
 
-ES-P10 completed `AUD-TESTER-001` and `AUD-TESTER-002`: authorized Cheat Tester staff-tool and `/cheattester` controls; Totem refill / No-fall / Velocity / Auto-armor probes; exact temporary target-state restoration; immutable V18 recovery journaling; global active-target fencing and cross-backend login recovery; durable inventory-lock participation; bounded evidence/audit; target/staff-scoped fake entities; target-only suspect interaction evidence; fail-closed ProtocolLib behavior; strict configuration; lifecycle recovery; tests; and Wiki/operator documentation. Fake bases remain ES-P11; no automatic punishment, production use, or unisolated NMS was introduced.
+ES-P11 implements `AUD-TESTER-003` as a bounded client-only fake base with one-loaded-chunk placement, real-air/safe-floor/build-height checks, no chunk loads or real block writes, exact target/global/controller limits, target plus successful-Teleport staff viewer isolation, five-minute bounded lifecycle, expired-Extend refusal, idempotent authoritative cleanup, coordinate-free durable audit, and `/cheattester base` text fallback with explicit least-privilege permissions.
 
-Final frozen implementation head `1997caa864847049d51bfc58402f019e0a0d65c6` passed the applicable exact-head hosted gates: Wiki `93015435354`; Java 21 workflow `31224336640` unchanged-head rerun job `93016497496` including build/tests/MariaDB/Testcontainers/migrations/aggregate JaCoCo/runtime-JAR inspection; artifact `9011777818` digest `sha256:4557877edff2589065483f4d2d81f0c231511001ad04ea82d5b36cfbba1c762a`; Codacy static `93015840928` with zero issues; coverage variation `93017546035` at `-0.98%`; and zero valid unresolved live review threads. The first workflow attempt hit an unrelated already-merged punishment-alert MariaDB concurrency test failure; no ES-P10 code changed, and the exact unchanged-head rerun passed.
+Manual review and actual CodeRabbit findings are repaired. Codacy remediation reduced static findings 23 → 9 → 5 → 1 → 0 while keeping lifecycle/ownership decisions in the manager and extracting low-level audit/world-view/presentation helpers. Product head `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f` passed Wiki `31239760132` / `93058657612`, full Java/MariaDB/Testcontainers/runtime-JAR/coverage `31239760133` / `93058683147`, artifact `9016711895`, Codacy static `93059044531` with zero annotations, Diff Coverage `93059225105`, and Coverage Variation `93059224975`.
 
-Exact frozen-head private staging run `31224339373` is **NOT A PASS**: Ubuntu job `93015447468` had runner ID `0`, empty runner name, and no steps; Pi `93015487565` was skipped. ES-P10 claims no infrastructure exception. Representative distributed Java/Bedrock acceptance remains assigned to `ES-V02` by contract.
+The automatic private product-head run remains **NOT A PASS** and outside the ES-P11 completion gate: private run `31239763060`, Ubuntu job `93058666371` runner ID `0` / empty runner / `steps: []` / Billing & plans rejection, Pi `93058670370` skipped. Representative Java/Bedrock/distributed acceptance remains `ES-V02`.
 
-PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d`. Post-merge compare from frozen head is one commit ahead, zero behind, with zero file differences, proving exact containment. GitHub automatically deleted `package/es-p10-cheat-testers`; branch lookup returns 404.
-
-Dependency-derived recomputation now makes `ES-P11 — Fake-base generation and cleanup` `READY`, but the ES-P10 worker did not activate or modify it. No package is active for this worker. After this terminal documentation-only publication reaches `main` and its temporary branch is cleaned up, stop; a future worker must begin from fresh live GitHub reconciliation.
+This state publication becomes the final frozen candidate. Merge requires the full exact-head gate set on that unchanged SHA, including an actual CodeRabbit/reviewer completion with zero valid unresolved findings. Then merge PR #88 normally, verify the two-parent merge/resulting `main`/frozen-head containment/live result, delete the implementation branch only after those checks, publish terminal `COMPLETE` state through the documentation-only finalization pattern, recompute routing without activating another package, and stop.

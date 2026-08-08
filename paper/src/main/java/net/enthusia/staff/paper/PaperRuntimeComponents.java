@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
+import net.enthusia.staff.domain.ports.FakeBaseAuditStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -30,6 +31,7 @@ import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.tester.CheatTesterSettings;
+import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.event.Listener;
@@ -41,6 +43,7 @@ record PaperRuntimeComponents(
         FreezeManager freeze,
         StaffModeManager staffMode,
         CheatTesterManager cheatTester,
+        FakeBaseManager fakeBases,
         StaffToolDispatcher staffTools,
         DefaultStaffVisibilityService visibility,
         VanishManager vanish,
@@ -64,7 +67,8 @@ record PaperRuntimeComponents(
                 dependencies.environment().serverId()
         );
         InventoryCoordinator inventory = createInventoryCoordinator(dependencies, inventoryContext);
-        CheatTesterManager cheatTester = createCheatTesterManager(dependencies, staffMode, inventory);
+        FakeBaseManager fakeBases = createFakeBaseManager(dependencies, staffMode);
+        CheatTesterManager cheatTester = createCheatTesterManager(dependencies, staffMode, inventory, fakeBases);
         StaffToolDispatcher staffTools = createStaffToolDispatcher(
                 dependencies,
                 staffMode,
@@ -85,6 +89,7 @@ record PaperRuntimeComponents(
                 freeze,
                 staffMode,
                 cheatTester,
+                fakeBases,
                 staffTools,
                 visibility,
                 vanish,
@@ -184,10 +189,32 @@ record PaperRuntimeComponents(
         return vanish;
     }
 
+    private static FakeBaseManager createFakeBaseManager(
+            Dependencies dependencies,
+            StaffModeManager staffMode
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        Supplier<FakeBaseAuditStore> auditStore = () -> {
+            InventoryJournalStore storage = dependencies.stores().inventoryJournalStore().get();
+            return storage instanceof FakeBaseAuditStore fakeBaseAuditStore ? fakeBaseAuditStore : null;
+        };
+        FakeBaseManager manager = new FakeBaseManager(
+                plugin,
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                staffMode,
+                auditStore,
+                dependencies.environment().workers()
+        );
+        registerListener(plugin, manager);
+        return manager;
+    }
+
     private static CheatTesterManager createCheatTesterManager(
             Dependencies dependencies,
             StaffModeManager staffMode,
-            InventoryCoordinator inventory
+            InventoryCoordinator inventory,
+            FakeBaseManager fakeBases
     ) {
         JavaPlugin plugin = dependencies.environment().plugin();
         Supplier<CheatTesterJournalStore> testerStore = () -> {
@@ -205,7 +232,7 @@ record PaperRuntimeComponents(
                 CheatTesterSettings.load(plugin.getConfig().getConfigurationSection("staff-tools.cheat-tester"))
         );
         registerListener(plugin, manager);
-        CheatTesterCommand commandHandler = new CheatTesterCommand(plugin, manager);
+        CheatTesterCommand commandHandler = new CheatTesterCommand(plugin, manager, fakeBases);
         var command = java.util.Objects.requireNonNull(
                 plugin.getCommand("cheattester"),
                 "cheattester command is missing from plugin.yml"
