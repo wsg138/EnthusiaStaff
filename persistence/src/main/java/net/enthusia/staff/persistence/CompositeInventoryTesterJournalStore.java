@@ -17,26 +17,32 @@ import net.enthusia.staff.domain.inventory.InventoryPatch;
 import net.enthusia.staff.domain.inventory.InventoryPreparation;
 import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
+import net.enthusia.staff.domain.ports.FakeBaseAuditStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.tester.CheatTesterJournalRecord;
 import net.enthusia.staff.domain.tester.CheatTesterJournalStart;
 import net.enthusia.staff.domain.tester.CheatTesterSessionState;
+import net.enthusia.staff.domain.tester.FakeBaseAuditEvent;
 
 /**
- * Publishes the existing inventory storage binding while also exposing the dedicated V18
- * cheat-tester journal port. A durable ACTIVE tester row participates in the inventory lock
- * contract so offline edits cannot race exact tester recovery after a disconnect or restart.
+ * Publishes one asset binding while exposing inventory, cheat-tester recovery, and
+ * coordinate-free fake-base audit ports. A durable ACTIVE tester row participates in
+ * the inventory lock contract so offline edits cannot race exact tester recovery.
  */
-public final class CompositeInventoryTesterJournalStore implements InventoryJournalStore, CheatTesterJournalStore {
+public final class CompositeInventoryTesterJournalStore
+        implements InventoryJournalStore, CheatTesterJournalStore, FakeBaseAuditStore {
     private final InventoryJournalStore inventory;
     private final CheatTesterJournalStore testers;
+    private final FakeBaseAuditStore fakeBaseAudits;
 
     public CompositeInventoryTesterJournalStore(
             InventoryJournalStore inventory,
-            CheatTesterJournalStore testers
+            CheatTesterJournalStore testers,
+            FakeBaseAuditStore fakeBaseAudits
     ) {
         this.inventory = java.util.Objects.requireNonNull(inventory, "inventory");
         this.testers = java.util.Objects.requireNonNull(testers, "testers");
+        this.fakeBaseAudits = java.util.Objects.requireNonNull(fakeBaseAudits, "fakeBaseAudits");
     }
 
     @Override
@@ -244,5 +250,10 @@ public final class CompositeInventoryTesterJournalStore implements InventoryJour
             Instant now
     ) {
         return testers.complete(sessionId, expectedRevision, terminalState, reason, evidence, now);
+    }
+
+    @Override
+    public void record(FakeBaseAuditEvent event) {
+        fakeBaseAudits.record(event);
     }
 }
