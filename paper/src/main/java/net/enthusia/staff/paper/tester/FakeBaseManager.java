@@ -50,6 +50,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     private final FakeBasePlacementPlanner planner = new FakeBasePlacementPlanner();
     private final FakeBaseRenderer renderer;
     private final Map<UUID, FakeBaseOperation> activeByTarget = new ConcurrentHashMap<>();
+    private final Object registryLock = new Object();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public FakeBaseManager(
@@ -77,7 +78,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         if (!authorized(staff) || target == null || !target.isOnline()) {
             return;
         }
-        if (auditStore.get() == null) {
+        if (loadedAuditStore() == null) {
             staff.sendMessage(Component.text("Fake-base audit storage is unavailable; nothing was shown.", NamedTextColor.RED));
             return;
         }
@@ -90,7 +91,6 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return;
         }
         UUID staffId = staff.getUniqueId();
-        UUID targetId = target.getUniqueId();
         boolean scheduled = target.getScheduler().execute(
                 plugin,
                 () -> prepareCreate(staffId, target),
@@ -198,7 +198,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 LIFETIME
         );
         if (!register(operation)) {
-            message(staffId, Component.text("That player already has an active fake base.", NamedTextColor.RED));
+            message(staffId, Component.text("Fake-base target or concurrency limit is already occupied.", NamedTextColor.RED));
             return;
         }
         auditThen(
@@ -212,11 +212,15 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private boolean register(FakeBaseOperation operation) {
-        if (closed.get() || activeByTarget.size() >= MAX_ACTIVE_GLOBAL
-                || activeForStaff(operation.staffId) >= MAX_ACTIVE_PER_STAFF) {
-            return false;
+        synchronized (registryLock) {
+            if (closed.get() || activeByTarget.containsKey(operation.targetId)
+                    || activeByTarget.size() >= MAX_ACTIVE_GLOBAL
+                    || activeForStaff(operation.staffId) >= MAX_ACTIVE_PER_STAFF) {
+                return false;
+            }
+            activeByTarget.put(operation.targetId, operation);
+            return true;
         }
-        return activeByTarget.putIfAbsent(operation.targetId, operation) == null;
     }
 
     private void activate(Player target, FakeBaseOperation operation) {
@@ -354,7 +358,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         if (!operation.close()) {
             return;
         }
-        activeByTarget.remove(operation.targetId, operation);
+        unregister(operation);
         for (UUID viewerId : operation.viewersSnapshot()) {
             onEntity(viewerId, viewer -> renderer.clear(viewer, operation.worldId, operation.anchor));
         }
@@ -366,11 +370,19 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 "COMMITTED",
                 reason
         ));
-        message(operation.staffId, Component.text("Fake base cleared: " + reason, NamedTextColor.GRAY));
+        if (!closed.get()) {
+            message(operation.staffId, Component.text("Fake base cleared: " + reason, NamedTextColor.GRAY));
+        }
     }
 
     private void closeWithoutClear(FakeBaseOperation operation) {
         if (operation.close()) {
+            unregister(operation);
+        }
+    }
+
+    private void unregister(FakeBaseOperation operation) {
+        synchronized (registryLock) {
             activeByTarget.remove(operation.targetId, operation);
         }
     }
@@ -383,7 +395,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             String reason,
             Runnable success
     ) {
-        FakeBaseAuditStore loaded = auditStore.get();
+        FakeBaseAuditStore loaded = loadedAuditStore();
         if (loaded == null) {
             if (action == FakeBaseAuditAction.CREATED) {
                 closeWithoutClear(operation);
@@ -412,7 +424,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void auditBestEffort(FakeBaseAuditEvent event) {
-        FakeBaseAuditStore loaded = auditStore.get();
+        FakeBaseAuditStore loaded = loadedAuditStore();
         if (loaded == null || !submit(() -> {
             try {
                 loaded.record(event);
@@ -421,6 +433,15 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             }
         })) {
             plugin.getLogger().warning("Fake-base lifecycle audit could not be queued; safety cleanup remains authoritative");
+        }
+    }
+
+    private FakeBaseAuditStore loadedAuditStore() {
+        try {
+            return auditStore.get();
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Fake-base audit storage lookup failed", exception);
+            return null;
         }
     }
 
@@ -438,7 +459,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private boolean submit(Runnable operation) {
-        if (closed.get() || workers.isShutdown()) {
+        if (workers.isShutdown()) {
             return false;
         }
         try {
@@ -450,12 +471,16 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void onEntity(UUID playerId, java.util.function.Consumer<Player> operation) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null && player.isOnline()) {
-                player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
-            }
-        });
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                Player player = plugin.getServer().getPlayer(playerId);
+                if (player != null && player.isOnline()) {
+                    player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
+                }
+            });
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Fake-base entity scheduling retired during shutdown", exception);
+        }
     }
 
     private void message(UUID playerId, Component message) {
@@ -535,7 +560,9 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         for (FakeBaseOperation operation : List.copyOf(activeByTarget.values())) {
             closeOperation(operation, operation.staffId, "PLUGIN_DISABLE_OR_RELOAD");
         }
-        activeByTarget.clear();
+        synchronized (registryLock) {
+            activeByTarget.clear();
+        }
     }
 
     private static final class WorldBlockView implements FakeBasePlacementPlanner.BlockView {
