@@ -121,6 +121,8 @@ main() {
 
     runtime_jar="${jar_candidates[0]}"
     runtime_filename="$(basename "$runtime_jar")"
+    [[ "$runtime_filename" =~ ^EnthusiaStaff-Paper-[A-Za-z0-9._+-]+\.jar$ ]] \
+        || fail 'Paper runtime filename is outside the bounded staging bridge format'
     jar_entries_file="$source_dir/build/enthusiastaff-paper-runtime-entries.txt"
     mkdir -p "$(dirname "$jar_entries_file")"
     unzip -tq "$runtime_jar"
