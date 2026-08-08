@@ -39,6 +39,27 @@ class FakeBaseOperationTest {
     }
 
     @Test
+    void renderedViewerIsRejectedIfCloseWonAfterAdmission() {
+        FakeBaseOperation operation = operation();
+        UUID viewer = UUID.randomUUID();
+
+        assertTrue(operation.addViewerIfOpen(viewer));
+        assertTrue(operation.close());
+        assertFalse(operation.retainViewerAfterRender(viewer));
+        assertFalse(operation.viewersSnapshot().contains(viewer));
+    }
+
+    @Test
+    void renderedViewerRemainsTrackedWhileOperationIsOpen() {
+        FakeBaseOperation operation = operation();
+        UUID viewer = UUID.randomUUID();
+
+        assertTrue(operation.addViewerIfOpen(viewer));
+        assertTrue(operation.retainViewerAfterRender(viewer));
+        assertTrue(operation.viewersSnapshot().contains(viewer));
+    }
+
+    @Test
     void expiryIsInclusiveAtDeadline() {
         FakeBaseOperation operation = operation();
         assertFalse(operation.expired(START.plusSeconds(299)));
