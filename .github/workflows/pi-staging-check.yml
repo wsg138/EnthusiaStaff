@@ -2,6 +2,37 @@ name: Pi Staging
 
 on:
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact EnthusiaStaff source SHA; blank uses the selected ref
+        required: false
+        default: ""
+        type: string
+      source_pr_number:
+        description: Source PR number for an explicitly staged non-main SHA
+        required: false
+        default: ""
+        type: string
+      source_pr_head_repository:
+        description: Exact same-repository PR head repository
+        required: false
+        default: ""
+        type: string
+      source_pr_head_ref:
+        description: Exact same-repository PR head branch
+        required: false
+        default: ""
+        type: string
+      source_pr_head_sha:
+        description: Exact same-repository PR head SHA
+        required: false
+        default: ""
+        type: string
+      run_pi_test:
+        description: Run the private self-hosted Pi boot/restart phase
+        required: true
+        default: true
+        type: boolean
   pull_request_target:
     types:
       - opened
@@ -19,92 +50,262 @@ concurrency:
   group: pi-staging-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  SOURCE_REPOSITORY: wsg138/EnthusiaStaff
+  STAGING_REPOSITORY: wsg138/EnthusiaStaff-Staging
+  STAGING_WORKFLOW: plugin-live-test.yml
+  REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
 jobs:
-  live-staging:
-    name: Pi boot and restart staging
+  fork-boundary:
+    name: Explain fork staging boundary
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      STAGING_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
-      SOURCE_REPOSITORY: ${{ github.repository }}
-      SOURCE_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-      SOURCE_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-      SOURCE_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
-      SOURCE_PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
-      STAGING_REPOSITORY: wsg138/EnthusiaStaff-Staging
-      STAGING_WORKFLOW: plugin-live-test.yml
-      REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 5
+    steps:
+      - name: Keep fork PRs outside private staging
+        run: echo 'Fork pull requests use the ordinary public build/test/static-analysis checks and never receive private Pi execution or staging credentials.'
+
+  build-paper-runtime:
+    name: Build trusted EnthusiaStaff Paper runtime
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      artifact_name: ${{ steps.build.outputs.artifact_name }}
+      resolved_source_sha: ${{ steps.build.outputs.resolved_source_sha }}
+      source_short_sha: ${{ steps.build.outputs.source_short_sha }}
+      source_selection: ${{ steps.build.outputs.source_selection }}
+      source_is_ancestor_of_main: ${{ steps.build.outputs.source_is_ancestor_of_main }}
+      runtime_filename: ${{ steps.build.outputs.runtime_filename }}
+      runtime_sha256: ${{ steps.build.outputs.runtime_sha256 }}
+      runtime_size_bytes: ${{ steps.build.outputs.runtime_size_bytes }}
+      run_pi_test: ${{ steps.select.outputs.run_pi_test }}
+      source_pr_number: ${{ steps.select.outputs.source_pr_number }}
+      source_pr_head_repository: ${{ steps.select.outputs.source_pr_head_repository }}
+      source_pr_head_ref: ${{ steps.select.outputs.source_pr_head_ref }}
+      source_pr_head_sha: ${{ steps.select.outputs.source_pr_head_sha }}
 
     steps:
-      - name: Determine whether live staging is trusted
-        id: trust
+      - name: Check out trusted public staging controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: staging-controls
+          persist-credentials: false
+
+      - name: Select exact source metadata
+        id: select
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          EVENT_PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          EVENT_PR_REF: ${{ github.event.pull_request.head.ref || '' }}
+          INPUT_SOURCE_SHA: ${{ inputs.source_sha || '' }}
+          INPUT_PR_NUMBER: ${{ inputs.source_pr_number || '' }}
+          INPUT_PR_REPOSITORY: ${{ inputs.source_pr_head_repository || '' }}
+          INPUT_PR_REF: ${{ inputs.source_pr_head_ref || '' }}
+          INPUT_PR_SHA: ${{ inputs.source_pr_head_sha || '' }}
+          INPUT_RUN_PI: ${{ inputs.run_pi_test || false }}
         run: |
           set -Eeuo pipefail
-          eligible=true
-          reason='main commit or same-repository pull request'
+          source_sha="$EVENT_SOURCE_SHA"
+          pr_number="$EVENT_PR_NUMBER"
+          pr_repository="$EVENT_PR_REPOSITORY"
+          pr_ref="$EVENT_PR_REF"
+          pr_sha="$EVENT_SOURCE_SHA"
+          run_pi_test=true
 
-          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' \
-              && "${SOURCE_PR_HEAD_REPOSITORY}" != "${SOURCE_REPOSITORY}" ]]; then
-            eligible=false
-            reason='fork pull requests are intentionally limited to hosted build, test, and Codacy checks'
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            [[ -z "$INPUT_SOURCE_SHA" ]] || source_sha="$INPUT_SOURCE_SHA"
+            pr_number="$INPUT_PR_NUMBER"
+            pr_repository="$INPUT_PR_REPOSITORY"
+            pr_ref="$INPUT_PR_REF"
+            pr_sha="$INPUT_PR_SHA"
+            run_pi_test="$INPUT_RUN_PI"
           fi
 
-          printf 'eligible=%s\n' "$eligible" >> "$GITHUB_OUTPUT"
-          printf 'reason=%s\n' "$reason" >> "$GITHUB_OUTPUT"
+          if [[ -z "$pr_number" ]]; then
+            pr_repository=''
+            pr_ref=''
+            pr_sha=''
+          fi
 
           {
-            echo '## Pi staging eligibility'
-            echo
-            echo "- Eligible: \`$eligible\`"
-            echo "- Reason: $reason"
-            echo "- Source SHA: \`$SOURCE_SHA\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+            printf 'source_sha=%s\n' "$source_sha"
+            printf 'source_pr_number=%s\n' "$pr_number"
+            printf 'source_pr_head_repository=%s\n' "$pr_repository"
+            printf 'source_pr_head_ref=%s\n' "$pr_ref"
+            printf 'source_pr_head_sha=%s\n' "$pr_sha"
+            printf 'run_pi_test=%s\n' "$run_pi_test"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Explain fork safety boundary
-        if: steps.trust.outputs.eligible != 'true'
+      - name: Check out current EnthusiaStaff main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: wsg138/EnthusiaStaff
+          ref: main
+          fetch-depth: 0
+          path: enthusiastaff-source
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Validate source, build, and package Paper runtime
+        id: build
         shell: bash
-        run: |
-          echo "::notice::${{ steps.trust.outputs.reason }}"
+        env:
+          SOURCE_SHA_INPUT: ${{ steps.select.outputs.source_sha }}
+          SOURCE_DIR: ${{ github.workspace }}/enthusiastaff-source
+          PACKAGE_DIR: ${{ github.workspace }}/runtime-package
+          BUILD_WORKFLOW_SHA: ${{ github.sha }}
+          AUTHORIZED_SOURCE_REPOSITORY: wsg138/EnthusiaStaff
+          AUTHORIZED_PR_NUMBER: ${{ steps.select.outputs.source_pr_number }}
+          AUTHORIZED_PR_HEAD_REPOSITORY: ${{ steps.select.outputs.source_pr_head_repository }}
+          AUTHORIZED_PR_HEAD_REF: ${{ steps.select.outputs.source_pr_head_ref }}
+          AUTHORIZED_PR_HEAD_SHA: ${{ steps.select.outputs.source_pr_head_sha }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash "${GITHUB_WORKSPACE}/staging-controls/scripts/staging/build-enthusiastaff-bridge-artifact.sh"
 
+      - name: Upload verified Paper runtime package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.build.outputs.artifact_name }}
+          path: |
+            runtime-package/EnthusiaStaff-Paper-*.jar
+            runtime-package/SHA256SUMS
+            runtime-package/manifest.json
+          if-no-files-found: error
+          retention-days: 2
+
+  bridge-staging:
+    name: Bridge verified runtime to private Pi staging
+    needs: build-paper-runtime
+    if: ${{ needs.build-paper-runtime.result == 'success' && needs.build-paper-runtime.outputs.run_pi_test == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: write
+    env:
+      STAGING_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
+      SOURCE_SHA: ${{ needs.build-paper-runtime.outputs.resolved_source_sha }}
+      SOURCE_SELECTION: ${{ needs.build-paper-runtime.outputs.source_selection }}
+      SOURCE_IS_ANCESTOR_OF_MAIN: ${{ needs.build-paper-runtime.outputs.source_is_ancestor_of_main }}
+      SOURCE_PR_NUMBER: ${{ needs.build-paper-runtime.outputs.source_pr_number }}
+      SOURCE_PR_HEAD_REPOSITORY: ${{ needs.build-paper-runtime.outputs.source_pr_head_repository }}
+      SOURCE_PR_HEAD_REF: ${{ needs.build-paper-runtime.outputs.source_pr_head_ref }}
+      SOURCE_PR_HEAD_SHA: ${{ needs.build-paper-runtime.outputs.source_pr_head_sha }}
+      TRANSFER_TAG: es-r01-staging-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
       - name: Require cross-repository staging token
-        if: steps.trust.outputs.eligible == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
           if [[ -z "$STAGING_TOKEN" ]]; then
-            echo '::error::Missing ENTHUSIASTAFF_STAGING_TOKEN. Add a fine-grained token with Actions read/write access to wsg138/EnthusiaStaff-Staging as a repository Actions secret.'
+            echo '::error::Missing ENTHUSIASTAFF_STAGING_TOKEN with Actions read/write access to wsg138/EnthusiaStaff-Staging.'
             exit 1
           fi
 
-      - name: Dispatch verified staging workflow
-        if: steps.trust.outputs.eligible == 'true'
+      - name: Download exact public build artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.build-paper-runtime.outputs.artifact_name }}
+          path: runtime-package
+
+      - name: Publish bounded transient GitHub release asset
+        id: transfer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          shopt -s nullglob
+          files=(runtime-package/*)
+          ((${#files[@]} == 3)) || { echo '::error::Unexpected runtime-package entry count'; exit 1; }
+          [[ -f runtime-package/manifest.json && ! -L runtime-package/manifest.json ]]
+          [[ -f runtime-package/SHA256SUMS && ! -L runtime-package/SHA256SUMS ]]
+          jars=(runtime-package/EnthusiaStaff-Paper-*.jar)
+          ((${#jars[@]} == 1)) || { echo '::error::Expected exactly one Paper runtime JAR'; exit 1; }
+          (cd runtime-package && sha256sum -c SHA256SUMS)
+
+          asset_name="enthusiastaff-staging-${{ needs.build-paper-runtime.outputs.source_short_sha }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.zip"
+          archive="$RUNNER_TEMP/$asset_name"
+          (cd runtime-package && zip -q -X "$archive" "$(basename "${jars[0]}")" SHA256SUMS manifest.json)
+          transport_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          transport_size="$(stat -c '%s' "$archive")"
+          ((transport_size > 0 && transport_size <= 62914560)) || { echo '::error::Transient package exceeds 60 MiB'; exit 1; }
+
+          release_payload="$(jq -n \
+            --arg tag "$TRANSFER_TAG" \
+            --arg target "$GITHUB_SHA" \
+            --arg name "Transient Pi staging artifact $REQUEST_ID" \
+            --arg body "Ephemeral ES-R01 transfer for source $SOURCE_SHA. No credentials or private evidence are contained in this release." \
+            '{tag_name:$tag,target_commitish:$target,name:$name,body:$body,draft:false,prerelease:true}')"
+          release_response="$(curl --fail --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --data "$release_payload" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases")"
+          release_id="$(jq -r '.id' <<< "$release_response")"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]] || { echo '::error::Release creation returned no ID'; exit 1; }
+
+          asset_response="$(curl --fail --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Content-Type: application/zip' \
+            --data-binary "@$archive" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$asset_name")"
+          asset_id="$(jq -r '.id' <<< "$asset_response")"
+          [[ "$asset_id" =~ ^[1-9][0-9]*$ ]] || { echo '::error::Release asset upload returned no ID'; exit 1; }
+
+          {
+            printf 'release_id=%s\n' "$release_id"
+            printf 'release_tag=%s\n' "$TRANSFER_TAG"
+            printf 'asset_id=%s\n' "$asset_id"
+            printf 'asset_name=%s\n' "$asset_name"
+            printf 'asset_sha256=%s\n' "$transport_sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch private self-hosted staging workflow
         id: dispatch
         shell: bash
         run: |
           set -Eeuo pipefail
-
-          payload="$({
-            jq -n \
-              --arg ref 'main' \
-              --arg source_sha "$SOURCE_SHA" \
-              --arg source_pr_number "$SOURCE_PR_NUMBER" \
-              --arg source_pr_head_repository "$SOURCE_PR_HEAD_REPOSITORY" \
-              --arg source_pr_head_ref "$SOURCE_PR_HEAD_REF" \
-              --arg request_id "$REQUEST_ID" \
-              '{
-                ref: $ref,
-                inputs: {
-                  source_sha: $source_sha,
-                  source_pr_number: $source_pr_number,
-                  source_pr_head_repository: $source_pr_head_repository,
-                  source_pr_head_ref: $source_pr_head_ref,
-                  source_pr_head_sha: (if $source_pr_number == "" then "" else $source_sha end),
-                  request_id: $request_id,
-                  run_pi_test: "true"
-                }
-              }'
-          })"
+          payload="$(jq -n \
+            --arg ref 'main' \
+            --arg source_sha "$SOURCE_SHA" \
+            --arg source_selection "$SOURCE_SELECTION" \
+            --arg source_is_ancestor "$SOURCE_IS_ANCESTOR_OF_MAIN" \
+            --arg source_pr_number "$SOURCE_PR_NUMBER" \
+            --arg source_pr_repository "$SOURCE_PR_HEAD_REPOSITORY" \
+            --arg source_pr_ref "$SOURCE_PR_HEAD_REF" \
+            --arg source_pr_sha "$SOURCE_PR_HEAD_SHA" \
+            --arg request_id "$REQUEST_ID" \
+            --arg build_run_id "$GITHUB_RUN_ID" \
+            --arg build_run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg build_workflow_sha "$GITHUB_SHA" \
+            --arg release_id '${{ steps.transfer.outputs.release_id }}' \
+            --arg release_tag '${{ steps.transfer.outputs.release_tag }}' \
+            --arg asset_id '${{ steps.transfer.outputs.asset_id }}' \
+            --arg asset_name '${{ steps.transfer.outputs.asset_name }}' \
+            --arg asset_sha256 '${{ steps.transfer.outputs.asset_sha256 }}' \
+            '{ref:$ref,inputs:{source_sha:$source_sha,source_selection:$source_selection,source_is_ancestor_of_main:$source_is_ancestor,source_pr_number:$source_pr_number,source_pr_head_repository:$source_pr_repository,source_pr_head_ref:$source_pr_ref,source_pr_head_sha:$source_pr_sha,request_id:$request_id,public_build_run_id:$build_run_id,public_build_run_attempt:$build_run_attempt,public_build_workflow_sha:$build_workflow_sha,public_release_id:$release_id,public_release_tag:$release_tag,public_asset_id:$asset_id,public_asset_name:$asset_name,public_asset_sha256:$asset_sha256}}')"
 
           curl --fail --silent --show-error \
             --request POST \
@@ -114,19 +315,16 @@ jobs:
             --data "$payload" \
             "https://api.github.com/repos/$STAGING_REPOSITORY/actions/workflows/$STAGING_WORKFLOW/dispatches"
 
-          expected_title="EnthusiaStaff staging $REQUEST_ID / $SOURCE_SHA"
+          expected_title="EnthusiaStaff bridge $REQUEST_ID / $SOURCE_SHA"
           printf 'expected_title=%s\n' "$expected_title" >> "$GITHUB_OUTPUT"
-          echo "Dispatched $expected_title"
 
-      - name: Locate dispatched staging run
-        if: steps.trust.outputs.eligible == 'true'
+      - name: Locate dispatched private run
         id: locate
         shell: bash
         env:
           EXPECTED_TITLE: ${{ steps.dispatch.outputs.expected_title }}
         run: |
           set -Eeuo pipefail
-
           run_id=''
           for attempt in $(seq 1 60); do
             response="$(curl --fail --silent --show-error \
@@ -134,183 +332,98 @@ jobs:
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               --header "Authorization: Bearer $STAGING_TOKEN" \
               "https://api.github.com/repos/$STAGING_REPOSITORY/actions/workflows/$STAGING_WORKFLOW/runs?event=workflow_dispatch&per_page=50")"
-
-            run_id="$(jq -r --arg title "$EXPECTED_TITLE" \
-              '.workflow_runs[] | select(.display_title == $title) | .id' \
-              <<< "$response" | head -n 1)"
-
-            if [[ -n "$run_id" && "$run_id" != 'null' ]]; then
-              break
-            fi
+            run_id="$(jq -r --arg title "$EXPECTED_TITLE" '.workflow_runs[] | select(.display_title == $title) | .id' <<< "$response" | head -n 1)"
+            [[ -z "$run_id" || "$run_id" == null ]] || break
             sleep 5
           done
-
-          if [[ -z "$run_id" || "$run_id" == 'null' ]]; then
-            echo "::error::Unable to locate dispatched staging run: $EXPECTED_TITLE"
-            exit 1
-          fi
-
+          [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || { echo '::error::Unable to locate exact dispatched private run'; exit 1; }
           printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
           printf 'run_url=https://github.com/%s/actions/runs/%s\n' "$STAGING_REPOSITORY" "$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for staging verdict
-        if: steps.trust.outputs.eligible == 'true'
+      - name: Wait for private staging verdict
         id: verdict
         shell: bash
         env:
           STAGING_RUN_ID: ${{ steps.locate.outputs.run_id }}
-          STAGING_RUN_URL: ${{ steps.locate.outputs.run_url }}
         run: |
           set -Eeuo pipefail
-
-          conclusion=''
           status=''
+          conclusion=''
           for attempt in $(seq 1 180); do
             response="$(curl --fail --silent --show-error \
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               --header "Authorization: Bearer $STAGING_TOKEN" \
               "https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
-
             status="$(jq -r '.status' <<< "$response")"
             conclusion="$(jq -r '.conclusion // ""' <<< "$response")"
-            echo "Staging run $STAGING_RUN_ID: $status ${conclusion:-pending}"
-
-            if [[ "$status" == 'completed' ]]; then
-              break
-            fi
+            [[ "$status" == completed ]] && break
             sleep 10
           done
-
-          if [[ "$status" != 'completed' ]]; then
-            status='timed_out'
-            conclusion='timed_out'
+          if [[ "$status" != completed ]]; then
+            conclusion=timed_out
           fi
-
-          printf 'status=%s\n' "$status" >> "$GITHUB_OUTPUT"
           printf 'conclusion=%s\n' "$conclusion" >> "$GITHUB_OUTPUT"
 
-          {
-            echo '## Pi staging verdict'
-            echo
-            echo "- Result: \`$conclusion\`"
-            echo "- Staging run: $STAGING_RUN_URL"
-            echo "- Tested source SHA: \`$SOURCE_SHA\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Collect failed staging reason, logs, and evidence
-        if: steps.trust.outputs.eligible == 'true' && steps.verdict.outputs.conclusion != 'success'
+      - name: Collect failed private staging diagnostics
+        if: ${{ steps.verdict.outputs.conclusion != 'success' }}
         shell: bash
         env:
           STAGING_RUN_ID: ${{ steps.locate.outputs.run_id }}
-          STAGING_RUN_URL: ${{ steps.locate.outputs.run_url }}
-          STAGING_CONCLUSION: ${{ steps.verdict.outputs.conclusion }}
         run: |
           set -Eeuo pipefail
           diagnostics="$RUNNER_TEMP/pi-staging-failure"
-          mkdir -p "$diagnostics/job-logs" "$diagnostics/evidence"
-
-          jobs_url="https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100"
-          artifacts_url="https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/artifacts?per_page=100"
-
+          mkdir -p "$diagnostics"
           curl --fail --silent --show-error \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             --header "Authorization: Bearer $STAGING_TOKEN" \
-            "$jobs_url" > "$diagnostics/jobs.json"
+            "https://api.github.com/repos/$STAGING_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100" \
+            > "$diagnostics/jobs.json"
+          jq -r '.jobs[] | [.name, (.conclusion // .status), (.runner_name // ""), (.runner_id // 0)] | @tsv' "$diagnostics/jobs.json" \
+            > "$diagnostics/job-summary.tsv"
+          cat "$diagnostics/job-summary.tsv"
 
-          curl --fail --silent --show-error \
+      - name: Remove transient public transfer
+        id: cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.transfer.outputs.release_id }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]; then
+            curl --fail --silent --show-error --request DELETE \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
+          fi
+          encoded_tag="$(jq -rn --arg value "tags/$TRANSFER_TAG" '$value|@uri')"
+          curl --fail --silent --show-error --request DELETE \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
-            --header "Authorization: Bearer $STAGING_TOKEN" \
-            "$artifacts_url" > "$diagnostics/artifacts.json"
+            --header "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/git/refs/$encoded_tag" || true
 
-          {
-            echo '# Pi staging failure diagnostics'
-            echo
-            echo "- Source SHA: \`$SOURCE_SHA\`"
-            echo "- Staging run: $STAGING_RUN_URL"
-            echo "- Conclusion: \`$STAGING_CONCLUSION\`"
-            echo
-            echo '## Failed jobs and steps'
-            echo
-            jq -r '
-              .jobs[]
-              | select((.conclusion // .status) != "success")
-              | "### " + .name + "\n\n- Job result: `" + (.conclusion // .status) + "`\n" +
-                ((.steps // [])
-                  | map(select((.conclusion // .status) != "success")
-                    | "- Step " + (.number | tostring) + ": **" + .name + "** — `" + (.conclusion // .status) + "`")
-                  | join("\n")) + "\n"
-            ' "$diagnostics/jobs.json"
-          } > "$diagnostics/failure-summary.md"
-
-          while IFS=$'\t' read -r job_id job_name; do
-            [[ -n "$job_id" ]] || continue
-            safe_name="$(tr -cs 'A-Za-z0-9._-' '_' <<< "$job_name" | sed 's/_$//')"
-            curl --fail --silent --show-error --location \
-              --header 'Accept: application/vnd.github+json' \
-              --header 'X-GitHub-Api-Version: 2022-11-28' \
-              --header "Authorization: Bearer $STAGING_TOKEN" \
-              "https://api.github.com/repos/$STAGING_REPOSITORY/actions/jobs/$job_id/logs" \
-              --output "$diagnostics/job-logs/${job_id}-${safe_name}.log" || true
-          done < <(
-            jq -r '.jobs[] | select((.conclusion // .status) != "success") | [.id, .name] | @tsv' \
-              "$diagnostics/jobs.json"
-          )
-
-          while IFS=$'\t' read -r artifact_id artifact_name; do
-            [[ -n "$artifact_id" ]] || continue
-            archive="$diagnostics/evidence/${artifact_name}.zip"
-            curl --fail --silent --show-error --location \
-              --header 'Accept: application/vnd.github+json' \
-              --header 'X-GitHub-Api-Version: 2022-11-28' \
-              --header "Authorization: Bearer $STAGING_TOKEN" \
-              "https://api.github.com/repos/$STAGING_REPOSITORY/actions/artifacts/$artifact_id/zip" \
-              --output "$archive"
-            mkdir -p "$diagnostics/evidence/${artifact_name}"
-            if ! unzip -q "$archive" -d "$diagnostics/evidence/${artifact_name}"; then
-              echo "Unable to extract $artifact_name; the original ZIP is retained." \
-                >> "$diagnostics/failure-summary.md"
-            fi
-          done < <(
-            jq -r '.artifacts[] | select(.name | startswith("enthusiastaff-pi-evidence-")) | [.id, .name] | @tsv' \
-              "$diagnostics/artifacts.json"
-          )
-
-          cat "$diagnostics/failure-summary.md"
-          cat "$diagnostics/failure-summary.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload failed staging diagnostics
-        if: steps.trust.outputs.eligible == 'true' && steps.verdict.outputs.conclusion != 'success'
-        id: failure_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: pi-staging-failure-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/pi-staging-failure/
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish final staging check result
-        if: steps.trust.outputs.eligible == 'true'
+      - name: Publish final staging result
+        if: ${{ always() }}
         shell: bash
         env:
           STAGING_CONCLUSION: ${{ steps.verdict.outputs.conclusion }}
+          CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
           STAGING_RUN_URL: ${{ steps.locate.outputs.run_url }}
-          DIAGNOSTIC_URL: ${{ steps.failure_artifact.outputs.artifact-url }}
         run: |
           set -Eeuo pipefail
-          if [[ "$STAGING_CONCLUSION" == 'success' ]]; then
-            echo 'Pi staging passed.'
-            exit 0
-          fi
-
-          if [[ -n "$DIAGNOSTIC_URL" ]]; then
-            echo "::error::Pi staging failed. Repair data: $DIAGNOSTIC_URL"
-            {
-              echo
-              echo "- Failure diagnostics: $DIAGNOSTIC_URL"
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "::error::Staging run: $STAGING_RUN_URL"
-          exit 1
+          {
+            echo '## Pi staging verdict'
+            echo
+            echo "- Source SHA: \`$SOURCE_SHA\`"
+            echo "- Private run: ${STAGING_RUN_URL:-unavailable}"
+            echo "- Private conclusion: \`${STAGING_CONCLUSION:-missing}\`"
+            echo "- Transient transfer cleanup: \`${CLEANUP_OUTCOME:-missing}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$STAGING_CONCLUSION" == success ]] || { echo '::error::Private staging did not succeed'; exit 1; }
+          [[ "$CLEANUP_OUTCOME" == success ]] || { echo '::error::Transient public transfer cleanup did not succeed'; exit 1; }
