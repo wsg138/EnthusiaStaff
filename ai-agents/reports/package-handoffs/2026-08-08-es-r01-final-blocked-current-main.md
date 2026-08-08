@@ -9,7 +9,7 @@ Terminal state: `BLOCKED` / `PARKED_BLOCKED`.
 
 This sequential worker worked exactly ES-R01 and no second package. The worker resumed ES-R01 only because live GitHub showed incomplete post-merge finalization after terminal publication PR #95 had already merged. No product code, migration, staging controls, credentials, targets, or runtime configuration were changed, and no manual staging rerun was issued.
 
-Repository-side bridge implementation and repairs are merged. The required fresh current-`main` staging proof after the final checkpoint merge failed at the guarded disposable Pi runtime gate, and the automatic proof triggered by PR #95's terminal-publication merge failed at the same guarded database-reset boundary. End-to-end staging is **NOT A PASS** and the package remains parked on the same external prerequisite.
+Repository-side bridge implementation and repairs are merged. The required fresh current-`main` staging proof after the final checkpoint merge failed at the guarded disposable Pi runtime gate, and the automatic proof triggered by PR #95's terminal-publication merge failed at the guarded disposable-database reset boundary. End-to-end staging is **NOT A PASS** and the package remains parked until the guarded pre-reset succeeds under the unchanged staging contract and a fresh exact-current-main acceptance run passes.
 
 ## Checkpoint publication and review
 Public PR #94 froze at `3f90ae4e96e969a7ceac45ee9a385f068c0af14a` and passed:
@@ -84,14 +84,14 @@ Private job `93094893264`:
 - therefore did not boot Paper;
 - uploaded sanitized evidence successfully as artifact `9020895148`, digest `sha256:fdd89c15bfab6374990e4c0129006e391ca6d0f417ed8bbc06b07bd2914b32cf`.
 
-This newer run exposes no SQLState, so none is invented. The earlier seven SQLState `08000` connection failures remain the precise captured connection diagnostic. The new run is material evidence that the condition remained unchanged, not evidence of an unblock. It is **NOT A PASS**.
+This newer run exposes no fresh SQLState or root-cause proof, so none is invented. Earlier seven-attempt SQLState `08000` evidence remains historical diagnostic evidence only. The new run proves another guarded disposable-database reset failure before Paper boot; it does **not** prove current endpoint unreachability or that the underlying database condition is unchanged. It is **NOT A PASS**.
 
 ## Exact blocker and unblock
 No safe repository-side implementation remains.
 
-Exact blocker: the existing authorized disposable Pi-staging MariaDB endpoint is not currently usable by the guarded Paper boot/restart path from `Lincoln-PI-4` under the current `pi-staging` environment contract.
+Exact blocker: the required guarded disposable-database pre-reset did not succeed before Paper boot under the current `pi-staging` environment contract. The newest run does not establish the current root cause beyond that observed reset failure.
 
-Exact unblock: material evidence that this same authorized endpoint is reachable from `Lincoln-PI-4` under that unchanged contract.
+Exact unblock signal: a successful guarded disposable-database pre-reset from `Lincoln-PI-4` under the unchanged current `pi-staging` environment contract, followed by the required fresh exact-current-main acceptance run.
 
 Do not:
 - change database targets or credentials;
@@ -101,14 +101,14 @@ Do not:
 - broaden ES-R01 into database administration;
 - manually repeat an identical staging attempt merely because time passed or documentation changed.
 
-After material evidence of the unblock condition, resume ES-R01 before any new package and require one fresh exact-current-main proof through public hosted build → bounded transfer → private exact provenance → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence → correlated public success → transfer cleanup. Only then mark ES-R01 `COMPLETE`. Do not start ES-P02 in that same worker.
+After material evidence that the guarded pre-reset can succeed, resume ES-R01 before any new package and require one fresh exact-current-main proof through public hosted build → bounded transfer → private exact provenance → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence → correlated public success → transfer cleanup. Only then mark ES-R01 `COMPLETE`. Do not start ES-P02 in that same worker.
 
 ## Dependent package routing
 - ES-P02 PR #70 remains `BLOCKED` / `PARKED_BLOCKED`; branch drift is not actionable while ES-R01 remains parked.
 - ES-P05 PR #81 remains `BLOCKED` / `PARKED_BLOCKED`; its implementation and hosted validation remain preserved.
 - ES-P07, ES-P06, ES-P08, ES-X01, ES-X02, ES-X03, ES-X04, and ES-QA01 remain dependency-blocked planned work.
 - ES-V01, ES-V02, ES-V03, and ES-A01 remain deferred under their existing private/acceptance contracts.
-- No package is currently dependency-complete `READY` while this unchanged ES-R01 prerequisite blocks the staging route.
+- No package is currently dependency-complete `READY` while ES-R01 still lacks the required successful guarded pre-reset and acceptance proof.
 
 ## Migration, authority, and production boundaries
 - V18 remains immutable/current; ES-R01 changed no migration.
