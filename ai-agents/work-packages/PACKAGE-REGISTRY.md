@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-07
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P11` is dependency-complete and `READY`. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-P11` is `ACTIVE` on `package/es-p11-fake-bases`. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -28,7 +28,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d` from frozen head `1997caa864847049d51bfc58402f019e0a0d65c6`; exact containment verified; implementation branch deleted; representative Java/Bedrock/distributed acceptance remains ES-V02 |
-| `ES-P11` | Fake-base generation and cleanup | `READY` | `READY` | 90 | `ES-P10` | dependency is now complete; eligible for a future worker after fresh live reconciliation; not activated by the ES-P10 worker |
+| `ES-P11` | Fake-base generation and cleanup | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 90 | `ES-P10` | current sequential worker; branch `package/es-p11-fake-bases`; starting `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`; implementation/review/validation in progress |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | dependency blocked |
@@ -103,6 +103,15 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `
 - Explicit exclusions remain: fake bases / `AUD-TESTER-003` (`ES-P11`), automatic punishment, production use, unsupported packet/NMS internals, deployment/cutover/private data.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p10-cheat-testers.md`.
 
+## `ES-P11`
+
+- Selected 2026-08-07 after fresh live reconciliation found no actionable continuation: ES-P02 and ES-P05 remain unchanged `PARKED_BLOCKED`, and no ES-P11 branch/PR/handoff existed.
+- Starting legitimate `main`: `68a6d936066383f5b8139304f40b2d01d0dfe036`.
+- Active implementation branch: `package/es-p11-fake-bases`.
+- Dependency ES-P10 is `COMPLETE`; migration boundary is immutable V18 and this package assumes no migration unless implementation proves durable state is required.
+- Authoritative world-safety direction is client-side virtual blocks/schematic only, with no real-world mutation; operator controls must remain staff-authorized and cleanup must restore real client-visible block state idempotently.
+- Current checkpoint: package claimed and state publication begun before product implementation. PR, implementation evidence, tests, review, and exact-head validation remain pending.
+
 ## Next-worker boundary
 
-ES-P10 is terminal `COMPLETE`; this worker owns no further package. Dependency recomputation makes ES-P11 `READY`, but it was not activated or modified by the ES-P10 worker. A future worker must begin with fresh live GitHub reconciliation and the canonical selection rules. ES-P02 and ES-P05 remain parked until their exact external unblock condition changes.
+ES-P11 is the selected `ACTIVE` package. This worker must complete or correctly park ES-P11, publish terminal/persistent state, and stop without activating another package. ES-P02 and ES-P05 remain parked until their exact external unblock condition changes.
