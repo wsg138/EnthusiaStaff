@@ -30,7 +30,7 @@ final class FakeBaseTemplate {
 
     private static FakeBaseTemplate buildStandard() {
         List<Cell> cells = new ArrayList<>();
-        for (int y = 1; y <= 3; y++) {
+        for (int y = 1; y < HEIGHT; y++) {
             for (int x = -RADIUS; x <= RADIUS; x++) {
                 for (int z = -RADIUS; z <= RADIUS; z++) {
                     if (Math.abs(x) != RADIUS && Math.abs(z) != RADIUS) {

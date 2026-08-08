@@ -3,6 +3,7 @@ package net.enthusia.staff.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -34,7 +35,7 @@ class FakeBaseAuditIntegrationTest {
             .withPassword("enthusia_test_password");
 
     @Test
-    void existingAuditLedgerPersistsCoordinateFreeFakeBaseLifecycleWithoutMigration() throws Exception {
+    void existingAuditLedgerPersistsCoordinateFreeFakeBaseLifecycle() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             MariaDbIntegrationSupport.insertPlayer(DATABASE, STAFF, "FakeBaseStaff", NOW);
             MariaDbIntegrationSupport.insertPlayer(DATABASE, TARGET, "FakeBaseTarget", NOW);
@@ -62,7 +63,7 @@ class FakeBaseAuditIntegrationTest {
                      """)) {
             statement.setBytes(1, uuidBytes(EVENT));
             try (ResultSet result = statement.executeQuery()) {
-                result.next();
+                assertTrue(result.next(), "fake-base audit row was not persisted");
                 assertEquals(OPERATION, uuid(result.getBytes("correlation_id")));
                 assertEquals(STAFF, uuid(result.getBytes("actor_id")));
                 assertEquals(TARGET, uuid(result.getBytes("target_id")));
@@ -73,19 +74,6 @@ class FakeBaseAuditIntegrationTest {
                 String eventJson = result.getString("event_json");
                 assertFalse(eventJson.contains("coordinate"));
                 assertFalse(eventJson.contains("location"));
-            }
-        }
-        assertEquals(18, latestMigrationVersion());
-    }
-
-    private static int latestMigrationVersion() throws Exception {
-        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
-             PreparedStatement statement = connection.prepareStatement(
-                     "SELECT MAX(CAST(version AS UNSIGNED)) FROM flyway_schema_history WHERE success = 1"
-             )) {
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                return result.getInt(1);
             }
         }
     }

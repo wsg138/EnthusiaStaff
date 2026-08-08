@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.tester;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.logging.Level;
 import org.bukkit.Location;
@@ -16,8 +17,8 @@ final class FakeBaseRenderer {
     private final FakeBaseTemplate template;
 
     FakeBaseRenderer(JavaPlugin plugin, FakeBaseTemplate template) {
-        this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.template = java.util.Objects.requireNonNull(template, "template");
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
+        this.template = Objects.requireNonNull(template, "template");
     }
 
     boolean show(Player viewer, UUID worldId, FakeBasePlacementPlanner.Anchor anchor) {
@@ -87,7 +88,7 @@ final class FakeBaseRenderer {
                     null,
                     1L
             );
-            if (!scheduled && viewer.isOnline()) {
+            if (!scheduled) {
                 plugin.getLogger().fine("Fake-base viewer restore retired before send; client session cleanup is relied on");
             }
         } catch (RuntimeException exception) {

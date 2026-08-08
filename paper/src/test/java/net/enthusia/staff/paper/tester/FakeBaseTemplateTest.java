@@ -28,7 +28,32 @@ class FakeBaseTemplateTest {
     @Test
     void standardTemplateKeepsTwoBlockDoorwayOpen() {
         FakeBaseTemplate template = FakeBaseTemplate.standard();
-        assertFalse(template.cells().stream().anyMatch(cell -> cell.x() == 0 && cell.z() == -3 && cell.y() == 1));
-        assertFalse(template.cells().stream().anyMatch(cell -> cell.x() == 0 && cell.z() == -3 && cell.y() == 2));
+        assertFalse(hasCell(template, 0, 1, -FakeBaseTemplate.RADIUS));
+        assertFalse(hasCell(template, 0, 2, -FakeBaseTemplate.RADIUS));
+    }
+
+    @Test
+    void standardTemplateRoofAndWallsTrackConfiguredHeight() {
+        FakeBaseTemplate template = FakeBaseTemplate.standard();
+        int roofCells = (FakeBaseTemplate.RADIUS * 2 + 1) * (FakeBaseTemplate.RADIUS * 2 + 1);
+        assertEquals(roofCells, template.cells().stream()
+                .filter(cell -> cell.y() == FakeBaseTemplate.HEIGHT)
+                .count());
+
+        for (int y = 1; y < FakeBaseTemplate.HEIGHT; y++) {
+            for (int x = -FakeBaseTemplate.RADIUS; x <= FakeBaseTemplate.RADIUS; x++) {
+                for (int z = -FakeBaseTemplate.RADIUS; z <= FakeBaseTemplate.RADIUS; z++) {
+                    if (Math.abs(x) != FakeBaseTemplate.RADIUS && Math.abs(z) != FakeBaseTemplate.RADIUS) {
+                        continue;
+                    }
+                    boolean doorway = x == 0 && z == -FakeBaseTemplate.RADIUS && y <= 2;
+                    assertEquals(!doorway, hasCell(template, x, y, z));
+                }
+            }
+        }
+    }
+
+    private static boolean hasCell(FakeBaseTemplate template, int x, int y, int z) {
+        return template.cells().stream().anyMatch(cell -> cell.x() == x && cell.y() == y && cell.z() == z);
     }
 }

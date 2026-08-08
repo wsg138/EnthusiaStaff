@@ -216,6 +216,8 @@ permissions:
     default: false
   enthusiastaff.cheattester.fake-base.manage-any:
     default: false
+    children:
+      enthusiastaff.cheattester.fake-base: true
   enthusiastaff.vanish:
     default: false
   enthusiastaff.staffchat:
