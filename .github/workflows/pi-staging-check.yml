@@ -262,6 +262,10 @@ jobs:
             "https://api.github.com/repos/$GITHUB_REPOSITORY/releases")"
           release_id="$(jq -r '.id' <<< "$release_response")"
           [[ "$release_id" =~ ^[1-9][0-9]*$ ]] || { echo '::error::Release creation returned no ID'; exit 1; }
+          {
+            printf 'release_id=%s\n' "$release_id"
+            printf 'release_tag=%s\n' "$TRANSFER_TAG"
+          } >> "$GITHUB_OUTPUT"
 
           asset_response="$(curl --fail --silent --show-error \
             --request POST \
@@ -275,8 +279,6 @@ jobs:
           [[ "$asset_id" =~ ^[1-9][0-9]*$ ]] || { echo '::error::Release asset upload returned no ID'; exit 1; }
 
           {
-            printf 'release_id=%s\n' "$release_id"
-            printf 'release_tag=%s\n' "$TRANSFER_TAG"
             printf 'asset_id=%s\n' "$asset_id"
             printf 'asset_name=%s\n' "$asset_name"
             printf 'asset_sha256=%s\n' "$transport_sha256"
@@ -400,13 +402,12 @@ jobs:
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               --header "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
+            curl --fail --silent --show-error --request DELETE \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/git/refs/tags/$TRANSFER_TAG"
           fi
-          encoded_tag="$(jq -rn --arg value "tags/$TRANSFER_TAG" '$value|@uri')"
-          curl --fail --silent --show-error --request DELETE \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/git/refs/$encoded_tag" || true
 
       - name: Publish final staging result
         if: ${{ always() }}
