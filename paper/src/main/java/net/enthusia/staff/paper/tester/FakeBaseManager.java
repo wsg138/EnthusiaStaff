@@ -117,7 +117,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 "ACCEPTED",
                 "STAFF_EXTEND",
                 () -> onEntity(staffId, currentStaff -> {
-                    if (!authorized(currentStaff) || !current(operation)) {
+                    if (!canControl(currentStaff, operation) || !current(operation)) {
                         return;
                     }
                     if (operation.extend(clock.instant(), LIFETIME)) {
@@ -222,7 +222,13 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 FakeBaseAuditAction.CREATED,
                 "ACCEPTED",
                 "CREATE",
-                () -> onEntity(operation.targetId, current -> activate(current, operation))
+                () -> onEntity(staffId, currentStaff -> {
+                    if (!authorized(currentStaff) || !current(operation)) {
+                        closeOperation(operation, staffId, "CONTROLLER_UNAUTHORIZED");
+                        return;
+                    }
+                    onEntity(operation.targetId, currentTarget -> activate(currentTarget, operation));
+                })
         );
     }
 
@@ -287,18 +293,28 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 "COMMITTED",
                 "VIRTUAL_RENDERED"
         ));
-        ScheduledTask lifecycleTask = target.getScheduler().runAtFixedRate(
-                plugin,
-                ignored -> tick(target, operation),
-                () -> closeOperation(operation, operation.staffId, "TARGET_RETIRED"),
-                20L,
-                20L
-        );
+        ScheduledTask lifecycleTask;
+        try {
+            lifecycleTask = target.getScheduler().runAtFixedRate(
+                    plugin,
+                    ignored -> tick(target, operation),
+                    () -> closeOperation(operation, operation.staffId, "TARGET_RETIRED"),
+                    20L,
+                    20L
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Fake-base lifecycle scheduler failed after render", exception);
+            closeOperation(operation, operation.staffId, "LIFECYCLE_SCHEDULER_FAILED");
+            return;
+        }
         if (lifecycleTask == null) {
             closeOperation(operation, operation.staffId, "LIFECYCLE_SCHEDULER_RETIRED");
             return;
         }
         operation.setLifecycleTask(lifecycleTask);
+        if (!current(operation)) {
+            return;
+        }
         String targetName = target.getName();
         message(operation.staffId, controls(
                 "Fake base shown to " + targetName + " for 5 minutes.",
@@ -360,7 +376,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void teleportViewer(Player staff, FakeBaseOperation operation) {
-        if (!current(operation) || !authorized(staff)) {
+        if (!current(operation) || !canControl(staff, operation)) {
             return;
         }
         World world = plugin.getServer().getWorld(operation.worldId);
@@ -376,7 +392,8 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         );
         UUID staffId = staff.getUniqueId();
         staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staffId, currentStaff -> {
-            if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation) || !authorized(currentStaff)
+            if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation)
+                    || !canControl(currentStaff, operation)
                     || !currentStaff.getWorld().getUID().equals(operation.worldId)) {
                 currentStaff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
                 return;
@@ -411,11 +428,16 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             staff.sendMessage(Component.text("That player has no active fake base.", NamedTextColor.RED));
             return null;
         }
-        if (!operation.staffId.equals(staff.getUniqueId()) && !staff.hasPermission(MANAGE_ANY_PERMISSION)) {
+        if (!canControl(staff, operation)) {
             staff.sendMessage(Component.text("You do not control that fake-base operation.", NamedTextColor.RED));
             return null;
         }
         return operation;
+    }
+
+    private boolean canControl(Player staff, FakeBaseOperation operation) {
+        return authorized(staff) && (operation.staffId.equals(staff.getUniqueId())
+                || staff.hasPermission(MANAGE_ANY_PERMISSION));
     }
 
     private void closeOperation(FakeBaseOperation operation, UUID actorId, String reason) {
