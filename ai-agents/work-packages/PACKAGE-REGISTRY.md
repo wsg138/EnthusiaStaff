@@ -28,7 +28,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d` from frozen head `1997caa864847049d51bfc58402f019e0a0d65c6`; exact containment verified; implementation branch deleted; representative Java/Bedrock/distributed acceptance remains ES-V02 |
-| `ES-P11` | Fake-base generation and cleanup | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 90 | `ES-P10` | current sequential worker; branch `package/es-p11-fake-bases`; starting `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`; implementation/review/validation in progress |
+| `ES-P11` | Fake-base generation and cleanup | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 90 | `ES-P10` | PR #88 / `package/es-p11-fake-bases`; bounded virtual-only implementation and initial direct tests committed; compile/review/docs/validation pending |
 | `ES-X01` | RoseChat provider and communication integration | `PLANNED` | — | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependency blocked while ES-P05 is parked |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | — | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | — | 120 | `ES-P08`, `ES-X02` | dependency blocked |
@@ -65,7 +65,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `
 - Implementation PR #81 remains open on `package/es-p05-report-workflow`; it must not merge while the required private staging gate is unavailable.
 - Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
 - Implemented provider-independent report review completion: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence` presentation, coordinate/privacy separation from broad GUI triage, strict client-evidence allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation. Existing durable cooldown/merge/replay/stale-revision/concurrency/rollback/purge foundations were preserved and revalidated.
-- Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
+- Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB-Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
 - Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI coordinate exposure, raw nested AutoClicker serialization, and oldest-snapshot default selection. Zero inline review threads remain. CodeRabbit was quota-limited and produced no review; it must rerun on resume.
 - Required private staging did not execute product code. Latest package-record public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. The fresh 16:10 UTC private run described above confirms that the same account-level condition remains unchanged.
 - This is not a staging pass and no ES-P05-specific exception exists. The ES-P04 exception is package-specific and cannot be reused.
@@ -107,10 +107,12 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, and `
 
 - Selected 2026-08-07 after fresh live reconciliation found no actionable continuation: ES-P02 and ES-P05 remain unchanged `PARKED_BLOCKED`, and no ES-P11 branch/PR/handoff existed.
 - Starting legitimate `main`: `68a6d936066383f5b8139304f40b2d01d0dfe036`.
-- Active implementation branch: `package/es-p11-fake-bases`.
-- Dependency ES-P10 is `COMPLETE`; migration boundary is immutable V18 and this package assumes no migration unless implementation proves durable state is required.
-- Authoritative world-safety direction is client-side virtual blocks/schematic only, with no real-world mutation; operator controls must remain staff-authorized and cleanup must restore real client-visible block state idempotently.
-- Current checkpoint: package claimed and state publication begun before product implementation. PR, implementation evidence, tests, review, and exact-head validation remain pending.
+- Active implementation: draft PR #88 on `package/es-p11-fake-bases`.
+- Dependency ES-P10 is `COMPLETE`; migration boundary remains immutable V18 and ES-P11 has added no migration.
+- Implemented checkpoint: fixed 7x7 bounded template; placement constrained to one already-loaded target chunk; all template cells must be real air and a 5x5 interior floor must be safe; no real block writes or chunk loads; exact global/per-staff/target ownership bounds; five-minute timeout, four-minute warning, distance/world/disconnect/staff-mode/plugin-disable cleanup; Extend/Clear/Teleport controls; target plus authorized staff viewer isolation; authoritative real-block re-send on cleanup; coordinate-free durable audit events through existing `audit_events`; `/cheattester base` text fallback and explicit permission nodes.
+- Initial direct tests cover template bounds/duplicates/doorway, one-chunk placement and conflict/height/floor rejection, lifecycle warning/extension/expiry/idempotency, and bounded coordinate-free audit model. Runtime permission/scheduler/shutdown tests, docs, self-review, and exact-head validation remain pending.
+- Pre-freeze workflow runs superseded by newer commits are not passing evidence. Current resume authority is the package file and `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md` plus live PR #88.
+- Private representative Java/Bedrock/distributed acceptance remains ES-V02 and unchanged private Actions billing/zero-runner evidence is not retried here without a material condition change.
 
 ## Next-worker boundary
 
