@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-IFS=$'\n\t'
 
 source_selection_fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -142,9 +141,13 @@ validate_source_commit() {
             return 1
         }
 
+        # shellcheck disable=SC2034 # Outputs intentionally consumed by the sourcing build script.
         VALIDATED_SOURCE_SHA="$normalized_sha"
+        # shellcheck disable=SC2034
         RESOLVED_SOURCE_SHA="$resolved_sha"
+        # shellcheck disable=SC2034
         SOURCE_SELECTION='main'
+        # shellcheck disable=SC2034
         SOURCE_IS_ANCESTOR_OF_MAIN='true'
         return 0
     fi
@@ -157,11 +160,11 @@ validate_source_commit() {
         source_selection_fail 'Authorized PR head repository must be wsg138/EnthusiaStaff'
         return 1
     }
-    [[ -n "${AUTHORIZED_PR_HEAD_REF:-}" ]] \
-        && git check-ref-format --branch "$AUTHORIZED_PR_HEAD_REF" >/dev/null 2>&1 || {
+    if [[ -z "${AUTHORIZED_PR_HEAD_REF:-}" ]] \
+        || ! git check-ref-format --branch "$AUTHORIZED_PR_HEAD_REF" >/dev/null 2>&1; then
         source_selection_fail 'AUTHORIZED_PR_HEAD_REF must be a valid branch name'
         return 1
-    }
+    fi
     normalize_source_sha "${AUTHORIZED_PR_HEAD_SHA:-}" >/dev/null || {
         source_selection_fail 'AUTHORIZED_PR_HEAD_SHA must be a full 40-character SHA'
         return 1
@@ -195,9 +198,13 @@ validate_source_commit() {
         return 1
     }
 
+    # shellcheck disable=SC2034 # Outputs intentionally consumed by the sourcing build script.
     VALIDATED_SOURCE_SHA="$normalized_sha"
+    # shellcheck disable=SC2034
     RESOLVED_SOURCE_SHA="$fetched_pr_sha"
+    # shellcheck disable=SC2034
     SOURCE_SELECTION='authorized_pr'
+    # shellcheck disable=SC2034
     SOURCE_IS_ANCESTOR_OF_MAIN='false'
     return 0
 }
