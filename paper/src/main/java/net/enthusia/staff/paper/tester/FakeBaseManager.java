@@ -266,7 +266,8 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                     "Real blocks changed before rendering; fake base was cancelled safely.");
             return;
         }
-        if (!operation.addViewerIfOpen(target.getUniqueId())) {
+        UUID targetId = target.getUniqueId();
+        if (!operation.addViewerIfOpen(targetId)) {
             return;
         }
         if (!renderer.show(target, operation.worldId, operation.anchor)) {
@@ -283,6 +284,10 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                     "Virtual fake-base rendering failed; the operation was cleared safely.",
                     NamedTextColor.RED
             ));
+            return;
+        }
+        if (!operation.retainViewerAfterRender(targetId)) {
+            renderer.clear(target, operation.worldId, operation.anchor);
             return;
         }
         auditBestEffort(event(
@@ -398,13 +403,18 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 currentStaff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
                 return;
             }
-            if (!operation.addViewerIfOpen(currentStaff.getUniqueId())) {
+            UUID viewerId = currentStaff.getUniqueId();
+            if (!operation.addViewerIfOpen(viewerId)) {
                 return;
             }
             if (!renderer.show(currentStaff, operation.worldId, operation.anchor)) {
-                operation.removeViewer(currentStaff.getUniqueId());
+                operation.removeViewer(viewerId);
                 renderer.clear(currentStaff, operation.worldId, operation.anchor);
                 currentStaff.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
+                return;
+            }
+            if (!operation.retainViewerAfterRender(viewerId)) {
+                renderer.clear(currentStaff, operation.worldId, operation.anchor);
                 return;
             }
             auditBestEffort(event(
