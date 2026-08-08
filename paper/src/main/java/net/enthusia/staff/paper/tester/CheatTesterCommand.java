@@ -26,16 +26,19 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     private static final String CANCEL = "cancel";
     private static final String STATUS = "status";
     private static final String CONFIG = "config";
-    private static final List<String> ROOT_COMPLETIONS = List.of(SELECT, RUN, CANCEL, STATUS, CONFIG);
+    private static final String BASE = "base";
+    private static final List<String> ROOT_COMPLETIONS = List.of(SELECT, RUN, CANCEL, STATUS, CONFIG, BASE);
     private static final List<String> TYPE_COMPLETIONS =
             Arrays.stream(CheatTesterType.values()).map(CheatTesterType::id).toList();
 
     private final JavaPlugin plugin;
     private final CheatTesterManager manager;
+    private final FakeBaseCommandRouter fakeBases;
 
-    public CheatTesterCommand(JavaPlugin plugin, CheatTesterManager manager) {
+    public CheatTesterCommand(JavaPlugin plugin, CheatTesterManager manager, FakeBaseManager fakeBaseManager) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.manager = java.util.Objects.requireNonNull(manager, "manager");
+        this.fakeBases = new FakeBaseCommandRouter(plugin, fakeBaseManager);
     }
 
     @Override
@@ -57,13 +60,14 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
             case RUN -> run(player, args);
             case CANCEL -> cancel(player, args);
             case STATUS -> status(player);
+            case BASE -> fakeBases.handle(player, args);
             default -> usage(player);
         };
     }
 
     private boolean usage(Player player) {
         player.sendMessage(Component.text(
-                "Usage: /cheattester <select|run|cancel|status|config>",
+                "Usage: /cheattester <select|run|cancel|status|config|base>",
                 NamedTextColor.YELLOW
         ));
         return true;
@@ -144,6 +148,9 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
         if (!(sender instanceof Player player) || !player.hasPermission(PERMISSION)) {
             return List.of();
         }
+        if (args.length >= TARGET_ARGUMENT && BASE.equalsIgnoreCase(args[0])) {
+            return fakeBases.tabComplete(player, args);
+        }
         return switch (args.length) {
             case ACTION_ARGUMENT -> filter(ROOT_COMPLETIONS, args[0]);
             case TARGET_ARGUMENT -> secondArgumentCompletions(args);
@@ -158,6 +165,9 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
         }
         if (RUN.equalsIgnoreCase(args[0]) || CANCEL.equalsIgnoreCase(args[0])) {
             return filter(plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(), args[1]);
+        }
+        if (BASE.equalsIgnoreCase(args[0])) {
+            return fakeBases.tabComplete((Player) null, args);
         }
         return List.of();
     }
