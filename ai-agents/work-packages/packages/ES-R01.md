@@ -1,104 +1,133 @@
 # `ES-R01` — Billing-independent staging bridge recovery
 
 ## 1. Package identity
-`ES-R01`; Validation-infrastructure recovery; primary `COMP-STAFF`; supporting repository `wsg138/EnthusiaStaff-Staging`; priority 15; not parallel-safe with staging-workflow changes.
+`ES-R01`; validation-infrastructure recovery; primary `COMP-STAFF`; supporting repository `wsg138/EnthusiaStaff-Staging`; priority 15; not parallel-safe with staging-workflow changes.
 
 ## 2. Status
-`IN_PROGRESS` / `VERIFYING`. The implementation is merged in both repositories. The first merged-main bridge attempt proved the new hosted-build/transfer/provenance path but failed closed before Paper boot because the disposable MariaDB connection returned SQLState `08000`; a bounded connection-readiness correction is now merged in staging and a fresh exact-main proof remains required.
+`BLOCKED` / `PARKED_BLOCKED` as of 2026-08-08. All safe repository-side implementation and repair work is merged. The remaining mandatory end-to-end acceptance cannot execute because the dedicated disposable Pi-staging MariaDB endpoint is not accepting connections; the exact current proof exhausted the package's bounded connection-readiness retry policy before Paper boot.
 
 ## 3. Objective
-Remove the shared repository-side staging deadlock without weakening validation by moving the mandatory ordinary hosted build for an exact EnthusiaStaff source SHA onto the public `wsg138/EnthusiaStaff` GitHub-hosted workflow, then securely handing the verified exact-head artifact and provenance to the existing private self-hosted Pi staging job for safe boot/restart validation.
+Remove the shared repository-side staging deadlock without weakening validation by building the exact authorized EnthusiaStaff source SHA on public GitHub-hosted infrastructure, securely handing the verified artifact/provenance to the private trusted Pi, and requiring the existing disposable Paper boot/restart gate.
 
 ## 4. Why the package exists
-`ES-P02` and `ES-P05` are otherwise implementation-complete enough to wait only on the same private staging path. Private staging runs began failing before runner allocation on the `ubuntu-latest` build with GitHub's Billing & plans payment/spending-limit rejection, while `wsg138/EnthusiaStaff-Staging` workflows using labels `self-hosted`, `Linux`, `ARM64`, `enthusia-staging` continued to run on `Lincoln-PI-4`. The public EnthusiaStaff repository continues to run ordinary GitHub-hosted Java 21 builds successfully. ES-R01 removes the shared dependency on private GitHub-hosted minutes while preserving both required validation classes.
+ES-P02 and ES-P05 were parked because private `wsg138/EnthusiaStaff-Staging` could not allocate its required GitHub-hosted `ubuntu-latest` build under the Billing & plans restriction while `Lincoln-PI-4` remained operational. ES-R01 removed that private-hosted build dependency. The replacement route now demonstrably reaches the private trusted Pi with exact artifact provenance; the remaining failure is a distinct disposable-database availability prerequisite.
 
 ## 5. Included audit/package IDs
-Validation infrastructure for `ES-P02` and `ES-P05`; later reusable staging infrastructure for ordinary development packages. This package does not complete or waive any product audit ID.
+Validation infrastructure for ES-P02 and ES-P05 and later ordinary development packages. No product audit ID is completed or waived by ES-R01.
 
 ## 6. Included behavior
-- Build and validate the exact authorized EnthusiaStaff source SHA on public GitHub-hosted `ubuntu-latest` infrastructure.
-- Preserve same-repository PR trust checks and exact SHA authorization.
-- Produce an immutable runtime package manifest containing exact source SHA, workflow/control revision, runtime filename, size, and SHA-256 digest.
-- Transfer or expose that exact artifact to the private staging workflow through a secure, bounded GitHub-supported mechanism that does not require private GitHub-hosted execution.
-- Verify artifact identity and provenance again before boot on the Pi.
-- Run the guarded disposable Paper safe boot/restart test only on `Lincoln-PI-4` or its explicitly equivalent trusted self-hosted staging labels.
-- Return one correlated verdict to the source PR and preserve sanitized evidence.
-- Keep fork PRs unable to obtain private staging secrets or execution.
-- Add regression fixtures for source selection, provenance/digest mismatch, missing/expired artifact, duplicate dispatch, cancellation, failure propagation, and transient disposable-database connection readiness.
+- Public ordinary GitHub-hosted Java 21 build of the exact authorized EnthusiaStaff SHA.
+- Exact main-history or open same-repository PR-head source authorization.
+- Fork boundary that prevents private staging credentials/execution.
+- SHA-256-bound runtime package and strict provenance manifest.
+- Bounded transient GitHub release transfer with exact run/release/asset correlation and cleanup.
+- Private re-verification of public run, PR provenance, asset freshness, transfer digest, manifest, runtime digest and size before boot.
+- Trusted self-hosted runner enforcement for `Lincoln-PI-4`.
+- Guarded disposable database reset plus two-cycle Paper boot/restart harness.
+- Bounded retries only for SQLState class `08xxx` connection failures; all other reset failures remain immediate failures.
+- Regression fixtures for source selection, PR-target provenance, stale/missing/mismatched artifacts, digest mismatch, cleanup error paths, duplicate/cancellation boundaries, database readiness, and existing staging controls.
 
 ## 7. Explicit exclusions
-No product Java behavior changes; no migrations; no production deployment/data/routes/credentials; no issue #43 activation or acceptance; no LiteBans authority change; no validation exception; no relabeling failed/skipped/zero-runner evidence as success; no weakening exact-head or ordinary-hosted-build requirements.
+No product Java behavior; no migrations; no production deployment/data/routes/credentials; no issue #43 activation or acceptance; no LiteBans authority change; no validation exception; no false pass for failed/skipped/unavailable evidence.
 
 ## 8. Dependencies
 Package dependency graph: none.
 
-### Operational prerequisites
-The public hosted Actions path, current cross-repository dispatch credential, and already-operational private self-hosted Pi staging runner are live operational prerequisites rather than package dependencies. If any is unavailable, or if secure artifact transfer requires a new owner-only credential or runner registration that does not already exist, stop as `BLOCKED` and record that exact external requirement rather than inventing a bypass.
+### Operational prerequisite now blocking completion
+The dedicated disposable Pi-staging MariaDB endpoint referenced by the existing `pi-staging` environment secrets must accept a connection from `Lincoln-PI-4` long enough for the guarded pre-test reset to succeed. Do not broaden ES-R01 to database administration, change credentials, use a different database, remove the reset, or permit Paper boot without that success.
 
 ## 9. Component and repository boundaries
-Workflow/tooling/test/documentation changes only in `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`. Product source, runtime behavior, migrations, package implementations, production configuration, and private evidence are excluded.
+Workflow/tooling/test/documentation only in `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`. Product source, runtime product behavior, migrations, production configuration, and private evidence remain outside scope.
 
-## 10. Required branches
-The primary implementation used temporary `package/es-r01-staging-bridge-recovery` branches in both required repositories. A staging-only follow-up used `package/es-r01-database-readiness` after the first merged-main proof exposed a transient database-readiness failure, and this checkpoint uses `package/es-r01-proof-retry-checkpoint` to record the evidence and trigger a fresh exact-main proof. Temporary branches must contain no unique work before cleanup.
+## 10. Branches used
+- `wsg138/EnthusiaStaff:package/es-r01-staging-bridge-recovery`
+- `wsg138/EnthusiaStaff-Staging:package/es-r01-staging-bridge-recovery`
+- `wsg138/EnthusiaStaff-Staging:package/es-r01-database-readiness`
+- `wsg138/EnthusiaStaff-Staging:package/es-r01-pr-provenance-fix`
+- `wsg138/EnthusiaStaff:package/es-r01-proof-retry-checkpoint` — current documentation-only blocked-state publication branch / PR #94
 
-## 11. Required PRs
-The required public/private infrastructure PRs merged normally as `wsg138/EnthusiaStaff#93` and `wsg138/EnthusiaStaff-Staging#58`. The same-package staging readiness correction merged normally as `wsg138/EnthusiaStaff-Staging#59`. Neither contains product Java changes.
+Merged implementation branches contain no unique product work. Preserve the current status-publication branch until PR #94 is normally merged. Safe branch deletion is desirable afterward, but the connected GitHub tool surface available to this worker does not expose ref deletion; do not falsify deletion by moving refs.
+
+## 11. PR and merge record
+- Staging bridge PR #58 → normal merge `570f83e41cb80b498a82c8b5a509c42345558a46`.
+- Public bridge PR #93 → normal merge `094838fa221476e0832cf821f7b4908b9402d0d9`.
+- Staging database-readiness PR #59 → normal merge `313ed2815058eadeb8c823453f4152089cae01d4`.
+- Staging PR-target provenance fix PR #60 → normal merge `4036d6e915c2d751bef18849107722dfd1e586a6`.
+- Public PR #94 is the documentation-only persistent blocked-state publication; it must not be treated as an implementation continuation.
 
 ## 12. Implementation checklist
-Startup reconciliation complete; public exact-SHA hosted build implemented; private self-hosted artifact retrieval/provenance verification implemented; trust/fork boundaries retained; negative-path fixtures and operator documentation added; both primary implementation PRs reviewed/frozen/merged normally; staging transient-connection readiness correction reviewed/tested/merged normally. Remaining work is a successful fresh exact-current-main end-to-end proof, final containment/cleanup verification, and terminal canonical state publication.
+Repository-side implementation is complete: public build, bounded transfer, private verifier, Pi runner restriction, fail-closed cleanup, PR-target provenance, database connection-readiness boundary, tests, operator documentation, normal implementation merges, and live bridge execution through the private verifier are complete. Mandatory Paper boot/restart acceptance remains incomplete only because the disposable database endpoint is unavailable.
 
-## 13. Acceptance criteria
-- An exact EnthusiaStaff source SHA receives a successful ordinary GitHub-hosted build without using private-repository hosted minutes.
-- The private staging phase allocates the trusted self-hosted runner and boots/restarts the exact verified runtime artifact produced by that build, or fails closed before boot on any provenance/digest/source mismatch.
-- No private GitHub-hosted build is required for the route.
-- Fork/untrusted source cannot dispatch or consume private staging secrets.
-- Failed, skipped, cancelled, missing, mismatched, expired, or zero-runner evidence is never reported as a pass.
-- A correlated end-to-end dry run against a safe current `main` SHA proves the bridge and produces sanitized source/build/Pi evidence.
-- The package does not itself claim ES-P02 or ES-P05 staging completion; after ES-R01 completes, ES-P02 becomes the highest-priority `ACTIONABLE_CONTINUATION` and must rerun its own exact-head gates.
+## 13. Acceptance criteria state
+- **PASS:** exact source builds successfully on ordinary public GitHub-hosted infrastructure without private hosted minutes.
+- **PASS:** private staging allocates trusted `Lincoln-PI-4` and independently verifies exact public artifact/run/source provenance.
+- **PASS:** no private `ubuntu-latest` job is required.
+- **PASS:** same-repository PR and fork trust boundaries are enforced and tested.
+- **PASS:** failed/missing/mismatched/expired evidence fails closed; transient transfer cleanup has been verified after failed private runs.
+- **BLOCKED:** guarded disposable-database reset has not succeeded in the current live environment, so Paper boot/restart acceptance cannot begin.
+- **NOT CLAIMED:** ES-P02 and ES-P05 are not validated by ES-R01 and remain parked.
 
-## 14. Test requirements
-Run existing staging-control fixtures plus tests for exact source authorization, fork rejection, artifact metadata/digest verification, stale or missing artifact, wrong SHA, duplicate request, workflow cancellation/failure propagation, self-hosted runner selection, disposable-database connection readiness, safe boot/restart evidence, and no dependency on a private `ubuntu-latest` job. Run all applicable repository-configured checks in both repositories.
+## 14. Test evidence
+- Staging PR #58 exact-head Staging Controls CI: green on `Lincoln-PI-4`.
+- Staging PR #59 exact-head run `31249532617`, job `93083557688`: green, including bounded SQLState `08xxx` retry fixture and all existing staging/Sentinel controls.
+- Staging PR #60 exact-head run `31250097746`, job `93084990928`: green, including valid `pull_request_target` provenance, wrong base/control rejection, clean failure-path cleanup, database readiness, storage readiness, successful-cycle, issue #43 prerequisite, and Sentinel fixtures.
+- Public PR #93 frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`: full build/tests/runtime inspection, Codacy static with zero issues, diff coverage, and coverage variation passed. CodeRabbit was rate-limited and produced no review threads.
 
-## 15. Static-analysis requirements
-All configured workflow/security/static-analysis/review gates for changed files in both repositories; zero valid unresolved findings. Pin third-party Actions by immutable commit SHA consistent with repository policy.
+## 15. Static/review evidence
+All valid static-analysis findings found during implementation were repaired before merge. PR #58, #59, and #60 had no unresolved review threads at merge. PR #93 Codacy was green with zero issues. Unavailable/rate-limited CodeRabbit evidence is recorded as unavailable, not approval.
 
-## 16. Documentation requirements
-Document the trust boundary, artifact/provenance handoff, exact-head correlation, failure modes, operator recovery, retention, and how ES-P02/ES-P05 resume after this package. Update registry/workspace/handoffs on completion.
+## 16. Documentation
+`docs/pi-staging-bridge.md` documents trust boundaries, artifact/provenance handoff, failure recovery, retention, and package resumption. Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-08-es-r01-blocked-staging-database.md`.
 
-## 17. Security and privacy requirements
-No secrets in artifacts/logs; least-privilege tokens; artifact retrieval bound to exact repository/SHA/run metadata and verified digest; no fork access to private environment; sanitized Pi evidence only; reject redirects or alternate artifact sources that break provenance. Disposable database retries apply only to SQL connection-class `08xxx` failures, remain bounded, and do not permit Paper boot until a successful guarded reset.
+## 17. Security and privacy state
+No secrets are included in public transfer artifacts/logs. The private Pi verifier receives only source/run/release identities and independently revalidates them. Private database credentials remain environment secrets and are not printed. The database reset still refuses unsafe targets and Paper is not allowed to boot until reset success.
 
 ## 18. Migration impact
-None. V18 remains immutable and this package must not add or modify Flyway migrations.
+None. V18 remains immutable/current; ES-R01 added or modified no Flyway migration.
 
 ## 19. Bedrock considerations
 Not applicable to this infrastructure repair. Representative Java/Bedrock acceptance remains assigned to later validation packages.
 
 ## 20. Distributed-runtime considerations
-Only staging orchestration is in scope. Do not claim distributed product acceptance from the bridge proof.
+Only staging orchestration is in scope. No distributed product acceptance is claimed.
 
 ## 21. External-provider considerations
-GitHub Actions and the existing private self-hosted runner are validation infrastructure, not product providers. No third-party artifact hosting or new external service was introduced.
+GitHub Actions and the existing self-hosted runner are validation infrastructure. No third-party artifact host or new external service was introduced. The current blocker is the already-configured disposable staging database endpoint.
 
 ## 22. Completion definition
-Both exact-head infrastructure PRs merge normally with applicable checks/reviews green; a safe current-main end-to-end run proves public hosted build plus private self-hosted Pi boot/restart with exact artifact provenance; branches contain no unique work and are cleaned where tooling permits; canonical state is updated so ES-P02 is the highest-priority `ACTIONABLE_CONTINUATION`.
+ES-R01 may become `COMPLETE` only after the disposable staging database is reachable and a fresh exact-current-main bridge run succeeds through: public hosted build → bounded transfer → private exact provenance verification → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence upload → public correlated success → transient release/tag cleanup. Until then the correct terminal worker state is `BLOCKED` / `PARKED_BLOCKED`.
 
 ## 23. Resume state
-Assigned to the current generic sequential worker. Primary implementation is merged. Current checkpoint branch: `wsg138/EnthusiaStaff:package/es-r01-proof-retry-checkpoint` from public main `094838fa221476e0832cf821f7b4908b9402d0d9`. Staging main includes PR #58 merge `570f83e41cb80b498a82c8b5a509c42345558a46` and PR #59 merge `313ed2815058eadeb8c823453f4152089cae01d4`.
+No worker is assigned after this blocked-state publication. Resume ES-R01 before any new READY work only when there is material evidence that the disposable Pi-staging MariaDB connectivity/availability condition changed. Do not rerun identical staging attempts merely because time passed or documentation changed.
 
-## 24. Last completed checkpoint
-The first merged-main proof used public Pi Staging run `31249125885` at source/control SHA `094838fa221476e0832cf821f7b4908b9402d0d9`. Public hosted job `93082543002` succeeded on GitHub-hosted runner ID `1000009805` and uploaded the exact runtime package. Bridge job `93083229835` successfully created the bounded transfer, dispatched and correlated private run `31249402654`, and removed the transient release/tag afterward. Private job `93083246690` allocated `Lincoln-PI-4` (runner ID `2`) and passed the full release/run/PR/digest/manifest provenance verifier. The guarded database reset then failed before Paper boot with connection-class SQLState `08000`; the workflow correctly reported failure rather than pass. The temporary public release ID `367158184` and tag `es-r01-staging-31249125885-1` were both confirmed absent after cleanup.
+## 24. Live proof evidence
+### First merged-main proof
+Public run `31249125885`, source/control `094838fa221476e0832cf821f7b4908b9402d0d9`:
+- public hosted build job `93082543002` succeeded on GitHub-hosted runner ID `1000009805`;
+- private run `31249402654`, job `93083246690`, allocated `Lincoln-PI-4` runner ID `2`;
+- exact release/run/digest/manifest verifier passed;
+- disposable database pre-reset failed on SQLState `08000` before Paper boot;
+- transient release `367158184` and tag `es-r01-staging-31249125885-1` were confirmed deleted afterward.
 
-A same-package correction in staging PR #59 added bounded retries only for SQLState class `08xxx` connection failures (7 total attempts with 5-second delays) while preserving immediate failure for other reset failures and preserving the rule that Paper cannot start until the guarded pre-reset succeeds. Exact-head Staging Controls CI run `31249532617`, job `93083557688`, succeeded on `Lincoln-PI-4` at head `74dceeba18c603b280449e8fba5a09e789ffd361`, including source-selection fixtures, ES-R01 bridge artifact fixtures, disposable-database wrapper retry fixtures, storage-readiness fixtures, successful-cycle fixture, issue #43 prerequisite fixtures, and Sentinel queue tests. PR #59 then merged normally as `313ed2815058eadeb8c823453f4152089cae01d4`.
+### Corrected live PR-target proof
+Public PR #94 head `4acb4853c5ce00805ff206e3d0bb28a2458e82c8`, public Pi Staging run `31250170297`:
+- ordinary public hosted build job `93085175893` succeeded and uploaded the exact runtime package;
+- correlated private run `31250450219`, job `93085892938`, allocated `Lincoln-PI-4` runner ID `2`;
+- corrected PR-target provenance verifier **passed** using source/PR head `4acb4853c5ce00805ff206e3d0bb28a2458e82c8` and trusted base/workflow control SHA `094838fa221476e0832cf821f7b4908b9402d0d9`;
+- verified public release ID `367163460`, asset ID `506237999`, asset `enthusiastaff-staging-4acb4853c5ce-31250170297-1.zip`, transfer SHA-256 `05ed21b6279b46283853e952214513b2871f838712509ac9e4e514c11ac82488`;
+- verified runtime `EnthusiaStaff-Paper-0.1.0-SNAPSHOT.jar`, 9,123,435 bytes, SHA-256 `cfb526a90994803d64858b649a6452b23b5c12438461fb8f66d5cab18a21c449`;
+- guarded database pre-reset attempted seven total connections. All seven returned SQLState `08000`; evidence recorded retry attempts 1/7 through 6/7 and `connection_retry_result=exhausted`; Paper never booted;
+- sanitized evidence artifact `9019842260`, digest `sha256:d0d203f707940c05d9d5728120d4a207b6cd0ad68357aeb7ea907561bf6bacc4`, uploaded successfully;
+- public bridge cleanup succeeded; release `367163460` and tag `es-r01-staging-31250170297-1` both return 404 after cleanup.
 
 ## 25. Remaining checklist
-Merge this checkpoint normally to produce a fresh public `main` SHA and trigger the repaired bridge; require a successful public hosted build, exact private provenance verification, guarded disposable database reset, two-cycle Paper boot/restart, sanitized evidence upload, correlated public success, and transient release/tag cleanup. Then verify merge containment/temporary branches, publish terminal package/registry/workspace/handoff state, and stop without starting ES-P02.
+No safe repository-side implementation work remains. Exact unblock: restore or otherwise make the **existing authorized disposable Pi-staging MariaDB endpoint** reachable from `Lincoln-PI-4` using the existing environment contract. After evidence of that condition change, resume ES-R01, reconcile current heads, rerun the exact-current-main bridge once, require the full boot/restart/reset/cleanup pass, publish `COMPLETE`, then stop. Do not start ES-P02 in the same worker.
 
-## 26. Known blockers
-No repository-independent blocker is currently established. The first proof's MariaDB SQLState `08000` was connection-class and the same guarded database/Pi path has succeeded historically; the package therefore added bounded readiness handling rather than weakening or bypassing the database gate. If the fresh proof exhausts those bounded connection retries, record the actual database availability prerequisite as the blocker instead of broadening this package or weakening validation.
+## 26. Known blocker
+`PARKED_BLOCKED`: the dedicated disposable staging MariaDB endpoint is unavailable from the trusted Pi. This is demonstrated by seven consecutive guarded connection attempts returning SQLState `08000` in private run `31250450219`. The package explicitly forbids bypassing the database gate, changing to an unapproved target, or broadening into database administration.
 
-## 27. Final evidence
-Implementation merges so far: private bridge PR #58 → `570f83e41cb80b498a82c8b5a509c42345558a46`; public bridge PR #93 → `094838fa221476e0832cf821f7b4908b9402d0d9`; staging readiness PR #59 → `313ed2815058eadeb8c823453f4152089cae01d4`. Public PR #93's frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3` passed the full build/tests/runtime inspection, Codacy static analysis with zero issues, coverage variation, and diff coverage; CodeRabbit was rate-limited and produced no review threads. Private PR #58 and #59 exact-head control suites were green with no unresolved review threads. Terminal current-main bridge evidence is pending the fresh proof triggered by this checkpoint.
+## 27. Final evidence state
+Repository-side bridge repair is merged and its exact provenance path has live success evidence. End-to-end runtime acceptance remains **NOT A PASS** because Paper was correctly prevented from starting. ES-R01 is therefore blocked, not complete. ES-P02 and ES-P05 remain parked and must not be reclassified actionable until ES-R01's staging database prerequisite clears and ES-R01 completes.
 
 ## 28. Merge and synchronization record
-Primary public/private infrastructure and the staging readiness correction are merged normally as recorded above. No component-source parity requirement applies and no product/migration source was changed. Terminal state remains intentionally unpublished until a fresh post-PR59 current-main bridge proof succeeds.
+Implementation merges: `570f83e41cb80b498a82c8b5a509c42345558a46`, `094838fa221476e0832cf821f7b4908b9402d0d9`, `313ed2815058eadeb8c823453f4152089cae01d4`, `4036d6e915c2d751bef18849107722dfd1e586a6`. No product/migration source was changed and no cross-repository source parity requirement applies. The documentation-only blocked-state publication is PR #94. Temporary implementation refs may remain only because the available connected GitHub tool surface has no delete-ref operation; live containment/merged PRs are the authority and no unique implementation work remains on them.
