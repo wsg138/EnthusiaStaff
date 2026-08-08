@@ -13,6 +13,8 @@ final class FakeBaseCommandRouter {
     private static final String CLEAR = "clear";
     private static final String TELEPORT = "teleport";
     private static final String STATUS = "status";
+    private static final int ACTION_ARGUMENT_COUNT = 2;
+    private static final int TARGET_ARGUMENT_COUNT = 3;
     private static final List<String> ACTIONS = List.of(CREATE, EXTEND, CLEAR, TELEPORT, STATUS);
 
     private final JavaPlugin plugin;
@@ -29,7 +31,7 @@ final class FakeBaseCommandRouter {
                     "Fake-base controls require authorized active staff mode.", NamedTextColor.RED));
             return true;
         }
-        if (args.length < 2) {
+        if (args.length < ACTION_ARGUMENT_COUNT) {
             return usage(staff);
         }
         String action = args[1].toLowerCase(Locale.ROOT);
@@ -40,7 +42,7 @@ final class FakeBaseCommandRouter {
     }
 
     private boolean handleTargetAction(Player staff, String[] args, String action) {
-        if (args.length != 3) {
+        if (args.length != TARGET_ARGUMENT_COUNT) {
             return usage(staff);
         }
         Player target = plugin.getServer().getPlayerExact(args[2]);
@@ -68,10 +70,10 @@ final class FakeBaseCommandRouter {
         if (!manager.authorized(staff)) {
             return List.of();
         }
-        if (args.length == 2) {
+        if (args.length == ACTION_ARGUMENT_COUNT) {
             return CheatTesterCommand.filter(ACTIONS, args[1]);
         }
-        if (args.length == 3 && !STATUS.equalsIgnoreCase(args[1])) {
+        if (args.length == TARGET_ARGUMENT_COUNT && !STATUS.equalsIgnoreCase(args[1])) {
             return CheatTesterCommand.filter(
                     plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(), args[2]);
         }
@@ -79,7 +81,7 @@ final class FakeBaseCommandRouter {
     }
 
     private boolean status(Player staff, String[] args) {
-        if (args.length != 2) {
+        if (args.length != ACTION_ARGUMENT_COUNT) {
             return usage(staff);
         }
         List<String> lines = manager.statusLines(staff);
