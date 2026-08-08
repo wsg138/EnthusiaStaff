@@ -8,19 +8,17 @@ Classification: `ACTIONABLE_CONTINUATION`
 ## Selection and starting state
 
 - Legitimate starting `main`: `68a6d936066383f5b8139304f40b2d01d0dfe036`.
-- Selected after canonical startup/reconciliation found no actionable continuation ahead of it.
-- ES-P02 PR #70 and ES-P05 PR #81 remain unchanged `PARKED_BLOCKED` by the recorded private GitHub Actions Billing & plans/zero-runner condition; they were not retried or synchronized.
-- Issue #43 remains open/deferred and is outside ES-P11.
+- Live reconciliation on this resumed worker found PR #88 / `package/es-p11-fake-bases` already advancing ES-P11, so it was resumed as the only `ACTIONABLE_CONTINUATION` rather than claiming a new package.
+- ES-P02 PR #70 and ES-P05 PR #81 remain unchanged `PARKED_BLOCKED` by the recorded private GitHub Actions Billing & plans/zero-runner condition; they were not resumed.
+- Issue #43 remains open/deferred and is outside ES-P11. LiteBans remains authoritative.
 - ES-P10 is `COMPLETE`; V18 is the current immutable aggregate migration boundary.
-- No pre-existing ES-P11 branch, PR, package handoff, or competing active worker was found.
 
 ## Current live work
 
 - Branch: `package/es-p11-fake-bases`.
-- PR: #88, `ES-P11: fake-base generation and cleanup`; draft until this review-state checkpoint is fully published, then ready-for-review.
-- Product hardening commit before review-state documentation: `c1fcf737aed2a9993d5c49a86457f999c1172752`.
-- Review-state package/report commits follow that product commit; live branch head remains authoritative until the exact freeze.
-- No migration was added; V18 remains the highest aggregate migration.
+- PR: #88, `ES-P11: fake-base generation and cleanup`; non-draft and mergeable at last reconciliation.
+- Product/review hardening is complete through `1d8502b2e68fe7d400d1981d964d51dbb00417d7`; this handoff checkpoint becomes the candidate frozen head unless a validation gate finds a valid defect.
+- No migration was added; V18 remains the aggregate migration boundary.
 
 ## Implemented behavior
 
@@ -30,71 +28,65 @@ Classification: `ACTIONABLE_CONTINUATION`
 - Immediately before final real-block reads, the target must still be in the planned anchor chunk, preventing stale cross-region reads under Folia.
 - No fake-base code writes a real block. Rendering uses Paper's client-only multi-block-change API only.
 - Exact ownership/concurrency: one operation per target, 8 global, 2 per controlling staff.
-- Target is the only ordinary viewer. Authorized staff are added only after the Teleport control succeeds.
-- Lifetime is 5 minutes with a warning roughly one minute before expiry; Extend starts a fresh 5-minute window.
+- Only the target and staff viewers whose Teleport action succeeds receive the virtual structure; every other player is excluded.
+- Lifetime is 5 minutes with a warning roughly one minute before expiry; Extend starts a fresh 5-minute window. Extension and warning transitions are serialized so an old tick cannot consume the new warning window.
 - Clear paths include staff clear, timeout, 48-block distance, target world/backend change, target/controller disconnect, staff-mode exit, render failure, lifecycle scheduler failure/retirement, and plugin lifecycle close.
-- Cleanup is idempotent and re-sends current authoritative real block data rather than mutating/restoring world blocks from a stale snapshot.
-- `/cheattester base create|extend|clear|teleport|status` is the text/Bedrock-safe fallback; active staff mode plus `enthusiastaff.cheattester.fake-base` is required, with `...manage-any` for cross-controller management.
+- Cleanup is idempotent and re-sends current authoritative real block data rather than mutating/restoring world blocks from a stale snapshot. Render completion rechecks operation ownership so close/render races immediately restore the viewer.
+- `/cheattester base create|extend|clear|teleport|status` is the text/Bedrock-safe fallback; active staff mode plus `enthusiastaff.cheattester.fake-base` is required, with `...manage-any` for cross-controller management. `manage-any` explicitly inherits the base permission while both remain default-false.
 - Async creation, Extend, and Teleport re-check current authority at commit time. Manage-any loss during audit/teleport cannot commit a stale privileged action.
 - Coordinate-free durable lifecycle evidence uses the existing `audit_events` ledger. Creation is durably accepted before render; Extend/Teleport distinguish accepted requests from committed actions. Fake-base coordinates are never persisted in the audit payload.
 
 ## Automated coverage
 
-Direct/unit tests cover:
+Direct/unit tests cover template bounds/block cap/duplicates/doorway/height-coupled walls and roof; loaded-chunk placement and same-chunk containment; unloaded chunk, real-block conflict, unsafe-floor, and world-height refusal; warning/extension/expiry/closed-state/idempotent viewer behavior; bounded coordinate-free audit values; and semantic least-privilege plugin permission metadata.
 
-- template bounds, block cap, duplicates, doorway;
-- loaded-chunk placement and same-chunk containment;
-- unloaded chunk, real-block conflict, unsafe-floor, and world-height refusal;
-- warning/extension/expiry/idempotent close/viewer state;
-- bounded coordinate-free audit domain values;
-- plugin command/permission metadata.
+MariaDB/Testcontainers integration writes a fake-base lifecycle event through the production runtime binding into the existing `audit_events` ledger, asserts the row exists, checks correlation/actor/target/action/outcome/JSON fields, and verifies no coordinate/location payload. The PR changes no migration path; the repository's existing migration validation remains responsible for V18 clean-install/upgrade/checksum coverage.
 
-MariaDB/Testcontainers integration coverage writes a fake-base lifecycle event through the production runtime binding into `audit_events`, checks correlation/actor/target/action/outcome/JSON fields, verifies no coordinate/location payload, and proves highest successful Flyway migration remains V18.
+## Review findings resolved
 
-## Self-review findings resolved
-
-Before freeze, manual review found and fixed:
+Manual review plus the actual CodeRabbit review resolved:
 
 - approximate concurrency admission;
 - noncanonical hand-built audit JSON;
-- expiry/warning read races;
-- worker-thread Bukkit `Player` access;
+- warning/extension race consistency;
+- worker/region-thread Bukkit `Player` access;
 - render/restore exception handling;
 - stale final placement after the target moved to another Folia chunk;
 - stale controlling-staff authorization before render;
 - stale manage-any authority during async Extend/Teleport;
 - lack of accepted-vs-committed control evidence;
 - post-render lifecycle scheduler failure/retirement potentially leaving an unscheduled virtual view;
+- render/close races that could otherwise leave a stale virtual view;
+- ambiguous target-vs-ordinary-player viewer wording;
+- missing canonical handoff routing in `WORKSPACE-STATE.md`;
+- explicit manage-any permission inheritance;
+- template-height coupling and related direct coverage;
+- brittle audit integration row/migration assertions;
 - unreachable fake-base tab-completion logic.
 
-No known product defect remains from this self-review.
+CodeRabbit's major render/close thread is resolved/outdated. Its two remaining actionable minor threads were fixed on `c6971234cb8bdd66be59c87f3422a1a1ae9c2a26` and explicitly resolved. Zero valid unresolved review threads remain at this checkpoint. Two top-level CodeRabbit nitpick suggestions were intentionally not expanded into extra architecture/UX scope: target UUID status output is bounded and documented, and the existing composite storage binding safely implements `FakeBaseAuditStore`; neither is a correctness/security defect.
 
 ## Validation status
 
-- Complete pre-freeze head `a0fc7c63b547cfa84a89aa116c4297d2c0b25f36` passed Wiki run `31233405241` and Coverage run `31233405218` / job `93041499563`, including full Java 21 build/tests/MariaDB/Testcontainers/runtime-JAR inspection and coverage upload; Codacy reported zero new issues.
-- That head is diagnostic only, **not** final evidence, because later self-review fixes changed product code.
-- Subsequent hardening heads have been compiling under hosted CI; cancelled/superseded runs are not counted as passes.
-- Final exact-head Wiki/full Java/static/coverage/reviewer evidence is still required after review-state docs are complete and PR #88 leaves draft.
-- CodeRabbit's earlier success status is not counted as an actual review because its PR comment explicitly said review was skipped while the PR was draft.
-- Live review threads were empty at the last reconciliation, but they must be rechecked after actual ready-for-review review.
-- Private representative Java/Bedrock/distributed acceptance remains assigned to ES-V02. The unchanged private Actions Billing & plans/zero-runner condition is not retried here without a material change and is not a package pass.
+- Diagnostic pre-freeze head `a0fc7c63b547cfa84a89aa116c4297d2c0b25f36` passed Wiki `31233405241` and Coverage `31233405218` / job `93041499563`.
+- Review checkpoint `c6971234cb8bdd66be59c87f3422a1a1ae9c2a26` passed Wiki `31238214659`; later hardening superseded it.
+- Head `1d8502b2e68fe7d400d1981d964d51dbb00417d7` passed Wiki run `31238322954` / job `93054863632`; its Coverage/Codacy/CodeRabbit results are diagnostic until this checkpoint freezes the tracked package state.
+- Final exact-head Wiki/full Java/static/coverage/reviewer evidence is required on the post-checkpoint frozen SHA.
+- Private representative Java/Bedrock/distributed acceptance remains ES-V02. A fresh automatic private attempt for `1d8502b2e68fe7d400d1981d964d51dbb00417d7` dispatched run `31238324044`: Ubuntu build `93054868171` received runner ID `0`, empty runner name and `steps: []`, with GitHub's Billing & plans payment/spending-limit rejection; Pi `93054872292` was skipped. This is **NOT A PASS**, no product step ran, and ES-P11 does not claim an infrastructure exception because the package contract assigns that representative acceptance to ES-V02.
 
 ## Documentation/evidence
 
 - `docs/wiki/pages/Cheat-Tester.md` documents commands, permissions, fixed limits, client-only safety, cleanup/recovery, audit privacy, and ES-V02 boundary.
 - `reports/ES-P11-FAKE-BASE-IMPLEMENTATION.md` maps `AUD-TESTER-003` to the implementation and records world-safety/failure/self-review evidence.
-- Package file and registry identify PR #88 / branch ownership and migration boundary.
-- `WORKSPACE-STATE.md` and `agent-handoffs/latest.md` are updated in this review checkpoint before final freeze.
+- Package file, registry, `WORKSPACE-STATE.md`, and `agent-handoffs/latest.md` identify PR #88 / branch ownership and migration/acceptance boundaries.
 
 ## Exact next actions
 
-1. Finish review-state registry/workspace/latest-handoff publication on the implementation branch.
-2. Mark PR #88 ready for review and request/reconcile an actual CodeRabbit review.
-3. Reconcile fresh `main`, open PRs, migration ownership, combined statuses, comments, and every review thread.
-4. Resolve every valid reviewer/static/CI finding; if code changes, restart exact-head validation.
-5. Freeze one head and require successful Wiki, full Java 21 build/tests/MariaDB/Testcontainers/runtime-JAR/artifact/coverage, required Codacy statuses, and zero valid unresolved review threads on that exact SHA.
-6. Merge PR #88 normally only after those gates are clean; verify exact containment and delete `package/es-p11-fake-bases`.
-7. Publish ES-P11 terminal COMPLETE state through the established documentation-only terminal-state PR pattern used by ES-P10, then verify its branch cleanup and stop.
+1. Freeze the post-checkpoint head and confirm legitimate `main`/migration ownership did not change.
+2. Require successful exact-head Wiki, full Java 21 build/tests/MariaDB/Testcontainers/migration/runtime-JAR/artifact/coverage, Codacy static/coverage, CodeRabbit/reviewer completion, and zero valid unresolved review threads.
+3. If any valid defect appears, repair only ES-P11 and restart the exact-head cycle.
+4. Merge PR #88 normally; verify exact feature-head containment and implementation branch deletion.
+5. Publish ES-P11 terminal `COMPLETE` state through the established documentation-only finalization PR pattern, recompute dependency routing without activating another package, verify cleanup, and stop.
 
 ## Systems not to disturb
 
