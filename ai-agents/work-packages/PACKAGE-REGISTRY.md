@@ -49,7 +49,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - ES-R01 is therefore finite repository-side validation infrastructure work: build/validate the exact authorized source on public hosted infrastructure, preserve immutable artifact/source provenance, securely hand that exact artifact to the existing private self-hosted Pi job, and remove the private-hosted build dependency without waiving any required gate.
 - ES-R01 is `READY`, unassigned, and has no implementation branch/PR. The definition-publication branch is process-only and must not be reused for implementation.
 - Completion requires two normal infrastructure PRs, one in `wsg138/EnthusiaStaff` and one in `wsg138/EnthusiaStaff-Staging`, all applicable checks/reviews, and a safe current-main end-to-end proof of public hosted build plus private self-hosted Pi boot/restart with exact artifact provenance.
-- ES-R01 does not itself validate ES-P02 or ES-P05. After ES-R01 completes, the shared unblock condition has materially changed; canonical continuation priority resumes ES-P02 before ES-P05, and each must rerun its own exact-head gates.
+- ES-R01 does not itself validate ES-P02 or ES-P05. After ES-R01 completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked; canonical continuation priority resumes ES-P02 before ES-P05, and each must rerun its own exact-head gates.
 - Canonical contract: `ai-agents/work-packages/packages/ES-R01.md`.
 - Definition handoff: `ai-agents/reports/package-handoffs/2026-08-08-es-r01-staging-bridge-recovery.md`.
 
