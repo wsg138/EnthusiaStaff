@@ -49,3 +49,17 @@ Created canonical package `ES-R01 — Billing-independent staging bridge recover
 The next normal sequential worker must select ES-R01, reconcile both `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`, create the two implementation branches/PRs required by its contract, preserve exact-head artifact provenance and fork/secret boundaries, validate an end-to-end safe current main bridge, merge normally, publish completion, and stop.
 
 After ES-R01 completes, a policy-valid repository-side staging route is available for ES-P02/ES-P05 even if GitHub billing remains blocked. Canonical continuation priority then resumes ES-P02 before ES-P05 and each package must rerun all of its own exact-head hosted/review/staging gates. ES-R01 completion itself is not ES-P02/ES-P05 staging evidence.
+
+## Definition publication evidence
+
+- Definition PR: #90, branch `package/es-r01-staging-bridge-recovery-definition`.
+- Frozen exact PR head: `5c68df5b774625ae78edce3b71f86dbc9c47951c`; diff contained exactly six Markdown/package-state files and no product, workflow, configuration, or migration file.
+- Exact-head Coverage run `31243460997`, job `93068075572`: success after exact checkout, Java 21 build/tests, runtime-JAR inspection, aggregate coverage, artifact publication, and Codacy upload.
+- Exact-head Codacy Static Code Analysis `93068205523`: success with zero issues; Diff Coverage `93068756565`: success with no coverable changed lines; Coverage Variation `93068756646`: success at 0.0% against the -1.0% target.
+- Exact-head CodeRabbit status: success. Five valid process/documentation review findings were fixed: staging-route semantics, required workspace handoff fields, post-merge evidence requirements, ambiguous wording, and an end-to-end grammar finding. All five review threads are resolved; zero valid unresolved review threads remain.
+- Automatically triggered Pi wrapper run `31243459998` is explicitly **NOT A PASS** and was genuinely non-applicable to the process-only PR under `VALIDATION-POLICY.md`: private run `31243462663` required hosted build job `93068076434` with runner ID `0`, empty runner name, and `steps: []` under the same Billing & plans rejection; Pi job `93068080486` skipped. No product, workflow, runner-label, dispatch, or migration change was under test, and no infrastructure exception was claimed.
+- PR #90 merged normally as merge commit `25fee003bd94b605f18f71b54c014fb7b0547b94`.
+- Verified merge parents: pre-merge `main` `41659389ba105e099c77966015714067ea6f1ae7` and frozen feature head `5c68df5b774625ae78edce3b71f86dbc9c47951c`.
+- Exact containment verified: resulting `main` is one merge commit ahead of the frozen feature head, zero behind, with zero file differences.
+- Definition branch cleanup verified: `package/es-r01-staging-bridge-recovery-definition` returns 404 after merge.
+- Result after definition merge: `main` `25fee003bd94b605f18f71b54c014fb7b0547b94`; ES-R01 is legitimately `READY`; ES-P02 and ES-P05 remain parked until billing is repaired or ES-R01 implements the alternate route.
