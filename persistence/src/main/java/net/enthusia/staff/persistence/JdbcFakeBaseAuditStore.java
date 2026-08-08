@@ -1,9 +1,12 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Map;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.ports.FakeBaseAuditStore;
 import net.enthusia.staff.domain.tester.FakeBaseAuditEvent;
@@ -11,12 +14,14 @@ import net.enthusia.staff.domain.tester.FakeBaseAuditEvent;
 /** Writes coordinate-free fake-base lifecycle evidence into the existing audit ledger. */
 public final class JdbcFakeBaseAuditStore implements FakeBaseAuditStore {
     private final DataSource dataSource;
+    private final ObjectMapper json;
 
-    public JdbcFakeBaseAuditStore(DataSource dataSource) {
-        if (dataSource == null) {
-            throw new IllegalArgumentException("dataSource must be present");
+    public JdbcFakeBaseAuditStore(DataSource dataSource, ObjectMapper json) {
+        if (dataSource == null || json == null) {
+            throw new IllegalArgumentException("dataSource and json mapper must be present");
         }
         this.dataSource = dataSource;
+        this.json = json;
     }
 
     @Override
@@ -39,29 +44,15 @@ public final class JdbcFakeBaseAuditStore implements FakeBaseAuditStore {
             statement.setString(7, eventJson(event));
             statement.setTimestamp(8, Timestamp.from(event.occurredAt()));
             statement.executeUpdate();
-        } catch (SQLException exception) {
+        } catch (SQLException | JsonProcessingException exception) {
             throw new ModerationPersistenceException("Unable to record fake-base audit event", exception);
         }
     }
 
-    static String eventJson(FakeBaseAuditEvent event) {
-        return "{\"serverId\":\"" + escape(event.serverId())
-                + "\",\"reasonCode\":\"" + escape(event.reasonCode()) + "\"}";
-    }
-
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length() + 8);
-        for (int index = 0; index < value.length(); index++) {
-            char current = value.charAt(index);
-            switch (current) {
-                case '\\' -> escaped.append("\\\\");
-                case '"' -> escaped.append("\\\"");
-                case '\n' -> escaped.append("\\n");
-                case '\r' -> escaped.append("\\r");
-                case '\t' -> escaped.append("\\t");
-                default -> escaped.append(current);
-            }
-        }
-        return escaped.toString();
+    String eventJson(FakeBaseAuditEvent event) throws JsonProcessingException {
+        return json.writeValueAsString(Map.of(
+                "serverId", event.serverId(),
+                "reasonCode", event.reasonCode()
+        ));
     }
 }
