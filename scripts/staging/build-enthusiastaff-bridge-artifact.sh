@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-IFS=$'\n\t'
 
 readonly BUILD_COMMAND_DISPLAY='./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain'
 readonly BUILD_REPOSITORY='wsg138/EnthusiaStaff'
-readonly BUILD_WORKFLOW_PATH='.github/workflows/pi-staging-check.yml'
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 SOURCE_VALIDATOR="$SCRIPT_DIR/validate-enthusiastaff-source.sh"
