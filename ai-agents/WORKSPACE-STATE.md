@@ -11,7 +11,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05` |
 | Parked packages | `ES-R01 — Billing-independent staging bridge recovery`; `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
 | Active/selected package | None after this ES-R01 post-merge finalization publication. The worker that produced this record selected exactly ES-R01 and no second package. |
-| Ready packages | None while the current ES-R01 disposable staging database blocker remains unchanged. |
+| Ready packages | None while ES-R01 still lacks a successful guarded disposable-database pre-reset and fresh exact-current-main acceptance run. |
 | ES-R01 post-merge finalization base | `3ce303ce3097be647091e142e801da9a5fd9a8fc` — normal merge of terminal publication PR #95 |
 | Current legitimate staging main | `4036d6e915c2d751bef18849107722dfd1e586a6` — normal merge of ES-R01 PR-target provenance fix PR #60 |
 | ES-R01 public implementation | PR #93, frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`, merged normally as `094838fa221476e0832cf821f7b4908b9402d0d9` |
@@ -20,13 +20,13 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-R01 terminal publication | PR #95 frozen head `b918ec7ed7708db9b69e061d2f4bc322a94c5124`, normal merge `3ce303ce3097be647091e142e801da9a5fd9a8fc`; containment exact and publication branch deleted |
 | ES-R01 terminal status | `BLOCKED` / `PARKED_BLOCKED` |
 | ES-R01 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md` |
-| ES-R01 blocker | The existing authorized disposable Pi-staging MariaDB endpoint remains unavailable to the guarded disposable boot/restart path from `Lincoln-PI-4`; the automatic exact-PR-#95-merge proof again failed before Paper boot because the dedicated disposable database could not be cleared |
-| ES-R01 exact unblock | Material evidence that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract |
-| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
-| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
+| ES-R01 blocker | The automatic exact-PR-#95-merge proof again failed before Paper boot because the guarded dedicated disposable-database clear/pre-reset did not succeed. The newest run exposes no fresh SQLState or root-cause proof. |
+| ES-R01 exact unblock | A successful guarded disposable-database pre-reset from `Lincoln-PI-4` under the unchanged current `pi-staging` environment contract, followed by the required fresh exact-current-main acceptance run |
+| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01 still lacks its required successful guarded pre-reset and acceptance proof |
+| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; do not synchronize or rerun while ES-R01 still lacks its required successful guarded pre-reset and acceptance proof |
 | Migration boundary | V18 remains immutable/current; ES-R01 changed no migration |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
-| Next legitimate action | If material evidence shows the ES-R01 database condition changed, resume ES-R01 before any new package and run one fresh exact-current-main proof. If it has not changed, no package is actionable or ready; report blockers and stop. |
+| Next legitimate action | If material evidence shows the guarded disposable pre-reset can now succeed under the unchanged staging contract, resume ES-R01 before any new package and run one fresh exact-current-main proof. Otherwise no package is actionable or ready; report blockers and stop. |
 
 ## ES-R01 terminal evidence
 
@@ -67,13 +67,13 @@ The merge automatically triggered Pi Staging run `31253869828` against exact sou
 - private job `93094893264` allocated trusted `Lincoln-PI-4`, runner ID `2`, and passed runner identity plus exact bridge-artifact verification;
 - the guarded disposable Paper boot/restart step failed with `ERROR: Refused or failed to clear the dedicated disposable Pi database before boot`; Paper therefore did not boot;
 - sanitized evidence upload succeeded as artifact `9020895148`, digest `sha256:fdd89c15bfab6374990e4c0129006e391ca6d0f417ed8bbc06b07bd2914b32cf`;
-- this newer run likewise exposes no SQLState, so the earlier repeated SQLState `08000` evidence remains the precise connection diagnostic rather than inventing a new value.
+- this newer run likewise exposes no fresh SQLState or root-cause proof. Earlier repeated SQLState `08000` evidence remains historical diagnostic evidence and is not projected onto this newer run.
 
-This automatic post-publication proof confirms that the unblock condition did **not** change. It is **NOT A PASS**. Repository-side bridge/provenance behavior remains proven while mandatory runtime acceptance remains externally blocked at the same guarded disposable-database boundary. No safe repository-side implementation remains.
+This automatic post-publication proof is **NOT A PASS**. It proves another guarded disposable-database reset failure before Paper boot; it does not establish the current endpoint-reachability state or a fresh SQLState. Repository-side bridge/provenance behavior remains proven while mandatory runtime acceptance remains blocked at the guarded disposable-database pre-reset boundary. No safe repository-side implementation remains.
 
 ## Classification snapshot
 
-- `ES-R01`: terminal `BLOCKED` / `PARKED_BLOCKED`. This worker selected it only for incomplete post-merge finalization and did not manually rerun staging. Resume only after material evidence of the exact database unblock condition.
+- `ES-R01`: terminal `BLOCKED` / `PARKED_BLOCKED`. This worker selected it only for incomplete post-merge finalization and did not manually rerun staging. Resume only after material evidence that the guarded disposable pre-reset can succeed under the unchanged staging contract.
 - `ES-P02`: `PARKED_BLOCKED`. Open PR #70 and branch drift do not make it actionable. Resume only after ES-R01 is `COMPLETE`.
 - `ES-P05`: `PARKED_BLOCKED`. Implementation/hosted validation remain preserved. Resume only after ES-R01 is `COMPLETE` and normal package priority permits it.
 - `ES-P07`, `ES-P06`, `ES-P08`, `ES-X01`, `ES-X02`, `ES-X03`, `ES-X04`, and `ES-QA01`: dependency-blocked planned work.
@@ -81,7 +81,7 @@ This automatic post-publication proof confirms that the unblock condition did **
 
 ## Resume boundary
 
-Do not manually rerun the identical ES-R01 staging failure merely because time passed or documentation changed. Material evidence must first show that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4`. After that change, resume ES-R01 before any new package and require a fresh exact-current-main proof through public build, exact private provenance, guarded pre-reset, Paper boot cycle 1, restart/cycle 2, guarded post-reset, sanitized evidence, correlated public success, and transfer cleanup. Only then mark ES-R01 complete. Do not begin ES-P02 in that same worker.
+Do not manually rerun the identical ES-R01 staging failure merely because time passed or documentation changed. Material evidence must first show that the guarded disposable-database pre-reset can succeed from `Lincoln-PI-4` under the unchanged current `pi-staging` environment contract. After that signal, resume ES-R01 before any new package and require a fresh exact-current-main proof through public build, exact private provenance, guarded pre-reset, Paper boot cycle 1, restart/cycle 2, guarded post-reset, sanitized evidence, correlated public success, and transfer cleanup. Only then mark ES-R01 complete. Do not begin ES-P02 in that same worker.
 
 ## Safety boundaries
 
