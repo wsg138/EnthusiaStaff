@@ -62,16 +62,18 @@ final class FakeBaseOperation {
     }
 
     boolean markWarningIfDue(Instant now, Duration warningLead) {
-        Instant warningAt = expiresAt.get().minus(warningLead);
-        return open() && !now.isBefore(warningAt) && now.isBefore(expiresAt.get())
+        Instant deadline = expiresAt.get();
+        Instant warningAt = deadline.minus(warningLead);
+        return open() && !now.isBefore(warningAt) && now.isBefore(deadline)
                 && warned.compareAndSet(false, true);
     }
 
     long remainingSeconds(Instant now) {
-        if (!now.isBefore(expiresAt.get())) {
+        Instant deadline = expiresAt.get();
+        if (!now.isBefore(deadline)) {
             return 0L;
         }
-        return Math.max(1L, Duration.between(now, expiresAt.get()).toSeconds());
+        return Math.max(1L, Duration.between(now, deadline).toSeconds());
     }
 
     boolean addViewerIfOpen(UUID viewerId) {
