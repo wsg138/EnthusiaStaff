@@ -4,7 +4,7 @@
 `ES-R01`; Validation-infrastructure recovery; primary `COMP-STAFF`; supporting repository `wsg138/EnthusiaStaff-Staging`; priority 15; not parallel-safe with staging-workflow changes.
 
 ## 2. Status
-`READY`. This package was created by the owner-directed canonical deadlock-recovery worker after live evidence proved that private GitHub-hosted jobs are billing-blocked while the existing `Lincoln-PI-4` self-hosted staging runner is healthy.
+`IN_PROGRESS` / `ACTIVE`. Selected by the next sequential package worker on 2026-08-08 after live reconciliation confirmed no higher-priority actionable continuation and the private-hosted Actions blocker remained unchanged.
 
 ## 3. Objective
 Remove the shared repository-side staging deadlock without weakening validation by moving the mandatory ordinary hosted build for an exact EnthusiaStaff source SHA onto the public `wsg138/EnthusiaStaff` GitHub-hosted workflow, then securely handing the verified exact-head artifact and provenance to the existing private self-hosted Pi staging job for safe boot/restart validation.
@@ -84,19 +84,19 @@ GitHub Actions and the existing private self-hosted runner are validation infras
 Both exact-head infrastructure PRs merge normally with all applicable checks/reviews green; a safe current-main end-to-end run proves public hosted build plus private self-hosted Pi boot/restart with exact artifact provenance; branches are cleaned; canonical state is updated so ES-P02 is the highest-priority `ACTIONABLE_CONTINUATION` (then ES-P05 if P02 cannot proceed for a different reason).
 
 ## 23. Resume state
-Unassigned and `READY`. No implementation branch or implementation PR exists. The next normal sequential worker must select ES-R01 and implement only this package.
+Assigned to the current generic sequential worker. Active branches: `wsg138/EnthusiaStaff:package/es-r01-staging-bridge-recovery` from `e482e64315f8c4f569506900ac8a8ef84cf0a90d` and `wsg138/EnthusiaStaff-Staging:package/es-r01-staging-bridge-recovery` from `4c3adfb6e50091ff389e064ab9619f096dd4b2b2`.
 
 ## 24. Last completed checkpoint
-Owner-directed deadlock analysis established the package definition and live feasibility evidence only. No workflow/tooling implementation has begun.
+Live startup reconciliation completed. The newest private plugin staging attempt `31244561683` still failed its required `ubuntu-latest` job `93070895799` before allocation with runner ID `0` and zero steps, while private Staging Controls CI `31245361935` / job `93072954209` succeeded on `Lincoln-PI-4` (runner ID `2`). Open staging PR #57 changes Sentinel runtime/tests/docs but no staging workflow file, so it does not violate ES-R01's non-parallel-safe workflow boundary.
 
 ## 25. Remaining checklist
-All two-repository implementation, tests, review, exact-head validation, safe bridge proof, merge, containment, cleanup, and terminal publication remain.
+Implement both repository sides, add negative-path fixtures/docs, open the two cross-referenced PRs, review/fix/freeze both heads, complete all applicable exact-head validation, prove the bridge against a safe current-main SHA, merge normally, verify containment/cleanup, publish terminal package state, and stop.
 
 ## 26. Known blockers
-No known repository-independent blocker to begin implementation. The current private hosted billing restriction is the condition this package is specifically designed not to depend on. If the self-hosted Pi runner ceases to be available or secure artifact transfer cannot be achieved without a new owner-only credential, record the precise condition and stop rather than weakening the gate.
+No repository-independent blocker is currently known. The private-hosted billing restriction is unchanged but intentionally removed from the new route. The existing public-to-private dispatch credential and self-hosted Pi runner remain the only credential/runner prerequisites; no new owner credential is authorized.
 
 ## 27. Final evidence
-Unset: exact repository bases/heads, two PRs/merge commits, workflow run/job IDs, artifact name/ID/digest/source SHA, Pi runner ID/name, boot/restart evidence, review findings, and containment.
+In progress. Starting heads are recorded above; final PRs/merge commits, workflow run/job IDs, transient transfer artifact identity/digests, Pi runner identity, boot/restart evidence, review findings, and containment remain unset until exact-head completion.
 
 ## 28. Merge and synchronization record
-Unset. Two workflow-infrastructure PRs are required; no component-source parity requirement applies. Record both normal merge commits and resulting default heads before completion.
+In progress. Two workflow-infrastructure PRs are required; no component-source parity requirement applies. Record both normal merge commits and resulting default heads before completion.
