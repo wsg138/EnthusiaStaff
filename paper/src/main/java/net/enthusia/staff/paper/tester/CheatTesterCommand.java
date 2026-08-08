@@ -166,9 +166,6 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
         if (RUN.equalsIgnoreCase(args[0]) || CANCEL.equalsIgnoreCase(args[0])) {
             return filter(plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(), args[1]);
         }
-        if (BASE.equalsIgnoreCase(args[0])) {
-            return fakeBases.tabComplete((Player) null, args);
-        }
         return List.of();
     }
 
