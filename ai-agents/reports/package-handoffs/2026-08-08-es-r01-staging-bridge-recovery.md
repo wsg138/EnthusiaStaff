@@ -20,7 +20,7 @@ PR #70 is open on `package/es-p02-runtime-db-recovery`, current head `99da410377
 
 `GENUINELY_EXTERNAL_BLOCKER` / canonical `PARKED_BLOCKED`.
 
-PR #81 is open on `package/es-p05-report-workflow`, frozen head `4a38e191395913c6733726e222f0889a2d56d267`. Coverage/Wiki/Codacy evidence remains successful and there are zero review threads. The repository commit status now exposes CodeRabbit success, so the old quota-limited review note is stale as a secondary condition; it does not remove the mandatory staging blocker. The same current private Billing & plans condition prevents the required trusted ordinary build/Pi route. Do not sync or rerun ES-P05 while that shared condition remains unchanged.
+PR #81 is open on `package/es-p05-report-workflow`, frozen head `4a38e191395913c6733726e222f0889a2d56d267`. Coverage/Wiki/Codacy evidence remains successful and there are zero review threads. The repository commit status now exposes CodeRabbit success, so the old quota-limited review note is stale as a secondary condition; it does not remove the mandatory staging blocker. The same current private Billing & plans condition prevents the required ordinary build/Pi route. Do not sync or rerun ES-P05 while that shared condition remains unchanged.
 
 ## Dependency analysis
 
@@ -46,6 +46,6 @@ The deadlock is not purely external because repository-side validation orchestra
 
 Created canonical package `ES-R01 — Billing-independent staging bridge recovery` as `READY`, priority 15, with no product dependency. This definition/publication worker does not implement ES-R01.
 
-The next normal sequential worker must select ES-R01, reconcile both `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`, create the two implementation branches/PRs required by its contract, preserve exact-head artifact provenance and fork/secret boundaries, validate an end-to-end safe current-main bridge, merge normally, publish completion, and stop.
+The next normal sequential worker must select ES-R01, reconcile both `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`, create the two implementation branches/PRs required by its contract, preserve exact-head artifact provenance and fork/secret boundaries, validate an end-to-end safe current main bridge, merge normally, publish completion, and stop.
 
-After ES-R01 completes, the shared external condition for ES-P02/ES-P05 has materially changed. Canonical continuation priority then resumes ES-P02 before ES-P05 and each package must rerun all of its own exact-head hosted/review/staging gates. ES-R01 completion itself is not ES-P02/ES-P05 staging evidence.
+After ES-R01 completes, a policy-valid repository-side staging route is available for ES-P02/ES-P05 even if GitHub billing remains blocked. Canonical continuation priority then resumes ES-P02 before ES-P05 and each package must rerun all of its own exact-head hosted/review/staging gates. ES-R01 completion itself is not ES-P02/ES-P05 staging evidence.
