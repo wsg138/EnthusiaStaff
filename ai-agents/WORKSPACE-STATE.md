@@ -18,6 +18,8 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-P11 canonical handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md` |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; unchanged private Actions Billing & plans zero-runner blocker |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; hosted implementation validation complete at its recorded head; required private staging remains unavailable under the same Billing & plans condition |
+| Next recommended work after ES-P11 | No later package is currently dependency-complete while ES-P02 and ES-P05 remain parked. If the private Actions Billing & plans condition changes, canonical priority resumes ES-P02 before ES-P05; this ES-P11 worker must not activate either package. |
+| Owner priorities | No separate owner-directed implementation priority is recorded. The owner action that can unlock the next parked work is restoring the private GitHub Actions payment/spending-limit path; until then, keep ES-P02 and ES-P05 parked and do not rerun identical zero-runner gates. |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
 | Private acceptance boundary | Representative Java/Bedrock/distributed fake-base acceptance remains `ES-V02`; unavailable zero-runner staging is **NOT A PASS** and is not an ES-P11 completion gate |
 
