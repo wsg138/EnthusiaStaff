@@ -36,10 +36,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 // fake-base safety state machine can be reviewed atomically rather than split across coordinators.
 @SuppressWarnings({
         "PMD.AvoidDuplicateLiterals",
-        "PMD.CyclomaticComplexity",
-        "PMD.ExcessiveClassLength",
-        "PMD.NPathComplexity",
-        "PMD.NcssCount"
+        "PMD.NPathComplexity"
 })
 public final class FakeBaseManager implements Listener, AutoCloseable {
     static final String PERMISSION = "enthusiastaff.cheattester.fake-base";
@@ -64,12 +61,8 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public FakeBaseManager(
-            JavaPlugin plugin,
-            Clock clock,
-            String serverId,
-            StaffModeManager staffMode,
-            Supplier<FakeBaseAuditStore> auditStore,
-            ExecutorService workers
+            JavaPlugin plugin, Clock clock, String serverId, StaffModeManager staffMode,
+            Supplier<FakeBaseAuditStore> auditStore, ExecutorService workers
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
@@ -85,22 +78,13 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     void create(Player staff, Player target) {
-        if (!authorized(staff) || target == null || !target.isOnline()) {
-            return;
-        }
-        if (loadedAuditStore() == null) {
-            staff.sendMessage(Component.text("Fake-base audit storage is unavailable; nothing was shown.", NamedTextColor.RED));
-            return;
-        }
-        if (activeByTarget.containsKey(target.getUniqueId())) {
-            staff.sendMessage(Component.text("That player already has an active fake base.", NamedTextColor.RED));
-            return;
-        }
-        if (activeByTarget.size() >= MAX_ACTIVE_GLOBAL || activeForStaff(staff.getUniqueId()) >= MAX_ACTIVE_PER_STAFF) {
-            staff.sendMessage(Component.text("The bounded fake-base concurrency limit is reached.", NamedTextColor.RED));
+        if (!validCreateTarget(staff, target)) {
             return;
         }
         UUID staffId = staff.getUniqueId();
+        if (!creationAvailable(staff, target.getUniqueId())) {
+            return;
+        }
         boolean scheduled = target.getScheduler().execute(
                 plugin,
                 () -> prepareCreate(staffId, target),
@@ -112,6 +96,30 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
     }
 
+    private boolean validCreateTarget(Player staff, Player target) {
+        return authorized(staff) && target != null && target.isOnline();
+    }
+
+    private boolean creationAvailable(Player staff, UUID targetId) {
+        if (loadedAuditStore() == null) {
+            staff.sendMessage(Component.text("Fake-base audit storage is unavailable; nothing was shown.", NamedTextColor.RED));
+            return false;
+        }
+        if (activeByTarget.containsKey(targetId)) {
+            staff.sendMessage(Component.text("That player already has an active fake base.", NamedTextColor.RED));
+            return false;
+        }
+        if (atConcurrencyLimit(staff.getUniqueId())) {
+            staff.sendMessage(Component.text("The bounded fake-base concurrency limit is reached.", NamedTextColor.RED));
+            return false;
+        }
+        return true;
+    }
+
+    private boolean atConcurrencyLimit(UUID staffId) {
+        return activeByTarget.size() >= MAX_ACTIVE_GLOBAL || activeForStaff(staffId) >= MAX_ACTIVE_PER_STAFF;
+    }
+
     void extend(Player staff, Player target) {
         FakeBaseOperation operation = controllable(staff, target);
         if (operation == null) {
@@ -119,30 +127,19 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
         UUID staffId = staff.getUniqueId();
         String targetName = target.getName();
-        auditThen(
-                operation,
-                staffId,
-                FakeBaseAuditAction.EXTENDED,
-                "ACCEPTED",
-                "STAFF_EXTEND",
-                () -> onEntity(staffId, currentStaff -> {
-                    if (!canControl(currentStaff, operation) || !current(operation)) {
-                        return;
-                    }
-                    if (operation.extend(clock.instant(), LIFETIME)) {
-                        auditBestEffort(event(
-                                operation.operationId,
-                                staffId,
-                                operation.targetId,
-                                FakeBaseAuditAction.EXTENDED,
-                                "COMMITTED",
-                                "STAFF_EXTEND"
-                        ));
-                        currentStaff.sendMessage(controls(
-                                "Fake base extended for 5 minutes.", targetName, NamedTextColor.GREEN));
-                    }
-                })
-        );
+        auditThen(operation, staffId, FakeBaseAuditAction.EXTENDED, "ACCEPTED", "STAFF_EXTEND", () ->
+                onEntity(staffId, currentStaff -> commitExtend(currentStaff, operation, targetName)));
+    }
+
+    private void commitExtend(Player staff, FakeBaseOperation operation, String targetName) {
+        if (!canControl(staff, operation) || !current(operation)) {
+            return;
+        }
+        if (operation.extend(clock.instant(), LIFETIME)) {
+            auditBestEffort(event(operation.operationId, staff.getUniqueId(), operation.targetId,
+                    FakeBaseAuditAction.EXTENDED, "COMMITTED", "STAFF_EXTEND"));
+            staff.sendMessage(controls("Fake base extended for 5 minutes.", targetName, NamedTextColor.GREEN));
+        }
     }
 
     void teleport(Player staff, Player target) {
@@ -151,14 +148,8 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return;
         }
         UUID staffId = staff.getUniqueId();
-        auditThen(
-                operation,
-                staffId,
-                FakeBaseAuditAction.TELEPORTED,
-                "ACCEPTED",
-                "STAFF_TELEPORT",
-                () -> onEntity(staffId, current -> teleportViewer(current, operation))
-        );
+        auditThen(operation, staffId, FakeBaseAuditAction.TELEPORTED, "ACCEPTED", "STAFF_TELEPORT",
+                () -> onEntity(staffId, current -> teleportViewer(current, operation)));
     }
 
     void clear(Player staff, Player target) {
@@ -187,58 +178,38 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return;
         }
         World world = target.getWorld();
-        FakeBasePlacementPlanner.BlockView blocks = new WorldBlockView(world);
         var placement = planner.find(
-                target.getLocation().getBlockX(),
-                target.getLocation().getBlockY(),
-                target.getLocation().getBlockZ(),
-                blocks,
-                template
+                target.getLocation().getBlockX(), target.getLocation().getBlockY(), target.getLocation().getBlockZ(),
+                new WorldBlockView(world), template
         );
         if (placement.isEmpty()) {
-            UUID operationId = UUID.randomUUID();
-            auditBestEffort(event(
-                    operationId,
-                    staffId,
-                    target.getUniqueId(),
-                    FakeBaseAuditAction.CREATE_REJECTED,
-                    "REJECTED",
-                    "NO_SAFE_PLACEMENT"
-            ));
-            message(staffId, Component.text(
-                    "No loaded, conflict-free fake-base placement exists near that player.",
-                    NamedTextColor.RED
-            ));
+            rejectNoSafePlacement(staffId, target.getUniqueId());
             return;
         }
-        Instant now = clock.instant();
         FakeBaseOperation operation = new FakeBaseOperation(
-                UUID.randomUUID(),
-                staffId,
-                target.getUniqueId(),
-                world.getUID(),
-                placement.orElseThrow(),
-                now,
-                LIFETIME
+                UUID.randomUUID(), staffId, target.getUniqueId(), world.getUID(), placement.orElseThrow(), clock.instant(), LIFETIME
         );
         if (!register(operation)) {
             message(staffId, Component.text("Fake-base target or concurrency limit is already occupied.", NamedTextColor.RED));
             return;
         }
-        auditThen(
-                operation,
-                staffId,
-                FakeBaseAuditAction.CREATED,
-                "ACCEPTED",
-                "CREATE",
-                () -> onEntity(staffId, currentStaff -> {
-                    if (!authorized(currentStaff) || !current(operation)) {
-                        closeOperation(operation, staffId, "CONTROLLER_UNAUTHORIZED");
-                        return;
-                    }
-                    onEntity(operation.targetId, currentTarget -> activate(currentTarget, operation));
-                })
-        );
+        auditThen(operation, staffId, FakeBaseAuditAction.CREATED, "ACCEPTED", "CREATE", () ->
+                onEntity(staffId, currentStaff -> continueCreate(currentStaff, operation)));
+    }
+
+    private void rejectNoSafePlacement(UUID staffId, UUID targetId) {
+        auditBestEffort(event(UUID.randomUUID(), staffId, targetId,
+                FakeBaseAuditAction.CREATE_REJECTED, "REJECTED", "NO_SAFE_PLACEMENT"));
+        message(staffId, Component.text(
+                "No loaded, conflict-free fake-base placement exists near that player.", NamedTextColor.RED));
+    }
+
+    private void continueCreate(Player staff, FakeBaseOperation operation) {
+        if (!authorized(staff) || !current(operation)) {
+            closeOperation(operation, operation.staffId, "CONTROLLER_UNAUTHORIZED");
+            return;
+        }
+        onEntity(operation.targetId, currentTarget -> activate(currentTarget, operation));
     }
 
     private boolean register(FakeBaseOperation operation) {
@@ -254,59 +225,73 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void activate(Player target, FakeBaseOperation operation) {
-        if (!current(operation) || !target.isOnline() || !target.getWorld().getUID().equals(operation.worldId)
-                || !staffMode.active(operation.staffId)) {
-            closeOperation(operation, operation.staffId, "TARGET_OR_CONTROLLER_UNAVAILABLE");
+        String unavailableReason = activationUnavailableReason(target, operation);
+        if (unavailableReason != null) {
+            closeOperation(operation, operation.staffId, unavailableReason);
             return;
         }
-        Location targetLocation = target.getLocation();
-        if ((targetLocation.getBlockX() >> 4) != operation.anchor.chunkX()
-                || (targetLocation.getBlockZ() >> 4) != operation.anchor.chunkZ()) {
-            rejectBeforeRender(
-                    operation,
-                    "TARGET_MOVED_CHUNK",
-                    "Target changed region before rendering; fake base was cancelled safely."
-            );
+        if (!targetStillInAnchorChunk(target, operation)) {
+            rejectBeforeRender(operation, "TARGET_MOVED_CHUNK",
+                    "Target changed region before rendering; fake base was cancelled safely.");
             return;
         }
-        WorldBlockView blocks = new WorldBlockView(target.getWorld());
-        if (!planner.safe(operation.anchor, blocks, template)) {
+        if (!planner.safe(operation.anchor, new WorldBlockView(target.getWorld()), template)) {
             rejectBeforeRender(operation, "PLACEMENT_CHANGED",
                     "Real blocks changed before rendering; fake base was cancelled safely.");
             return;
         }
-        UUID targetId = target.getUniqueId();
-        if (!operation.addViewerIfOpen(targetId)) {
+        if (!renderTarget(target, operation) || !startLifecycle(target, operation) || !current(operation)) {
             return;
         }
+        message(operation.staffId, controls(
+                "Fake base shown to " + target.getName() + " for 5 minutes.", target.getName(), NamedTextColor.AQUA));
+    }
+
+    private String activationUnavailableReason(Player target, FakeBaseOperation operation) {
+        if (!current(operation)) {
+            return "OPERATION_CLOSED";
+        }
+        if (!target.isOnline()) {
+            return "TARGET_OR_CONTROLLER_UNAVAILABLE";
+        }
+        if (!target.getWorld().getUID().equals(operation.worldId)) {
+            return "TARGET_OR_CONTROLLER_UNAVAILABLE";
+        }
+        if (!staffMode.active(operation.staffId)) {
+            return "TARGET_OR_CONTROLLER_UNAVAILABLE";
+        }
+        return null;
+    }
+
+    private static boolean targetStillInAnchorChunk(Player target, FakeBaseOperation operation) {
+        Location targetLocation = target.getLocation();
+        return (targetLocation.getBlockX() >> 4) == operation.anchor.chunkX()
+                && (targetLocation.getBlockZ() >> 4) == operation.anchor.chunkZ();
+    }
+
+    private boolean renderTarget(Player target, FakeBaseOperation operation) {
+        UUID targetId = target.getUniqueId();
+        if (!operation.addViewerIfOpen(targetId)) {
+            return false;
+        }
         if (!renderer.show(target, operation.worldId, operation.anchor)) {
-            auditBestEffort(event(
-                    operation.operationId,
-                    operation.staffId,
-                    operation.targetId,
-                    FakeBaseAuditAction.CREATE_REJECTED,
-                    "REJECTED",
-                    "RENDER_FAILED"
-            ));
+            auditBestEffort(event(operation.operationId, operation.staffId, operation.targetId,
+                    FakeBaseAuditAction.CREATE_REJECTED, "REJECTED", "RENDER_FAILED"));
             closeOperation(operation, operation.staffId, "RENDER_FAILED");
             message(operation.staffId, Component.text(
-                    "Virtual fake-base rendering failed; the operation was cleared safely.",
-                    NamedTextColor.RED
-            ));
-            return;
+                    "Virtual fake-base rendering failed; the operation was cleared safely.", NamedTextColor.RED));
+            return false;
         }
         if (!operation.retainViewerAfterRender(targetId)) {
             renderer.clear(target, operation.worldId, operation.anchor);
-            return;
+            return false;
         }
-        auditBestEffort(event(
-                operation.operationId,
-                operation.staffId,
-                operation.targetId,
-                FakeBaseAuditAction.CREATED,
-                "COMMITTED",
-                "VIRTUAL_RENDERED"
-        ));
+        auditBestEffort(event(operation.operationId, operation.staffId, operation.targetId,
+                FakeBaseAuditAction.CREATED, "COMMITTED", "VIRTUAL_RENDERED"));
+        return true;
+    }
+
+    private boolean startLifecycle(Player target, FakeBaseOperation operation) {
         ScheduledTask lifecycleTask;
         try {
             lifecycleTask = target.getScheduler().runAtFixedRate(
@@ -319,35 +304,21 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Fake-base lifecycle scheduler failed after render", exception);
             closeOperation(operation, operation.staffId, "LIFECYCLE_SCHEDULER_FAILED");
-            return;
+            return false;
         }
         if (lifecycleTask == null) {
             closeOperation(operation, operation.staffId, "LIFECYCLE_SCHEDULER_RETIRED");
-            return;
+            return false;
         }
         operation.setLifecycleTask(lifecycleTask);
-        if (!current(operation)) {
-            return;
-        }
-        String targetName = target.getName();
-        message(operation.staffId, controls(
-                "Fake base shown to " + targetName + " for 5 minutes.",
-                targetName,
-                NamedTextColor.AQUA
-        ));
+        return current(operation);
     }
 
-    private void rejectBeforeRender(FakeBaseOperation operation, String reason, String message) {
-        auditBestEffort(event(
-                operation.operationId,
-                operation.staffId,
-                operation.targetId,
-                FakeBaseAuditAction.CREATE_REJECTED,
-                "REJECTED",
-                reason
-        ));
+    private void rejectBeforeRender(FakeBaseOperation operation, String reason, String staffMessage) {
+        auditBestEffort(event(operation.operationId, operation.staffId, operation.targetId,
+                FakeBaseAuditAction.CREATE_REJECTED, "REJECTED", reason));
         closeWithoutClear(operation);
-        message(operation.staffId, Component.text(message, NamedTextColor.RED));
+        message(operation.staffId, Component.text(staffMessage, NamedTextColor.RED));
     }
 
     private void tick(Player target, FakeBaseOperation operation) {
@@ -373,24 +344,15 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return;
         }
         if (operation.markWarningIfDue(now, WARNING_LEAD)) {
-            auditBestEffort(event(
-                    operation.operationId,
-                    operation.staffId,
-                    operation.targetId,
-                    FakeBaseAuditAction.WARNING_SENT,
-                    "COMMITTED",
-                    "FOUR_MINUTE_WARNING"
-            ));
+            auditBestEffort(event(operation.operationId, operation.staffId, operation.targetId,
+                    FakeBaseAuditAction.WARNING_SENT, "COMMITTED", "FOUR_MINUTE_WARNING"));
             message(operation.staffId, controls(
-                    "Fake base expires in about 1 minute.",
-                    target.getName(),
-                    NamedTextColor.YELLOW
-            ));
+                    "Fake base expires in about 1 minute.", target.getName(), NamedTextColor.YELLOW));
         }
     }
 
     private void teleportViewer(Player staff, FakeBaseOperation operation) {
-        if (!current(operation) || !canControl(staff, operation)) {
+        if (!canStartViewerTeleport(staff, operation)) {
             return;
         }
         World world = plugin.getServer().getWorld(operation.worldId);
@@ -399,43 +361,47 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return;
         }
         Location destination = new Location(
-                world,
-                operation.anchor.x() + 0.5D,
-                operation.anchor.y(),
-                operation.anchor.z() + 0.5D
-        );
+                world, operation.anchor.x() + 0.5D, operation.anchor.y(), operation.anchor.z() + 0.5D);
         UUID staffId = staff.getUniqueId();
-        staff.teleportAsync(destination).whenComplete((moved, failure) -> onEntity(staffId, currentStaff -> {
-            if (failure != null || !Boolean.TRUE.equals(moved) || !current(operation)
-                    || !canControl(currentStaff, operation)
-                    || !currentStaff.getWorld().getUID().equals(operation.worldId)) {
-                currentStaff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
-                return;
-            }
-            UUID viewerId = currentStaff.getUniqueId();
-            if (!operation.addViewerIfOpen(viewerId)) {
-                return;
-            }
-            if (!renderer.show(currentStaff, operation.worldId, operation.anchor)) {
-                operation.removeViewer(viewerId);
-                renderer.clear(currentStaff, operation.worldId, operation.anchor);
-                currentStaff.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
-                return;
-            }
-            if (!operation.retainViewerAfterRender(viewerId)) {
-                renderer.clear(currentStaff, operation.worldId, operation.anchor);
-                return;
-            }
-            auditBestEffort(event(
-                    operation.operationId,
-                    staffId,
-                    operation.targetId,
-                    FakeBaseAuditAction.TELEPORTED,
-                    "COMMITTED",
-                    "STAFF_TELEPORT"
-            ));
-            currentStaff.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
-        }));
+        staff.teleportAsync(destination).whenComplete((moved, failure) ->
+                onEntity(staffId, currentStaff -> completeViewerTeleport(currentStaff, operation, moved, failure)));
+    }
+
+    private boolean canStartViewerTeleport(Player staff, FakeBaseOperation operation) {
+        return current(operation) && canControl(staff, operation);
+    }
+
+    private void completeViewerTeleport(
+            Player staff, FakeBaseOperation operation, Boolean moved, Throwable failure
+    ) {
+        if (!successfulViewerTeleport(staff, operation, moved, failure)) {
+            staff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
+            return;
+        }
+        UUID viewerId = staff.getUniqueId();
+        if (!operation.addViewerIfOpen(viewerId)) {
+            return;
+        }
+        if (!renderer.show(staff, operation.worldId, operation.anchor)) {
+            operation.removeViewer(viewerId);
+            renderer.clear(staff, operation.worldId, operation.anchor);
+            staff.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
+            return;
+        }
+        if (!operation.retainViewerAfterRender(viewerId)) {
+            renderer.clear(staff, operation.worldId, operation.anchor);
+            return;
+        }
+        auditBestEffort(event(operation.operationId, staff.getUniqueId(), operation.targetId,
+                FakeBaseAuditAction.TELEPORTED, "COMMITTED", "STAFF_TELEPORT"));
+        staff.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
+    }
+
+    private boolean successfulViewerTeleport(
+            Player staff, FakeBaseOperation operation, Boolean moved, Throwable failure
+    ) {
+        return failure == null && Boolean.TRUE.equals(moved) && current(operation)
+                && canControl(staff, operation) && staff.getWorld().getUID().equals(operation.worldId);
     }
 
     private FakeBaseOperation controllable(Player staff, Player target) {
@@ -467,14 +433,8 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         for (UUID viewerId : operation.viewersSnapshot()) {
             onEntity(viewerId, viewer -> renderer.clear(viewer, operation.worldId, operation.anchor));
         }
-        auditBestEffort(event(
-                operation.operationId,
-                actorId,
-                operation.targetId,
-                FakeBaseAuditAction.CLEARED,
-                "COMMITTED",
-                reason
-        ));
+        auditBestEffort(event(operation.operationId, actorId, operation.targetId,
+                FakeBaseAuditAction.CLEARED, "COMMITTED", reason));
         if (!closed.get()) {
             message(operation.staffId, Component.text("Fake base cleared: " + reason, NamedTextColor.GRAY));
         }
@@ -493,34 +453,16 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void auditThen(
-            FakeBaseOperation operation,
-            UUID actorId,
-            FakeBaseAuditAction action,
-            String outcome,
-            String reason,
-            Runnable success
+            FakeBaseOperation operation, UUID actorId, FakeBaseAuditAction action,
+            String outcome, String reason, Runnable success
     ) {
         FakeBaseAuditStore loaded = loadedAuditStore();
         if (loaded == null) {
-            if (action == FakeBaseAuditAction.CREATED) {
-                closeWithoutClear(operation);
-            }
-            message(actorId, Component.text("Fake-base audit storage is unavailable; action rejected.", NamedTextColor.RED));
+            rejectUnavailableAudit(operation, actorId, action);
             return;
         }
         FakeBaseAuditEvent event = event(operation.operationId, actorId, operation.targetId, action, outcome, reason);
-        if (!submit(() -> {
-            try {
-                loaded.record(event);
-                success.run();
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Fake-base durable audit/action failed", exception);
-                if (action == FakeBaseAuditAction.CREATED) {
-                    closeWithoutClear(operation);
-                }
-                message(actorId, Component.text("Fake-base audit/action failed; action was not applied.", NamedTextColor.RED));
-            }
-        })) {
+        if (!submit(() -> recordThen(loaded, event, operation, actorId, action, success))) {
             if (action == FakeBaseAuditAction.CREATED) {
                 closeWithoutClear(operation);
             }
@@ -528,16 +470,41 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
     }
 
+    private void rejectUnavailableAudit(FakeBaseOperation operation, UUID actorId, FakeBaseAuditAction action) {
+        if (action == FakeBaseAuditAction.CREATED) {
+            closeWithoutClear(operation);
+        }
+        message(actorId, Component.text("Fake-base audit storage is unavailable; action rejected.", NamedTextColor.RED));
+    }
+
+    private void recordThen(
+            FakeBaseAuditStore store, FakeBaseAuditEvent event, FakeBaseOperation operation,
+            UUID actorId, FakeBaseAuditAction action, Runnable success
+    ) {
+        try {
+            store.record(event);
+            success.run();
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Fake-base durable audit/action failed", exception);
+            if (action == FakeBaseAuditAction.CREATED) {
+                closeWithoutClear(operation);
+            }
+            message(actorId, Component.text("Fake-base audit/action failed; action was not applied.", NamedTextColor.RED));
+        }
+    }
+
     private void auditBestEffort(FakeBaseAuditEvent event) {
         FakeBaseAuditStore loaded = loadedAuditStore();
-        if (loaded == null || !submit(() -> {
-            try {
-                loaded.record(event);
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Fake-base cleanup/lifecycle audit failed", exception);
-            }
-        })) {
+        if (loaded == null || !submit(() -> recordBestEffort(loaded, event))) {
             plugin.getLogger().warning("Fake-base lifecycle audit could not be queued; safety cleanup remains authoritative");
+        }
+    }
+
+    private void recordBestEffort(FakeBaseAuditStore store, FakeBaseAuditEvent event) {
+        try {
+            store.record(event);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Fake-base cleanup/lifecycle audit failed", exception);
         }
     }
 
@@ -551,16 +518,11 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private FakeBaseAuditEvent event(
-            UUID operationId,
-            UUID actorId,
-            UUID targetId,
-            FakeBaseAuditAction action,
-            String outcome,
-            String reason
+            UUID operationId, UUID actorId, UUID targetId,
+            FakeBaseAuditAction action, String outcome, String reason
     ) {
         return new FakeBaseAuditEvent(
-                UUID.randomUUID(), operationId, serverId, actorId, targetId, action, outcome, reason, clock.instant()
-        );
+                UUID.randomUUID(), operationId, serverId, actorId, targetId, action, outcome, reason, clock.instant());
     }
 
     private boolean submit(Runnable operation) {

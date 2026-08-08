@@ -5,19 +5,14 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Finds a conflict-free placement without loading chunks or mutating real blocks. */
-// The safety predicate is intentionally kept as one direct fail-closed review surface.
-@SuppressWarnings("PMD.CyclomaticComplexity")
 final class FakeBasePlacementPlanner {
     private static final int INTERIOR_FLOOR_RADIUS = 2;
     private static final int[] HORIZONTAL_OFFSETS = {0, 4, -4};
     private static final int[] VERTICAL_OFFSETS = {0, 1, -1, 2, -2};
 
     Optional<Anchor> find(
-            int targetX,
-            int targetY,
-            int targetZ,
-            BlockView blocks,
-            FakeBaseTemplate template
+            int targetX, int targetY, int targetZ,
+            BlockView blocks, FakeBaseTemplate template
     ) {
         int chunkX = targetX >> 4;
         int chunkZ = targetZ >> 4;
@@ -34,20 +29,36 @@ final class FakeBasePlacementPlanner {
     }
 
     boolean safe(Anchor anchor, BlockView blocks, FakeBaseTemplate template) {
-        if (!blocks.isChunkLoaded(anchor.chunkX(), anchor.chunkZ())) {
-            return false;
-        }
-        if (anchor.y() - 1 < blocks.minHeight() || anchor.y() + FakeBaseTemplate.HEIGHT >= blocks.maxHeight()) {
-            return false;
-        }
+        return blocks.isChunkLoaded(anchor.chunkX(), anchor.chunkZ())
+                && insideWorldHeight(anchor, blocks)
+                && templateCellsAreClear(anchor, blocks, template)
+                && interiorFloorIsSafe(anchor, blocks);
+    }
+
+    private static boolean insideWorldHeight(Anchor anchor, BlockView blocks) {
+        return anchor.y() - 1 >= blocks.minHeight()
+                && anchor.y() + FakeBaseTemplate.HEIGHT < blocks.maxHeight();
+    }
+
+    private static boolean templateCellsAreClear(
+            Anchor anchor, BlockView blocks, FakeBaseTemplate template
+    ) {
         for (FakeBaseTemplate.Cell cell : template.cells()) {
             int x = anchor.x() + cell.x();
             int y = anchor.y() + cell.y();
             int z = anchor.z() + cell.z();
-            if ((x >> 4) != anchor.chunkX() || (z >> 4) != anchor.chunkZ() || !blocks.isAir(x, y, z)) {
+            if (!inAnchorChunk(anchor, x, z) || !blocks.isAir(x, y, z)) {
                 return false;
             }
         }
+        return true;
+    }
+
+    private static boolean inAnchorChunk(Anchor anchor, int x, int z) {
+        return (x >> 4) == anchor.chunkX() && (z >> 4) == anchor.chunkZ();
+    }
+
+    private static boolean interiorFloorIsSafe(Anchor anchor, BlockView blocks) {
         for (int x = -INTERIOR_FLOOR_RADIUS; x <= INTERIOR_FLOOR_RADIUS; x++) {
             for (int z = -INTERIOR_FLOOR_RADIUS; z <= INTERIOR_FLOOR_RADIUS; z++) {
                 if (!blocks.isSafeFloor(anchor.x() + x, anchor.y() - 1, anchor.z() + z)) {
@@ -59,11 +70,7 @@ final class FakeBasePlacementPlanner {
     }
 
     private static Set<Anchor> candidates(
-            int targetX,
-            int targetY,
-            int targetZ,
-            int chunkX,
-            int chunkZ
+            int targetX, int targetY, int targetZ, int chunkX, int chunkZ
     ) {
         int minX = (chunkX << 4) + FakeBaseTemplate.RADIUS;
         int maxX = (chunkX << 4) + 15 - FakeBaseTemplate.RADIUS;

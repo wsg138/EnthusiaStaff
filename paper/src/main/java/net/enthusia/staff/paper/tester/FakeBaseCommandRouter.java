@@ -7,12 +7,6 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-// The fixed five-action command router intentionally keeps dispatch in one reviewable method.
-@SuppressWarnings({
-        "PMD.AvoidLiteralsInIfCondition",
-        "PMD.CyclomaticComplexity",
-        "PMD.NPathComplexity"
-})
 final class FakeBaseCommandRouter {
     private static final String CREATE = "create";
     private static final String EXTEND = "extend";
@@ -32,9 +26,7 @@ final class FakeBaseCommandRouter {
     boolean handle(Player staff, String[] args) {
         if (!manager.authorized(staff)) {
             staff.sendMessage(Component.text(
-                    "Fake-base controls require authorized active staff mode.",
-                    NamedTextColor.RED
-            ));
+                    "Fake-base controls require authorized active staff mode.", NamedTextColor.RED));
             return true;
         }
         if (args.length < 2) {
@@ -44,6 +36,10 @@ final class FakeBaseCommandRouter {
         if (STATUS.equals(action)) {
             return status(staff, args);
         }
+        return handleTargetAction(staff, args, action);
+    }
+
+    private boolean handleTargetAction(Player staff, String[] args, String action) {
         if (args.length != 3) {
             return usage(staff);
         }
@@ -52,6 +48,10 @@ final class FakeBaseCommandRouter {
             staff.sendMessage(Component.text("That player is not online on this backend.", NamedTextColor.RED));
             return true;
         }
+        return dispatch(staff, target, action);
+    }
+
+    private boolean dispatch(Player staff, Player target, String action) {
         switch (action) {
             case CREATE -> manager.create(staff, target);
             case EXTEND -> manager.extend(staff, target);
@@ -73,9 +73,7 @@ final class FakeBaseCommandRouter {
         }
         if (args.length == 3 && !STATUS.equalsIgnoreCase(args[1])) {
             return CheatTesterCommand.filter(
-                    plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(),
-                    args[2]
-            );
+                    plugin.getServer().getOnlinePlayers().stream().map(Player::getName).toList(), args[2]);
         }
         return List.of();
     }
@@ -98,9 +96,7 @@ final class FakeBaseCommandRouter {
 
     private static boolean usage(Player staff) {
         staff.sendMessage(Component.text(
-                "Usage: /cheattester base <create|extend|clear|teleport|status> [player]",
-                NamedTextColor.YELLOW
-        ));
+                "Usage: /cheattester base <create|extend|clear|teleport|status> [player]", NamedTextColor.YELLOW));
         return true;
     }
 }
