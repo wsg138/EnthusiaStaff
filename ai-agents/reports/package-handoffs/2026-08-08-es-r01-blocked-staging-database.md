@@ -1,13 +1,13 @@
-# ES-R01 blocked handoff — disposable staging database unavailable
+# ES-R01 database-gate evidence — disposable staging database unavailable
 
 Date: 2026-08-08
 
-## Package and classification
+## Package and current classification
 `ES-R01 — Billing-independent staging bridge recovery`
 
-Terminal worker state: `BLOCKED` / `PARKED_BLOCKED`.
+Current worker state: `IN_PROGRESS` / `VERIFYING`.
 
-The repository-side bridge implementation is merged and live artifact/source provenance has been proven. The package cannot satisfy its mandatory Paper boot/restart acceptance because the existing authorized disposable Pi-staging MariaDB endpoint is not accepting connections from the trusted Pi. This is an external operational prerequisite under the package contract, not a validation pass and not authorization to weaken the gate.
+The repository-side bridge implementation is merged and live artifact/source provenance has been proven. Repeated proof attempts have failed at the existing authorized disposable Pi-staging MariaDB prerequisite before Paper boot. This is strong evidence of a blocked external gate, but terminal `BLOCKED` / `PARKED_BLOCKED` classification is intentionally deferred until PR #94 merges normally and its required fresh current-`main` Pi Staging proof is inspected.
 
 ## Starting state
 The worker started from legitimate `wsg138/EnthusiaStaff:main` `e482e64315f8c4f569506900ac8a8ef84cf0a90d` and `wsg138/EnthusiaStaff-Staging:main` `4c3adfb6e50091ff389e064ab9619f096dd4b2b2` after reading the required universal/package policies. ES-P02 and ES-P05 were both parked on the same private GitHub-hosted Actions Billing & plans blocker. The latest inspected old-route failure was staging run `31244561683`, job `93070895799`, runner ID `0`, zero steps. `Lincoln-PI-4` itself was healthy on private Staging Controls run `31245361935`, job `93072954209`, runner ID `2`.
@@ -65,8 +65,8 @@ Public PR #94 exact head `4acb4853c5ce00805ff206e3d0bb28a2458e82c8`, public Pi S
 
 This second attempt materially proves the database condition is not a one-shot readiness race within the package's bounded retry window.
 
-## Exact blocker
-The already-authorized disposable Pi-staging MariaDB endpoint configured through the existing private `pi-staging` environment is unavailable from `Lincoln-PI-4`. The observable database contract fails at connection establishment with SQLState class `08` before identity/destructive-target checks can run.
+## Exact blocked-gate evidence
+The already-authorized disposable Pi-staging MariaDB endpoint configured through the existing private `pi-staging` environment has been unavailable from `Lincoln-PI-4`. The strongest captured database evidence fails at connection establishment with SQLState class `08` before identity/destructive-target checks can run.
 
 No safe repository-side implementation remains. Do **not**:
 - use another database target;
@@ -74,27 +74,23 @@ No safe repository-side implementation remains. Do **not**:
 - remove the disposable reset;
 - allow Paper to boot before reset success;
 - broaden ES-R01 into database administration;
-- repeatedly rerun the same gate without evidence the database availability condition changed.
+- manually repeat the same gate without evidence the database availability condition changed.
 
-## Exact unblock condition and resume action
-Material evidence must show the existing authorized disposable staging MariaDB endpoint is reachable again from `Lincoln-PI-4` under the current `pi-staging` environment contract. Once that condition changes:
+## Post-merge decision and conditional unblock
+PR #94 must merge normally before terminal package classification. Its merge-triggered current-`main` Pi Staging proof is the next mandatory package action and is not an optional manual rerun.
 
-1. Resume ES-R01 as the highest-priority `ACTIONABLE_CONTINUATION` before selecting another READY package.
-2. Reconcile current public/private `main`, open PRs, current package state, issue #43, V18, and live runner/database conditions.
-3. Run one fresh exact-current-main bridge proof.
-4. Require public hosted build success, exact private provenance success, guarded pre-reset success, Paper cycle 1, restart/cycle 2, guarded post-reset, sanitized evidence upload, correlated public success, and transient release/tag cleanup.
-5. Only then mark ES-R01 `COMPLETE`, update dependent package classifications, publish terminal state, and stop.
+If that current-main proof succeeds fully, ES-R01 becomes `COMPLETE` and this blocked-gate evidence is superseded by successful acceptance. If it fails only because the same existing authorized disposable staging MariaDB endpoint remains unreachable from `Lincoln-PI-4`, terminal classification becomes `BLOCKED` / `PARKED_BLOCKED`. The exact later unblock condition is then material evidence that this same authorized endpoint is reachable again under the current `pi-staging` environment contract; only after that condition changes should a future worker resume and rerun the bridge.
 
-Do not start ES-P02 in the same worker that completes ES-R01.
+Do not start ES-P02 in the same worker that terminally completes or parks ES-R01.
 
 ## Dependent package routing
-ES-P02 and ES-P05 remain `BLOCKED` / `PARKED_BLOCKED`. The old private-hosted billing dependency has been removed by ES-R01's merged implementation, but mandatory staging acceptance still cannot pass while the disposable staging database is unavailable. Their branches/PRs alone do not make them actionable.
+ES-P02 and ES-P05 remain `BLOCKED` / `PARKED_BLOCKED`. Their branches/PRs alone do not make them actionable while ES-R01 is unfinished.
 
-## Current publication
-Public PR #94 / branch `package/es-r01-proof-retry-checkpoint` is documentation/package-state only and is being converted into the required persistent `BLOCKED` publication. It must merge normally to `main` before this worker stops. It must not be treated as product implementation or as a successful Pi validation.
+## Current checkpoint publication
+Public PR #94 / branch `package/es-r01-proof-retry-checkpoint` is documentation/package-state only. It records the current verification checkpoint and, after normal merge, triggers the required current-main proof. It is **not** itself the terminal blocked-state publication. After the post-merge proof, persist the resulting terminal facts through the smallest documentation-only finalization PR necessary.
 
 ## Branch cleanup note
 Merged implementation heads are contained by their recorded normal merge commits. The connected GitHub tool surface available to this worker provides branch creation/update but no delete-ref operation. Do not falsify cleanup by moving refs. Any remaining merged ES-R01 temporary refs have no unique implementation work and may be deleted later with a tool that actually supports ref deletion.
 
 ## Systems not to disturb
-Production data/configuration, LiteBans authority, issue #43, private database contents/credentials, Flyway history/V18, ES-V02 acceptance, and all product package code remain outside this blocked-state publication.
+Production data/configuration, LiteBans authority, issue #43, private database contents/credentials, Flyway history/V18, ES-V02 acceptance, and all product package code remain outside this checkpoint publication.
