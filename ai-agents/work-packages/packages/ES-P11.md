@@ -4,7 +4,7 @@
 `ES-P11`; Internal; primary `COMP-STAFF`; priority 90; sequential after tester system.
 
 ## 2. Status
-`REVIEW` — implementation, direct/integration tests, Wiki/runbook, harsh self-review, and actual CodeRabbit finding reconciliation are complete on PR #88. The latest valid review defect was fixed at `3564d6942e669f9c79c7c952a32285f98f46fcf3`; one final state checkpoint and exact-head gate cycle remain before normal merge.
+`REVIEW` — implementation, direct/integration tests, Wiki/runbook, harsh self-review, actual CodeRabbit finding repair, and Codacy remediation are complete on PR #88. Product head `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f` is fully green under hosted/static validation. This state checkpoint becomes the final frozen candidate and requires one unchanged-head validation/reviewer cycle before normal merge.
 
 ## 3. Objective
 Implement bounded, auditable fake-base generation, access control, lifecycle, and complete cleanup without risking real-world or player data.
@@ -35,14 +35,16 @@ Implementation PR #88: `ES-P11: fake-base generation and cleanup` targeting `mai
 
 ## 12. Implementation checklist
 - [x] Fresh live GitHub reconciliation and dependency/branch/migration ownership check.
-- [x] Activate/resume package from legitimate `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`.
-- [x] Reconcile Paper/Folia world APIs; define templates/bounds/safety/recovery.
+- [x] Resume the only live `ACTIONABLE_CONTINUATION` from legitimate `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`.
+- [x] Reconcile Paper/Folia world APIs and define templates/bounds/safety/recovery.
 - [x] Implement bounded client-only generation and cleanup state machine.
 - [x] Add direct template/placement/lifecycle/audit/metadata tests plus MariaDB/Testcontainers audit-ledger integration coverage.
 - [x] Document commands, permissions, limits, recovery, privacy, migration boundary, and ES-V02 acceptance boundary.
 - [x] Harsh self-review and repair concurrency, Folia ownership, authorization, render/restore, scheduler, audit, thread-affinity, permission, and test findings.
 - [x] Obtain actual CodeRabbit reviews and resolve every valid finding, including render/close cleanup and refusal to extend an already-expired operation.
-- [ ] Publish the final state checkpoint, freeze its exact head, complete exact-head hosted/static/reviewer gates, reconcile fresh `main`, merge normally, verify containment/merge shape, delete implementation branch, and publish terminal state.
+- [x] Resolve configured Codacy static findings from 23 to zero without weakening world-safety/authorization boundaries.
+- [x] Prove product head `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f` under Wiki/full Java/MariaDB/Testcontainers/runtime-JAR/artifact/Codacy static/coverage gates.
+- [ ] Freeze this state-inclusive checkpoint; complete exact-head hosted/static/reviewer gates; reconcile fresh `main`; merge normally; verify merge shape/containment/live result; delete implementation branch; publish terminal state.
 
 ## 13. Acceptance criteria
 Generation cannot overwrite protected/real data; every operation is bounded/owned/audited; cleanup is idempotent after all termination modes; expired operations cannot be revived by Extend; abandoned state is detected/recovered; ordinary players cannot access operator controls or persistent artifacts.
@@ -75,19 +77,21 @@ No protection-provider bypass is used because ES-P11 never changes world blocks.
 All generation/cleanup safety criteria proven; one exact-head implementation PR merged with a normal two-parent merge commit; exact feature-head containment verified; live merge result recorded; temporary implementation branch deleted; terminal package state published to `main` through the established documentation-only finalization pattern.
 
 ## 23. Resume state
-Current worker owns PR #88 / `package/es-p11-fake-bases`. Product and review hardening are complete through `3564d6942e669f9c79c7c952a32285f98f46fcf3`. A final state-only checkpoint follows this commit and becomes the candidate frozen head unless a gate finds another valid defect. Legitimate `main` was still `68a6d936066383f5b8139304f40b2d01d0dfe036` at the last reconciliation.
+Current worker owns PR #88 / `package/es-p11-fake-bases`. Product implementation and review/static remediation are complete through `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f`. This state-only checkpoint becomes the final frozen candidate unless a required exact-head gate finds another valid defect. Legitimate `main` remained `68a6d936066383f5b8139304f40b2d01d0dfe036` at the latest pre-checkpoint reconciliation.
 
 ## 24. Last completed checkpoint
-The second actual CodeRabbit review found that Extend could revive an operation after its deadline but before the lifecycle tick closed it. `3564d6942e669f9c79c7c952a32285f98f46fcf3` now rejects Extend when `now` is equal to or later than `expiresAt` and adds direct deadline/after-deadline coverage. The same checkpoint expanded `WORKSPACE-STATE.md` to require the full canonical exact-head validation list and explicit post-merge two-parent/main-SHA/containment/live-evidence verification before branch cleanup. Earlier review fixes remain intact: exact admission, canonical JSON, warning/extension serialization, worker/region-thread Bukkit safety, stale Folia/authority guards, accepted-vs-committed evidence, scheduler failure cleanup, render/close race recovery, permission inheritance, template-height coupling, semantic metadata tests, and audit assertion hardening.
+Product head `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f` passed Wiki run `31239760132` / job `93058657612`; full Java 21 build/tests/MariaDB/Testcontainers/migration/runtime-JAR/JaCoCo/artifact/Codacy upload run `31239760133` / job `93058683147`; artifact `9016711895` digest `sha256:fac889493926350db66ca4f5e89c5f356d30d682613b99e483b4d863abf30f82`; Codacy static `93059044531` success with zero annotations; Diff Coverage `93059225105` success at 40.81%; Coverage Variation `93059224975` success at -0.45%. Aggregate coverage was 47.02% lines / 38.15% branches / 49.64% instructions. Paper/Velocity runtime-JAR provider leak count was zero.
+
+Codacy remediation reduced findings 23 → 9 → 5 → 1 → 0. Low-level audit persistence, world block-view reads, and presentation helpers were extracted while lifecycle/ownership decisions remain in `FakeBaseManager`; no world-mutation or worker-thread Bukkit access was introduced.
 
 ## 25. Remaining checklist
-Publish this reconciled state checkpoint; freeze that exact SHA; require exact-head Wiki, full Java 21 build/tests/MariaDB/Testcontainers/migration/runtime-JAR/artifact/coverage, Codacy static/coverage, CodeRabbit/reviewer completion, and zero valid unresolved findings; reconcile fresh `main`, PR/branch/issue/migration state; merge PR #88 normally; verify exact merge commit/two parents/resulting `main`/feature-head containment/live evidence; only then delete `package/es-p11-fake-bases`; publish terminal COMPLETE state and stop.
+Freeze the state-inclusive checkpoint; require exact-head Wiki, full Java 21 build/tests/MariaDB/Testcontainers/migration/runtime-JAR/artifact/coverage, Codacy static/coverage, actual CodeRabbit/reviewer completion, and zero valid unresolved findings; reconcile fresh `main`, PR/branch/issue/migration state; merge PR #88 normally; verify exact merge commit/two parents/resulting `main`/feature-head containment/live evidence; only then delete `package/es-p11-fake-bases`; publish terminal COMPLETE state and stop.
 
 ## 26. Known blockers
-None for ES-P11 implementation or hosted validation. Representative Java/Bedrock/distributed private/Pi acceptance remains assigned to `ES-V02` and is not an ES-P11 completion gate. Automatic private attempts under the unchanged Billing & plans condition are **NOT A PASS** and must be recorded as unavailable evidence, not as successful staging or an owner-approved ES-P11 exception.
+None for ES-P11 implementation or hosted validation. Representative Java/Bedrock/distributed private/Pi acceptance remains assigned to `ES-V02` and is not an ES-P11 completion gate. Product-head private run `31239763060` did not execute product code: Ubuntu job `93058666371` had runner ID `0`, empty runner name, `steps: []`, and the Billing & plans payment/spending-limit rejection; Pi `93058670370` skipped. This is **NOT A PASS** and no ES-P11 infrastructure exception exists.
 
 ## 27. Final evidence
-Pending the post-checkpoint frozen exact head. Earlier passing heads are diagnostic only because later review fixes changed tracked content. Exact final run/check/review IDs must correspond to the later frozen SHA.
+Pending the state-inclusive frozen exact head. The `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f` evidence above proves the final product implementation before state publication, but may not substitute for exact-head checks after this package-state commit.
 
 ## 28. Merge and synchronization record
 Pending: normal implementation merge/resulting `main`, two-parent merge verification, exact containment, live post-merge evidence, implementation branch deletion, and terminal documentation publication. External parity is not applicable.

@@ -1,6 +1,6 @@
 # ES-P11 package handoff — fake-base generation and cleanup
 
-Date: 2026-08-07
+Date: 2026-08-08
 Package: `ES-P11`
 Status: `REVIEW`
 Classification: `ACTIONABLE_CONTINUATION`
@@ -8,48 +8,58 @@ Classification: `ACTIONABLE_CONTINUATION`
 ## Selection and starting state
 
 - Legitimate starting `main`: `68a6d936066383f5b8139304f40b2d01d0dfe036`.
-- This sequential worker resumed PR #88 / `package/es-p11-fake-bases` as the only live `ACTIONABLE_CONTINUATION` rather than claiming a new package.
-- ES-P02 PR #70 and ES-P05 PR #81 remain unchanged `PARKED_BLOCKED` by the private GitHub Actions Billing & plans/zero-runner condition; they were not resumed.
+- This sequential worker resumed PR #88 / `package/es-p11-fake-bases` as the only live `ACTIONABLE_CONTINUATION`; no new package was claimed.
+- ES-P02 PR #70 and ES-P05 PR #81 remain unchanged `PARKED_BLOCKED` by the private GitHub Actions Billing & plans/zero-runner condition.
 - Issue #43 remains open/deferred and LiteBans remains authoritative.
 - ES-P10 is `COMPLETE`; V18 is the immutable aggregate migration boundary. ES-P11 adds no migration.
 
-## Current live work
-
-- Branch: `package/es-p11-fake-bases`.
-- PR: #88, `ES-P11: fake-base generation and cleanup`; non-draft.
-- Product/review hardening is complete through `3564d6942e669f9c79c7c952a32285f98f46fcf3`.
-- This handoff/state publication follows that fix and is intended to become the next frozen exact head unless validation finds another valid defect.
-
 ## Implemented behavior
 
-- Fixed bounded 7x7 virtual fake-base template; client-only Paper block changes, no real world writes.
-- Placement is restricted to one already-loaded target chunk and world height; no chunk loading/generation.
-- Every virtual cell must be real air; the 5x5 interior floor must be solid/non-hazardous; final same-chunk revalidation protects Folia region ownership.
-- Exact ownership/concurrency: one operation per target, 8 global, 2 per controller.
+- Fixed bounded 7x7 virtual fake base rendered client-side only; no real world block mutation, schematic paste, rollback, chunk load, or chunk generation.
+- Placement is restricted to one already-loaded target chunk, build height, real-air template cells, and a solid/non-hazardous 5x5 floor. Final same-chunk validation preserves Folia ownership.
+- Exact concurrency: one operation per target, 8 globally, 2 per controller.
 - Only the target and staff viewers whose Teleport action succeeds receive the virtual structure.
-- Lifetime is five minutes with a one-minute warning; Extend starts a fresh five-minute window only while the prior deadline is still in the future. Expired-but-not-yet-cleaned operations cannot be revived.
-- Cleanup covers clear, timeout, distance, world/backend change, disconnect, staff-mode exit, render/scheduler failure, and plugin lifecycle. It is idempotent and sends current authoritative real block data rather than mutating world state.
+- Lifetime is five minutes with a one-minute warning; Extend starts a fresh five-minute window only before the existing deadline. Expired-but-not-yet-cleaned operations cannot be revived.
+- Cleanup covers clear, timeout, distance, world/backend change, disconnect, staff-mode exit, render/scheduler failure, and plugin lifecycle. It is idempotent and sends current authoritative real block states.
 - Async creation/Extend/Teleport re-check current authority at commit time; manage-any loss cannot commit stale privilege.
 - Coordinate-free lifecycle evidence uses existing `audit_events`; creation is accepted before render and Extend/Teleport distinguish accepted from committed actions.
 - `/cheattester base create|extend|clear|teleport|status` is the text/Bedrock-safe operator surface with explicit default-false base/manage-any permissions.
 
-## Review findings resolved
+## Review and static findings resolved
 
-Harsh manual review and actual CodeRabbit reviews resolved exact admission, audit JSON, warning/extension synchronization, worker/region-thread Bukkit access, render/restore failures, stale Folia cross-chunk reads, stale staff/manage-any authority, accepted-vs-committed evidence, lifecycle scheduler retirement, render/close races, viewer wording, canonical handoff routing, permission inheritance, template-height coupling, semantic permission tests, audit integration assertions, unreachable tab completion, and expired-operation extension.
+Harsh manual review and actual CodeRabbit reviews resolved exact admission, audit JSON, warning/extension synchronization, Bukkit thread-affinity, render/restore failures, stale Folia cross-chunk reads, stale staff/manage-any authority, accepted-vs-committed evidence, lifecycle scheduler retirement, render/close races, viewer wording, handoff routing, permission inheritance, template-height coupling, metadata/integration assertions, unreachable tab completion, and expired-operation extension.
 
-The latest functional finding was CodeRabbit's observation that an operation could be extended at/after its deadline before its cleanup tick. `3564d6942e669f9c79c7c952a32285f98f46fcf3` rejects that case and adds direct coverage. The review thread was explicitly resolved after the fix. `WORKSPACE-STATE.md` was also expanded to require a normal two-parent merge result, resulting-main verification, containment/live-evidence checks, and branch deletion only after those checks.
+Codacy then reported maintainability/static findings on the expanded fake-base code. Those were reduced 23 → 9 → 5 → 1 → 0 through targeted refactoring and narrow repository-consistent suppression only where structurally justified. Audit persistence, authoritative world-block reads, and presentation helpers were extracted; router/placement/template hotspots were split; lifecycle/ownership decisions stayed in `FakeBaseManager`. A manual diff review after the refactor found no new world mutation, worker-thread Bukkit access, authorization regression, or cleanup defect.
 
-Two low-value top-level suggestions remain intentionally outside correctness scope: replacing bounded staff-facing UUID status with online names, and adding a typed runtime accessor for a capability already safely exposed by the composite store. Neither changes package safety, authorization, persistence correctness, or acceptance criteria.
+## Validated product head
 
-## Validation boundary
+Product head: `dafa710e44cc3c4ff7af1ee367d679f95ea8fd3f`.
 
-Final merge evidence must apply to one unchanged post-state-checkpoint SHA and include the canonical `VALIDATION-POLICY.md` exact-head set: Wiki; Java 21 clean build/tests/warnings; MariaDB/Testcontainers and migration checks; runtime-JAR/artifact integrity; configured Codacy/static/coverage checks; actual CodeRabbit/reviewer completion; zero valid unresolved findings; and fresh `main`, PR/branch, issue #43, and migration reconciliation.
+Passing evidence:
 
-Representative Java/Bedrock/distributed private/Pi acceptance remains assigned to `ES-V02`, not ES-P11. Automatic private runs that receive runner ID `0`, no steps, and the account Billing & plans rejection are **NOT A PASS** and are recorded only as unavailable external evidence; no ES-P11 infrastructure exception is claimed.
+- Wiki `31239760132` / `93058657612`.
+- Full build/coverage `31239760133` / `93058683147`: Java 21 clean build/tests, MariaDB/Testcontainers, migration checks, runtime-JAR inspection, artifact and JaCoCo/Codacy upload.
+- Aggregate JaCoCo: 47.02% lines, 38.15% branches, 49.64% instructions.
+- Paper JAR SHA-256 `22ceb5f71b387a7a9bc369aa7a3a7313d696d9477c41e6cb5bb5bc58310a9f1c`; Velocity JAR SHA-256 `8529a2b8c12c8392ccba61735c5b190bc66b09a4f982fc12d3280c29a7ee3a99`; provider API leaks 0.
+- Artifact `9016711895`, digest `sha256:fac889493926350db66ca4f5e89c5f356d30d682613b99e483b4d863abf30f82`.
+- Codacy static `93059044531`: success, zero annotations.
+- Codacy Diff Coverage `93059225105`: 40.81%, success.
+- Codacy Coverage Variation `93059224975`: -0.45%, success.
 
-## Merge/cleanup boundary
+Because package-state files are part of PR #88, this handoff/state checkpoint follows the green product head and becomes the final frozen candidate. The product-head checks above are diagnostic for the final implementation; required merge evidence must rerun on the exact state-inclusive frozen SHA.
 
-After exact-head gates pass, merge PR #88 with the normal merge method only. Record and verify the exact two-parent merge commit, resulting `main` SHA, feature-head containment, and live PR/main evidence. Delete `package/es-p11-fake-bases` only after those checks. Then publish terminal `COMPLETE` package state through the established documentation-only terminal-state PR pattern, recompute dependency routing without activating another package, verify finalization branch cleanup, and stop.
+## Private acceptance boundary
+
+Representative Java/Bedrock/distributed private/Pi acceptance remains assigned to `ES-V02`, not ES-P11. Product-head public wrapper `31239759170` / check `93058655372` dispatched private run `31239763060`; Ubuntu job `93058666371` had runner ID `0`, empty runner name, `steps: []`, and GitHub's Billing & plans payment/spending-limit rejection; Pi `93058670370` was skipped. This is **NOT A PASS** and no ES-P11 infrastructure exception is claimed.
+
+## Exact next actions
+
+1. Freeze this state-inclusive checkpoint.
+2. Require successful exact-head Wiki, full Java 21 build/tests/MariaDB/Testcontainers/migration/runtime-JAR/artifact/coverage, Codacy static/coverage, and an actual CodeRabbit/reviewer completion with zero valid unresolved findings.
+3. Reconcile legitimate `main`, PR/branch state, issue #43, and migration ownership on the unchanged frozen head.
+4. Merge PR #88 normally; verify the exact two-parent merge commit, resulting `main`, frozen-head containment, and live PR/main result.
+5. Delete `package/es-p11-fake-bases` only after those checks.
+6. Publish ES-P11 terminal `COMPLETE` state through the established documentation-only finalization PR, recompute routing without activating another package, verify terminal branch cleanup, and stop.
 
 ## Systems not to disturb
 
