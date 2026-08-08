@@ -7,7 +7,9 @@ Date: 2026-08-08
 
 Terminal state: `BLOCKED` / `PARKED_BLOCKED`.
 
-This sequential worker worked exactly ES-R01 and no second package. Repository-side bridge implementation and repairs are merged. The required fresh current-`main` staging proof after the final checkpoint merge again failed at the guarded disposable Pi runtime gate, so end-to-end staging is **NOT A PASS** and the package is parked on an external prerequisite.
+This sequential worker worked exactly ES-R01 and no second package. The worker resumed ES-R01 only because live GitHub showed incomplete post-merge finalization after terminal publication PR #95 had already merged. No product code, migration, staging controls, credentials, targets, or runtime configuration were changed, and no manual staging rerun was issued.
+
+Repository-side bridge implementation and repairs are merged. The required fresh current-`main` staging proof after the final checkpoint merge failed at the guarded disposable Pi runtime gate, and the automatic proof triggered by PR #95's terminal-publication merge failed at the same guarded database-reset boundary. End-to-end staging is **NOT A PASS** and the package remains parked on the same external prerequisite.
 
 ## Checkpoint publication and review
 Public PR #94 froze at `3f90ae4e96e969a7ceac45ee9a385f068c0af14a` and passed:
@@ -19,7 +21,7 @@ Public PR #94 froze at `3f90ae4e96e969a7ceac45ee9a385f068c0af14a` and passed:
 
 PR #94 merged normally as `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`. The merge has exactly two parents: pre-merge `main` `094838fa221476e0832cf821f7b4908b9402d0d9` and frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`. Compare from frozen head to merge reports one commit ahead, zero behind, no file differences. The public checkpoint branch was automatically deleted after merge.
 
-## Required fresh current-main proof
+## Required fresh current-main proof after PR #94
 Public Pi Staging run `31252997554` targeted exact merged source `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`.
 
 Public build job `93092131811`:
@@ -48,7 +50,41 @@ Private staging run `31253345564` used staging control SHA `4036d6e915c2d751bef1
 
 Sanitized evidence artifact: `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`.
 
-The final run's GitHub step metadata does not expose a fresh database SQLState, so none is invented here. Precise earlier evidence remains public run `31250170297` → private run `31250450219` / job `93085892938`, where exact provenance passed and seven guarded connection attempts all returned SQLState `08000` before Paper boot. Taken together, the evidence proves the bridge/provenance path is working and the remaining failure is at the existing guarded disposable staging-database/runtime boundary.
+This run's GitHub step metadata does not expose a fresh database SQLState, so none is invented here. Precise earlier evidence remains public run `31250170297` → private run `31250450219` / job `93085892938`, where exact provenance passed and seven guarded connection attempts all returned SQLState `08000` before Paper boot.
+
+## Terminal publication PR #95 and containment
+PR #95, `ES-R01: publish terminal blocked current-main state`, froze at `b918ec7ed7708db9b69e061d2f4bc322a94c5124` and merged normally as `3ce303ce3097be647091e142e801da9a5fd9a8fc`.
+
+Post-merge containment is exact:
+- compare frozen head `b918ec7ed7708db9b69e061d2f4bc322a94c5124` → merge `3ce303ce3097be647091e142e801da9a5fd9a8fc` reports one commit ahead, zero behind;
+- no file differences are present;
+- the public terminal-publication branch `package/es-r01-finalize-blocked` is no longer present.
+
+This completed the publication action that the previous handoff still described prospectively.
+
+## Automatic exact-main proof after PR #95
+PR #95's merge automatically triggered public Pi Staging run `31253869828` against exact source `3ce303ce3097be647091e142e801da9a5fd9a8fc`.
+
+Public build job `93094217219` succeeded and produced the verified Paper runtime.
+
+Public bridge job `93094873681`:
+- required the cross-repository token successfully;
+- downloaded the exact public artifact successfully;
+- published the bounded transient transfer successfully;
+- dispatched and correlated private run `31254151964` successfully;
+- collected failure diagnostics successfully;
+- removed the transient public transfer successfully;
+- correctly failed the final staging verdict because private staging failed.
+
+Private job `93094893264`:
+- allocated trusted `Lincoln-PI-4`, runner ID `2`;
+- passed runner identity assertion;
+- retrieved and verified the exact public bridge artifact successfully;
+- failed at `Run guarded disposable Paper boot and restart test` with `ERROR: Refused or failed to clear the dedicated disposable Pi database before boot`;
+- therefore did not boot Paper;
+- uploaded sanitized evidence successfully as artifact `9020895148`, digest `sha256:fdd89c15bfab6374990e4c0129006e391ca6d0f417ed8bbc06b07bd2914b32cf`.
+
+This newer run exposes no SQLState, so none is invented. The earlier seven SQLState `08000` connection failures remain the precise captured connection diagnostic. The new run is material evidence that the condition remained unchanged, not evidence of an unblock. It is **NOT A PASS**.
 
 ## Exact blocker and unblock
 No safe repository-side implementation remains.
@@ -70,6 +106,8 @@ After material evidence of the unblock condition, resume ES-R01 before any new p
 ## Dependent package routing
 - ES-P02 PR #70 remains `BLOCKED` / `PARKED_BLOCKED`; branch drift is not actionable while ES-R01 remains parked.
 - ES-P05 PR #81 remains `BLOCKED` / `PARKED_BLOCKED`; its implementation and hosted validation remain preserved.
+- ES-P07, ES-P06, ES-P08, ES-X01, ES-X02, ES-X03, ES-X04, and ES-QA01 remain dependency-blocked planned work.
+- ES-V01, ES-V02, ES-V03, and ES-A01 remain deferred under their existing private/acceptance contracts.
 - No package is currently dependency-complete `READY` while this unchanged ES-R01 prerequisite blocks the staging route.
 
 ## Migration, authority, and production boundaries
@@ -80,9 +118,9 @@ After material evidence of the unblock condition, resume ES-R01 before any new p
 
 ## Branch cleanup
 - Public PR #94 checkpoint branch was automatically deleted after normal merge.
-- The three private staging ES-R01 implementation branches were compared against staging `main` and contain no unique work.
-- The connected GitHub tool surface available to this worker does not expose delete-ref; those contained private refs are not falsely moved or called deleted.
-- Terminal publication branch `package/es-r01-finalize-blocked` should be removed after its normal merge if GitHub does not auto-delete it.
+- Public PR #95 terminal-publication branch is deleted after normal merge.
+- The three private staging ES-R01 implementation branches were previously compared against staging `main` and contain no unique work. They remain contained refs; no false deletion claim is made.
+- This post-merge finalization uses only `package/es-r01-post-merge-finalization` and contains documentation/package-state changes only.
 
 ## Stop boundary
-After the terminal documentation publication merges normally and containment is verified, stop. Do not select or prepare ES-P02, ES-P05, or any other package in this worker.
+After this documentation-only post-merge finalization is normally merged, exact containment is verified, and the temporary finalization branch is cleaned when safe, stop. Do not select, prepare, synchronize, or rerun ES-P02, ES-P05, or any other package in this worker.
