@@ -4,7 +4,7 @@
 `ES-P11`; Internal; primary `COMP-STAFF`; priority 90; sequential after tester system.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`ACTIVE` — selected 2026-08-07 after fresh live reconciliation from legitimate `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`.
 
 ## 3. Objective
 Implement bounded, auditable fake-base generation, access control, lifecycle, and complete cleanup without risking real-world or player data.
@@ -22,19 +22,25 @@ Approved bounded templates/placement; staff authorization; isolated ownership; t
 General world rollback; CoreProtect replacement; unbounded generation; production deployment; unrelated tester features.
 
 ## 8. Dependencies
-`ES-P10` must be `COMPLETE`.
+`ES-P10` is `COMPLETE`.
 
 ## 9. Component and repository boundaries
 Root fake-base/world-safety/tester/tests/resources/docs only. No external component, permanent branch, or isolated PR.
 
 ## 10. Required branches
-Temporary `package/es-p11-fake-bases`; delete after verified merge containment.
+Active temporary branch: `package/es-p11-fake-bases`; delete after verified merge containment.
 
 ## 11. Required PRs
 One PR to `wsg138/EnthusiaStaff:main`.
 
 ## 12. Implementation checklist
-Reconcile world APIs; define templates/bounds/safety/recovery; implement generation and cleanup state machine; failure-inject tests; document and update state/handoff; review/freeze/validate/merge/cleanup.
+- [x] Fresh live GitHub reconciliation and dependency/branch/migration ownership check.
+- [x] Activate package from exact legitimate `main`.
+- [ ] Reconcile world APIs; define templates/bounds/safety/recovery.
+- [ ] Implement generation and cleanup state machine.
+- [ ] Add failure/lifecycle/access/scheduler tests.
+- [ ] Document commands/limits/recovery and update requirement evidence.
+- [ ] Review, freeze exact head, validate, merge normally, verify containment, publish terminal state, delete temporary branch.
 
 ## 13. Acceptance criteria
 Generation cannot overwrite protected/real data; every operation is bounded/owned/audited; cleanup is idempotent after all termination modes; abandoned state is detected/recovered; ordinary players cannot access operator controls or persistent artifacts.
@@ -52,7 +58,7 @@ Commands/permissions/templates/limits, world-safety and recovery runbook, exclus
 Strict staff authorization; no player-base targeting or private-coordinate evidence; fail closed when ownership/safety is uncertain.
 
 ## 18. Migration impact
-No migration assumed; durable operation state, if required, uses a new immutable post-V16 migration with upgrade/checksum tests.
+No migration assumed; durable operation state, if required, uses a new immutable post-V18 migration with upgrade/checksum tests.
 
 ## 19. Bedrock considerations
 Staff control must have command/text fallback; player-facing fake content must not depend on Java-only packets unless safely isolated.
@@ -67,19 +73,19 @@ Use only verified world/protection APIs; missing integrations must fail safe and
 All generation/cleanup safety criteria proven; one exact-head PR merged normally; no valid threads; temporary branch cleanup verified.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after `ES-P10` and assignment.
+Assigned to the current sequential package worker on `package/es-p11-fake-bases`. No pre-existing ES-P11 implementation branch, PR, or handoff existed at selection time.
 
 ## 24. Last completed checkpoint
-Definition only; no product work began.
+Package selected and branch created from exact legitimate `main` `68a6d936066383f5b8139304f40b2d01d0dfe036`; ES-P02/ES-P05 remain unchanged parked external blockers and were not resumed.
 
 ## 25. Remaining checklist
-All design, implementation, tests, review, validation, merge, and evidence remain.
+World-safety design, implementation, tests, documentation, review, exact-head validation, normal merge, containment verification, terminal state publication, and temporary branch deletion.
 
 ## 26. Known blockers
-Dependency `ES-P10`; any required protection-provider contract must be verified before use.
+None for implementation. Private representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02`; unchanged account-level private staging failures are external evidence and are not retried here without a material condition change.
 
 ## 27. Final evidence
-Unset: world-safety design, exact heads, lifecycle/failure matrix, checks, review, docs.
+Pending: world-safety design, exact heads, lifecycle/failure matrix, checks, review, docs.
 
 ## 28. Merge and synchronization record
-Unset: merge/resulting main/containment/temporary branch deletion; parity not applicable.
+Pending: merge/resulting main/containment/temporary branch deletion; parity not applicable.
