@@ -12,14 +12,19 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
 | Active/selected package | None. This owner-directed deadlock-recovery publication defines routing only and does not begin ES-R01 implementation. |
 | Ready packages | `ES-R01 — Billing-independent staging bridge recovery` is the sole legitimate `READY` package. No existing product dependency was relaxed. |
-| ES-R01 basis | Current private `ubuntu-latest` staging builds remain Billing & plans blocked at runner ID `0`, while current private self-hosted job `93064778261` successfully executed on runner ID `2`, `Lincoln-PI-4`. Public EnthusiaStaff hosted validation remains available. |
+| ES-R01 definition PR | PR #90, `package/es-r01-staging-bridge-recovery-definition`; process/package-state only, no product or workflow implementation |
+| ES-R01 package handoff | `ai-agents/reports/package-handoffs/2026-08-08-es-r01-staging-bridge-recovery.md` |
+| ES-R01 migration boundary | No migration change; V18 remains immutable/current |
+| ES-R01 definition validation | Exact-head validation/review must be rerun after the active review-fix commits; earlier checks on superseded heads are not final evidence |
+| ES-R01 definition merge/containment | Unset until PR #90 actually merges and live post-merge evidence is verified |
+| ES-R01 basis | Current private `ubuntu-latest` staging builds remain Billing & plans blocked at runner ID `0`, while current private self-hosted job `93064778261` successfully executed on runner ID `2`, `Lincoln-PI-4`. Public EnthusiaStaff-hosted validation remains available. |
 | ES-P11 status | `COMPLETE`; implementation PR #88 merged normally as `6cd293d9f1abc3ca6ca8b70e953da936f4a22ab0` from frozen head `a3192dd5f684d402b79dfee2de3f32e18af7c9c4`; exact containment verified; implementation branch deleted |
 | ES-P11 starting legitimate main | `68a6d936066383f5b8139304f40b2d01d0dfe036` |
 | ES-P11 migration impact | No migration; immutable V18 remains the aggregate boundary |
 | ES-P11 canonical handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md` |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; unchanged private Actions Billing & plans zero-runner blocker. Current branch/PR drift is not actionable while that condition remains unchanged. |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; hosted implementation validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; current CodeRabbit commit status is success and zero review threads exist, but required private staging remains unavailable under the same Billing & plans condition. |
-| Next recommended work | A normal sequential worker must select only `ES-R01`, implement the two-repository staging bridge defined in its package contract, prove it end to end, merge it normally, publish terminal state, and stop. After ES-R01 completes, resume ES-P02 before ES-P05 because their shared external condition will have materially changed. |
+| Next recommended work | After this definition publication is normally merged and its post-merge evidence is persistently recorded, a normal sequential worker must select only `ES-R01`, implement the two-repository staging bridge defined in its package contract, prove it end-to-end, merge it normally, publish terminal state, and stop. After ES-R01 completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked; resume ES-P02 before ES-P05. |
 | Owner priorities | This owner-directed recovery explicitly authorizes deadlock resolution but does not waive any validation gate. Do not rerun identical private-hosted failures while ES-R01 is incomplete. |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
 | Private acceptance boundary | ES-R01 repairs staging transport only. Representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02`; unavailable zero-runner staging is **NOT A PASS**. |
@@ -27,7 +32,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 ## Deadlock-recovery determination
 
 - Starting legitimate `main`: `41659389ba105e099c77966015714067ea6f1ae7`.
-- Live reconciliation found only open PR #70 (ES-P02) and PR #81 (ES-P05), with only their two package branches remaining open.
+- Live reconciliation found only open PR #70 (ES-P02) and PR #81 (ES-P05) before the recovery publication branch/PR was created; only their two implementation package branches were then open.
 - A fresh private staging run created 2026-08-08 05:40:54 UTC again failed its required `ubuntu-latest` build before runner allocation with runner ID `0`, empty runner, `steps: []`, and GitHub's Billing & plans payment/spending-limit annotation; its Pi job was skipped.
 - ES-P02 is therefore `GENUINELY_EXTERNAL_BLOCKER` / `PARKED_BLOCKED` under the current route.
 - ES-P05 is also `GENUINELY_EXTERNAL_BLOCKER` / `PARKED_BLOCKED` under the current route. Its former CodeRabbit quota note is stale as a secondary condition because the live exact-head commit status is now success, but the mandatory staging blocker is unchanged.
@@ -73,7 +78,7 @@ The automatic exact-head private attempt did not execute product code. Public wr
 
 ## Current worker boundary
 
-This deadlock-recovery worker publishes one process/package-system change only. It does not implement ES-R01 and does not resume either parked product PR. After the definition PR merges and cleanup is verified, stop; the next normal sequential worker selects ES-R01.
+This deadlock-recovery worker publishes one process/package-system change only. It does not implement ES-R01 and does not resume either parked product PR. Before stopping, it must normally merge PR #90 only after final exact-head gates/review are green, then directly verify and persist the actual PR #90 merge commit, resulting `main` SHA, exact feature-head containment, definition-branch cleanup, and live package-state evidence. No merge, containment, cleanup, or final-validation result may be recorded before it actually occurs. After those post-merge facts are published through the canonical documentation path, the worker stops; the next normal sequential worker selects ES-R01.
 
 ## Safety boundaries
 
