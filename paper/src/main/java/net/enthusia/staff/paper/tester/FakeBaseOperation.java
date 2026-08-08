@@ -48,23 +48,26 @@ final class FakeBaseOperation {
         return !closed.get();
     }
 
-    boolean extend(Instant now, Duration lifetime) {
+    synchronized boolean extend(Instant now, Duration lifetime) {
         if (!open() || now == null || lifetime == null || lifetime.isZero() || lifetime.isNegative()) {
             return false;
         }
         expiresAt.set(now.plus(lifetime));
         warned.set(false);
-        return open();
+        return true;
     }
 
     boolean expired(Instant now) {
         return !now.isBefore(expiresAt.get());
     }
 
-    boolean markWarningIfDue(Instant now, Duration warningLead) {
+    synchronized boolean markWarningIfDue(Instant now, Duration warningLead) {
+        if (!open()) {
+            return false;
+        }
         Instant deadline = expiresAt.get();
         Instant warningAt = deadline.minus(warningLead);
-        return open() && !now.isBefore(warningAt) && now.isBefore(deadline)
+        return !now.isBefore(warningAt) && now.isBefore(deadline)
                 && warned.compareAndSet(false, true);
     }
 
@@ -108,7 +111,7 @@ final class FakeBaseOperation {
         return Set.copyOf(viewers);
     }
 
-    boolean close() {
+    synchronized boolean close() {
         boolean changed = closed.compareAndSet(false, true);
         if (changed) {
             cancelTask();

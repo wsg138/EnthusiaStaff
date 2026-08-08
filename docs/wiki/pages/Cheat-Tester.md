@@ -68,7 +68,7 @@ Before showing the structure, the runtime requires all of the following:
 - the global limit of 8 active fake bases and per-controller limit of 2 are not exceeded;
 - durable audit storage is available before rendering begins.
 
-The target sees the virtual structure. Ordinary players do not. Authorized staff see it only after using the operation's **Teleport** control, which teleports that staff member to the virtual base and then applies the same client-only view to that staff client.
+Only the target and staff viewers whose **Teleport** action succeeds see the virtual structure. Every other player is not a viewer.
 
 A fake base expires after five minutes. At roughly four minutes, the controlling staff member receives a warning with clickable **Extend**, **Clear**, and **Teleport** controls. **Extend** starts a new five-minute expiry window. The structure is also cleared when the target moves more than 48 blocks away, changes world/backend, disconnects, the controlling staff member disconnects or leaves staff mode, or the plugin's fake-base lifecycle closes.
 

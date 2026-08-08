@@ -11,9 +11,10 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-X05` |
 | Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
 | Selected package | `ES-P11 — Fake-base generation and cleanup` |
-| ES-P11 status | `REVIEW`; implementation PR #88 on `package/es-p11-fake-bases`; implementation/self-review/docs complete; actual ready-for-review review and exact-head final gates pending |
+| ES-P11 status | `REVIEW`; implementation PR #88 on `package/es-p11-fake-bases`; implementation/self-review/docs complete; actual CodeRabbit review received and its valid findings are being reconciled before the final exact-head gates |
 | ES-P11 starting legitimate main | `68a6d936066383f5b8139304f40b2d01d0dfe036` |
 | ES-P11 migration impact | No migration; immutable V18 remains the aggregate boundary |
+| ES-P11 canonical handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md` |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; unchanged private Actions Billing & plans zero-runner blocker |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; hosted implementation validation complete at its recorded head; required private staging remains unavailable under the same Billing & plans condition |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
@@ -27,7 +28,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 - Every virtual template cell must currently be real air and the 5x5 interior floor must be solid/non-hazardous.
 - The target must still be in the planned anchor chunk immediately before the final real-block reads, preventing stale cross-region Folia access while durable audit I/O is in flight.
 - Operations are exactly fenced to one per target, at most 8 globally and 2 per controlling staff member.
-- The target is the only ordinary viewer. Authorized staff become viewers only after a successful Teleport control.
+- Only the target and staff viewers whose Teleport action succeeds receive the virtual structure; every other player is excluded.
 - Fixed lifecycle: five-minute expiry, warning at about four minutes, 48-block distance cutoff, plus clear on world/backend change, disconnect, controller staff-mode exit/disconnect, render or lifecycle-scheduler failure, and plugin lifecycle close.
 - Cleanup is idempotent and re-sends current authoritative real block data to connected viewers. Process/server interruption cannot leave a saved-world artifact because the world was never mutated.
 - `/cheattester base create|extend|clear|teleport|status` is the text/Bedrock-safe control surface. Active staff mode and `enthusiastaff.cheattester.fake-base` are required; `...manage-any` is required for another controller's operation.
@@ -40,12 +41,12 @@ Live GitHub state overrides stale records, but persistent package state must be 
 - MariaDB/Testcontainers integration coverage writes through the production fake-base audit binding, verifies correlation/actor/target/action/outcome/JSON fields, rejects coordinate/location leakage, and proves Flyway remains at V18.
 - Wiki/operator documentation and `reports/ES-P11-FAKE-BASE-IMPLEMENTATION.md` are present.
 - A complete pre-freeze head `a0fc7c63b547cfa84a89aa116c4297d2c0b25f36` passed Wiki `31233405241` and Coverage `31233405218` / job `93041499563`, including Java 21 build/tests/MariaDB/Testcontainers/runtime-JAR inspection. It is diagnostic only because later self-review fixes changed product code.
-- Manual review subsequently fixed approximate admission limits, hand-built audit JSON, expiry consistency, worker-thread Bukkit access, render/restore failure handling, stale cross-chunk Folia reads, stale async authority/manage-any privileges, accepted-vs-committed control evidence, lifecycle scheduler failure after render, and unreachable tab completion.
-- CodeRabbit's earlier status is not final review evidence because its comment explicitly skipped review while PR #88 was draft.
+- Manual review subsequently fixed approximate admission limits, hand-built audit JSON, expiry/warning consistency, worker-thread Bukkit access, render/restore failure handling, stale cross-chunk Folia reads, stale async authority/manage-any privileges, accepted-vs-committed control evidence, lifecycle scheduler failure after render, and unreachable tab completion.
+- The actual CodeRabbit review found a render/close race plus two documentation/state clarity issues. The render/close race was fixed before this checkpoint; the two remaining clarity findings are addressed in this checkpoint. Final exact-head review/static/coverage evidence must still be rechecked after the head freezes.
 
 ## Current worker boundary
 
-This sequential worker owns exactly ES-P11. It must not activate another package. The remaining path is: finish review-state checkpoint → mark PR #88 ready → obtain/reconcile actual review and exact-head hosted/static/coverage gates → fresh `main`/migration reconciliation → normal merge → exact containment → implementation branch deletion → documentation-only terminal COMPLETE publication → stop.
+This sequential worker owns exactly ES-P11. It must not activate another package. The remaining path is: freeze one reconciled head → obtain/reconcile exact-head hosted/static/coverage/reviewer gates → fresh `main`/migration reconciliation → normal merge → exact containment → implementation branch deletion → documentation-only terminal COMPLETE publication → stop.
 
 If a valid review or CI defect appears, repair only ES-P11 and restart exact-head validation. If an external blocker newly prevents a required package gate, publish the true blocker and park only after all safe actionable ES-P11 work is complete.
 

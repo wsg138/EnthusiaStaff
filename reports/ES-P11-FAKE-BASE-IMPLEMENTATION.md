@@ -31,7 +31,7 @@ The safety boundary is deliberately stronger than a rollback scheme:
 - Async Extend and Teleport paths re-check current staff-mode and control authority at the point the action commits, so permission/session changes while durable audit I/O is in flight cannot authorize a stale action.
 - Creation re-checks the controlling staff session before target rendering begins.
 - Target must be online on the current backend when the operation starts.
-- Ordinary players are never added as viewers. The target receives the fake structure; authorized staff receive it only through the Teleport control.
+- Only the target and staff viewers whose Teleport action succeeds are viewers; players other than the target are never added unless they are authorized staff whose Teleport action succeeds.
 - Status output contains target UUID and remaining lifetime only; no fake-base coordinates are persisted or exposed there.
 
 ## Lifecycle
@@ -91,7 +91,7 @@ The manual package review found and fixed all of the following before final vali
 
 - approximate concurrent operation limits were replaced with exact synchronized registration;
 - fake-base audit JSON moved to the repository's canonical JSON serializer;
-- expiry/warning reads were made consistent under concurrent extension;
+- expiry/warning reads and extension/reset transitions were serialized so a stale warning cannot consume a newly extended warning window;
 - live Bukkit `Player` state was removed from worker-thread audit callbacks;
 - virtual render and authoritative restore errors now fail/log safely;
 - target rendering is refused if the target changes chunks while audit I/O is pending, preserving Folia region ownership for final real-block reads;
@@ -99,6 +99,7 @@ The manual package review found and fixed all of the following before final vali
 - manage-any authority is re-checked at commit time rather than only when the command begins;
 - Extend/Teleport now distinguish durable accepted requests from actually committed actions;
 - lifecycle scheduler exceptions/retirement after render immediately close and restore the operation rather than leaving an unscheduled virtual view;
+- render completion re-checks operation ownership so a close racing the client render immediately restores real blocks instead of leaving stale virtual blocks;
 - an unreachable fake-base tab-completion branch was removed.
 
 Exact run/job identifiers, final frozen head, static/review evidence, merge SHA, and containment result are recorded in the ES-P11 package file and handoff after validation completes.

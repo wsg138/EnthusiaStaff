@@ -33,9 +33,13 @@ class FakeBaseOperationTest {
 
         assertTrue(operation.addViewerIfOpen(viewer));
         assertTrue(operation.viewersSnapshot().contains(viewer));
+        operation.removeViewer(viewer);
+        assertFalse(operation.viewersSnapshot().contains(viewer));
         assertTrue(operation.close());
         assertFalse(operation.close());
         assertFalse(operation.addViewerIfOpen(UUID.randomUUID()));
+        assertFalse(operation.extend(START.plusSeconds(10), Duration.ofMinutes(5)));
+        assertFalse(operation.markWarningIfDue(START.plusSeconds(240), Duration.ofMinutes(1)));
     }
 
     @Test
