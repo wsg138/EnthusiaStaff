@@ -52,6 +52,9 @@ final class FakeBaseOperation {
         if (!open() || now == null || lifetime == null || lifetime.isZero() || lifetime.isNegative()) {
             return false;
         }
+        if (!now.isBefore(expiresAt.get())) {
+            return false;
+        }
         expiresAt.set(now.plus(lifetime));
         warned.set(false);
         return true;

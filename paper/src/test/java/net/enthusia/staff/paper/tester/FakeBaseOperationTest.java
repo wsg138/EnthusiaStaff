@@ -27,6 +27,15 @@ class FakeBaseOperationTest {
     }
 
     @Test
+    void expiredOperationCannotBeExtendedBeforeLifecycleCleanupRuns() {
+        FakeBaseOperation operation = operation();
+
+        assertFalse(operation.extend(START.plusSeconds(300), Duration.ofMinutes(5)));
+        assertFalse(operation.extend(START.plusSeconds(301), Duration.ofMinutes(5)));
+        assertEquals(0L, operation.remainingSeconds(START.plusSeconds(301)));
+    }
+
+    @Test
     void closeAndViewerCleanupStateAreIdempotent() {
         FakeBaseOperation operation = operation();
         UUID viewer = UUID.randomUUID();
