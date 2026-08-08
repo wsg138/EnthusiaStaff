@@ -30,7 +30,10 @@ Validation infrastructure for `ES-P02` and `ES-P05`; later reusable staging infr
 No product Java behavior changes; no migrations; no production deployment/data/routes/credentials; no issue #43 activation or acceptance; no LiteBans authority change; no validation exception; no relabeling failed/skipped/zero-runner evidence as success; no weakening exact-head or ordinary-hosted-build requirements.
 
 ## 8. Dependencies
-None. Existing public hosted Actions, the current cross-repository dispatch credential, and the already-operational private self-hosted Pi staging runner are present live dependencies. If implementation discovers that secure artifact transfer requires a new owner-only credential or runner registration that does not already exist, stop as `BLOCKED` and record that exact new external requirement rather than inventing a bypass.
+Package dependency graph: none.
+
+### Operational prerequisites
+The public hosted Actions path, current cross-repository dispatch credential, and already-operational private self-hosted Pi staging runner are live operational prerequisites rather than package dependencies. If any is unavailable at implementation start, or if secure artifact transfer requires a new owner-only credential or runner registration that does not already exist, stop as `BLOCKED` and record that exact external requirement rather than inventing a bypass.
 
 ## 9. Component and repository boundaries
 Workflow/tooling/test/documentation changes only in `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`. Product source, runtime behavior, migrations, package implementations, production configuration, and private evidence are excluded.
