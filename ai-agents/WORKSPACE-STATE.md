@@ -10,18 +10,30 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05` |
 | Parked packages | `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
-| Active/selected package | None. ES-P11 reached terminal `COMPLETE`; this documentation-only publication must not activate another package. |
-| Ready packages | None under current dependency state. `ES-P07` remains blocked by ES-P02; `ES-P06` and `ES-X01` remain blocked by ES-P05; downstream packages remain dependency-blocked. |
+| Active/selected package | None. This owner-directed deadlock-recovery publication defines routing only and does not begin ES-R01 implementation. |
+| Ready packages | `ES-R01 — Billing-independent staging bridge recovery` is the sole legitimate `READY` package. No existing product dependency was relaxed. |
+| ES-R01 basis | Current private `ubuntu-latest` staging builds remain Billing & plans blocked at runner ID `0`, while current private self-hosted job `93064778261` successfully executed on runner ID `2`, `Lincoln-PI-4`. Public EnthusiaStaff hosted validation remains available. |
 | ES-P11 status | `COMPLETE`; implementation PR #88 merged normally as `6cd293d9f1abc3ca6ca8b70e953da936f4a22ab0` from frozen head `a3192dd5f684d402b79dfee2de3f32e18af7c9c4`; exact containment verified; implementation branch deleted |
 | ES-P11 starting legitimate main | `68a6d936066383f5b8139304f40b2d01d0dfe036` |
 | ES-P11 migration impact | No migration; immutable V18 remains the aggregate boundary |
 | ES-P11 canonical handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p11-fake-bases.md` |
-| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; unchanged private Actions Billing & plans zero-runner blocker |
-| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; hosted implementation validation complete at its recorded head; required private staging remains unavailable under the same Billing & plans condition |
-| Next recommended work | No later package is currently dependency-complete while ES-P02 and ES-P05 remain parked. If the private Actions Billing & plans condition materially changes, canonical priority resumes ES-P02 before ES-P05. This ES-P11 worker does not activate either package. |
-| Owner priorities | No separate owner-directed implementation priority is recorded. The owner action that can unlock the next parked work is restoring the private GitHub Actions payment/spending-limit path; until then, keep ES-P02 and ES-P05 parked and do not rerun identical zero-runner gates. |
+| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; unchanged private Actions Billing & plans zero-runner blocker. Current branch/PR drift is not actionable while that condition remains unchanged. |
+| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; hosted implementation validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; current CodeRabbit commit status is success and zero review threads exist, but required private staging remains unavailable under the same Billing & plans condition. |
+| Next recommended work | A normal sequential worker must select only `ES-R01`, implement the two-repository staging bridge defined in its package contract, prove it end to end, merge it normally, publish terminal state, and stop. After ES-R01 completes, resume ES-P02 before ES-P05 because their shared external condition will have materially changed. |
+| Owner priorities | This owner-directed recovery explicitly authorizes deadlock resolution but does not waive any validation gate. Do not rerun identical private-hosted failures while ES-R01 is incomplete. |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
-| Private acceptance boundary | Representative Java/Bedrock/distributed fake-base acceptance remains `ES-V02`; unavailable zero-runner staging is **NOT A PASS** and was not an ES-P11 completion gate |
+| Private acceptance boundary | ES-R01 repairs staging transport only. Representative Java/Bedrock/distributed acceptance remains assigned to `ES-V02`; unavailable zero-runner staging is **NOT A PASS**. |
+
+## Deadlock-recovery determination
+
+- Starting legitimate `main`: `41659389ba105e099c77966015714067ea6f1ae7`.
+- Live reconciliation found only open PR #70 (ES-P02) and PR #81 (ES-P05), with only their two package branches remaining open.
+- A fresh private staging run created 2026-08-08 05:40:54 UTC again failed its required `ubuntu-latest` build before runner allocation with runner ID `0`, empty runner, `steps: []`, and GitHub's Billing & plans payment/spending-limit annotation; its Pi job was skipped.
+- ES-P02 is therefore `GENUINELY_EXTERNAL_BLOCKER` / `PARKED_BLOCKED` under the current route.
+- ES-P05 is also `GENUINELY_EXTERNAL_BLOCKER` / `PARKED_BLOCKED` under the current route. Its former CodeRabbit quota note is stale as a secondary condition because the live exact-head commit status is now success, but the mandatory staging blocker is unchanged.
+- No existing product package dependency was safely relaxed. ES-P07 needs P02 lifecycle/reload foundations; P06 overlaps runtime/reload and report integration while both P02 and P05 remain unmerged; destructive/provider/validation packages retain real technical or acceptance prerequisites.
+- The private staging repository itself is not unavailable: run `31242140573`, job `93064778261`, succeeded on `Lincoln-PI-4` with labels `self-hosted`, `Linux`, `ARM64`, `enthusia-staging` immediately before the newest hosted-build failure.
+- Repository-side workflow work can therefore remove the shared dependency on private GitHub-hosted minutes while preserving a mandatory public hosted build and a real private self-hosted Pi gate. That finite work is now `ES-R01`.
 
 ## ES-P11 terminal implementation record
 
@@ -61,8 +73,8 @@ The automatic exact-head private attempt did not execute product code. Public wr
 
 ## Current worker boundary
 
-ES-P11 is terminal `COMPLETE`. This documentation-only finalization publishes that state and recomputes routing without claiming or activating another package. After the terminal publication is merged and its temporary branch is verified cleaned up, this sequential worker stops.
+This deadlock-recovery worker publishes one process/package-system change only. It does not implement ES-R01 and does not resume either parked product PR. After the definition PR merges and cleanup is verified, stop; the next normal sequential worker selects ES-R01.
 
 ## Safety boundaries
 
-No production credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, or ES-V02 execution was authorized or performed by ES-P11.
+No product source, production credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, or ES-V02 execution is authorized by this recovery publication.
