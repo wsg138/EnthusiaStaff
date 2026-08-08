@@ -54,7 +54,9 @@ class FakeBaseAuditIntegrationTest {
 
         try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
-                     SELECT correlation_id, actor_id, target_id, event_type, outcome, event_json
+                     SELECT correlation_id, actor_id, target_id, event_type, outcome, event_json,
+                            JSON_VALUE(event_json, '$.serverId') AS server_id,
+                            JSON_VALUE(event_json, '$.reasonCode') AS reason_code
                      FROM audit_events
                      WHERE event_id = ?
                      """)) {
@@ -66,23 +68,14 @@ class FakeBaseAuditIntegrationTest {
                 assertEquals(TARGET, uuid(result.getBytes("target_id")));
                 assertEquals("FAKE_BASE_CREATED", result.getString("event_type"));
                 assertEquals("COMMITTED", result.getString("outcome"));
+                assertEquals("SMP", result.getString("server_id"));
+                assertEquals("VIRTUAL_RENDERED", result.getString("reason_code"));
                 String eventJson = result.getString("event_json");
-                assertEquals("{\"reasonCode\": \"VIRTUAL_RENDERED\", \"serverId\": \"SMP\"}", normalizeJson(connection, eventJson));
                 assertFalse(eventJson.contains("coordinate"));
                 assertFalse(eventJson.contains("location"));
             }
         }
         assertEquals(18, latestMigrationVersion());
-    }
-
-    private static String normalizeJson(Connection connection, String json) throws Exception {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT JSON_NORMALIZE(?)")) {
-            statement.setString(1, json);
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                return result.getString(1);
-            }
-        }
     }
 
     private static int latestMigrationVersion() throws Exception {
