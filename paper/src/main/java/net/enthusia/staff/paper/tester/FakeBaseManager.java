@@ -3,7 +3,6 @@ package net.enthusia.staff.paper.tester;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -153,7 +152,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             return List.of();
         }
         boolean includeAll = staff.hasPermission(MANAGE_ANY_PERMISSION);
-        Instant now = clock.instant();
+        java.time.Instant now = clock.instant();
         return activeByTarget.values().stream()
                 .filter(FakeBaseOperation::open)
                 .filter(operation -> includeAll || operation.staffId.equals(staff.getUniqueId()))
@@ -318,7 +317,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
             closeOperation(operation, operation.staffId, "DISTANCE_LIMIT");
             return;
         }
-        Instant now = clock.instant();
+        java.time.Instant now = clock.instant();
         if (operation.expired(now)) {
             closeOperation(operation, operation.staffId, "TIMEOUT");
             return;
