@@ -5,6 +5,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Finds a conflict-free placement without loading chunks or mutating real blocks. */
+// The safety predicate is intentionally kept as one direct fail-closed review surface.
+@SuppressWarnings("PMD.CyclomaticComplexity")
 final class FakeBasePlacementPlanner {
     private static final int INTERIOR_FLOOR_RADIUS = 2;
     private static final int[] HORIZONTAL_OFFSETS = {0, 4, -4};

@@ -12,6 +12,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Sends and restores client-only fake blocks. The real world is never modified. */
+// Every virtual template cell necessarily needs its own immutable Location key.
+@SuppressWarnings("PMD.AvoidInstantiatingObjectsInLoops")
 final class FakeBaseRenderer {
     private final JavaPlugin plugin;
     private final FakeBaseTemplate template;

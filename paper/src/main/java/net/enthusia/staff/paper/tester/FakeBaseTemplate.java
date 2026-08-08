@@ -5,6 +5,8 @@ import java.util.List;
 import org.bukkit.Material;
 
 /** Fixed, reviewable fake-base schematic. No cell represents a real-world mutation. */
+// Keep the tiny approved schematic generator direct so every cell rule is reviewable in one place.
+@SuppressWarnings({"PMD.AvoidLiteralsInIfCondition", "PMD.CyclomaticComplexity"})
 final class FakeBaseTemplate {
     static final int RADIUS = 3;
     static final int HEIGHT = 4;

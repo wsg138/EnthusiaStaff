@@ -48,30 +48,34 @@ final class FakeBaseOperation {
         return !closed.get();
     }
 
-    synchronized boolean extend(Instant now, Duration lifetime) {
-        if (!open() || now == null || lifetime == null || lifetime.isZero() || lifetime.isNegative()) {
-            return false;
+    boolean extend(Instant now, Duration lifetime) {
+        synchronized (this) {
+            if (!open() || now == null || lifetime == null || lifetime.isZero() || lifetime.isNegative()) {
+                return false;
+            }
+            if (!now.isBefore(expiresAt.get())) {
+                return false;
+            }
+            expiresAt.set(now.plus(lifetime));
+            warned.set(false);
+            return true;
         }
-        if (!now.isBefore(expiresAt.get())) {
-            return false;
-        }
-        expiresAt.set(now.plus(lifetime));
-        warned.set(false);
-        return true;
     }
 
     boolean expired(Instant now) {
         return !now.isBefore(expiresAt.get());
     }
 
-    synchronized boolean markWarningIfDue(Instant now, Duration warningLead) {
-        if (!open()) {
-            return false;
+    boolean markWarningIfDue(Instant now, Duration warningLead) {
+        synchronized (this) {
+            if (!open()) {
+                return false;
+            }
+            Instant deadline = expiresAt.get();
+            Instant warningAt = deadline.minus(warningLead);
+            return !now.isBefore(warningAt) && now.isBefore(deadline)
+                    && warned.compareAndSet(false, true);
         }
-        Instant deadline = expiresAt.get();
-        Instant warningAt = deadline.minus(warningLead);
-        return !now.isBefore(warningAt) && now.isBefore(deadline)
-                && warned.compareAndSet(false, true);
     }
 
     long remainingSeconds(Instant now) {
@@ -114,12 +118,14 @@ final class FakeBaseOperation {
         return Set.copyOf(viewers);
     }
 
-    synchronized boolean close() {
-        boolean changed = closed.compareAndSet(false, true);
-        if (changed) {
-            cancelTask();
+    boolean close() {
+        synchronized (this) {
+            boolean changed = closed.compareAndSet(false, true);
+            if (changed) {
+                cancelTask();
+            }
+            return changed;
         }
-        return changed;
     }
 
     void setLifecycleTask(ScheduledTask task) {

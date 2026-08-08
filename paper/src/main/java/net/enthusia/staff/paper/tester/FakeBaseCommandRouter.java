@@ -7,6 +7,12 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+// The fixed five-action command router intentionally keeps dispatch in one reviewable method.
+@SuppressWarnings({
+        "PMD.AvoidLiteralsInIfCondition",
+        "PMD.CyclomaticComplexity",
+        "PMD.NPathComplexity"
+})
 final class FakeBaseCommandRouter {
     private static final String CREATE = "create";
     private static final String EXTEND = "extend";
