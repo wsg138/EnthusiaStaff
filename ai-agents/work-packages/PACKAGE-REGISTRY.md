@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-08
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. No later package is currently dependency-complete while those parked blockers remain. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-P02` and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`; `ES-R01` is the sole `READY` package. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -17,15 +17,16 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
+| `ES-R01` | Billing-independent staging bridge recovery | `READY` | `READY` | 15 | — | unassigned; definition complete, implementation not started |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
-| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; unchanged private Actions Billing & plans blocker |
+| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; unchanged private Actions Billing & plans blocker; ES-R01 is the repository-side unblock path |
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; private staging Billing & plans blocker |
+| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; private staging Billing & plans blocker; ES-R01 is the repository-side unblock path |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
-| `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked |
+| `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked; dependency retained after deadlock analysis |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | PR #86 merged normally as `e605d8ad6094b2ae6842044d209875e13c38906d` from frozen head `1997caa864847049d51bfc58402f019e0a0d65c6`; exact containment verified; implementation branch deleted; representative Java/Bedrock/distributed acceptance remains ES-V02 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | PR #88 merged normally as `6cd293d9f1abc3ca6ca8b70e953da936f4a22ab0` from frozen head `a3192dd5f684d402b79dfee2de3f32e18af7c9c4`; exact containment verified; implementation branch deleted; representative Java/Bedrock/distributed acceptance remains ES-V02 |
@@ -39,12 +40,25 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | — | 300 | `ES-V01`, `ES-V02`, `ES-V03` | owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | — | 400 | `ES-A01` | dependency blocked |
 
+## `ES-R01`
+
+- Created by the 2026-08-08 explicit owner-directed deadlock-recovery worker after both ES-P02 and ES-P05 were reclassified against live evidence as genuinely externally blocked under the current staging route.
+- The shared condition is specific: private repository `wsg138/EnthusiaStaff-Staging` cannot allocate its required `ubuntu-latest` build because GitHub reports failed account payments or an insufficient Actions spending limit. The latest inspected run `31242230326`, job `93065006558`, again had runner ID `0`, empty runner name and `steps: []`; Pi was skipped.
+- The private staging environment itself is operational: immediately preceding private run `31242140573`, job `93064778261`, succeeded on self-hosted runner ID `2`, name `Lincoln-PI-4`, labels `self-hosted`, `Linux`, `ARM64`, `enthusia-staging`.
+- The public EnthusiaStaff repository continues to execute ordinary GitHub-hosted validation, and its current staging wrapper already runs on public `ubuntu-latest` before dispatching the private workflow.
+- ES-R01 is therefore finite repository-side validation infrastructure work: build/validate the exact authorized source on public hosted infrastructure, preserve immutable artifact/source provenance, securely hand that exact artifact to the existing private self-hosted Pi job, and remove the private-hosted build dependency without waiving any required gate.
+- ES-R01 is `READY`, unassigned, and has no implementation branch/PR. The definition-publication branch is process-only and must not be reused for implementation.
+- Completion requires two normal infrastructure PRs, one in `wsg138/EnthusiaStaff` and one in `wsg138/EnthusiaStaff-Staging`, all applicable checks/reviews, and a safe current-main end-to-end proof of public hosted build plus private self-hosted Pi boot/restart with exact artifact provenance.
+- ES-R01 does not itself validate ES-P02 or ES-P05. After ES-R01 completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked; canonical continuation priority resumes ES-P02 before ES-P05, and each must rerun its own exact-head gates.
+- Canonical contract: `ai-agents/work-packages/packages/ES-R01.md`.
+- Definition handoff: `ai-agents/reports/package-handoffs/2026-08-08-es-r01-staging-bridge-recovery.md`.
+
 ## `ES-P02`
 
 - Remains `BLOCKED` / `PARKED_BLOCKED` on PR #70.
 - Latest package-record private build `92753075216` received runner ID `0`, empty runner name, steps `[]`, and the Billing & plans payment/spending-limit rejection; Pi `92753100652` skipped.
-- A fresh private staging run at 2026-08-07 16:10 UTC for current EnthusiaStaff source again produced required Ubuntu build `92925059857` with runner ID `0`, empty runner name, and `steps: []`; Pi `92925074453` skipped. This confirms the same external blocker remains and does not make ES-P02 actionable.
-- Unblock: resolve that account-level restriction, then resume and rerun all required exact-head gates.
+- A fresh private staging run on 2026-08-08 for current EnthusiaStaff source again produced required Ubuntu build `93065006558` with runner ID `0`, empty runner name, and `steps: []`; Pi `93065010758` skipped. This confirms the same external blocker remains and does not make ES-P02 actionable.
+- Unblock: either resolve the account-level restriction directly or complete ES-R01's policy-valid alternate staging bridge, then resume and rerun all required exact-head gates.
 
 ## `ES-P04`
 
@@ -56,7 +70,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - Exact-head hosted evidence: Wiki run `31178353549`, job `92865432750`, success; Coverage run `31178353504`, job `92865439305`, success on GitHub-hosted Java 21 including full build/tests/coverage/runtime-JAR inspection; Codacy static `92865800728` success with zero issues; coverage variation `92867049954` and diff coverage `92867049338` success.
 - Exact-head private staging did not execute product code: public wrapper `31178352312` dispatched private run `31178359804`; required Ubuntu build `92865456267` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92865494913` skipped.
 - **Owner-approved ES-P04 infrastructure exception:** on 2026-08-07 the owner instructed the worker to continue, mark Pi staging skipped/deferred, and record an internal follow-up to run it later when available. This is not a staging pass and does not generalize to other packages.
-- Internal follow-up: when the private Actions billing/runner path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that later test exposes a real defect.
+- Internal follow-up: when a policy-valid staging path is available, rerun ES-P04 Pi boot/restart staging against the merged behavior and record the result. Reopen ES-P04 only if that later test exposes a real defect.
 - V17 remains immutable; ES-P04 added no migration.
 
 ## `ES-P05`
@@ -66,10 +80,10 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
 - Implemented provider-independent report review completion: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence` presentation, coordinate/privacy separation from broad GUI triage, strict client-evidence allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation. Existing durable cooldown/merge/replay/stale-revision/concurrency/rollback/purge foundations were preserved and revalidated.
 - Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
-- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI coordinate exposure, raw nested AutoClicker serialization, and oldest-snapshot default selection. Zero inline review threads remain. CodeRabbit was quota-limited and produced no review; it must rerun on resume.
-- Required private staging did not execute product code. Latest package-record public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. The fresh 16:10 UTC private run described above confirms that the same account-level condition remains unchanged.
+- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI coordinate exposure, raw nested AutoClicker serialization, and oldest-snapshot default selection. Zero inline review threads remain. The live exact-head commit status now reports CodeRabbit success, so the earlier quota-limited review note is stale as a secondary condition.
+- Required private staging did not execute product code. Latest package-record public wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; required Ubuntu build `92881577147` had runner ID `0`, empty runner name, steps `[]`, and GitHub's Billing & plans rejection; Pi `92881591391` skipped. The fresh current private run described above confirms that the same account-level condition remains unchanged.
 - This is not a staging pass and no ES-P05-specific exception exists. The ES-P04 exception is package-specific and cannot be reused.
-- Exact unblock: resolve the GitHub Actions payment/spending-limit restriction for private `wsg138/EnthusiaStaff-Staging`, then resume PR #81, reconcile newer `main`, rerun every exact-head review/static/hosted/staging gate (including CodeRabbit), require successful trusted private build plus Pi safe boot/restart, merge normally, verify containment, finalize records/cleanup, and stop.
+- Exact unblock: resolve the GitHub Actions payment/spending-limit restriction for private `wsg138/EnthusiaStaff-Staging` or complete ES-R01's policy-valid staging bridge, then resume PR #81, reconcile newer `main`, rerun every exact-head review/static/hosted/staging gate, require successful trusted ordinary build plus Pi safe boot/restart, merge normally, verify containment, finalize records/cleanup, and stop.
 - V17 remains immutable; ES-P05 added no migration. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md`.
 
@@ -124,4 +138,4 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## Next-worker boundary
 
-ES-P11 is terminal `COMPLETE`. No package is currently `READY` under the dependency graph while ES-P02 and ES-P05 remain parked. If the private Actions Billing & plans condition materially changes, a future canonical worker resumes ES-P02 before ES-P05; this ES-P11 worker must not activate either package. The owner action that can unlock the sequence is restoring the private Actions payment/spending-limit path. This worker stops after terminal state publication and terminal-branch cleanup.
+`ES-R01 — Billing-independent staging bridge recovery` is the sole legitimate `READY` package and no implementation has begun. The next normal sequential worker must select ES-R01, implement only that package across the two workflow repositories, validate/merge/publish it, and stop. ES-P02 and ES-P05 remain parked until either the account billing restriction is directly fixed or ES-R01 successfully establishes the policy-valid alternate staging route. No product dependency was relaxed and no unavailable gate was treated as passed.
