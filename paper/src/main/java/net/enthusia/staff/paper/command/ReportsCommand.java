@@ -33,6 +33,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     public static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
     public static final String EVIDENCE_PERMISSION = "enthusiastaff.reports.evidence";
     private static final String UNAVAILABLE = "unavailable";
+    private static final int SINGLE_ARGUMENT = 1;
     private static final int MIN_EVIDENCE_ARGUMENTS = 3;
     private static final int MAX_EVIDENCE_ARGUMENTS = 5;
     private static final int STATE_CHANGE_MIN_ARGUMENTS = 3;
@@ -93,7 +94,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         if (arguments[0].equalsIgnoreCase("note")) {
             return note(sender, arguments);
         }
-        if (arguments[0].equalsIgnoreCase("cancel") && arguments.length == 1) {
+        if (arguments[0].equalsIgnoreCase("cancel") && arguments.length == SINGLE_ARGUMENT) {
             if (sender instanceof Player player) {
                 gui.cancelNote(player);
             } else {
@@ -105,7 +106,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return evidence(sender, arguments);
         }
         ReportQueue queue = parseQueue(arguments[0]);
-        if (queue != null && arguments.length == 1) {
+        if (queue != null && arguments.length == SINGLE_ARGUMENT) {
             UUID actorId = actorId(sender);
             submit(sender, () -> list(sender, queue, actorId));
             return true;
@@ -470,7 +471,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
-        if (arguments.length == 1) {
+        if (arguments.length == SINGLE_ARGUMENT) {
             return List.of("note", "cancel", "evidence", "open", "mine", "claimed", "review", "closed", "view",
                     "claim", "awaitreview", "close", "noviolation");
         }

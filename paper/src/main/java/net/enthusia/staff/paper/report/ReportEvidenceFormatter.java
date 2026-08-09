@@ -19,6 +19,7 @@ public final class ReportEvidenceFormatter {
     private static final int CHAT_MESSAGES_PER_PAGE = 5;
     private static final int CLIENT_LINES_PER_PAGE = 8;
     private static final int MAX_RENDERED_FIELD = 1_000;
+    private static final int FIRST_EVIDENCE_INDEX = 1;
 
     private final ObjectMapper json;
 
@@ -54,7 +55,7 @@ public final class ReportEvidenceFormatter {
             return emptyPage(kind);
         }
         int snapshot = resolveSnapshot(snapshots, requestedSnapshot);
-        List<String> lines = renderSnapshot(kind, snapshots.get(snapshot - 1));
+        List<String> lines = renderSnapshot(kind, snapshots.get(snapshot - FIRST_EVIDENCE_INDEX));
         PageSlice slice = pageSlice(lines, pageSize(kind), requestedPage);
         return new EvidencePage(
                 kind,
@@ -70,7 +71,7 @@ public final class ReportEvidenceFormatter {
         if (details == null || kind == null) {
             throw new IllegalArgumentException("report evidence request is invalid");
         }
-        if (requestedPage < 1) {
+        if (requestedPage < FIRST_EVIDENCE_INDEX) {
             throw new IllegalArgumentException("report evidence request is invalid");
         }
     }
@@ -80,7 +81,7 @@ public final class ReportEvidenceFormatter {
     }
 
     private static int resolveSnapshot(List<String> snapshots, int requestedSnapshot) {
-        int snapshot = requestedSnapshot < 1 ? snapshots.size() : requestedSnapshot;
+        int snapshot = requestedSnapshot < FIRST_EVIDENCE_INDEX ? snapshots.size() : requestedSnapshot;
         if (snapshot > snapshots.size()) {
             throw new IllegalArgumentException("snapshot must be between 1 and " + snapshots.size());
         }
@@ -92,11 +93,11 @@ public final class ReportEvidenceFormatter {
     }
 
     private static PageSlice pageSlice(List<String> lines, int pageSize, int requestedPage) {
-        int totalPages = Math.max(1, (lines.size() + pageSize - 1) / pageSize);
+        int totalPages = Math.max(FIRST_EVIDENCE_INDEX, (lines.size() + pageSize - FIRST_EVIDENCE_INDEX) / pageSize);
         if (requestedPage > totalPages) {
             throw new IllegalArgumentException("page must be between 1 and " + totalPages);
         }
-        int from = Math.min(lines.size(), (requestedPage - 1) * pageSize);
+        int from = Math.min(lines.size(), (requestedPage - FIRST_EVIDENCE_INDEX) * pageSize);
         int to = Math.min(lines.size(), from + pageSize);
         List<String> pageLines = lines.isEmpty()
                 ? List.of("The retained snapshot is empty.")
