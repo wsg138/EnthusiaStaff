@@ -24,7 +24,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; ReportStore hosted regression fixed and final head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` is fully hosted-green; correlated private Pi job exists but has zero execution because `Lincoln-PI-4` has not accepted it. |
 | ES-P05 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md` |
-| Migration boundary | V18 remains immutable/current; ES-P05 changed no migration. |
+| Migration boundary | V18 remains immutable/current; ES-R01 and ES-P05 changed no migration. |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative. |
 | Next legitimate action | Reconcile live GitHub first. If ES-R01's exact unblock condition changed, normal priority rules still apply. For ES-P05, inspect existing public run `31301426684` and private run `31301734048` before any new staging attempt; if that correlated private run later executed, classify its real terminal result rather than creating a duplicate run. |
 
@@ -120,4 +120,4 @@ For ES-P05, first inspect the already-correlated public/private runs before any 
 
 ## Safety boundaries
 
-No production data/configuration, credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, or unrelated package implementation is authorized by this terminal-state publication.
+No production data/configuration, credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, ES-V02 execution, or unrelated package implementation is authorized by this terminal-state publication.
