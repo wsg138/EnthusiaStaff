@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -106,8 +107,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         if (arguments[0].equalsIgnoreCase("view") && arguments.length == 2) {
             UUID reportId = uuid(sender, arguments[1]);
             if (reportId != null) {
-                boolean evidenceAccess = sender.hasPermission(EVIDENCE_PERMISSION);
-                submit(sender, () -> details(sender, reportId, evidenceAccess));
+                submit(sender, () -> details(sender, reportId));
             }
             return true;
         }
@@ -225,7 +225,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void details(CommandSender sender, UUID reportId, boolean evidenceAccess) {
+    private void details(CommandSender sender, UUID reportId) {
         ReportStore store = reports.get();
         if (store == null) {
             send(sender, "Report storage is not ready.");
@@ -241,17 +241,22 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
                 + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
         send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
-        String reporterCoordinates = evidenceAccess ? details.reporterCoordinates().orElse("unavailable") : "restricted";
-        String targetCoordinates = evidenceAccess ? details.targetCoordinates().orElse("unavailable") : "restricted";
-        send(sender, "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
-                + " reporter-coordinates=" + reporterCoordinates
-                + " target-coordinates=" + targetCoordinates);
+        sendEvidenceAware(
+                sender,
+                () -> "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
+                        + " reporter-coordinates=" + details.reporterCoordinates().orElse("unavailable")
+                        + " target-coordinates=" + details.targetCoordinates().orElse("unavailable"),
+                "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
+                        + " reporter-coordinates=restricted target-coordinates=restricted"
+        );
         send(sender, "Evidence snapshots: public-chat=" + details.publicChatSnapshots().size()
                 + ", private-message=" + details.privateMessageSnapshots().size()
                 + ", client=" + details.clientEvidenceSnapshots().size());
-        send(sender, evidenceAccess
-                ? "Inspect retained contents with /reports evidence <report-id> <public|private|client> [snapshot] [page]."
-                : "Sensitive evidence contents and exact coordinates require " + EVIDENCE_PERMISSION + '.');
+        sendEvidenceAware(
+                sender,
+                () -> "Inspect retained contents with /reports evidence <report-id> <public|private|client> [snapshot] [page].",
+                "Sensitive evidence contents and exact coordinates require " + EVIDENCE_PERMISSION + '.'
+        );
     }
 
     private void renderEvidence(
@@ -273,21 +278,22 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         try {
             EvidencePage page = evidenceFormatter.render(details, kind, requestedSnapshot, requestedPage);
+            List<String> messages = new ArrayList<>();
             if (page.totalSnapshots() == 0) {
-                send(sender, "Report " + reportId + " has no retained " + kind.commandName() + " evidence.");
-                return;
+                messages.add("Report " + reportId + " has no retained " + kind.commandName() + " evidence.");
+            } else {
+                messages.add("Report " + reportId + " " + kind.commandName() + " evidence: snapshot "
+                        + page.snapshot() + '/' + page.totalSnapshots() + ", page " + page.page() + '/'
+                        + page.totalPages());
+                messages.addAll(page.lines());
+                if (page.page() < page.totalPages()) {
+                    messages.add("Next: /reports evidence " + reportId + ' ' + kind.commandName() + ' '
+                            + page.snapshot() + ' ' + (page.page() + 1));
+                }
             }
-            send(sender, "Report " + reportId + " " + kind.commandName() + " evidence: snapshot "
-                    + page.snapshot() + '/' + page.totalSnapshots() + ", page " + page.page() + '/' + page.totalPages());
-            for (String line : page.lines()) {
-                send(sender, line);
-            }
-            if (page.page() < page.totalPages()) {
-                send(sender, "Next: /reports evidence " + reportId + ' ' + kind.commandName() + ' '
-                        + page.snapshot() + ' ' + (page.page() + 1));
-            }
+            sendSensitive(sender, messages);
         } catch (IllegalArgumentException exception) {
-            send(sender, "Invalid evidence page: " + exception.getMessage());
+            sendSensitive(sender, List.of("Invalid evidence page: " + exception.getMessage()));
         }
     }
 
@@ -324,6 +330,26 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private void send(CommandSender sender, String message) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+    }
+
+    private void sendEvidenceAware(CommandSender sender, Supplier<String> authorizedMessage, String deniedMessage) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            String message = sender.hasPermission(EVIDENCE_PERMISSION) ? authorizedMessage.get() : deniedMessage;
+            sender.sendMessage(Component.text(message));
+        });
+    }
+
+    private void sendSensitive(CommandSender sender, List<String> messages) {
+        List<String> output = List.copyOf(messages);
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
+                sender.sendMessage(Component.text("Sensitive report evidence access is no longer permitted."));
+                return;
+            }
+            for (String message : output) {
+                sender.sendMessage(Component.text(message));
+            }
+        });
     }
 
     private static ReportQueue parseQueue(String input) {
