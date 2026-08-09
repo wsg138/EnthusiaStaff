@@ -71,7 +71,7 @@ At the time this guide was introduced, PR #97 was the live same-repository resta
 
 ## Exact commands
 
-Sentinel currently accepts these ten exact pull-request command bodies and no others:
+Current live Sentinel source and its dedicated profile documentation recognize these eleven exact pull-request command bodies:
 
 ```text
 @enthusia-sentinel status
@@ -82,11 +82,12 @@ Sentinel currently accepts these ten exact pull-request command bodies and no ot
 @enthusia-sentinel test database
 @enthusia-sentinel test dependencies
 @enthusia-sentinel test java-client
+@enthusia-sentinel test java-interaction
 @enthusia-sentinel cancel
 @enthusia-sentinel approve-test startup
 ```
 
-Do not add arguments, prefixes, suffixes, explanations, surrounding whitespace, or multiple lines to a command body. Ordinary comments are ignored. Do not invent additional Sentinel commands.
+Do not add arguments, prefixes, suffixes, explanations, surrounding whitespace, or multiple lines to a command body. Ordinary comments are ignored. Do not invent additional Sentinel commands. Reconcile the live parser and profile documentation before relying on this list if Sentinel has changed since this guide was last updated.
 
 ### CLI usage
 
@@ -126,6 +127,7 @@ The `--body` value must remain exactly the documented command. Do not append a n
 - `test database` — runs the current bounded Sentinel database profile against exactly one declared SQLite fixture using fixed internal read-only checks over two stopped/reaped Paper cycles. It does not accept MariaDB URLs, credentials, manifest SQL, or arbitrary clients. Success is `PAPER_DATABASE_OK`.
 - `test dependencies` — resolves only private locked-registry dependency coordinates, stages the target plus declared dependencies, requires enablement evidence in one rootless Paper cycle, then cleans up. Success is `PAPER_DEPENDENCIES_OK`.
 - `test java-client` — runs the target with one credential-free synthetic offline Java client in the same disposable isolated environment and executes the bounded declared client-command sequence. Success is `JAVA_CLIENT_OK`.
+- `test java-interaction` — runs exactly two fixed credential-free offline Java clients against one isolated loopback-only Paper server, preserving the admitted interleaved command order and proof-bound request/result chain. The live profile uses direct `JAVA_INTERACTION_*` terminal codes for setup, protocol, response, timeout, cancellation, exit, and cleanup outcomes; cleanup failure overrides success.
 - `cancel` — requests cancellation of active jobs linked to the current same-repository PR and exact head while preserving durable cancellation and cleanup rules. It refuses unsafe shared-scope cancellation.
 - `approve-test startup` — the only current fork admission path. It requires an authorized approver, a real fork of the trusted base repository, explicit private-policy permission, exact fork/PR/SHA/manifest/artifact binding, and execution-time revalidation. It admits only the `startup` profile. Ordinary `status` and `cancel` remain same-repository-only for this phase.
 
