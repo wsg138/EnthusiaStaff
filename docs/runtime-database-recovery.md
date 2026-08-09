@@ -55,11 +55,11 @@ When storage is unavailable and no live reload coordinator exists, `/estaff relo
 3. On Velocity, run `/estaff reload`. A valid reloadable candidate is applied, or an exhausted storage cycle is restarted. Restart the proxy when the command reports resource-bound changes.
 4. On Paper, allow the current bounded cycle to finish. A missing permanent environment requirement still requires correcting the process environment and restarting the backend.
 5. Confirm the runtime leaves `BOOTSTRAP` or `DEGRADED` and returns to the persisted operational mode.
-6. Do not use Flyway repair, edit V1–V16, delete recovery rows, activate authority, or bypass cutover gates.
+6. Do not use Flyway repair, edit V1–V18, delete recovery rows, activate authority, or bypass cutover gates.
 
 ## Migration boundary
 
-ES-P02 adds no database migration. `V16` remains the highest migration, and V1–V16 remain byte-immutable. A checksum mismatch or unsupported future schema remains a hard safety failure rather than an automatic repair target.
+ES-P02 adds no database migration. The current repository migration boundary is `V18`; V1–V18 remain byte-immutable. A checksum mismatch or unsupported future schema remains a hard safety failure rather than an automatic repair target.
 
 ## Validation boundary
 
