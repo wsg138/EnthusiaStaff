@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 Live GitHub state overrides stale records, but persistent package state must be reconciled here.
 
@@ -11,21 +11,21 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05` |
 | Parked packages | `ES-R01 — Billing-independent staging bridge recovery`; `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
 | Active/selected package | None after this worker's terminal ES-R01 publication merges. |
-| Ready packages | None while the current ES-R01 disposable staging database blocker remains unchanged. |
-| Current legitimate EnthusiaStaff main before terminal publication | `689ff337dd8a33f0bd417d952a7cad5581cb9d9e` — normal merge of ES-R01 checkpoint PR #94 |
+| Ready packages | None: the staging-only MariaDB availability repair changed the prior blocker, but current `main` now fails its required public build before private bridge/Pi staging can run. |
+| Current legitimate EnthusiaStaff main | `3ce303ce3097be647091e142e801da9a5fd9a8fc` — normal merge of ES-R01 terminal publication PR #95 |
 | Current legitimate staging main | `4036d6e915c2d751bef18849107722dfd1e586a6` — normal merge of ES-R01 PR-target provenance fix PR #60 |
 | ES-R01 public implementation | PR #93, frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`, merged normally as `094838fa221476e0832cf821f7b4908b9402d0d9` |
 | ES-R01 private implementation | PR #58 → `570f83e41cb80b498a82c8b5a509c42345558a46`; PR #59 → `313ed2815058eadeb8c823453f4152089cae01d4`; PR #60 → `4036d6e915c2d751bef18849107722dfd1e586a6` |
 | ES-R01 checkpoint | PR #94 frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`, normal merge `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`; containment exact and checkpoint branch auto-deleted |
 | ES-R01 terminal status | `BLOCKED` / `PARKED_BLOCKED` |
-| ES-R01 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md` |
-| ES-R01 blocker | The existing authorized disposable Pi-staging MariaDB endpoint remains unavailable to the guarded disposable boot/restart path from `Lincoln-PI-4`; current-main proof again failed before runtime acceptance could complete |
-| ES-R01 exact unblock | Material evidence that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract |
+| ES-R01 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-09-es-r01-staging-repair-reblocked.md` |
+| ES-R01 blocker | The staging-only MariaDB service/schema/account boundary is now available, but current `main` cannot produce the required exact-SHA public runtime artifact because two `ReportStoreIntegrationTest` assertions fail before bridge/Pi execution |
+| ES-R01 exact unblock | A validated current-main/product fix that restores the required public build, followed by one fresh canonical exact-SHA bridge/Pi run through guarded reset and both Paper cycles |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
 | Migration boundary | V18 remains immutable/current; ES-R01 changed no migration |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
-| Next legitimate action | If material evidence shows the ES-R01 database condition changed, resume ES-R01 before any new package and run one fresh exact-current-main proof. If it has not changed, no package is actionable or ready; report blockers and stop. |
+| Next legitimate action | Do not bypass the public build or use an expired bridge asset. After the two current-main integration-test failures are repaired by their owning product work, resume ES-R01 and run one fresh canonical exact-SHA proof. |
 
 ## ES-R01 terminal evidence
 

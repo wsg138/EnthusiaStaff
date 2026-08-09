@@ -4,7 +4,7 @@
 `ES-R01`; validation-infrastructure recovery; primary `COMP-STAFF`; supporting repository `wsg138/EnthusiaStaff-Staging`; priority 15; not parallel-safe with staging-workflow changes.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED` as of 2026-08-08. Repository-side implementation and repair work is merged and exact artifact/provenance delivery to the trusted Pi is proven. The mandatory guarded disposable Paper boot/restart acceptance remains unavailable at the existing authorized staging-database boundary.
+`BLOCKED` / `PARKED_BLOCKED` as of 2026-08-09. Repository-side implementation and repair work is merged and exact artifact/provenance delivery to the trusted Pi is proven. The staging-only MariaDB availability boundary is repaired, but the current exact source fails its required public build before the mandatory guarded disposable Paper boot/restart acceptance can begin.
 
 ## 3. Objective
 Remove the shared repository-side staging deadlock without weakening validation by building the exact authorized EnthusiaStaff source SHA on public GitHub-hosted infrastructure, securely handing the verified artifact/provenance to the private trusted Pi, and requiring the existing disposable Paper boot/restart gate.
@@ -34,7 +34,7 @@ No product Java behavior; no migrations; no production deployment/data/routes/cr
 Package dependency graph: none.
 
 ### Operational prerequisite / exact unblock
-The existing dedicated disposable Pi-staging MariaDB endpoint referenced by the current `pi-staging` environment contract must become reachable from `Lincoln-PI-4` long enough for the guarded pre-test reset to succeed. A future worker may resume ES-R01 only after material evidence that this condition changed. Do not broaden ES-R01 to database administration, change credentials or targets, use a different database, remove the reset, or permit Paper boot without reset success.
+The staging-only MariaDB availability condition has changed: the Pi service is active and loopback-only, with the existing dedicated disposable staging schema/account. The new exact blocker is the current public build: run `31298080632`, job `93206301028`, failed two `ReportStoreIntegrationTest` assertions before bridge/Pi execution. A future worker may resume ES-R01 after the owning product work restores a passing current exact-SHA build. Do not bypass the build, reuse an expired transfer, change credentials or targets, use a different database, remove the reset, or permit Paper boot without reset success.
 
 ## 9. Component and repository boundaries
 Workflow/tooling/test/documentation only in `wsg138/EnthusiaStaff` and `wsg138/EnthusiaStaff-Staging`. Product source, runtime product behavior, migrations, production configuration, and private production evidence remain outside scope.

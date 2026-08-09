@@ -1,8 +1,8 @@
 # Package registry
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-R01`, `ES-P02`, and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. No package is currently `READY`. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-R01`, `ES-P02`, and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. The staging-only MariaDB boundary is repaired, but the current exact source cannot pass its required public build. No package is currently `READY`. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -17,7 +17,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
-| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | repository-side bridge and repairs merged; fresh current-`main` proof after PR #94 again failed at the guarded disposable Pi staging boot/restart gate; exact unblock is restored reachability of the existing authorized staging MariaDB endpoint from `Lincoln-PI-4` |
+| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | staging-only MariaDB server/schema boundary repaired; fresh public run `31298080632` is blocked before bridge/Pi execution by two current-main `ReportStoreIntegrationTest` failures in job `93206301028`; exact unblock is a passing exact-SHA public runtime build followed by fresh canonical staging |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; remain parked while ES-R01's unchanged external staging-database blocker prevents mandatory validation; branch drift is not actionable |
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
@@ -51,11 +51,12 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - Earlier strongest database diagnostics remain public run `31250170297` → private run `31250450219` / job `93085892938`: exact provenance passed; seven guarded connection attempts all returned SQLState `08000`; Paper never booted; sanitized evidence and transient transfer cleanup succeeded.
 - Required fresh current-`main` proof after PR #94 merge: public Pi Staging run `31252997554` at exact source `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`; public build job `93092131811` succeeded; bridge job `93092964130` dispatched private run `31253345564`; private job `93092978141` allocated `Lincoln-PI-4` runner ID `2`, passed exact artifact verification, then failed at `Run guarded disposable Paper boot and restart test`; sanitized evidence upload succeeded as artifact `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`; public failed-run diagnostics and transient transfer cleanup succeeded. This run is **NOT A PASS**.
 - The current-main run's GitHub step metadata does not expose a fresh SQLState, so terminal classification does not invent one; it is correlated with the same guarded disposable-database gate established by the earlier captured SQLState `08xxx` evidence and there is no remaining safe repository-side implementation.
-- Terminal state is `BLOCKED` / `PARKED_BLOCKED`. Exact unblock: material evidence that the existing authorized disposable Pi-staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract. Do not change targets or credentials, remove the reset, allow Paper to boot before reset success, broaden this package into database administration, or manually repeat an identical failure absent that material condition change.
-- After the unblock condition changes, a future sequential worker must resume ES-R01 before any new package and run one fresh exact-current-main bridge proof through public hosted build → exact private provenance → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence → correlated public success → transfer cleanup. Only then mark ES-R01 `COMPLETE`; do not start ES-P02 in that same worker.
+- The old external MariaDB-unavailable blocker is resolved only on the staging Pi boundary: MariaDB now listens loopback-only and the dedicated guarded staging schema/account was created without production access. This is not itself a canonical staging pass.
+- Fresh public Pi Staging run `31298080632` at exact main `3ce303ce3097be647091e142e801da9a5fd9a8fc` failed at public build job `93206301028` before bridge/Pi allocation: `ReportStoreIntegrationTest.stateLifecycleEnforcesAssignmentRevisionAndQueues()` expected `true` but was `false`, and `duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` expected `2` but was `0`. Private retry `31298391766` correctly failed closed because its prior bounded transient bridge asset had expired (HTTP 404). Neither result is a staging pass.
+- Terminal state remains `BLOCKED` / `PARKED_BLOCKED`. Exact unblock: repair the two current-main product test failures through their owning product package, then resume ES-R01 for one fresh exact-current-main public build → exact private provenance → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence → correlated public success → transfer cleanup. Do not bypass the build, reuse expired transfers, weaken the database-name guard, change to production targets, or start ES-P02 in that same worker.
 - V18 remains immutable/current; ES-R01 changed no migration. Issue #43 remains open/deferred and LiteBans remains authoritative.
 - Canonical contract: `ai-agents/work-packages/packages/ES-R01.md`.
-- Terminal handoff: `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md`.
+- Current handoff: `ai-agents/reports/package-handoffs/2026-08-09-es-r01-staging-repair-reblocked.md`.
 
 ## `ES-P02`
 
