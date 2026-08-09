@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,7 +21,7 @@ import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 
 final class ReportIntegrationFixtures {
-    static final Instant NOW = Instant.parse("2026-08-01T12:00:00Z");
+    static final Instant NOW = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MICROS);
     private static final String REASON_ID = "chat.abuse";
     private static final String SERVER_ID = "paper-report-test";
 
