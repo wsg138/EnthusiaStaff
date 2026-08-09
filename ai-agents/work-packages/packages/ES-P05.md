@@ -4,7 +4,7 @@
 `ES-P05`; Internal; primary `COMP-STAFF`; priority 50; conditionally parallel only with proven non-overlap.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED` on PR #81. The ReportStore hosted-test regression is fixed and the exact final implementation head passes hosted Java/MariaDB validation, but required canonical private Pi staging has not executed because `Lincoln-PI-4` has not accepted the correlated private job.
+`BLOCKED` / `PARKED_BLOCKED` on PR #81. The synchronized exact implementation head is fully hosted-green, but mandatory canonical Pi staging failed at private transient-artifact freshness/provenance verification before database or Paper runtime execution.
 
 ## 3. Objective
 Complete provider-independent report submission, evidence, queue/detail, notes/status, stale-state, privacy, and staff workflow behavior.
@@ -31,34 +31,33 @@ Root report/domain/persistence/Paper/tests/docs only. No RoseChat source import,
 Temporary implementation branch `package/es-p05-report-workflow`; preserve while blocked. Delete only after verified normal merge containment.
 
 ## 11. Required PRs
-PR #81 to `wsg138/EnthusiaStaff:main`; open and unmerged while canonical staging is incomplete.
+PR #81 to `wsg138/EnthusiaStaff:main`; open and intentionally unmerged while canonical staging is incomplete.
 
 ## 12. Implementation checklist
-- [x] Reconcile live GitHub and resume ES-P05 through canonical routing rather than create a competing repair PR.
-- [x] Reconcile the old ES-P05 branch with current `main` through a normal two-parent merge commit.
-- [x] Trace current submission/query/state/evidence runtime and persistence paths.
-- [x] Identify the two ReportStore integration failures as a stale test-clock defect rather than a product persistence defect.
-- [x] Repair the test clock without weakening assertions or changing production retention/query behavior.
-- [x] Preserve provider-independent review/privacy implementation and newer mainline V18/staging/cheat-tester/fake-base work.
-- [x] Keep the attachment boundary explicit: arbitrary direct file/screenshot/URL/binary attachments remain unsupported in ES-P05.
-- [x] Add/retain direct command/GUI/privacy proof and restart durability proof.
-- [x] Update report operational/privacy/retention documentation.
-- [x] Harshly review the final product diff and repair all valid review findings.
-- [x] Freeze and pass ordinary exact-head hosted/static validation on the final head.
-- [ ] Obtain required successful canonical Pi boot/restart acceptance on the exact merge candidate.
-- [ ] Merge normally, verify containment, finalize records, delete the temporary branch, and stop.
+- [x] Reconcile live GitHub and resume ES-P05 through canonical routing rather than create a competing implementation PR.
+- [x] Identify and repair the stale ReportStore integration fixture clock without weakening assertions or production retention behavior.
+- [x] Preserve provider-independent review/privacy implementation, dedicated evidence permission, bounded/scalar-only rendering, delivery-time authorization and restart durability proof.
+- [x] Verify the previously queued exact-head Pi run completed successfully and record its real runtime evidence.
+- [x] Merge current legitimate `main` into the existing implementation branch through a normal two-parent merge; no rebase/force/squash.
+- [x] Re-review the synchronized nine-file product diff and preserve newer unrelated `main` work.
+- [x] Resolve fresh Codacy maintainability findings with bounded static-only refactors.
+- [x] Freeze final candidate `346e764f40b25c98e7d24ce7f863e5629773e814`.
+- [x] Pass fresh exact-head Wiki, Java 21 full build/tests, ReportStore integration, MariaDB/Testcontainers, migration, coverage, runtime-JAR and Codacy gates.
+- [x] Preserve zero valid unresolved review threads.
+- [ ] Obtain successful canonical Pi provenance + guarded DB/Paper/restart/persistence/cleanup acceptance on the exact final candidate.
+- [ ] Merge normally, verify containment, finalize `COMPLETE`, delete the implementation branch, and stop.
 
 ## 13. Acceptance criteria
-Provider-independent product behavior and hosted proof are complete: submission/staff review are usable through GUI and text fallback; durable duplicate/cooldown/merge foundations remain; state/note revisions are exact and stale-safe; evidence is bounded, attributable, retained/purged by current policy, and privacy-gated for staff presentation. Final package completion is withheld only because canonical Pi execution has not run to terminal success on the final implementation head.
+Provider-independent product behavior and hosted proof are complete: submission/staff review are usable through GUI and text fallback; durable duplicate/cooldown/merge foundations remain; state/note revisions are exact and stale-safe; evidence is bounded, attributable, retained/purged by current policy, and privacy-gated for staff presentation. Final package completion is withheld because exact-head canonical staging did not reach runtime acceptance.
 
 ## 14. Test requirements
-The exact final head passes the configured Java 21 build/test path including the full report integration suite, MariaDB/Testcontainers, migration validation, coverage, and runtime-JAR inspection. The two formerly failing `ReportStoreIntegrationTest` methods therefore pass on the final reviewed head. A separate local focused run is not claimed because the reset execution environment had no checkout/network access.
+Final exact head `346e764f40b25c98e7d24ce7f863e5629773e814` passes Coverage run `31330790942` / job `93288609588`, including the full Java 21 build/tests, both formerly failing ReportStore integration methods, MariaDB/Testcontainers, migration validation, aggregate coverage, runtime-JAR inspection, validation artifact upload and Codacy coverage upload. A separate local focused run is not claimed because the reset execution environment had no checkout/network access.
 
 ## 15. Static-analysis requirements
-Codacy static succeeds with zero issues on the final head; Codacy diff coverage succeeds at 47.37% with no repository gate defined. CodeRabbit is green after three valid findings were fixed and all review threads resolved. Zero valid unresolved review threads remain.
+Codacy static `93288694739` succeeds with zero annotations on the final head. Codacy diff coverage `93289365775` succeeds at 42.96% with no configured gate. Three historical CodeRabbit findings remain fixed/resolved and zero valid unresolved review threads remain. No fresh final-head CodeRabbit commit status was present at terminal publication time, so one is not claimed.
 
 ## 16. Documentation requirements
-Report commands, permissions, workflow, evidence/privacy/retention, fallbacks, troubleshooting and attachment decision remain documented in `docs/wiki/pages/Reports-and-Evidence.md`. The current ReportStore repair/staging blocker is published through the canonical registry/workspace/handoff records.
+Report commands, permissions, workflow, evidence/privacy/retention, fallbacks, troubleshooting and attachment decision remain documented in `docs/wiki/pages/Reports-and-Evidence.md`. Current final staging evidence is published through canonical registry/workspace/handoff records.
 
 ## 17. Security and privacy requirements
 Least-privilege `enthusiastaff.reports.evidence` remains separate from broad report management. Sensitive authorization is rechecked immediately before scheduled delivery. Broad helper GUI/text triage does not reveal exact coordinates or retained evidence contents. Chat identity/timestamp/body rendering is bounded; client rendering accepts only allow-listed scalar values; unexpected structured values and opaque Polar metadata are withheld; malformed storage fails closed.
@@ -76,34 +75,46 @@ Existing durable duplicate prevention/query/state ownership, optimistic revision
 RoseChat-specific PM capture remains excluded/unavailable until `ES-X01`; no provider-specific source dependency was introduced. Discord route delivery remains ES-P06.
 
 ## 22. Completion definition
-Not yet met. Product/report hosted validation and review are green on exact final head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`, but mandatory canonical Pi staging has not executed because the correlated self-hosted job remains unallocated.
+Not yet met. Product/report hosted validation is green on exact final head `346e764f40b25c98e7d24ce7f863e5629773e814`, but the mandatory final canonical Pi run failed at private transient-release freshness verification before any database/Paper runtime assertion executed.
 
 ## 23. Resume state
-Original selection: 2026-08-07 from `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`. Current repair worker started from live `main` `b0cf67b880856ec7536cf1385fe1559bb18a42a1`. Implementation branch `package/es-p05-report-workflow`; PR #81. Current reviewed/hosted-validation head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`. Main synchronization merge `5d78a9621f7cc3e5f056b417af88424eaa26e555`. Preserve this branch/head unless live staging/review evidence requires a real change.
+Original selection: 2026-08-07 from `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`. Finalization worker started from live `main` `e210df15ed90cf96757516fd363faa801bc7192c`. Implementation branch `package/es-p05-report-workflow`; PR #81. Current-main synchronization merge `f052fd8177f5b5eed6bc75111411e10b0ced66db`. Final exact hosted-green candidate `346e764f40b25c98e7d24ce7f863e5629773e814`. Preserve this branch/head unless live `main`, review or staging evidence requires a real change.
 
 ## 24. Last completed checkpoint
-The public hosted ReportStore failure is fixed. Final Coverage run `31301427623` / job `93214731253` succeeded. Public Pi Staging run `31301426684` also completed its exact-source hosted build successfully and dispatched correlated private run `31301734048`; private job `93215499833` remained queued with no runner allocation/steps at terminal publication time.
+The earlier exact head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` later received genuine successful canonical Pi runtime evidence: public run `31301426684`, private run `31301734048` / job `93215499833`, two clean storage-ready Paper cycles, guarded DB reset/cleanup and sanitized artifact `9034945235`. After required synchronization and static remediation, final head `346e764f40b25c98e7d24ce7f863e5629773e814` passed all hosted gates. Its automatic public Pi build also passed, but private artifact verification failed before runtime.
 
 ## 25. Remaining checklist
-First inspect the existing public/private runs before triggering anything new. If private run `31301734048` later completed, use its real terminal evidence. If the runner/environment materially becomes available but the existing run cannot complete, allow a fresh normal automatic canonical Pi run only when justified. Require real private provenance/prerequisite/Paper/restart/persistence/cleanup success; merge PR #81 normally; verify containment; finalize COMPLETE state; clean branch; stop.
+First inspect existing exact final-head public run `31330788773` and private run `31331175023`; do not launch a duplicate merely because time passed. Require material evidence that the canonical bridge freshness/provenance condition changed. If it changes, synchronize any newer legitimate `main`, preserve/freeze the merge candidate, rerun affected exact-head gates as required, allow one normal automatic canonical public→private Pi run, and require real private provenance, guarded pre-reset, Paper cycle 1, clean shutdown/reap, cycle 2/restart/persistence, post-cleanup and sanitized evidence success before normal merge.
 
 ## 26. Known blockers
-Only current package blocker: canonical Pi runtime acceptance has not executed. Correlated private job `93215499833` for exact final source remains queued with `runner_id: 0`, empty runner name, and zero executed steps because `Lincoln-PI-4` has not accepted it. This is temporary self-hosted environment/runner unavailability, not a product failure and not a pass. Do not issue duplicate retries while the condition is unchanged.
+Only current ES-P05 blocker: final exact-head canonical staging stopped at private transfer freshness verification. Public run `31330788773` built and uploaded the exact source successfully; private run `31331175023` allocated trusted `Lincoln-PI-4` runner ID `2`, but job `93289556545` failed in `Retrieve and verify exact public bridge artifact` with `release created_at is expired for the staging bridge`. Guarded database reset and Paper runtime/restart were skipped. The verifier is unchanged from the earlier successful ES-P05 staging control. The evidence does not establish why the live release metadata appeared older than the two-hour bound, so no lower-level cause is invented. Do not weaken the freshness check, bypass provenance, directly dispatch private staging, or change ES-P05 product code in response.
 
 ## 27. Final evidence
-Final reviewed/hosted-validation head: `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`.
+Final exact candidate: `346e764f40b25c98e7d24ce7f863e5629773e814`.
 
-- Wiki run `31301427600`, job `93214726543`: success.
-- Coverage run `31301427623`, job `93214731253`: success on Java 21 with full build/tests, MariaDB/Testcontainers, migration validation, aggregate coverage, runtime-JAR inspection and artifact/Codacy upload.
-- Codacy static `93214975215`: success, zero issues.
-- Codacy diff coverage `93215398455`: success, 47.37%; no configured gate.
-- CodeRabbit: success after three valid findings were fixed; all three review threads resolved; zero valid unresolved threads remain.
-- Public Pi Staging run `31301426684`: public build job `93214729981` success; exact runtime artifact upload success; bridge job `93215481473` dispatched and correlated private run `31301734048`.
-- Private job `93215499833`: queued, `runner_id: 0`, empty runner name, zero steps. No private runtime assertion executed; staging is **NOT A PASS**.
-- Sentinel: non-applicable; no `.enthusia-test.yml` exists on the implementation head.
+Historical successful runtime proof on `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`:
+- public Pi `31301426684`, build `93214729981`, bridge `93215481473`: success;
+- private run `31301734048`, job `93215499833`: success on `Lincoln-PI-4` runner ID `2`;
+- pre-reset PASS; Paper cycle 1 storage ready; clean shutdown/reap; Paper cycle 2 storage ready with v18 current; clean shutdown/reap; post-cleanup PASS; zero failure scans;
+- sanitized artifact `9034945235`, digest `sha256:a81af3154c7e561c5ea09ed7072c970d483b25b63e217f34f1976132bab4ef3e`.
+
+Final-head hosted proof:
+- Wiki `31330790907`: success;
+- Coverage `31330790942` / `93288609588`: success;
+- Codacy static `93288694739`: success, zero annotations;
+- Codacy diff coverage `93289365775`: success, 42.96%, no configured gate;
+- zero valid unresolved review threads.
+
+Final-head canonical staging:
+- public Pi run `31330788773`, public build `93288608088`: success;
+- bridge `93289540403`: exact artifact download/release publication/private dispatch/correlation/failed-run diagnostics/public transfer cleanup all succeeded; final bridge verdict failure because private staging failed;
+- private run `31331175023`, job `93289556545`: `Lincoln-PI-4`, runner ID `2`; runner assertion success; exact bridge artifact freshness/provenance verification failure; Paper/DB/restart skipped;
+- sanitized diagnostic artifact `9042975898`, digest `sha256:1b470d2f20a6f263ed424734ff9397663077bbeec2d3ea942e3981ed926d7a93`;
+- public transient release/tag cleanup: success.
+- Sentinel: non-applicable; `.enthusia-test.yml` is absent.
 
 ## 28. Merge and synchronization record
-Implementation PR #81 remains intentionally unmerged because required canonical staging has not executed to success. Current main synchronization is already incorporated through normal merge commit `5d78a9621f7cc3e5f056b417af88424eaa26e555`; final implementation head is zero behind current starting `main`. No external parity applies.
+Implementation PR #81 is intentionally **not merged**. Normal main synchronization merge `f052fd8177f5b5eed6bc75111411e10b0ced66db` is incorporated on the branch, followed by two bounded static-only commits ending at `346e764f40b25c98e7d24ce7f863e5629773e814`. The final implementation branch is zero behind finalization-worker starting `main` and contains only the nine ES-P05 report files. No external parity applies.
 
 ## 29. Canonical handoff
-[`2026-08-09-es-p05-reportstore-repair-blocked-pi.md`](../../reports/package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md)
+[`2026-08-09-es-p05-final-staging-prereq-blocked.md`](../../reports/package-handoffs/2026-08-09-es-p05-final-staging-prereq-blocked.md)
