@@ -17,9 +17,9 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
-| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | repository-side bridge and repairs merged; preserve its current package-specific external blocker and handoff; this ES-P05 repair worker did not reopen ES-R01 infrastructure |
+| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | repository-side bridge and repairs merged; fresh current-`main` proof after PR #94 again failed at the guarded disposable Pi staging boot/restart gate; exact unblock is restored reachability of the existing authorized staging MariaDB endpoint from `Lincoln-PI-4` |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
-| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; unchanged by the ES-P05 repair worker |
+| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; remain parked while ES-R01's unchanged external staging-database blocker prevents mandatory validation; branch drift is not actionable |
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
@@ -42,7 +42,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## `ES-R01`
 
-- Selected as the package continuation on 2026-08-08 and worked as the only package through terminal classification; no ES-P02, ES-P05, or other package implementation was prepared or changed by that worker.
+- Selected as the package continuation on 2026-08-08 and worked as the only package through terminal classification; no ES-P02, ES-P05, or other package implementation was prepared or changed.
 - Public bridge PR #93 merged normally as `094838fa221476e0832cf821f7b4908b9402d0d9` from frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`.
 - Private staging bridge PR #58 merged normally as `570f83e41cb80b498a82c8b5a509c42345558a46`; bounded database-readiness PR #59 merged as `313ed2815058eadeb8c823453f4152089cae01d4`; PR-target provenance/cleanup fix PR #60 merged as `4036d6e915c2d751bef18849107722dfd1e586a6`.
 - Documentation/verification checkpoint PR #94 froze at `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`, passed exact-head hosted build/review/static gates, and merged normally as `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`. Containment is exact: the merge is one commit ahead of the frozen head, zero behind, with no file differences; its parents are pre-merge `main` `094838fa221476e0832cf821f7b4908b9402d0d9` and frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`.
@@ -50,8 +50,9 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - The replacement route proves ordinary public GitHub-hosted Java 21 build, bounded transient transfer, exact source/run/manifest/digest verification, and trusted self-hosted runner allocation without requiring a private-repository `ubuntu-latest` build.
 - Earlier strongest database diagnostics remain public run `31250170297` → private run `31250450219` / job `93085892938`: exact provenance passed; seven guarded connection attempts all returned SQLState `08000`; Paper never booted; sanitized evidence and transient transfer cleanup succeeded.
 - Required fresh current-`main` proof after PR #94 merge: public Pi Staging run `31252997554` at exact source `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`; public build job `93092131811` succeeded; bridge job `93092964130` dispatched private run `31253345564`; private job `93092978141` allocated `Lincoln-PI-4` runner ID `2`, passed exact artifact verification, then failed at `Run guarded disposable Paper boot and restart test`; sanitized evidence upload succeeded as artifact `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`; public failed-run diagnostics and transient transfer cleanup succeeded. This run is **NOT A PASS**.
-- The current-main run's GitHub step metadata does not expose a fresh SQLState, so terminal classification does not invent one; it is correlated with the same guarded disposable-database gate established by the earlier captured SQLState `08xxx` evidence and there is no remaining safe repository-side implementation in that package record.
-- Terminal state remains `BLOCKED` / `PARKED_BLOCKED` under the current ES-R01 package contract. This ES-P05 worker did not reopen, rerun, or reinterpret ES-R01 infrastructure.
+- The current-main run's GitHub step metadata does not expose a fresh SQLState, so terminal classification does not invent one; it is correlated with the same guarded disposable-database gate established by the earlier captured SQLState `08xxx` evidence and there is no remaining safe repository-side implementation.
+- Terminal state is `BLOCKED` / `PARKED_BLOCKED`. Exact unblock: material evidence that the existing authorized disposable Pi-staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract. Do not change targets or credentials, remove the reset, allow Paper to boot before reset success, broaden this package into database administration, or manually repeat an identical failure absent that material condition change.
+- After the unblock condition changes, a future sequential worker must resume ES-R01 before any new package and run one fresh exact-current-main bridge proof through public hosted build → exact private provenance → guarded pre-reset → Paper boot cycle 1 → restart/cycle 2 → guarded post-reset → sanitized evidence → correlated public success → transfer cleanup. Only then mark ES-R01 `COMPLETE`; do not start ES-P02 in that same worker.
 - V18 remains immutable/current; ES-R01 changed no migration. Issue #43 remains open/deferred and LiteBans remains authoritative.
 - Canonical contract: `ai-agents/work-packages/packages/ES-R01.md`.
 - Terminal handoff: `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md`.
@@ -59,8 +60,8 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 ## `ES-P02`
 
 - Remains `BLOCKED` / `PARKED_BLOCKED` on PR #70.
-- Its implementation and earlier hosted validation remain preserved; this ES-P05 repair worker did not modify or rerun it.
-- Resume only through current live canonical routing after reconciling all higher-priority actionable continuations and external blocker changes.
+- Its implementation and earlier hosted validation remain preserved; its branch/PR drift behind newer `main` does not make it actionable while the ES-R01 external staging-database blocker is unchanged.
+- Resume ES-P02 only after ES-R01 is `COMPLETE`. Then reconcile newer `main`, freeze the resulting exact head, rerun every required hosted/review/staging gate through the completed bridge, merge normally if green, verify containment/finalization, and stop.
 
 ## `ES-P04`
 
@@ -145,4 +146,4 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## Next-worker boundary
 
-First reconcile live GitHub. For ES-P05 specifically, inspect existing public run `31301426684` and correlated private run `31301734048` before considering a new staging attempt. If that private run later completed, its exact terminal result is the next actionable ES-P05 evidence. If it remains queued with no runner, keep ES-P05 `PARKED_BLOCKED` and do not create a duplicate run merely because time passed. Resume any other package only through the normal current priority/classification rules; do not infer that ES-P05's temporary runner state changes ES-R01 or ES-P02 automatically. No unavailable gate is treated as passed.
+`ES-R01` remains persistently `BLOCKED` / `PARKED_BLOCKED` on its exact recorded external condition. If its authorized disposable Pi-staging MariaDB endpoint remains unreachable from `Lincoln-PI-4`, keep it parked rather than repeating the identical failure. `ES-P05` is independently `PARKED_BLOCKED` on correlated private job `93215499833`, which had zero execution because the self-hosted runner had not accepted it. A future sequential worker must reconcile live GitHub first: inspect ES-P05 runs `31301426684` / `31301734048`, and inspect whether ES-R01's exact unblock condition changed. Any material change becomes an `ACTIONABLE_CONTINUATION` under the normal classification/priority rules. Do not create duplicate staging runs merely because time passed, and do not treat an unavailable gate as passed.
