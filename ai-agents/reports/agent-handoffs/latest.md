@@ -2,20 +2,22 @@
 
 Current package handoff:
 
-[`2026-08-09-es-p05-reportstore-repair-blocked-pi.md`](../package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md)
+[`2026-08-09-es-p05-final-staging-prereq-blocked.md`](../package-handoffs/2026-08-09-es-p05-final-staging-prereq-blocked.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P05 — Report evidence and staff workflow completion` is currently `BLOCKED` / `PARKED_BLOCKED` on PR #81 at reviewed/hosted-validation head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`.
+`ES-P05 — Report evidence and staff workflow completion` remains `BLOCKED` / `PARKED_BLOCKED` on open PR #81. Final exact implementation candidate is `346e764f40b25c98e7d24ce7f863e5629773e814` after normal current-main synchronization merge `f052fd8177f5b5eed6bc75111411e10b0ced66db` and bounded static-only remediation.
 
-The two hosted `ReportStoreIntegrationTest` failures were caused by a stale fixed integration-test clock (`2026-08-01T12:00:00Z`) crossing the live seven-day evidence-retention and recently-closed windows. The fixture now uses current time minus one minute at microsecond precision. Production `ReportStore` persistence/query/state/transaction behavior and V18 were not changed for this repair.
+The prior head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` later received genuine canonical Pi success: public run `31301426684`, private run `31301734048` / job `93215499833` on trusted `Lincoln-PI-4`, guarded pre-reset, two clean storage-ready Paper cycles, restart/schema-v18 persistence proof, post-cleanup, and sanitized evidence artifact `9034945235` (`sha256:a81af3154c7e561c5ea09ed7072c970d483b25b63e217f34f1976132bab4ef3e`). That material change made ES-P05 actionable but became historical evidence after synchronization changed the exact source SHA.
 
-Final exact-head hosted evidence is green: Wiki run `31301427600` / job `93214726543`; Coverage run `31301427623` / job `93214731253` with Java 21 full build/tests, MariaDB/Testcontainers, migration validation, coverage and runtime-JAR inspection; Codacy static `93214975215` with zero issues; Codacy diff coverage `93215398455` success at 47.37%. CodeRabbit found three valid privacy/authorization/bounds issues in the resumed ES-P05 feature diff; all were fixed and all review threads are resolved.
+Final exact-head hosted evidence is green: Wiki run `31330790907`; Coverage run `31330790942` / job `93288609588` with complete Java 21 build/tests, ReportStore integration, MariaDB/Testcontainers, migration validation, coverage and runtime-JAR inspection; Codacy static `93288694739` with zero annotations; Codacy diff coverage `93289365775` success at 42.96% with no configured gate. The three historical CodeRabbit findings remain fixed/resolved and zero valid unresolved review threads remain. No fresh CodeRabbit commit status appeared on the final static-only head, so one is not claimed.
 
-Automatic Pi Staging run `31301426684` reached farther than the prior public-build failures: public build job `93214729981` succeeded and uploaded the exact runtime artifact; bridge job `93215481473` dispatched and correlated private run `31301734048`. Private job `93215499833` has not executed: at terminal publication time it is queued with `runner_id: 0`, empty runner name, and zero steps because `Lincoln-PI-4` has not accepted it. Therefore this is temporary Pi runner/environment unavailability, **not** a Pi product failure and **not** a staging pass.
+Automatic final-head Pi Staging run `31330788773` passed its public exact-source build (`93288608088`) and reached trusted `Lincoln-PI-4`, but correlated private run `31331175023` / job `93289556545` failed at `Retrieve and verify exact public bridge artifact` with `release created_at is expired for the staging bridge`. Runner identity passed; guarded database reset and Paper boot/restart were skipped. Sanitized diagnostic artifact `9042975898` has digest `sha256:1b470d2f20a6f263ed424734ff9397663077bbeec2d3ea942e3981ed926d7a93`. Public bridge diagnostics and transient release/tag cleanup succeeded.
 
-Do not issue a duplicate retry merely because time passed. First inspect public run `31301426684` and private run `31301734048`; if the existing run later completed, use its actual terminal result. When the self-hosted environment materially becomes available, complete canonical Pi validation on the exact current merge candidate, then merge PR #81 normally if all gates remain green, verify containment, publish `COMPLETE`, clean the branch, and stop.
+This is **not a Pi product/runtime failure and not a staging pass**. The existing bridge verifier is unchanged from the previous successful ES-P05 run; the evidence proves the live release-metadata freshness rejection but does not prove why the newly created release appeared older than the two-hour bound.
 
-Sentinel is non-applicable to the current ES-P05 head because no `.enthusia-test.yml` manifest exists. V18 remains immutable/current, issue #43 remains open/deferred, and LiteBans remains authoritative.
+Do not repeat an identical staging run merely because time passed, weaken freshness/provenance, or directly dispatch the private workflow. Resume ES-P05 only after material evidence that this canonical bridge freshness condition changed; then synchronize newer `main` if necessary and require one genuine exact-head public→private runtime pass before normal merge of PR #81.
+
+Sentinel is non-applicable because `.enthusia-test.yml` is absent. V18 remains immutable/current, issue #43 remains open/deferred, LiteBans remains authoritative, and no downstream package becomes `READY` while ES-P05 is incomplete.
