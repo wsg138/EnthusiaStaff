@@ -4,123 +4,96 @@
 `ES-R01`; validation-infrastructure recovery; primary `COMP-STAFF`; supporting repository `wsg138/EnthusiaStaff-Staging`; priority 15; not parallel-safe with staging-workflow changes.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED` as of 2026-08-09 after an owner-directed `ACTIONABLE_CONTINUATION` repaired the newly exposed transient-release freshness verifier defect. The repair is merged and its regression/safety suite is green. ES-R01 cannot yet obtain the mandatory fresh current-`main` end-to-end proof because current `EnthusiaStaff:main` itself fails the trusted public Java build in two ReportStore integration tests before any bridge artifact is created.
+`COMPLETE` as of 2026-08-09.
 
-## 3. Objective
-Provide a billing-independent canonical staging route that builds the exact authorized EnthusiaStaff source SHA on public GitHub-hosted Java 21 infrastructure, transfers only a bounded verified artifact to private staging, re-verifies provenance on trusted `Lincoln-PI-4`, and requires guarded disposable database plus two-cycle Paper restart/persistence acceptance.
+This owner-directed continuation entered as `ACTIONABLE_CONTINUATION` because ES-R02 had merged the narrow Report integration fixture clock repair and the old current-main public-build blocker had materially changed. Live post-merge Coverage and canonical Pi Staging then proved the exact current `EnthusiaStaff:main` source through the complete public→private acceptance chain.
 
-## 4. Material blocker history correction
-The former package text claimed the exact unblock was restoration of MariaDB reachability from `Lincoln-PI-4`. That became stale before this continuation.
+## 3. Exact completed source and staging controls
+- `wsg138/EnthusiaStaff:main` source under proof: `5220f21a44527fdd54bb469c767c40a2f232b171`.
+- `wsg138/EnthusiaStaff-Staging:main` controls: `af1bd6d3ae8214e58eb969c23972f872b15c1f18`.
+- ES-R02 frozen repair head: `20a4c697e64bebffad6c7bee0132dfd1d1237e9a`.
+- ES-R02 normal merge/current-main commit: `5220f21a44527fdd54bb469c767c40a2f232b171`.
+- Staging freshness repair remained the already-merged PR #75 / merge `af1bd6d3ae8214e58eb969c23972f872b15c1f18`; no new staging-control repair was required in this continuation.
 
-Historical ES-P05 proof at source `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` established the database/Paper path was usable:
-- public Pi Staging run `31301426684`;
-- private run `31301734048`, job `93215499833`;
-- trusted `Lincoln-PI-4`, runner ID `2`;
-- exact artifact/provenance verification passed;
-- guarded pre-reset passed;
-- Paper cycle 1 reached readiness, EnthusiaStaff enabled, MariaDB/Flyway initialized through V18;
-- clean shutdown/full reap;
-- Paper cycle 2 reached readiness with restart/persistence/schema-v18 proof;
-- second clean shutdown/full reap;
-- guarded final database cleanup passed;
-- sanitized evidence artifact `9034945235`, digest `sha256:a81af3154c7e561c5ea09ed7072c970d483b25b63e217f34f1976132bab4ef3e`.
+## 4. ES-R02 prerequisite verification
+Post-merge Coverage run `31334653827` completed `SUCCESS` on exact source `5220f21a44527fdd54bb469c767c40a2f232b171`. The trusted Java build is green again, including the ReportStore integration suite that previously failed on the stale fixture clock. ES-R02 is therefore terminal `COMPLETE` and is not reopened by ES-R01.
 
-Therefore ES-R01 was correctly reclassified `ACTIONABLE_CONTINUATION` for this worker instead of being left parked on the obsolete MariaDB condition.
+PR #103 merged normally from frozen head `20a4c697e64bebffad6c7bee0132dfd1d1237e9a`; its live review state had zero review threads, CodeRabbit status `success`, and Codacy Static Code Analysis `success` with zero annotations.
 
-## 5. Newly exposed bridge defect and root cause
-ES-P05 final candidate `346e764f40b25c98e7d24ce7f863e5629773e814` produced public run `31330788773`; public hosted build job `93288608088` succeeded. Bridge job `93289540403` created transient release `367563110`, tag `es-r01-staging-31330788773-1`, asset `507820281` / `enthusiastaff-staging-346e764f40b2-31330788773-1.zip`, then dispatched private run `31331175023` / job `93289556545` to trusted `Lincoln-PI-4` runner ID `2`. Private verification failed before database/Paper execution with:
+## 5. Canonical current-main proof
+The already-triggered push run was consumed rather than duplicated:
 
-`release created_at is expired for the staging bridge`
+- public Pi Staging run: `31334653835`, attempt 1, `SUCCESS`;
+- public hosted build job: `93298406398`, `SUCCESS`;
+- bridge job: `93299167848`, `SUCCESS`;
+- exact source SHA: `5220f21a44527fdd54bb469c767c40a2f232b171`;
+- public Actions runtime artifact: `9044030545`, `enthusiastaff-paper-5220f21a4452-31334653835-1`, artifact digest `sha256:22a29b5828d14b1cc0e8b6864f1bc12980b308d4bc7b2517abef8ddf1c355ec7`;
+- runtime JAR: `EnthusiaStaff-Paper-0.1.0-SNAPSHOT.jar`, 9,123,435 bytes, SHA-256 `6436f3467ad871b854bf89176fa1f319b7905e5692446a6e72eace6096c601d3`.
 
-Investigation confirmed the verifier applied its two-hour transport freshness bound to GitHub Release `created_at`. GitHub documents Release `created_at` as the date of the commit used for the release, not the publication time of the release. A newly published transient release pointing to an older workflow/control commit can therefore legitimately have an old `created_at` and be rejected immediately.
+The public Java 21 build completed the full Gradle build/test path and runtime-JAR integrity verification before bridge dispatch.
 
-The correct transport semantics are:
-- release publication freshness: required valid Release `published_at`;
-- asset upload freshness: Release Asset `created_at`;
-- retain the existing two-hour maximum age and five-minute future-clock-skew guard.
+## 6. Bounded transfer, freshness and provenance
+The bridge created only the bounded transient transfer for this exact run:
 
-## 6. Repair
-Private staging PR #75 changed only:
-- `scripts/fetch-enthusiastaff-bridge-artifact.sh`;
-- `tests/test-staging-bridge-artifact.sh`.
+- release ID `367580675`;
+- tag `es-r01-staging-31334653835-1`;
+- asset ID `507885425`;
+- asset `enthusiastaff-staging-5220f21a4452-31334653835-1.zip`;
+- transfer SHA-256 `e5828649f8b6dc37a3da9039e62cd08d7091e4230bc3232fbee9ad870d03ff62`.
 
-The verifier now requires `release.published_at`, rejects missing/malformed/timezone-less publication timestamps, retains future-skew and two-hour expiry enforcement, and continues independently validating asset `created_at`. Exact release/tag/asset identity, repository/workflow/run/attempt/source SHA, same-repository PR provenance, canonical download URL, digest, size, archive allowlist, manifest, runtime digest/size and cleanup boundaries remain intact.
+Private retrieval/verification completed successfully under staging controls `af1bd6d3...`. Therefore the repaired verifier passed its mandatory Release `published_at` publication-freshness gate and its independent Release Asset `created_at` upload-freshness gate while retaining the two-hour maximum age, future-skew protection, exact release/tag/asset/run/source/workflow provenance, digest, size, archive allowlist and manifest checks. No gate was weakened or bypassed.
 
-Frozen staging repair head: `19e38d6851367d835cfe50fc29e9f95a0936f66d`.
-Normal staging merge commit: `af1bd6d3ae8214e58eb969c23972f872b15c1f18`.
+Sanitized artifact validation also recorded `artifact_allowlist=PASS`, `manifest_validation=PASS`, `checksum_validation=PASS`, `zip_integrity=PASS`, `plugin_main_class=PASS`, and `provider_api_leaks=0` for resolved source `5220f21a...`.
 
-## 7. Regression and safety evidence
-Staging Controls CI run `31332576934`, job `93293056853`, executed on `Lincoln-PI-4` and passed the full staging-control suite. Focused bridge coverage proves:
-1. old target commit + freshly published release + fresh asset = ACCEPT;
-2. fresh release + expired asset = REJECT;
-3. expired published release + fresh asset = REJECT;
-4. future release publication beyond skew = REJECT;
-5. future asset timestamp beyond skew = REJECT;
-6. missing/null publication timestamp = REJECT;
-7. mismatched release ID/tag = REJECT;
-8. mismatched asset ID/name = REJECT;
-9. digest mismatch = REJECT;
-10. stale/moved PR provenance = REJECT;
-11. wrong public workflow/control/source provenance = REJECT;
-12. existing successful workflow-dispatch and pull-request-target fixtures continue to pass.
+## 7. Correlated trusted private execution
+- correlated private run: `31334953968`, `SUCCESS`;
+- private job: `93299183621`, `SUCCESS`;
+- runner: `Lincoln-PI-4`;
+- runner ID: `2`;
+- labels: `self-hosted`, `Linux`, `ARM64`, `enthusia-staging`.
 
-The same run also passed source-selection, database-wrapper, storage-readiness, successful-cycle, issue-43 prerequisite, multi-repository policy and Sentinel fixtures, including 292 isolated Sentinel unit tests. Repository-equivalent Bash validation executed the scripts under strict shell settings. No secret exposure was observed. CodeRabbit was green and there were zero valid unresolved review threads before merge.
+The private workflow title bound the run to `EnthusiaStaff bridge 31334653835-1 / 5220f21a44527fdd54bb469c767c40a2f232b171`. Trusted-runner assertion and exact public artifact retrieval both succeeded before database/Paper execution.
 
-## 8. Public documentation counterpart
-Public PR #102, branch `package/es-r01-release-publication-freshness`, documents the corrected GitHub timestamp semantics and retained trust boundary. Its initial frozen docs head was `c2a80525e964acfaf230169863d835dcf07d3d60`. CodeRabbit is green and review threads are zero. No ES-P05 product file is changed by this package.
+## 8. Guarded database and Paper proof
+Sanitized evidence proves the required disposable MariaDB/Paper sequence:
 
-## 9. Fresh-proof attempt and new exact blocker
-The required canonical proof cannot currently advance past the public hosted build.
+1. **Guarded pre-reset:** `phase=before`, `database_identity=verified-disposable`, `objects_removed=0`, `result=PASS`.
+2. **Paper cycle 1:** storage bootstrap `PASS`; operational mode `SHADOW_MIGRATION`; EnthusiaStaff emitted `Storage verified; EnthusiaStaff entered SHADOW_MIGRATION`; Flyway created the disposable schema history and applied V1 through V18, ending at v18.
+3. **First shutdown/reap boundary:** Java exit code `0`, stopping-server marker `PASS`, all-dimensions-saved marker `PASS`; the harness successfully advanced to cycle 2 only after the first process lifecycle completed.
+4. **Paper cycle 2:** storage bootstrap `PASS`; same required operational mode; Flyway reported current schema version 18 and `Schema ... is up to date. No migration necessary`, proving restart/persistence of the initialized storage state.
+5. **Second shutdown/reap boundary:** Java exit code `0`, stopping-server marker `PASS`, all-dimensions-saved marker `PASS`.
+6. **Final guarded cleanup:** `phase=after`, `database_identity=verified-disposable`, `objects_removed=69`, `result=PASS`.
 
-Current starting/main SHA `140d10ef63f3d6761c95afccbead13db53888304` already failed its own automatic canonical Pi Staging run `31332055336`, public build job `93291754833`, before this ES-R01 public docs branch was involved. The exact failures were:
-- `ReportStoreIntegrationTest.stateLifecycleEnforcesAssignmentRevisionAndQueues()` — expected `true`, got `false` at `ReportIntegrationFixtures.assertQueueContains` / line 236 of the test;
-- `ReportStoreIntegrationTest.duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` — expected `2`, got `0` at line 101.
+The terminal sanitized summary is `result=PASS`, `server_starts_completed=2`, `storage_ready_cycles_completed=2`, and `failure_count=0`.
 
-On unchanged ES-R01 docs head `c2a80525e964acfaf230169863d835dcf07d3d60`:
-- Coverage run `31332739840` failed those same two tests; its unchanged-head rerun also failed;
-- canonical Pi Staging run `31333070856`, public build job `93294291022`, failed those same two tests;
-- bridge job `93295041935` was skipped because no verified public artifact existed;
-- no private run was dispatched, so provenance, DB reset and Paper runtime were correctly not claimed.
+## 9. Sanitized evidence and public correlation
+Private sanitized evidence artifact:
+- artifact ID `9044106847`;
+- name `enthusiastaff-pi-evidence-5220f21a44527fdd54bb469c767c40a2f232b171-31334953968`;
+- digest `sha256:273496920e3cb1e36c8f2468ca4dc012015cdde7cea913498c2d823657831def`;
+- 26 sanitized files; no credentials or database contents are recorded in canonical package state.
 
-This is not a regression caused by the ES-R01 bridge repair: the failing current-main run predates the public ES-R01 docs change, and the ES-R01 public diff is documentation-only. Fixing or weakening ReportStore product/test behavior is explicitly outside ES-R01 scope. Skipping those integration tests would weaken the trusted public build boundary and is prohibited.
+The public bridge observed correlated private conclusion `success`, then completed its success assertion.
 
-## 10. Current exact unblock
-Material evidence that current `EnthusiaStaff:main` again passes the canonical trusted public Java build, including the two ReportStore integration tests above, without ES-R01 weakening or bypassing the build gate. Once that condition changes, resume ES-R01 before starting a new package and run one fresh exact-current-main canonical public→private staging proof.
+## 10. Transfer cleanup
+Public bridge cleanup deleted both the exact transient release and tag. Independent post-run API checks return `404 Not Found` for release ID `367580675` and tag `es-r01-staging-31334653835-1`, confirming no transfer residue for this proof.
 
-The next sequential worker must reconcile whether ES-P02 or the parked ES-P05 work is the correct owner of the product-side condition under current routing. This ES-R01 worker does not modify, synchronize, rerun staging for, merge, or delete ES-P05 PR #81.
+## 11. Completion decision
+Every ES-R01 completion boundary has now genuinely passed for the same exact source SHA:
 
-## 11. Acceptance criteria state
-- **PASS:** billing-independent public GitHub-hosted build architecture exists.
-- **PASS:** bounded transient release/asset transport with exact provenance and cleanup exists.
-- **PASS:** release publication freshness now uses semantically correct `published_at`; independent asset-upload freshness remains on asset `created_at`.
-- **PASS:** two-hour maximum age and future-skew protections remain enforced.
-- **PASS:** trusted Pi verifier and staging-control regression suite are green after the repair.
-- **BLOCKED / NOT A PASS:** no fresh current-main public build artifact can currently be produced, so no post-repair private provenance/DB/Paper proof exists.
-- **NOT CLAIMED:** ES-P02 or ES-P05 completion/validation.
+public GitHub-hosted Java 21 build → verified runtime artifact → bounded transient release/asset → Release `published_at` freshness → asset `created_at` freshness → exact provenance → correlated private execution → trusted `Lincoln-PI-4` → guarded pre-reset → Paper cycle 1/storage readiness → clean shutdown/reap → Paper cycle 2/restart-persistence/storage readiness → clean shutdown/reap → guarded final cleanup → sanitized evidence → correlated public success → transient transfer cleanup.
 
-## 12. Scope boundaries
-No report Java product behavior, ReportStore product/tests, Flyway migration, V18, production infrastructure, production credential, LiteBans authority, issue #43 behavior, or ES-P05 implementation file was changed by ES-R01.
+`ES-R01 = COMPLETE`.
 
-## 13. PR and merge record
-Historical ES-R01 bridge merges remain valid. This continuation adds:
-- `wsg138/EnthusiaStaff-Staging` PR #75 — normal merge `af1bd6d3ae8214e58eb969c23972f872b15c1f18` from frozen head `19e38d6851367d835cfe50fc29e9f95a0936f66d`;
-- `wsg138/EnthusiaStaff` PR #102 — public documentation/canonical state counterpart; terminal publication/merge state must be recorded by the final worker verification.
+## 12. Scope and preserved boundaries
+No product Java behavior, V18-or-older migration, production data, production infrastructure, LiteBans authority, issue #43 behavior, ES-P02 PR #70, or ES-P05 PR #81 was modified in this continuation. The ES-P05 branch remains at `346e764f40b25c98e7d24ce7f863e5629773e814`. `noop-temp-ignore` remains untouched.
 
-Stale public ES-R01 PRs #96 and #98 were closed as superseded rather than merged or history-rewritten.
+Historical ES-R01 terminal branches `package/es-r01-post-merge-finalization` and `package/es-r01-staging-state-update` were checked against current main and remain diverged with unique commits (`ahead_by=6` and `ahead_by=1`, respectively); they therefore do not meet the safe automatic deletion rule and are retained.
 
-## 14. Cleanup
-`noop-temp-ignore` has no PR, but compare-to-main proves two unique commits/work. It therefore does not satisfy the owner's deletion condition and is intentionally retained; no force-update or simulated deletion was performed.
+## 13. Routing after completion
+`EXECUTION-ORDER.md` explicitly states that after ES-R01 completes, normal continuation priority resumes **ES-P02 before ES-P05**. ES-P02's old private-GitHub-hosted billing blocker is materially changed by the now-proven billing-independent bridge, so the next normal sequential worker must reconcile and resume `ES-P02 — Runtime database recovery and Velocity reload` as the highest-priority continuation, rerun its own exact-head gates through the current bridge, and make no claim from ES-R01's evidence on ES-P02's behalf.
 
-## 15. Security/privacy
-No credential, private database content, or secret-bearing runtime evidence was copied into public artifacts or package records. The repaired verifier still fails closed before DB/Paper execution on provenance/freshness mismatch. The new blocker occurs even earlier, during the trusted public product build.
+This ES-R01 worker stops here and does not start ES-P02 or ES-P05.
 
-## 16. Migration and authority impact
-None. V18 remains immutable/current. LiteBans authority and issue #43 remain unchanged/deferred.
-
-## 17. Completion definition
-ES-R01 becomes `COMPLETE` only after a fresh exact-current-main run succeeds through public Java 21 build → verified bounded transient release/asset → correlated private dispatch → trusted `Lincoln-PI-4` → exact artifact/provenance verification → guarded DB pre-reset → Paper cycle 1/storage readiness → clean shutdown/full reap → Paper cycle 2/restart-persistence readiness → clean shutdown/full reap → guarded final DB cleanup → sanitized evidence → correlated public success → transient release/tag cleanup.
-
-That definition is not met in this continuation because the current-main public build is red before transport. ES-R01 is therefore truthfully terminal for this worker as `BLOCKED` / `PARKED_BLOCKED`, not `COMPLETE`.
-
-## 18. Resume boundary
-Resume only when live GitHub shows the current-main trusted public build condition materially changed. Do not repeat identical staging attempts merely because time passed. Do not weaken integration tests, provenance, freshness, cleanup, or database/Paper gates. A resumed ES-R01 worker should obtain the one fresh current-main end-to-end proof, mark `COMPLETE` if and only if it succeeds, publish canonical state, and stop. Do not start ES-P05 in the same ES-R01 worker.
+## 14. Canonical handoff
+`ai-agents/reports/package-handoffs/2026-08-09-es-r01-current-main-canonical-proof-complete.md`
