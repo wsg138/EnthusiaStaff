@@ -7,6 +7,7 @@ Dependencies are authoritative. Priority breaks ties only among dependency-compl
 Each package appears once. A comma-separated dependency set means every listed package must be `COMPLETE` before the package can become `READY`, unless a later validation package explicitly permits an owner-accepted deferred gate.
 
 ```text
+ES-R01
 ES-P01 -> ES-P02
 ES-P01 -> ES-X05
 ES-P02 -> ES-P03
@@ -28,6 +29,8 @@ ES-V01 + ES-V02 + ES-V03 -> ES-A01
 ES-A01 + all applicable completed-or-owner-accepted-deferred packages -> ES-QA01
 ```
 
+`ES-R01` is an independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It does not replace or relax a product dependency. Its purpose is to remove the shared private-GitHub-hosted billing dependency from the exact-head staging route while preserving an ordinary hosted build and the existing private self-hosted Pi boot/restart gate. Until ES-R01 completes, ES-P02 and ES-P05 remain `PARKED_BLOCKED`; after it completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked, so normal continuation priority resumes ES-P02 before ES-P05. Each blocked package still must rerun its own exact-head gates and may not treat ES-R01's proof as package staging evidence.
+
 `ES-V01` is independently deferred until a private local/Codex environment and representative database are available. It does not grant production authority and does not change the dependency chain for implementation packages.
 
 ## Parallel safety
@@ -43,6 +46,7 @@ Potentially parallel after prerequisites and preflight:
 
 Keep sequential:
 
+- ES-R01 staging-workflow recovery before another identical private-hosted staging retry for ES-P02 or ES-P05 while the billing condition remains unchanged;
 - exact-sanction appeal mutation before site appeals;
 - lifecycle/reload before Bedrock identity and inventory runtime;
 - staff tool dispatch before testers;

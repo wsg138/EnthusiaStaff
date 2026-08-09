@@ -1,356 +1,185 @@
 # Moderation, Punishments, and Reports
 
-**Estimated group completion: about 63%.**
+This hub covers cases, sanctions, punishment selection and approval, escalation, history, appeals, player reports, retained evidence, and strict automod/client evidence.
 
-This group covers the moderation record model, punishment selection and approval,
-escalation policy, sanction changes, appeals, player reports, retained evidence,
-client evidence and strict automod.
+For staff procedure, start with [[Punishment System]] or [[Reports and Evidence]]. For detailed source tracing, use [[Developer Code Guide]]. For review invariants, use [[Code Review Guide]].
 
-- Return to [[Feature Completion Status|Implementation-Status]].
-- Staff procedures: [[Punishment System]] and [[Reports and Evidence]].
-- Commands and permission nodes: [[Commands and Permissions]].
-- Source-level traces: [[Developer Code Guide]].
+## Quick status
 
-> Percentages are rounded planning estimates. Exact evidence and blockers remain
-> in the
-> [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md).
+| Area | Merged-main state | Main limitation |
+| --- | --- | --- |
+| Cases, sanctions and audit | **Implemented, not staging-verified** | Representative enforcement/provider/site/runtime acceptance remains. |
+| Punishment commands, GUI and durable drafts | **Implemented, not staging-verified** | Broader modular GUI/configuration and Java/Bedrock multi-runtime usability remain. |
+| Rank authority and approval requests | **Implemented, not staging-verified** | Website/provider parity and distributed reviewer/requester acceptance remain. |
+| Request notifications | **Available with limitations** | Durable recipient-specific delivery foundations are merged; complete external/Discord/runtime presentation remains. |
+| Escalation policy | **Partial** | Broader family relationships, combined recommendations and modular policy configuration remain. |
+| History and exact sanction changes | **Implemented, not staging-verified** | Representative staff/provider/site acceptance remains. |
+| Appeals and website moderation workflow | **Implemented, not staging-verified** | Private site deployment/security/provider/runtime acceptance remains. |
+| Report submission, queues and GUI | **Available with limitations** | RoseChat private-message provider and complete distributed notification/provider staging remain. |
+| Evidence capture/privacy/retention | **Available with limitations** | Provider-specific PM/client evidence and full operational privacy review remain. |
+| Strict automod/client evidence | **Partial** | Supported RoseChat/AutoClicker provider contracts and representative false-positive/runtime validation remain. |
 
-## Find a moderation area
+## Cases, sanctions and authoritative writes
 
-| Area | Complete | What it does | Jump to details |
-| --- | ---: | --- | --- |
-| Cases, sanctions and audit | **70%** | Records who acted, what happened, why, which sanctions applied and how state changed. | [Cases and sanctions](#cases-sanctions-and-audit) |
-| Punishment commands and GUI | **72%** | Guides staff from a target and reason to an authorized, reviewed punishment. | [Punishment interface](#punishment-commands-and-gui) |
-| Durable drafts and resume | **85%** | Preserves unfinished punishment work across ordinary interruption. | [Drafts](#durable-drafts-and-resume) |
-| Rank authority and approval requests | **82%** | Prevents Helpers and Developers from bypassing required review. | [Authority](#rank-authority-and-approval-requests) |
-| Request notifications and recovery | **35%** | Notifies requesters and eligible reviewers without losing or duplicating delivery. | [Notifications](#request-notifications-and-recovery) |
-| Escalation policy | **52%** | Selects configured steps from reason families, history, recency and decay. | [Escalation](#escalation-policy) |
-| History and sanction changes | **85%** | Reads the full timeline and precisely ends, reduces, revokes or overturns one sanction. | [History and changes](#history-and-sanction-changes) |
-| Appeals | **35%** | Connects player appeals and reviewer decisions to audited sanction state. | [Appeals](#appeals) |
-| Report submission and queues | **68%** | Accepts private player reports and coordinates staff claims and closure. | [Reports](#report-submission-and-queues) |
-| Evidence capture, privacy and retention | **56%** | Stores bounded chat/client context while keeping private evidence internal. | [Evidence](#evidence-capture-privacy-and-retention) |
-| Report GUI | **20%** | Provides staff queue, detail and action interfaces. | [Report GUI](#report-queue-and-detail-gui) |
-| Strict automod and client evidence | **35%** | Detects exact high-confidence chat violations and records point-in-time client information. | [Automod and clients](#strict-automod-and-client-evidence) |
+A **case** is the durable explanation for a moderation decision. It links the actor, target, stable reason, evidence references, visibility, sanctions, requests, appeals and audit history. A **sanction** is one enforceable outcome such as a warning, mute, ban or network ban.
 
-## Cases, sanctions, and audit
+Primary source:
 
-### What it does
+- [PunishmentService](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java)
+- [case domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/casefile)
+- [sanction domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/sanction)
+- [JdbcModerationStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcModerationStore.java)
+- [JdbcCaseReviewStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcCaseReviewStore.java)
 
-A case is the durable explanation for a moderation decision. It links the target,
-actor, stable reason, public/private visibility, evidence, sanctions, provider
-actions, appeal state and audit history. A sanction is one enforceable result,
-such as a warning, mute, ban or network ban.
+Important review properties are combined-sanction atomicity, idempotency, locked authority checks, stable reason identity, append-only history, safe public projections and durable network/notification state. See [[Code Review Guide]].
 
-### Staff-facing surfaces
+## Punishment interface and durable drafts
 
-- `/punish`, `/ban`, `/mute`, `/warn`, `/kick`, `/ipban`
-- `/removepunishment`, `/unban`, `/unmute`, `/removewarning`
-- public punishment projections and the future `/history` view
+The main staff path starts with `/punish <player>` or a filtered command such as `/ban`, `/mute`, `/warn`, `/kick`, or `/ipban`. Presentation should lead into the same central policy rather than contain a second punishment implementation.
 
-### Primary files
+Primary paths:
 
-- [Punishment service](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java)
-- [Case domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/casefile)
-- [Sanction domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/sanction)
-- [Moderation store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcModerationStore.java)
-- [Case review store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcCaseReviewStore.java)
-- [Public punishment registry](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPublicPunishmentRegistry.java)
+- [PunishmentCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/PunishmentCommand.java)
+- [paper punishment package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/punishment)
+- [PunishmentDraftWorkflow](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentDraftWorkflow.java)
+- [JdbcPunishmentDraftStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPunishmentDraftStore.java)
+- [reason policies](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml)
 
-### What remains
+Drafts are durable and resumable, but a resumed draft must still revalidate current history, policy, target state and authority before final commit.
 
-Complete all sanction types, combined-sanction behavior, readable full timelines,
-visibility mutation authorization and real Paper/Velocity/provider enforcement.
+Staff procedure: [[Punishment System]].
 
-## Punishment commands and GUI
+## Authority and approval requests
 
-### What it does
+Permission nodes are an early boundary, not the final authority decision. Central services enforce rank semantics and hierarchy again around authoritative writes.
 
-The central punishment workflow resolves the target, selects a stable reason,
-loads relevant history, calculates a recommendation, checks rank authority,
-collects notes/evidence and commits one durable case after confirmation. Direct
-commands are filtered entry points into the same policy path.
+Current policy includes:
 
-### Primary files
+- Helper may apply authorized temporary outcomes; permanent outcomes become approval requests.
+- Developer is a technical/request-preparation role and cannot directly punish or approve.
+- Self-approval and unauthorized review are blocked.
+- Higher-rank and issuing-rank rules remain part of service/transaction authorization.
+- Console/`SYSTEM` semantics must be explicit rather than treated as unlimited ordinary staff authority.
 
-- [Punishment command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/PunishmentCommand.java)
-- [Punishment GUI package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/punishment)
-- [Punishment draft workflow](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentDraftWorkflow.java)
-- [Punishment service](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java)
-- [Reason policies](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml)
+Primary paths:
 
-### Related pages
+- [DefaultAuthorizationPolicy](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/auth/DefaultAuthorizationPolicy.java)
+- [PunishmentApprovalRules](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentApprovalRules.java)
+- [PunishmentRequestService](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentRequestService.java)
+- [JdbcPunishmentRequestStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPunishmentRequestStore.java)
 
-- [[Punishment System]]
-- [[Staff Quick Start|Moderator-Quick-Start]]
-- [[Roles and Permissions|Rank-Authority]]
+See [[Roles and Permissions|Rank-Authority]].
 
-### What remains
+## Request notifications
 
-Complete every category/reason/review screen, optional sanction control, modular
-GUI configuration, stale-state revalidation, Bedrock layouts, offline behavior,
-reload behavior and real multi-server staging.
+Recipient-specific alert/delivery state is durable so a request can survive disconnect/restart without treating presentation as the authoritative decision. Reviewers should verify that recipient authority is checked when an alert is presented and that retries do not duplicate a moderation action.
 
-## Durable drafts and resume
+Relevant areas:
 
-### What it does
+- `domain/application/` request workflow
+- `domain/discord/`
+- persistence request/alert stores
+- `paper/punishment/`
+- `velocity/DiscordOutboxWorker.java`
 
-An unfinished punishment draft is stored so staff can close the interface and
-resume later without reconstructing the target, reason and note from memory. The
-workflow must revalidate the recommendation when history or policy changes.
-
-### Primary files
-
-- [Draft workflow](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentDraftWorkflow.java)
-- [Draft domain models](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/application)
-- [JDBC draft store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPunishmentDraftStore.java)
-- [Punishment GUI package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/punishment)
-
-### What remains
-
-Prove complete crash, logout, server-switch, expiration, policy-version and
-multi-server ownership behavior.
-
-## Rank authority and approval requests
-
-### What it does
-
-Authorization is rechecked in central services rather than trusting a command or
-permission node. Helpers can apply authorized temporary results, but permanent
-results become approval requests. Developers may prepare requests but cannot
-mutate punishment state or approve their own work.
-
-### Primary files
-
-- [Authorization policy](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/auth/DefaultAuthorizationPolicy.java)
-- [Punishment approval rules](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentApprovalRules.java)
-- [Punishment request service](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/PunishmentRequestService.java)
-- [Paper request command handler](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/PunishmentRequestCommandHandler.java)
-- [Request GUI package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/punishment)
-- [JDBC request store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPunishmentRequestStore.java)
-
-### What remains
-
-Complete external website/provider parity, live queue refresh, Bedrock
-presentation, offline reviewer flows, multi-server contention and production
-staging.
-
-## Request notifications and recovery
-
-### What it does
-
-The finished notification lifecycle informs the requester, eligible reviewers and
-operational administrators when a request is submitted, claimed, approved,
-denied, expired or externally fulfilled. Delivery must survive restart, avoid
-premature acknowledgement and recheck recipient authority immediately before
-presentation.
-
-### Current development
-
-PR #27 contains extensive durable recipient-specific alert, reconnect, recovery,
-configuration and Folia-safe delivery work. Until merged, it is active branch
-evidence rather than the behavior of `main`.
-
-### Primary areas
-
-- [Punishment request domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/application)
-- [Discord delivery domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/discord)
-- [Persistence stores](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
-- [Paper punishment presentation](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/punishment)
-- [Velocity Discord worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
-
-### What remains
-
-Merge/reconcile the active work, then prove online/offline delivery, restart,
-lease recovery, duplicate safety, authorization changes, Discord delivery and
-real multi-server/Folia behavior.
+The remaining gap is primarily complete provider/Discord/multi-runtime presentation and acceptance, not an unmerged historical request-notification branch.
 
 ## Escalation policy
 
-### What it does
+Stable reason IDs, families, ladder ordinals, aliases/removed metadata, recommendation snapshots and explicit decay eligibility are represented in merged code. The current system still has broader policy/configuration work before every goal-defined escalation relationship is complete.
 
-Each stable reason belongs to a family and ladder. Relevant historical actions,
-severity relationships, recent reoffending and configured decay determine the
-recommended step. Existing sanctions retain their original expectation when
-policy files change.
+Primary paths:
 
-### Primary files
+- [escalation domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/escalation)
+- [EscalationEngine](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/escalation/EscalationEngine.java)
+- [ReasonPolicyConfigurationLoader](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java)
+- [reason policies](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml)
 
-- [Escalation domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/escalation)
-- [Escalation engine](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/escalation/EscalationEngine.java)
-- [Reason policy loader](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java)
-- [Reason policies](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml)
+A policy-file edit must not silently reinterpret the original stored decision behind an existing sanction.
 
-### What remains
+## History and exact sanction lifecycle
 
-Complete all family relationships, severity jumps, clean-period decay, recency,
-finite/permanent ladder behavior, renamed/removed IDs, aliases and combined
-recommendations.
+Merged history/lifecycle behavior includes:
 
-## History and sanction changes
+```text
+/history <player|uuid> [page]
+/case [view] <case-id>
+/estaff sanction reduce <sanction-id> <expiration-or-duration> <reason>
+/estaff sanction end <sanction-id> <reason>
+/estaff sanction revoke <sanction-id> <reason>
+/estaff sanction overturn <sanction-id> [--appeal <appeal-id>] <reason>
+```
 
-### Implemented behavior
+The lifecycle targets one exact sanction. Reduction, early ending, revocation and overturn preserve the original case/sanction history and append the new decision rather than deleting history. Optional appeal/request linkage must belong to the same relevant case/sanction.
 
-`/history <player|uuid> [page]` resolves UUIDs, current usernames, historical usernames, offline players and stored Floodgate/Bedrock identities from the shared player directory. Ambiguous historical names are rejected with candidate UUIDs instead of guessing. MariaDB performs `COUNT`, `LIMIT` and `OFFSET`; ordering is newest-first with a stable event key for equal timestamps.
+Primary paths:
 
-`/case [view] <case-id>` is the single case-detail path. It shows subject identity, every sanction, request and appeal history, mutation timeline, original/current expiration and effective state. Plain-text IDs and next-page commands remain usable on Bedrock; Java click/hover features are not required.
+- `domain/history/`
+- [SanctionChangeService](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/application/SanctionChangeService.java)
+- `paper/command/HistoryCommand.java`
+- `paper/command/CaseCommand.java`
+- [SanctionLifecycleCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/SanctionLifecycleCommand.java)
+- [JdbcModerationHistoryStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcModerationHistoryStore.java)
+- [JdbcExactSanctionMutationStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcExactSanctionMutationStore.java)
+- `V14__punishment_history_and_exact_sanction_changes.sql`
 
-Exact lifecycle commands are:
+## Appeals and website moderation
 
-- `/estaff sanction reduce <sanction-id> <expiration-or-duration> <reason>`
-- `/estaff sanction end <sanction-id> <reason>`
-- `/estaff sanction revoke <sanction-id> <reason>`
-- `/estaff sanction overturn <sanction-id> [--appeal <appeal-id>] <reason>`
+Current aggregate source includes a scoped punishment/appeal workflow rather than only a future bridge. V17 adds appeal-workflow persistence and the Velocity bridge includes dedicated appeal workflow handling.
 
-An optional `--request <request-id>` links a resolved punishment request. Reduction preserves original issue/decision data and only moves expiration earlier. Early ending records the actual stop time and differs from natural expiration. Revocation is administrative withdrawal. Overturn is reversal of the decision and may link one accepted appeal belonging to the same case and sanction. No action deletes the original sanction, case, request, appeal or audit trail.
+Primary paths:
 
-### Concurrency, authority and audit
+- [website domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/website)
+- [JdbcWebsiteModerationStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java)
+- [JdbcWebsiteAppealWorkflowStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java)
+- [WebsiteApiRouter](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
+- [WebsiteAppealWorkflowEndpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealWorkflowEndpoint.java)
+- `V17__website_appeal_workflow.sql`
 
-The command prevalidates one exact sanction revision, then the fenced MariaDB transaction locks that sanction, rechecks the revision and issuing-rank hierarchy, validates appeal/request ownership, changes state, appends one `sanction_events` row and one `audit_events` row, and queues network/Discord output in the same commit. Identical retries replay the committed result. Conflicting runtimes produce one commit and one stale/no-op/rejected result; terminal revocation and overturn cannot contradict one another. The durable operational-mode fence from PR #37 remains authoritative.
+This is still **not** evidence that the private site is deployed, publicly launched, or production-accepted. Authentication, runtime/provider integration, operational deployment and privacy/security acceptance remain separate gates.
 
-### Primary files
+## Reports and evidence
 
-- `domain/history/*` and `domain/ports/ModerationHistoryStore.java`
-- `domain/application/SanctionChangeService.java`
-- `paper/command/HistoryCommand.java`, `CaseCommand.java`, `SanctionLifecycleCommand.java`
-- `persistence/JdbcModerationHistoryStore.java`
-- `persistence/JdbcExactSanctionMutationStore.java`
-- Flyway `V14__punishment_history_and_exact_sanction_changes.sql`
+Current merged report behavior includes player submission, bounded queues, detail/action GUI, text/Bedrock fallbacks, optimistic revision fencing, configurable policy/GUI snapshots, bounded retained evidence and cleanup.
 
-### What remains
+Primary paths:
 
-Run representative non-production staff usability/staging, complete the separate authenticated website reviewer UI and provider enforcement work, and retain LiteBans authority until the unrelated production-cutover gate is completed.
+- [ReportCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ReportCommand.java)
+- [ReportsCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ReportsCommand.java)
+- [report domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/report)
+- [JdbcReportStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportStore.java)
+- `JdbcReportSubmissionStore.java`
+- `JdbcReportSubmissionReplay.java`
+- `JdbcReportQueryStore.java`
+- `JdbcReportStateStore.java`
+- `JdbcReportEvidenceMaintenance.java`
+- [paper report package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/report)
 
-## Appeals
+The supported RoseChat private-message bridge and complete provider/Discord/distributed staging are still limitations. A report is investigation input, not proof of a violation.
 
-### What it does
-
-Players submit appeals through a private site. Authorized reviewers inspect a
-sanitized case projection and issue an audited decision that may leave the
-sanction unchanged or invoke the central sanction-change service.
-
-### Primary files
-
-- [Website domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/website)
-- [Website moderation store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java)
-- [Website appeal store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealStore.java)
-- [Website appeal endpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealEndpoint.java)
-- [Website API router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
-
-### What remains
-
-Complete authenticated site sessions, role controls, reviewer decisions,
-reopening, notifications and CSRF/rate-limit hardening. Accepted website appeal
-records can now be linked to the exact audited overturn transaction; the separate
-reviewer UI and production provider flow remain unfinished.
-
-## Report submission and queues
-
-### What it does
-
-Players submit private reports. The system validates the target, prevents
-self-reporting, applies cooldown/merge rules, stores bounded context and exposes
-revisioned staff queues. Staff claim, investigate and close one current revision
-without overwriting newer work.
-
-### Commands
-
-- `/report <player> <reason-id> <description>`
-- `/reports`
-- `/reports view`, `claim`, `close`, `no-violation`, `review`
-
-### Primary files
-
-- [Report command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ReportCommand.java)
-- [Reports command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ReportsCommand.java)
-- [Report domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/report)
-- [JDBC report facade](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportStore.java)
-- [Submission store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportSubmissionStore.java)
-- [Submission replay](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportSubmissionReplay.java)
-- [Query store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportQueryStore.java)
-- [State store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportStateStore.java)
-
-### Related pages
-
-- [[Reports and Evidence]]
-- [[Privacy and Data Handling]]
-
-### What remains
-
-Complete configurable reasons/cooldowns, live refresh, full GUI actions,
-multi-server contention, production-volume behavior and client/server context.
-
-## Evidence capture, privacy, and retention
-
-### What it does
-
-Reports can retain bounded public-chat context, private-message context supplied
-by a supported provider, coordinates and a point-in-time client snapshot. Private
-messages, reporter identity and coordinates remain staff-only and must never enter
-public punishment output or ordinary Discord payloads.
-
-### Primary files
-
-- [Chat context buffer](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/report/ChatContextBuffer.java)
-- [Paper evidence maintenance](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/report/ReportEvidenceMaintenance.java)
-- [JDBC evidence maintenance](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcReportEvidenceMaintenance.java)
-- [Client integrations](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client)
-
-### What remains
-
-Implement the supported RoseChat private-message bridge, verify message ordering
-and cross-server context, finish staff privacy review and stage physical retention
-under production conditions.
-
-## Report queue and detail GUI
-
-### What it does
-
-The planned staff GUI organizes Open, Mine, Claimed, Awaiting Review and Recently
-Closed reports. Detail actions include claim, spectate, teleport, freeze, punish,
-close and no violation.
-
-### Primary areas
-
-- [Report domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/report)
-- [Paper report package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/report)
-- [Reports command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ReportsCommand.java)
-
-### What remains
-
-Build the GUI, detail actions, modular configuration, pagination/live refresh,
-permissions and Java/Bedrock layouts.
+Staff procedure: [[Reports and Evidence]]. Configuration: [[Report Configuration]]. Privacy: [[Privacy and Data Handling]].
 
 ## Strict automod and client evidence
 
-### What it does
+Automod/client-evidence foundations exist, but the finished behavior depends on supported provider contracts and false-positive-resistant runtime integration.
 
-Strict automod is intended to cancel exact high-confidence violations before
-ordinary RoseChat recipients see them, then create durable case/evidence/audit and
-Discord output. Client evidence records protocol, platform, reported brand and
-supported AutoClicker handshake information without treating spoofable metadata as
-proof by itself.
+Relevant areas:
 
-### Primary files
+- `domain/evidence/`
+- `paper/client/`
+- `paper/automod/`
+- `integration-contracts/`
 
-- [Automod package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/automod)
-- [Client package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client)
-- [Evidence domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/evidence)
-- [AutoClicker contract](https://github.com/wsg138/EnthusiaStaff/blob/main/integration-contracts/src/main/java/net/enthusia/staff/integration/contracts/EnthusiaAutoClickerClientApi.java)
-- [Client command](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ClientCommand.java)
+Do not invent RoseChat or client-provider APIs. If the required provider contract is unavailable, the dependent feature should degrade explicitly instead of guessing through reflection, raw SQL or command dispatch.
 
-### What remains
+## Go deeper
 
-Reconstruct AutoClicker and RoseChat providers, prove pre-broadcast ordering,
-false-positive resistance, bounded retention, explicit capture, reload behavior,
-and durable case/audit/Discord creation.
-
-## Related pages
-
-- [[Feature Completion Status|Implementation-Status]]
-- [[Remaining Development Map|Development-Blueprint]]
-- [[Punishment System]]
-- [[Reports and Evidence]]
-- [[Commands and Permissions]]
-- [[Roles and Permissions|Rank-Authority]]
-- [[Privacy and Data Handling]]
-- [[Developer Code Guide]]
+- [[Punishment System]] — staff punishment procedure.
+- [[Reports and Evidence]] — report/evidence procedure.
+- [[Report Configuration]] — report policy/GUI configuration.
+- [[Roles and Permissions|Rank-Authority]] — rank authority.
+- [[Privacy and Data Handling]] — evidence/public-data boundaries.
+- [[Developer Code Guide]] — detailed source traces.
+- [[Code Review Guide]] — authority, transaction, distributed and privacy review checklist.
+- [[Build and Testing]] — what automated versus runtime evidence proves.
+- [[Implementation Status]] — overall product status.

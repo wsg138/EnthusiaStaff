@@ -6,88 +6,60 @@
 
 ## 2. Status
 
-`MERGE_PENDING` — `ACTIONABLE_CONTINUATION`
+`COMPLETE`.
 
-Assigned worker: `ChatGPT sequential ES-X05 completion worker`.
+The owner-directed outage-recovery pass selected this package only after proving ES-P02 remained parked on its unchanged private Billing & plans blocker and ordinary public GitHub-hosted Ubuntu execution had recovered.
 
-## 3. Objective
+## 3. Completed implementation
 
-Complete website authentication, exact-punishment appeal UX, reviewer controls, privacy, rate limiting, retries, the real private EnthusiaStaff appeal contract, production site deployment, and verified standalone/aggregate synchronization.
+The package provides Cloudflare Access claim verification, canonical linked Minecraft identity, direct-but-unlinked appeal/reviewer pages, exact-punishment appeal selection/submission, privileged reviewer decisions, same-origin browser mutations, fixed-origin bearer-plus-HMAC private Staff API requests, bounded/time-limited upstream access, MariaDB-backed appeal persistence, atomic rate limiting, scoped replay/idempotency protection, optimistic revisions, audit events, and exact-sanction approval delegation. V17 is the only package migration; V1–V16 remain unchanged.
 
-## 4. Completed standalone-site work
+## 4. Standalone evidence and live defect repair
 
-- Cloudflare Access JWT signature, issuer, audience, expiry, and not-before verification.
-- Canonical Minecraft identity derived only from verified claims.
-- Authenticated exact-punishment selector and appeal submission boundary.
-- Privileged reviewer listing and versioned decision boundary.
-- Same-origin mutation enforcement, identity-bound idempotency, bounded bodies, bounded upstream requests, and stale-decision protection.
-- Fixed-origin, allowlisted, bearer-plus-HMAC private Staff API requests with timestamp, nonce, and body-hash authentication.
-- Hosted Node 22 test/build workflow with persisted checkout credentials disabled.
-- Exact vanilla potion IDs and tint colors for potions, splash potions, lingering potions, and tipped arrows nested in shulker boxes or bundles; live updates are serialized and failed manifest loads may retry.
+- Repository: `wsg138/enthusia-site`.
+- ES-X05 PR #2 reviewed head `1a45b32e372cf6939c078a0d7986655e7ed639d6`; hosted validation `31113188453` success; production and preview Cloudflare deployments success; Codacy success; zero unresolved review threads; normal merge `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Live reconciliation found follow-up PR #3, `Allow unlinked appeal pages to load publicly`, exact head `db8d4dc6836729b0558eaa2926f8bf4f362b8eaf`, normal merge/current standalone `main` `2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2`.
+- PR #3 fixes a reproducible ES-X05 routing defect by removing page-level `functions/_middleware.js`, which redirected intended public-but-unlinked appeal/reviewer pages when Access/login configuration was absent. Authentication and reviewer-role authorization remain inside the protected `/api/appeals*` and `/api/reviewer/appeals*` handlers.
+- PR #3 exact head passed site test workflow run `31118849099` / job `92674874313`, `Cloudflare Pages: enthusia-site` check `92675068365`, `Cloudflare Pages: enthusia-market-preview` check `92674953189`, and Codacy check `92675034770`; zero review threads were present.
 
-## 5. Standalone evidence
+## 5. Aggregate recovery and exact-head validation
 
-- Repository: `wsg138/enthusia-site`
-- Starting main: `9408166c75def0b55caa8d38fb546c6e77ea1f7d`
-- Baseline PR #1 merge: `042b503b7a4adc2627f2259a09e7d7394ced06ce`
-- Continuation branch: `package/es-x05-appeal-hardening`
-- Continuation PR: `wsg138/enthusia-site#2`
-- Final reviewed head: `1a45b32e372cf6939c078a0d7986655e7ed639d6`
-- Hosted validation: run `31113188453` — success.
-- Production `enthusia-site` Cloudflare deployment: success.
-- Market-preview Cloudflare deployment: success.
-- Review: zero unresolved threads; Codacy passed with zero annotations.
-- Normal merge commit and current standalone `main`: `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
+- Aggregate implementation branch `package/es-x05-state-publication`; PR #73; normal merge `345b7bbcec6facb45c7f96b0e6e181ac7a38e1da`.
+- Exact aggregate implementation hosted-validation/review product head `4c818bb3aea953d3f877efc8a48a9175ba219d38`; Coverage `31116854096` / `92668751419` passed Java 21 build/tests, MariaDB/Testcontainers migrations, coverage, runtime-JAR/provider-leak checks, artifacts, and Codacy coverage.
+- Recovery started from aggregate `main` `9b1aac2677049ccc71dbddd963831f270c73dcd0` and finalization head `96bf9ab21b114a4523582a5ca267e6c1d1370cb1`.
+- Current `main` was reconciled through normal merge commit `e9644c14e743f686758ee619ab347cbebe1b21ec`, preserving ES-P03 and current ES-P02 records. The standalone PR #3 deletion was mirrored under `components/enthusia-site/`.
+- Frozen exact finalization head: `ab59b8357b8e2eb146b60ff122e316112906746f`.
+- Coverage run `31140188918`, job `92748299782`: success on Ubuntu 24.04 / Temurin Java `21.0.11+10`; `./gradlew clean build jacocoAggregateReport runtimeJars` succeeded with unit and MariaDB/Testcontainers integration/migration tests, coverage, runtime-JAR integrity/provider-leak checks, artifacts, and Codacy upload.
+- Runtime inspection checked 24 provider API source types with 0 leaks. Paper JAR SHA-256 `9880457c88f445de6f813f9bbee15544b59abc344d65420a6ae100d4ef5ab9d4`; Velocity JAR SHA-256 `74e0105a94c7f10fc371fe033f07ab46588a01c18bfeea832af3179e72f986d6`. Validation artifact `8979625925`, archive SHA-256 `42c9f835001de4847cd26961dbbe185a671b0239511d872a9553efeba44680f4`.
+- CodeRabbit exact-head status succeeded; PR #74 has zero valid unresolved review threads. Codacy static `92748599134`, coverage variation `92749330468`, and diff coverage `92749330613` all succeeded.
+- Wiki validation was not applicable because the finalization diff changed no wiki paths or workflow.
 
-## 6. Completed aggregate and contract work
+## 6. Merge, containment, and parity
 
-- Aggregate branch: `package/es-x05-state-publication`.
-- Aggregate PR: `wsg138/EnthusiaStaff#73`.
-- Frozen aggregate product head before final state reconciliation: `96912301fc425ac6f5eff9349ee3b3d543d122eb`.
-- The site and Velocity implementation use the same exact POST routes and payloads:
-  - `/v1/website/appeals/eligible`
-  - `/v1/website/appeals/submit`
-  - `/v1/website/appeals/reviewer/list`
-  - `/v1/website/appeals/reviewer/{appealId}/decision`
-- The Velocity API validates bearer/HMAC authentication, timestamp skew, nonce replay, body hash, canonical UUIDs, bounded request bodies, fixed fields, and role/service-boundary authorization. It is loopback-only and is intended to sit behind the deployment proxy for `staff-api.enthusia.info`.
-- Durable MariaDB appeal workflow includes exact-punishment eligibility, account binding, duplicate prevention, atomic rate limiting, request idempotency, reviewer version checks, appeal-scoped reviewer replay keys, audit events, and exact-sanction approval integration.
-- V17 is the only new migration and does not alter V1–V16.
-- Integration tests cover lifecycle behavior, stale decisions, duplicate appeals, account binding, rate limits, submission replay, reviewer replay scoping, and exact-sanction acceptance delegation.
+- Finalization PR #74 merged normally as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` with frozen head unchanged.
+- Compare from frozen head `ab59b8357b8e2eb146b60ff122e316112906746f` to merge `2bcf5d46ca6471fddac600f85020c66105b1c0f2` reports no changed files, proving full containment and no unique branch work.
+- Deterministic post-merge component parity used `tools/component-sync/component_sync.py` against exact aggregate merge `2bcf5d46ca6471fddac600f85020c66105b1c0f2` and standalone `main` `2fe7d59c1c5e12db0b7ba792fc9e2af4d24337c2`.
+- Successful parity run `31140896890`, job `92750376952`, artifact `8979748083`: aggregate hash = standalone hash = `780269847698d37c470cb7c241539b1c7387014225cc7eee9598548c9dc97f8b`; added `[]`; missing `[]`; modified `[]`; parity `true`.
+- Earlier harness-only attempts `31140685623` / `92749749317` and `31140785772` / `92750046294` failed respectively on an unrelated shallow-history precheck and an incorrect wrapper JSON key. The second already printed `parity: true`; the corrected third run passed every step and uploaded evidence.
 
-## 7. Component synchronization
+## 7. Owner-approved deferred staging
 
-- Standalone source: merge commit `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
-- Aggregate destination: `components/enthusia-site/` in PR #73.
-- Canonical component hash: `9910dc90d22be68bf034f03def0cabd617bdf2e9953f87231f11af1166fc07e2`.
-- Standalone hash equals aggregate hash.
-- Added, missing, and modified path sets are empty.
-- Metadata-only `COMPONENT-METADATA.md` is excluded by the canonical sync method.
-- Parity evidence: [`2026-08-06-es-x05-component-parity.json`](../../reports/package-handoffs/2026-08-06-es-x05-component-parity.json).
+Evidence label: **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED**.
 
-## 8. Remaining completion work
+- Owner: repository owner `wsg138`; approval source/date: explicit project-conversation instruction on 2026-08-06.
+- Named deferred package: `ES-V02 — Distributed and Java/Bedrock staging`.
+- Original dispatcher `31116852061` / `92668521113`; private run `31116860919`; build `92668551209` had runner ID `0`, empty runner name and steps `[]`; Pi job `92668600472` skipped. No private checkout/build/test/artifact/Paper boot/restart/migration executed.
+- No manual private-staging retry was requested during recovery. Repository PR automation automatically dispatched wrapper `31140187754` / job `92748257022`, which dispatched private run `31140197043` for frozen source `ab59b8357b8e2eb146b60ff122e316112906746f`. Private build `92748287250` again had runner ID `0`, empty runner name, steps `[]`, and the same Billing & plans payment/spending-limit annotation; Pi `92748295072` skipped.
+- These results are unavailable-infrastructure evidence only. Private/Pi staging remains deferred to ES-V02 and is not called passed.
 
-1. Obtain a successful exact-current-head aggregate Coverage run. Run `31115480613` failed before checkout because GitHub could not resolve action downloads; no product step executed.
-2. Confirm applicable static-analysis checks and zero valid unresolved review threads on the final head.
-3. Reconfirm deterministic parity against standalone `main` at `b385f78c522f452cc48d78ed19fd2ee82573f64d`.
-4. Merge aggregate PR #73 by a normal merge commit with the reviewed head unchanged.
-5. Verify aggregate-main containment and no unique temporary-branch work.
-6. Publish final aggregate merge SHA and `COMPLETE` state, clean temporary branches where tooling permits, and stop without selecting another package.
+## 8. Authority/privacy boundary
 
-## 9. Migration and authority boundary
+LiteBans remains authoritative. Issue #43, production cutover, production credentials/accounts/data/routes, production/private player data, Flyway repair/history rewriting, ES-V02 execution, and authority activation remain excluded.
 
-- Current aggregate `main` remains at V16 until PR #73 merges.
-- PR #73 adds immutable `V17__website_appeal_workflow.sql`.
-- LiteBans remains authoritative. Issue #43 remains open, deferred, and excluded.
-- ES-X05 does not deploy or authorize a LiteBans cutover, access production punishment data, rewrite Flyway history, or activate EnthusiaStaff punishment authority.
-
-## 10. Security/privacy boundary
-
-No production credentials, Access tokens, player records, punishment records, or private database data are committed. Authentication, reviewer rank, origin, replay, rate-limit, timeout, request-size, and upstream-service configuration fail closed. Browser-provided identity and rank are never trusted as service authority.
-
-## 11. Canonical handoff
+## 9. Canonical handoff
 
 [`2026-08-06-es-x05-website-auth-appeals.md`](../../reports/agent-handoffs/2026-08-06-es-x05-website-auth-appeals.md)
 
-## 12. Last update
+## 10. Completion / next routing
 
-2026-08-06
+ES-X05 is complete after hosted exact-head validation, normal merge, zero unresolved findings, containment, and deterministic external-component parity. This worker must stop after publishing this same-package completion record. `ES-P04` and `ES-P09` become dependency-ready because ES-P03 is complete; neither is started here. Normal sequential routing should prefer `ES-P04` at priority 40 absent a newly actionable continuation.

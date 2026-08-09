@@ -4,31 +4,36 @@
 - Package: `ES-P02 — Runtime database recovery and Velocity reload`
 - Starting status: `READY`
 - Current status: `BLOCKED`
-- Selection: resumed through automatic sequential package selection because PR #70 remained open
+- Current routing classification: `PARKED_BLOCKED` while the exact runner and authorization condition remains unchanged
 - Starting `main`: `d94d0219a598c9afb7e19c4ea9fddafd554d6469`
-- Current `main`: `5c969901146fc5081eec14b3c089bec7b06d5f5e`
+- Canonical `main` at status-publication start: `5c969901146fc5081eec14b3c089bec7b06d5f5e`
 - Branch: `package/es-p02-runtime-db-recovery`
 - Pull request: `#70`, open, non-draft, unmerged, and currently non-mergeable
 - Frozen product head: `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`
+- Current package-record and PR head: `80d4ea840f34017c09afb618f623581b31c6223d`
 - Highest Flyway migration: `V16`; V1–V16 remain immutable
 - Issue #43: open, deferred, and excluded
 - Production authority: LiteBans remains authoritative
 - External parity: not applicable; ES-P02 is internal
+- Active implementation package: `NONE`
+- Next eligible ready package: `ES-X05`, unstarted
 
-## Selection and live reconciliation
+## Canonical routing disposition
 
-Live GitHub contained one unfinished package PR: PR #70 for ES-P02. The PR body and package records identified the package as blocked by required Pi staging evidence. The parent workflow failure was rechecked rather than selecting ES-X05. The staging diagnostics showed the failure occurred before the Pi runner: the ordinary `ubuntu-latest` build job received no runner and executed zero steps. The failed staging build job was rerun once; attempt 2 reproduced the same zero-runner, zero-step failure. ES-P02 therefore remains the selected package and is correctly blocked. No second package was started.
+PR #70 and its unique product work remain preserved. ES-P02 is not actionable merely because the PR is open, the branch is behind current `main`, or the PR is non-mergeable. Its required next product action still depends on the same unavailable runner or a new policy-valid owner disposition, and there is no other known actionable defect.
 
-The package branch has also diverged from current `main`: it is 53 commits ahead and 5 commits behind, with merge base `d94d0219a598c9afb7e19c4ea9fddafd554d6469`. The current `main` head is `5c969901146fc5081eec14b3c089bec7b06d5f5e`.
+While that condition remains unchanged, classify ES-P02 as `PARKED_BLOCKED`. Do not rerun the identical staging gate, merge `main` into the package branch merely to keep it current, modify PR #70, or start repair work without a newly confirmed defect. Continue canonical selection to the eligible `READY` package.
 
-## Included scope completed
+When hosted runner availability or owner authorization demonstrably changes, classify ES-P02 as `ACTIONABLE_CONTINUATION` and resume PR #70 before starting another new package.
+
+## Included scope completed on the preserved implementation branch
 
 ### Paper
 
 - Bounded exponential MariaDB bootstrap retry and recovery.
 - One active attempt and one scheduled retry at a time.
 - Cleanup-before-retry for partially published runtimes.
-- Worker/global/entity scheduler separation and stale callback rejection.
+- Worker, global, and entity scheduler separation and stale callback rejection.
 - Retry exhaustion, recovery, shutdown suppression, and sanitized health.
 
 ### Velocity
@@ -44,35 +49,35 @@ The package branch has also diverged from current `main`: it is 53 commits ahead
 - Whole-candidate restart-required rejection for resource-bound settings.
 - Atomic health issue updates that preserve the current mode.
 
-### Process and documentation
+### Documentation
 
-- Automatic sequential package-selection rules were established.
-- Package, registry, workspace, handoff, prompt, and worker-protocol records were updated.
-- `docs/runtime-database-recovery.md` documents recovery, reload, operator, security, and migration boundaries.
+- `docs/runtime-database-recovery.md` on the preserved implementation branch documents recovery, reload, operator, security, and migration boundaries.
+- The implementation branch package records preserve the detailed product checklist and evidence.
+- This canonical handoff publishes routing and blocker state plus summarized scope and validation evidence; it does not copy product source or test files.
 
 ## Exclusions preserved
 
-No production database or private-data access; no Flyway repair or migration rewrite; no provider invention; no deployment, authority activation, issue #43 acceptance, shadow period, production migration, cutover, rollback, ES-X05 work, external component work, or second package.
+No production database or private-data access; no Flyway repair or migration rewrite; no provider invention; no deployment, authority activation, issue #43 acceptance, shadow period, production migration, cutover, rollback, ES-X05 work, external component work, or second implementation package.
 
 ## Tests and review evidence
 
 Paper tests cover scheduler phase separation, transient recovery, worker rejection, exhaustion, shutdown before retry, cleanup-before-retry, stale callbacks, recovery failure, cleanup rejection, and retry payloads.
 
-Velocity tests cover transient recovery, exhaustion, permanent failure, shutdown, manual retry without overlap, worker/scheduler rejection, atomic reload, restart-required rejection, invalid candidates, publication rollback, repeated reload, shutdown races, immutable health snapshots, and atomic issue merges.
+Velocity tests cover transient recovery, exhaustion, permanent failure, shutdown, manual retry without overlap, worker and scheduler rejection, atomic reload, restart-required rejection, invalid candidates, publication rollback, repeated reload, shutdown races, immutable health snapshots, and atomic issue merges.
 
-CodeRabbit identified three confirmed defects: a Paper terminal-health overwrite, a Velocity lost-update/stale-mode health race, and overlapping Velocity bootstrap transitions. All were fixed. Manual review fixed two additional race windows. Codacy findings were addressed. Zero valid unresolved review threads were recorded before the package froze its product head.
+CodeRabbit identified three confirmed defects: a Paper terminal-health overwrite, a Velocity lost-update and stale-mode health race, and overlapping Velocity bootstrap transitions. All were fixed. Manual review fixed two additional concurrency windows. Codacy findings were addressed. Zero valid unresolved review threads remain on PR #70.
 
-## Exact product-head validation
+## Successful hosted product validation
 
 Frozen product head `b63fa1fa09ae4a9ea90988143ecda2cc7decbe14`:
 
 - Coverage workflow run `31072792371`, job `92524077883`: `SUCCESS`.
 - Expected SHA verification and Java 21 setup: passed.
-- Full tests, MariaDB/Testcontainers, migration integrity, and changed-code coverage threshold: passed.
-- Runtime JAR build, integrity, and API/provider-leak checks: passed.
+- Full tests, MariaDB and Testcontainers, migration integrity, and changed-code coverage threshold: passed.
+- Runtime JAR build, integrity, and API or provider-leak checks: passed.
 - Codacy Static Code Analysis: passed with zero annotations.
 - CodeRabbit check: passed.
-- Unresolved review threads: zero.
+- Valid unresolved review threads: zero.
 - Snyk: skipped and not counted as passing evidence.
 - Exact numeric coverage and artifact hash were not surfaced by the connector, so only the configured threshold and integrity gates are claimed.
 
@@ -86,34 +91,46 @@ Parent source-repository workflow:
 
 Staging attempt 1:
 
-- Build job `92524048937`, `ubuntu-latest`: `FAILURE`.
+- Ordinary hosted build job `92524048937`, label `ubuntu-latest`: `FAILURE`.
 - `runner_id: 0`; runner name empty; `steps: []`.
-- Pi job `92524054852`: `SKIPPED`.
+- Downstream Pi job `92524054852`: `SKIPPED`.
 
-Staging attempt 2, triggered by rerunning the failed build job:
+Staging attempt 2, triggered by rerunning the failed build job once:
 
-- Build job `92541148296`, `ubuntu-latest`: `FAILURE`.
+- Ordinary hosted build job `92541148296`, label `ubuntu-latest`: `FAILURE`.
 - `runner_id: 0`; runner name empty; `steps: []`.
-- Pi job `92541160241`: `SKIPPED`.
+- Downstream Pi job `92541160241`: `SKIPPED`.
 
-No staging product build, Pi boot, or restart step executed. This is infrastructure-unavailable evidence, not a product failure and not a pass. The missing gate is an ordinary hosted build, so `VALIDATION-POLICY.md` does not permit treating it as an owner-approved infrastructure exception. No ES-P02 package-specific owner approval exists regardless.
+No staging product build, Pi boot, or restart step executed. This is infrastructure-unavailable evidence, not a product failure and not a pass. The unavailable job is an ordinary hosted build gate. No ES-P02 package-specific infrastructure exception or owner authorization exists.
 
-## Current blocker
+Do not rerun an identical zero-runner gate without evidence that runner capacity, billing, authorization, configuration, or environment availability changed. A manual rerun alone is not evidence that the unblock condition changed.
 
-ES-P02 cannot merge until all of the following occur:
+## Exact unblock condition
+
+All of the following are required before merge:
 
 1. an exact package head obtains a successful ordinary staging build and successful specialized-runner Pi build, safe boot, and restart result, or the owner records a policy-valid ES-P02 disposition that does not relabel a missing ordinary hosted gate as passed;
-2. current `main` is merged into the package branch through the approved merge-commit workflow, without rebase or force-push, and all conflicts are resolved; and
-3. every applicable exact-head hosted, static-analysis, review, artifact, migration, and staging gate is rerun on the synchronized frozen head.
+2. after that external condition changes, current `main` is merged into the package branch through the approved normal merge-commit workflow, without rebase or force-push, and conflicts are resolved; and
+3. every applicable exact-head hosted, static-analysis, review, artifact, migration, and staging gate is rerun on the synchronized frozen head with zero valid unresolved findings.
 
-## Resume state and exact next action
+Branch drift and non-mergeability do not make ES-P02 actionable while the external condition is unchanged. Do not synchronize merely to keep the branch current.
 
-Resume PR #70 and `package/es-p02-runtime-db-recovery`. Do not modify product code without a newly confirmed defect. Recheck staging only when hosted runner allocation may have recovered or the owner supplies new authorization. After the staging condition can proceed, merge current `main` into the package branch, resolve conflicts, freeze the resulting head, rerun all required exact-head gates, and merge normally only if every gate passes.
+## Exact next-worker behavior while unchanged
+
+1. Inspect PR #70 and confirm its head, checks, reviews, package records, and exact unblock condition.
+2. Classify ES-P02 as `PARKED_BLOCKED`.
+3. Do not rerun staging.
+4. Do not merge `main` into the ES-P02 branch.
+5. Do not modify or close PR #70.
+6. Select ES-X05 as the lowest-priority eligible `READY` package.
+7. Complete only ES-X05 and stop.
 
 ## Systems not to disturb
 
+- PR #70, its unique commits, and `package/es-p02-runtime-db-recovery`.
 - LiteBans authority and issue #43 acceptance.
 - Production databases, credentials, routes, logs, and private data.
 - V1–V16 migration bytes.
+- Workflows and runtime configuration.
 - External component repositories and aggregate component copies.
-- ES-X05 and every other package.
+- ES-X05 during this documentation-only status-publication work.

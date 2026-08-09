@@ -19,6 +19,7 @@ import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
+import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
@@ -58,12 +59,14 @@ class NetworkIdentityWriteFenceIntegrationTest {
             assertEquals(1, delegate.observations.get());
             assertFalse(store.setRelationship(null, null, null, null, null, null));
             assertFalse(store.reopen(null, null, null, null, null));
+            assertEquals(new NetworkIdentityRetentionResult(0, 0), store.purgeExpired(Instant.EPOCH, 10));
             assertEquals(0, delegate.manualChanges.get());
+            assertEquals(0, delegate.retentionRuns.get());
         }
     }
 
     @Test
-    void activeModePreservesRequestedInheritanceBehavior() throws SQLException {
+    void activeModePreservesRequestedInheritanceAndRetentionBehavior() throws SQLException {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              HikariDataSource dataSource = dataSource()) {
             setMode(OperationalMode.ACTIVE);
@@ -77,10 +80,13 @@ class NetworkIdentityWriteFenceIntegrationTest {
                     Instant.EPOCH,
                     false
             );
+            NetworkIdentityRetentionResult retention = store.purgeExpired(Instant.EPOCH, 10);
 
             assertFalse(result.evidenceSuppressed());
             assertFalse(delegate.suppressAutomatedEvidence.get());
             assertEquals(1, delegate.observations.get());
+            assertEquals(new NetworkIdentityRetentionResult(2, 3), retention);
+            assertEquals(1, delegate.retentionRuns.get());
         }
     }
 
@@ -133,6 +139,7 @@ class NetworkIdentityWriteFenceIntegrationTest {
     private static final class TrackingNetworkIdentityStore implements NetworkIdentityStore {
         private final AtomicInteger observations = new AtomicInteger();
         private final AtomicInteger manualChanges = new AtomicInteger();
+        private final AtomicInteger retentionRuns = new AtomicInteger();
         private final AtomicBoolean suppressAutomatedEvidence = new AtomicBoolean();
 
         @Override
@@ -175,6 +182,12 @@ class NetworkIdentityWriteFenceIntegrationTest {
         ) {
             manualChanges.incrementAndGet();
             return true;
+        }
+
+        @Override
+        public NetworkIdentityRetentionResult purgeExpired(Instant cutoff, int batchSize) {
+            retentionRuns.incrementAndGet();
+            return new NetworkIdentityRetentionResult(2, 3);
         }
     }
 }

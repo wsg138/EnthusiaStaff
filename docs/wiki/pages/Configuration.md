@@ -1,72 +1,61 @@
 # Configuration
 
-EnthusiaStaff is moving toward a modular, versioned configuration tree that is
-validated as one immutable model. Current `main` still uses a smaller
-configuration shape, so this page distinguishes **what exists now** from the
-**target layout**.
+EnthusiaStaff is moving toward a modular, versioned configuration tree that can be validated as one immutable model. Current merged `main` implements only part of that target, so this page separates **current sources** from **planned modular layout**.
 
-- Core completion, source files and remaining work: [[Core Platform and Infrastructure]]
-- Commands and permissions: [[Commands and Permissions]]
+- Current core status: [[Core Platform and Infrastructure]]
+- Commands/permissions: [[Commands and Permissions]]
 - Provider settings: [[Integrations]]
-- Validation/reload testing: [[Build and Testing]]
+- Report-specific configuration: [[Report Configuration]]
+- Validation/reload evidence: [[Build and Testing]]
 
 ## Current configuration sources
 
 | File or class | Current purpose |
 | --- | --- |
-| [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Current Paper runtime settings |
-| [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | Current reason, ladder and escalation policy |
-| [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | Commands, permissions and soft dependencies |
-| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Parses and validates reason policies, aliases and removed-ID metadata |
-| [`PaperReasonPolicyBootstrap.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperReasonPolicyBootstrap.java) | Publishes the valid reason-policy model |
-| [`PaperDatabaseConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperDatabaseConfiguration.java) | Resolves database settings and environment-variable names |
-| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy, alias and removed-ID boundary |
-| [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Velocity settings and environment-backed secret references |
+| [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Current Paper runtime settings, including current staff-tool controls |
+| [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | Stable reason, family, ladder, decay and compatibility policy |
+| [`paper/src/main/resources/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reports.yml) | Report submission/evidence/retention policy |
+| [`paper/src/main/resources/gui/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/gui/reports.yml) | Report queue/detail GUI presentation |
+| [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | Commands, permissions, rank inheritance and soft dependencies |
+| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Reason-policy parsing and validation |
+| [`PaperReasonPolicyBootstrap.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperReasonPolicyBootstrap.java) | Valid reason-policy publication |
+| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy boundary |
+| [`PaperDatabaseConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperDatabaseConfiguration.java) | Database settings/environment-variable references |
+| [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Velocity/network/Discord/site settings and secret references |
 
-The full modular tree below is not yet implemented on `main`.
+The complete target modular tree is not yet implemented.
 
-## Reason aliases and removed IDs
+## Reason IDs, aliases and removed reasons
 
-`reason-policies.yml` supports two optional versioned compatibility sections at the root:
+Reason IDs are durable identities, not display strings. The policy supports versioned compatibility metadata so old stored state can remain understandable without making removed policies newly selectable.
 
-```yaml
-version: "2026-08-02.1"
+An alias maps one historical ID directly to one active canonical reason. Alias chains, cycles, self-targets, unknown targets, duplicate IDs and overlap with active/removed IDs are invalid.
 
-aliases:
-  - id: chat.old-harassment
-    target: chat.harassment
+A removed reason retains presentation metadata for history/review, but has no active ladder and cannot be selected for a new punishment. Existing cases/sanctions are not rewritten when a reason is renamed or retired.
 
-removed-reasons:
-  - id: chat.retired-abuse
-    family: chat
-    display-name: Retired abusive language
-```
+Aliases, removed-reason metadata, active reasons and configuration version are published as one validated snapshot.
 
-An alias is an old stable ID mapped directly to one active canonical reason. Alias targets must be active reasons; alias chains, cycles, self-targets, duplicate aliases, unknown targets, and overlap with active or removed IDs are rejected. A stored draft or compatible caller using an alias is evaluated against the current canonical policy and the canonical ID is used for a newly committed case.
+## Current history/sanction settings
 
-A removed reason contains presentation metadata only. It has no ladder and never appears in the category or reason selection catalog. Saved review state can still show its ID, family, and display name, but authoritative confirmation rejects it because removed IDs do not resolve to active policies. Existing case, sanction, ordinal, expiration, and audit records are not rewritten.
+Current Paper configuration includes history and exact-sanction-action presentation/validation settings such as bounded page size, request/appeal timeline inclusion, timezone and mutation-reason length limits.
 
-Aliases, removed-ID metadata, active reasons, and the configuration version are one atomic reload snapshot. A failed publication or later reload component failure restores the previous complete snapshot rather than mixing versions.
+These settings are reloadable only through their validated snapshot path. A rejected candidate must leave the previous valid values active and must not rebuild MariaDB, rerun migrations, reset operational mode, activate moderation authority, discard queued work or duplicate workers.
 
-## Current history and sanction-action settings
+## Current report settings
 
-The following values are implemented in `paper/src/main/resources/config.yml` and validated as part of the immutable Paper configuration snapshot:
+Report policy and GUI configuration have their own source files and validation/publication path. They cover bounded submission/evidence behavior and report inventory presentation.
 
-```yaml
-history:
-  page-size: 8
-  include-request-events: true
-  include-appeal-events: true
-  timezone: UTC
-sanction-actions:
-  minimum-reason-length: 3
-  maximum-reason-length: 500
-  allow-permanent-reduction: true
-```
+Use [[Report Configuration]] for supported fields and operator-facing behavior. Do not copy that full reference into this page.
 
-`history.page-size` accepts `1` through `100`; timezone must be an IANA zone. Reason limits must be between `1` and `512`, with maximum at least minimum. Invalid reload candidates leave the previous valid snapshot and command presentation settings active. These settings are reloadable and do not rebuild the MariaDB pool, rerun migrations, reset operational mode, activate authority, discard queued work or duplicate scheduled workers.
+## Current staff-tool settings
 
-## Target layout
+Current merged staff-tool controls are stored in Paper configuration and are applied to the runtime staff profile/dispatcher. Treat scheduler/lifecycle/provider capacity and any setting documented as restart-only accordingly; a reload command should not pretend a restart-only runtime resource was rebuilt successfully.
+
+Staff-facing behavior is documented in [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
+
+## Target modular layout
+
+The authoritative goals describe a broader shape similar to:
 
 ```text
 plugins/EnthusiaStaff/
@@ -102,61 +91,39 @@ plugins/EnthusiaStaff/
 │   ├── cheat-testers.yml
 │   └── alts.yml
 └── punishments/
-    ├── hate-harassment-safety.yml
-    ├── spam-noise-language.yml
-    ├── inappropriate-content.yml
-    ├── politics-irl.yml
-    ├── account-security.yml
-    ├── complicity-evasion.yml
-    ├── exploits.yml
-    ├── market.yml
-    ├── reputation.yml
-    ├── mods-clients.yml
-    ├── reports-tickets.yml
-    └── other-extreme.yml
+    └── <versioned policy files>
 ```
+
+That tree is a finished-design target, not a statement that every file currently exists.
 
 ## Design rules
 
-Every modular file should provide:
+Configuration changes should preserve:
 
-- comments and examples;
-- a configuration version;
 - stable IDs and explicit aliases;
-- path-aware validation errors;
-- immutable runtime models;
+- path-aware validation failures;
+- immutable runtime snapshots;
+- cross-file reference validation;
+- safe defaults that cannot activate production authority accidentally;
 - explicit restart-required settings;
-- safe defaults that do not enable production authority accidentally.
+- one all-or-nothing publication boundary for settings that must agree;
+- durable state continuity across reload.
+
+A reload must not discard active sanctions, drafts, requests, reports, staff sessions, leases, journals, recovery state, or queued durable delivery.
 
 ## Secrets
 
-Keep real secrets outside Git and ordinary Wiki examples:
+Keep real secrets outside Git and ordinary Wiki examples, including:
 
-- MariaDB passwords;
+- MariaDB credentials;
 - TLS key/trust-store passwords;
 - network-identity encryption/HMAC keys;
 - Discord webhook URLs;
-- website bridge secrets;
+- website bridge/authentication secrets;
 - Cloudflare/email/Turnstile/D1/R2/Hyperdrive credentials;
 - private provider credentials.
 
-Use environment variables or an approved secret manager. Configuration should
-store the environment-variable **name**, not the secret value.
-
-## Stable IDs and durations
-
-Supported duration examples:
-
-```text
-6h
-21d
-90d
-permanent
-```
-
-Reason, family, ladder, GUI, server and integration IDs must remain stable.
-Display-name changes must not create new policy identities. Removed IDs remain
-readable in history but unselectable. Renames require explicit aliases.
+Configuration should normally reference an environment-variable/secret name rather than embed the secret value.
 
 ## Reload
 
@@ -164,34 +131,28 @@ readable in history but unselectable. Renames require explicit aliases.
 /estaff reload
 ```
 
-The target reload transaction is:
+For a reloadable configuration set, the safe model is:
 
-1. read every reloadable file into a temporary tree;
-2. validate versions, paths, aliases, cross-references, ladders, GUI slots,
-   durations, permissions, servers and integrations;
-3. reject the entire candidate when any validation fails;
-4. leave the current valid model unchanged;
-5. atomically publish only a complete valid immutable model;
-6. preserve active sanctions, drafts, requests, reports, staff sessions, locks,
-   journals and recovery state.
+1. parse a complete candidate separately from live state;
+2. validate versions, IDs, aliases, cross-references, ranges, GUI slots, permissions, servers and integration references;
+3. reject the whole affected candidate on any invalid dependency;
+4. leave the prior valid snapshot active on failure;
+5. publish only a fully valid immutable replacement;
+6. preserve durable in-flight workflows and owned runtime resources.
 
-A reload must never partially apply only some files.
+Current implementation does not yet provide the full modular all-file reload described by the final goals.
 
-Punishment-request alert settings, history/sanction-action settings, and the reason policy compatibility metadata above use the validated all-or-nothing reload path.
+## Restart-required boundaries
 
-## Restart-required settings
+Typical restart-owned resources include:
 
-Examples likely to require restart include:
-
-- database connection pools and credentials;
+- database pools/credentials;
 - TLS key/trust material;
-- proxy/backend server identity;
-- persistent-channel sockets;
-- provider classloading;
+- backend/proxy identity and persistent sockets;
+- provider classloading/service discovery;
 - executor capacity and ownership.
 
-Verification should report **RESTART REQUIRED** rather than claiming those
-changes applied through reload.
+Verification should report **RESTART REQUIRED** when applicable instead of claiming a hot reload changed a resource that remained live.
 
 ## Operational modes
 
@@ -204,34 +165,33 @@ MAINTENANCE
 READ_ONLY_FAILURE
 ```
 
-Modes are safety controls, not convenience toggles. A configuration change must
-not switch authority merely to make a command available.
+Modes are safety/authority states, not convenience toggles. A configuration failure must not be “fixed” by switching authority merely to make a command available.
 
-## Validation checklist
+## Review checklist
 
-Before approving a configuration change, confirm:
+Before approving a configuration change, verify:
 
-- IDs are unique and stable;
-- aliases resolve exactly once to an active reason;
-- removed IDs are presentation-only and absent from selection;
-- every reason has family, severity, ladder, decay, visibility, reportability,
-  rank, automation eligibility, confiscation options and alt inheritance;
-- every GUI reference exists and slots do not conflict;
-- durations parse and limits are bounded;
-- permission nodes and server scopes are known;
-- secrets are absent from the diff/logs/errors;
-- invalid candidates are rejected atomically;
-- restart-only settings are reported clearly;
-- active sanctions and stored historical policy remain interpretable.
+- stable/unique IDs and deterministic alias handling;
+- removed IDs remain historical/presentation-only;
+- references and ranges validate together;
+- GUI slots/permissions/server scopes are known;
+- invalid candidates leave the previous valid runtime model intact;
+- restart-owned resources are reported honestly;
+- secrets cannot appear in source/log/error output;
+- active durable workflows remain interpretable after publication;
+- tests cover invalid and rollback publication, not only happy-path parsing;
+- any runtime claim beyond parser/publication tests is supported by the appropriate staging evidence.
 
-## Current completion
+## Current state
 
-The current policy file now has versioned alias and removed-ID compatibility, but the broader modular file tree remains incomplete. Modular configuration is still roughly **30%** complete and full atomic reload roughly **40%** complete. The detailed breakdown and primary files are maintained in [[Core Platform and Infrastructure]].
+Configuration/reload is **partial**. Several important validated snapshots exist, but the complete modular tree and full cross-file immutable reload boundary in the goals are not finished. See [[Core Platform and Infrastructure]] and [[Implementation Status]] for current merged-main status without artificial percentages.
 
 ## Related pages
 
 - [[Core Platform and Infrastructure]]
+- [[Report Configuration]]
 - [[Commands and Permissions]]
 - [[Integrations]]
+- [[Code Review Guide]]
 - [[Build and Testing]]
 - [[Recovery and Troubleshooting]]

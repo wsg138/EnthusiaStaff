@@ -1,229 +1,173 @@
 # Developer Code Guide
 
-This page is the practical map for reviewing or modifying the EnthusiaStaff
-codebase. It explains where important code lives, which files own each
-responsibility, and how requests move through Paper, the domain layer, MariaDB,
-Velocity, and external integrations.
+This is the detailed source map for EnthusiaStaff. Use [[Developer Guide Index]] when you only need to know where to start, and [[Code Review Guide]] when you need a cross-cutting review checklist.
 
-> **Review boundary:** this is an orientation guide, not proof that a feature is
-> complete. Always compare the code with `ENTHUSIASTAFF-GOALS.md`,
-> `reports/REQUIREMENTS-MATRIX.md`, relevant tests, and staging evidence.
-
-## Recommended review order
-
-Do not begin by opening files at random. Use this order:
-
-1. `ENTHUSIASTAFF-GOALS.md` — authoritative intended behavior and safety rules.
-2. `reports/REQUIREMENTS-MATRIX.md` — conservative implementation, test, and
-   staging status.
-3. `settings.gradle.kts` and root `build.gradle.kts` — module graph, Java
-   version, testing, and deployable artifacts.
-4. `paper/src/main/resources/plugin.yml` — exposed Paper commands,
-   permissions, soft dependencies, and the Paper entry point.
-5. `paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java`
-   — Paper bootstrap and feature wiring.
-6. `velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java`
-   — proxy bootstrap, login enforcement, network identity, workers, migration,
-   and the website bridge.
-7. `paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java` and
-   `persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java`
-   — how ports, stores, and application services are assembled.
-8. The feature-specific trace in this guide.
-9. The corresponding unit, integration, concurrency, and failure tests.
-
-Read [[Architecture]] for dependency rules and runtime ownership. Read
-[[Implementation Status]] before treating any path as production-ready.
+> **Evidence boundary:** a path existing in source does not prove that the complete feature is staging-verified or production-ready. Reconcile this map with [[Implementation Status]], current merged code, the requirements/evidence ledger, and exact-SHA validation.
 
 ## Repository map
 
-| Path | Responsibility | Deployment |
+| Path | Owns | Deployment |
 | --- | --- | --- |
-| `common/` | Shared identifiers, validation, cryptographic primitives, bounded utilities, and platform-neutral result types | Included by runtime modules |
-| `domain/` | Business rules, authorization, application services, state machines, requests/results, and ports | Included by runtime modules |
-| `integration-contracts/` | Compile-time contracts for optional Enthusia-owned provider plugins | Contract dependency only |
-| `persistence/` | MariaDB bootstrap, Flyway migrations, JDBC stores, transactions, leases, journals, inboxes, outboxes, and quarantine | Included by both runtime jars |
-| `protocol/` | Authenticated Paper–Velocity transport, replay protection, acknowledgements, TLS, and bounded delivery | Included by both runtime jars |
-| `paper/` | Commands, GUIs, listeners, player-state mutation, staff tools, and Paper-side integrations | `EnthusiaStaff-Paper-<version>.jar` |
-| `velocity/` | Login and switch enforcement, network identity, network workers, migration, Discord, and website API | `EnthusiaStaff-Velocity-<version>.jar` |
-| `integration-tests/` | MariaDB Testcontainers, transaction, idempotency, recovery, migration, and cross-module tests | Never deployed |
-| `docs/` | Source-controlled architecture, security, migration, recovery, and operational documents | Documentation only |
-| `docs/wiki/pages/` | Published Wiki source | Documentation only |
-| `reports/` | Requirements status, Codacy checkpoints, and review evidence | Review material only |
+| `common/` | identifiers, validation, security/crypto primitives, bounded utilities | shared into runtime modules |
+| `domain/` | business policy, authorization, application services, state machines and ports | shared into runtime modules |
+| `integration-contracts/` | stable compile-time contracts for Enthusia-owned providers | contract dependency only |
+| `persistence/` | MariaDB bootstrap, Flyway, JDBC stores, transactions, leases, journals, inboxes/outboxes, recovery state | shared into runtime jars |
+| `protocol/` | authenticated Paper-Velocity transport, replay protection, ACKs, reconnect | shared into runtime jars |
+| `paper/` | commands, GUIs/listeners, server-local player state and Bukkit/provider adapters | Paper runtime jar |
+| `velocity/` | proxy enforcement, network identity, transport server, workers, migration and website bridge | Velocity runtime jar |
+| `integration-tests/` | MariaDB/cross-module/concurrency/recovery/migration tests | never deployed |
+| `components/` | aggregate copies of external components when present | component-specific |
+| `docs/` | architecture, security, migration and operational reference | documentation |
+| `docs/wiki/pages/` | repository-managed GitHub Wiki source | documentation |
 
-Exactly two Minecraft runtime jars are intended. `integration-tests` and
-`integration-contracts` are not separate server plugins.
+Exactly two Minecraft runtime plugins are intended: Paper and Velocity.
 
-## Root files reviewers should understand
+## Read these before source diving
 
-### `ENTHUSIASTAFF-GOALS.md`
-
-The authoritative specification. Existing code does not override it. When the
-implementation and goals disagree, treat the mismatch as unfinished work or a
-design change that requires explicit review and documentation.
-
-### `reports/REQUIREMENTS-MATRIX.md`
-
-Maps each requirement to source, configuration, tests, remaining work, and
-blockers. Use it to avoid assuming that class existence proves completion.
-
-### `settings.gradle.kts`
-
-Declares the eight Gradle modules. Adding or removing a module is an
-architecture-level change.
-
-### Root `build.gradle.kts`
-
-Owns Java 21 compilation, `-Xlint:all -Werror`, JUnit, JaCoCo aggregation, and
-the `runtimeJars` task that builds only the Paper and Velocity artifacts.
-
-### `paper/src/main/resources/plugin.yml`
-
-The Paper registration surface for commands, permissions, rank permission
-inheritance, soft dependencies, and the Paper main class. Compare it with the
-command classes and the goals document. Registration does not prove that the
-complete workflow is staging-verified.
-
-### Database migrations
-
-Flyway SQL lives under:
-
-```text
-persistence/src/main/resources/db/migration/
-```
-
-Review migrations before reviewing JDBC implementations. Constraints, indexes,
-unique keys, revisions, and state columns enforce many safety properties.
-Migrations are forward-only; do not rewrite an already applied migration.
+1. [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) — intended finished behavior.
+2. [[Implementation Status]] — merged-main product state and evidence class.
+3. [[Architecture]] — dependency direction and runtime ownership.
+4. [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate PR/runtime evidence — requirement-level proof/blockers. Reconcile with live `main` after recent merges.
+5. [[Code Review Guide]] — cross-cutting invariants and failure modes.
 
 ## Dependency direction
 
-Shared policy must not depend on platform implementations:
-
 ```text
-Paper/Velocity commands, events, GUIs, and adapters
-                         |
-                         v
-               domain application services
-                         |
-                         v
-                  domain ports/models
-                         ^
-                         |
-             persistence/protocol adapters
+Paper / Velocity / website / provider adapters
+                    |
+                    v
+         domain application services
+                    |
+                    v
+             domain ports/models
+                    ^
+                    |
+       persistence / protocol adapters
 ```
 
-`domain` must not import Bukkit, Velocity, JDBC, Discord, or a web framework.
-Commands and GUIs translate input and display results; they must not independently
-implement punishment ladders, authorization, transaction rules, or recovery
-policy.
+`domain` must not depend on Bukkit, Velocity, JDBC, Discord, or a web framework. Commands, GUIs, listeners, HTTP routes and provider adapters should translate runtime input/output; they should not own a second copy of moderation policy.
 
-## Paper runtime
+## Paper composition roots
 
-### Composition root: `EnthusiaStaffPaperPlugin.java`
-
-Path:
+Main package:
 
 ```text
-paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java
+paper/src/main/java/net/enthusia/staff/paper/
 ```
-
-This class wires the Paper runtime. It currently:
-
-- loads Paper configuration and reason policies;
-- creates the bounded worker executor;
-- constructs freeze, staff-mode, vanish, inventory, economy, confiscation,
-  reports, evidence, automod, and integration components;
-- registers commands, listeners, and Bukkit services;
-- initializes MariaDB off the game thread;
-- starts enforcement and network communication after required state is ready;
-- records degraded feature state when storage or integrations are unavailable;
-- closes coordinators, transport, workers, and database state during disable.
-
-Review it for lifecycle ordering, shutdown races, feature gating, accidental
-main-thread I/O, and business policy leaking into bootstrap code.
-
-### Paper lifecycle and service wiring
 
 | File | Responsibility |
 | --- | --- |
-| `paper/.../PaperRuntimeLifecycle.java` | Coordinates storage publication, runtime start/stop state, and shutdown races |
-| `paper/.../PaperStorageBindings.java` | Groups MariaDB stores and constructs `PunishmentService`, `PunishmentDraftWorkflow`, and `SanctionChangeService` |
-| `paper/.../RuntimeHealth.java` | Paper operational-mode and feature-issue reporting |
-| `paper/.../BoundedExecutorFactory.java` | Creates bounded background execution rather than unbounded pools |
+| `EnthusiaStaffPaperPlugin.java` | plugin entrypoint and top-level lifecycle handoff |
+| `PaperRuntimeLifecycle.java` | storage/runtime publication and lifecycle coordination |
+| `PaperRuntimeComponents.java` | server-local manager/coordinator construction |
+| `PaperStorageBindings.java` | JDBC/domain service bindings |
+| `PaperCommandRegistrar.java` | command and GUI registration |
+| `PaperIntegrationManager.java` | optional integration discovery/lifecycle |
+| `PaperResourceCloser.java` | owned resource shutdown |
+| `RuntimeHealth.java` | operational health/degraded state |
 
-`PaperStorageBindings` is an important review boundary. It shows which persistence
-ports are supplied to domain services and helps detect commands or GUIs bypassing
-application services.
+Start here when a change affects startup, shutdown, service ownership, feature publication, scheduler ownership, or integration lifecycle. Business rules should normally lead you from these files into a domain service rather than stay in composition code.
 
-### Commands
+## Paper commands and presentation
 
-Paper command classes live under:
+Command classes live under:
 
 ```text
 paper/src/main/java/net/enthusia/staff/paper/command/
 ```
 
-Important classes include:
+Important entry points include:
 
-| Class | Entry point |
+| Command area | Primary class/path |
 | --- | --- |
-| `EstaffCommand` | Status, verification, reload, and diagnostics |
-| `PunishmentCommand` | `/punish`, `/ban`, `/mute`, `/warn`, `/kick`, and `/ipban` workflow entry |
-| `SanctionChangeCommand` | Reduction, ending, revocation, unban/unmute, warning removal, and overturn paths |
-| `ReportCommand` | Player report creation |
-| `ReportsCommand` | Staff report queue and management |
-| `FreezeCommand` | Durable freeze and unfreeze actions |
-| `StaffModeCommand` | Staff-mode entry and exit |
-| `VanishCommand` | Rank-aware vanish toggle |
-| `StaffChatCommand` | Staff-channel toggle through the configured chat adapter |
-| `InventoryCommand` | Inventory and Ender chest inspection entry points |
-| `InspectCommand` | Player inspection and case-linked asset actions |
-| `ClientCommand` | Client evidence inspection and explicit snapshot capture |
-| `CaseCommand` | Case-linked recovery such as item restoration |
+| status/verify/reload | `EstaffCommand` |
+| punishment creation and filtered commands | `PunishmentCommand` plus `paper/punishment/` |
+| history | `HistoryCommand` |
+| exact sanction reduce/end/revoke/overturn | `SanctionLifecycleCommand` |
+| case detail/restoration | `CaseCommand` |
+| player report | `ReportCommand` |
+| staff report queues/actions | `ReportsCommand` plus `paper/report/` |
+| staff mode | `StaffModeCommand` plus `paper/staff/` |
+| vanish | `VanishCommand` plus `paper/visibility/` |
+| freeze | `FreezeCommand` plus `paper/freeze/` |
+| inventory/Ender | `InventoryCommand` plus `paper/inventory/` |
+| inspect/client | `InspectCommand`, `ClientCommand`, `paper/client/` |
+| staff tools | `StaffToolsCommand`, `paper/staff/StaffToolDispatcher.java` |
+| staff chat | `StaffChatCommand` and chat integration adapter |
 
-For each command, confirm that it resolves the actor and target safely, delegates
-to an application service or coordinator, performs no blocking I/O on the server
-thread, and does not duplicate authorization or policy.
+For any write, trace past the command into the domain/coordinator/store. Permission checks at the command surface are not the final authority boundary.
 
-## Velocity runtime
+## Staff-mode operational tool source map
 
-### Composition root: `EnthusiaStaffVelocityPlugin.java`
+Current merged staff-tool behavior is split rather than living in the command:
 
-Path:
+| File | Purpose |
+| --- | --- |
+| `paper/staff/StaffModeManager.java` | durable session lifecycle and restoration coordination |
+| `paper/staff/StaffModeActivationCoordinator.java` | profile activation after durable state exists |
+| `paper/staff/StaffStateCodec.java` | normal/staff player-state serialization/checksums |
+| `paper/staff/StaffModeAccessPolicy.java` | explicit rank/profile access decisions |
+| `paper/staff/StaffToolDefinition.java` | canonical slot/material/action definitions |
+| `paper/staff/StaffToolDispatcher.java` | validates active owner/session/token/slot/material/rank and routes actions |
+| `paper/staff/StaffToolCooldowns.java` | bounded per-action cooldown state |
+| `paper/staff/StaffModeWorldInteractionListener.java` | staff-profile world/item interaction protections |
+| `persistence/JdbcStaffSessionStore.java` | durable staff-session state |
+
+The dispatcher is a routing surface. Inspect/freeze/reports/vanish/staff-chat actions should continue through the existing command/service boundary rather than gain a second authority implementation.
+
+See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] for staff-facing behavior.
+
+## Vanish source map
+
+Core paths:
 
 ```text
-velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java
+paper/src/main/java/net/enthusia/staff/paper/visibility/
+paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcVanishStore.java
 ```
 
-This class currently owns or wires:
+Key classes include `VanishManager`, `VanishAudienceCoordinator`, `VanishRankReconciliationPolicy`, `DefaultStaffVisibilityService`, and `ProtocolLibSpectatorTabPacketAdapter`.
 
-- MariaDB and Velocity configuration startup;
-- network login-ban enforcement;
-- safe server-switch enforcement;
-- player presence and server-directory updates;
-- protected network identity capture;
-- `/estaff`, `/alts`, and `/alt` proxy commands;
-- persistent Paper–Velocity channel server;
+Use [[Vanish Internals]] for the detailed event, session-fence, packet, scheduler, performance, and known-visibility-gap explanation rather than duplicating those internals here.
+
+## Velocity composition root
+
+Main package:
+
+```text
+velocity/src/main/java/net/enthusia/staff/velocity/
+```
+
+Start with `EnthusiaStaffVelocityPlugin.java`. Current responsibilities around it include:
+
+- MariaDB/configuration startup;
+- login and server-switch enforcement;
+- player/server presence updates;
+- protected network identity observation;
+- persistent backend transport server;
 - network and Discord outbox workers;
-- LiteBans migration, shadow comparison, and cutover coordination;
-- restricted punishment/appeal website API delivery;
-- shutdown of tasks, HTTP, transport, executors, and database resources.
+- LiteBans migration/shadow/cutover services;
+- restricted website moderation/appeal API;
+- orderly task/socket/database shutdown.
 
-Review it for event-thread blocking, authority-mode checks, raw network-address
-leakage, startup/shutdown ordering, oversized responsibilities, and safe behavior
-when MariaDB or backends are unavailable.
-
-### Important Velocity files
+Important nearby files:
 
 | File | Responsibility |
 | --- | --- |
-| `velocity/.../VelocityConfiguration.java` | Parses Velocity-owned configuration and environment-backed secrets |
-| `velocity/.../VelocityRuntimeHealth.java` | Proxy health and operational-mode reporting |
-| `velocity/.../NetworkOutboxWorker.java` | Claims and delivers durable network messages with retry/fencing |
-| `velocity/.../DiscordOutboxWorker.java` | Delivers durable Discord events with bounded retry and failure behavior |
-| `velocity/.../WebsiteApiServer.java` | Restricted website-facing moderation API |
+| `VelocityConfiguration.java` | proxy-owned settings and secret references |
+| `VelocityRuntimeHealth.java` | proxy health/degradation state |
+| `NetworkOutboxWorker.java` | durable backend delivery |
+| `DiscordOutboxWorker.java` | durable webhook delivery |
+| `WebsiteApiRuntime.java` | website bridge lifetime/bindings |
+| `WebsiteApiServer.java` | restricted HTTP server |
+| `WebsiteApiRequestDecoder.java` | bounded/authenticated request decoding |
+| `WebsiteApiRouter.java` | route ownership |
+| `WebsiteAppealEndpoint.java` / `WebsiteAppealWorkflowEndpoint.java` | appeal-facing bridge operations |
 
-## Domain layer
+Do not describe bootstrap/reload classes that exist only on an unmerged branch as current `main` behavior.
+
+## Domain source map
 
 Main path:
 
@@ -231,41 +175,29 @@ Main path:
 domain/src/main/java/net/enthusia/staff/domain/
 ```
 
-The domain layer contains policy and application behavior. Important areas are:
-
-| Package/path | Responsibility |
+| Area | Owns |
 | --- | --- |
-| `application/` | Use cases such as punishment creation, durable drafts, and sanction changes |
-| `auth/` | Rank and action authorization; `DefaultAuthorizationPolicy` is a central boundary |
-| `casefile/` | Case identity, visibility, review projections, and case state |
-| `sanction/` | Sanction types, status, changes, expectations, and active-sanction projections |
-| `escalation/` | Reason families, history contribution, ladders, decay, and recommendations |
-| `report/` | Report requests, queues, details, claims, closure, and evidence projections |
-| `inventory/` | Inventory revisions, item paths, journal states, patches, confiscation, and restoration models |
-| `economy/` | Moderation plans, exact before/after evidence, operation state, and recovery results |
-| `staff/` | Durable staff-session records and state snapshots |
-| `freeze/` | Freeze records and persistence-facing state |
-| `alt/` | Relationship states, inheritance decisions, evidence, and confidence summaries |
-| `migration/` | Import, shadow, cutover, reconciliation, and founder-override policy |
-| `discord/` | Durable delivery event and retry models |
-| `website/` | Sanitized public projections, punishment codes, and website actor requests |
-| `ports/` | Interfaces implemented by MariaDB, Paper, Velocity, or provider adapters |
-| `runtime/` | Operational-state snapshots and mode coordination |
+| `application/` | punishment creation/drafts/requests and sanction-change use cases |
+| `auth/` | rank/action authority; `DefaultAuthorizationPolicy` is a key boundary |
+| `casefile/` | cases, visibility and review projections |
+| `sanction/` | sanction state and exact change requests/results |
+| `history/` | moderation timeline projections |
+| `escalation/` | stable reasons/families, ordinals, decay and recommendation policy |
+| `report/` | report submission/query/state/evidence policy |
+| `inventory/` | inventory revisions, paths, patches, leases, confiscation/restoration models |
+| `economy/` | economy moderation plans and operation/recovery state |
+| `staff/` | durable staff-session records/snapshots |
+| `freeze/` | durable freeze policy/state |
+| `alt/` | relationship/evidence/confidence/inheritance policy |
+| `migration/` | import, shadow, cutover and reconciliation policy |
+| `discord/` | durable delivery models |
+| `website/` | sanitized projections and website actor/appeal models |
+| `runtime/` | operational mode/state |
+| `ports/` | interfaces implemented by storage/platform/provider adapters |
 
-### Authorization boundary
+When the same business decision appears in both domain and a platform adapter, treat that duplication as a review smell.
 
-Start with:
-
-```text
-domain/src/main/java/net/enthusia/staff/domain/auth/DefaultAuthorizationPolicy.java
-```
-
-Then inspect every application service and adapter that performs a write. The
-Developer role must remain punishment read-only even if a command, GUI, website,
-or integration supplies a permission node incorrectly. Authorization must be
-rechecked inside the authoritative service, not only in presentation code.
-
-## Persistence layer
+## Persistence source map
 
 Main path:
 
@@ -273,49 +205,40 @@ Main path:
 persistence/src/main/java/net/enthusia/staff/persistence/
 ```
 
-### Runtime assembly
+Runtime/database entry points:
 
-`MariaDb.java` opens the datasource and migration runtime. `MariaDbRuntime.java`
-constructs and exposes JDBC implementations for the domain ports. Compare its
-store ownership with `PaperStorageBindings` and Velocity bootstrap.
+- `MariaDb.java`
+- `MariaDbRuntime.java`
+- `persistence/src/main/resources/db/migration/`
 
-### Important stores
+Current merged Flyway history runs through `V17__website_appeal_workflow.sql`. Earlier migrations are immutable; future schema work adds a new migration.
 
-| File | Responsibility |
+Important stores include:
+
+| Store | Durable responsibility |
 | --- | --- |
-| `JdbcModerationStore.java` | Case and punishment creation persistence |
-| `JdbcSanctionMutationStore.java` | Precise sanction changes, revisions, and audit-linked mutations |
-| `JdbcCaseReviewStore.java` | Case and sanction review projections |
-| `JdbcPunishmentDraftStore.java` | Durable punishment GUI drafts and resume state |
-| `JdbcReportStore.java` | Reports, state changes, and evidence projections |
-| `JdbcPlayerDirectory.java` | UUID/name/session lookup and player-directory persistence |
-| `JdbcInventoryJournalStore.java` | Inventory, confiscation, snapshot, restoration, and recovery journal data |
-| `JdbcInventoryPatchTransitions.java` | Coherent paired inventory-patch state transitions |
-| `JdbcEconomyJournalStore.java` | Economy removal/restoration operation state and evidence |
-| `JdbcStaffSessionStore.java` | Durable staff-mode state snapshots |
-| `JdbcVanishStore.java` | Durable vanish intent/state |
-| `JdbcFreezeStore.java` | Durable freeze state and reconnect behavior |
-| `JdbcNetworkIdentityStore.java` | Protected network identity and alt evidence persistence |
-| `JdbcNetworkOutboxStore.java` | Durable Paper–Velocity delivery queue |
-| `JdbcDiscordOutboxStore.java` | Durable Discord delivery queue |
-| `JdbcWebsiteModerationStore.java` | Sanitized website projections and actions |
+| `JdbcModerationStore` | case/punishment creation transaction |
+| `JdbcModerationHistoryStore` | bounded moderation history/case timeline reads |
+| `JdbcExactSanctionMutationStore` | exact sanction lifecycle changes and audit linkage |
+| `JdbcPunishmentDraftStore` | resumable punishment drafts |
+| `JdbcPunishmentRequestStore` | approval-request workflow |
+| `JdbcReportStore` and report-specific stores | submission, queries, state transitions, evidence retention |
+| `JdbcPlayerDirectory` | UUID/name/alias/platform/presence persistence and lookup |
+| `JdbcInventoryJournalStore` | inventory/confiscation/snapshot/restoration operation state |
+| `JdbcInventoryPatchTransitions` | coherent queued-patch transitions |
+| `JdbcEconomyJournalStore` | economy moderation operation journal |
+| `JdbcStaffSessionStore` | durable staff mode/recovery state |
+| `JdbcVanishStore` | durable vanish intent |
+| `JdbcFreezeStore` | durable freeze state |
+| `JdbcNetworkIdentityStore` | protected network identity/alt data |
+| `JdbcNetworkOutboxStore` | durable Paper-Velocity queue |
+| `JdbcDiscordOutboxStore` | durable Discord queue |
+| `JdbcWebsiteModerationStore` | sanitized website moderation projections/actions |
+| `JdbcWebsiteAppealWorkflowStore` | V17-backed appeal workflow state |
 
-### JDBC review checklist
+For a destructive workflow, find the transaction, unique/idempotency key, revision/fence, before snapshot, terminal state and recovery path—not only the nominal SQL statement.
 
-For every destructive store method, verify:
-
-- prepared statements and bounded queries;
-- explicit transaction ownership;
-- correct isolation and row locking;
-- revision or fencing checks in the `WHERE` clause;
-- exact affected-row validation;
-- unique-key handling for idempotency;
-- no success returned before durable commit;
-- resources closed on every path;
-- duplicate replay returns the original result rather than repeating effects;
-- ambiguous external state enters quarantine instead of being guessed.
-
-## Paper–Velocity protocol
+## Protocol source map
 
 Main path:
 
@@ -323,336 +246,254 @@ Main path:
 protocol/src/main/java/net/enthusia/staff/protocol/
 ```
 
-Important files:
+Key files:
 
-| File | Responsibility |
-| --- | --- |
-| `PersistentChannelClient.java` | Backend connection, bounded outbound delivery, reconnect, and acknowledgements |
-| `PersistentChannelServer.java` | Velocity-side authenticated connection and message handling |
-| `EnvelopeAuthenticator.java` | Message authentication and envelope verification |
-| `ReplayGuard.java` | Rejects replayed or stale authenticated messages |
-| `TlsContextLoader.java` | Loads explicit TLS key and trust material |
+- `PersistentChannelClient.java`
+- `PersistentChannelServer.java`
+- `EnvelopeAuthenticator.java`
+- `ReplayGuard.java`
+- `TlsContextLoader.java`
+- `FrameTransport.java`
+- `EnvelopeCodec.java`
 
-Review protocol changes together with `NetworkOutboxWorker`, inbox/outbox schemas,
-and tests. Transport is at-least-once; idempotent consumers and unique inbox keys
-make repeated delivery safe. An acknowledgement must represent a durably recorded
-outcome, not merely receipt of bytes.
+Read these together with `JdbcNetworkOutboxStore`, the consumer inbox/receipt handling, and `velocity/NetworkOutboxWorker.java`. The transport is at-least-once; durable idempotency and inbox/outbox semantics make duplicate delivery safe.
+
+Deep dive: [[Protocol and Network Traffic]].
 
 ## Feature traces
 
 ### Punishment creation
 
-Typical path:
-
 ```text
 /punish or filtered command
-  -> paper/command/PunishmentCommand
-  -> paper/punishment/PunishmentGuiController or direct request
-  -> domain/application/PunishmentDraftWorkflow
-  -> domain/application/PunishmentService
-  -> domain/auth/DefaultAuthorizationPolicy
-  -> domain/escalation/EscalationEngine
-  -> persistence/JdbcModerationStore
-  -> case + sanctions + audit + durable network outbox
-  -> Velocity/network enforcement worker
+  -> PunishmentCommand / paper/punishment GUI
+  -> PunishmentDraftWorkflow
+  -> PunishmentService
+  -> DefaultAuthorizationPolicy + EscalationEngine
+  -> JdbcModerationStore transaction
+  -> case + sanctions + audit + durable network/notification state
+  -> Velocity/network enforcement
 ```
 
-Review together:
+Review related `domain/application`, `domain/escalation`, `paper/punishment`, `JdbcModerationStore`, draft/request stores, and MariaDB tests.
 
-- `paper/punishment/`
-- `domain/application/PunishmentService.java`
-- `domain/application/PunishmentDraftWorkflow.java`
-- `domain/escalation/`
-- `persistence/JdbcModerationStore.java`
-- `persistence/JdbcPunishmentDraftStore.java`
-- punishment, escalation, permission, and MariaDB integration tests.
-
-Check atomic combined sanctions, stable reason IDs, history contribution, decay,
-public/private visibility, durable drafts, duplicate submission, and restart
-recovery.
-
-### Punishment change or removal
-
-Typical path:
+### Punishment history and exact sanction change
 
 ```text
-/removepunishment, /unban, /unmute, /removewarning
-  -> paper/command/SanctionChangeCommand
-  -> paper/sanction/SanctionChangeGuiController when applicable
-  -> domain/application/SanctionChangeService
-  -> persistence/JdbcSanctionMutationStore
-  -> audit + outbox + precise sanction state change
+/history or /case
+  -> HistoryCommand / CaseCommand
+  -> moderation history queries
+  -> JdbcModerationHistoryStore
+
+/estaff sanction reduce|end|revoke|overturn
+  -> SanctionLifecycleCommand
+  -> SanctionChangeService
+  -> locked authority/hierarchy recheck
+  -> JdbcExactSanctionMutationStore
+  -> append-only mutation/audit history
 ```
 
-Verify that the exact case and sanction are selected, revisions are rechecked,
-unrelated sanctions are untouched, history is preserved, and Developer remains
-unable to mutate punishment state.
+V14 introduced the persistence needed for this slice. Appeal-linked overturn paths must target the exact sanction, not every sanction in a case.
 
-### Reports and evidence
-
-Typical path:
+### Reports
 
 ```text
 /report
-  -> paper/command/ReportCommand
-  -> domain/report request and policy
-  -> persistence/JdbcReportStore facade
-  -> JdbcReportSubmissionStore / JdbcReportSubmissionReplay
+  -> ReportCommand
+  -> report domain policy
+  -> JdbcReportSubmissionStore / replay checks
+  -> bounded evidence persistence
+
+/reports or GUI
+  -> ReportsCommand / ReportGuiController
   -> JdbcReportQueryStore / JdbcReportStateStore
-  -> JdbcReportEvidenceMaintenance
-  -> reports queue and staff actions
+  -> optimistic revision transition
 ```
 
-Context capture also involves:
+Also inspect `ChatContextBuffer`, `ReportEvidenceMaintenance`, report policy/GUI loaders and the RoseChat private-message provider boundary. See [[Reports and Evidence]].
 
-- `paper/report/ChatContextBuffer.java`
-- `paper/report/ReportEvidenceMaintenance.java`
-- `paper/command/ReportsCommand.java`
-- client-evidence adapters under `paper/client/`
-- RoseChat integration for private-message evidence where supported.
-
-Review reporter privacy, cooldowns, duplicate merging, retention, coordinate and
-client snapshots, claim conflicts, and Discord sanitization.
-
-### Inventory inspection and editing
-
-Typical path:
+### Inventory and Ender access
 
 ```text
 /invsee or /endersee
-  -> paper/command/InventoryCommand
-  -> paper/inventory/InventoryCoordinator
-  -> domain/inventory revisions, patches, leases, and decisions
-  -> persistence/JdbcInventoryJournalStore
-  -> main-thread Bukkit mutation or queued login patch
+  -> InventoryCommand
+  -> InventoryCoordinator
+  -> inventory domain revisions/leases/patch decisions
+  -> JdbcInventoryJournalStore / JdbcInventoryPatchTransitions
+  -> owning Paper scheduler mutation or queued login patch
 ```
 
-Review:
+High-risk boundaries are concurrent viewers, dirty-slot versus stale full-state writes, nested containers, offline ownership/save races, restart, server switching and login-time patch ordering.
 
-- online authority versus offline authority;
-- one coordinator and compatible concurrent viewers per target;
-- dirty-slot updates rather than stale full-clone saves;
-- nested shulkers and bundles;
-- server/scope ownership;
-- exact before snapshots;
-- atomic offline replacement and reread verification;
-- login-time queued patch application;
-- quarantine when safety cannot be proved.
-
-### Item confiscation and restoration
-
-Typical path:
+### Item confiscation/restoration
 
 ```text
-Inspect/case action
-  -> paper/inventory/ConfiscationCoordinator
-  -> domain inventory/confiscation models
-  -> persistence/JdbcInventoryJournalStore
-  -> durable snapshot before deletion
-  -> verified commit or recovery quarantine
+case/inspect action
+  -> ConfiscationCoordinator
+  -> exact item path/fingerprint + durable before snapshot
+  -> inventory journal transaction
+  -> verified deletion or recovery/quarantine
+
+/case restoration
+  -> CaseCommand
+  -> original case-linked snapshot
+  -> idempotent safe restore
 ```
 
-Restoration enters through `paper/command/CaseCommand` and must be idempotent and
-dupe-safe. Review exact case bindings, item paths/fingerprints, lock renewal,
-startup recovery, and movement/container bypasses.
+Deep dive/procedure: [[Inventory and Confiscation Safety]].
 
-### Economy confiscation
-
-Typical path:
+### Economy moderation
 
 ```text
-case-linked economy action
-  -> paper/economy/EconomyCoordinator
-  -> paper/economy/EnthusiaCurrencyGateway
-  -> domain/economy plan and operation models
-  -> persistence/JdbcEconomyJournalStore
-  -> EnthusiaCurrency provider API
+case-linked action
+  -> EconomyCoordinator
+  -> EnthusiaCurrencyGateway
+  -> domain economy plan/journal state
+  -> JdbcEconomyJournalStore
+  -> supported EnthusiaCurrency moderation contract
 ```
 
-EnthusiaStaff owns moderation intent, journaling, verification, audit, and
-recovery. EnthusiaCurrency remains the balance authority. Raw balance database
-writes are not an acceptable shortcut.
+Provider balance storage remains provider-owned; direct raw SQL is outside this boundary.
 
-### Staff mode, vanish, and freeze
+### Staff mode, tools, vanish and freeze
 
-Important paths:
+```text
+/staff
+  -> StaffModeCommand
+  -> StaffModeManager / activation/recovery collaborators
+  -> JdbcStaffSessionStore
+  -> owned player-state apply/verify/restore
 
-| Feature | Paper runtime | Persistence |
-| --- | --- | --- |
-| Staff mode | `paper/staff/StaffModeManager.java`, `StaffStateCodec.java` | `JdbcStaffSessionStore.java` |
-| Vanish | `paper/api/StaffVisibilityService.java`, `paper/visibility/DefaultStaffVisibilityService.java`, `VanishManager.java` | `JdbcVanishStore.java` |
-| Freeze | `paper/freeze/FreezeManager.java`, `paper/command/FreezeCommand.java` | `JdbcFreezeStore.java` |
+staff hotbar or /stafftools
+  -> StaffToolDispatcher / StaffToolsCommand
+  -> canonical token/slot/material/rank validation
+  -> existing inspect/freeze/reports/spectate/vanish/staffchat routes
 
-Review crash/reconnect restoration, original snapshot preservation, staff-item
-leakage, rank visibility, CombatLogX gating, listener coverage, reload/disable,
-server switching, and degraded integration behavior.
+/vanish
+  -> VanishManager / visibility service
+  -> JdbcVanishStore
 
-### Alts and network identity
+/freeze
+  -> FreezeManager
+  -> JdbcFreezeStore
+```
 
-Important paths:
+The operational tools merged after older Wiki source maps were written; review their owner/session token fencing and Folia entity-scheduler sampling in addition to the existing staff-session contract.
 
-- `common/src/main/java/net/enthusia/staff/common/security/NetworkIdentityProtector.java`
-- `common/.../HmacTokenService.java`
+### Java/Bedrock identity
+
+Relevant paths:
+
+- `paper/client/FloodgateIntegration.java`
+- player/platform identity domain types
+- `persistence/JdbcPlayerDirectory.java`
+- Velocity presence/network identity observation paths
+- punishment/report presentation and lookup code.
+
+Supported Floodgate evidence can persist a verified platform. Missing/incompatible evidence remains `UNKNOWN`; proxy presence is unverified for platform and must not downgrade a verified record. `*` names are aliases, not proof of Bedrock.
+
+### Alts/network identity
+
+Relevant paths:
+
+- `common/security/NetworkIdentityProtector.java`
+- `common/security/HmacTokenService.java`
 - `domain/alt/`
-- `persistence/JdbcNetworkIdentityStore.java`
-- Velocity login/session handling and `/alts`/`/alt` commands.
+- `JdbcNetworkIdentityStore.java`
+- Velocity login/session observation and `/alts`/`/alt` handling.
 
-Raw addresses must never appear in GUI, Discord, site output, logs, API errors, or
-ordinary database equality queries. Review encryption envelopes, HMAC tokens,
-nonce generation, key versions, rotation, maintenance-event suppression,
-relationship states, household exceptions, and exact remaining sanction
-inheritance.
+Protect raw addresses from ordinary logs, Discord, public/site output and staff-facing equality workflows.
 
-### Discord delivery
-
-Typical path:
+### Discord
 
 ```text
-domain event or committed operation
-  -> discord_outbox row in the same durable transaction
-  -> persistence/JdbcDiscordOutboxStore
-  -> velocity/DiscordOutboxWorker
-  -> configured webhook destination
+committed producer transaction
+  -> discord_outbox
+  -> JdbcDiscordOutboxStore
+  -> Velocity DiscordOutboxWorker
+  -> configured webhook
 ```
 
-Review lease ownership, stale-worker fencing, backoff, circuit behavior,
-sanitization, manual retry, and no loss during restart.
+Producer-side sanitization matters: the worker is not a universal privacy scrubber.
 
-### LiteBans migration and cutover
+### Website and appeals
 
-Important paths:
+Current aggregate source includes both the Velocity bridge and the scoped site component work.
 
-- `domain/migration/`
-- `persistence/src/main/java/net/enthusia/staff/persistence/migration/`
-- `LiteBansMigrationService.java`
-- Velocity migration and shadow tasks
-- `docs/litebans-migration.md`, `docs/shadow-mode.md`, `docs/cutover.md`, and
-  `docs/rollback.md`.
-
-Review dry-run accuracy, source schema variants, external-ID mappings,
-idempotent reruns, checksums, exact expiration preservation, the 168-hour
-non-enforcing shadow window, mismatch blockers, writer fencing, and post-cutover
-emergency freeze.
-
-### Website bridge
-
-Important paths:
+Bridge paths include:
 
 - `domain/website/`
-- `persistence/JdbcWebsiteModerationStore.java`
-- `persistence/WebsitePunishmentProjection.java`
-- `velocity/WebsiteApiServer.java`
-- website actor and projection tests.
+- `JdbcWebsiteModerationStore.java`
+- `JdbcWebsiteAppealWorkflowStore.java`
+- `WebsiteApiRuntime.java`
+- `WebsiteApiServer.java`
+- `WebsiteApiRequestDecoder.java`
+- `WebsiteApiRouter.java`
+- `WebsiteAppealEndpoint.java`
+- `WebsiteAppealWorkflowEndpoint.java`
+- `integration-tests/.../WebsiteAppealWorkflowIntegrationTest.java`
 
-The bridge may expose only sanitized fields. It must not expose reporter identity,
-private messages, coordinates, internal notes, network identity, alt evidence,
-confiscation detail, or sensitive automation metadata.
+Site/component code lives under `components/` when present. Review authentication/authorization, exact-sanction appeal binding, privacy projection, replay/rate/body bounds, and aggregate/standalone parity separately from the private deployment acceptance claim.
 
-## Configuration locations
+### LiteBans migration/shadow/cutover
 
-Current configuration is still evolving toward the modular target described in
-the goals. Review both current resources and the missing target layout.
+Relevant areas:
 
-| Location | Purpose |
+- `domain/migration/`
+- `persistence/.../migration/`
+- Velocity migration/shadow/cutover runtime
+- `docs/litebans-migration.md`
+- `docs/shadow-mode.md`
+- `docs/cutover.md`
+- `docs/rollback.md`
+- [[LiteBans Migration]]
+- [[Shadow Mode and Cutover]]
+
+Review dry-run/source schema interpretation, external ID mapping, idempotent resume/rerun, expiration/identity parity, shadow comparison dimensions, writer fencing, final reconciliation and post-cutover emergency freeze.
+
+## Configuration source map
+
+Current configuration is still evolving toward the full modular goals.
+
+| Location | Owns |
 | --- | --- |
-| `paper/src/main/resources/config.yml` | Current Paper runtime settings |
-| `paper/src/main/resources/reason-policies.yml` | Current punishment reason and escalation policy source |
-| `paper/src/main/resources/plugin.yml` | Commands, permissions, rank inheritance, and soft dependencies |
-| `paper/.../config/ReasonPolicyConfigurationLoader.java` | Parses and validates reason policies |
-| `domain/.../ports/AtomicReasonPolicyRepository.java` | Immutable, atomically replaceable policy boundary |
-| `velocity/.../VelocityConfiguration.java` | Velocity settings and environment-backed secret references |
+| `paper/src/main/resources/config.yml` | current Paper runtime settings, including merged staff-tool settings |
+| `paper/src/main/resources/reason-policies.yml` | punishment reason/escalation source |
+| `paper/src/main/resources/reports.yml` | report policy |
+| `paper/src/main/resources/gui/reports.yml` | report inventory presentation |
+| `paper/src/main/resources/plugin.yml` | commands, permissions, ranks, soft dependencies |
+| `paper/.../config/ReasonPolicyConfigurationLoader.java` | reason-policy validation |
+| `paper/.../report/` configuration loaders | report policy/GUI validation and immutable snapshots |
+| `domain/.../ports/AtomicReasonPolicyRepository.java` | atomic policy publication boundary |
+| `velocity/.../VelocityConfiguration.java` | proxy-owned settings and secret references |
 
-A reload must parse into a temporary immutable model, validate all references, and
-swap only if the entire configuration is valid. It must not discard active drafts,
-sessions, sanctions, reports, leases, or journals.
+Do not assume `/estaff reload` applies every setting. Focused pages such as [[Configuration]] and [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] state restart-only boundaries where applicable.
 
-## Tests and where to look
+## Finding tests
 
-Unit tests normally sit beside their module under `src/test/java`. Database and
-cross-module tests live in `integration-tests` and use MariaDB Testcontainers.
+Unit tests normally live beside each module under `src/test/java`; MariaDB and cross-module scenarios live under `integration-tests/src/test/java`.
 
-Key test families include:
+Useful search anchors by change type:
 
-- authorization and Developer denial;
-- punishment creation, escalation, drafts, and sanction changes;
-- report requests and chat-context buffering;
-- network identity encryption, tamper rejection, key versions, and fresh nonces;
-- protocol authentication, replay rejection, reconnect, and duplicate delivery;
-- inventory patch decisions, confiscation lifecycle, restoration integrity, and
-  journal transitions;
-- economy operation codecs, rollback evidence, and conflict behavior;
-- Discord and network outbox leasing/fencing;
-- LiteBans import, idempotency, shadow mismatch, and cutover gates;
-- website projection sanitization and actor authorization.
+- authorization: `DefaultAuthorizationPolicy`, approval and hierarchy tests;
+- sanctions: `SanctionChange`, history and exact-mutation tests;
+- reports: report submission/state/GUI/configuration/evidence maintenance tests;
+- identity: Floodgate/platform/player-directory tests;
+- staff tools: `StaffToolDispatcher`, staff-session/recovery/scheduler tests;
+- vanish: visibility/rank/session-fence/ProtocolLib tests;
+- protocol: `PersistentChannelTransportTest`, `EnvelopeAuthenticatorTest`, `ReplayGuardTest`;
+- persistence: MariaDB integration tests around the exact store/migration;
+- website: appeal workflow/auth/privacy/component tests;
+- migration: import/shadow/cutover/recovery integration tests.
 
-Before approving a feature change, identify at least one test for policy, one test
-for persistence or adapter behavior when relevant, and the staging requirement
-that cannot be proven by automated tests.
+See [[Build and Testing]] for what each test category proves and [[Code Review Guide]] for the failure scenarios to look for.
 
-## Threading and concurrency rules
+## Deep technical references
 
-- Bukkit mutations run only on the owning Paper server thread or supported entity
-  scheduler.
-- Velocity event threads must not block on JDBC, HTTP, filesystem, or socket I/O.
-- Database, network, and provider calls use bounded executors and queues.
-- Per-player destructive work uses locks or durable leases with fencing tokens.
-- Optimistic updates must reject stale revisions; they must not overwrite newer
-  state by retrying blindly.
-- Outbox delivery is at-least-once and consumers must be idempotent.
-- Shutdown stops new intake, preserves durable pending work, and closes resources
-  in dependency order.
-
-## External integration boundaries
-
-Paper adapters live mainly under:
-
-```text
-paper/src/main/java/net/enthusia/staff/paper/integration/
-paper/src/main/java/net/enthusia/staff/paper/client/
-paper/src/main/java/net/enthusia/staff/paper/economy/
-```
-
-Provider plugins remain authoritative for their own data. EnthusiaStaff should use
-a supported API or explicit adapter, never raw provider database writes, reflective
-guessing presented as fact, or command dispatch as a transaction mechanism.
-Missing optional integrations must disable only the affected feature and appear in
-verification output.
-
-## High-risk review areas
-
-Spend additional review time on:
-
-1. punishment authorization and combined-sanction atomicity;
-2. inventory, confiscation, and economy crash windows;
-3. stale revisions, lease renewal, fencing, and exact affected-row checks;
-4. startup recovery and quarantine resolution;
-5. raw network-identity leakage;
-6. Paper main-thread and Velocity event-thread blocking;
-7. durable outbox duplicate and stale-worker behavior;
-8. configuration reload preserving live durable workflows;
-9. Developer punishment denial through commands, GUIs, APIs, website, and
-   integrations;
-10. migration mismatch handling and post-cutover reconciliation;
-11. oversized composition, coordinator, and JDBC classes where responsibilities
-   may be mixed;
-12. provider API packaging and duplicate classes in shaded jars.
-
-## Review completion checklist
-
-A reviewer should be able to answer:
-
-- Which module owns the policy?
-- Which class is the authoritative application-service entry point?
-- Which port and JDBC store persist the operation?
-- What transaction, revision, lease, or idempotency mechanism prevents partial or
-  duplicate effects?
-- Which thread applies platform state?
-- What happens when the database, proxy, provider, or process fails halfway?
-- Which audit and outbox records are committed?
-- Which tests prove the normal, duplicate, stale, failure, and recovery paths?
-- What remains dependent on real Paper/Velocity/provider staging?
-- Does the requirements matrix need to be updated?
-
-A change is not fully reviewed merely because its primary class looks correct. The
-entire path from input through authorization, durable intent, side effect,
-verification, recovery, audit, and external delivery must agree.
+- [[Architecture]] — system/module ownership.
+- [[Code Review Guide]] — cross-cutting review discipline.
+- [[Protocol and Network Traffic]] — authenticated distributed transport.
+- [[Vanish Internals]] — visibility/scheduler/packet details.
+- [[Inventory and Confiscation Safety]] — destructive player-state invariants.
+- [[Recovery and Troubleshooting]] — runtime failure/recovery model.
+- [[Build and Testing]] — exact validation and evidence interpretation.

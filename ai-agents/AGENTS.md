@@ -21,12 +21,15 @@ Read, in order:
 5. `ai-agents/work-packages/EXECUTION-ORDER.md`;
 6. `ai-agents/work-packages/BRANCH-AND-MIRROR-POLICY.md`;
 7. `ai-agents/work-packages/VALIDATION-POLICY.md`;
-8. `ai-agents/work-packages/COMPONENT-REGISTRY.md`;
-9. `ai-agents/reports/agent-handoffs/latest.md`;
-10. the selected package file and its latest handoff, or confirm none exists;
-11. relevant goals, audit, manifest, requirements matrix, Wiki, contracts, migrations, and provider rules.
+8. `ai-agents/STAGING-TEST-OPERATING-GUIDE.md`;
+9. `ai-agents/work-packages/COMPONENT-REGISTRY.md`;
+10. `ai-agents/reports/agent-handoffs/latest.md`;
+11. the selected package file and its latest handoff, or confirm none exists;
+12. relevant goals, audit, manifest, requirements matrix, Wiki, contracts, migrations, and provider rules.
 
 Then reconcile live GitHub across every required repository: default heads, open and draft PRs, temporary branches, recent merges, unresolved threads, every check state, exact reviewed heads, current highest Flyway migration, issue #43, standalone repository availability, and whether another worker is active. Live code and GitHub override stale files, but known persistent package state must still be published to `main`.
+
+When Sentinel or Pi/canonical staging is applicable, follow `ai-agents/STAGING-TEST-OPERATING-GUIDE.md`. Sentinel and canonical Pi staging are separate evidence systems. A pass in one does not imply a pass in the other.
 
 ## 3. Canonical status and classification-first behavior
 

@@ -1,29 +1,28 @@
 # Recovery and Troubleshooting
 
-Recovery begins by preserving evidence and stopping conflicting work. It does
-**not** begin by repeatedly running the same destructive command.
+Recovery begins by preserving evidence and stopping conflicting work. It does **not** begin by repeatedly running the same destructive command.
 
 ## Find the affected system
 
-| Symptom or area | Feature details and source files | Related procedure |
+| Symptom or area | Product/source hub | Procedure or deep dive |
 | --- | --- | --- |
 | Startup, MariaDB, protocol, modes, reload or identity | [[Core Platform and Infrastructure]] | [[Configuration]], [[Protocol and Network Traffic]] |
 | Punishment, request, history, report or evidence | [[Moderation, Punishments, and Reports]] | [[Punishment System]], [[Reports and Evidence]] |
-| Staff mode, vanish, freeze, inventory, confiscation, economy or alts | [[Staff Tools, Investigations, and Player-State Safety]] | [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]], [[Inventory and Confiscation Safety]] |
+| Staff mode, vanish, freeze, inventory, confiscation, economy or alts | [[Staff Tools, Investigations, and Player-State Safety]] | [[Staff-Mode-Vanish-and-Freeze]], [[Inventory and Confiscation Safety]], [[Vanish Internals]] |
 | Discord, website, provider, migration, shadow or cutover | [[Integrations, Migration, and Release Readiness]] | [[Integrations]], [[LiteBans Migration]], [[Shadow Mode and Cutover]] |
+| I am debugging the code behind the failure | [[Developer Code Guide]] | [[Code Review Guide]], [[Build and Testing]] |
 
 ## First response
 
 1. Stop repeated actions for the affected player, case, asset, provider or migration.
 2. Record exact time, backend/proxy, actor, target UUID and visible error.
-3. Record applicable case, sanction, report, draft, request, operation, patch,
-   migration, message and staff-session IDs.
+3. Record applicable stable case, sanction, report, draft, request, operation, patch, migration, message or staff-session IDs.
 4. Run `/estaff status`.
 5. Run the narrowest relevant verify command; use `/estaff verify full` when needed.
 6. Preserve logs and sanitized stack traces.
 7. Determine whether authoritative state committed before retrying anything.
 8. Replay only a documented idempotent stage.
-9. Quarantine any ambiguous outcome.
+9. Quarantine or escalate any ambiguous outcome.
 
 ## Never do these as a first response
 
@@ -33,7 +32,7 @@ Recovery begins by preserving evidence and stopping conflicting work. It does
 - Do not point the plugin at a different database as a shortcut.
 - Do not rebuild inventories or balances from memory.
 - Do not enable another authority while the original authority may still be writing.
-- Do not post secrets, raw addresses or private evidence in ordinary support channels.
+- Do not publish secrets, raw addresses, private messages, coordinates, staff notes or private evidence in ordinary support channels.
 
 ## Operational modes
 
@@ -46,13 +45,11 @@ Recovery begins by preserving evidence and stopping conflicting work. It does
 | `MAINTENANCE` | Sensitive writes/reconnect evidence are suppressed for planned work |
 | `READ_ONLY_FAILURE` | Destructive work is blocked pending recovery |
 
-Do not change mode merely to bypass an error. See
-[[Core Platform and Infrastructure]] for current mode completion and source files.
+Do not change mode merely to bypass an error. See [[Core Platform and Infrastructure]] and [[Implementation Status]] for the current merged implementation/acceptance boundary.
 
 ## MariaDB unavailable
 
-Expected behavior: no new punishment or destructive edit. Safe status, history and
-recovery inspection may remain.
+Expected behavior is conservative: new punishments/destructive edits whose durable authority cannot be established must stop. Safe status/history/recovery inspection may remain where designed.
 
 Check:
 
@@ -61,23 +58,21 @@ Check:
 - pool exhaustion;
 - schema version and migration checksum;
 - database time/clock skew;
-- long-running transactions;
+- long-running transactions/deadlocks;
 - lease, outbox and recovery-worker backlog;
 - disk/host availability.
 
-If the database may have committed before the client timed out, look up the exact
-idempotency/case/operation record before retrying.
+If the database may have committed before the client timed out, look up the exact idempotency/case/operation record before retrying. Timeout-after-commit is a core idempotency case, not proof that “nothing happened.”
 
 ## Schema checksum or future version
 
-Stop unsafe startup/work. Confirm migrations match the exact runtime artifacts.
-Do not repair Flyway history manually without an approved database recovery plan
-and backup.
+Stop unsafe startup/work. Confirm migrations match the exact runtime artifacts. Current merged history is through V17.
 
-## Paper–Velocity channel failure
+Do not edit an applied migration or use Flyway repair simply to make a modified historical file pass. Follow an approved database recovery plan with backup/evidence when history itself is genuinely damaged.
 
-New network sanctions must remain blocked when network enforcement cannot be
-proven.
+## Paper-Velocity channel failure
+
+New network sanctions must remain blocked when network enforcement cannot be proved.
 
 Check:
 
@@ -86,72 +81,67 @@ Check:
 - server identity/allowlist;
 - protocol version;
 - clock skew and replay rejection;
-- queue limits and backlog;
+- queue limits/backlog;
 - reconnect/backoff state;
-- durable inbox/outbox acknowledgement.
+- durable inbox/outbox acknowledgement;
+- stale/duplicate consumer state.
 
-The channel must not require an online player as transport.
+The channel must not require an online player as transport. A successful socket write is not necessarily a durable consumer acknowledgement.
 
 ## Punishment or request timed out
 
-Do not immediately re-run. A timeout can occur after durable commit.
-
-Check:
+Do not immediately rerun. Check:
 
 - draft/request ID;
-- case and sanction records;
+- case/sanction state;
 - idempotency key;
-- network/Discord outbox entries;
+- network/Discord outbox state;
 - approval/request state;
 - current operational mode.
 
-Same-key replay should return the original outcome. Changed content with a reused
-key should be rejected as a conflict.
+Same-key replay should return the original committed result when that is the defined idempotent behavior. Reusing a key for changed content should be rejected as a conflict.
 
 ## Report state conflict
 
-A report mutation may fail because another staff member changed the revision.
-Reopen the report, read the latest revision and review the new state. Do not force
-the stale action.
+A report action can fail because another staff member changed the revision. Reopen the report, read the latest revision and review the new state. Do not force the stale action or keep submitting an old confirmation screen.
 
-## Inventory or economy operation incomplete
+## Inventory, confiscation or economy operation incomplete
 
-Stop edits, transfers and server switching for the target/scope.
+Stop edits, transfers and server switching for the affected target/scope.
 
 Inspect the operation as one state machine:
 
 - actor/target/scope;
-- operation state and idempotency key;
-- lease owner/fence and expiration;
+- operation state/idempotency key;
+- lease owner/fence/expiration;
 - before snapshot/checksum;
 - selected item paths/fingerprints or economy plan;
-- provider result;
+- provider/runtime side-effect result;
 - after verification;
-- audit and quarantine state.
+- audit/quarantine state.
 
-See [[Inventory and Confiscation Safety]] and
-[[Staff Tools, Investigations, and Player-State Safety]].
+A failed external call after durable intent is different from an ambiguous timeout after the external side effect may have happened. Do not choose retry/rollback until the operation model distinguishes those cases.
+
+See [[Inventory and Confiscation Safety]] and [[Staff Tools, Investigations, and Player-State Safety]].
 
 ## Staff-mode restoration failure
 
-Keep the staff member out of normal gameplay. Preserve the original durable
-session snapshot. Do not toggle staff mode repeatedly or replace the snapshot with
-current broken state.
+Keep the staff member out of normal gameplay. Preserve the original durable session snapshot. Do not toggle staff mode repeatedly or replace the snapshot with current broken state.
 
 Record:
 
-- session ID and revision;
-- original/current backend and location;
+- session ID/revision;
+- original/current backend/location;
 - visible inventory/armor/offhand;
-- XP, effects, health/hunger and game mode;
+- XP/effects/health/hunger/game mode;
 - reconnect/restart timing;
 - any staff items that escaped the profile.
 
-Escalate to owner recovery.
+Escalate to the documented recovery owner. The original snapshot is recovery evidence.
 
 ## Vanish exposure
 
-Record exactly how the player was exposed:
+Record exactly where the hidden state leaked:
 
 - tab/player-info;
 - entity spawn/metadata/equipment;
@@ -161,57 +151,52 @@ Record exactly how the player was exposed:
 - external API/provider;
 - Java/Bedrock client and protocol version.
 
-Do not assume Bukkit `hidePlayer` proves the other visibility layers are correct.
-See [[Vanish Internals]].
+Do not assume Bukkit `hidePlayer` proves other visibility layers. See [[Vanish Internals]].
 
 ## Freeze bypass
 
-Record the exact bypass, client/platform, backend and sequence. Release or hand off
-the freeze when the investigation cannot continue safely. Do not repeatedly test
-an unsafe bypass on the live player.
+Record the exact bypass, client/platform, backend and sequence. Release or hand off the freeze when the investigation cannot continue safely. Do not repeatedly exercise an unsafe bypass on a live player merely to collect more attempts.
 
 ## Outbox delivery stalled
 
 Check:
 
-- due time and attempt count;
+- due time/attempt count;
 - lease owner/fence/expiration;
 - sanitized last error;
-- destination configuration;
-- circuit/dead-letter state;
+- destination/configuration;
+- circuit/dead-letter/manual-retry state;
 - consumer acknowledgement;
 - whether the producer transaction committed.
 
-A successful HTTP/socket write is not necessarily a durable consumer
-acknowledgement.
+Never “fix” a stuck message by blindly deleting the row when its corresponding side effect may already exist.
 
 ## Optional provider unavailable
 
-Confirm only the dependent feature is disabled. Examples:
+Confirm only the dependent feature is disabled when that is safe. Examples:
 
-- RoseChat down: disable affected chat/staff/PM-evidence/automod paths;
-- Voice down: text mute may remain, voice enforcement unavailable;
-- Currency down: hide/block economy confiscation;
-- Market down: block Market confirmation;
-- ProtocolLib down: fail closed for dependent spectator presentation;
-- Polar unavailable: disable Polar automation only.
+- RoseChat unavailable: affected chat/staff/PM-evidence/automod paths degrade;
+- Voice unavailable: text moderation may remain while voice enforcement is unavailable;
+- Currency unavailable: economy confiscation is hidden/blocked;
+- Market unavailable: market moderation confirmation is blocked;
+- ProtocolLib unavailable/incompatible: dependent vanish/spectator presentation fails conservatively;
+- Polar unsupported/unavailable: Polar automation remains disabled.
 
 See [[Integrations]].
 
 ## Migration mismatch
 
-Keep LiteBans authoritative. Compare exact:
+Keep LiteBans authoritative. Compare exact source/mapped state:
 
-- source IDs and mappings;
+- source IDs/mappings;
 - counts/checksums;
-- timestamps and expirations;
+- timestamps/expirations;
 - UUID/name interpretation;
-- active state;
-- login, mute and IP/network decisions;
+- active/expired state;
+- login/mute/network decisions;
 - source schema variant/blocker output.
 
-Correct source interpretation or implementation. Do not edit mappings solely to
-force parity.
+Correct source interpretation or implementation. Do not edit mappings solely to force parity.
 
 ## Emergency freeze after cutover
 
@@ -225,24 +210,35 @@ When EnthusiaStaff authority may be unsafe:
 6. prove parity and command ownership;
 7. re-enable exactly one authority.
 
-There is intentionally no automatic failback to LiteBans.
+There is intentionally no automatic failback to LiteBans: post-cutover actions may exist only in EnthusiaStaff and must be reconciled first.
+
+## Maintainer debugging path
+
+When the symptom appears to be a code defect:
+
+1. identify the owning feature hub and exact source trace in [[Developer Code Guide]];
+2. identify the invariant that failed using [[Code Review Guide]];
+3. locate durable evidence before reproducing a destructive path;
+4. reproduce in a disposable environment where possible;
+5. add the narrow unit/integration/concurrency/failure test that proves the bug and fix;
+6. rerun the strongest required runtime/staging layer from [[Build and Testing]];
+7. do not claim the original production/runtime incident is resolved until the exact relevant acceptance has been rerun.
 
 ## Support evidence
 
-Provide sanitized:
+Provide only sanitized support material:
 
-- exact source revision and artifact hashes;
-- Java, Paper, Velocity and MariaDB versions;
-- operational mode and health categories;
+- exact source revision/artifact hashes;
+- Java, Paper, Velocity, MariaDB and relevant provider versions;
+- operational mode/health categories;
 - stable case/operation/message/session/migration IDs;
 - timestamps;
 - bounded sanitized errors;
 - reproduction steps;
-- whether restart/reconnect changed behavior;
-- which commands/actions were already attempted.
+- restart/reconnect effect;
+- commands/actions already attempted.
 
-Do not provide secrets, raw addresses, private messages, coordinates, staff notes,
-confiscated contents or appeal media in ordinary support channels.
+Keep credentials, raw addresses, private messages, coordinates, staff notes, confiscated contents and appeal media out of ordinary support channels.
 
 ## Related pages
 
@@ -250,6 +246,9 @@ confiscated contents or appeal media in ordinary support channels.
 - [[Moderation, Punishments, and Reports]]
 - [[Staff Tools, Investigations, and Player-State Safety]]
 - [[Integrations, Migration, and Release Readiness]]
+- [[Developer Code Guide]]
+- [[Code Review Guide]]
+- [[Build and Testing]]
 - [[Configuration]]
 - [[Integrations]]
 - [[Protocol and Network Traffic]]

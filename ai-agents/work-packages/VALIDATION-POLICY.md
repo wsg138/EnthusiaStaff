@@ -10,6 +10,16 @@ Freeze tracked content before final validation. Evidence must apply to each exac
 
 Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not passing evidence. Documentation-only changes may omit runtime/Pi checks only when they are genuinely non-applicable and that reason is recorded.
 
+## Sentinel and canonical staging
+
+Operational procedures, exact commands, failure-phase classification, and evidence requirements are defined in `ai-agents/STAGING-TEST-OPERATING-GUIDE.md`.
+
+Sentinel and EnthusiaStaff canonical Pi staging are independent gates. Apply whichever gate or gates the selected package requires. Neither substitutes for the other unless the selected package or this policy explicitly says so.
+
+Classify a failure at the phase that actually executed. A public hosted build failure means no Pi runtime result exists. A queued, rejected, stale, moved-head, unauthorized, cancelled, or missing-artifact Sentinel command is not a pass. Sentinel `test restart` is successful only with terminal result `PAPER_RESTART_OK`. Canonical Pi success requires correlated private execution plus every applicable runtime, persistence/restart, guarded cleanup, process-reap, and public transfer-cleanup assertion.
+
+Do not use Sentinel restart success as replacement evidence for canonical MariaDB/Flyway staging when canonical staging is required. Do not describe a public bridge dispatch, a private prerequisite rejection before Paper, or a cleanup failure as a canonical Pi pass.
+
 ## Owner-approved infrastructure exception
 
 Use the evidence label `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`. Never label the unavailable gate `PASS`.

@@ -12,10 +12,17 @@ class AltInheritancePolicyTest {
     private final Instant cutover = Instant.parse("2026-01-01T00:00:00Z");
 
     @Test
-    void newSameNetworkAccountAfterCutoverInheritsWithoutSafeHistory() {
+    void newSameNetworkAccountAfterCutoverInheritsOnlyWhenObservationIsUnambiguous() {
         assertTrue(policy.shouldInherit(
                 AltRelationshipState.SAME_NETWORK,
                 true,
+                cutover.plusSeconds(1),
+                Optional.of(cutover),
+                false
+        ));
+        assertFalse(policy.shouldInherit(
+                AltRelationshipState.SAME_NETWORK,
+                false,
                 cutover.plusSeconds(1),
                 Optional.of(cutover),
                 false

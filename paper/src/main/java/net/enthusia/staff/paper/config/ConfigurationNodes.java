@@ -132,6 +132,31 @@ final class ConfigurationNodes {
         return parsed;
     }
 
+    static double boundedDouble(
+            JsonNode parent,
+            String field,
+            String path,
+            double fallback,
+            double minimum,
+            double maximum,
+            List<String> errors
+    ) {
+        JsonNode value = parent == null ? null : parent.get(field);
+        if (value == null || value.isNull()) {
+            return fallback;
+        }
+        if (!value.isNumber()) {
+            errors.add(path + " must be a number");
+            return fallback;
+        }
+        double parsed = value.doubleValue();
+        if (!Double.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+            errors.add(path + " must be between " + minimum + " and " + maximum);
+            return fallback;
+        }
+        return parsed;
+    }
+
     static String text(
             JsonNode parent,
             String field,
