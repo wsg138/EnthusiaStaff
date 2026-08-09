@@ -381,6 +381,8 @@ public final class EnthusiaStaffVelocityPlugin {
         initializeWebsiteApi(loaded, runtime);
     }
 
+    @SuppressWarnings("PMD.GuardLogStatement")
+    // SLF4J placeholders defer formatting; the argument is an enum.
     private void publishStorageRuntime(
             VelocityConfiguration loaded,
             MariaDbRuntime runtime,
