@@ -4,7 +4,7 @@
 `ES-P09`; Internal; primary `COMP-STAFF`; priority 55; conditionally parallel after identity correctness.
 
 ## 2. Status
-`READY` — dependency satisfied; unassigned; not activated by the ES-X05 recovery worker. Registry is authoritative.
+`COMPLETE` — implementation PR #84 merged normally on 2026-08-07 as `a88201524690848f778297f140f7ee2ba5b6ce36`. Frozen reviewed/validated implementation head: `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`.
 
 ## 3. Objective
 Complete protected network identity, alt graph/confidence/manual relationships, IP/network sanction inheritance, privacy, retention, and operator workflow.
@@ -28,58 +28,66 @@ Canonical Java/Floodgate platform identity and normalization (`ES-P03`); product
 Root identity/alt/persistence/Velocity/tests/docs only. No external source import, permanent component branch, or isolated PR.
 
 ## 10. Required branches
-Temporary `package/es-p09-alt-network-identity`; delete after verified merge containment.
+Temporary implementation branch `package/es-p09-alt-network-identity` was created from legitimate `main` commit `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`, merged through PR #84, and automatically deleted by GitHub after verified containment.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`.
+One implementation PR to `wsg138/EnthusiaStaff:main`: PR #84, merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36`. A documentation-only post-merge finalization PR publishes terminal package state.
 
 ## 12. Implementation checklist
-Reconcile data flows and the `ES-P03` handoff; model graph/confidence/manual exceptions/retention; implement commands and inheritance safety; test privacy/races/restart; update docs/state/handoff; review/freeze/validate/merge/cleanup.
+Complete. Data flows and ES-P03 handoff were reconciled; graph/confidence/manual exceptions and retention were hardened; inheritance safety and privacy were implemented; direct concurrency/restart/privacy tests were added; Wiki/state/handoffs were updated; review findings were resolved; exact-head hosted/static validation passed; implementation merged normally; containment and branch cleanup were verified.
 
 ## 13. Acceptance criteria
-Raw addresses never persist/log; deterministic protected tokens and key-version handling work; ambiguous links cannot silently inherit sanctions; manual decisions are authorized/audited; queries/retention are bounded; restart and concurrent proxies are safe; canonical platform identity is consumed without redefining it.
+Satisfied for the development package: raw addresses do not persist/log through this surface; deterministic protected tokens and key-version handling are covered; ambiguous links cannot silently inherit sanctions; manual decisions remain authorized/audited; queries/retention are bounded; restart and concurrent-proxy cases are covered; canonical platform identity is consumed without redefining it. Private representative-network false-positive/staging acceptance remains assigned to `ES-V02` by contract.
 
 ## 14. Test requirements
-Protector/key-version, graph confidence, ambiguity/manual exception, multi-proxy duplicate input, sanction inheritance, retention/purge, restart, migration interaction, authorization and redaction tests.
+Covered by unit and direct MariaDB/Testcontainers tests for protector/key-version behavior, graph confidence, ambiguity/manual decisions, multi-proxy duplicate input, sanction inheritance and exact expiry, retention/purge/restart, authority fencing, and raw-address redaction/rejection. Existing migration checks remained green; no schema migration was added.
 
 ## 15. Static-analysis requirements
-Configured Java/static-analysis/review-bot gates; zero valid unresolved findings.
+Satisfied on frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`: Codacy check `92917176627` completed `success` with zero annotations. Repository CodeRabbit status was `success`; all four actionable review threads were resolved/outdated and zero valid unresolved threads remained. A later incremental CodeRabbit pass was quota-limited and is not represented as review evidence.
 
 ## 16. Documentation requirements
-Privacy model, commands/permissions, confidence/ambiguity/manual workflows, keys/retention, the field-level handoff from `ES-P03`, troubleshooting, Wiki, registry/handoff.
+Satisfied. Privacy model and alt-investigation guidance were updated in the repository-managed Wiki, and package/registry/handoff records were reconciled.
 
 ## 17. Security and privacy requirements
-Never expose raw/reversible addresses; keys from environment/secret store; least-privilege views; bounded retention; fail closed on key/version uncertainty.
+Satisfied for development scope: no staff-facing/raw-address lookup was introduced; manual reason text rejects raw IPv4/IPv6 literals before audit persistence; protected equality/encryption tokens remain the identity representation; retention is bounded and uses a trusted runtime clock; manual decisions are preserved; key/version uncertainty remains fail-closed.
 
 ## 18. Migration impact
-New post-V17 migration only if necessary for graph/manual/retention state, with clean/upgrade/checksum tests.
+No schema change was required; V17 remains current and immutable.
 
 ## 19. Bedrock considerations
-Consume corrected platform identity from `ES-P03`; ensure prefixed names do not change network identity semantics; acceptance remains `ES-V02`.
+Consumes corrected platform identity from `ES-P03`; prefixed names do not redefine network identity semantics. Distributed Java/Bedrock acceptance remains `ES-V02`.
 
 ## 20. Distributed-runtime considerations
-Multiple proxies, reconnect, duplicate observations, ordering, inheritance races, process restart, and retention jobs must be safe.
+Bounded matching, simultaneous-online ambiguity, evidence throttling, concurrent duplicate observations, sanction idempotency, restart persistence, and authority-fenced retention are directly covered. Representative multi-runtime staging remains `ES-V02`.
 
 ## 21. External-provider considerations
-No external source provider required; integrate only through verified Floodgate/runtime identity boundaries.
+No external source provider required; integration remains through verified Floodgate/runtime identity boundaries.
 
 ## 22. Completion definition
-Development scope proven and merged in one exact-head PR with zero valid threads and branch cleanup; private false-positive/staging acceptance remains deferred.
+Met for ES-P09 development scope. PR #84 merged from exact reviewed/validated head, zero valid review threads remained, `main` contains the implementation head with zero file divergence, and the temporary package branch was deleted. Private false-positive/staging acceptance remains deferred to `ES-V02` and is not called passed.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Eligible for normal sequential selection after outage recovery; priority 55. Live continuation classification still precedes new selection.
+Terminal. Claimed 2026-08-07 by `ChatGPT sequential package worker`; start `main` `ec88d4a4e30fac4acd6d06a60e67e27fed057bd7`; frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; merge `a88201524690848f778297f140f7ee2ba5b6ce36`.
 
 ## 24. Last completed checkpoint
-Dependency `ES-P03` is complete; no ES-P09 product work has begun.
+Post-merge verification complete. `main` at `a88201524690848f778297f140f7ee2ba5b6ce36` has `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb` as the implementation parent; compare reports `ahead_by=1`, `behind_by=0`, and no file differences. The temporary implementation branch no longer exists.
 
 ## 25. Remaining checklist
-All implementation, tests, review, validation, merge, and evidence remain.
+No ES-P09 development work remains. `ES-V02` retains private representative-network false-positive and distributed Java/Bedrock staging acceptance. This worker must not select another package.
 
 ## 26. Known blockers
-No dependency blocker; private representative data remains unavailable by design for acceptance and is deferred to `ES-V02`.
+No ES-P09 development blocker remains. The private staging path is still externally unavailable because of the GitHub Actions Billing & plans restriction; this is not a pass. On exact frozen head, public wrapper run `31193762319` dispatched private run `31193769314`; required Ubuntu build job `92916864019` received runner ID `0`, empty runner name, and steps `[]`; Pi job `92916876057` was skipped. This unavailable private acceptance is assigned to `ES-V02`, not used to claim staging success.
 
 ## 27. Final evidence
-Unset: exact heads, privacy review, graph/inheritance test matrix, checks, docs.
+- Frozen implementation head: `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`.
+- Wiki/package validation: run `31193764800`, job `92916829444`, `success`.
+- Java 21 build/tests/MariaDB-Testcontainers/aggregate JaCoCo/runtime-JAR inspection: run `31193765341`, job `92916907616`, `success`; all build/test/JAR/coverage steps completed successfully and no failed-test diagnostics ran.
+- Codacy static analysis: check `92917176627`, `success`, zero annotations.
+- Review: repository CodeRabbit status `success`; four actionable threads resolved/outdated; zero valid unresolved threads at merge.
+- Private staging: **NOT A PASS**. Public wrapper `31193762319`; private run `31193769314`; Ubuntu job `92916864019` runner ID `0`, empty runner name, steps `[]`, Billing & plans rejection; Pi `92916876057` skipped. Deferred to `ES-V02` by package scope.
+- Normal merge: PR #84 -> `a88201524690848f778297f140f7ee2ba5b6ce36`.
+- Containment: implementation head is a parent of the merge; compare from implementation head to merge is ahead by one with no file differences.
+- Cleanup: `package/es-p09-alt-network-identity` is absent after merge.
 
 ## 28. Merge and synchronization record
-Unset: normal merge/resulting main/containment/temporary branch cleanup; parity not applicable.
+PR #84 merged normally into primary `main` on 2026-08-07 as `a88201524690848f778297f140f7ee2ba5b6ce36` from exact head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`. Post-merge `main` containment is exact and the temporary implementation branch is deleted. Terminal package state is being published through a documentation-only finalization PR; no product content changes after the frozen implementation head.

@@ -1,308 +1,179 @@
 # Integrations, Migration, and Release Readiness
 
-**Estimated group completion: about 36%.**
+This hub covers provider boundaries, durable external delivery, the private punishment/appeal site, LiteBans migration and shadow comparison, cutover, distributed client/runtime acceptance, failure testing, and the evidence required before production authority can move.
 
-This group covers delivery outside the Paper plugin, optional provider APIs, the
-private punishment/appeal site, LiteBans migration, shadow comparison, cutover,
-platform acceptance, failure testing and the evidence required before production
-authority can move.
+For operator procedure, use [[Installation]], [[LiteBans Migration]], [[Shadow Mode and Cutover]], or [[Recovery and Troubleshooting]]. For provider behavior use [[Integrations]]. For source tracing and review use [[Developer Code Guide]] and [[Code Review Guide]].
 
-- Return to [[Feature Completion Status|Implementation-Status]].
-- Operator procedures: [[Installation]], [[LiteBans Migration]],
-  [[Shadow Mode and Cutover]], and [[Recovery and Troubleshooting]].
-- Provider behavior: [[Integrations]].
-- Source-level traces: [[Developer Code Guide]].
+## Quick status
 
-> Percentages are rounded planning estimates. Exact evidence and blockers remain
-> in the
-> [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md).
-
-## Find an integration or release area
-
-| Area | Complete | What it does | Jump to details |
-| --- | ---: | --- | --- |
-| Durable Discord delivery | **55%** | Persists staff events and retries webhook delivery without losing committed moderation work. | [Discord](#durable-discord-delivery) |
-| Restricted website bridge | **65%** | Exposes a small authenticated loopback API for sanitized punishment and appeal operations. | [Website bridge](#restricted-website-bridge) |
-| Public punishment projections and access codes | **70%** | Publishes safe fields and one-time access flows without exposing internal evidence. | [Public projections](#public-punishment-projections-and-access-codes) |
-| Private punishment and appeal website | **15%** | Provides player lookup/appeal and authenticated staff review outside Minecraft. | [Private site](#private-punishment-and-appeal-website) |
-| Enthusia-owned provider APIs | **20%** | Connects Currency, Commend, AutoClicker, RoseChat and Market through supported contracts. | [Providers](#enthusia-owned-provider-apis) |
-| Optional third-party integrations | **35%** | Uses Voice, ViaVersion, Floodgate, CombatLogX, ProtocolLib, Polar and other plugins safely. | [Third-party integrations](#optional-third-party-integrations) |
-| LiteBans schema inspection and import | **80%** | Discovers supported source variants and imports/matches source records idempotently. | [Migration import](#litebans-schema-inspection-and-import) |
-| Shadow comparison | **75%** | Compares counts, checksums, identities, expirations and enforcement decisions while LiteBans remains authoritative. | [Shadow comparison](#shadow-comparison) |
-| Cutover coordination and rollback | **45%** | Fences writers, changes authority, records transitions and supports emergency freeze/recovery. | [Cutover](#cutover-coordination-and-rollback) |
-| Real-data rehearsal and 168-hour shadow | **10%** | Proves the migration and comparison model against production-like private data over seven days. | [Real-data proof](#real-data-rehearsal-and-168-hour-shadow) |
-| Runtime and client acceptance | **20%** | Verifies HUB/SMP/Velocity, providers, Java, Bedrock/Geyser and Folia behavior together. | [Runtime acceptance](#runtime-and-client-acceptance) |
-| Load, saturation and process-kill tests | **20%** | Proves bounded behavior and recovery under outage, queue pressure and abrupt termination. | [Failure tests](#load-saturation-and-process-kill-tests) |
-| Release manifest and operational approval | **20%** | Binds exact repository revisions, artifacts, configs, environments and acceptance evidence. | [Release evidence](#release-manifest-and-operational-approval) |
+| Area | Merged-main state | Main limitation |
+| --- | --- | --- |
+| Durable Discord delivery | **Partial** | Complete event routing/privacy/dead-letter/outage/operator acceptance remains. |
+| Restricted website bridge | **Implemented, not staging-verified** | Private deployment/security/overload/secret-rotation/runtime acceptance remains. |
+| Punishment/appeal website workflow | **Implemented, not staging-verified** | Aggregate source is present; private deployment/provider/public-launch acceptance remains. |
+| Enthusia-owned provider contracts | **Partial / provider-dependent** | Several provider-side APIs/implementations are incomplete or unavailable. |
+| Optional third-party integrations | **Available with limitations** | Exact-version/provider failure/classloader/client staging remains. |
+| LiteBans schema inspection/import | **Implemented, not production-accepted** | Representative private data, volume, interruption/resume and final reconciliation remain. |
+| Shadow comparison | **Implemented, not production-accepted** | The required 168-hour production-like observation has not been accepted. |
+| Cutover/recovery coordination | **Implemented foundations; acceptance blocked** | Real final-import/writer-fence/restart/rollback/emergency-recovery acceptance remains. |
+| Java/Bedrock/Folia/provider topology | **Not staging-verified as a complete candidate** | One exact release candidate still needs representative distributed acceptance. |
+| Load/saturation/process-kill | **Incomplete** | High-risk workflows still need representative queue/load/kill/recovery evidence. |
+| Production cutover/release | **Blocked pending acceptance** | LiteBans remains authoritative until all required evidence and owner authorization exist. |
 
 ## Durable Discord delivery
 
-### What it does
+A committed moderation operation may write a sanitized Discord event to a durable outbox in the same transaction. Velocity leases and sends due events with bounded retry. Discord failure must not roll back a valid moderation commit or silently make a durable moderation action disappear.
 
-A committed moderation action writes a Discord event into the durable outbox in
-the same transaction. A Velocity worker leases, renders and sends the event with
-bounded retry. Discord failure must not roll back a valid punishment or silently
-lose the notification.
-
-### Primary files
+Primary paths:
 
 - [Discord domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/discord)
-- [Discord outbox store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordOutboxStore.java)
-- [Discord outbox worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
-- [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
+- [JdbcDiscordOutboxStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordOutboxStore.java)
+- [DiscordOutboxWorker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
+- [VelocityConfiguration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
 
-### What remains
-
-Route every punishment, request, report, alert, recovery and migration event;
-enforce producer-side privacy and mention safety; add circuit open/half-open
-status, dead-letter/manual retry and live webhook outage testing.
+Review producer-side privacy, lease/fence behavior, bounded backoff, terminal/dead-letter handling, manual recovery and outage behavior. The worker should not be relied on as a universal late-stage privacy scrubber.
 
 ## Restricted website bridge
 
-### What it does
+The Velocity website bridge is a restricted inbound boundary for the trusted site component, not a general public moderation API.
 
-The Velocity website bridge is a loopback-only HTTP boundary for a trusted local
-site process or reverse proxy. It authenticates bearer/HMAC requests, applies a
-bounded timestamp and nonce replay window, rejects unknown input and returns
-stable sanitized response envelopes.
+Primary paths:
 
-### Primary files
+- [WebsiteApiRuntime](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRuntime.java)
+- [WebsiteApiServer](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiServer.java)
+- [WebsiteApiRequestDecoder](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRequestDecoder.java)
+- [WebsiteApiRouter](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
+- [website domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/website)
+- [JdbcWebsiteModerationStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java)
 
-- [Website API runtime](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRuntime.java)
-- [Website API server](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiServer.java)
-- [Request decoder](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRequestDecoder.java)
-- [Website router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
-- [Website domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/website)
-- [Website moderation store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java)
+Requests must remain authenticated, bounded and replay-resistant. Only sanitized projections may leave the moderation core. Private-message evidence, reporter identity, coordinates, raw network identity, staff notes, confiscation detail and other sensitive internals do not belong in public projections.
 
-### What remains
+## Punishment and appeal website workflow
 
-Complete production authentication boundaries, secret rotation, overload and
-rate behavior, private-site integration, operator status and full end-to-end
-staging. The bridge must remain private; it is not a public internet server.
+The aggregate repository now contains scoped website/appeal component work; the old statement that the private site is absent is no longer accurate.
 
-## Public punishment projections and access codes
+Current bridge/persistence paths include:
 
-### What it does
+- [WebsiteAppealEndpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealEndpoint.java)
+- [WebsiteAppealWorkflowEndpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealWorkflowEndpoint.java)
+- [JdbcWebsiteAppealWorkflowStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealWorkflowStore.java)
+- `V17__website_appeal_workflow.sql`
+- [website component area](https://github.com/wsg138/EnthusiaStaff/tree/main/components)
 
-Public projections expose only fields approved for players: safe reason, sanction
-type/status, dates, expiration and appeal availability. Access codes provide a
-durable limited path from an in-game case to the correct private site record.
+Appeal acceptance/review must target the intended exact sanction and pass through central sanction authority rather than creating a website-only punishment mutation path.
 
-### Primary files
+Source presence still does not establish a live site. Private deployment authentication, sessions, CSRF/rate/media controls, provider integration, operational monitoring, privacy/security review and public/production launch remain separate acceptance gates.
 
-- [Website projection domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/website)
-- [Website moderation store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java)
-- [Public punishment registry](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPublicPunishmentRegistry.java)
-- [Punishment code store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPunishmentCodeStore.java)
+## Enthusia-owned provider boundaries
 
-### What remains
+Provider plugins remain authoritative for their own state. EnthusiaStaff should consume a supported contract, not raw provider SQL, reflective guessing, or command dispatch as a transaction protocol.
 
-Complete every visibility/sanction rule, code expiry and operator controls, then
-verify exact site rendering without reporter identity, private messages,
-coordinates, staff notes, alt evidence or confiscation details.
-
-## Private punishment and appeal website
-
-### What it does
-
-The private site is intended to let players find their punishment, submit an
-appeal and receive a decision. Authorized staff can review sanitized case data and
-issue role-checked actions through the restricted bridge.
-
-### Current state
-
-The root contracts and Velocity bridge exist. The complete private site is not
-present in this repository and must not be inferred from the bridge alone.
-
-### Primary bridge files
-
-- [Website appeal endpoint](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealEndpoint.java)
-- [Appeal store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealStore.java)
-- [Website router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
-
-### What remains
-
-Build authenticated sessions, CSRF protection, rate limits, restricted staff
-roles, safe media storage, player/staff pages, decisions/reopening,
-notifications, privacy controls and integration tests in the private site
-repository.
-
-## Enthusia-owned provider APIs
-
-### What it does
-
-Provider plugins remain authoritative for their own data. EnthusiaStaff supplies
-or consumes stable contracts rather than issuing raw SQL or reflective calls.
-
-| Provider | Moderation purpose | Current state |
+| Provider | Moderation boundary | Current direction |
 | --- | --- | --- |
-| EnthusiaCurrency | Exact economy snapshots, removal plans and restoration | Contract/gateway foundations only |
-| EnthusiaCommend | Persistent reputation blacklist enforced at every write path | Contract defined; provider work incomplete |
-| EnthusiaAutoClicker | Versioned bounded client handshake/evidence | Contract defined; provider work incomplete |
-| Enthusia-RoseChat | Staff/global channels, mute/freeze, PM evidence, automod and vanish recipients | Required API unavailable/incomplete |
-| EnthusiaMarket | Supported stall moderation, review and restoration | Contract boundary defined; provider work incomplete |
+| EnthusiaCurrency | exact balance plan/apply/verify/restore under an external operation | provider-side completion/acceptance still required |
+| EnthusiaCommend | persistent reputation blacklist/enforcement | provider-side completion/acceptance still required |
+| EnthusiaAutoClicker | versioned bounded client evidence | provider contract/runtime acceptance incomplete |
+| Enthusia-RoseChat | staff/chat/mute/freeze/PM-evidence/automod/visibility integration | The supported API required for all intended paths remains incomplete or unavailable. |
+| EnthusiaMarket | supported stall moderation/review/restoration | provider-side completion/acceptance still required |
 
-### Primary files and paths
+Primary paths:
 
-- [Integration contracts](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts/src/main/java)
+- [integration contracts](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts/src/main/java)
 - [Paper integration adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration)
 - [Paper economy adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/economy)
 - [Paper client adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client)
 
-### Related page
-
-- [[Integrations]]
-
-### What remains
-
-Reconstruct each provider implementation, enforce its contract at every command,
-GUI and API path, publish compatible API artifacts where appropriate, then stage
-all providers together for classloader and degraded-mode behavior.
+See [[Integrations]] for operator-facing degradation behavior.
 
 ## Optional third-party integrations
 
-### What it does
+Current integration points include capabilities such as Simple Voice Chat, ViaVersion/ViaBackwards, Floodgate/Geyser, CombatLogX, ProtocolLib, Polar, Discord-related delivery and permission/provider surfaces.
 
-Optional integrations provide chat, voice, protocol, Bedrock, combat,
-packet-level and anticheat capabilities. A missing provider must disable only its
-dependent feature and explain the result through verification.
+Review every provider in at least these states:
 
-| Integration | Used for |
-| --- | --- |
-| Simple Voice Chat | Voice mute and vanish-aware voice recipients |
-| ViaVersion/ViaBackwards | Protocol/version evidence |
-| Floodgate/Geyser | Bedrock identity and compatibility |
-| CombatLogX | Safe staff-mode combat gating |
-| ProtocolLib | Supported player-info/entity packet filtering |
-| Polar | Evidence and future supported automation |
-| DiscordSRV/webhooks | Staff notifications |
-| LuckPerms | Command discovery and rank permissions |
-| EnthusiaTeleport/PlayTimePlugin | Vanish-aware external behavior |
+- present and compatible;
+- missing;
+- present but incompatible/unavailable;
+- failing during use;
+- restart/reload boundary where applicable.
 
-### Primary paths
+A missing optional provider should disable only the dependent behavior when that can be done safely and should surface a clear health/verification state.
 
-- [Paper integrations](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration)
-- [Client integrations](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client)
-- [Visibility API](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java)
+### Java and Bedrock identity
 
-### What remains
+Merged identity persistence now uses supported Floodgate evidence rather than username shape:
 
-Verify supported API versions, event reception, classloaders, reload/restart
-boundaries and isolated failure. Polar automatic punishment remains disabled until
-a supported violation-event contract exists.
+- UUID remains authoritative;
+- verified Floodgate evidence may establish Java/Bedrock platform;
+- unavailable/incompatible evidence remains `UNKNOWN`;
+- unverified proxy observations cannot downgrade a verified platform record;
+- `*` current/historical names remain lookup aliases, not platform proof.
+
+Representative Geyser/Floodgate client behavior is still a staging requirement.
+
+### Polar
+
+Do not invent a violation/punishment callback that the supported provider API does not expose. If no compatible event contract exists, automated enforcement stays disabled and only supported evidence/integration behavior may be claimed.
 
 ## LiteBans schema inspection and import
 
-### What it does
+Migration code inspects the source schema, maps supported variants, preserves external IDs/identity/expiration state and records mapping/run state for idempotent dry run/import/reconciliation.
 
-Migration first inspects the LiteBans source schema, maps supported aliases and
-reports explicit blockers. Import preserves external IDs, identities, sanctions,
-expiration and mapping state so dry runs and reruns are idempotent.
+Primary areas:
 
-### Primary files and paths
+- [migration domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/migration)
+- [migration persistence](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence/migration)
+- [Velocity migration runtime](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity)
+- [integration tests](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-tests/src/test/java)
 
-- [Migration domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/migration)
-- [Persistence migration package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence/migration)
-- [LiteBans migration service search](https://github.com/wsg138/EnthusiaStaff/search?q=LiteBansMigrationService&type=code)
-- [Migration integration tests](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-tests/src/test/java)
+Automated/synthetic import evidence does not replace representative private LiteBans data, production-like volume, interruption/resume, source-variant and final incremental import proof.
 
-### Related page
-
-- [[LiteBans Migration]]
-
-### What remains
-
-Validate additional real schema variants, production volume, interruption at
-every stage, orphan mappings, conflict resolution, resume and rollback.
+Operator runbook: [[LiteBans Migration]].
 
 ## Shadow comparison
 
-### What it does
+During shadow, LiteBans remains authoritative. EnthusiaStaff calculates and records comparisons without enforcing its own result.
 
-While LiteBans remains authoritative, EnthusiaStaff mirrors imported state and
-compares:
+At minimum compare:
 
-- total and active counts;
-- checksums;
-- UUID mappings;
-- expiration timestamps;
-- ban, mute and IP/network enforcement decisions.
+- total/active records and mappings;
+- stable external IDs;
+- UUID/name interpretation;
+- exact issue/expiration times;
+- active/expired state;
+- ban login decisions;
+- mute/chat decisions;
+- network/IP decisions;
+- new source actions during the observation window;
+- recovery/quarantine/mismatch state.
 
-Every discrepancy must be stored and explained; comparison must not enforce the
-EnthusiaStaff result during shadow mode.
+A “close” count is not acceptable parity. Every mismatch needs an explanation or fix.
 
-### Primary paths
+The final production acceptance requires the policy-defined **168 continuous hours** of accepted non-enforcing observation; automated shadow tests or historical synthetic runs do not satisfy that gate.
 
-- [Migration domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/migration)
-- [Migration persistence](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence/migration)
-- [Velocity migration runtime](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity)
+Runbook: [[Shadow Mode and Cutover]].
 
-### Related pages
+## Cutover and rollback boundary
 
-- [[LiteBans Migration]]
-- [[Shadow Mode and Cutover]]
+Merged source contains substantial cutover/recovery coordination foundations. Treat them as implementation, not production authorization.
 
-### What remains
+Before production authority moves, the exact candidate must prove:
 
-Run continuous real-data comparisons, operator mismatch workflows and seven valid
-daily summaries spanning at least 168 hours.
+- final source snapshot/incremental import;
+- no unresolved mismatch;
+- exactly one authoritative writer/enforcement path;
+- writer fencing and duplicate activation rejection;
+- maintenance/activation/emergency-freeze transitions;
+- restart/recovery behavior;
+- queue/outbox reconciliation;
+- rollback/emergency procedures;
+- operator/owner acceptance.
 
-## Cutover coordination and rollback
+After activation, an unsafe outcome enters `READ_ONLY_FAILURE`; do not automatically fail back to LiteBans while post-cutover actions may exist only in EnthusiaStaff.
 
-### What it does
+## Distributed runtime and client acceptance
 
-Cutover coordination freezes sensitive writers, checks the final incremental
-import and shadow evidence, rejects duplicate activation, records every authority
-transition and supports emergency freeze or rollback when the outcome is unsafe.
-
-### Current development
-
-PR #37 contains focused cutover transition, final-import, duplicate activation,
-shadow-window and emergency-freeze tests. It remains draft work until completed,
-reviewed and merged.
-
-### Primary paths
-
-- [Migration domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/migration)
-- [Migration persistence](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence/migration)
-- [Velocity migration runtime](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity)
-
-### What remains
-
-Finish and merge the coordinator, then prove writer fencing, final-import linkage,
-restart resume, emergency freeze, founder override, ambiguous-outcome quarantine,
-rollback and post-cutover reconciliation.
-
-## Real-data rehearsal and 168-hour shadow
-
-### What it does
-
-Synthetic tests prove algorithms, but production authority requires private
-production-like LiteBans data and the real observation environment. The final
-shadow must produce seven valid daily summaries over at least 168 continuous
-non-enforcing hours.
-
-### Evidence required
-
-- dry run and rerun results;
-- interruption/resume evidence;
-- final incremental import;
-- all count/checksum/identity/expiration/decision comparisons;
-- explanations for every mismatch;
-- rollback and emergency-freeze rehearsal.
-
-### Current state
-
-The comparison dimensions exist, but the real-data rehearsal and mandatory
-168-hour observation have not been completed.
-
-## Runtime and client acceptance
-
-### What it does
-
-Full acceptance tests the exact release candidate in the real distributed
-shape:
+A full release candidate needs representative testing of the real topology rather than one plugin in isolation:
 
 ```text
 Velocity
@@ -310,84 +181,68 @@ Velocity
 └── SMP + EnthusiaStaff-Paper
 ```
 
-It also covers optional providers and supported Java/Bedrock clients.
+The acceptance set should include:
 
-### Required groups
-
-- proxy login and server-switch enforcement;
+- login and server-switch enforcement;
 - no-online-player transport;
-- HUB/SMP ownership and distinct inventory scopes;
-- complete staff, punishment, report, inventory and recovery workflows;
-- Java supported versions;
-- Bedrock/Geyser GUI, identity and packet behavior;
-- Folia-compatible entity/player ownership;
-- provider presence and isolated failure.
+- backend reconnect/outage;
+- distinct backend/player-data scopes;
+- Paper/Velocity/provider startup and shutdown;
+- staff, punishment, report and recovery workflows;
+- supported Java clients;
+- Bedrock/Geyser/Floodgate identity and UI fallback;
+- vanish/packet/client behavior;
+- Folia-compatible owner/scheduler behavior where supported;
+- provider present/missing/failure cases.
 
-### Current state
+Historical standalone Paper boot/restart evidence is useful only for the exact recorded Paper scenario and SHA. It is not complete distributed staging.
 
-Standalone Paper boot/restart staging exists. Complete Velocity, multi-backend,
-provider, Bedrock and Folia acceptance does not.
+## Load, saturation and process-kill evidence
 
-## Load, saturation, and process-kill tests
+Release confidence also requires the workflows with destructive or distributed state to behave safely under resource pressure and abrupt interruption.
 
-### What it does
+Exercise, as relevant:
 
-These tests prove that bounded executors, DB pools, network/Discord queues,
-reconnect behavior and destructive journals remain safe when resources are
-exhausted or the process terminates between workflow stages.
+- bounded worker/executor saturation;
+- DB pool/lock contention;
+- network and Discord queue pressure;
+- provider latency/timeouts;
+- reconnect storms/backoff;
+- process termination between durable intent, side effect, verification and terminal commit;
+- restart recovery and duplicate replay;
+- stale lease/fence owners;
+- inventory/economy/confiscation ambiguity and quarantine.
 
-### Primary locations
+A unit test that injects one exception is not a general process-kill/load acceptance result.
 
-- [Protocol](https://github.com/wsg138/EnthusiaStaff/tree/main/protocol)
-- [Persistence](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence)
-- [Integration tests](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-tests/src/test/java)
-- [GitHub workflows](https://github.com/wsg138/EnthusiaStaff/tree/main/.github/workflows)
+## Release evidence and approval
 
-### What remains
+A release decision should bind one exact candidate:
 
-Run queue saturation, DB pool exhaustion, reconnect storms, Discord outages,
-report/GUI load and process termination during punishment, notification, asset
-and migration operations. Verify exact recovery or visible quarantine.
+- repository revisions/component parity;
+- runtime JAR hashes;
+- migration/configuration versions/checksums;
+- exact CI/static/coverage results;
+- runtime topology and provider versions;
+- Java/Bedrock/Folia evidence;
+- load/recovery evidence;
+- migration/shadow/cutover records;
+- unresolved warnings/known limitations;
+- rollback/recovery plan;
+- explicit operational/owner approval.
 
-## Release manifest and operational approval
+Changing relevant source, migration, configuration or provider contracts after an acceptance run invalidates the affected evidence until it is rerun.
 
-### What it does
+## Go deeper
 
-A release manifest prevents evidence from unrelated revisions from being combined
-into a fictional release candidate. It must declare one authenticated revision
-for EnthusiaStaff, each provider and the private site, plus:
-
-- artifact hashes;
-- configuration checksums;
-- dependency and environment versions;
-- database/migration state;
-- all acceptance results;
-- backups and rollback evidence;
-- explicit authorization record.
-
-### Primary documents
-
-- [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
-- [Workspace manifest](https://github.com/wsg138/EnthusiaStaff/blob/main/WORKSPACE-MANIFEST.md)
-- [Installation documentation](https://github.com/wsg138/EnthusiaStaff/tree/main/docs)
-- [[Installation]]
-- [[Shadow Mode and Cutover]]
-- [[Recovery and Troubleshooting]]
-
-### What remains
-
-Produce and test one final manifest across every participating repository, run
-clean install/upgrade/rollback drills, complete the 168-hour shadow, record
-Founder authorization and observe production before retiring any legacy plugin.
-
-## Related pages
-
-- [[Feature Completion Status|Implementation-Status]]
-- [[Remaining Development Map|Development-Blueprint]]
-- [[Integrations]]
-- [[Installation]]
-- [[LiteBans Migration]]
-- [[Shadow Mode and Cutover]]
-- [[Recovery and Troubleshooting]]
-- [[Build and Testing]]
-- [[Developer Code Guide]]
+- [[Integrations]] — provider/operator behavior.
+- [[Installation]] — installation/staging entry point.
+- [[LiteBans Migration]] — migration procedure.
+- [[Shadow Mode and Cutover]] — authority transition procedure.
+- [[Recovery and Troubleshooting]] — outage/recovery procedure.
+- [[Protocol and Network Traffic]] — distributed transport details.
+- [[Privacy and Data Handling]] — sensitive/public data boundaries.
+- [[Developer Code Guide]] — source traces.
+- [[Code Review Guide]] — distributed/provider/security review.
+- [[Build and Testing]] — evidence interpretation.
+- [[Implementation Status]] — overall merged-main status.

@@ -8,6 +8,7 @@ import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
+import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
 
 public final class FencedNetworkIdentityStore implements NetworkIdentityStore {
@@ -83,6 +84,14 @@ public final class FencedNetworkIdentityStore implements NetworkIdentityStore {
         return fence.execute(
                 () -> delegate.reopen(firstPlayerId, secondPlayerId, actorId, changedAt, reason),
                 () -> false
+        );
+    }
+
+    @Override
+    public NetworkIdentityRetentionResult purgeExpired(Instant cutoff, int batchSize) {
+        return fence.execute(
+                () -> delegate.purgeExpired(cutoff, batchSize),
+                () -> new NetworkIdentityRetentionResult(0, 0)
         );
     }
 }

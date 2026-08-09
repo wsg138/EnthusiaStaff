@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,17 +18,23 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.common.security.NetworkAddressTextGuard;
 import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
+import net.enthusia.staff.domain.alt.AltInheritancePolicy;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
-import net.enthusia.staff.domain.alt.AltInheritancePolicy;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
+import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final int PROTOCOL_VERSION = 1;
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
+    private static final int MAX_AUTOMATED_MATCHES = 20;
+    private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
+    private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
+    private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
             .filter(SanctionType::inheritsAcrossAltRelationships)
             .toList();
@@ -63,33 +70,80 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     connection.commit();
                     return new NetworkIdentityObservationResult(0, 0, 0, true);
                 }
+
                 Optional<Instant> cutoverAt = latestCutover(connection);
-                List<UUID> matches = matchingPlayers(connection, joiningPlayerId, identity);
+                List<MatchingPlayer> matches = matchingPlayers(connection, joiningPlayerId, identity);
+                if (matches.size() > MAX_AUTOMATED_MATCHES) {
+                    connection.commit();
+                    return new NetworkIdentityObservationResult(matches.size(), 0, 0, true);
+                }
+
+                boolean singleNetworkCandidate = matches.size() == 1;
                 boolean hasProtectedHistory = hasProtectedRelationshipHistory(connection, joiningPlayerId);
                 int inherited = 0;
                 int alerts = 0;
-                for (UUID otherPlayerId : matches) {
+                for (MatchingPlayer match : matches) {
+                    UUID otherPlayerId = match.playerId();
                     Relationship relationship = lockOrCreateRelationship(
                             connection, joiningPlayerId, otherPlayerId, observedAt
                     );
-                    insertEvidence(connection, relationship.id(), observedAt);
+                    if (match.currentlyOnline() && !relationship.manuallyManaged()) {
+                        relationship = lowerAutomaticConfidence(connection, relationship, observedAt);
+                        insertEvidenceIfDue(
+                                connection,
+                                relationship,
+                                "SIMULTANEOUS_PLAY",
+                                -0.2500,
+                                "PLAYER_DIRECTORY_PRESENCE",
+                                observedAt
+                        );
+                    } else {
+                        insertEvidenceIfDue(
+                                connection,
+                                relationship,
+                                "SAME_NETWORK",
+                                0.2500,
+                                "PROXY_IDENTITY_TOKEN",
+                                observedAt
+                        );
+                    }
+
                     List<SourceSanction> active = activeInheritableSanctions(connection, otherPlayerId, observedAt);
                     if (active.isEmpty()) {
                         continue;
                     }
+                    boolean unambiguousNewAccountEvidence = relationship.created()
+                            && singleNetworkCandidate
+                            && !match.currentlyOnline();
                     boolean shouldInherit = inheritancePolicy.shouldInherit(
-                            relationship.state(), relationship.created(), firstSeenAt, cutoverAt, hasProtectedHistory
+                            relationship.state(),
+                            unambiguousNewAccountEvidence,
+                            firstSeenAt,
+                            cutoverAt,
+                            hasProtectedHistory
                     );
                     if (shouldInherit) {
                         for (SourceSanction source : active) {
-                            if (inherit(connection, joiningPlayerId, otherPlayerId, source, relationship.state(), observedAt)) {
+                            if (inherit(
+                                    connection,
+                                    joiningPlayerId,
+                                    otherPlayerId,
+                                    source,
+                                    relationship.state(),
+                                    observedAt
+                            )) {
                                 inherited++;
                                 alerts++;
                             }
                         }
                     } else if (!relationship.state().preventsAutomaticInheritance()) {
                         alerts += insertLowerConfidenceAlert(
-                                connection, joiningPlayerId, otherPlayerId, relationship.state(), active, observedAt
+                                connection,
+                                joiningPlayerId,
+                                otherPlayerId,
+                                relationship.state(),
+                                active,
+                                observedAt
                         );
                     }
                 }
@@ -165,9 +219,16 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     return false;
                 }
                 if (existing == null) {
-                    insertRelationship(connection, pair, state, actorId, changedAt, false);
+                    insertRelationship(connection, pair, state, actorId, changedAt);
                 } else {
-                    updateRelationship(connection, pair, state, actorId, changedAt, state == AltRelationshipState.NOT_RELATED);
+                    updateRelationship(
+                            connection,
+                            pair,
+                            state,
+                            actorId,
+                            changedAt,
+                            state == AltRelationshipState.NOT_RELATED
+                    );
                 }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
                 connection.commit();
@@ -185,8 +246,14 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
 
     @Override
     public boolean reopen(UUID firstPlayerId, UUID secondPlayerId, UUID actorId, Instant changedAt, String reason) {
-        validateManualChange(firstPlayerId, secondPlayerId, AltRelationshipState.LOW_CONFIDENCE,
-                actorId, changedAt, reason);
+        validateManualChange(
+                firstPlayerId,
+                secondPlayerId,
+                AltRelationshipState.LOW_CONFIDENCE,
+                actorId,
+                changedAt,
+                reason
+        );
         PlayerPair pair = ordered(firstPlayerId, secondPlayerId);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -218,6 +285,26 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
+    @Override
+    public NetworkIdentityRetentionResult purgeExpired(Instant cutoff, int batchSize) {
+        validateRetentionRequest(cutoff, batchSize);
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                NetworkIdentityRetentionResult result = purgeExpired(connection, cutoff, batchSize);
+                connection.commit();
+                return result;
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw new ModerationPersistenceException("Network identity retention transaction failed", exception);
+            } finally {
+                restoreAutoCommit(connection);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to open network identity retention transaction", exception);
+        }
+    }
+
     private static Instant lockPlayerFirstSeen(Connection connection, UUID playerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT first_seen_at FROM players WHERE player_id = ? FOR UPDATE")) {
@@ -242,7 +329,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     encryption_key_version, encrypted_value, first_seen_at, last_seen_at, session_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
                 ON DUPLICATE KEY UPDATE encryption_key_version = VALUES(encryption_key_version),
-                    encrypted_value = VALUES(encrypted_value), last_seen_at = VALUES(last_seen_at),
+                    encrypted_value = VALUES(encrypted_value), last_seen_at = GREATEST(last_seen_at, VALUES(last_seen_at)),
                     session_count = session_count + 1
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
@@ -269,22 +356,31 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static List<UUID> matchingPlayers(
+    private static List<MatchingPlayer> matchingPlayers(
             Connection connection,
             UUID joiningPlayerId,
             ProtectedNetworkIdentity identity
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT DISTINCT player_id FROM network_identity_tokens
-                WHERE hmac_key_version = ? AND equality_token = ? AND player_id <> ?
+                SELECT DISTINCT n.player_id,
+                       CASE WHEN p.current_server IS NULL THEN FALSE ELSE TRUE END AS currently_online
+                FROM network_identity_tokens n
+                JOIN players p ON p.player_id = n.player_id
+                WHERE n.hmac_key_version = ? AND n.equality_token = ? AND n.player_id <> ?
+                ORDER BY n.player_id
+                LIMIT ?
                 """)) {
             statement.setInt(1, identity.equalityKeyVersion());
             statement.setBytes(2, identity.equalityToken());
             statement.setBytes(3, UuidBytes.toBytes(joiningPlayerId));
+            statement.setInt(4, MATCH_QUERY_LIMIT);
             try (ResultSet result = statement.executeQuery()) {
-                List<UUID> players = new ArrayList<>();
+                List<MatchingPlayer> players = new ArrayList<>();
                 while (result.next()) {
-                    players.add(UuidBytes.fromBytes(result.getBytes(1)));
+                    players.add(new MatchingPlayer(
+                            UuidBytes.fromBytes(result.getBytes("player_id")),
+                            result.getBoolean("currently_online")
+                    ));
                 }
                 return List.copyOf(players);
             }
@@ -324,8 +420,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     relationship_state, confidence, locked_until_reopened, updated_at)
                 VALUES (?, ?, ?, 'SAME_NETWORK', 0.2500, FALSE, ?)
                 """)) {
-            UUID relationshipId = UUID.randomUUID();
-            statement.setBytes(1, UuidBytes.toBytes(relationshipId));
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             statement.setBytes(2, UuidBytes.toBytes(pair.lower()));
             statement.setBytes(3, UuidBytes.toBytes(pair.upper()));
             statement.setTimestamp(4, Timestamp.from(observedAt));
@@ -334,13 +429,19 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             if (locked == null) {
                 throw new SQLException("Alt relationship could not be created");
             }
-            return new Relationship(locked.id(), locked.state(), locked.locked(), created);
+            return new Relationship(
+                    locked.id(),
+                    locked.state(),
+                    locked.locked(),
+                    locked.manuallyManaged(),
+                    created
+            );
         }
     }
 
     private static Relationship lockRelationship(Connection connection, PlayerPair pair) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT relationship_id, relationship_state, locked_until_reopened
+                SELECT relationship_id, relationship_state, locked_until_reopened, updated_by
                 FROM alt_relationships
                 WHERE lower_player_id = ? AND upper_player_id = ? FOR UPDATE
                 """)) {
@@ -348,27 +449,91 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             statement.setBytes(2, UuidBytes.toBytes(pair.upper()));
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? new Relationship(
-                        UuidBytes.fromBytes(result.getBytes(1)),
-                        AltRelationshipState.valueOf(result.getString(2)),
-                        result.getBoolean(3),
+                        UuidBytes.fromBytes(result.getBytes("relationship_id")),
+                        AltRelationshipState.valueOf(result.getString("relationship_state")),
+                        result.getBoolean("locked_until_reopened"),
+                        result.getBytes("updated_by") != null,
                         false
                 ) : null;
             }
         }
     }
 
-    private void insertEvidence(Connection connection, UUID relationshipId, Instant observedAt)
-            throws SQLException, JsonProcessingException {
+    private static Relationship lowerAutomaticConfidence(
+            Connection connection,
+            Relationship relationship,
+            Instant observedAt
+    ) throws SQLException {
+        if (relationship.manuallyManaged() || relationship.state() != AltRelationshipState.SAME_NETWORK) {
+            return relationship;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE alt_relationships
+                SET relationship_state = 'LOW_CONFIDENCE', confidence = 0.2000,
+                    updated_at = GREATEST(updated_at, ?), revision = revision + 1
+                WHERE relationship_id = ? AND updated_by IS NULL AND relationship_state = 'SAME_NETWORK'
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(observedAt));
+            statement.setBytes(2, UuidBytes.toBytes(relationship.id()));
+            statement.executeUpdate();
+        }
+        return new Relationship(
+                relationship.id(),
+                AltRelationshipState.LOW_CONFIDENCE,
+                relationship.locked(),
+                false,
+                relationship.created()
+        );
+    }
+
+    private void insertEvidenceIfDue(
+            Connection connection,
+            Relationship relationship,
+            String evidenceType,
+            double weight,
+            String source,
+            Instant observedAt
+    ) throws SQLException, JsonProcessingException {
+        Instant threshold = observedAt.minus(EVIDENCE_REFRESH_INTERVAL);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT MAX(observed_at)
+                FROM alt_evidence
+                WHERE relationship_id = ? AND evidence_type = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(relationship.id()));
+            statement.setString(2, evidenceType);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    Timestamp latest = result.getTimestamp(1);
+                    if (latest != null && !latest.toInstant().isBefore(threshold)) {
+                        return;
+                    }
+                }
+            }
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO alt_evidence(evidence_id, relationship_id, evidence_type, weight,
                     evidence_json, observed_at)
-                VALUES (?, ?, 'SAME_NETWORK', 0.2500, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(relationshipId));
-            statement.setString(3, json.writeValueAsString(Map.of("source", "PROXY_IDENTITY_TOKEN")));
-            statement.setTimestamp(4, Timestamp.from(observedAt));
+            statement.setBytes(2, UuidBytes.toBytes(relationship.id()));
+            statement.setString(3, evidenceType);
+            statement.setDouble(4, weight);
+            statement.setString(5, json.writeValueAsString(Map.of("source", source)));
+            statement.setTimestamp(6, Timestamp.from(observedAt));
             statement.executeUpdate();
+        }
+        if (!relationship.manuallyManaged()) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE alt_relationships
+                    SET updated_at = GREATEST(updated_at, ?), revision = revision + 1
+                    WHERE relationship_id = ? AND updated_by IS NULL
+                    """)) {
+                statement.setTimestamp(1, Timestamp.from(observedAt));
+                statement.setBytes(2, UuidBytes.toBytes(relationship.id()));
+                statement.executeUpdate();
+            }
         }
     }
 
@@ -386,6 +551,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                   AND (s.expiration_at IS NULL OR s.expiration_at > ?)
                   AND c.state <> 'FULLY_OVERTURNED'
                 ORDER BY s.issued_at
+                LIMIT 100
                 FOR UPDATE
                 """.formatted(placeholders);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -587,8 +753,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             PlayerPair pair,
             AltRelationshipState state,
             UUID actorId,
-            Instant changedAt,
-            boolean ignored
+            Instant changedAt
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO alt_relationships(relationship_id, lower_player_id, upper_player_id,
@@ -659,6 +824,36 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
+    private static NetworkIdentityRetentionResult purgeExpired(
+            Connection connection,
+            Instant cutoff,
+            int batchSize
+    ) throws SQLException {
+        int evidenceDeleted;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM alt_evidence
+                WHERE observed_at < ?
+                ORDER BY observed_at
+                LIMIT ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(cutoff));
+            statement.setInt(2, batchSize);
+            evidenceDeleted = statement.executeUpdate();
+        }
+        int tokensDeleted;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM network_identity_tokens
+                WHERE last_seen_at < ?
+                ORDER BY last_seen_at
+                LIMIT ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(cutoff));
+            statement.setInt(2, batchSize);
+            tokensDeleted = statement.executeUpdate();
+        }
+        return new NetworkIdentityRetentionResult(tokensDeleted, evidenceDeleted);
+    }
+
     private static double confidence(AltRelationshipState state) {
         return switch (state) {
             case SAME_NETWORK -> 0.25;
@@ -683,6 +878,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         if (first == null || second == null || first.equals(second) || state == null || actor == null
                 || changedAt == null || reason == null || reason.isBlank() || reason.length() > 512) {
             throw new IllegalArgumentException("valid distinct players, actor, state, time, and reason are required");
+        }
+        NetworkAddressTextGuard.requireNoRawAddress(reason);
+    }
+
+    private static void validateRetentionRequest(Instant cutoff, int batchSize) {
+        if (cutoff == null || batchSize < 1 || batchSize > MAX_RETENTION_BATCH_SIZE) {
+            throw new IllegalArgumentException("retention cutoff and batch size must be valid");
         }
     }
 
@@ -720,7 +922,16 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private record PlayerPair(UUID lower, UUID upper) {
     }
 
-    private record Relationship(UUID id, AltRelationshipState state, boolean locked, boolean created) {
+    private record MatchingPlayer(UUID playerId, boolean currentlyOnline) {
+    }
+
+    private record Relationship(
+            UUID id,
+            AltRelationshipState state,
+            boolean locked,
+            boolean manuallyManaged,
+            boolean created
+    ) {
     }
 
     private record SourceSanction(

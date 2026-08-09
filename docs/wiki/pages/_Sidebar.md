@@ -1,17 +1,9 @@
 ## Start here
 
 - [[Home]]
-- [[Feature Completion Status|Implementation-Status]]
-- [[Remaining Development Map|Development-Blueprint]]
+- [[Implementation Status]]
 
-## Feature hubs
-
-- [[Core Platform and Infrastructure]]
-- [[Moderation, Punishments, and Reports]]
-- [[Staff Tools, Investigations, and Player-State Safety]]
-- [[Integrations, Migration, and Release Readiness]]
-
-## Staff guides
+## Staff
 
 - [[Staff Quick Start|Moderator-Quick-Start]]
 - [[Staff Handbook]]
@@ -31,27 +23,35 @@
 - [[Configuration]]
 - [[Integrations]]
 
-## Operations and release
+## Operations
 
 - [[Installation]]
 - [[Recovery and Troubleshooting]]
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
 
-## Development
+## Development and review
 
 - [[Developer Guide Index]]
+- [[Code Review Guide]]
+- [[Development Setup]]
+- [[Build and Testing]]
 - [[Architecture]]
 - [[Developer Code Guide]]
 - [[Protocol and Network Traffic]]
 - [[Vanish Internals]]
-- [[Development Setup]]
-- [[Build and Testing]]
+- [[Remaining Development Map|Development-Blueprint]]
 - [[Wiki Maintenance]]
+
+## Feature hubs
+
+- [[Core Platform and Infrastructure]]
+- [[Moderation, Punishments, and Reports]]
+- [[Staff Tools, Investigations, and Player-State Safety]]
+- [[Integrations, Migration, and Release Readiness]]
 
 ## Authoritative sources
 
-- [Repository](https://github.com/wsg138/EnthusiaStaff)
 - [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
-- [Workspace manifest](https://github.com/wsg138/EnthusiaStaff/blob/main/WORKSPACE-MANIFEST.md)
+- [Repository](https://github.com/wsg138/EnthusiaStaff)

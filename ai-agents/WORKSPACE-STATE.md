@@ -1,56 +1,74 @@
 # EnthusiaStaff workspace state
 
-Last updated: 2026-08-07
+Last updated: 2026-08-08
 
-Live GitHub state overrides stale records, but persistent package state must be published to `main`.
+Live GitHub state overrides stale records, but persistent package state must be reconciled here.
 
 ## Current routing
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01 — Exact-sanction appeal isolation`; `ES-P03 — Bedrock identity correctness`; `ES-P04 — Staff-mode operational tools`; `ES-X05 — Website UX, authentication, and appeals` |
-| Parked package | `ES-P02 — Runtime database recovery and Velocity reload` |
-| Active implementation package | `ES-P05 — Report evidence and staff workflow completion` |
-| ES-P05 branch | `package/es-p05-report-workflow` |
-| ES-P05 starting main | `bf9b305ba96d9536f3d111c79eef674bd2e11dc5` |
-| ES-P05 handoff | `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md` |
-| Other ready packages | `ES-P09 — Alt and network-identity completion` at priority 55; `ES-P10 — Cheat tester and fake-entity system` at priority 80; do not activate while ES-P05 is active |
-| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; private Actions Billing & plans blocker unchanged |
-| ES-P04 status | `COMPLETE` under an explicit owner-approved package-specific infrastructure exception for Pi staging |
-| ES-P04 validated head | `15d9428eba454e9ae4a905752129bd18676acdb1` |
-| ES-P04 merge | PR #79; normal merge `a530b992232a8a08cbbd13b0eed6606228ceb652` |
-| ES-P04 hosted validation | Wiki `31178353549` / `92865432750` success; Coverage `31178353504` / `92865439305` success on Java 21 including build/tests/coverage/runtime-JAR inspection; Codacy static `92865800728` success with zero issues; Codacy variation `92867049954` and diff coverage `92867049338` success; zero valid unresolved review threads |
-| ES-P04 staging disposition | **OWNER-APPROVED INFRASTRUCTURE EXCEPTION — PI STAGING SKIPPED/DEFERRED**; private staging `31178359804`, Ubuntu build `92865456267` runner ID `0`, steps `[]`, Billing & plans failure; Pi `92865494913` skipped. This is not a staging pass. |
-| ES-P04 internal follow-up | When the private Actions billing/runner path is available, rerun the ES-P04 Pi boot/restart staging against the merged behavior and record the result. This deferred check does not reopen ES-P04 unless it exposes a real defect. |
-| Migration boundary | immutable V17 at ES-P05 start |
-| Production boundary | issue #43 remains open and deferred; LiteBans remains authoritative |
-| Parallel documentation branch | `docs/wiki-maintenance-2026-08` exists separately, has no package authority, and is not being modified by the ES-P05 worker |
+| Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05` |
+| Parked packages | `ES-R01 — Billing-independent staging bridge recovery`; `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
+| Active/selected package | None after this worker's terminal ES-R01 publication merges. |
+| Ready packages | None while the current ES-R01 disposable staging database blocker remains unchanged. |
+| Current legitimate EnthusiaStaff main before terminal publication | `689ff337dd8a33f0bd417d952a7cad5581cb9d9e` — normal merge of ES-R01 checkpoint PR #94 |
+| Current legitimate staging main | `4036d6e915c2d751bef18849107722dfd1e586a6` — normal merge of ES-R01 PR-target provenance fix PR #60 |
+| ES-R01 public implementation | PR #93, frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`, merged normally as `094838fa221476e0832cf821f7b4908b9402d0d9` |
+| ES-R01 private implementation | PR #58 → `570f83e41cb80b498a82c8b5a509c42345558a46`; PR #59 → `313ed2815058eadeb8c823453f4152089cae01d4`; PR #60 → `4036d6e915c2d751bef18849107722dfd1e586a6` |
+| ES-R01 checkpoint | PR #94 frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`, normal merge `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`; containment exact and checkpoint branch auto-deleted |
+| ES-R01 terminal status | `BLOCKED` / `PARKED_BLOCKED` |
+| ES-R01 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md` |
+| ES-R01 blocker | The existing authorized disposable Pi-staging MariaDB endpoint remains unavailable to the guarded disposable boot/restart path from `Lincoln-PI-4`; current-main proof again failed before runtime acceptance could complete |
+| ES-R01 exact unblock | Material evidence that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract |
+| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
+| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
+| Migration boundary | V18 remains immutable/current; ES-R01 changed no migration |
+| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative |
+| Next legitimate action | If material evidence shows the ES-R01 database condition changed, resume ES-R01 before any new package and run one fresh exact-current-main proof. If it has not changed, no package is actionable or ready; report blockers and stop. |
 
-## ES-P05 selection evidence
+## ES-R01 terminal evidence
 
-- Legitimate `main` at selection: `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`.
-- Live open PRs: only PR #70 for ES-P02; it remains parked on the unchanged private Actions Billing & plans blocker and therefore is not an actionable continuation.
-- Live branches at selection: `main`, parked `package/es-p02-runtime-db-recovery`, and separate documentation branch `docs/wiki-maintenance-2026-08`; no ES-P05 branch or competing package branch existed.
-- Dependencies ES-P03 and ES-P04 are complete. ES-P05 was the lowest-priority-number dependency-complete READY package, ahead of ES-P09 and ES-P10.
-- Included scope: provider-independent report submission, durable cooldown/merge/duplicate behavior, queue/detail and text fallback, notes/status revision safety, bounded chat/coordinate/client evidence, retention/privacy, attachment boundary decision, restart/concurrency proof, documentation and validation.
-- Preserved exclusions: RoseChat private-message evidence remains ES-X01; Discord route delivery remains ES-P06; production evidence/routes and issue #43 remain excluded.
-- No prior ES-P05 package handoff existed.
+### Checkpoint merge and exact-head quality
 
-## ES-P04 completion evidence retained
+PR #94 frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`:
 
-- Starting legitimate aggregate `main`: `5c820c29c2fe5a498ea7f80454579953ac05b436`.
-- ES-P04 was selected ahead of ES-P09 after ES-P02 remained parked on its unchanged external blocker; existing PR #79 was resumed rather than duplicated.
-- Scope completed: authenticated staff-mode tools for random teleport, inspector, freeze, reports, follow/spectate, vanish, staff chat, and tools menu; stale/spoofed/session/rank/slot/material checks; Folia-safe target sampling; cooldowns; durable command/service reuse; Bedrock command/text fallbacks; restoration/reconnect/reload/shutdown/rank-change safety.
-- Explicit exclusions were preserved: Cheat Tester/fake entities remain ES-P10; fake bases remain ES-P11.
-- Review fixes prevent deferred Cheat Tester issuance, cover inclusive cooldown boundaries, correct follow/spectate feedback, and resolve Codacy test-quality findings. Every valid review thread was resolved; scheduler-helper consolidation was withdrawn as optional maintainability follow-up.
-- Frozen head `15d9428eba454e9ae4a905752129bd18676acdb1` passed all ordinary exact-head gates. The private staging route did not execute product code because GitHub rejected the required private Ubuntu build before runner allocation under Billing & plans.
-- On 2026-08-07 the owner explicitly authorized ES-P04 to continue despite that infrastructure condition, with the Pi check marked skipped/deferred and an internal requirement to run it later when available. The exception is package-specific and does not relabel the failed/skipped staging evidence as a pass.
-- PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; the merge commit has validated head `15d9428e...` as its package parent.
+- Coverage run `31252575675`, job `93091088422`: success on Java 21 with full build/tests/runtime inspection/aggregate coverage;
+- Codacy static `93091169010`: success;
+- Codacy diff coverage `93091677173`: success;
+- Codacy coverage variation `93091677101`: success;
+- CodeRabbit: success after one valid terminal-status sequencing finding was accepted, fixed, and resolved;
+- normal merge commit `689ff337dd8a33f0bd417d952a7cad5581cb9d9e` has exactly two parents, pre-merge `main` `094838fa221476e0832cf821f7b4908b9402d0d9` and frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`;
+- compare frozen head → merge: one commit ahead, zero behind, no file differences;
+- the public checkpoint branch was automatically deleted after merge.
 
-## Next routing
+### Required fresh current-main proof
 
-ES-P05 is active. This worker must complete or correctly park ES-P05, persist its state, and stop. It must not activate ES-P09, ES-P10, ES-P06, or any other package in this session.
+Public Pi Staging run `31252997554`, exact source `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`:
+
+- public build job `93092131811` succeeded on ordinary GitHub-hosted `ubuntu-latest` with Java 21 and uploaded the verified runtime package;
+- bridge job `93092964130` successfully required the token, downloaded the exact artifact, published bounded transient transfer, dispatched/correlated the private run, collected failure diagnostics, and removed the transient transfer; its final result is failure, correctly reflecting private staging failure;
+- private run `31253345564` on staging control SHA `4036d6e915c2d751bef18849107722dfd1e586a6`;
+- private job `93092978141` allocated trusted `Lincoln-PI-4`, runner ID `2`;
+- runner identity and exact public bridge artifact verification succeeded;
+- `Run guarded disposable Paper boot and restart test` failed; runtime acceptance therefore did not pass;
+- sanitized evidence upload succeeded as artifact `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`;
+- this current-main run's step metadata does not expose a fresh SQLState, so none is invented. Earlier captured proof `31250170297` → private `31250450219` / `93085892938` established seven guarded connection attempts, all SQLState `08000`, before Paper boot.
+
+The current-main proof is **NOT A PASS**. It confirms that the repository-side bridge works through exact provenance and trusted Pi allocation while mandatory guarded runtime acceptance remains unavailable at the same external disposable-database boundary. No safe repository-side implementation remains.
+
+## Classification snapshot
+
+- `ES-R01`: terminal `BLOCKED` / `PARKED_BLOCKED`. Resume only after material evidence of the exact database unblock condition.
+- `ES-P02`: `PARKED_BLOCKED`. Open PR #70 and branch drift do not make it actionable. Resume only after ES-R01 is `COMPLETE`.
+- `ES-P05`: `PARKED_BLOCKED`. Implementation/hosted validation remain preserved. Resume only after ES-R01 is `COMPLETE` and normal package priority permits it.
+- `ES-P07`, `ES-P06`, `ES-P08`, `ES-X01`, `ES-X02`, `ES-X03`, `ES-X04`, and `ES-QA01`: dependency-blocked planned work.
+- `ES-V01`, `ES-V02`, `ES-V03`, and `ES-A01`: deferred private/acceptance work under their existing contracts. Issue #43 is still open and does not authorize production cutover.
+
+## Resume boundary
+
+Do not manually rerun the identical ES-R01 staging failure merely because time passed or documentation changed. Material evidence must first show that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4`. After that change, resume ES-R01 before any new package and require a fresh exact-current-main proof through public build, exact private provenance, guarded pre-reset, Paper boot cycle 1, restart/cycle 2, guarded post-reset, sanitized evidence, correlated public success, and transfer cleanup. Only then mark ES-R01 complete. Do not begin ES-P02 in that same worker.
 
 ## Safety boundaries
 
-No production credentials, punishment/player records, raw addresses, private databases, production routes, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration, shadow window, cutover, ES-V02 execution, or authority activation is authorized.
+No production data/configuration, credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, or ES-V02 execution is authorized by this terminal-state publication.

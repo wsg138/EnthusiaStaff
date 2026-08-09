@@ -72,7 +72,8 @@ public final class PaperConfigurationLoader {
                 ConfigurationNodes.text(channel, "backend-secret-environment", "channel.backend-secret-environment", "ES_CHANNEL_BACKEND_SECRET", errors),
                 ConfigurationNodes.text(channel, "proxy-secret-environment", "channel.proxy-secret-environment", "ES_CHANNEL_PROXY_SECRET", errors),
                 ConfigurationNodes.text(tls, "trust-store", "channel.tls.trust-store", "channel-trust.p12", errors),
-                ConfigurationNodes.text(tls, "trust-store-password-environment", "channel.tls.trust-store-password-environment", "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD", errors)
+                ConfigurationNodes.text(tls, "trust-store-password-environment", "channel.tls.trust-store-password-environment", "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD", errors),
+                new CheatTesterConfigurationParser().parse(root, errors)
         );
         validateChannel(restart, dataDirectory, errors);
 

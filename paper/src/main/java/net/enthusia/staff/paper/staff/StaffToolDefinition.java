@@ -52,7 +52,7 @@ enum StaffToolDefinition {
             Material.BLAZE_ROD,
             "Cheat Tester",
             4,
-            "enthusiastaff.client",
+            "enthusiastaff.cheattester",
             false,
             true,
             CooldownClass.TOGGLE
@@ -163,7 +163,7 @@ enum StaffToolDefinition {
     }
 
     boolean availableFor(StaffRank rank) {
-        if (this == CHEAT_TESTER || rank == null || rank == StaffRank.SYSTEM) {
+        if (rank == null || rank == StaffRank.SYSTEM) {
             return false;
         }
         return !advancedOnly || StaffModeAccessPolicy.hasAdvancedStaffTools(rank);

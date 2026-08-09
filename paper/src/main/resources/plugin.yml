@@ -98,6 +98,10 @@ commands:
     description: Use the staff-mode operational tool menu and text fallbacks
     usage: /stafftools | /stafftools random | /stafftools spectate <player>
     permission: enthusiastaff.stafftools.menu
+  cheattester:
+    description: Configure and run bounded evidence-only cheat tester probes and virtual fake bases
+    usage: /cheattester <select|run|cancel|status|config|base>
+    permission: enthusiastaff.cheattester
   vanish:
     description: Toggle durable rank-aware vanish or spectator tab presentation
     usage: /vanish | /vanish tab <show|hide>
@@ -186,8 +190,6 @@ permissions:
     default: false
   enthusiastaff.reports.manage:
     default: false
-  enthusiastaff.reports.evidence:
-    default: false
   enthusiastaff.alerts:
     default: false
   enthusiastaff.freeze:
@@ -206,6 +208,16 @@ permissions:
     default: false
   enthusiastaff.stafftools.spectate-exempt:
     default: false
+  enthusiastaff.cheattester:
+    default: false
+  enthusiastaff.cheattester.cancel-any:
+    default: false
+  enthusiastaff.cheattester.fake-base:
+    default: false
+  enthusiastaff.cheattester.fake-base.manage-any:
+    default: false
+    children:
+      enthusiastaff.cheattester.fake-base: true
   enthusiastaff.vanish:
     default: false
   enthusiastaff.staffchat:
@@ -266,7 +278,6 @@ permissions:
       enthusiastaff.punish: true
       enthusiastaff.punish.configured: true
       enthusiastaff.reports.manage: true
-      enthusiastaff.reports.evidence: true
       enthusiastaff.alerts: true
       enthusiastaff.freeze: true
       enthusiastaff.freeze.chat: true
@@ -274,6 +285,8 @@ permissions:
       enthusiastaff.stafftools.teleport: true
       enthusiastaff.stafftools.spectate: true
       enthusiastaff.stafftools.menu: true
+      enthusiastaff.cheattester: true
+      enthusiastaff.cheattester.fake-base: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
       enthusiastaff.client: true
@@ -295,10 +308,11 @@ permissions:
       enthusiastaff.sanction.reduce: true
       enthusiastaff.sanction.end: true
       enthusiastaff.sanction.revoke: true
-      enthusiastaff.reports.evidence: true
       enthusiastaff.inventory.edit: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
+      enthusiastaff.cheattester: true
+      enthusiastaff.cheattester.fake-base: true
   enthusiastaff.rank.admin:
     default: false
     children:
@@ -314,6 +328,8 @@ permissions:
       enthusiastaff.sanction.overturn.appeal: true
       enthusiastaff.market.restrict: true
       enthusiastaff.reputation.restrict: true
+      enthusiastaff.cheattester.cancel-any: true
+      enthusiastaff.cheattester.fake-base.manage-any: true
   enthusiastaff.rank.founder:
     default: false
     children:

@@ -1,184 +1,172 @@
 # Wiki Maintenance
 
-The main repository is the source for the live GitHub Wiki. Do not make the live
-Wiki the only copy of a change.
+The main repository is the authoring source for the live GitHub Wiki. The separate `.wiki.git` repository is a publication target only; do not make a direct live-Wiki edit the only copy of a documentation change.
 
 ## Repository locations
 
 | Location | Purpose |
 | --- | --- |
 | `docs/wiki/pages/*.md` | Publishable Wiki pages |
+| `docs/wiki/README.md` | Repository-managed Wiki conventions |
 | `docs/wiki/legacy/ea4f929/` | Preserved pre-migration pages |
 | `scripts/wiki/validate_wiki.py` | Internal-link/page validation |
-| `.github/workflows/wiki-validate.yml` | Pull-request and main validation |
+| `.github/workflows/wiki-validate.yml` | Pull-request/main Wiki validation |
 | `.github/workflows/wiki-publish.yml` | Protected manual publication from `main` |
 
 ## Information architecture
 
-Keep each kind of information in one primary location:
+Use progressive disclosure:
+
+1. answer the reader's immediate question first;
+2. keep staff/index pages short enough to scan;
+3. link to a focused page for procedures or internals;
+4. use [[Developer Code Guide]] for detailed source maps;
+5. use [[Code Review Guide]] for cross-cutting review discipline;
+6. use authoritative repository evidence for exact implementation/proof claims.
+
+One primary owner per information type reduces drift:
 
 | Information | Primary owner |
 | --- | --- |
-| Main navigation and task routing | `Home.md` and `_Sidebar.md` |
-| Overall percentages and group directory | `Implementation-Status.md` |
-| Core feature descriptions/files | `Core-Platform-and-Infrastructure.md` |
-| Moderation feature descriptions/files | `Moderation,-Punishments,-and-Reports.md` |
-| Staff-tool feature descriptions/files | `Staff-Tools,-Investigations,-and-Player-State-Safety.md` |
-| Integration/release descriptions/files | `Integrations,-Migration,-and-Release-Readiness.md` |
-| Cross-group development order | `Development-Blueprint.md` |
-| Complete source map and feature traces | `Developer-Code-Guide.md` |
-| Staff procedures | Focused staff guide for the task |
-| Administrator references | Commands, ranks, configuration and integrations pages |
-| Operational procedures | Installation, recovery, migration and cutover pages |
-| Validation commands/evidence | `Build-and-Testing.md` |
-| Exact implementation proof/blockers | `reports/REQUIREMENTS-MATRIX.md` |
+| Role/task routing | `Home.md` and `_Sidebar.md` |
+| Merged-main product/evidence state | `Implementation-Status.md` |
+| Core feature status and entry points | `Core-Platform-and-Infrastructure.md` |
+| Moderation feature status and entry points | `Moderation,-Punishments,-and-Reports.md` |
+| Staff/player-state feature status and entry points | `Staff-Tools,-Investigations,-and-Player-State-Safety.md` |
+| Provider/migration/release status and entry points | `Integrations,-Migration,-and-Release-Readiness.md` |
+| Durable remaining-product map | `Development-Blueprint.md` |
+| Developer task routing | `Developer-Guide-Index.md` |
+| Detailed source map and feature traces | `Developer-Code-Guide.md` |
+| Cross-cutting code-review checklist | `Code-Review-Guide.md` |
+| Validation commands and evidence interpretation | `Build-and-Testing.md` |
+| Staff procedures | focused staff page for that task |
+| Admin references | commands, ranks, configuration and integrations pages |
+| Operational procedures | installation, recovery, migration and cutover pages |
+| Exact finished intent | `ENTHUSIASTAFF-GOALS.md` |
+| Requirement/evidence ledger | `reports/REQUIREMENTS-MATRIX.md` plus current legitimate review/runtime evidence |
+| Worker/package orchestration | `ai-agents/`; not general Wiki product pages |
 
-Do not copy the same percentage table, command list, source-file map or release
-procedure into multiple pages. Link to the owning page.
+Do not copy the same command table, source map, review checklist, release procedure, or transient worker/package state across many pages. Link to the owning page.
 
 ## Navigation rules
 
-- `Home.md` should answer “where do I start?” by role and task.
-- `_Sidebar.md` should remain compact and expose the four feature hubs directly.
-- Every focused staff/admin page should link to its matching feature hub.
-- Every feature hub should link to important source files, related procedures and
-  the requirements matrix.
-- New pages must be reachable from Home, the sidebar or an owning index.
-- Preserve stable filenames when possible so old Wiki links continue to work.
-- Use headings that describe the question answered by the section.
+- `Home.md` should let Staff, Administration, Operations, Development, Code Review, and Troubleshooting readers choose a route quickly.
+- `_Sidebar.md` should remain compact; it is navigation, not a complete index.
+- Feature hubs should explain purpose, current merged-main state, important limitations and primary source entry points.
+- Focused staff pages should lead with procedure/safety and defer internals.
+- Developer index pages should route rather than duplicate the detailed source map.
+- New deep-dive pages must be linked from their owning hub/index and from the sidebar only when they are common enough to deserve permanent placement.
+- Preserve stable filenames when practical so existing Wiki links continue to work.
+- Use a small `Related pages`, `See also`, or `Go deeper` section instead of repeating large navigation blocks.
+
+## Source-of-truth discipline
+
+When sources disagree:
+
+1. `ENTHUSIASTAFF-GOALS.md` defines intended finished behavior.
+2. Current merged code, configuration, migrations, tests and runtime evidence define implemented behavior.
+3. The requirements matrix and current legitimate review/runtime evidence describe proof/blockers; reconcile them with live `main` after recent merges.
+4. The Wiki explains the result for humans.
+
+Do not describe unmerged code as available. If active development is useful context, label it explicitly as development/in progress and keep it out of the merged-main status table.
+
+Do not call a feature staging-verified merely because unit, integration or Testcontainers tests exist. See [[Build and Testing]].
 
 ## Editing process
 
-1. Update code, configuration and exact status sources first.
-2. Update the relevant `reports/REQUIREMENTS-MATRIX.md` row.
-3. Edit only the Wiki page that owns the changed information.
-4. Update the matching feature hub when purpose, percentage, files or remaining
-   work changed.
-5. Update `Implementation-Status.md` only when the group summary changed.
-6. Update `_Sidebar.md` and Home when a page is added, removed or renamed.
+For a normal product change:
+
+1. Determine the authoritative behavior and current merged implementation.
+2. Update the focused Wiki page that owns the changed human-facing behavior.
+3. Update the matching feature hub if state, limitation, source ownership, or navigation changed.
+4. Update [[Developer Code Guide]] only when important source ownership/traces changed.
+5. Update [[Code Review Guide]] only when a new cross-cutting invariant/review class is genuinely introduced.
+6. Update Home/sidebar only when navigation should change.
 7. Run `python scripts/wiki/validate_wiki.py`.
-8. Open a pull request and inspect every changed link/path.
-9. Review technical accuracy, staff clarity, privacy, duplication and navigation.
-10. Merge the approved pull request.
-11. Publish the reviewed Wiki source from `main`.
+8. Manually inspect changed internal/source links, privacy, status wording, and duplication.
+9. Review and merge the documentation through the normal repository process.
+10. Publish the reviewed `main` source through **Publish Wiki**.
 
-## Writing style
+Package/workspace state has separate ownership. A Wiki worker or ordinary documentation fix should not rewrite package routing/status merely because it finds stale prose elsewhere.
 
-- Start with what the page is for and who should use it.
-- Put a short navigation section near the top.
-- Separate live/staff procedure from intended or incomplete behavior.
-- Explain a feature in plain language before listing implementation files.
-- For destructive actions, include explicit stop/escalation conditions.
-- Keep private information and secrets out of examples.
-- Do not claim tests/staging passed without exact evidence.
-- Prefer direct source-file links on feature hubs; use the Developer Code Guide for
-  complete end-to-end traces.
+## Writing rules
 
-## One-time GitHub setup
+- State what the page is for near the top.
+- Give the useful answer or common action before implementation detail.
+- Distinguish merged repository behavior, staging evidence and production acceptance.
+- Prefer meaningful states/limitations over invented exact percentages.
+- Explain a feature before listing source files.
+- Put exhaustive source maps on [[Developer Code Guide]], not staff quick-start pages.
+- Put review invariants on [[Code Review Guide]], not every feature page.
+- For destructive workflows, give explicit stop/escalation/recovery conditions.
+- Keep examples sanitized; never use real punishment/case records, raw addresses, credentials, private-message evidence or private server details.
+- Do not claim a check, provider, staging environment or production gate passed without exact evidence.
 
-### Workflow permission
+## Validation
 
-Repository settings:
+Run from repository root:
 
-```text
-Settings -> Actions -> General -> Workflow permissions
+```bash
+python scripts/wiki/validate_wiki.py
 ```
 
-The publisher needs write permission. Repository/organization policy may require
-an owner to allow it.
+The validator checks structural rules such as required pages, flat layout, UTF-8/LF, H1 headings, duplicate normalized page names, internal Wiki links, relative Markdown links, size limits and placeholder tokens.
 
-### Protected environment
+It does **not** prove technical truth, external source links, privacy judgment, implementation status, or staging evidence. Manually verify those.
 
-Create an environment named exactly:
+Before merge confirm:
 
-```text
-wiki-production
-```
+- every new page is reachable;
+- Home/sidebar destinations exist;
+- aliases use the correct Wiki filename/slug;
+- source links still name real current files;
+- no active unmerged feature is described as merged;
+- no sensitive/private data was copied into the Wiki;
+- focused pages still own focused procedure rather than duplicating an index/hub.
 
-Recommended protection:
+## Publication setup
 
-- allow deployments only from `main`;
-- require a trusted reviewer when available;
-- prevent self-review when publication should require a second person.
+The publisher uses the protected `wiki-production` environment and requires write access to the Wiki repository. Repository/organization policy may require a reviewer.
 
-### Wiki token fallback
-
-The permanent publisher first tries the job's `GITHUB_TOKEN`. If the Wiki push is
-rejected, configure an environment secret named:
+The workflow uses the protected environment secret `WIKI_PUBLISH_TOKEN` when it is configured. Otherwise, it uses the job's `GITHUB_TOKEN`:
 
 ```text
 WIKI_PUBLISH_TOKEN
 ```
 
-Use the narrowest token that can write the repository's `.wiki.git` remote. Never
-place the token in source, issues, Wiki pages or logs. Set an expiration and rotate
-or remove it when no longer required.
-
-### Keep the Wiki enabled
-
-Publication target:
-
-```text
-https://github.com/wsg138/EnthusiaStaff.wiki.git
-```
-
-Visible Wiki:
-
-```text
-https://github.com/wsg138/EnthusiaStaff/wiki
-```
+Use the narrowest token that can write `wsg138/EnthusiaStaff.wiki.git`. Never place the token in source, issues, Wiki pages or logs.
 
 ## Publishing
 
-After the source pull request is merged:
+After the documentation PR is merged to `main`:
 
-1. Open **Actions**.
-2. Select **Publish Wiki**.
-3. Choose **Run workflow** on `main`.
-4. Enter `PUBLISH` exactly.
-5. Approve `wiki-production` when required.
-6. Confirm validation, clone, backup branch, artifact upload, commit and push.
-7. Open the live Wiki and verify Home, sidebar, feature hubs and changed pages.
+1. Open **Actions** -> **Publish Wiki**.
+2. Run it on `main`.
+3. Enter `PUBLISH` exactly.
+4. Approve `wiki-production` if required.
+5. Confirm Wiki validation succeeds.
+6. Confirm the workflow clones the live Wiki, creates a timestamped backup branch and uploads the pre-publish bundle.
+7. Confirm it replaces the live Markdown from `docs/wiki/pages/` and records the source revision.
+8. Verify the live Home, sidebar and changed pages.
 
-Merging the source repository alone does not update the separate Wiki repository.
+Merging source alone does not update `.wiki.git`.
 
-## Publication safety
+## Publication safety and restore
 
-The protected publisher:
+Before replacing live pages, the workflow:
 
 1. validates repository-managed pages;
 2. clones the live Wiki;
 3. creates a full Git bundle;
 4. pushes a timestamped backup branch;
-5. uploads the pre-publish bundle as an artifact;
-6. replaces root Markdown pages from reviewed source;
-7. records the source revision in Wiki history;
+5. uploads that bundle as an artifact;
+6. replaces Wiki Markdown from reviewed source;
+7. commits the source revision;
 8. pushes the detected Wiki default branch.
 
-The live Wiki should remain unchanged when validation, clone or backup creation
-fails.
+The live Wiki should remain unchanged if validation, clone or backup creation fails.
 
-## Confirming publication
-
-The workflow summary should record:
-
-- source revision;
-- backup branch;
-- backup artifact;
-- published Wiki branch.
-
-Verify:
-
-- Home displays the role/task navigation;
-- sidebar includes all four feature hubs;
-- Feature Completion Status links to each hub;
-- internal Wiki links open the expected page;
-- direct source links point to current files/directories;
-- stale pages were replaced rather than duplicated.
-
-## Restore
-
-Preferred restore uses the automatically created backup branch:
+Preferred restore uses the exact backup branch reported by the workflow:
 
 ```bash
 git clone https://github.com/wsg138/EnthusiaStaff.wiki.git
@@ -187,38 +175,19 @@ git reset --hard origin/backup/<exact-branch-from-workflow>
 git push --force-with-lease origin HEAD:<reported-default-branch>
 ```
 
-Use the exact branch names from the workflow summary. The original pre-migration
-state is also preserved at `ea4f929710d3281aac4a8087da1e947973c2d795` and under
-`docs/wiki/legacy/ea4f929/`.
+Do not guess branch names or bypass a failed protected publisher by hand-editing the live Wiki.
 
-## Review checklist
+## Final documentation review
 
-### Navigation and ownership
+Ask:
 
-- Home routes by role and task.
-- Sidebar is compact and complete.
-- Every new page is reachable.
-- Feature hubs link to source files and focused procedures.
-- The same table/description is not copied across several pages.
-
-### Accuracy
-
-- Staff instructions match actual command usage.
-- Rank limits match central policy and `plugin.yml`.
-- Planned behavior is not described as deployed.
-- Percentages agree with the requirements matrix.
-- Developer file paths still match the source tree.
-- Active branch work is not counted as merged behavior.
-
-### Safety and privacy
-
-- Destructive workflows include stop conditions.
-- Private evidence, addresses, coordinates and secrets are not exposed.
-- Optional-provider limitations are explicit.
-- Recovery advice does not recommend blind retries or raw storage edits.
-
-### Validation
-
-- `python scripts/wiki/validate_wiki.py` passes.
-- Changed external source links were manually checked.
-- Wiki validation and normal repository checks pass on the final PR head.
+- Can each audience find its starting page in one step?
+- Is the useful answer above the deep implementation detail?
+- Does each technical subject have one clear owning page?
+- Are merged behavior, limitations, automated evidence, staging and production acceptance distinguished?
+- Do developer pages answer where policy, platform glue, persistence, tests and remaining runtime evidence live?
+- Does the review guide point reviewers to the right risks without duplicating the source map?
+- Are recovery instructions conservative and free of blind retry/raw-storage advice?
+- Is all sensitive information excluded?
+- Did `python scripts/wiki/validate_wiki.py` pass on the final exact PR head?
+- Were live pages verified after publication?
