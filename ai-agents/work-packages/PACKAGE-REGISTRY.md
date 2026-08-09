@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-09
 
-Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-R01`, `ES-P02`, and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. No package is currently `READY`. Issue #43 remains open, deferred, and excluded.
+Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-R02` is the owner-directed baseline-build recovery whose terminal `COMPLETE` state is published when exact validated PR #103 merges normally; `ES-R01`, `ES-P02`, and `ES-P05` remain `BLOCKED` / `PARKED_BLOCKED` during this worker. No normal product package is `READY`. Issue #43 remains open, deferred, and excluded.
 
 ## Rules
 
@@ -17,14 +17,15 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
-| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | owner-directed continuation proved the former MariaDB blocker stale, repaired the transient-release freshness verifier in staging PR #75, and retained the two-hour security boundary using Release `published_at` plus asset `created_at`; fresh current-`main` proof is now blocked earlier because current public `main` fails two ReportStore integration tests before a bridge artifact can be produced |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
-| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70; remain parked while ES-R01 cannot obtain mandatory current-main proof; next sequential worker must reconcile whether the current-main product-build blocker belongs to ES-P02, ES-P05, or another canonical route before resuming product work |
+| `ES-R01` | Billing-independent staging bridge recovery | `BLOCKED` | `PARKED_BLOCKED` | 15 | — | shared freshness repair is merged; current-main trusted-build blocker is being independently repaired by owner-directed ES-R02. Do not resume ES-R01 in this worker. After ES-R02 merges green, the exact unblock condition materially changes and the next worker must resume ES-R01 first for one fresh exact-current-main canonical proof |
+| `ES-R02` | Report integration fixture clock recovery | `COMPLETE` on exact validated PR #103 merge | owner-directed recovery | 16 | — | branch `package/es-r02-report-fixture-clock-recovery`; only the stale Report integration fixture clock plus canonical ES-R02 records; no product-feature scope, no ES-P05 merge/advance; terminal publication becomes authoritative only when PR #103 merges normally |
+| `ES-P02` | Runtime database recovery and Velocity reload | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | PR #70 remains parked and untouched in ES-R02 |
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81 remains untouched at `346e764f40b25c98e7d24ce7f863e5629773e814`; its former transient-release freshness prerequisite is repaired by ES-R01, but no ES-P05 rerun/resync/merge is allowed in this worker; current public `main` independently fails two ReportStore integration tests before bridge execution |
+| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81 remains open/unmerged and untouched at `346e764f40b25c98e7d24ce7f863e5629773e814`; ES-R02 copies only the independently valid fixture-clock repair into current-main lineage and makes no ES-P05 completion claim |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked; dependency retained after deadlock analysis |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
@@ -42,27 +43,40 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## `ES-R01`
 
-- Owner-directed continuation on 2026-08-09 overrode the stale parked routing after live evidence proved the old MariaDB-unreachable condition had materially changed. No ES-P02, ES-P05, or other package implementation was modified.
+- Owner-directed continuation on 2026-08-09 overrode the stale parked routing after live evidence proved the old MariaDB-unreachable condition had materially changed. No ES-P02, ES-P05, or other product implementation was modified.
 - Historical proof of the changed database condition: ES-P05 source `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`, public run `31301426684`, private run `31301734048` / job `93215499833`, trusted `Lincoln-PI-4` runner ID `2`, exact provenance PASS, guarded pre-reset PASS, two storage-ready Paper cycles through Flyway V18, clean shutdown/reap after each cycle, restart/persistence PASS, final guarded cleanup PASS, sanitized artifact `9034945235` digest `sha256:a81af3154c7e561c5ea09ed7072c970d483b25b63e217f34f1976132bab4ef3e`.
 - Newly exposed ES-P05 transfer failure: public run `31330788773`, public build job `93288608088` success, bridge `93289540403`, private run `31331175023` / job `93289556545` on trusted runner ID `2`; private verifier failed before DB/Paper with `release created_at is expired for the staging bridge`; sanitized diagnostic artifact `9042975898`, digest `sha256:1b470d2f20a6f263ed424734ff9397663077bbeec2d3ea942e3981ed926d7a93`; public cleanup removed the transient release/tag.
 - Root cause confirmed against GitHub REST semantics and live metadata: Release `created_at` is based on the commit used for the release and is not a publication timestamp. The verifier's two-hour transfer TTL therefore falsely rejected a newly published transient release when its target commit was older than two hours.
 - Repair model: Release `published_at` is mandatory for release-publication freshness; Release Asset `created_at` continues to enforce independent upload freshness; existing two-hour max age, five-minute future skew, exact release/tag/asset IDs/names, source/workflow/run/PR provenance, repository, digest, size, archive allowlist, manifest and cleanup requirements are retained.
 - Staging PR #75 froze at `19e38d6851367d835cfe50fc29e9f95a0936f66d`; exact-content Staging Controls run `31332576934` / job `93293056853` passed on `Lincoln-PI-4`, including all requested freshness/provenance regression fixtures plus the broader staging controls and 292 Sentinel unit tests. CodeRabbit green; zero unresolved review threads. PR #75 merged normally as `af1bd6d3ae8214e58eb969c23972f872b15c1f18`.
-- Public counterpart PR #102 documents the corrected timestamp semantics and canonical state. It changes no product Java behavior.
-- New blocker is upstream of the bridge: current public `main` `140d10ef63f3d6761c95afccbead13db53888304` already failed automatic Pi Staging run `31332055336` / public build job `93291754833` in two ReportStore integration tests before any ES-R01 public branch change. The failures are `stateLifecycleEnforcesAssignmentRevisionAndQueues()` (expected true, got false) and `duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` (expected 2, got 0).
-- ES-R01 docs head `c2a80525e964acfaf230169863d835dcf07d3d60` reproduced the same baseline failures in Coverage run `31332739840` and canonical Pi Staging run `31333070856` / build job `93294291022`; an unchanged-head Coverage rerun failed again. Because no verified public artifact was produced, no private Pi dispatch occurred. This is **NOT A PASS**.
-- ES-R01 explicitly forbids changing ReportStore product/test behavior or weakening the trusted public build. The exact unblock is material evidence that current `EnthusiaStaff:main` again passes the canonical trusted public Java build, including those two ReportStore integration tests, without an ES-R01 bypass.
-- Terminal state for this worker is `BLOCKED` / `PARKED_BLOCKED`, not `COMPLETE`. Resume ES-R01 only after that exact public-build condition materially changes; then obtain one fresh exact-current-main public→private proof through provenance, DB pre-reset, two Paper cycles/restart-persistence, final cleanup, sanitized evidence, correlated public success and transfer cleanup.
-- `noop-temp-ignore` has no PR but has two unique commits/work versus main, so the owner's safe-delete condition is not met; it remains untouched.
-- V18 remains immutable/current; issue #43 remains deferred; LiteBans authority is unchanged.
+- Public counterpart PR #102 froze at `369a71c84a4fcb1c09cfd43cf32b323ffbc0fbb6` and merged normally as `15d37fa1e49b5d4b8403914b6f7a43892dbe417e`. It changed documentation/canonical state only.
+- The newly exposed blocker was upstream of the bridge: baseline public `main` `140d10ef63f3d6761c95afccbead13db53888304` failed automatic Pi Staging run `31332055336` / public build job `93291754833` in `ReportStoreIntegrationTest.stateLifecycleEnforcesAssignmentRevisionAndQueues()` and `duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` before artifact creation. ES-R01 documentation-only heads reproduced those same failures.
+- ES-R01 explicitly forbids weakening or bypassing the trusted public build. Its exact unblock is material evidence that current `EnthusiaStaff:main` again passes that canonical Java build, including those two tests.
+- ES-R02 is the narrow independent vehicle for that prerequisite repair. ES-R01 remains `BLOCKED` / `PARKED_BLOCKED` during this worker and is not allowed to claim ES-R02 validation or private acceptance as its own.
+- If exact validated PR #103 merges and current main becomes green, ES-R01 must be reclassified by the **next worker** as `ACTIONABLE_CONTINUATION`, which must then obtain one fresh exact-current-main full canonical public→private proof before ES-R01 may become `COMPLETE`.
+- `noop-temp-ignore` retains unique work and remains untouched. V18 remains immutable/current; issue #43 remains deferred; LiteBans authority is unchanged.
 - Canonical contract: `ai-agents/work-packages/packages/ES-R01.md`.
-- Terminal handoff: `ai-agents/reports/package-handoffs/2026-08-09-es-r01-release-freshness-repaired-public-build-blocked.md`.
+- Terminal handoff before ES-R02: `ai-agents/reports/package-handoffs/2026-08-09-es-r01-release-freshness-repaired-public-build-blocked.md`.
+
+## `ES-R02`
+
+- Explicit owner-directed baseline-build deadlock recovery; no normal product package was selected.
+- Starting legitimate `main`: `15d37fa1e49b5d4b8403914b6f7a43892dbe417e` after normal merge of PR #102.
+- Branch: `package/es-r02-report-fixture-clock-recovery`; PR #103.
+- Confirmed circular dependency: ES-R01 requires current-main trusted Java build success; current main fails two ReportStore integration tests; the proven repair exists in unmerged ES-P05 PR #81; ES-P05 itself cannot merge until ES-R01 proves the shared staging path.
+- Root cause: current main used `ReportIntegrationFixtures.NOW = Instant.parse("2026-08-01T12:00:00Z")`; default recently-closed/evidence-retention windows are seven days; production reads correctly use live UTC/database time; the fixture aged out as wall time advanced.
+- Repair: only the integration fixture imports `ChronoUnit` and changes `NOW` to one JVM-wide `Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MICROS)`. The resulting fixture blob matches ES-P05 head `346e764f40b25c98e7d24ce7f863e5629773e814` exactly.
+- Time review: one static clock value; approximately one minute in the past; microsecond precision; lifecycle timestamps remain in the past; explicit expiry fixture remains `NOW - 9 days` against the seven-day policy; no calendar-day/midnight dependence; no assertion or policy weakening.
+- No production `JdbcReportStore`/query/transaction/schema behavior, report command/permission/GUI/formatter, Flyway/migration, staging workflow, production data/infrastructure, issue #43 behavior or LiteBans authority changes are in scope.
+- PR #81 remains open/unmerged, unsynchronized, unmodified, unstaged and otherwise untouched. The duplicate fixture repair in main and PR #81 is intentional; a later ES-P05 worker will reconcile normal Git history.
+- Exact-head hosted/review/static evidence is recorded on PR #103 after the tracked head freezes, per the anti-self-referential validation rule. Full private ES-R01 acceptance is not an ES-R02 claim.
+- Terminal `COMPLETE` state in this record becomes authoritative only when the exact final PR #103 head is hosted-green, review/static-green, normally merged, contained by main, and verified not to include ES-P05 feature code.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-09-es-r02-report-fixture-clock-recovery.md`.
 
 ## `ES-P02`
 
-- Remains `BLOCKED` / `PARKED_BLOCKED` on PR #70.
-- Its implementation and earlier hosted validation remain preserved. ES-R01 no longer parks on the stale MariaDB condition; instead the repaired bridge is waiting on a current-main trusted public build that currently fails in ReportStore integration tests before artifact production.
-- After ES-R01 terminal publication, the next sequential worker must reconcile live routing and determine whether ES-P02, ES-P05, or another canonical product package owns the current-main build failure. Do not change product scope from an ES-R01 worker.
+- Remains `BLOCKED` / `PARKED_BLOCKED` on PR #70 and is untouched by ES-R02.
+- Its implementation and earlier hosted validation remain preserved. Do not resume it before the post-ES-R02 ES-R01 continuation.
 
 ## `ES-P04`
 
@@ -81,7 +95,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 - Resumed/finalized on 2026-08-09 as the existing `ACTIONABLE_CONTINUATION`; no competing ES-P05 implementation PR was created.
 - Finalization-worker starting `main`: `e210df15ed90cf96757516fd363faa801bc7192c`.
-- Existing implementation PR #81 remains open on `package/es-p05-report-workflow`; ES-R01 does not modify, synchronize, rerun staging for, merge, or delete it.
+- Existing implementation PR #81 remains open on `package/es-p05-report-workflow`; ES-R02 does not modify, synchronize, rerun staging for, merge, or delete it.
 - The previous head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` later received genuine canonical Pi runtime success: public run `31301426684`, private run `31301734048` / job `93215499833` on trusted `Lincoln-PI-4`, guarded pre-reset, two clean storage-ready Paper cycles, v18 restart/persistence proof, post-cleanup and sanitized artifact `9034945235` (`sha256:a81af3154c7e561c5ea09ed7072c970d483b25b63e217f34f1976132bab4ef3e`).
 - Current `main` was merged normally into PR #81 through two-parent merge `f052fd8177f5b5eed6bc75111411e10b0ced66db`; no rebase/force/squash. The implementation diff remained exactly nine ES-P05 report files and zero behind `main` at that point.
 - Fresh Codacy maintainability findings were resolved through bounded static-only commits `b1bcf1d8422115de95d1e8233f5ca3f55325b373` and `346e764f40b25c98e7d24ce7f863e5629773e814`. Final parked candidate remains `346e764f40b25c98e7d24ce7f863e5629773e814`.
@@ -90,7 +104,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 - Exact final-head hosted evidence: Wiki `31330790907` success; Coverage `31330790942` / `93288609588` success on Java 21 including full build/tests/ReportStore integration/MariaDB/Testcontainers/migration validation/coverage/runtime-JAR inspection; Codacy static `93288694739` success with zero annotations; Codacy diff coverage `93289365775` success at 42.96% with no defined gate.
 - Final automatic public Pi run `31330788773`: public build `93288608088` passed and uploaded the exact runtime. Bridge `93289540403` successfully downloaded the artifact, created the bounded transient release/asset, dispatched/correlated private run `31331175023`, collected failed-run diagnostics and removed the transient release/tag.
 - Correlated private job `93289556545` allocated trusted `Lincoln-PI-4` runner ID `2` and passed the runner assertion, but failed `Retrieve and verify exact public bridge artifact` with `release created_at is expired for the staging bridge`. Guarded database reset and all Paper/restart/persistence/cleanup runtime assertions were skipped. Sanitized diagnostic artifact `9042975898` has digest `sha256:1b470d2f20a6f263ed424734ff9397663077bbeec2d3ea942e3981ed926d7a93`.
-- ES-R01 has now confirmed and repaired that shared freshness defect; the two-hour transport boundary is retained with Release `published_at` plus asset `created_at`. ES-P05 itself has not been rerun and remains parked pending later sequential routing.
+- ES-R01 has now confirmed and repaired that shared freshness defect; ES-R02 independently repairs only the baseline fixture clock. ES-P05 itself has not been rerun and remains parked pending a later worker after ES-R01 completion.
 - V18 remains immutable/current; RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-09-es-p05-final-staging-prereq-blocked.md`.
 
@@ -145,6 +159,8 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## Next-worker boundary
 
-`ES-R01` is persistently `BLOCKED` / `PARKED_BLOCKED` after its release-freshness repair. Its exact unblock is no longer MariaDB reachability and no longer the transient-release `created_at` defect. Resume ES-R01 only after material evidence that current `EnthusiaStaff:main` passes the canonical trusted public Java build, including the two currently failing ReportStore integration tests, without weakening that gate. Then run one fresh exact-current-main public→private proof and mark ES-R01 `COMPLETE` only if the full provenance/DB/two-cycle Paper/cleanup chain succeeds.
+This worker stops after exact validated PR #103 merges and containment is verified. It does not begin another package.
 
-The next sequential worker must reconcile live routing for the product-side build failure and reconsider ES-P02/ES-P05 accordingly. ES-P05 PR #81 remains parked and untouched by this ES-R01 worker; do not infer that the repaired shared bridge validates its current head. Do not create duplicate staging runs merely because time passed, do not weaken product tests or provenance/freshness gates, and do not treat an unavailable prerequisite as passed. No package is currently `READY`.
+At that point, current-main trusted Java build success materially changes ES-R01's exact unblock condition. The **next worker** must reclassify `ES-R01 — Billing-independent staging bridge recovery` as `ACTIONABLE_CONTINUATION` and resume it before ES-P02, ES-P05, ES-P06, ES-X01, or any new product package.
+
+That ES-R01 worker must obtain one fresh exact-current-main canonical public→private proof through public Java build → bounded transient transfer → corrected Release `published_at` / asset freshness verification → trusted `Lincoln-PI-4` → guarded DB pre-reset → Paper cycle 1 → clean shutdown/reap → Paper cycle 2/restart-persistence → clean shutdown/reap → final DB cleanup → sanitized evidence → public correlation success → transfer cleanup. Only then may ES-R01 become `COMPLETE`; only a later worker may then resume ES-P05.
