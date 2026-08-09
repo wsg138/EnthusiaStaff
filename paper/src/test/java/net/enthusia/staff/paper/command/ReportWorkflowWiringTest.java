@@ -60,6 +60,11 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("sender.hasPermission(EVIDENCE_PERMISSION)"));
         assertTrue(source.contains("/reports evidence <report-id> <public|private|client> [snapshot] [page]"));
         assertTrue(source.contains("evidenceFormatter.render("));
+        assertTrue(source.contains("sendEvidenceAware("));
+        assertTrue(source.contains("sendSensitive(sender, messages)"));
+        assertTrue(source.contains("authorizedMessage.get() : deniedMessage"));
+        assertTrue(source.contains("if (!sender.hasPermission(EVIDENCE_PERMISSION))"));
+        assertFalse(source.contains("boolean evidenceAccess = sender.hasPermission(EVIDENCE_PERMISSION)"));
         assertFalse(source.contains("send(sender, details.publicChatSnapshots().toString())"));
         assertFalse(source.contains("send(sender, details.privateMessageSnapshots().toString())"));
         assertFalse(source.contains("send(sender, details.clientEvidenceSnapshots().toString())"));
