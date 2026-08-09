@@ -36,31 +36,20 @@ final class VelocityConfigurationReloadCoordinator {
         }
     }
 
-    @SuppressWarnings({
-            "PMD.CyclomaticComplexity",
-            "PMD.NPathComplexity",
-            "PMD.ExcessiveMethodLength"
-    }) // A reload is one serialized transaction; splitting its rollback branches would obscure atomicity.
     private VelocityConfigurationReloadResult reloadLocked() {
         if (stopping.getAsBoolean()) {
-            return result(
-                    VelocityConfigurationReloadResult.Outcome.SHUTTING_DOWN,
-                    "Velocity configuration reload was rejected because shutdown has started",
-                    List.of()
-            );
+            return shuttingDown("Velocity configuration reload was rejected because shutdown has started");
         }
-
         final VelocityConfiguration candidate;
         try {
             candidate = candidates.load();
         } catch (IOException | RuntimeException exception) {
-            return result(
-                    VelocityConfigurationReloadResult.Outcome.VALIDATION_FAILED,
-                    "Velocity configuration candidate was rejected; the live configuration is unchanged",
-                    List.of(sanitized(exception))
-            );
+            return validationFailed(exception);
         }
+        return applyCandidate(candidate);
+    }
 
+    private VelocityConfigurationReloadResult applyCandidate(VelocityConfiguration candidate) {
         VelocityConfiguration current = active.get();
         List<String> restartRequired = restartRequiredChanges(current, candidate);
         if (!restartRequired.isEmpty()) {
@@ -78,13 +67,8 @@ final class VelocityConfigurationReloadCoordinator {
             );
         }
         if (stopping.getAsBoolean()) {
-            return result(
-                    VelocityConfigurationReloadResult.Outcome.SHUTTING_DOWN,
-                    "Velocity configuration reload was rejected because shutdown started before publication",
-                    List.of()
-            );
+            return shuttingDown("Velocity configuration reload was rejected because shutdown started before publication");
         }
-
         try {
             publisher.accept(candidate);
             active.set(candidate);
@@ -94,47 +78,70 @@ final class VelocityConfigurationReloadCoordinator {
                     List.of()
             );
         } catch (RuntimeException publicationFailure) {
-            RuntimeException rollbackFailure = null;
-            try {
-                publisher.accept(current);
-            } catch (RuntimeException exception) {
-                rollbackFailure = exception;
-            }
-            List<String> details = new ArrayList<>();
-            details.add("Candidate publication failed: " + publicationFailure.getClass().getSimpleName());
-            if (rollbackFailure != null) {
-                details.add("Previous configuration restoration failed: "
-                        + rollbackFailure.getClass().getSimpleName());
-            }
-            return result(
-                    VelocityConfigurationReloadResult.Outcome.UNAVAILABLE,
-                    rollbackFailure == null
-                            ? "Velocity configuration publication failed; the previous configuration was restored"
-                            : "Velocity configuration publication and restoration both failed",
-                    details
-            );
+            return restorePreviousConfiguration(current, publicationFailure);
         }
     }
 
-    @SuppressWarnings("PMD.ExcessiveMethodLength")
-    // Keeping the complete restart-required inventory together makes omissions reviewable against the configuration record.
+    private VelocityConfigurationReloadResult restorePreviousConfiguration(
+            VelocityConfiguration current,
+            RuntimeException publicationFailure
+    ) {
+        RuntimeException rollbackFailure = null;
+        try {
+            publisher.accept(current);
+        } catch (RuntimeException exception) {
+            rollbackFailure = exception;
+        }
+        List<String> details = new ArrayList<>();
+        details.add("Candidate publication failed: " + publicationFailure.getClass().getSimpleName());
+        if (rollbackFailure != null) {
+            details.add("Previous configuration restoration failed: "
+                    + rollbackFailure.getClass().getSimpleName());
+        }
+        return result(
+                VelocityConfigurationReloadResult.Outcome.UNAVAILABLE,
+                rollbackFailure == null
+                        ? "Velocity configuration publication failed; the previous configuration was restored"
+                        : "Velocity configuration publication and restoration both failed",
+                details
+        );
+    }
+
+    private static VelocityConfigurationReloadResult validationFailed(Exception exception) {
+        return result(
+                VelocityConfigurationReloadResult.Outcome.VALIDATION_FAILED,
+                "Velocity configuration candidate was rejected; the live configuration is unchanged",
+                List.of(sanitized(exception))
+        );
+    }
+
+    private static VelocityConfigurationReloadResult shuttingDown(String message) {
+        return result(VelocityConfigurationReloadResult.Outcome.SHUTTING_DOWN, message, List.of());
+    }
+
     private static List<String> restartRequiredChanges(
             VelocityConfiguration current,
             VelocityConfiguration candidate
     ) {
         List<String> changes = new ArrayList<>();
-        changed(changes, "storage.jdbc-url-environment",
-                current.jdbcUrlEnvironment(), candidate.jdbcUrlEnvironment());
-        changed(changes, "storage.username-environment",
-                current.usernameEnvironment(), candidate.usernameEnvironment());
-        changed(changes, "storage.password-environment",
-                current.passwordEnvironment(), candidate.passwordEnvironment());
-        changed(changes, "storage.maximum-pool-size",
-                current.maximumPoolSize(), candidate.maximumPoolSize());
+        storageAndWebsiteChanges(changes, current, candidate);
+        channelAndIdentityChanges(changes, current, candidate);
+        discordAndLiteBansChanges(changes, current, candidate);
+        return List.copyOf(changes);
+    }
+
+    private static void storageAndWebsiteChanges(
+            List<String> changes,
+            VelocityConfiguration current,
+            VelocityConfiguration candidate
+    ) {
+        changed(changes, "storage.jdbc-url-environment", current.jdbcUrlEnvironment(), candidate.jdbcUrlEnvironment());
+        changed(changes, "storage.username-environment", current.usernameEnvironment(), candidate.usernameEnvironment());
+        changed(changes, "storage.password-environment", current.passwordEnvironment(), candidate.passwordEnvironment());
+        changed(changes, "storage.maximum-pool-size", current.maximumPoolSize(), candidate.maximumPoolSize());
         changed(changes, "storage.connection-timeout-millis",
                 current.connectionTimeoutMillis(), candidate.connectionTimeoutMillis());
         changed(changes, "server.id", current.serverId(), candidate.serverId());
-
         changed(changes, "website-api.enabled", current.websiteApiEnabled(), candidate.websiteApiEnabled());
         changed(changes, "website-api.bind-address",
                 current.websiteApiBindAddress(), candidate.websiteApiBindAddress());
@@ -155,21 +162,24 @@ final class VelocityConfigurationReloadCoordinator {
                 current.websiteApiWorkerThreads(), candidate.websiteApiWorkerThreads());
         changed(changes, "website-api.queue-capacity",
                 current.websiteApiQueueCapacity(), candidate.websiteApiQueueCapacity());
+    }
 
+    private static void channelAndIdentityChanges(
+            List<String> changes,
+            VelocityConfiguration current,
+            VelocityConfiguration candidate
+    ) {
         changed(changes, "channel.enabled", current.channelEnabled(), candidate.channelEnabled());
         changed(changes, "channel.bind-address", current.channelBindAddress(), candidate.channelBindAddress());
         changed(changes, "channel.port", current.channelPort(), candidate.channelPort());
         changed(changes, "channel.proxy-id", current.channelProxyId(), candidate.channelProxyId());
         changed(changes, "channel.proxy-secret-environment",
                 current.channelProxySecretEnvironment(), candidate.channelProxySecretEnvironment());
-        changed(changes, "channel.tls-key-store",
-                current.channelTlsKeyStorePath(), candidate.channelTlsKeyStorePath());
+        changed(changes, "channel.tls-key-store", current.channelTlsKeyStorePath(), candidate.channelTlsKeyStorePath());
         changed(changes, "channel.tls-key-store-password-environment",
-                current.channelTlsKeyStorePasswordEnvironment(),
-                candidate.channelTlsKeyStorePasswordEnvironment());
+                current.channelTlsKeyStorePasswordEnvironment(), candidate.channelTlsKeyStorePasswordEnvironment());
         changed(changes, "channel.backend.*.secret-environment",
                 current.backendSecretEnvironments(), candidate.backendSecretEnvironments());
-
         changed(changes, "network-identity.enabled",
                 current.networkIdentityEnabled(), candidate.networkIdentityEnabled());
         changed(changes, "network-identity.hmac-key-version",
@@ -179,21 +189,23 @@ final class VelocityConfigurationReloadCoordinator {
         changed(changes, "network-identity.encryption-key-version",
                 current.networkIdentityEncryptionKeyVersion(), candidate.networkIdentityEncryptionKeyVersion());
         changed(changes, "network-identity.encryption-secret-environment",
-                current.networkIdentityEncryptionSecretEnvironment(),
-                candidate.networkIdentityEncryptionSecretEnvironment());
+                current.networkIdentityEncryptionSecretEnvironment(), candidate.networkIdentityEncryptionSecretEnvironment());
+    }
 
+    private static void discordAndLiteBansChanges(
+            List<String> changes,
+            VelocityConfiguration current,
+            VelocityConfiguration candidate
+    ) {
         changed(changes, "discord.enabled", current.discordEnabled(), candidate.discordEnabled());
         changed(changes, "discord.*.webhook-environment",
                 current.discordWebhookEnvironments(), candidate.discordWebhookEnvironments());
-        changed(changes, "discord.maximum-attempts",
-                current.discordMaximumAttempts(), candidate.discordMaximumAttempts());
-        changed(changes, "discord.failure-threshold",
-                current.discordFailureThreshold(), candidate.discordFailureThreshold());
+        changed(changes, "discord.maximum-attempts", current.discordMaximumAttempts(), candidate.discordMaximumAttempts());
+        changed(changes, "discord.failure-threshold", current.discordFailureThreshold(), candidate.discordFailureThreshold());
         changed(changes, "discord.circuit-open-seconds",
                 current.discordCircuitOpenSeconds(), candidate.discordCircuitOpenSeconds());
         changed(changes, "discord.request-timeout-millis",
                 current.discordRequestTimeoutMillis(), candidate.discordRequestTimeoutMillis());
-
         changed(changes, "litebans.jdbc-url-environment",
                 current.liteBansJdbcUrlEnvironment(), candidate.liteBansJdbcUrlEnvironment());
         changed(changes, "litebans.username-environment",
@@ -204,15 +216,12 @@ final class VelocityConfigurationReloadCoordinator {
                 current.liteBansMaximumPoolSize(), candidate.liteBansMaximumPoolSize());
         changed(changes, "litebans.connection-timeout-millis",
                 current.liteBansConnectionTimeoutMillis(), candidate.liteBansConnectionTimeoutMillis());
-        changed(changes, "litebans.table-prefix",
-                current.liteBansTablePrefix(), candidate.liteBansTablePrefix());
-        changed(changes, "litebans.batch-size",
-                current.liteBansBatchSize(), candidate.liteBansBatchSize());
+        changed(changes, "litebans.table-prefix", current.liteBansTablePrefix(), candidate.liteBansTablePrefix());
+        changed(changes, "litebans.batch-size", current.liteBansBatchSize(), candidate.liteBansBatchSize());
         changed(changes, "litebans.shadow-schedule-enabled",
                 current.liteBansShadowScheduleEnabled(), candidate.liteBansShadowScheduleEnabled());
         changed(changes, "litebans.shadow-interval-hours",
                 current.liteBansShadowIntervalHours(), candidate.liteBansShadowIntervalHours());
-        return List.copyOf(changes);
     }
 
     private static void changed(List<String> changes, String key, Object current, Object candidate) {

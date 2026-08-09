@@ -94,6 +94,9 @@ public final class EnthusiaStaffVelocityPlugin {
     private static final Set<SanctionType> LOGIN_BLOCKS = Set.of(
             SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
     );
+    private static final String SUPPRESS_GUARD_LOG = "PMD.GuardLogStatement";
+    private static final String SUPPRESS_NULL_ASSIGNMENT = "PMD.NullAssignment";
+    private static final String CONFIGURATION_RELOAD_ISSUE = "configuration-reload";
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -137,7 +140,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.AvoidLiteralsInIfCondition"})
+    @SuppressWarnings({SUPPRESS_GUARD_LOG, "PMD.AvoidLiteralsInIfCondition"})
     // SLF4J placeholders defer formatting; attempt one is the only recovery-log threshold.
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
@@ -223,7 +226,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings("PMD.NullAssignment")
+    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
     // Clearing volatile resource references prevents post-shutdown readers from using closed objects.
     public void onProxyShutdown(ProxyShutdownEvent ignored) {
         shuttingDown.set(true);
@@ -321,71 +324,92 @@ public final class EnthusiaStaffVelocityPlugin {
         ));
     }
 
-    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.ExcessiveMethodLength"})
-    // One candidate is composed and published as a single fail-closed lifecycle transaction.
     private void initializeStorageAttempt() {
-        VelocityConfiguration loaded;
-        try {
-            loaded = VelocityConfiguration.load(dataDirectory);
-        } catch (java.io.IOException | IllegalArgumentException exception) {
-            throw new VelocityBootstrapCoordinator.PermanentFailure(
-                    "Velocity configuration could not be loaded or validated", exception);
-        }
-
+        VelocityConfiguration loaded = loadStorageConfiguration();
         MariaDbRuntime opened = null;
         try {
             opened = MariaDb.initialize(loaded.databaseFromEnvironment());
-            OperationalStateSnapshot state = opened.operationalStateStore().current();
-            if (state.mode() == OperationalMode.ACTIVE && !opened.operationalStateStore().hasAuthorizedCutover()) {
-                activeAuthorityObserved = true;
-                throw new VelocityBootstrapCoordinator.PermanentFailure(
-                        "Persistent ACTIVE state has no authorized cutover record");
-            }
-            if (shuttingDown.get()) {
-                throw new IllegalStateException("Velocity shutdown started during storage initialization");
-            }
-
-            SanctionLookup candidateSanctions = opened.sanctionLookup();
-            PlayerDirectory candidatePlayers = opened.playerDirectory();
-            FreezeStore candidateFreezes = opened.freezeStore();
-            StaffSessionStore candidateSessions = opened.staffSessionStore();
-            InventoryJournalStore candidateInventories = opened.inventoryJournalStore();
-            EconomyJournalStore candidateEconomies = opened.economyJournalStore();
-
-            initializeNetworkIdentity(loaded, opened.networkIdentityStore());
-            initializeChannel(loaded, opened.networkOutboxStore());
-            initializeDiscord(loaded, opened.discordOutboxStore());
-            initializeWebsiteApi(loaded, opened);
+            OperationalStateSnapshot state = validateStorageState(opened);
+            StorageBindings bindings = storageBindings(opened);
+            initializeStorageResources(loaded, opened);
             if (shuttingDown.get()) {
                 throw new IllegalStateException("Velocity shutdown started before storage publication");
             }
-
-            configuration = loaded;
-            databaseRuntime = opened;
-            sanctionLookup = candidateSanctions;
-            playerDirectory = candidatePlayers;
-            freezeStore = candidateFreezes;
-            staffSessionStore = candidateSessions;
-            inventoryJournalStore = candidateInventories;
-            economyJournalStore = candidateEconomies;
-            reloadCoordinator = new VelocityConfigurationReloadCoordinator(
-                    loaded,
-                    () -> VelocityConfiguration.load(dataDirectory),
-                    candidate -> configuration = candidate,
-                    shuttingDown::get
-            );
-            authorityMode.set(state.mode());
-            activeAuthorityObserved = state.mode() == OperationalMode.ACTIVE;
-            health.update(state.mode(), operationalIssues(state.mode()));
-            operationalStateTask = proxy.getScheduler().buildTask(this, this::refreshOperationalState)
-                    .repeat(5, TimeUnit.SECONDS)
-                    .schedule();
-            initializeShadowMigrationSchedule(loaded);
-            logger.info("MariaDB verified; Velocity moderation authority is {}", state.mode());
+            publishStorageRuntime(loaded, opened, state, bindings);
         } catch (RuntimeException exception) {
             cleanupFailedInitialization(opened);
             throw exception;
         }
+    }
+
+    private VelocityConfiguration loadStorageConfiguration() {
+        try {
+            return VelocityConfiguration.load(dataDirectory);
+        } catch (java.io.IOException | IllegalArgumentException exception) {
+            throw new VelocityBootstrapCoordinator.PermanentFailure(
+                    "Velocity configuration could not be loaded or validated", exception);
+        }
+    }
+
+    private OperationalStateSnapshot validateStorageState(MariaDbRuntime runtime) {
+        OperationalStateSnapshot state = runtime.operationalStateStore().current();
+        if (state.mode() == OperationalMode.ACTIVE && !runtime.operationalStateStore().hasAuthorizedCutover()) {
+            activeAuthorityObserved = true;
+            throw new VelocityBootstrapCoordinator.PermanentFailure(
+                    "Persistent ACTIVE state has no authorized cutover record");
+        }
+        if (shuttingDown.get()) {
+            throw new IllegalStateException("Velocity shutdown started during storage initialization");
+        }
+        return state;
+    }
+
+    private static StorageBindings storageBindings(MariaDbRuntime runtime) {
+        return new StorageBindings(
+                runtime.sanctionLookup(),
+                runtime.playerDirectory(),
+                runtime.freezeStore(),
+                runtime.staffSessionStore(),
+                runtime.inventoryJournalStore(),
+                runtime.economyJournalStore()
+        );
+    }
+
+    private void initializeStorageResources(VelocityConfiguration loaded, MariaDbRuntime runtime) {
+        initializeNetworkIdentity(loaded, runtime.networkIdentityStore());
+        initializeChannel(loaded, runtime.networkOutboxStore());
+        initializeDiscord(loaded, runtime.discordOutboxStore());
+        initializeWebsiteApi(loaded, runtime);
+    }
+
+    private void publishStorageRuntime(
+            VelocityConfiguration loaded,
+            MariaDbRuntime runtime,
+            OperationalStateSnapshot state,
+            StorageBindings bindings
+    ) {
+        configuration = loaded;
+        databaseRuntime = runtime;
+        sanctionLookup = bindings.sanctions();
+        playerDirectory = bindings.players();
+        freezeStore = bindings.freezes();
+        staffSessionStore = bindings.sessions();
+        inventoryJournalStore = bindings.inventories();
+        economyJournalStore = bindings.economies();
+        reloadCoordinator = new VelocityConfigurationReloadCoordinator(
+                loaded,
+                () -> VelocityConfiguration.load(dataDirectory),
+                candidate -> configuration = candidate,
+                shuttingDown::get
+        );
+        authorityMode.set(state.mode());
+        activeAuthorityObserved = state.mode() == OperationalMode.ACTIVE;
+        health.update(state.mode(), operationalIssues(state.mode()));
+        operationalStateTask = proxy.getScheduler().buildTask(this, this::refreshOperationalState)
+                .repeat(5, TimeUnit.SECONDS)
+                .schedule();
+        initializeShadowMigrationSchedule(loaded);
+        logger.info("MariaDB verified; Velocity moderation authority is {}", state.mode());
     }
 
     private boolean submitWorker(Runnable operation) {
@@ -401,7 +425,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement")
+    @SuppressWarnings(SUPPRESS_GUARD_LOG)
     // SLF4J placeholders defer formatting of the exception class.
     private boolean scheduleBootstrapRetry(Runnable operation, long delayMillis) {
         if (shuttingDown.get()) {
@@ -418,7 +442,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings("PMD.NullAssignment")
+    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
     // References are cleared before retry so stale event readers cannot reach retired resources.
     private void cleanupFailedInitialization(MariaDbRuntime opened) {
         cancelScheduledTask("failed operational state refresh", operationalStateTask);
@@ -442,7 +466,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings("PMD.NullAssignment")
+    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
     // Volatile null publication is the explicit unavailable-state fence.
     private void clearPublishedStores() {
         configuration = null;
@@ -458,7 +482,7 @@ public final class EnthusiaStaffVelocityPlugin {
         websiteModerationStore = null;
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement")
+    @SuppressWarnings(SUPPRESS_GUARD_LOG)
     // SLF4J placeholders defer formatting.
     private void cancelScheduledTask(String label, ScheduledTask task) {
         if (task == null) {
@@ -471,7 +495,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeOutboxWorker() {
         NetworkOutboxWorker worker = outboxWorker;
@@ -485,7 +509,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeDiscordWorker() {
         DiscordOutboxWorker worker = discordOutboxWorker;
@@ -499,7 +523,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeWebsiteServer() {
         WebsiteApiServer server = websiteApiServer;
@@ -513,7 +537,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
+    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeChannelServer() {
         PersistentChannelServer server = channelServer;
@@ -527,7 +551,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; the argument is an integer.
+    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; the argument is an integer.
     private void initializeShadowMigrationSchedule(VelocityConfiguration loaded) {
         if (!loaded.liteBansShadowScheduleEnabled()) {
             logger.warn("Automatic LiteBans shadow summaries are disabled; the daily cutover gate must be satisfied manually");
@@ -542,7 +566,7 @@ public final class EnthusiaStaffVelocityPlugin {
         );
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are scalar accessors.
+    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; arguments are scalar accessors.
     private void scheduleShadowMigration() {
         MariaDbRuntime runtime = databaseRuntime;
         VelocityConfiguration loaded = configuration;
@@ -717,63 +741,65 @@ public final class EnthusiaStaffVelocityPlugin {
             logger.warn("Restricted website API is disabled; punishment appeals remain unavailable");
             return;
         }
-        WebsiteApiServer server = null;
         try {
-            WebsiteModerationStore store = runtime.websiteModerationStore(
-                    loaded.punishmentCodeProtectorFromEnvironment()
+            WebsiteRuntime website = startWebsiteApi(loaded, runtime);
+            websiteModerationStore = website.store();
+            websiteApiServer = website.server();
+            websiteMaintenanceTask = website.maintenance();
+            logger.info(
+                    "Restricted website API started on loopback; {} eligible punishment codes were backfilled",
+                    website.backfilledCodes()
             );
-            AuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
-            Clock apiClock = Clock.systemUTC();
-            SanctionChangeService sanctionChanges = new SanctionChangeService(
-                    authorization,
-                    runtime.sanctionMutationStore()
+        } catch (RuntimeException | java.io.IOException exception) {
+            logger.error(
+                    "Restricted website API initialization failed; the moderation runtime remains available",
+                    exception
             );
-            int created = store.ensureEligibleCodes(Clock.systemUTC().instant(), 5_000);
-            server = new WebsiteApiServer(
-                    new WebsiteApiServerConfiguration(
-                            InetAddress.getByName(loaded.websiteApiBindAddress()),
-                            loaded.websiteApiPort(),
-                            loaded.websiteApiMaximumBodyBytes(),
-                            loaded.websiteApiWorkerThreads(),
-                            loaded.websiteApiQueueCapacity()
-                    ),
-                    new WebsiteApiAuthenticator(
-                            loaded.websiteApiBearerTokenFromEnvironment(),
-                            loaded.websiteApiHmacSecretFromEnvironment(),
-                            Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
-                            store
-                    ),
-                    new WebsiteApiRouter(
-                            store,
-                            authorization,
-                            sanctionChanges,
-                            authorityMode::get,
-                            apiClock
-                    ),
-                    apiClock,
-                    (message, failure) -> logger.error(message, failure)
-            );
+        }
+    }
+
+    private WebsiteRuntime startWebsiteApi(
+            VelocityConfiguration loaded,
+            MariaDbRuntime runtime
+    ) throws java.io.IOException {
+        WebsiteModerationStore store = runtime.websiteModerationStore(
+                loaded.punishmentCodeProtectorFromEnvironment()
+        );
+        AuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
+        Clock apiClock = Clock.systemUTC();
+        SanctionChangeService sanctionChanges = new SanctionChangeService(
+                authorization,
+                runtime.sanctionMutationStore()
+        );
+        int created = store.ensureEligibleCodes(apiClock.instant(), 5_000);
+        WebsiteApiServer server = new WebsiteApiServer(
+                new WebsiteApiServerConfiguration(
+                        InetAddress.getByName(loaded.websiteApiBindAddress()),
+                        loaded.websiteApiPort(),
+                        loaded.websiteApiMaximumBodyBytes(),
+                        loaded.websiteApiWorkerThreads(),
+                        loaded.websiteApiQueueCapacity()
+                ),
+                new WebsiteApiAuthenticator(
+                        loaded.websiteApiBearerTokenFromEnvironment(),
+                        loaded.websiteApiHmacSecretFromEnvironment(),
+                        Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
+                        store
+                ),
+                new WebsiteApiRouter(store, authorization, sanctionChanges, authorityMode::get, apiClock),
+                apiClock,
+                (message, failure) -> logger.error(message, failure)
+        );
+        try {
             server.start();
             ScheduledTask maintenance = proxy.getScheduler()
                     .buildTask(this, this::maintainWebsiteApi)
                     .repeat(1, TimeUnit.MINUTES)
                     .schedule();
-            websiteModerationStore = store;
-            websiteApiServer = server;
-            websiteMaintenanceTask = maintenance;
-            server = null;
-            logger.info(
-                    "Restricted website API started on loopback; {} eligible punishment codes were backfilled",
-                    created
-            );
+            return new WebsiteRuntime(store, server, maintenance, created);
         } catch (RuntimeException | java.io.IOException exception) {
-            if (server != null) {
-                server.close();
-            }
-            logger.error(
-                    "Restricted website API initialization failed; the moderation runtime remains available",
-                    exception
-            );
+            server.close();
+            throw exception;
         }
     }
 
@@ -813,7 +839,7 @@ public final class EnthusiaStaffVelocityPlugin {
         return value.toCharArray();
     }
 
-    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are enums.
+    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; arguments are enums.
     private void refreshOperationalState() {
         MariaDbRuntime runtime = databaseRuntime;
         if (runtime == null) {
@@ -1114,7 +1140,7 @@ public final class EnthusiaStaffVelocityPlugin {
             VelocityConfiguration.load(dataDirectory);
         } catch (java.io.IOException | IllegalArgumentException exception) {
             updateHealthIssue(
-                    "configuration-reload",
+                    CONFIGURATION_RELOAD_ISSUE,
                     "The Velocity configuration candidate is invalid; the previous unavailable state is unchanged"
             );
             source.sendMessage(Component.text(
@@ -1124,7 +1150,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
         VelocityBootstrapCoordinator coordinator = bootstrapCoordinator;
         if (coordinator != null && coordinator.requestImmediateRetry()) {
-            updateHealthIssue("configuration-reload", null);
+            updateHealthIssue(CONFIGURATION_RELOAD_ISSUE, null);
             source.sendMessage(Component.text(
                     "Velocity configuration is valid; an immediate bounded storage retry was started."
             ));
@@ -1138,7 +1164,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private void publishReloadHealth(VelocityConfigurationReloadResult result) {
         switch (result.outcome()) {
             case APPLIED, NO_CHANGES -> {
-                updateHealthIssue("configuration-reload", null);
+                updateHealthIssue(CONFIGURATION_RELOAD_ISSUE, null);
                 updateHealthIssue("configuration-restart-required", null);
             }
             case RESTART_REQUIRED -> updateHealthIssue(
@@ -1146,17 +1172,18 @@ public final class EnthusiaStaffVelocityPlugin {
                     "A validated Velocity configuration candidate requires a proxy restart and was not applied"
             );
             case VALIDATION_FAILED -> updateHealthIssue(
-                    "configuration-reload",
+                    CONFIGURATION_RELOAD_ISSUE,
                     "Velocity configuration validation failed; the live configuration is unchanged"
             );
             case UNAVAILABLE -> updateHealthIssue(
-                    "configuration-reload",
+                    CONFIGURATION_RELOAD_ISSUE,
                     "Velocity configuration publication failed; inspect the sanitized proxy log"
             );
             case SHUTTING_DOWN -> updateHealthIssue(
-                    "configuration-reload",
+                    CONFIGURATION_RELOAD_ISSUE,
                     "Velocity configuration reload was rejected during shutdown"
             );
+            default -> throw new IllegalStateException("Unsupported reload outcome: " + result.outcome());
         }
     }
 
@@ -1895,5 +1922,23 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("Cutover blocked: " + String.join(", ", outcome.assessment().blockers())));
             }
         }
+    }
+
+    private record StorageBindings(
+            SanctionLookup sanctions,
+            PlayerDirectory players,
+            FreezeStore freezes,
+            StaffSessionStore sessions,
+            InventoryJournalStore inventories,
+            EconomyJournalStore economies
+    ) {
+    }
+
+    private record WebsiteRuntime(
+            WebsiteModerationStore store,
+            WebsiteApiServer server,
+            ScheduledTask maintenance,
+            int backfilledCodes
+    ) {
     }
 }

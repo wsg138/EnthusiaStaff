@@ -51,13 +51,10 @@ final class StorageBootstrapCoordinator<S> {
                 recovery,
                 followUp,
                 stopping,
-                logger,
-                RetryPolicy.defaults()
+                new RuntimeOptions(logger, RetryPolicy.defaults())
         );
     }
 
-    @SuppressWarnings("PMD.ExcessiveParameterList")
-    // The coordinator dependencies are explicit lifecycle boundaries, not interchangeable options.
     StorageBootstrapCoordinator(
             WorkerExecutor workers,
             GlobalScheduler global,
@@ -66,8 +63,7 @@ final class StorageBootstrapCoordinator<S> {
             BukkitRecovery<S> recovery,
             FollowUp<S> followUp,
             BooleanSupplier stopping,
-            Logger logger,
-            RetryPolicy retryPolicy
+            RuntimeOptions options
     ) {
         this.workers = Objects.requireNonNull(workers, "workers");
         this.global = Objects.requireNonNull(global, "global");
@@ -76,8 +72,9 @@ final class StorageBootstrapCoordinator<S> {
         this.recovery = Objects.requireNonNull(recovery, "recovery");
         this.followUp = Objects.requireNonNull(followUp, "followUp");
         this.stopping = Objects.requireNonNull(stopping, "stopping");
-        this.logger = Objects.requireNonNull(logger, "logger");
-        this.retryPolicy = Objects.requireNonNull(retryPolicy, "retryPolicy");
+        RuntimeOptions safeOptions = Objects.requireNonNull(options, "options");
+        this.logger = safeOptions.logger();
+        this.retryPolicy = safeOptions.retryPolicy();
     }
 
     boolean start() {
@@ -212,23 +209,9 @@ final class StorageBootstrapCoordinator<S> {
         }
     }
 
-    @SuppressWarnings("PMD.CyclomaticComplexity")
-    // Every branch is a fail-closed scheduler boundary that must trigger the same cleanup path.
     private void finishRecovery(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
         try {
-            for (PlayerSnapshot snapshot : snapshots) {
-                if (!runRecoveryStep(attempt, storage, () -> recovery.verifyFreeze(snapshot))) {
-                    return;
-                }
-            }
-            for (PlayerSnapshot snapshot : snapshots) {
-                if (!runRecoveryStep(attempt, storage, () -> recovery.recoverStaffMode(snapshot))) {
-                    return;
-                }
-            }
-            if (!runRecoveryStep(attempt, storage, recovery::initializeVanish)
-                    || !runRecoveryStep(attempt, storage, () -> recovery.attachAlerts(storage))
-                    || !runRecoveryStep(attempt, storage, () -> recovery.publishOperationalState(storage))) {
+            if (!recoverPlayers(attempt, storage, snapshots) || !publishRecoveredState(attempt, storage)) {
                 return;
             }
             runRecoveryStep(attempt, storage, () -> {
@@ -239,6 +222,26 @@ final class StorageBootstrapCoordinator<S> {
         } catch (RuntimeException exception) {
             cleanupFromGlobal(attempt, storage, exception, true);
         }
+    }
+
+    private boolean recoverPlayers(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
+        for (PlayerSnapshot snapshot : snapshots) {
+            if (!runRecoveryStep(attempt, storage, () -> recovery.verifyFreeze(snapshot))) {
+                return false;
+            }
+        }
+        for (PlayerSnapshot snapshot : snapshots) {
+            if (!runRecoveryStep(attempt, storage, () -> recovery.recoverStaffMode(snapshot))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean publishRecoveredState(Attempt attempt, S storage) {
+        return runRecoveryStep(attempt, storage, recovery::initializeVanish)
+                && runRecoveryStep(attempt, storage, () -> recovery.attachAlerts(storage))
+                && runRecoveryStep(attempt, storage, () -> recovery.publishOperationalState(storage));
     }
 
     private boolean runRecoveryStep(Attempt attempt, S storage, Runnable step) {
@@ -266,8 +269,6 @@ final class StorageBootstrapCoordinator<S> {
                 logger.log(Level.SEVERE, "Storage bootstrap asynchronous follow-up failed", exception);
                 followUp.failed(exception);
             }
-            // Follow-up failure does not make the published database unavailable. Keep the
-            // runtime open and terminal while reporting the feature-level failure separately.
             if (retire(attempt)) {
                 terminal.set(true);
             }
@@ -318,8 +319,6 @@ final class StorageBootstrapCoordinator<S> {
             return;
         }
         if (stopping.getAsBoolean()) {
-            // Keep conditionally published storage visible. Normal shutdown drains accepted work
-            // and closes any remaining MariaDB runtime after the worker deadline.
             retire(attempt);
             terminal.set(true);
             return;
@@ -367,9 +366,11 @@ final class StorageBootstrapCoordinator<S> {
             terminal.set(true);
             return;
         }
-        logger.log(Level.WARNING,
-                "MariaDB bootstrap attempt " + attempt.number() + " failed; runtime remains unavailable",
-                failure);
+        if (logger.isLoggable(Level.WARNING)) {
+            logger.log(Level.WARNING,
+                    "MariaDB bootstrap attempt " + attempt.number() + " failed; runtime remains unavailable",
+                    failure);
+        }
         scheduleRetry(attempt, failure);
     }
 
@@ -430,6 +431,13 @@ final class StorageBootstrapCoordinator<S> {
 
     private boolean retire(Attempt attempt) {
         return activeAttempt.compareAndSet(attempt, null);
+    }
+
+    record RuntimeOptions(Logger logger, RetryPolicy retryPolicy) {
+        RuntimeOptions {
+            Objects.requireNonNull(logger, "logger");
+            Objects.requireNonNull(retryPolicy, "retryPolicy");
+        }
     }
 
     record RetryPolicy(int maximumAttempts, long initialDelayMillis, long maximumDelayMillis) {

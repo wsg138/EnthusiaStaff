@@ -296,6 +296,10 @@ class StorageBootstrapCoordinatorTest {
         }
 
         private Harness(StorageBootstrapCoordinator.RetryPolicy retryPolicy) {
+            StorageBootstrapCoordinator.RuntimeOptions options = new StorageBootstrapCoordinator.RuntimeOptions(
+                    Logger.getLogger("StorageBootstrapCoordinatorTest"),
+                    retryPolicy
+            );
             coordinator = new StorageBootstrapCoordinator<>(
                     workers::offer,
                     global::offer,
@@ -304,8 +308,7 @@ class StorageBootstrapCoordinatorTest {
                     new RecoveryStub(),
                     new FollowUpStub(),
                     stopping::get,
-                    Logger.getLogger("StorageBootstrapCoordinatorTest"),
-                    retryPolicy
+                    options
             );
         }
 

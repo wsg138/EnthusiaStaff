@@ -21,10 +21,7 @@ class VelocityConfigurationReloadCoordinatorTest {
         VelocityConfiguration candidate = configuration(false, "https://example.test/new-appeals", "velocity");
         AtomicReference<VelocityConfiguration> published = new AtomicReference<>(initial);
         VelocityConfigurationReloadCoordinator coordinator = new VelocityConfigurationReloadCoordinator(
-                initial,
-                () -> candidate,
-                published::set,
-                () -> false
+                initial, () -> candidate, published::set, () -> false
         );
 
         VelocityConfigurationReloadResult result = coordinator.reload();
@@ -42,10 +39,7 @@ class VelocityConfigurationReloadCoordinatorTest {
         VelocityConfiguration candidate = configuration(false, "https://example.test/new-appeals", "velocity-b");
         AtomicReference<VelocityConfiguration> published = new AtomicReference<>(initial);
         VelocityConfigurationReloadCoordinator coordinator = new VelocityConfigurationReloadCoordinator(
-                initial,
-                () -> candidate,
-                published::set,
-                () -> false
+                initial, () -> candidate, published::set, () -> false
         );
 
         VelocityConfigurationReloadResult result = coordinator.reload();
@@ -109,10 +103,7 @@ class VelocityConfigurationReloadCoordinatorTest {
         VelocityConfiguration candidate = configuration(false, "https://example.test/new-appeals", "velocity");
         AtomicReference<VelocityConfiguration> published = new AtomicReference<>(initial);
         VelocityConfigurationReloadCoordinator coordinator = new VelocityConfigurationReloadCoordinator(
-                initial,
-                () -> candidate,
-                published::set,
-                () -> false
+                initial, () -> candidate, published::set, () -> false
         );
 
         assertEquals(VelocityConfigurationReloadResult.Outcome.APPLIED, coordinator.reload().outcome());
@@ -164,66 +155,23 @@ class VelocityConfigurationReloadCoordinatorTest {
         assertSame(initial, published.get());
     }
 
-    @SuppressWarnings("PMD.ExcessiveMethodLength")
-    // The production configuration record is intentionally constructed in full to catch field-order drift.
-    private static VelocityConfiguration configuration(
-            boolean failClosed,
-            String appealsUrl,
-            String serverId
-    ) {
+    private static VelocityConfiguration configuration(boolean failClosed, String appealsUrl, String serverId) {
         return new VelocityConfiguration(
-                "ES_DB_URL",
-                "ES_DB_USER",
-                "ES_DB_PASSWORD",
-                8,
-                5_000L,
-                failClosed,
-                appealsUrl,
-                serverId,
-                true,
-                "127.0.0.1",
-                18_080,
-                "ES_WEBSITE_TOKEN",
-                "ES_WEBSITE_HMAC",
-                1,
-                "ES_WEBSITE_CODE",
-                300,
-                65_536,
-                2,
-                64,
-                true,
-                "127.0.0.1",
-                19_000,
-                "velocity",
-                "ES_CHANNEL_PROXY",
-                Path.of("channel.p12"),
-                "ES_CHANNEL_PASSWORD",
-                Map.of("survival", "ES_CHANNEL_SURVIVAL"),
-                true,
-                1,
-                "ES_IDENTITY_HMAC",
-                1,
-                "ES_IDENTITY_ENCRYPTION",
+                "ES_DB_URL", "ES_DB_USER", "ES_DB_PASSWORD", 8, 5_000L,
+                failClosed, appealsUrl, serverId,
+                true, "127.0.0.1", 18_080, "ES_WEBSITE_TOKEN", "ES_WEBSITE_HMAC", 1,
+                "ES_WEBSITE_CODE", 300, 65_536, 2, 64,
+                true, "127.0.0.1", 19_000, "velocity", "ES_CHANNEL_PROXY",
+                Path.of("channel.p12"), "ES_CHANNEL_PASSWORD", Map.of("survival", "ES_CHANNEL_SURVIVAL"),
+                true, 1, "ES_IDENTITY_HMAC", 1, "ES_IDENTITY_ENCRYPTION",
                 true,
                 Map.of(
-                        "punishments", "ES_DISCORD_PUNISHMENTS",
-                        "reports", "ES_DISCORD_REPORTS",
-                        "logs-staffmode", "ES_DISCORD_STAFF",
-                        "alerts", "ES_DISCORD_ALERTS"
+                        "punishments", "ES_DISCORD_PUNISHMENTS", "reports", "ES_DISCORD_REPORTS",
+                        "logs-staffmode", "ES_DISCORD_STAFF", "alerts", "ES_DISCORD_ALERTS"
                 ),
-                5,
-                3,
-                60,
-                5_000,
-                "ES_LITEBANS_URL",
-                "ES_LITEBANS_USER",
-                "ES_LITEBANS_PASSWORD",
-                2,
-                5_000L,
-                "litebans_",
-                500,
-                false,
-                24
+                5, 3, 60, 5_000,
+                "ES_LITEBANS_URL", "ES_LITEBANS_USER", "ES_LITEBANS_PASSWORD", 2, 5_000L,
+                "litebans_", 500, false, 24
         );
     }
 }
