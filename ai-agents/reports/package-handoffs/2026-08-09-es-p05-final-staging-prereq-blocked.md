@@ -111,7 +111,7 @@ ES-P05 therefore remains `BLOCKED` / `PARKED_BLOCKED`.
 
 Exact unblock/resume condition: material evidence that the canonical public→private bridge freshness/provenance condition has changed so a fresh exact-source transfer can pass the existing bounded release/asset-age checks. A future worker must reconcile live GitHub first and inspect public run `31330788773` and private run `31331175023`. Do not repeat an identical run merely because time passed. Do not weaken the freshness boundary, bypass provenance, dispatch `plugin-live-test.yml` directly, or change ES-P05 product code in response to this infrastructure prerequisite failure.
 
-If the condition materially changes, resume ES-P05 as the same package, synchronize any newer legitimate `main`, freeze the exact merge candidate, rerun every required hosted/review/static gate as needed, and allow one normal automatic canonical Pi run. Only a genuine exact-head private provenance + database reset + Paper cycle 1 + clean shutdown/reap + cycle 2/restart/persistence + final cleanup + sanitized-evidence success can authorize normal merge of PR #81.
+If the condition materially changes, resume ES-P05 as the same package, synchronize any newer legitimate `main`, freeze the exact merge candidate, rerun all required hosted, review, and static gates as needed, and allow one normal automatic canonical Pi run. Only a genuine exact-head private provenance + database reset + Paper cycle 1 + clean shutdown/reap + cycle 2/restart/persistence + final cleanup + sanitized-evidence success can authorize normal merge of PR #81.
 
 No downstream package becomes `READY` while ES-P05 remains incomplete. Do not start ES-P06, ES-X01 or any other package in this worker.
 
