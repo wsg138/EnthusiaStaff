@@ -94,7 +94,7 @@ public final class ReportEvidenceFormatter {
         for (JsonNode message : root) {
             lines.add('[' + text(message, "sentAt", "unknown-time") + "] "
                     + text(message, "senderName", "unknown-sender") + ": "
-                    + bounded(text(message, "body", "")));
+                    + text(message, "body", ""));
         }
         return List.copyOf(lines);
     }
@@ -108,7 +108,7 @@ public final class ReportEvidenceFormatter {
             lines.add('[' + text(message, "sentAt", "unknown-time") + "] "
                     + text(message, "senderName", "unknown-sender") + " -> "
                     + text(message, "recipientName", "unknown-recipient") + ": "
-                    + bounded(text(message, "body", "")));
+                    + text(message, "body", ""));
         }
         return List.copyOf(lines);
     }
@@ -150,11 +150,15 @@ public final class ReportEvidenceFormatter {
     }
 
     private static void add(List<String> lines, JsonNode root, String field, String label) {
-        if (present(root, field)) {
-            lines.add(label + ": " + bounded(root.path(field).isTextual()
-                    ? root.path(field).asText()
-                    : root.path(field).toString()));
+        JsonNode value = root.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            return;
         }
+        if (!value.isTextual() && !value.isNumber() && !value.isBoolean()) {
+            lines.add(label + ": withheld (unexpected structured value)");
+            return;
+        }
+        lines.add(label + ": " + bounded(value.asText()));
     }
 
     private static boolean present(JsonNode root, String field) {
@@ -164,7 +168,7 @@ public final class ReportEvidenceFormatter {
 
     private static String text(JsonNode node, String field, String fallback) {
         JsonNode value = node.path(field);
-        return value.isTextual() ? value.asText() : fallback;
+        return bounded(value.isTextual() ? value.asText() : fallback);
     }
 
     private static String bounded(String value) {
