@@ -2,6 +2,8 @@
 
 The ES-R01 staging route keeps the two required validation classes separate: an ordinary GitHub-hosted Java build runs in the public `wsg138/EnthusiaStaff` repository, then the already-trusted self-hosted Raspberry Pi in `wsg138/EnthusiaStaff-Staging` performs the disposable Paper boot/restart test. The private repository no longer needs a GitHub-hosted `ubuntu-latest` job.
 
+AI workers making staging or validation decisions must also follow [`ai-agents/STAGING-TEST-OPERATING-GUIDE.md`](../ai-agents/STAGING-TEST-OPERATING-GUIDE.md). This page remains the bridge architecture/detail reference; the AI guide owns operational phase classification, Sentinel-versus-canonical-staging distinction, commands, and evidence rules.
+
 ## Trust boundary
 
 The public build job receives no private staging credential. It checks out a trusted copy of the staging-control scripts at the workflow control SHA, independently authorizes the requested source as either a commit already contained by `main` or the exact current head of an open same-repository pull request, then checks out that exact source SHA detached and runs the normal Java 21 Gradle build.
