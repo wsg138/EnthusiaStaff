@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, and `ES-X05` are `COMPLETE`; `ES-R01`, `ES-P02`, and `ES-P05` are `BLOCKED` / `PARKED_BLOCKED`. No package is currently `READY`. Issue #43 remains open, deferred, and excluded.
 
@@ -24,7 +24,7 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | PR #79 merged normally as `a530b992232a8a08cbbd13b0eed6606228ceb652`; Pi staging owner-deferred for later internal verification |
 | `ES-P07` | Inventory and Ender editing runtime completion | `PLANNED` | — | 45 | `ES-P02` | dependency blocked |
-| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; implementation/hosted validation complete at `4a38e191395913c6733726e222f0889a2d56d267`; remain parked while ES-R01's unchanged external staging-database blocker prevents mandatory validation |
+| `ES-P05` | Report evidence and staff workflow completion | `BLOCKED` | `PARKED_BLOCKED` | 50 | `ES-P03`, `ES-P04` | PR #81; ReportStore hosted regression fixed; final head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` passes hosted/review/static gates; correlated private Pi job `93215499833` exists but has zero execution because `Lincoln-PI-4` has not accepted it |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | PR #84 merged normally as `a88201524690848f778297f140f7ee2ba5b6ce36` from frozen head `2ed33d9f36ec9e5583a030b63feb9eb935c5ccdb`; implementation branch deleted; private representative-network staging remains ES-V02 |
 | `ES-P06` | Discord notification delivery completion | `PLANNED` | — | 60 | `ES-P05` | dependency blocked while ES-P05 is parked; dependency retained after deadlock analysis |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | — | 70 | `ES-P07` | dependency blocked |
@@ -78,15 +78,22 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## `ES-P05`
 
-- Selected on 2026-08-07 from legitimate `main` `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`; implementation PR #81 remains open on `package/es-p05-report-workflow`.
-- Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
-- Implemented provider-independent report review completion: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence` presentation, coordinate/privacy separation from broad GUI triage, strict client-evidence allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation. Existing durable cooldown/merge/replay/stale-revision/concurrency/rollback/purge foundations were preserved and revalidated.
-- Exact-head hosted evidence: Wiki `31183192145` / `92881243088` success; Coverage `31183192068` / `92881313210` success on GitHub-hosted Java 21 including full build/tests/MariaDB/Testcontainers/migration checks/coverage/runtime-JAR inspection; artifact `8995826742`, digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`; Codacy static `92882185524` success with zero issues; coverage variation `92882989470` success; diff coverage `92882989439` success.
-- Final diff was harshly self-reviewed; three found issues were fixed before freeze: broad GUI coordinate exposure, raw nested AutoClicker serialization, and oldest-snapshot default selection. Zero inline review threads remain. The live exact-head commit status reports CodeRabbit success.
-- Its old private-hosted build evidence remains **NOT A PASS**. ES-R01 removed that repository-side build dependency, but mandatory Pi boot/restart staging remains unavailable while ES-R01 is parked on the external disposable-database gate.
-- Resume ES-P05 only after ES-R01 is `COMPLETE` and after higher-priority ES-P02 is resolved or parked for a different unchanged external condition. Reconcile newer `main`, rerun every exact-head review/static/hosted/staging gate, merge normally if green, verify containment/finalization, and stop.
-- V17 remains immutable for ES-P05; it added no migration. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
-- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-07-es-p05-report-workflow.md`.
+- Resumed on 2026-08-09 as the existing `ACTIONABLE_CONTINUATION` because the current public hosted build exposed two report integration failures inside ES-P05's lifecycle/evidence contract. No competing repair PR was created.
+- Starting repair-worker `main`: `b0cf67b880856ec7536cf1385fe1559bb18a42a1`.
+- Existing implementation PR #81 remains open on `package/es-p05-report-workflow`.
+- Old ES-P05 head `4a38e191395913c6733726e222f0889a2d56d267` was synchronized with current main through normal two-parent merge `5d78a9621f7cc3e5f056b417af88424eaa26e555`; no rebase/force-push.
+- Final reviewed/hosted-validation head: `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`.
+- Root cause: `ReportIntegrationFixtures.NOW` was fixed at `2026-08-01T12:00:00Z`; current report policy uses seven-day evidence retention and a seven-day recently-closed window, while production queries correctly use the live database/system clock. By 2026-08-09 fixture evidence had expired and closed rows had aged out. The stale test clock, not ReportStore product persistence, caused both failures.
+- Repair: fixture time is now one minute behind real current time, truncated to microseconds. Explicit nine-day-old purge coverage remains expired. No production query/state/transaction/policy/schema behavior changed and no assertion was weakened.
+- Provider-independent report review implementation remains: dedicated sensitive-evidence permission, bounded staff-only `/reports evidence`, coordinate/privacy separation, strict scalar/field allow-listing, newest-snapshot default, explicit no-direct-attachment boundary, direct wiring/privacy tests, MariaDB restart durability proof, and Wiki/operator documentation.
+- Fresh CodeRabbit review found three valid issues and all were fixed: sensitive permission is rechecked immediately before scheduled delivery; structured allow-listed client JSON is withheld rather than serialized; all rendered chat text fields are bounded. All three threads are resolved and CodeRabbit is green.
+- Exact final-head hosted evidence: Wiki `31301427600` / `93214726543` success; Coverage `31301427623` / `93214731253` success on Java 21 including full build/tests/MariaDB/Testcontainers/migration validation/coverage/runtime-JAR inspection; Codacy static `93214975215` success with zero issues; Codacy diff coverage `93215398455` success at 47.37% with no defined gate. Both formerly failing ReportStore methods pass inside the successful final full suite.
+- Canonical public Pi run `31301426684` reached the private boundary successfully: public build `93214729981` passed and uploaded the exact runtime; bridge `93215481473` downloaded it, created bounded transfer, dispatched and correlated private run `31301734048`.
+- Correlated private job `93215499833` had **zero execution** at terminal publication time: queued, `runner_id: 0`, empty runner name, no steps. `Lincoln-PI-4` had not accepted the job. No private prerequisite/database/Paper/restart/persistence/cleanup assertion executed. This is temporary runner/environment unavailability, **not a Pi failure and not a staging pass**.
+- No duplicate retry or direct private workflow dispatch was issued. Future work must first inspect runs `31301426684` and `31301734048`; if the existing run later completed, use its real result. A fresh canonical run is justified only after a material environment/source change.
+- Sentinel is non-applicable because the implementation head has no `.enthusia-test.yml`.
+- V18 remains immutable/current; ES-P05 added no migration. RoseChat PM capture remains ES-X01; Discord route delivery remains ES-P06; issue #43 remains deferred.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md`.
 
 ## `ES-P09`
 
@@ -139,4 +146,4 @@ Canonical current state: `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P
 
 ## Next-worker boundary
 
-`ES-R01` is persistently `BLOCKED` / `PARKED_BLOCKED` after the required fresh current-`main` proof. If the existing authorized disposable Pi-staging MariaDB endpoint remains unreachable from `Lincoln-PI-4`, there is no `ACTIONABLE_CONTINUATION` and no dependency-complete `READY` package; a sequential worker must report the unchanged blockers and stop rather than starting unrelated planned/deferred work. If material evidence shows that database availability changed, resume ES-R01 before any new package, require a fresh exact-current-main proof, and stop after ES-R01's resulting terminal state. ES-P02 and ES-P05 remain parked until ES-R01 is `COMPLETE`. No unavailable gate is treated as passed.
+`ES-R01` remains persistently `BLOCKED` / `PARKED_BLOCKED` on its exact recorded external condition. If its authorized disposable Pi-staging MariaDB endpoint remains unreachable from `Lincoln-PI-4`, keep it parked rather than repeating the identical failure. `ES-P05` is independently `PARKED_BLOCKED` on correlated private job `93215499833`, which had zero execution because the self-hosted runner had not accepted it. A future sequential worker must reconcile live GitHub first: inspect ES-P05 runs `31301426684` / `31301734048`, and inspect whether ES-R01's exact unblock condition changed. Any material change becomes an `ACTIONABLE_CONTINUATION` under the normal classification/priority rules. Do not create duplicate staging runs merely because time passed, and do not treat an unavailable gate as passed.
