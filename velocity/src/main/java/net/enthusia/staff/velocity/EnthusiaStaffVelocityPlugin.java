@@ -82,6 +82,7 @@ import net.enthusia.staff.protocol.TlsContextLoader;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
+@SuppressWarnings("PMD.AvoidDuplicateLiterals")
 @Plugin(
         id = "enthusiastaff",
         name = "EnthusiaStaff",
@@ -94,8 +95,6 @@ public final class EnthusiaStaffVelocityPlugin {
     private static final Set<SanctionType> LOGIN_BLOCKS = Set.of(
             SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
     );
-    private static final String SUPPRESS_GUARD_LOG = "PMD.GuardLogStatement";
-    private static final String SUPPRESS_NULL_ASSIGNMENT = "PMD.NullAssignment";
     private static final String CONFIGURATION_RELOAD_ISSUE = "configuration-reload";
 
     private final ProxyServer proxy;
@@ -140,7 +139,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings({SUPPRESS_GUARD_LOG, "PMD.AvoidLiteralsInIfCondition"})
+    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.AvoidLiteralsInIfCondition"})
     // SLF4J placeholders defer formatting; attempt one is the only recovery-log threshold.
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
@@ -226,7 +225,7 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
+    @SuppressWarnings("PMD.NullAssignment")
     // Clearing volatile resource references prevents post-shutdown readers from using closed objects.
     public void onProxyShutdown(ProxyShutdownEvent ignored) {
         shuttingDown.set(true);
@@ -425,7 +424,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings(SUPPRESS_GUARD_LOG)
+    @SuppressWarnings("PMD.GuardLogStatement")
     // SLF4J placeholders defer formatting of the exception class.
     private boolean scheduleBootstrapRetry(Runnable operation, long delayMillis) {
         if (shuttingDown.get()) {
@@ -442,7 +441,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
+    @SuppressWarnings("PMD.NullAssignment")
     // References are cleared before retry so stale event readers cannot reach retired resources.
     private void cleanupFailedInitialization(MariaDbRuntime opened) {
         cancelScheduledTask("failed operational state refresh", operationalStateTask);
@@ -466,7 +465,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings(SUPPRESS_NULL_ASSIGNMENT)
+    @SuppressWarnings("PMD.NullAssignment")
     // Volatile null publication is the explicit unavailable-state fence.
     private void clearPublishedStores() {
         configuration = null;
@@ -482,7 +481,7 @@ public final class EnthusiaStaffVelocityPlugin {
         websiteModerationStore = null;
     }
 
-    @SuppressWarnings(SUPPRESS_GUARD_LOG)
+    @SuppressWarnings("PMD.GuardLogStatement")
     // SLF4J placeholders defer formatting.
     private void cancelScheduledTask(String label, ScheduledTask task) {
         if (task == null) {
@@ -495,7 +494,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeOutboxWorker() {
         NetworkOutboxWorker worker = outboxWorker;
@@ -509,7 +508,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeDiscordWorker() {
         DiscordOutboxWorker worker = discordOutboxWorker;
@@ -523,7 +522,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeWebsiteServer() {
         WebsiteApiServer server = websiteApiServer;
@@ -537,7 +536,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings({SUPPRESS_NULL_ASSIGNMENT, SUPPRESS_GUARD_LOG})
+    @SuppressWarnings({"PMD.NullAssignment", "PMD.GuardLogStatement"})
     // Clear the published reference before closing; SLF4J placeholders defer formatting.
     private void closeChannelServer() {
         PersistentChannelServer server = channelServer;
@@ -551,7 +550,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; the argument is an integer.
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; the argument is an integer.
     private void initializeShadowMigrationSchedule(VelocityConfiguration loaded) {
         if (!loaded.liteBansShadowScheduleEnabled()) {
             logger.warn("Automatic LiteBans shadow summaries are disabled; the daily cutover gate must be satisfied manually");
@@ -566,7 +565,7 @@ public final class EnthusiaStaffVelocityPlugin {
         );
     }
 
-    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; arguments are scalar accessors.
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are scalar accessors.
     private void scheduleShadowMigration() {
         MariaDbRuntime runtime = databaseRuntime;
         VelocityConfiguration loaded = configuration;
@@ -839,7 +838,7 @@ public final class EnthusiaStaffVelocityPlugin {
         return value.toCharArray();
     }
 
-    @SuppressWarnings(SUPPRESS_GUARD_LOG) // SLF4J placeholders defer formatting; arguments are enums.
+    @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are enums.
     private void refreshOperationalState() {
         MariaDbRuntime runtime = databaseRuntime;
         if (runtime == null) {
