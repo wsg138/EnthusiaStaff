@@ -32,6 +32,12 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class ReportsCommand implements CommandExecutor, TabCompleter {
     public static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
     public static final String EVIDENCE_PERMISSION = "enthusiastaff.reports.evidence";
+    private static final String UNAVAILABLE = "unavailable";
+    private static final int MIN_EVIDENCE_ARGUMENTS = 3;
+    private static final int MAX_EVIDENCE_ARGUMENTS = 5;
+    private static final int STATE_CHANGE_MIN_ARGUMENTS = 3;
+    private static final int EVIDENCE_KIND_TAB_ARGUMENTS = 3;
+    private static final int MIN_POSITIVE_INTEGER = 1;
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -132,82 +138,118 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("You do not have permission to inspect sensitive report evidence."));
             return true;
         }
-        if (arguments.length < 3 || arguments.length > 5) {
+        EvidenceRequest request = evidenceRequest(sender, arguments);
+        if (request != null) {
+            submit(sender, () -> renderEvidence(
+                    sender,
+                    request.reportId(),
+                    request.kind(),
+                    request.snapshot(),
+                    request.page()
+            ));
+        }
+        return true;
+    }
+
+    private EvidenceRequest evidenceRequest(CommandSender sender, String[] arguments) {
+        if (arguments.length < MIN_EVIDENCE_ARGUMENTS || arguments.length > MAX_EVIDENCE_ARGUMENTS) {
             sender.sendMessage(Component.text(
                     "Usage: /reports evidence <report-id> <public|private|client> [snapshot] [page]"
             ));
-            return true;
+            return null;
         }
         UUID reportId = uuid(sender, arguments[1]);
         if (reportId == null) {
-            return true;
+            return null;
         }
         EvidenceKind kind = evidenceFormatter.parseKind(arguments[2]).orElse(null);
         if (kind == null) {
             sender.sendMessage(Component.text("Evidence kind must be public, private, or client."));
-            return true;
+            return null;
         }
-        Integer snapshot = arguments.length > 3
-                ? positiveInteger(sender, arguments[3], "snapshot")
-                : 0;
-        Integer page = arguments.length > 4
-                ? positiveInteger(sender, arguments[4], "page")
-                : 1;
-        if (snapshot == null || page == null) {
-            return true;
+        Integer snapshot = optionalPositiveInteger(sender, arguments, 3, "snapshot", 0);
+        if (snapshot == null) {
+            return null;
         }
-        submit(sender, () -> renderEvidence(sender, reportId, kind, snapshot, page));
-        return true;
+        Integer page = optionalPositiveInteger(sender, arguments, 4, "page", 1);
+        if (page == null) {
+            return null;
+        }
+        return new EvidenceRequest(reportId, kind, snapshot, page);
     }
 
     private boolean stateChange(CommandSender sender, String[] arguments) {
         ReportAction action = parseAction(arguments[0]);
-        if (action == null || arguments.length < 3) {
+        if (action == null || arguments.length < STATE_CHANGE_MIN_ARGUMENTS) {
             usage(sender);
             return true;
         }
-        UUID reportId = uuid(sender, arguments[1]);
-        if (reportId == null) {
+        StateChangeInput input = stateChangeInput(sender, arguments, action);
+        if (input == null) {
             return true;
         }
-        long revision;
-        try {
-            revision = Long.parseLong(arguments[2]);
-        } catch (NumberFormatException exception) {
-            sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
-            return true;
-        }
-        if (revision < 0) {
-            sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
-            return true;
-        }
-        boolean claim = action == ReportAction.CLAIM;
-        boolean confirmed = arguments[arguments.length - 1].equals("CONFIRM");
-        int reasonStart = 3;
-        int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
-        String note = reasonStart < reasonEnd
-                ? String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim()
-                : claim ? "Claimed for investigation" : "";
-        if (note.isBlank()) {
-            sender.sendMessage(Component.text("A written action note is required."));
-            return true;
-        }
-        if (!claim && !confirmed) {
-            sender.sendMessage(Component.text("Review only: " + action + " report " + reportId + '.'));
+        if (input.reviewOnly()) {
+            sender.sendMessage(Component.text("Review only: " + action + " report " + input.reportId() + '.'));
             sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
             return true;
         }
         UUID actorId = actorId(sender);
         submit(sender, () -> change(sender, new ReportStateChangeRequest(
-                reportId,
+                input.reportId(),
                 actorId,
                 action,
-                revision,
-                note,
+                input.revision(),
+                input.note(),
                 new IdempotencyKey("report-change:" + UUID.randomUUID()),
                 clock.instant()
         )));
         return true;
+    }
+
+    private static StateChangeInput stateChangeInput(
+            CommandSender sender,
+            String[] arguments,
+            ReportAction action
+    ) {
+        UUID reportId = uuid(sender, arguments[1]);
+        if (reportId == null) {
+            return null;
+        }
+        Long revision = revision(sender, arguments[2]);
+        if (revision == null) {
+            return null;
+        }
+        boolean claim = action == ReportAction.CLAIM;
+        boolean confirmed = arguments[arguments.length - 1].equals("CONFIRM");
+        String note = stateChangeNote(arguments, claim, confirmed);
+        if (note.isBlank()) {
+            sender.sendMessage(Component.text("A written action note is required."));
+            return null;
+        }
+        return new StateChangeInput(reportId, revision, note, claim, confirmed);
+    }
+
+    private static Long revision(CommandSender sender, String input) {
+        try {
+            long revision = Long.parseLong(input);
+            if (revision < 0) {
+                sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
+                return null;
+            }
+            return revision;
+        } catch (NumberFormatException exception) {
+            sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
+            return null;
+        }
+    }
+
+    private static String stateChangeNote(String[] arguments, boolean claim, boolean confirmed) {
+        int reasonStart = STATE_CHANGE_MIN_ARGUMENTS;
+        int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
+        if (reasonStart < reasonEnd) {
+            return String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim();
+        }
+        return claim ? "Claimed for investigation" : "";
     }
 
     private void list(CommandSender sender, ReportQueue queue, UUID actorId) {
@@ -243,10 +285,10 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
         sendEvidenceAware(
                 sender,
-                () -> "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
-                        + " reporter-coordinates=" + details.reporterCoordinates().orElse("unavailable")
-                        + " target-coordinates=" + details.targetCoordinates().orElse("unavailable"),
-                "Server=" + summary.serverId() + " world=" + details.worldId().orElse("unavailable")
+                () -> "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
+                        + " reporter-coordinates=" + details.reporterCoordinates().orElse(UNAVAILABLE)
+                        + " target-coordinates=" + details.targetCoordinates().orElse(UNAVAILABLE),
+                "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
                         + " reporter-coordinates=restricted target-coordinates=restricted"
         );
         send(sender, "Evidence snapshots: public-chat=" + details.publicChatSnapshots().size()
@@ -390,10 +432,20 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private static Integer optionalPositiveInteger(
+            CommandSender sender,
+            String[] arguments,
+            int index,
+            String name,
+            int defaultValue
+    ) {
+        return arguments.length > index ? positiveInteger(sender, arguments[index], name) : defaultValue;
+    }
+
     private static Integer positiveInteger(CommandSender sender, String input, String name) {
         try {
             int value = Integer.parseInt(input);
-            if (value < 1) {
+            if (value < MIN_POSITIVE_INTEGER) {
                 throw new NumberFormatException("not positive");
             }
             return value;
@@ -422,9 +474,18 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return List.of("note", "cancel", "evidence", "open", "mine", "claimed", "review", "closed", "view",
                     "claim", "awaitreview", "close", "noviolation");
         }
-        if (arguments.length == 3 && arguments[0].equalsIgnoreCase("evidence")) {
+        if (arguments.length == EVIDENCE_KIND_TAB_ARGUMENTS && arguments[0].equalsIgnoreCase("evidence")) {
             return List.of("public", "private", "client");
         }
         return List.of();
+    }
+
+    private record EvidenceRequest(UUID reportId, EvidenceKind kind, int snapshot, int page) {
+    }
+
+    private record StateChangeInput(UUID reportId, long revision, String note, boolean claim, boolean confirmed) {
+        private boolean reviewOnly() {
+            return !claim && !confirmed;
+        }
     }
 }

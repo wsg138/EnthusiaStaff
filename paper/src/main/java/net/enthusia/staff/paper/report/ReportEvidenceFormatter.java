@@ -48,19 +48,50 @@ public final class ReportEvidenceFormatter {
             int requestedSnapshot,
             int requestedPage
     ) {
-        if (details == null || kind == null || requestedPage < 1) {
-            throw new IllegalArgumentException("report evidence request is invalid");
-        }
+        validateRequest(details, kind, requestedPage);
         List<String> snapshots = snapshots(details, kind);
         if (snapshots.isEmpty()) {
-            return new EvidencePage(kind, 0, 0, 0, 0, List.of("No retained evidence is available."));
+            return emptyPage(kind);
         }
+        int snapshot = resolveSnapshot(snapshots, requestedSnapshot);
+        List<String> lines = renderSnapshot(kind, snapshots.get(snapshot - 1));
+        PageSlice slice = pageSlice(lines, pageSize(kind), requestedPage);
+        return new EvidencePage(
+                kind,
+                snapshot,
+                snapshots.size(),
+                requestedPage,
+                slice.totalPages(),
+                slice.lines()
+        );
+    }
+
+    private static void validateRequest(ReportDetails details, EvidenceKind kind, int requestedPage) {
+        if (details == null || kind == null) {
+            throw new IllegalArgumentException("report evidence request is invalid");
+        }
+        if (requestedPage < 1) {
+            throw new IllegalArgumentException("report evidence request is invalid");
+        }
+    }
+
+    private static EvidencePage emptyPage(EvidenceKind kind) {
+        return new EvidencePage(kind, 0, 0, 0, 0, List.of("No retained evidence is available."));
+    }
+
+    private static int resolveSnapshot(List<String> snapshots, int requestedSnapshot) {
         int snapshot = requestedSnapshot < 1 ? snapshots.size() : requestedSnapshot;
         if (snapshot > snapshots.size()) {
             throw new IllegalArgumentException("snapshot must be between 1 and " + snapshots.size());
         }
-        List<String> lines = renderSnapshot(kind, snapshots.get(snapshot - 1));
-        int pageSize = kind == EvidenceKind.CLIENT ? CLIENT_LINES_PER_PAGE : CHAT_MESSAGES_PER_PAGE;
+        return snapshot;
+    }
+
+    private static int pageSize(EvidenceKind kind) {
+        return kind == EvidenceKind.CLIENT ? CLIENT_LINES_PER_PAGE : CHAT_MESSAGES_PER_PAGE;
+    }
+
+    private static PageSlice pageSlice(List<String> lines, int pageSize, int requestedPage) {
         int totalPages = Math.max(1, (lines.size() + pageSize - 1) / pageSize);
         if (requestedPage > totalPages) {
             throw new IllegalArgumentException("page must be between 1 and " + totalPages);
@@ -70,7 +101,7 @@ public final class ReportEvidenceFormatter {
         List<String> pageLines = lines.isEmpty()
                 ? List.of("The retained snapshot is empty.")
                 : List.copyOf(lines.subList(from, to));
-        return new EvidencePage(kind, snapshot, snapshots.size(), requestedPage, totalPages, pageLines);
+        return new PageSlice(totalPages, pageLines);
     }
 
     private List<String> renderSnapshot(EvidenceKind kind, String snapshot) {
@@ -199,6 +230,12 @@ public final class ReportEvidenceFormatter {
 
         public String commandName() {
             return commandName;
+        }
+    }
+
+    private record PageSlice(int totalPages, List<String> lines) {
+        private PageSlice {
+            lines = List.copyOf(lines);
         }
     }
 

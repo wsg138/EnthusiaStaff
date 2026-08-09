@@ -21,7 +21,7 @@ final class ReportEvidenceFormatterTest {
 
     @Test
     void publicChatIsRenderedAsBoundedFiveMessagePages() {
-        StringBuilder snapshot = new StringBuilder("[");
+        StringBuilder snapshot = new StringBuilder(512).append('[');
         for (int index = 0; index < 6; index++) {
             if (index > 0) {
                 snapshot.append(',');
