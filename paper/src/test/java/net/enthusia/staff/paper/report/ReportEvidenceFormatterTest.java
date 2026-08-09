@@ -46,6 +46,24 @@ final class ReportEvidenceFormatterTest {
     }
 
     @Test
+    void oversizedChatIdentityFieldsAreBounded() {
+        String oversizedSender = "S".repeat(1_100);
+        String stored = "[{\"senderName\":\"" + oversizedSender
+                + "\",\"body\":\"bounded body\",\"sentAt\":\"2026-08-07T12:00:00Z\"}]";
+
+        EvidencePage page = formatter.render(
+                details(List.of(stored), List.of(), List.of()),
+                EvidenceKind.PUBLIC_CHAT,
+                1,
+                1
+        );
+        String line = page.lines().getFirst();
+
+        assertTrue(line.contains("S".repeat(1_000) + "…: bounded body"));
+        assertFalse(line.contains("S".repeat(1_001)));
+    }
+
+    @Test
     void privateMessagesRetainDirectionWithoutReturningRawJson() {
         String stored = "[{\"senderName\":\"Reporter\",\"recipientName\":\"Target\","
                 + "\"body\":\"private context\",\"sentAt\":\"2026-08-07T12:00:00Z\"}]";
@@ -101,6 +119,23 @@ final class ReportEvidenceFormatterTest {
         assertTrue(all.stream().anyMatch(line -> line.equals("Polar metadata: withheld from chat presentation")));
         assertFalse(all.stream().anyMatch(line -> line.contains("opaque-private-provider-value")));
         assertFalse(all.stream().anyMatch(line -> line.contains("must-not-render")));
+    }
+
+    @Test
+    void structuredAllowlistedClientValuesAreWithheldWithoutRenderingNestedData() {
+        String stored = "{\"reportedBrand\":{\"secret\":\"must-not-render\"},"
+                + "\"floodgatePlayer\":[\"also-secret\"]}";
+
+        EvidencePage page = formatter.render(
+                details(List.of(), List.of(), List.of(stored)),
+                EvidenceKind.CLIENT,
+                1,
+                1
+        );
+
+        assertTrue(page.lines().contains("Brand: withheld (unexpected structured value)"));
+        assertTrue(page.lines().contains("Floodgate player: withheld (unexpected structured value)"));
+        assertFalse(page.lines().stream().anyMatch(line -> line.contains("must-not-render") || line.contains("also-secret")));
     }
 
     @Test
