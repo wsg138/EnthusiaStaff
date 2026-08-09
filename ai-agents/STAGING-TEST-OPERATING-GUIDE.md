@@ -14,13 +14,13 @@ The **Current known staging state** section is advisory and time-sensitive. Reco
 
 ## The two systems are separate
 
-### A. Enthusia Sentinel manual restart testing
+### Sentinel overview
 
 Sentinel is a separate, on-demand PR testing system. Its production controller runs on `Lincoln-PI-4`, polls GitHub outbound through the Enthusia Sentinel GitHub App, validates an exact PR head and manifest/artifact contract, and runs only the requested approved profile in a disposable sandbox.
 
 A Sentinel pass proves only the profile Sentinel actually executed. In particular, `PAPER_RESTART_OK` proves Sentinel's disposable two-cycle Paper restart behavior. It does **not** automatically prove EnthusiaStaff's canonical MariaDB/Flyway Pi-staging contract.
 
-### B. EnthusiaStaff Canonical Pi Staging
+### Canonical Pi staging overview
 
 Canonical Pi staging is the EnthusiaStaff public-to-private validation bridge:
 
