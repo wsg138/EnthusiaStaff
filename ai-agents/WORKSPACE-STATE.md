@@ -23,6 +23,7 @@ Live GitHub state overrides stale records, but persistent package state must be 
 | ES-R01 exact unblock | Material evidence that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract |
 | ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
 | ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; final exact head `346e764f40b25c98e7d24ce7f863e5629773e814` is hosted-green, but final canonical private staging failed at transient-release freshness verification before DB/Paper runtime execution. |
+| ES-P05 implementation branch | `package/es-p05-report-workflow` |
 | ES-P05 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-09-es-p05-final-staging-prereq-blocked.md` |
 | Migration boundary | V18 remains immutable/current; ES-R01 and ES-P05 changed no migration. |
 | Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative. |
@@ -115,7 +116,7 @@ Public Pi Staging run `31252997554`, exact source `689ff337dd8a33f0bd417d952a7ca
 - public build job `93092131811` succeeded on ordinary GitHub-hosted `ubuntu-latest` with Java 21 and uploaded the verified runtime package;
 - bridge job `93092964130` successfully required the token, downloaded the exact artifact, published bounded transient transfer, dispatched/correlated the private run, collected failure diagnostics, and removed the transient transfer; its final result is failure, correctly reflecting private staging failure;
 - private run `31253345564` on staging control SHA `4036d6e915c2d751bef18849107722dfd1e586a6`;
-- private job `93092978141` allocated `Lincoln-PI-4`, runner ID `2`;
+- private job `93092978141` allocated trusted `Lincoln-PI-4`, runner ID `2`;
 - runner identity and exact public bridge artifact verification succeeded;
 - `Run guarded disposable Paper boot and restart test` failed; runtime acceptance therefore did not pass;
 - sanitized evidence upload succeeded as artifact `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`;
