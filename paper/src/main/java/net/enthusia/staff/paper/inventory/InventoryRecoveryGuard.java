@@ -1,5 +1,7 @@
 package net.enthusia.staff.paper.inventory;
 
+import io.papermc.paper.event.player.PlayerPickItemEvent;
+import io.papermc.paper.event.player.PlayerSwapWithEquipmentSlotEvent;
 import java.util.Objects;
 import net.enthusia.staff.paper.api.InventoryLockService;
 import org.bukkit.entity.Player;
@@ -11,8 +13,6 @@ import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
-import org.bukkit.event.player.PlayerPickItemEvent;
-import org.bukkit.event.player.PlayerSwapWithEquipmentSlotEvent;
 
 /**
  * Closes mutation paths that are not inventory-click based while an inventory
