@@ -18,7 +18,7 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 
 `ES-P07 — Inventory and Ender editing runtime completion` is `ACTIVE` on `package/es-p07-inventory-runtime`. The 2026-08-10 sequential worker reconciled live GitHub, found no actionable continuation, verified no existing ES-P07 branch/PR/work, and selected ES-P07 as the lowest-priority-number dependency-complete READY package. Starting `main` is `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
 
-`ES-P06` remains `READY` behind the active package. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`: its dependencies are complete, but the required supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved. All other incomplete packages remain parked on their documented dependency or external conditions.
+`ES-P06` remains `READY` behind the active package. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`: its dependencies are complete, but the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved. All other incomplete packages remain parked on their documented dependency or external conditions.
 
 `ES-V01 — Private LiteBans representative-data verification` remains terminal `COMPLETE` on final frozen PR head `de39e30232df9bd44d4b4df54a8922e815bada76`. PR `#110` merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`; containment is proven and GitHub auto-deleted `package/es-v01-litebans-private-verification`. The private LiteBans database remained local. The seven malformed/rejected rows remain a later data-policy decision and were not silently repaired, discarded, or rewritten.
 
@@ -40,7 +40,7 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | `PARKED_BLOCKED` | 70 | `ES-P07` | dependency blocked until ES-P07 completes |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 as `e605d8ad6094b2ae6842044d209875e13c38906d`; representative acceptance remains ES-V02 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 as `6cd293d9f1abc3ca6ca8b70e953da936f4a22ab0`; representative acceptance remains ES-V02 |
-| `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependencies complete, but supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved; do not invent an API or repository |
+| `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependencies complete, but the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved; do not invent an API or repository |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | `PARKED_BLOCKED` | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | dependencies blocked |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependency blocked |
