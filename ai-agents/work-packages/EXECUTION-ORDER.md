@@ -1,6 +1,6 @@
 # Execution order and dependency graph
 
-Dependencies are authoritative. Priority breaks ties only among dependency-complete packages.
+Dependencies are authoritative. Priority breaks ties only among dependency-complete packages within the same selection class. Existing `ACTIONABLE_CONTINUATION` work is selected before a new `READY` package under the canonical worker rules.
 
 ## Canonical direct-dependency DAG
 
@@ -29,7 +29,11 @@ ES-V01 + ES-V02 + ES-V03 -> ES-A01
 ES-A01 + all applicable completed-or-owner-accepted-deferred packages -> ES-QA01
 ```
 
-`ES-R01` is an independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It does not replace or relax a product dependency. Its purpose is to remove the shared private-GitHub-hosted billing dependency from the exact-head staging route while preserving an ordinary hosted build and the existing private self-hosted Pi boot/restart gate. Until ES-R01 completes, ES-P02 and ES-P05 remain `PARKED_BLOCKED`; after it completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked, so normal continuation priority resumes ES-P02 before ES-P05. Each blocked package still must rerun its own exact-head gates and may not treat ES-R01's proof as package staging evidence.
+`ES-R01` is an independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It does not replace or relax a product dependency. Its purpose was to remove the shared private-GitHub-hosted billing dependency from the exact-head staging route while preserving an ordinary hosted build and the existing private self-hosted Pi boot/restart gate. ES-R01 is now `COMPLETE`.
+
+`ES-P02` is also now `COMPLETE` after its own exact-head hosted/static/review validation and canonical public→private Pi proof, followed by normal PR #70 merge `df9f4bf39ceda3911b7c084ac0c2caa188b82c7c`. This completion makes `ES-P07` dependency-complete and `READY`.
+
+`ES-P05` remains an existing `ACTIONABLE_CONTINUATION`. Because canonical selection chooses actionable continuation work before a new READY package, the exact next normal sequential package is ES-P05 while that classification remains true. ES-P07 remains unstarted until continuation routing permits it.
 
 `ES-V01` is independently deferred until a private local/Codex environment and representative database are available. It does not grant production authority and does not change the dependency chain for implementation packages.
 
@@ -46,7 +50,7 @@ Potentially parallel after prerequisites and preflight:
 
 Keep sequential:
 
-- ES-R01 staging-workflow recovery before another identical private-hosted staging retry for ES-P02 or ES-P05 while the billing condition remains unchanged;
+- ES-R01 staging-workflow recovery before another identical private-hosted staging retry for ES-P02 or ES-P05 while the historical billing condition remained unchanged;
 - exact-sanction appeal mutation before site appeals;
 - lifecycle/reload before Bedrock identity and inventory runtime;
 - staff tool dispatch before testers;
