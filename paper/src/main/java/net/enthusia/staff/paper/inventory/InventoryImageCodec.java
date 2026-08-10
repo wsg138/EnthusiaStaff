@@ -208,13 +208,13 @@ public final class InventoryImageCodec {
         }
 
         @Override
-        public synchronized void write(int value) {
+        public void write(int value) {
             requireCapacity(1);
             super.write(value);
         }
 
         @Override
-        public synchronized void write(byte[] buffer, int offset, int length) {
+        public void write(byte[] buffer, int offset, int length) {
             requireCapacity(length);
             super.write(buffer, offset, length);
         }
