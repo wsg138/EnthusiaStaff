@@ -34,6 +34,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class LiteBansMigrationIntegrationTest {
     private static final String LEGACY_PREFIX = "legacy_";
     private static final UUID PLAYER_ID = UUID.fromString("00000000-0000-0000-0000-000000000101");
+    private static final UUID BAN_PLAYER_ID = UUID.fromString("00000000-0000-0000-0000-000000000102");
     private static final Instant ISSUED_AT = Instant.parse("2026-07-01T00:00:00Z");
     private static final Instant EXPIRES_AT = Instant.parse("2026-08-01T00:00:00Z");
 
@@ -130,17 +131,18 @@ class LiteBansMigrationIntegrationTest {
     }
 
     private static void assertInitialMigration(MigrationExecutionReport report) throws SQLException {
-        assertEquals(2, report.importedRecords());
+        assertEquals(3, report.importedRecords());
         assertEquals(0, report.reconciledRecords());
         assertEquals(1, report.protectedIdentityRecords());
         assertCleanShadowSummary(report);
-        assertEquals(2, importedCaseCount());
+        assertEquals(3, importedCaseCount());
+        assertEquals(1, uuidBackedBanMappingCount());
     }
 
     private static void assertReconciledMigration(MigrationExecutionReport report) throws SQLException {
         assertEquals(0, report.importedRecords());
         assertEquals(1, report.reconciledRecords());
-        assertEquals(1, report.replayedRecords());
+        assertEquals(2, report.replayedRecords());
         assertCleanShadowSummary(report);
         assertEquals("ENDED_EARLY", importedBanStatus());
         assertEquals(1, legacySyncEventCount());
@@ -149,9 +151,10 @@ class LiteBansMigrationIntegrationTest {
     private static void assertReplayMigration(MigrationExecutionReport report) throws SQLException {
         assertEquals(0, report.importedRecords());
         assertEquals(0, report.reconciledRecords());
-        assertEquals(2, report.replayedRecords());
+        assertEquals(3, report.replayedRecords());
         assertCleanShadowSummary(report);
-        assertEquals(2, importedCaseCount());
+        assertEquals(3, importedCaseCount());
+        assertEquals(1, uuidBackedBanMappingCount());
         assertEquals(1, legacySyncEventCount());
     }
 
@@ -160,7 +163,7 @@ class LiteBansMigrationIntegrationTest {
         assertFalse(summary.countsMatch());
         assertComparisonDimensionsMatch(summary);
         assertEquals(1, summary.mismatchCount());
-        assertEquals(2, importedCaseCount());
+        assertEquals(3, importedCaseCount());
     }
 
     private static void endLegacyBan() throws SQLException {
@@ -200,11 +203,17 @@ class LiteBansMigrationIntegrationTest {
 
     private static void insertLegacyRows() throws SQLException {
         try (Connection connection = sourceConnection();
-             PreparedStatement ban = connection.prepareStatement("""
+             PreparedStatement ipBan = connection.prepareStatement("""
                     INSERT INTO legacy_bans(
                         id, uuid, ip, reason, banned_by_name, removed_by_date,
                         time, until, active, ipban
                     ) VALUES (1, NULL, '203.0.113.25', 'Cheating', 'LegacyMod', NULL, ?, ?, TRUE, TRUE)
+                    """);
+             PreparedStatement uuidBan = connection.prepareStatement("""
+                    INSERT INTO legacy_bans(
+                        id, uuid, ip, reason, banned_by_name, removed_by_date,
+                        time, until, active, ipban
+                    ) VALUES (3, ?, NULL, 'UUID-only ban', 'LegacyMod', NULL, ?, ?, TRUE, FALSE)
                     """);
              PreparedStatement mute = connection.prepareStatement("""
                     INSERT INTO legacy_mutes(
@@ -216,9 +225,14 @@ class LiteBansMigrationIntegrationTest {
                      INSERT INTO legacy_history(id, date, name, uuid, ip)
                      VALUES (1, ?, 'Example', ?, '203.0.113.25')
                      """)) {
-            ban.setLong(1, ISSUED_AT.toEpochMilli());
-            ban.setLong(2, EXPIRES_AT.toEpochMilli());
-            ban.executeUpdate();
+            ipBan.setLong(1, ISSUED_AT.toEpochMilli());
+            ipBan.setLong(2, EXPIRES_AT.toEpochMilli());
+            ipBan.executeUpdate();
+
+            uuidBan.setString(1, BAN_PLAYER_ID.toString());
+            uuidBan.setLong(2, ISSUED_AT.toEpochMilli());
+            uuidBan.setLong(3, EXPIRES_AT.toEpochMilli());
+            uuidBan.executeUpdate();
 
             mute.setString(1, PLAYER_ID.toString());
             mute.setLong(2, ISSUED_AT.toEpochMilli());
@@ -251,6 +265,17 @@ class LiteBansMigrationIntegrationTest {
         try (Connection connection = sourceConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) FROM cases WHERE configuration_version = 'litebans-import-v1'
+                     """)) {
+            return count(statement);
+        }
+    }
+
+    private static long uuidBackedBanMappingCount() throws SQLException {
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*)
+                     FROM migration_mappings
+                     WHERE source_table = 'legacy_bans' AND external_id = '3'
                      """)) {
             return count(statement);
         }

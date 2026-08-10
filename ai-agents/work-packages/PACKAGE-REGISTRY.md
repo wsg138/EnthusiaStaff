@@ -16,7 +16,7 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 
 `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, and `ES-R02` are `COMPLETE`.
 
-`ES-V01 — Private LiteBans representative-data verification` is the active highest-priority `ACTIONABLE_CONTINUATION`. The UUID-only sanction repair from local commit `22934e33` was reviewed and reproduced at product head `ea07f55a` on `package/es-v01-litebans-private-verification`, based on `main` `b78a62de3876bfde7fa5f57860fedc1415ef3c53`. Private representative dry-run, import, replay, and abandoned-run recovery passed on disposable local databases. Hosted exact-head validation, review, and normal PR completion remain required; no private database may enter GitHub or chat.
+`ES-V01 — Private LiteBans representative-data verification` is the active highest-priority `ACTIONABLE_CONTINUATION` in PR `#110` on `package/es-v01-litebans-private-verification`. The UUID-only sanction repair from local commit `22934e33` was reviewed and reproduced at product head `ea07f55a`, based on `main` `b78a62de3876bfde7fa5f57860fedc1415ef3c53`. Private representative dry-run, import, replay, and abandoned-run recovery passed on disposable local databases. Pre-review PR head `2485c8b7a4a80ae306216eb9f66f1e9415d9eac0` passed hosted Java 21/full tests, MariaDB/Testcontainers, Coverage, Codacy, and canonical Pi Staging. Substantive review found valid follow-up fixes; the post-review-fix live PR head must be frozen and every invalidated gate rerun before merge. No private database may enter GitHub or chat.
 
 `ES-P07` and `ES-P06` are `READY`, but both remain behind the existing ES-V01 actionable continuation. `ES-X01` is `BLOCKED` / `PARKED_BLOCKED`: its dependencies are complete, but the required supported RoseChat standalone repository remains unresolved in the component registry and live repository search.
 
@@ -42,7 +42,7 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | `PARKED_BLOCKED` | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | dependencies blocked |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependencies blocked |
-| `ES-V01` | Private LiteBans representative-data verification | `PARTIAL` | `ACTIONABLE_CONTINUATION` | 200 | — | branch `package/es-v01-litebans-private-verification`; product head `ea07f55a`; local private validation complete through recovery; hosted/review/PR gates remain |
+| `ES-V01` | Private LiteBans representative-data verification | `PARTIAL` | `ACTIONABLE_CONTINUATION` | 200 | — | PR `#110`; branch `package/es-v01-litebans-private-verification`; product repair `ea07f55a`; pre-review head `2485c8b7a4a80ae306216eb9f66f1e9415d9eac0`; review fixes require a new frozen exact head and rerun gates |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | incomplete dependencies plus representative distributed/Java/Bedrock private staging required |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | incomplete destructive-provider dependencies plus private acceptance required |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | owner authorization and issue #43 required after validation dependencies complete |
@@ -76,6 +76,6 @@ This evidence belongs to ES-V01 because that package owns representative private
 
 ## Next sequential action
 
-Resume `ES-V01 — Private LiteBans representative-data verification` as the highest-priority `ACTIONABLE_CONTINUATION`. Preserve/reproduce local commit `22934e33` on the correct canonical package branch, review the actual diff, add or retain synthetic UUID-only regression coverage, and run normal exact-head validation. Keep the private database local and do not expose it. The seven rejected rows remain a separate data-policy decision.
+Continue `ES-V01 — Private LiteBans representative-data verification` as the sole active `ACTIONABLE_CONTINUATION` in PR `#110`. Freeze the post-review-fix live head, rerun every hosted/static/canonical staging gate invalidated by that head change, inspect and resolve every valid review finding, require zero valid unresolved threads, merge normally if clean, prove containment and branch cleanup, and publish terminal canonical state. Keep the private database local and do not expose it. The seven rejected rows remain a separate later data-policy decision.
 
-Do not activate ES-P07, ES-P06, ES-X01, or any other package in this ES-P05 terminal-correction worker.
+Do not activate ES-P07, ES-P06, ES-X01, or any other package in this ES-V01 worker.

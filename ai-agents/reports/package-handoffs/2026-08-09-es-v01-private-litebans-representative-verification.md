@@ -17,7 +17,7 @@ Reviewed local commit `22934e33` and reproduced only its four legitimate ES-V01 
 - sanction-table usernames are optional when LiteBans supplies a UUID;
 - the reader selects a null username when no name column exists;
 - synthetic schema coverage verifies UUID-only resolution;
-- the migration integration fixture omits sanction-table name columns.
+- the migration integration fixture omits sanction-table name columns and, after review, covers both the retained IP-only ban path and UUID-backed ban/mute paths.
 
 Malformed-source rejection behavior was not weakened. Flyway migrations were not changed. The unrelated untracked `CutoverEvidenceReader.java` in the original worktree was not included.
 
@@ -37,10 +37,12 @@ The seven rejected rows are unchanged pre-rehearsal data-policy input: 2 `INVALI
 
 Passed locally: focused persistence migration tests; synthetic UUID-only regression compilation; disposable representative dry-run/import/replay/recovery probe. The portable local database process was stopped after the run.
 
-`gradlew --no-configuration-cache clean build` compiled the Java 21 projects but could not execute the Testcontainers integration suite on this workstation: Docker is unavailable/misconfigured before container startup, so 46 container-backed tests failed at Testcontainers initialization rather than at product assertions. This is not a passing full-build result and requires exact-head hosted container validation.
+`gradlew --no-configuration-cache clean build` compiled the Java 21 projects but could not execute the Testcontainers integration suite on this workstation: Docker is unavailable/misconfigured before container startup, so 46 container-backed tests failed at Testcontainers initialization rather than at product assertions. This is not a product defect; hosted Java 21/Testcontainers validation is authoritative where the package policy permits it.
 
-Still required: full exact-head Java 21 hosted build/test/static checks, relevant Testcontainers integration execution, PR review with zero valid unresolved findings, normal merge, containment, and branch cleanup. Private local success is not a production shadow, cutover, issue #43 acceptance, or 168-hour authority result.
+PR `#110` on `package/es-v01-litebans-private-verification` reached pre-review exact head `2485c8b7a4a80ae306216eb9f66f1e9415d9eac0`, where Coverage `31351570626`, canonical Pi Staging `31351570636`, Codacy, and the hosted Java 21/Testcontainers suite passed. Substantive review then found valid documentation consistency findings and a missing UUID-backed ban integration fixture. The review-fix commit intentionally advances the PR head, so all invalidated gates must rerun on the resulting frozen exact head; no validation from `2485c8b7a4a80ae306216eb9f66f1e9415d9eac0` may be reused to merge the changed head.
+
+Still required: freeze the post-review-fix PR head; rerun all invalidated hosted build/test/static/canonical staging gates; resolve every valid review thread; require zero valid unresolved findings; normal merge; containment; branch cleanup; and terminal package-state publication. Private local success is not a production shadow, cutover, issue #43 acceptance, or 168-hour authority result.
 
 ## Exact next action
 
-Push this package branch, open the single ES-V01 draft PR, run/await exact-head hosted validation and review, and merge normally only if every remaining gate passes. Otherwise publish the precise `PARTIAL`/`BLOCKED` state without altering the private source data.
+Continue existing PR `#110` on branch `package/es-v01-litebans-private-verification`; do not create another package PR. Freeze its live head after these review fixes, rerun every invalidated exact-head gate, inspect and resolve all substantive review findings, and merge normally only if the frozen head remains unchanged and every required gate passes. Otherwise publish the precise `PARTIAL`/`BLOCKED` state without altering the private source data.
