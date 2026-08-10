@@ -9,21 +9,25 @@ Live GitHub overrides stale records. This file records the current sequential-wo
 | Field | Value |
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active/selected package | `ES-P07 — Inventory and Ender editing runtime completion`; `ACTIVE`; generic sequential worker; branch `package/es-p07-inventory-runtime`. |
+| Active/selected package | `ES-P07 — Inventory and Ender editing runtime completion`; `ACTIVE`; implementation/review complete and freeze-ready; branch `package/es-p07-inventory-runtime`; PR `#112`. |
 | ES-P07 starting head | `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`; branch was created exactly from this `main` head after live reconciliation. |
 | ES-P07 handoff | `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`. |
 | Other ready package | `ES-P06 — Discord notification delivery completion` remains `READY` at priority 60 and must not be started by this worker. |
 | Parked provider package | `ES-X01 — RoseChat provider and communication integration`; `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved. |
 | Dependency-blocked packages | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked until their documented dependencies/external conditions change. |
-| Migration boundary | V18 remains current and immutable. ES-P07 currently plans no migration. |
+| Migration boundary | V18 remains current and immutable. ES-P07 adds no migration. |
 | Production boundary | Issue #43 remains open/deferred; LiteBans remains authoritative; no production data, production shadow, authority, cutover, deployment, or source-data rewrite is authorized. |
-| Exact next action | Complete only ES-P07: trace inventory runtime paths, implement/test safe online/offline editing and recovery, harsh-review, freeze/validate exact head, merge normally if all required evidence passes, publish terminal state, then stop. |
+| Exact next action | Finish the ES-P07 tracking checkpoint, freeze the resulting PR #112 head, mark it ready, require exact-head hosted/static/review/Sentinel/canonical Pi evidence, merge normally only if unchanged and fully green, then publish terminal state and stop. |
 
-## ES-P07 active state
+## ES-P07 freeze-ready state
 
-Live reconciliation found no actionable continuation. There were no open EnthusiaStaff PRs, no ES-P07 branch or commit, and no supported RoseChat repository. ES-P07 and ES-P06 were the only dependency-complete READY packages, so the lower-priority-number ES-P07 was selected at priority 45.
+Live selection found no actionable continuation. ES-P07 and ES-P06 were the only dependency-complete READY packages, so ES-P07 was selected at priority 45. No second package has been started.
 
-The current inventory implementation already contains durable MariaDB observations/patches, optimistic revisions, operation leases/fencing, fail-closed pre-login recovery and Paper live/offline coordinator logic. The development pass is therefore targeted at runtime proof and correctness: command/GUI wiring, correct entity-thread mutation, concurrent viewer synchronization, stale-state rejection, offline queued-patch ownership, disconnect/switch/restart recovery, bounded payloads and Java/Bedrock-safe command/text behavior.
+Implementation and harsh source review are complete. ES-P07 now uses exact logical dirty-slot application instead of stale whole-image inventory replacement; bounds complete serialized inventory images at 32 MiB; makes same-operation APPLYING lease replay idempotent while preserving competing-operation fencing; and blocks additional vanilla/Paper mutation paths while a login/recovery inventory lock is active. Existing command permission split, async authoritative directory lookup, entity-thread scheduling, offline queued patches, durable revision/checksum decisions, Velocity switch fencing, nested item serialization and shutdown ownership were preserved.
+
+Intermediate sanity head `321a50f3ca120dba7d7e21542450d4d527dabbd3` passed Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo, Codacy coverage upload, Wiki validation and Sentinel artifact production. That head is explicitly not final acceptance because tracking records changed afterward. Final proof must be for the frozen PR head produced by this checkpoint.
+
+The first recovery-guard compile attempt failed on incorrect Bukkit package imports for two Paper events and was fixed before the successful sanity build; the failed run is not represented as passing evidence.
 
 Item confiscation/restoration remains ES-P08. Provider-backed destructive work remains ES-X02/ES-X03/ES-X04. Representative private large-inventory, distributed Java/Bedrock acceptance remains ES-V02.
 
