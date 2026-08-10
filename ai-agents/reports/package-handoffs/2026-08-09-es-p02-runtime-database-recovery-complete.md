@@ -18,6 +18,7 @@ No second implementation package was started. Issue #43 remains deferred and Lit
 - Merge commit parents: `d036908...` and `90f78f...`.
 - Compare from feature head to merge commit: `status=ahead`, `ahead_by=1`, `behind_by=0`; feature work is contained with no unique implementation commit remaining.
 - Open PR search for `package/es-p02-runtime-db-recovery`: none.
+- Branch search after merge: `package/es-p02-runtime-db-recovery` absent; GitHub auto-deleted the merged implementation branch.
 
 ## Completed product work
 
@@ -146,9 +147,9 @@ No production database, production server, private user data, production authori
 
 ## Cleanup
 
-The implementation head is fully contained in `main`, and no open PR depends on `package/es-p02-runtime-db-recovery`, so the branch is safe to delete. The current GitHub connector does not expose a branch-ref deletion action; if it remains present after this worker, that is a tool-surface cleanup limitation only, not unmerged work or a package blocker.
+The implementation head is fully contained in `main`, no open PR depends on `package/es-p02-runtime-db-recovery`, and GitHub auto-deleted that branch after the normal merge. The implementation-branch cleanup requirement is therefore satisfied.
 
-The documentation-only branch `package/es-p02-completion-record` exists solely to publish this terminal state and must be merged normally, then cleaned if the available control surface permits.
+The documentation-only branch `package/es-p02-completion-record` exists solely to publish this terminal state. It should be removed after its own normal merge; GitHub repository behavior may auto-delete it as it did the implementation branch.
 
 ## Dependency-derived state and next action
 
