@@ -1,0 +1,14 @@
+schema_version: 1
+plugin:
+  id: enthusiastaff
+  name: EnthusiaStaff
+  main_class: net.enthusia.staff.paper.EnthusiaStaffPaperPlugin
+artifact:
+  name: enthusiastaff-sentinel-paper
+  jar_path: EnthusiaStaff-Paper.jar
+profiles:
+  - restart
+configs: []
+databases: []
+dependencies: []
+actions: []
