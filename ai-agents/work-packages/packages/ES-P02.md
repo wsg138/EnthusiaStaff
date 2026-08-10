@@ -35,6 +35,7 @@ No production database access, private data access, Flyway repair/history rewrit
 - Merge commit parents are the synchronized `main` head and exact frozen implementation head.
 - Post-merge compare from `90f78f...` to `df9f4bf...` reports `status=ahead`, `ahead_by=1`, `behind_by=0`, proving the feature head is contained in `main` with no unique implementation commit left behind.
 - No open pull request depends on the implementation branch.
+- GitHub auto-deleted `package/es-p02-runtime-db-recovery` after merge; branch search confirms it is absent.
 
 ## 8. Final review and static analysis
 - All three substantive CodeRabbit review threads are resolved; valid unresolved thread count is zero.
@@ -114,7 +115,7 @@ ES-P02 adds no migration. V18 is the current highest migration and V1–V18 rema
 No credential, private database row, private message, raw address, production route, or reconstructable private evidence was committed. Operator output is sanitized. Reload requires `enthusiastaff.reload`.
 
 ## 14. Acceptance criteria
-All ES-P02 implementation, review, hosted-validation, canonical staging, restart/persistence, cleanup, containment, and merge criteria are satisfied. Representative distributed Java/Bedrock acceptance remains assigned to later validation packages where already documented; it is not claimed by ES-P02.
+All ES-P02 implementation, review, hosted-validation, canonical staging, restart/persistence, cleanup, containment, branch-cleanup, and merge criteria are satisfied. Representative distributed Java/Bedrock acceptance remains assigned to later validation packages where already documented; it is not claimed by ES-P02.
 
 ## 15. Completion checklist
 - [x] Reconciled live GitHub and current package routing.
@@ -128,10 +129,8 @@ All ES-P02 implementation, review, hosted-validation, canonical staging, restart
 - [x] Proved two storage-ready Paper cycles, Flyway V18 persistence, clean shutdown/reap, and guarded cleanup.
 - [x] Merged PR #70 normally as `df9f4bf...`.
 - [x] Verified exact feature-head containment and no open dependent PR.
-- [ ] Delete `package/es-p02-runtime-db-recovery` when the available GitHub control surface permits safe ref deletion.
+- [x] Verified GitHub deleted `package/es-p02-runtime-db-recovery` after merge.
 - [x] Publish this documentation-only terminal state through the ES-P02 completion-record PR.
-
-The implementation branch is safe to delete because it is fully contained and has no open dependent PR. If branch-ref deletion is unavailable to the current connector, that tool limitation is cleanup-only and does not change package completion or product evidence.
 
 ## 16. Handoff
 [`2026-08-09-es-p02-runtime-database-recovery-complete.md`](../../reports/package-handoffs/2026-08-09-es-p02-runtime-database-recovery-complete.md)
