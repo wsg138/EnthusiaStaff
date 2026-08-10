@@ -1,4 +1,4 @@
-# EnthusiaStaff workspace state
+# Workspace state
 
 Last updated: 2026-08-09
 
@@ -8,27 +8,28 @@ Live GitHub overrides stale records. This file records the current sequential-wo
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02` |
-| Active/selected package | None after the ES-P02 completion-record PR merges. |
-| Highest-priority next continuation | `ES-P05 — Report evidence and staff workflow completion`; existing PR #81 remains the package work to resume. |
-| Newly dependency-ready package | `ES-P07 — Inventory and Ender editing runtime completion`; `READY`, but behind the existing ES-P05 actionable continuation. |
-| ES-P02 implementation | frozen head `90f78f902a25039515d883ca96a1b72c2265418d`; PR #70 merged normally as `df9f4bf39ceda3911b7c084ac0c2caa188b82c7c`. |
-| ES-P02 hosted proof | Coverage `31342778279` / job `93319183473` success; validation artifact `9046404003`, digest `sha256:fc61861c9e1a49270d8686350f791f4ad5d63ef1c4e94f5e81aad89ab6e4f598`; Codacy static `93313758400` success with zero annotations. |
-| ES-P02 review state | all substantive CodeRabbit threads resolved; valid unresolved thread count zero. |
-| ES-P02 canonical Pi proof | public run `31342778432`: build `93319183919` success, bridge `93319918461` success; private run `31343077935` / job `93319937672` success on trusted `Lincoln-PI-4`, runner ID `2`. |
-| ES-P02 private evidence | artifact `9046774374`, digest `sha256:d51574d879a0c3271947d9d1422bc27b24d006703a0e659b7132c0228c4d1ac6`; two storage-ready cycles; Flyway V1–V18 then schema-v18 restart; SHADOW_MIGRATION; clean shutdown/reap; guarded final cleanup; zero failures. |
-| ES-P02 containment/cleanup | feature head is contained in merge commit with no unique commit remaining; no open PR depends on `package/es-p02-runtime-db-recovery`; GitHub auto-deleted the implementation branch. |
-| Migration boundary | V18 remains current and immutable; ES-P02 added no migration. |
-| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative; no production data/infrastructure/authority change. |
-| Shared Sentinel boundary | unrelated SEN-P02 jobs were not cancelled or preempted; its stale-fixture cleanup validation completed before the final ES-P02 Pi run. |
-| Exact next normal sequential-worker action | Resume ES-P05 through existing PR #81, reconcile current `main`, and obtain ES-P05's own exact-head review/hosted/canonical staging proof. Do not activate ES-P07 in this worker. |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02` |
+| Active/selected package | None after the ES-P05 completion-record PR merges. |
+| Exact next normal package | `ES-P07 — Inventory and Ender editing runtime completion`; `READY`, priority 45. |
+| Other newly/currently ready packages | `ES-P06 — Discord notification delivery completion` (`READY`, priority 60); `ES-X01 — RoseChat provider and communication integration` (`READY`, priority 100). Neither is activated by this worker. |
+| ES-P05 implementation | frozen head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`; PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`. |
+| ES-P05 hosted proof | Wiki `31348316809` success; Coverage `31348316817` / job `93334330436` success; validation artifact `9048186426`, digest `sha256:62c9ad1cad86fa2e5189445a9a9ff5f5b6761f1b19d4c25ebacbea5860d4fff9`; Codacy static `93334591193` success with zero annotations; diff coverage 42.96%; coverage variation +0.03%. |
+| ES-P05 review state | CodeRabbit exact-head status success; all three historical substantive threads resolved; valid unresolved thread count zero. |
+| ES-P05 canonical Pi proof | public run `31348316060`: build `93334328455` success, bridge `93335216891` success; private run `31348651990` / job `93335243975` success on trusted `Lincoln-PI-4`, runner ID `2`. |
+| ES-P05 private evidence | exact provenance/freshness PASS; guarded disposable DB pre-reset PASS; two Paper starts; V1–V18 then schema-v18 restart; 2/2 storage-ready cycles in `SHADOW_MIGRATION`; clean shutdown markers; zero failure scans; post-reset PASS; artifact `9048272564`, digest `sha256:55f61484144ef1911e81678ba26d6ca910d915375f0a0425f9d707a4d8904234`. |
+| ES-P05 containment/cleanup | feature head is fully contained in merge commit (`ahead_by=1`, `behind_by=0`, no file delta); GitHub auto-deleted `package/es-p05-report-workflow`. |
+| Migration boundary | V18 remains current and immutable; ES-P05 added no migration. |
+| Provider boundary | RoseChat PM evidence remains ES-X01; Discord route delivery remains ES-P06; representative distributed/Bedrock acceptance remains ES-V02. |
+| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative; no production data/infrastructure/authority/deployment/cutover change. |
+| External parity | Not applicable for ES-P05; all implementation work was internal to `wsg138/EnthusiaStaff`. |
+| Exact next sequential-worker action | Reconcile live GitHub and classify all incomplete packages again. Absent a new actionable continuation, select ES-P07 as the lowest-priority-number dependency-complete READY package. Do not treat this terminal publication as activation of ES-P07, ES-P06 or ES-X01. |
 
-## ES-P02 terminal result
+## ES-P05 terminal result
 
-ES-P02 is complete. The exact implementation head passed fresh hosted validation, static analysis, review, and the complete canonical public→private Pi route. The successful Pi execution verified exact provenance, guarded disposable database setup, two Paper starts, V18 initialization/persistence, SHADOW_MIGRATION operator state, clean shutdown/reap, final database cleanup, sanitized evidence upload, and public transfer cleanup. PR #70 then merged through a normal merge commit, containment was verified, and GitHub removed the merged implementation branch.
+ES-P05 is complete. The worker resumed the existing PR after the canonical bridge freshness/provenance unblock condition materially changed, synchronized legitimate `main` without scope expansion, froze exact head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`, re-reviewed the eight-file live diff, and obtained fresh hosted/static/review/canonical public→private Pi proof on that exact SHA. PR #81 then merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`; containment and safe implementation-branch deletion were verified.
 
-Earlier exact-head attempts that ended in a shared-host SIGKILL and a rerun-attempt manifest mismatch remain historical failure evidence only. Neither is represented as a passing gate.
+The earlier final-candidate freshness failure remains historical failure evidence only. The successful final run did not weaken provenance/freshness or bypass the public→private route.
 
 ## Stop boundary
 
-After the documentation-only ES-P02 completion record is merged and verified, this worker stops. It does not implement, stage, merge, or otherwise advance ES-P05 or ES-P07.
+After the documentation-only ES-P05 completion record is merged and verified, this worker stops. It does not implement, stage, merge, or otherwise advance ES-P07, ES-P06, ES-X01, or any other package.

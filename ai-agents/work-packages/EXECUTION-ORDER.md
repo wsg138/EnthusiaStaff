@@ -29,9 +29,19 @@ ES-V01 + ES-V02 + ES-V03 -> ES-A01
 ES-A01 + all applicable completed-or-owner-accepted-deferred packages -> ES-QA01
 ```
 
-`ES-R01` is an independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It does not replace or relax a product dependency. Its purpose is to remove the shared private-GitHub-hosted billing dependency from the exact-head staging route while preserving an ordinary hosted build and the existing private self-hosted Pi boot/restart gate. Until ES-R01 completes, ES-P02 and ES-P05 remain `PARKED_BLOCKED`; after it completes, a policy-valid repository-side staging route is available even if GitHub billing remains blocked, so normal continuation priority resumes ES-P02 before ES-P05. Each blocked package still must rerun its own exact-head gates and may not treat ES-R01's proof as package staging evidence.
+`ES-R01` is the independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It did not replace or relax any product dependency. It repaired the canonical public→private Pi route while preserving ordinary hosted build and private self-hosted runtime acceptance. ES-P02 and ES-P05 later passed their own exact-head gates through that route and are now `COMPLETE`; ES-R01 proof was never substituted for either package's acceptance.
 
-`ES-V01` is independently deferred until a private local/Codex environment and representative database are available. It does not grant production authority and does not change the dependency chain for implementation packages.
+`ES-V01` remains independently deferred until a private local/Codex environment and representative database are available. It does not grant production authority and does not change the implementation dependency chain.
+
+## Current sequential routing snapshot
+
+After ES-P05 completion, there is no active package. Dependency-derived `READY` packages are:
+
+1. `ES-P07` — priority 45; exact next normal sequential selection absent a newly discovered actionable continuation.
+2. `ES-P06` — priority 60; newly ready because ES-P05 is complete.
+3. `ES-X01` — priority 100; newly ready because ES-P03, ES-P04 and ES-P05 are complete.
+
+A terminal package worker must not activate any of those packages merely because it updated their derived status. Every new worker must reconcile live GitHub and reclassify incomplete packages before selecting work.
 
 ## Parallel safety
 
@@ -46,7 +56,6 @@ Potentially parallel after prerequisites and preflight:
 
 Keep sequential:
 
-- ES-R01 staging-workflow recovery before another identical private-hosted staging retry for ES-P02 or ES-P05 while the billing condition remains unchanged;
 - exact-sanction appeal mutation before site appeals;
 - lifecycle/reload before Bedrock identity and inventory runtime;
 - staff tool dispatch before testers;
