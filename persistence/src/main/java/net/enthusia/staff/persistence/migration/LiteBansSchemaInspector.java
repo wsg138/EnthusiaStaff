@@ -35,7 +35,6 @@ public final class LiteBansSchemaInspector {
     private static final Map<String, List<String>> REQUIRED = Map.of(
             "id", List.of("id"),
             UUID_COLUMN, List.of(UUID_COLUMN),
-            USERNAME_COLUMN, List.of("name", USERNAME_COLUMN),
             "reason", List.of("reason"),
             STAFF_COLUMN, List.of("banned_by_name", "muted_by_name", "staff_name", "executor"),
             "issued_at", List.of("time", "created_at"),
@@ -43,7 +42,7 @@ public final class LiteBansSchemaInspector {
             "active", List.of("active")
     );
     private static final List<String> REQUIRED_COLUMN_ORDER = List.of(
-            "id", UUID_COLUMN, USERNAME_COLUMN, "reason", STAFF_COLUMN, "issued_at", "expires_at", "active"
+            "id", UUID_COLUMN, "reason", STAFF_COLUMN, "issued_at", "expires_at", "active"
     );
     private static final Map<String, List<String>> HISTORY_REQUIRED = Map.of(
             "id", List.of("id"),
@@ -173,6 +172,8 @@ public final class LiteBansSchemaInspector {
         Map<String, String> resolved = new LinkedHashMap<>();
         REQUIRED.forEach((canonical, aliases) -> resolve(availableColumns, aliases)
                 .ifPresent(value -> resolved.put(canonical, value)));
+        resolve(availableColumns, List.of("name", USERNAME_COLUMN))
+                .ifPresent(value -> resolved.put(USERNAME_COLUMN, value));
         if (BANS.equals(kind)) {
             resolve(availableColumns, BAN_STAFF_ALIASES)
                     .ifPresent(value -> resolved.put(STAFF_COLUMN, value));

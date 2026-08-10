@@ -4,22 +4,22 @@
 `ES-P05`; Internal; primary `COMP-STAFF`; priority 50; conditionally parallel only with proven non-overlap.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED` on PR #81 because the required private trusted-build/Pi staging path cannot allocate its GitHub-hosted build runner under the account Billing & plans restriction.
+`COMPLETE`. Frozen exact implementation head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85` passed all applicable exact-head hosted, static-analysis, review and canonical Pi gates, then PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`.
 
 ## 3. Objective
 Complete provider-independent report submission, evidence, queue/detail, notes/status, stale-state, privacy, and staff workflow behavior.
 
 ## 4. Why the package exists
-Report command/GUI runtime paths and evidence handling need one bounded package before Discord delivery and RoseChat PM integration.
+Report command/GUI runtime paths and evidence handling required one bounded package before Discord delivery and RoseChat PM integration.
 
 ## 5. Included audit IDs
 `AUD-REPORT-001`, `AUD-REPORT-002`, provider-independent portions of `AUD-REPORT-003`.
 
 ## 6. Included behavior
-Prove target resolution, cooldown/merge/duplicate prevention; queue/detail GUI and command fallback; notes/status revisions/stale-state; chat/coordinate/client evidence; privacy/retention boundaries; attachment behavior must be explicitly implemented or excluded by documented decision.
+Target resolution; cooldown/merge/duplicate prevention foundations; queue/detail GUI and command fallback; notes/status revisions and stale-state; retained chat/coordinate/client evidence presentation; privacy/retention boundaries; explicit attachment exclusion decision; restart durability proof.
 
 ## 7. Explicit exclusions
-RoseChat private-message evidence (`ES-X01`); Discord route delivery (`ES-P06`); production evidence/routes.
+RoseChat private-message evidence (`ES-X01`); Discord route delivery (`ES-P06`); production evidence/routes; representative distributed/Bedrock acceptance (`ES-V02`).
 
 ## 8. Dependencies
 `ES-P03` and `ES-P04` are `COMPLETE`.
@@ -28,81 +28,88 @@ RoseChat private-message evidence (`ES-X01`); Discord route delivery (`ES-P06`);
 Root report/domain/persistence/Paper/tests/docs only. No RoseChat source import, permanent component branch, or isolated PR.
 
 ## 10. Required branches
-Temporary implementation branch `package/es-p05-report-workflow`; preserve while blocked. Delete only after verified normal merge containment.
+Implementation branch was `package/es-p05-report-workflow`. GitHub auto-deleted it only after verified normal merge containment. Terminal-record branch is documentation-only and is not a second implementation package.
 
 ## 11. Required PRs
-PR #81 to `wsg138/EnthusiaStaff:main`; open and unmerged while blocked.
+Implementation PR #81 to `wsg138/EnthusiaStaff:main`, merged normally. A documentation-only terminal publication PR records canonical completion state.
 
 ## 12. Implementation checklist
-- [x] Reconcile live GitHub and select ES-P05 through canonical routing.
-- [x] Trace current submission/query/state/evidence runtime and persistence paths.
-- [x] Implement confirmed provider-independent review/privacy gaps without expanding into ES-X01 or ES-P06.
-- [x] Make the attachment boundary explicit: arbitrary direct file/screenshot/URL/binary attachments are unsupported in ES-P05.
-- [x] Add direct command/GUI/privacy wiring proof and restart durability proof while preserving existing cooldown/replay/stale/concurrency/purge/rollback tests.
-- [x] Update report operational/privacy/retention documentation.
-- [x] Harshly review the final product diff and repair found defects before freeze.
-- [x] Freeze and run ordinary exact-head hosted/static validation.
-- [ ] Obtain the required successful trusted private build and Pi safe boot/restart on the exact merge candidate.
-- [ ] Rerun CodeRabbit when review quota is available and resolve any valid findings.
-- [ ] Merge normally, verify containment, finalize records, delete the temporary branch, and stop.
+- [x] Resume existing ES-P05 through canonical routing instead of creating competing implementation work.
+- [x] Preserve the repaired ReportStore integration fixture and current-main product state.
+- [x] Preserve provider-independent review/privacy implementation, dedicated evidence permission, bounded/scalar-only rendering, delivery-time authorization and restart durability proof.
+- [x] Synchronize legitimate `main` through a normal two-parent merge without rebase, squash, force-push or scope expansion.
+- [x] Harshly re-review the final live eight-file ES-P05 diff and preserve unrelated newer `main` work.
+- [x] Freeze exact implementation candidate `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`.
+- [x] Pass fresh exact-head Wiki, Java 21 full build/tests, MariaDB/Testcontainers, migration integrity, coverage, runtime-JAR and Codacy gates.
+- [x] Preserve CodeRabbit success and zero valid unresolved review threads.
+- [x] Pass canonical public→private Pi provenance, guarded disposable DB/Paper/restart/persistence/cleanup acceptance on the exact frozen head.
+- [x] Merge normally, verify containment, verify safe implementation-branch cleanup and publish terminal `COMPLETE` state.
 
 ## 13. Acceptance criteria
-Product behavior and hosted proof are implemented: submission/staff review are usable through GUI and text fallback; durable duplicate/cooldown/merge foundations remain; state/note revisions are exact and stale-safe; evidence is bounded, attributable, retained/purged by existing policy, and now privacy-gated for staff presentation. Final package completion is withheld until the required staging gate succeeds and the PR merges normally.
+Met. Provider-independent report submission and staff review are usable through GUI and text fallback; state/note revisions are exact and stale-safe; retained evidence presentation is bounded and privacy-gated; delivery-time sensitive authorization is rechecked; restart durability is tested; attachment behavior is explicitly excluded from this package; all required exact-head validation and staging proof succeeded.
 
 ## 14. Test requirements
-Satisfied on the frozen hosted-validation head for command/GUI wiring, offline target path, cooldown/replay, stale revision, concurrent staff, restart, evidence bounds/purge, failure rollback, and text/Bedrock-safe fallback. Representative live client/distributed acceptance remains ES-V02, while the package's required trusted-build/Pi gate is currently blocked before execution.
+Frozen head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85` passed Coverage run `31348316817` / job `93334330436`, including Java 21 full build/tests, MariaDB/Testcontainers, aggregate JaCoCo generation, runtime-JAR inspection, validation-artifact upload and Codacy upload. Hosted artifact `9048186426` has digest `sha256:62c9ad1cad86fa2e5189445a9a9ff5f5b6761f1b19d4c25ebacbea5860d4fff9`.
 
-## 15. Static-analysis requirements
-Codacy static succeeded with zero issues on the frozen head. CodeRabbit was quota-limited after the PR became ready and produced no findings; it must be rerun before merge when ES-P05 resumes. Zero inline review threads currently exist.
+## 15. Static-analysis and review requirements
+Codacy static `93334591193` succeeded with zero annotations. Codacy diff coverage `93335202690` succeeded at 42.96% with no configured diff-coverage gate. Coverage variation `93335202668` succeeded at +0.03% against the -1.0% target. CodeRabbit exact-head status succeeded; all three historical substantive review threads are resolved and valid unresolved thread count is zero.
 
 ## 16. Documentation requirements
-Report commands, permissions, workflow, evidence/privacy/retention, fallbacks, troubleshooting and attachment decision are updated in `docs/wiki/pages/Reports-and-Evidence.md`; registry/workspace/package/handoff terminal blocker state is published separately to `main`.
+`docs/wiki/pages/Reports-and-Evidence.md` documents report commands, permissions, workflow, evidence/privacy/retention, fallbacks, troubleshooting and the attachment decision. Canonical registry/workspace/handoff records publish terminal evidence and routing.
 
 ## 17. Security and privacy requirements
-Implemented least-privilege `enthusiastaff.reports.evidence`; broad helper-level GUI/text triage does not reveal exact coordinates or retained evidence contents; chat rendering is bounded; client rendering is allow-listed; opaque Polar metadata is withheld; malformed storage fails closed; no private rows or evidence bodies are placed in build artifacts.
+Least-privilege `enthusiastaff.reports.evidence` remains separate from broad report management. Sensitive authorization is rechecked immediately before scheduled delivery. Broad helper GUI/text triage does not reveal exact coordinates or retained evidence contents. Chat identity/timestamp/body rendering is bounded; client rendering accepts only allow-listed scalar values; unexpected structured values and opaque Polar metadata are withheld; malformed storage fails closed.
 
 ## 18. Migration impact
-No migration. Immutable V17 remains the package-start and terminal schema boundary.
+No ES-P05 migration. V18 is current and immutable; V1–V18 were not rewritten or repaired.
 
 ## 19. Bedrock considerations
-Text command fallback remains complete and readable. Evidence inspection itself is command-based and does not depend on Java-only inventory interactions. Representative live Bedrock acceptance remains `ES-V02`.
+Text command fallback remains complete/readable and does not require Java-only inventory interaction. Representative live Bedrock acceptance remains `ES-V02`.
 
 ## 20. Distributed-runtime considerations
-Existing durable duplicate prevention/query/state ownership, optimistic revisions, row locks, idempotency and transactional persistence remain. New `ReportRestartIntegrationTest` proves evidence/state/revision/assignment survive repeated MariaDB runtime initialization. Full multi-backend acceptance remains deferred to `ES-V02`.
+Existing durable duplicate prevention/query/state ownership, optimistic revisions, row locks, idempotency and transactional persistence remain unchanged. `ReportRestartIntegrationTest` proves report evidence/state/revision/assignment survive repeated MariaDB runtime initialization. Full representative multi-backend acceptance remains `ES-V02`.
 
 ## 21. External-provider considerations
-RoseChat-specific PM capture remains excluded/unavailable until `ES-X01`; no provider-specific source dependency was introduced. Discord route delivery remains ES-P06.
+RoseChat-specific PM capture remains excluded for `ES-X01`; no provider-specific source dependency was introduced. Discord route delivery remains `ES-P06`.
 
 ## 22. Completion definition
-Not yet met. Provider-independent product scope is implemented and hosted-validated, but PR #81 cannot merge normally until required private staging succeeds on the exact merge candidate and the review bot is rerun.
+Met. The frozen exact implementation head passed hosted validation, static analysis, review and mandatory canonical Pi runtime acceptance; PR #81 then merged normally; containment and safe branch cleanup were verified; terminal package state is published without starting another package.
 
-## 23. Resume state
-Selected 2026-08-07 from legitimate `main` `bf9b305ba96d9536f3d111c79eef674bd2e11dc5`. Implementation branch `package/es-p05-report-workflow`; PR #81. Frozen implementation/hosted-validation head `4a38e191395913c6733726e222f0889a2d56d267`. Do not modify product code without a newly confirmed defect. Reconcile any newer `main` through normal merge rules before a new freeze.
+## 23. Worker resume and synchronization record
+This automatic worker started with live `main` `7d438988e2ca6a681b5fba82f25377fc9de8df84` and existing PR #81 at historical hosted-green head `346e764f40b25c98e7d24ce7f863e5629773e814`. The previous transient-release freshness blocker was materially changed by the repaired canonical bridge and later successful exact current-main staging proof. The worker preserved the existing branch, synchronized current `main` through two-parent merge commit `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`, and froze that SHA for final validation.
 
-## 24. Last completed checkpoint
-All product work and ordinary exact-head hosted/static checks completed on `4a38e191395913c6733726e222f0889a2d56d267`; required private staging failed before runner allocation under Billing & plans, so the package was classified `BLOCKED` / `PARKED_BLOCKED` instead of merged.
+## 24. Historical blocker record
+The earlier exact candidate `346e764f40b25c98e7d24ce7f863e5629773e814` was hosted-green but private run `31331175023` / job `93289556545` failed during exact public bridge artifact freshness verification with `release created_at is expired for the staging bridge`; guarded DB/Paper/restart execution was skipped. That failure remains historical evidence and was never represented as a pass. The worker did not weaken freshness/provenance or bypass the canonical bridge.
 
-## 25. Remaining checklist
-Resolve the private Actions billing/spending-limit condition; resume PR #81; reconcile legitimate `main`; rerun CodeRabbit and every exact-head hosted/static/staging gate; require trusted private build + Pi safe boot/restart; merge normally; verify containment; finalize/clean branch; stop.
+An older candidate `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` had successful runtime proof, but it was not substituted for the final-head gate.
 
-## 26. Known blockers
-Primary blocker: private `wsg138/EnthusiaStaff-Staging` cannot start its required `ubuntu-latest` trusted build because GitHub reports failed recent payments or insufficient Actions spending limit. Latest build job `92881577147` has runner ID `0`, empty runner name and `steps: []`; Pi job `92881591391` skipped. This is infrastructure-unavailable evidence, not product failure and not a pass. CodeRabbit review is additionally quota-limited and must rerun on resume; it returned no product finding.
+## 25. Final hosted evidence
+- Exact head: `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`.
+- Validate Wiki `31348316809`: success.
+- Coverage `31348316817` / job `93334330436`: success.
+- Hosted validation artifact `9048186426`, digest `sha256:62c9ad1cad86fa2e5189445a9a9ff5f5b6761f1b19d4c25ebacbea5860d4fff9`.
+- Codacy static `93334591193`: success, zero annotations.
+- Codacy diff coverage `93335202690`: 42.96%, success; no configured gate.
+- Codacy coverage variation `93335202668`: +0.03%, success.
+- CodeRabbit exact-head status: success; zero valid unresolved review threads.
 
-## 27. Final evidence
-Frozen implementation / hosted-validation head: `4a38e191395913c6733726e222f0889a2d56d267`.
+## 26. Final canonical Pi evidence
+- Public Pi run `31348316060`.
+- Public build job `93334328455`: success; exact source validation, Java 21 build/package and verified runtime artifact upload passed.
+- Bridge job `93335216891`: success; exact artifact download, bounded transient release publication, private dispatch/correlation, private verdict, transient public transfer removal and final staging result all passed.
+- Private run `31348651990`, job `93335243975`: success on trusted `Lincoln-PI-4`, runner ID `2`.
+- Private provenance/freshness verification: success.
+- Guarded disposable Paper boot/restart: success.
+- Sanitized evidence artifact `9048272564`, digest `sha256:55f61484144ef1911e81678ba26d6ca910d915375f0a0425f9d707a4d8904234`.
+- Sanitized summary: `result=PASS`; Paper `1.21.11` build `132`; two server starts; 2/2 storage-ready cycles; required mode `SHADOW_MIGRATION`; failure count zero.
+- First boot applied V1–V18 to the empty disposable schema and reached v18; second boot saw schema v18 already current. Both storage checks and status/verify mode checks passed; both shutdowns exited 0 with stopping/save markers; both failure scans were clean; guarded pre/post database reset passed.
+- Sentinel: non-applicable; `.enthusia-test.yml` is absent.
 
-- Wiki run `31183192145`, job `92881243088`: success.
-- Coverage run `31183192068`, job `92881313210`: success on GitHub-hosted Java 21, including full build/tests, MariaDB/Testcontainers, migration integrity, aggregate coverage, runtime-JAR build/inspection and Codacy upload.
-- Validation artifact `8995826742` (`java-21-validation`), digest `sha256:ed87314d5eda8286928ce64f11027240898a0823333c6ffa5aa6d98f1697dbe4`.
-- Codacy static `92882185524`: success, zero issues/annotations.
-- Codacy coverage variation `92882989470`: success, `+0.05%` variation.
-- Codacy diff coverage `92882989439`: success, `49.05%`; repository gate undefined.
-- Harsh self-review found and fixed three issues before freeze: broad GUI exact-coordinate exposure, raw nested AutoClicker rendering, oldest-snapshot default selection.
-- Zero inline review threads. CodeRabbit review quota was exhausted and must be rerun before merge.
-- Latest staging wrapper `31183283525` / `92881545286` dispatched private run `31183290816`; trusted build `92881577147` failed before runner allocation with Billing & plans annotation; Pi `92881591391` skipped. Earlier automatic exact-head dispatch had the same result. No manual identical retry followed confirmation.
+## 27. Merge, containment and cleanup
+PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856` with parents starting `main` `7d438988e2ca6a681b5fba82f25377fc9de8df84` and frozen feature head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`. Compare from feature head to merge commit is `ahead_by=1`, `behind_by=0` with no file delta, proving complete containment and no unique implementation work. GitHub auto-deleted `package/es-p05-report-workflow`. No external repository parity applies.
 
-## 28. Merge and synchronization record
-Implementation PR #81 is intentionally **not merged**. `main` remained `bf9b305ba96d9536f3d111c79eef674bd2e11dc5` through the product freeze and blocker classification. Terminal package-state publication is documentation-only and does not merge ES-P05 product code. No external parity applies.
+## 28. Production and next-package boundary
+Issue #43 remains open/deferred; LiteBans remains authoritative. No production data, credentials, infrastructure authority, deployment, shadow window, cutover, or migration was changed. ES-P05 completion makes ES-P06 and ES-X01 dependency-ready, while ES-P07 remains lower-priority-number READY and is the next normal sequential selection. This worker does not activate or implement any of them.
 
 ## 29. Canonical handoff
-[`2026-08-07-es-p05-report-workflow.md`](../../reports/package-handoffs/2026-08-07-es-p05-report-workflow.md)
+[`2026-08-09-es-p05-report-workflow-complete.md`](../../reports/package-handoffs/2026-08-09-es-p05-report-workflow-complete.md)

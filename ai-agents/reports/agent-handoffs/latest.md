@@ -1,15 +1,23 @@
 # Latest AI handoff
 
-Current package handoff:
+Current terminal package handoff:
 
-[`2026-08-08-es-r01-final-blocked-current-main.md`](../package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md)
+[`2026-08-10-es-v01-private-litebans-representative-verification-complete.md`](../package-handoffs/2026-08-10-es-v01-private-litebans-representative-verification-complete.md)
+
+Prior ES-V01 execution handoff:
+
+[`2026-08-09-es-v01-private-litebans-representative-verification.md`](../package-handoffs/2026-08-09-es-v01-private-litebans-representative-verification.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-R01 — Billing-independent staging bridge recovery` is terminally `BLOCKED` / `PARKED_BLOCKED`. Repository-side bridge implementation and repairs are merged in both required repositories. PR #94 froze at `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`, passed exact-head hosted/static/review gates, and merged normally as `689ff337dd8a33f0bd417d952a7cad5581cb9d9e` with exact containment.
+`ES-V01 — Private LiteBans representative-data verification` is terminal `COMPLETE`. Final frozen PR #110 head `de39e30232df9bd44d4b4df54a8922e815bada76` passed final exact-head Java 21/full tests and MariaDB/Testcontainers in Coverage `31353964138` / job `93349968412`; Codacy static `93347267178`; canonical public Pi run `31353964382` with build `93349969346` and bridge `93350945971`; and private run `31354311211` / job `93350973876` on trusted `Lincoln-PI-4`. The private run proved exact artifact/provenance, guarded disposable database reset, V1–V18 first boot, schema-v18 no-op restart, two `SHADOW_MIGRATION` storage-ready cycles, clean shutdowns/failure scans, cleanup, and sanitized evidence artifact `9050381344` (`sha256:34f77c0fe32fee5c79872daf9487371b17404f3308c4212b736b6f011a194bd0`).
 
-The required fresh current-`main` Pi Staging proof was public run `31252997554` at `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`. Public build job `93092131811` succeeded; bridge job `93092964130` dispatched private run `31253345564`; private job `93092978141` allocated trusted `Lincoln-PI-4` runner ID `2` and passed exact artifact verification, then the guarded disposable Paper boot/restart step failed. Sanitized evidence artifact `9020680419` (`sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`) uploaded successfully and public transfer cleanup succeeded. This is **not a staging pass**. Earlier captured proof established repeated SQLState `08000` connection failures; the final run's step metadata does not expose a fresh SQLState, so none is invented.
+Substantive CodeRabbit review found valid routing/scope inconsistencies and a missing UUID-backed ban integration fixture; all were fixed in `de39e30232df9bd44d4b4df54a8922e815bada76`, all three substantive review threads are resolved/outdated and marked addressed, and valid unresolved count is zero. The later incremental CodeRabbit re-review was rate-limited and is not claimed as a second full review.
 
-The exact ES-R01 unblock condition is material evidence that the existing authorized disposable Pi-staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract. Until that changes, do not manually rerun an identical staging failure, change targets/credentials, bypass the reset, or start another package. `ES-P02` PR #70 and `ES-P05` PR #81 remain `BLOCKED` / `PARKED_BLOCKED`; no package is currently `READY`. V18 remains immutable/current, issue #43 remains open/deferred, and LiteBans remains authoritative.
+PR #110 merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`. The frozen feature head is fully contained as the merge commit's second parent with no unique feature-tree delta; GitHub auto-deleted `package/es-v01-litebans-private-verification`.
+
+The private LiteBans database remained local. Sanitized representative results remain: MariaDB 10.11.6, `litebans_`, 102 bans, 53 mutes, 1,747 history rows, 153 supported sanctions imported/replayed idempotently, zero mapped issue/expiry mismatches, and abandoned-run recovery passed. Seven rows remain explicit later data-policy input: 2 `INVALID_SOURCE_ROW` and 5 `INVALID_HISTORY_ROW`. Warnings/kicks remain intentionally unsupported/audit-only. No production shadow, migration, cutover, authority change, source rewrite, issue #43 activation, or Flyway rewrite occurred.
+
+No package became newly `READY` solely from ES-V01 completion. `ES-P07 — Inventory and Ender editing runtime completion` was already `READY` and is the highest-priority next package; `ES-P06` remains `READY`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`. A new sequential worker must reconcile live GitHub before selecting ES-P07. This ES-V01 terminal-publication worker must stop without starting another package.

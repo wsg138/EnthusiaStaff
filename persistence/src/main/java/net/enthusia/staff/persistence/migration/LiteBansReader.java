@@ -195,7 +195,9 @@ public final class LiteBansReader {
         List<String> selection = new ArrayList<>();
         selection.add(quoteInspectedIdentifier(columns.get("id")) + " AS source_id");
         selection.add(quoteInspectedIdentifier(columns.get("uuid")) + " AS source_uuid");
-        selection.add(quoteInspectedIdentifier(columns.get("username")) + " AS source_username");
+        selection.add(columns.containsKey("username")
+                ? quoteInspectedIdentifier(columns.get("username")) + " AS source_username"
+                : "NULL AS source_username");
         selection.add(quoteInspectedIdentifier(columns.get("reason")) + " AS source_reason");
         selection.add(quoteInspectedIdentifier(columns.get("staff")) + " AS source_staff");
         selection.add(quoteInspectedIdentifier(columns.get("issued_at")) + " AS source_issued_at");

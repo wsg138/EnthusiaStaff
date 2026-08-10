@@ -19,11 +19,12 @@ Use the GitHub connector first. Read in order:
 5. `ai-agents/work-packages/EXECUTION-ORDER.md`
 6. `ai-agents/work-packages/BRANCH-AND-MIRROR-POLICY.md`
 7. `ai-agents/work-packages/VALIDATION-POLICY.md`
-8. `ai-agents/work-packages/COMPONENT-REGISTRY.md`
-9. `ai-agents/reports/agent-handoffs/latest.md`
-10. the selected package file and latest linked handoff
-11. `reports/PROJECT-COMPLETION-AUDIT.md`
-12. relevant goals, manifest, matrix, Wiki, code, tests, migrations, workflows, contracts, and provider rules
+8. `ai-agents/STAGING-TEST-OPERATING-GUIDE.md`
+9. `ai-agents/work-packages/COMPONENT-REGISTRY.md`
+10. `ai-agents/reports/agent-handoffs/latest.md`
+11. the selected package file and latest linked handoff
+12. `reports/PROJECT-COMPLETION-AUDIT.md`
+13. relevant goals, manifest, matrix, Wiki, code, tests, migrations, workflows, contracts, and provider rules
 
 Authority for factual state is live GitHub, current default-branch source, the registry, selected package file, current handoff, then older reports. The system must still publish known persistent package state to `main`; live GitHub overriding stale documentation is a recovery rule, not permission to knowingly leave the canonical registry stale.
 
@@ -89,6 +90,8 @@ After every coherent section, commit and push, then update the registry, package
 Harshly review the complete final diff for scope, lifecycle, threading, transactions, concurrency, idempotency, rollback, restart, bounds, permissions, stale state, Bedrock fallback, provider behavior, privacy, weak tests, and documentation overclaims. Inspect and resolve every valid human, CodeRabbit, Codacy, CI, and static-analysis finding. Require zero valid unresolved review threads.
 
 Freeze tracked content before final validation. Validate the exact final head with all applicable Java 21 builds and tests, warnings-as-errors, MariaDB and Testcontainers, migration integrity, static analysis, coverage, runtime-JAR and provider-leak checks, Wiki, Markdown, link and package validation, and safe Pi or staging gates where applicable. Skipped, cancelled, superseded, missing, queued, merge-ref-only, or different-revision checks are not passing evidence.
+
+When Sentinel, canonical Pi staging, or both are applicable, determine the required gate or gates from the selected package and policy, then follow `ai-agents/STAGING-TEST-OPERATING-GUIDE.md`. Keep public-build, bridge, private-prerequisite, Paper-runtime, and cleanup failures distinct. If the public hosted build fails, the Pi was not tested. Never substitute Sentinel success for canonical staging when canonical staging is required.
 
 Use an infrastructure exception only when the repository policy records explicit owner approval for the selected package and every zero-execution condition is met. Never call an unavailable gate passed.
 

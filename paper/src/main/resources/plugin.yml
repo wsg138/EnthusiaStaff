@@ -190,6 +190,8 @@ permissions:
     default: false
   enthusiastaff.reports.manage:
     default: false
+  enthusiastaff.reports.evidence:
+    default: false
   enthusiastaff.alerts:
     default: false
   enthusiastaff.freeze:
@@ -278,6 +280,7 @@ permissions:
       enthusiastaff.punish: true
       enthusiastaff.punish.configured: true
       enthusiastaff.reports.manage: true
+      enthusiastaff.reports.evidence: true
       enthusiastaff.alerts: true
       enthusiastaff.freeze: true
       enthusiastaff.freeze.chat: true
@@ -308,6 +311,7 @@ permissions:
       enthusiastaff.sanction.reduce: true
       enthusiastaff.sanction.end: true
       enthusiastaff.sanction.revoke: true
+      enthusiastaff.reports.evidence: true
       enthusiastaff.inventory.edit: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
