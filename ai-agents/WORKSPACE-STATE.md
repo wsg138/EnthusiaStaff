@@ -2,39 +2,32 @@
 
 Last updated: 2026-08-10
 
-Live GitHub overrides stale records. This file records the current sequential-worker routing snapshot; detailed evidence remains in package records and canonical handoffs.
+Live GitHub overrides stale records. Detailed package evidence remains in the registry and canonical handoffs.
 
 ## Current routing
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active/selected package | `ES-P07 — Inventory and Ender editing runtime completion`; `ACTIVE` / `ACTIONABLE_CONTINUATION`; branch `package/es-p07-inventory-runtime`; ready PR `#112`. |
-| Original ES-P07 start | `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`; branch was created exactly from that `main` head. |
-| Current target main synchronization | Current target `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` was normally merged into the package branch as `562e8647063c3fa09b4349d167dc41d1a1660553`. The merge restored PR mergeability and changed no ES-P07 product file. |
-| Superseded final-review head | `8b055b8851dd185ae5e8969148aaa11e0d1985e4` fixed the two valid synchronized-head CodeRabbit findings, but exact-head Codacy then found one valid repeated-literal warning in the strengthened permission metadata test. All evidence for `8b055b...` and earlier is superseded. |
-| Final static correction | The current checkpoint replaces the four repeated `"default"` literals with one `DEFAULT_FIELD` test constant while retaining explicit non-null field-presence and false-value assertions. The commit produced by this checkpoint is the new immutable validation candidate. |
-| ES-P07 handoff | `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`. |
-| Other ready package | `ES-P06 — Discord notification delivery completion` remains `READY` at priority 60 and must not be started by this worker. |
-| Parked provider package | `ES-X01 — RoseChat provider and communication integration`; `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat integration repository/source contract remains unresolved. |
-| Dependency-blocked packages | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked until their documented dependencies/external conditions change. |
-| Migration boundary | V18 remains current and immutable. ES-P07 adds no migration. |
-| Production boundary | Issue #43 remains open/deferred; LiteBans remains authoritative; no production data, production shadow, authority, cutover, deployment, or source-data rewrite is authorized. |
-| Intended terminal state | `ES-P07 COMPLETE` after a normal merge of the exact validated head, verified containment/divergence and safe temporary-branch cleanup, dependency-derived routing publication, then worker stop without activating another package. |
-| Exact next action | Freeze the commit containing this final static-analysis correction and rerun every exact-head hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi gate. Merge/finalize only if that same head remains unchanged, mergeable and fully green. |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
+| Selected package result | `ES-P07 — Inventory and Ender editing runtime completion` is `COMPLETE`. Frozen head `70b279998bbcc9a3ddd68b5f6e060d5a60662323`; PR #112 merged normally as `c96b0a2047e2e720bb4f18d32cf8c254d0302508`; containment proven; implementation branch deleted. |
+| Hosted/review proof | Exact-head Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak checks, Wiki, aggregate coverage, Codacy and CodeRabbit/review closure all passed. Valid unresolved review-thread count is zero. |
+| Runtime proof | Sentinel exact artifact passed and restart job 85 reached `PAPER_RESTART_OK`. Fresh canonical public Pi run `31437103701` attempt 1 and correlated private run `31437719313` / job `93615505782` passed exact provenance, two Paper/storage-ready cycles, V1–V18 then v18 no-op restart, clean shutdown/failure scans, evidence upload and cleanup. |
+| Non-passing history | Earlier HTTP-404 bridge and rerun-attempt manifest-mismatch attempts remain explicitly non-passing and are not reused. |
+| Ready packages | `ES-P06 — Discord notification delivery completion` remains `READY` at priority 60. `ES-P08 — Item confiscation and restoration` is now dependency-complete and `READY` at priority 70. Neither is activated by this worker. |
+| Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS contract remains unresolved. |
+| Downstream blockers | `ES-X02`, `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented incomplete dependencies/external conditions. |
+| Migration boundary | V18 remains current and immutable. ES-P07 added no migration. |
+| Production boundary | Issue #43 remains open/deferred; LiteBans remains authoritative; no production data, shadow window, deployment, authority change, cutover, or source rewrite occurred. |
+| Exact next action | Stop this ES-P07 worker after terminal-state publication. A new sequential worker must reconcile live GitHub; absent a new actionable continuation, current priority places ES-P06 before ES-P08. |
 
-## ES-P07 current state
+## ES-P07 terminal result
 
-Live reconciliation resumed ES-P07 before ES-P06 because the formerly blocked private Pi runner materially became available. An old exact-head private attempt then failed before Paper because its transient bridge artifact returned HTTP 404; that failure was not called a pass. Current `main` was later normally merged into PR #112 to restore mergeability.
+The package completed exact logical dirty-slot inventory/Ender writes, whole-slot-set prevalidation, aggregate snapshot bounds, same-owner lease replay, expanded recovery mutation guards, direct command/GUI permission wiring coverage, and updated safety documentation. Broader confiscation, destructive-provider, and representative distributed/Java-Bedrock work remains assigned to later packages.
 
-Product implementation remains unchanged and complete: exact logical dirty-slot application, complete slot-set prevalidation before mutation, 32 MiB aggregate snapshot bounds, same-operation APPLYING lease replay, additional login/recovery mutation guards, authoritative-directory lookup, entity-thread scheduling, offline queued patches, revision/checksum decisions, Velocity switch fencing, nested item serialization and shutdown ownership.
+The final frozen implementation head passed every required development/runtime gate. PR #112 then merged with a normal two-parent merge commit; the merge is exactly one commit ahead of the feature head with zero file delta, and GitHub auto-deleted the implementation branch.
 
-The synchronized candidate `562e8647063c3fa09b4349d167dc41d1a1660553` passed hosted Java/MariaDB/JAR/Wiki/Codacy-upload checks before CodeRabbit found two valid review issues. Head `8b055b8851dd185ae5e8969148aaa11e0d1985e4` fixed those issues and resolved all review threads, but exact-head Codacy static analysis then reported the valid four-occurrence `"default"` literal warning. This checkpoint fixes only that test maintainability issue plus the tracking records necessary to supersede `8b055b...` honestly.
-
-Any Sentinel, canonical Pi, hosted or static/review result tied to `8b055b...` or an earlier head is non-final even if it completes successfully. Fresh final evidence must bind to the resulting static-correction head. Do not cancel or interfere with unrelated legitimate Sentinel or Staging jobs.
-
-Item confiscation/restoration remains ES-P08. Provider-backed destructive work remains ES-X02/ES-X03/ES-X04. Representative broader private large-inventory/distributed Java/Bedrock acceptance remains ES-V02.
+A late review request to embed the final commit SHA in files that determine that same commit was dispositioned as self-referential and invalid. The literal SHA was already present in PR metadata/HEAD, the thread was resolved, and the validated tree was not changed.
 
 ## Stop boundary
 
-This worker owns only ES-P07. It must not activate, prepare, stage or partially implement ES-P06, ES-X01, ES-P08 or any other package. After ES-P07 reaches a truthful terminal state and dependency-derived statuses are updated, stop.
+This worker completed exactly ES-P07 and publishes only terminal routing state here. It must not activate, prepare, stage, or partially implement ES-P06, ES-P08, ES-X01, or any other package.
