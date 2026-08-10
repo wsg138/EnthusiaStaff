@@ -1,27 +1,23 @@
 # Latest AI handoff
 
-Current active package handoff:
+Current terminal package handoff:
 
-[`2026-08-10-es-p07-inventory-runtime-active.md`](../package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md)
-
-Prior terminal package handoff:
-
-[`2026-08-10-es-v01-private-litebans-representative-verification-complete.md`](../package-handoffs/2026-08-10-es-v01-private-litebans-representative-verification-complete.md)
+[`2026-08-10-es-p07-inventory-runtime-complete.md`](../package-handoffs/2026-08-10-es-p07-inventory-runtime-complete.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P07 — Inventory and Ender editing runtime completion` is the only active package on `package/es-p07-inventory-runtime`, PR `#112`. The branch started from `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315` and was later normally synchronized with current target `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` as merge commit `562e8647063c3fa09b4349d167dc41d1a1660553`. No ES-P07 product file changed in that synchronization.
+`ES-P07 — Inventory and Ender editing runtime completion` is `COMPLETE`.
 
-Product implementation is complete: exact dirty-slot inventory/Ender writes, complete dirty-slot-set prevalidation, aggregate snapshot bounds, same-owner lease replay recovery and additional login-recovery mutation guards preserve authoritative target lookup, view/edit permission separation, durable queued offline patches, revision/checksum fencing, Velocity switch locks, nested item serialization and lifecycle ownership.
+Final frozen implementation head: `70b279998bbcc9a3ddd68b5f6e060d5a60662323`. PR #112 merged normally as `c96b0a2047e2e720bb4f18d32cf8c254d0302508`, whose two parents are pre-merge `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` and the frozen feature head. The merge is one commit ahead of the frozen head, zero behind, with zero file differences. GitHub auto-deleted `package/es-p07-inventory-runtime`.
 
-The synchronized candidate `562e8647063c3fa09b4349d167dc41d1a1660553` passed hosted Java/MariaDB/JAR/Wiki/Codacy-upload checks before CodeRabbit identified two valid final-review issues. Review-correction head `8b055b8851dd185ae5e8969148aaa11e0d1985e4` fixed both and resolved all review threads, but exact-head Codacy static analysis then found one valid maintainability warning because the strengthened permission test repeated the `"default"` field literal four times. This checkpoint replaces those repetitions with one `DEFAULT_FIELD` constant while preserving the explicit non-null field-presence and false-value assertions.
+The final head passed Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, Wiki, aggregate coverage, Codacy static/coverage, CodeRabbit/reviewer closure, exact Sentinel artifact plus terminal `PAPER_RESTART_OK`, and a fresh canonical public→private Pi run. Public Pi run `31437103701` attempt 1 and correlated private run `31437719313` / job `93615505782` passed exact provenance, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 application followed by a v18 no-op restart, clean shutdown/failure scans, sanitized evidence upload, and cleanup. Earlier HTTP-404 and rerun-attempt provenance failures remain explicitly non-passing.
 
-**The commit produced by this final static-analysis correction is the new immutable final validation head.** PR metadata must record its literal SHA. `8b055b8851dd185ae5e8969148aaa11e0d1985e4` and every earlier candidate are superseded. If any exact-head gate identifies another real defect, fix it, repeat harsh review, freeze the new head, and rerun every exact-head gate before merge.
+A late review request to embed the final commit's own SHA inside tracked files belonging to that commit was dispositioned as self-referential and invalid; PR metadata/HEAD already recorded the literal SHA, the thread was resolved, and the validated tree was not changed.
 
-Final acceptance requires that immutable head to independently pass hosted Java 21 clean/full build and tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, Wiki validation, configured static analysis and coverage, CodeRabbit/reviewer completion with zero valid unresolved findings, Sentinel exact-artifact restart with terminal `PAPER_RESTART_OK`, and canonical automatic public→private Pi staging with correlated private provenance, Paper restart/MariaDB/Flyway evidence and cleanup. Skipped, queued, cancelled, merge-ref-only, wrong-head or superseded checks are not passing evidence.
+ES-P06 remains `READY` at priority 60. ES-P08 is now dependency-complete and `READY` at priority 70. ES-X01 remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat integration repository/source contract is unresolved. Downstream validation/provider packages remain parked on their documented dependencies and production conditions.
 
-Any Sentinel or canonical Pi work tied to `8b055b...` or an earlier head is stale for final acceptance after this tracked correction even if it later executes. Do not cancel or interfere with unrelated legitimate Sentinel or Staging jobs. Request fresh exact-head runtime gates only through the canonical paths.
+V18 remains the immutable migration boundary. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, source rewrite, or second package implementation occurred.
 
-ES-P06 remains READY and must not be started by this worker. ES-X01 remains PARKED_BLOCKED because the supported RoseChat integration repository/source contract is unresolved. ES-P08 remains dependency-blocked until ES-P07 completes. V18 remains the immutable migration boundary. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change or source rewrite is authorized.
+This worker must stop after the documentation-only terminal state is normally merged and its temporary terminal branch is cleaned. It does not activate ES-P06, ES-P08, ES-X01, or another package.
