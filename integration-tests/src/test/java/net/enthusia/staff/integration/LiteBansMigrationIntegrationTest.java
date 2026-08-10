@@ -53,7 +53,6 @@ class LiteBansMigrationIntegrationTest {
                     CREATE TABLE legacy_bans (
                         id BIGINT NOT NULL PRIMARY KEY,
                         uuid VARCHAR(36) NULL,
-                        name VARCHAR(32) NULL,
                         ip VARCHAR(64) NULL,
                         reason VARCHAR(255) NOT NULL,
                         banned_by_name VARCHAR(64) NOT NULL,
@@ -68,7 +67,6 @@ class LiteBansMigrationIntegrationTest {
                     CREATE TABLE legacy_mutes (
                         id BIGINT NOT NULL PRIMARY KEY,
                         uuid VARCHAR(36) NULL,
-                        name VARCHAR(32) NULL,
                         reason VARCHAR(255) NOT NULL,
                         muted_by_name VARCHAR(64) NOT NULL,
                         removed_by_date TIMESTAMP(6) NULL,
@@ -203,17 +201,17 @@ class LiteBansMigrationIntegrationTest {
     private static void insertLegacyRows() throws SQLException {
         try (Connection connection = sourceConnection();
              PreparedStatement ban = connection.prepareStatement("""
-                     INSERT INTO legacy_bans(
-                         id, uuid, name, ip, reason, banned_by_name, removed_by_date,
-                         time, until, active, ipban
-                     ) VALUES (1, NULL, NULL, '203.0.113.25', 'Cheating', 'LegacyMod', NULL, ?, ?, TRUE, TRUE)
-                     """);
+                    INSERT INTO legacy_bans(
+                        id, uuid, ip, reason, banned_by_name, removed_by_date,
+                        time, until, active, ipban
+                    ) VALUES (1, NULL, '203.0.113.25', 'Cheating', 'LegacyMod', NULL, ?, ?, TRUE, TRUE)
+                    """);
              PreparedStatement mute = connection.prepareStatement("""
-                     INSERT INTO legacy_mutes(
-                         id, uuid, name, reason, muted_by_name, removed_by_date,
-                         time, until, active
-                     ) VALUES (2, ?, 'Example', 'Spam', 'LegacyMod', NULL, ?, ?, TRUE)
-                     """);
+                    INSERT INTO legacy_mutes(
+                        id, uuid, reason, muted_by_name, removed_by_date,
+                        time, until, active
+                    ) VALUES (2, ?, 'Spam', 'LegacyMod', NULL, ?, ?, TRUE)
+                    """);
              PreparedStatement history = connection.prepareStatement("""
                      INSERT INTO legacy_history(id, date, name, uuid, ip)
                      VALUES (1, ?, 'Example', ?, '203.0.113.25')

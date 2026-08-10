@@ -48,4 +48,14 @@ class LiteBansSchemaInspectorTest {
 
         assertEquals(BAN_STAFF, mapping.get(STAFF_COLUMN));
     }
+
+    @Test
+    void acceptsUuidOnlySanctionsWhenModernLiteBansOmitsPlayerNames() {
+        Map<String, String> mapping = LiteBansSchemaInspector.resolveColumns(Set.of(
+                "id", "uuid", "reason", BAN_STAFF, "time", "until", "active"
+        ), "bans");
+
+        assertEquals("uuid", mapping.get("uuid"));
+        assertFalse(mapping.containsKey("username"));
+    }
 }
