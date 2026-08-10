@@ -4,7 +4,7 @@
 `ES-P07`; Internal; primary `COMP-STAFF`; priority 45; conditionally parallel only after lifecycle files are stable.
 
 ## 2. Status
-`ACTIVE`; implementation, required direct wiring coverage, substantive review fixes and repeated harsh review are complete; tracked content is being re-frozen for exact-head validation. Branch `package/es-p07-inventory-runtime`; ready-for-review PR `#112`; starting `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
+`ACTIVE`; implementation, required direct wiring coverage, substantive CodeRabbit fixes, Codacy fixes and repeated harsh review are complete; tracked content is being re-frozen for exact-head validation. Branch `package/es-p07-inventory-runtime`; ready-for-review PR `#112`; starting `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
 
 ## 3. Objective
 Complete safe online/offline inventory and Ender viewing/editing, revisions, locks, queued patches, server scopes, and runtime recovery.
@@ -46,7 +46,8 @@ One PR to `wsg138/EnthusiaStaff:main`: ready-for-review PR `#112`.
 - [x] Add unit and MariaDB/Testcontainers regression coverage for snapshot bounds, slot-set validation and lease replay invariants.
 - [x] Verify direct permission-policy tests cover view/edit rank separation and add direct structural wiring coverage for `invsee`/`endersee`, authoritative target lookup, entity-scheduler handoff and GUI edit gating.
 - [x] Update inventory operational/Wiki documentation without overclaiming private acceptance.
-- [x] Harsh-review the product diff, inspect CodeRabbit findings, fix the valid partial-mutation defect, and repeat the review before refreezing.
+- [x] Harsh-review the product diff; fix the valid CodeRabbit partial-mutation defect; repeat review; resolve all valid review threads.
+- [x] Inspect exact-head Codacy annotations and remove unnecessary method-level synchronization from the encode-local bounded byte stream; no lock is required because each stream instance is confined to one `encode` invocation.
 - [ ] Freeze the resulting tracked head and validate that exact revision through all applicable hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi gates.
 - [ ] Merge normally only after exact-head evidence is complete, prove containment/divergence, clean the branch safely and publish terminal state.
 
@@ -84,20 +85,20 @@ Development/runtime scope must be exact-head validated and merged in one impleme
 Generic sequential worker remains on `package/es-p07-inventory-runtime`; PR `#112`; start `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`.
 
 ## 24. Last completed checkpoint
-Implementation, documentation, direct wiring coverage and repeated harsh source review are complete. Intermediate sanity head `321a50f3ca120dba7d7e21542450d4d527dabbd3` passed Coverage run `31422933262` / job `93567841848`: exact Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR inspection, aggregate JaCoCo and Codacy coverage upload. Aggregate coverage was 47.12% lines / 38.19% branches / 49.78% instructions; provider API leaks were zero across Paper and Velocity runtime JARs. Wiki run `31422933273` and Sentinel Restart Artifact run `31422933425` also succeeded on that intermediate head.
+Implementation, documentation, direct wiring coverage and repeated harsh review are complete. Intermediate sanity head `321a50f3ca120dba7d7e21542450d4d527dabbd3` passed Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR inspection, aggregate JaCoCo/Codacy upload, Wiki and Sentinel artifact sanity checks.
 
-First freeze `c3545612d370ea237a63394e6a0401edbe650790` was intentionally superseded after re-reading the original package contract exposed the remaining command/GUI wiring-test requirement. Second freeze `6c7ec06622b8ee20d00aa3839e5741f44a0f1976` was intentionally superseded when CodeRabbit found a valid data-integrity defect: a dirty-slot list containing a valid slot followed by an invalid slot could mutate the first slot before throwing. `InventoryImageCodec.applySlots` now validates the complete deduplicated slot set first, then obtains and mutates player inventory. A pure package-private validator and mixed valid/out-of-range regression make that ordering testable without Bukkit runtime mocking. Every gate tied to either superseded freeze remains non-final evidence.
+Freeze `c3545612d370ea237a63394e6a0401edbe650790` was superseded by the direct command/GUI wiring test. Freeze `6c7ec06622b8ee20d00aa3839e5741f44a0f1976` was superseded by the valid CodeRabbit partial-mutation finding. Freeze `2c0ad0543f9f39f242e8a75c532a77ca2afb52de` was superseded when exact-head Codacy static analysis reported two valid warnings on method-level synchronization in the encode-local bounded stream. Those `synchronized` modifiers were removed rather than replaced with unnecessary locks. Every gate tied to those superseded heads remains non-final evidence.
 
-The first recovery-guard compile attempt failed because two Paper events were imported from the Bukkit namespace; the imports were corrected to `io.papermc.paper.event.player` and the subsequent full sanity build passed. No failed or superseded run is relabeled as passing evidence.
+The first recovery-guard compile attempt failed because two Paper events were imported from the Bukkit namespace; the imports were corrected to `io.papermc.paper.event.player`. Exact-head Sentinel attempts on `2c0ad054...` also failed infrastructure resource preconditions (637 MB available versus 700 MB required); those failures are not Paper restart passes. No failed or superseded run is relabeled as passing evidence.
 
 ## 25. Remaining checklist
-Complete tracking/review-finding record updates; take the resulting PR head as the new immutable freeze; require exact frozen-head hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi evidence; merge normally only if unchanged and fully green; verify containment/divergence/cleanup; publish COMPLETE state and dependency-derived routing; stop without starting another package.
+Complete current handoff/workspace records; take the resulting PR head as the new immutable freeze; require exact frozen-head hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi evidence; merge normally only if unchanged and fully green; verify containment/divergence/cleanup; publish COMPLETE state and dependency-derived routing; stop without starting another package.
 
 ## 26. Known blockers
-No current ES-P07 implementation blocker. Representative private large-inventory/Java-Bedrock/distributed acceptance remains intentionally deferred to `ES-V02` and is not a blocker to ES-P07 development completion.
+No current product blocker. Sentinel previously observed a transient Pi resource precondition below its 700 MB threshold; do not repeat the identical restart gate until evidence shows the host resource condition changed. Representative private large-inventory/Java-Bedrock/distributed acceptance remains intentionally deferred to `ES-V02` and is not a blocker to ES-P07 development completion.
 
 ## 27. Final evidence
-Pending the new frozen head produced after the CodeRabbit review fix. `321a50f...` is sanity evidence; `c354561...` and `6c7ec066...` are superseded freezes. None may be cited as final acceptance.
+Pending the new frozen head produced after the Codacy fix. All prior validation heads are superseded and may not be cited as final acceptance.
 
 ## 28. Merge and synchronization record
 Unset pending completion: normal merge/resulting `main`, containment/divergence, temporary branch cleanup; external parity not applicable.
