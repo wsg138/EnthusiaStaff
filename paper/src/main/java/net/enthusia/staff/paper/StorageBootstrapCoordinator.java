@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -14,88 +15,148 @@ import java.util.logging.Logger;
 import net.enthusia.staff.domain.auth.StaffRank;
 
 final class StorageBootstrapCoordinator<S> {
+    private static final int MINIMUM_ATTEMPTS = 1;
+    private static final long CLEANUP_RETRY_DELAY_MILLIS = 50L;
+
     private final WorkerExecutor workers;
     private final GlobalScheduler global;
-    private final RetryScheduler cleanupRetry;
+    private final RetryScheduler retries;
     private final StoragePhase<S> storagePhase;
     private final BukkitRecovery<S> recovery;
     private final FollowUp<S> followUp;
     private final BooleanSupplier stopping;
     private final Logger logger;
+    private final RetryPolicy retryPolicy;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean terminal = new AtomicBoolean();
+    private final AtomicBoolean retryScheduled = new AtomicBoolean();
+    private final AtomicInteger attempts = new AtomicInteger();
+    private final AtomicReference<Attempt> activeAttempt = new AtomicReference<>();
 
     StorageBootstrapCoordinator(
             WorkerExecutor workers,
             GlobalScheduler global,
-            RetryScheduler cleanupRetry,
+            RetryScheduler retries,
             StoragePhase<S> storagePhase,
             BukkitRecovery<S> recovery,
             FollowUp<S> followUp,
             BooleanSupplier stopping,
             Logger logger
     ) {
+        this(
+                workers,
+                global,
+                retries,
+                storagePhase,
+                recovery,
+                followUp,
+                stopping,
+                new RuntimeOptions(logger, RetryPolicy.defaults())
+        );
+    }
+
+    StorageBootstrapCoordinator(
+            WorkerExecutor workers,
+            GlobalScheduler global,
+            RetryScheduler retries,
+            StoragePhase<S> storagePhase,
+            BukkitRecovery<S> recovery,
+            FollowUp<S> followUp,
+            BooleanSupplier stopping,
+            RuntimeOptions options
+    ) {
         this.workers = Objects.requireNonNull(workers, "workers");
         this.global = Objects.requireNonNull(global, "global");
-        this.cleanupRetry = Objects.requireNonNull(cleanupRetry, "cleanupRetry");
+        this.retries = Objects.requireNonNull(retries, "retries");
         this.storagePhase = Objects.requireNonNull(storagePhase, "storagePhase");
         this.recovery = Objects.requireNonNull(recovery, "recovery");
         this.followUp = Objects.requireNonNull(followUp, "followUp");
         this.stopping = Objects.requireNonNull(stopping, "stopping");
-        this.logger = Objects.requireNonNull(logger, "logger");
+        RuntimeOptions safeOptions = Objects.requireNonNull(options, "options");
+        this.logger = safeOptions.logger();
+        this.retryPolicy = safeOptions.retryPolicy();
     }
 
     boolean start() {
-        return started.compareAndSet(false, true) && workers.submit(this::runStoragePhase);
+        return started.compareAndSet(false, true) && submitAttempt();
     }
 
-    private void runStoragePhase() {
+    int attempts() {
+        return attempts.get();
+    }
+
+    boolean retryScheduled() {
+        return retryScheduled.get();
+    }
+
+    private boolean submitAttempt() {
         if (shouldStop()) {
             terminal.set(true);
+            return false;
+        }
+        int number = attempts.incrementAndGet();
+        Attempt attempt = new Attempt(number);
+        if (!activeAttempt.compareAndSet(null, attempt)) {
+            attempts.decrementAndGet();
+            return false;
+        }
+        if (workers.submit(() -> runStoragePhase(attempt))) {
+            return true;
+        }
+        activeAttempt.compareAndSet(attempt, null);
+        scheduleRetry(attempt, new IllegalStateException("storage bootstrap worker submission was rejected"));
+        return false;
+    }
+
+    private void runStoragePhase(Attempt attempt) {
+        if (shouldAbort(attempt)) {
+            retire(attempt);
             return;
         }
         S storage = null;
         try {
             storage = storagePhase.openAndPublish();
             if (storage == null) {
+                retire(attempt);
                 terminal.set(true);
                 return;
             }
-            if (shouldStop() || !storagePhase.isPublished(storage)) {
-                closeFromWorker(storage);
+            if (shouldAbort(attempt) || !storagePhase.isPublished(storage)) {
+                closeFromWorker(attempt, storage, null, false);
                 return;
             }
             S published = storage;
-            if (!global.execute(() -> beginRecovery(published))) {
-                closeFromWorker(published);
+            if (!global.execute(() -> beginRecovery(attempt, published))) {
+                closeFromWorker(
+                        attempt,
+                        published,
+                        new IllegalStateException("global bootstrap recovery submission was rejected"),
+                        true
+                );
             }
         } catch (RuntimeException exception) {
             if (storage != null) {
-                closeFromWorker(storage);
+                closeFromWorker(attempt, storage, exception, true);
             } else {
-                terminal.set(true);
-            }
-            if (!stopping.getAsBoolean()) {
-                logger.log(Level.SEVERE, "MariaDB bootstrap failed; destructive actions are disabled", exception);
-                storagePhase.failed(exception);
+                failAttempt(attempt, exception);
             }
         }
     }
 
-    private void beginRecovery(S storage) {
-        if (shouldAbort(storage)) {
-            cleanupFromGlobal(storage, null);
+    private void beginRecovery(Attempt attempt, S storage) {
+        if (shouldAbort(attempt, storage)) {
+            cleanupFromGlobal(attempt, storage, null, false);
             return;
         }
         final List<UUID> playerIds;
         try {
             playerIds = List.copyOf(recovery.onlinePlayerIds());
         } catch (RuntimeException exception) {
-            cleanupFromGlobal(storage, exception);
+            cleanupFromGlobal(attempt, storage, exception, true);
             return;
         }
         if (playerIds.isEmpty()) {
-            finishRecovery(storage, List.of());
+            finishRecovery(attempt, storage, List.of());
             return;
         }
 
@@ -104,12 +165,12 @@ final class StorageBootstrapCoordinator<S> {
         for (UUID playerId : playerIds) {
             AtomicBoolean completed = new AtomicBoolean();
             Runnable retired = () -> snapshotCompleted(
-                    storage, snapshots, remaining, completed, null);
+                    attempt, storage, snapshots, remaining, completed, null);
             try {
                 recovery.capturePlayer(
                         playerId,
                         snapshot -> snapshotCompleted(
-                                storage, snapshots, remaining, completed, snapshot),
+                                attempt, storage, snapshots, remaining, completed, snapshot),
                         retired
                 );
             } catch (RuntimeException exception) {
@@ -120,13 +181,14 @@ final class StorageBootstrapCoordinator<S> {
     }
 
     private void snapshotCompleted(
+            Attempt attempt,
             S storage,
             ConcurrentHashMap<UUID, PlayerSnapshot> snapshots,
             AtomicInteger remaining,
             AtomicBoolean completed,
             PlayerSnapshot snapshot
     ) {
-        if (!completed.compareAndSet(false, true)) {
+        if (!completed.compareAndSet(false, true) || !isActive(attempt)) {
             return;
         }
         if (snapshot != null && !shouldStop()) {
@@ -137,136 +199,268 @@ final class StorageBootstrapCoordinator<S> {
         }
         List<PlayerSnapshot> immutable = new ArrayList<>(snapshots.values());
         immutable.sort((left, right) -> left.playerId().compareTo(right.playerId()));
-        if (!global.execute(() -> finishRecovery(storage, List.copyOf(immutable)))) {
-            submitWorkerCleanup(storage);
+        if (!global.execute(() -> finishRecovery(attempt, storage, List.copyOf(immutable)))) {
+            submitWorkerCleanup(
+                    attempt,
+                    storage,
+                    new IllegalStateException("final global bootstrap recovery submission was rejected"),
+                    true
+            );
         }
     }
 
-    private void finishRecovery(S storage, List<PlayerSnapshot> snapshots) {
+    private void finishRecovery(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
         try {
-            if (shouldAbort(storage)) {
-                cleanupFromGlobal(storage, null);
+            if (!recoverPlayers(attempt, storage, snapshots) || !publishRecoveredState(attempt, storage)) {
                 return;
             }
-            for (PlayerSnapshot snapshot : snapshots) {
-                if (shouldAbort(storage)) {
-                    cleanupFromGlobal(storage, null);
-                    return;
+            runRecoveryStep(attempt, storage, () -> {
+                if (!workers.submit(() -> runFollowUp(attempt, storage))) {
+                    throw new IllegalStateException("storage bootstrap follow-up was rejected");
                 }
-                recovery.verifyFreeze(snapshot);
-            }
-            for (PlayerSnapshot snapshot : snapshots) {
-                if (shouldAbort(storage)) {
-                    cleanupFromGlobal(storage, null);
-                    return;
-                }
-                recovery.recoverStaffMode(snapshot);
-            }
-            if (shouldAbort(storage)) {
-                cleanupFromGlobal(storage, null);
-                return;
-            }
-            recovery.initializeVanish();
-            if (shouldAbort(storage)) {
-                cleanupFromGlobal(storage, null);
-                return;
-            }
-            recovery.attachAlerts(storage);
-            if (shouldAbort(storage)) {
-                cleanupFromGlobal(storage, null);
-                return;
-            }
-            recovery.publishOperationalState(storage);
-            if (shouldAbort(storage)) {
-                cleanupFromGlobal(storage, null);
-                return;
-            }
-            if (!workers.submit(() -> runFollowUp(storage))) {
-                cleanupFromGlobal(storage,
-                        new IllegalStateException("storage bootstrap follow-up was rejected"));
-            }
+            });
         } catch (RuntimeException exception) {
-            cleanupFromGlobal(storage, exception);
+            cleanupFromGlobal(attempt, storage, exception, true);
         }
     }
 
-    private void runFollowUp(S storage) {
-        if (shouldAbort(storage)) {
-            closeFromWorker(storage);
+    private boolean recoverPlayers(Attempt attempt, S storage, List<PlayerSnapshot> snapshots) {
+        for (PlayerSnapshot snapshot : snapshots) {
+            if (!runRecoveryStep(attempt, storage, () -> recovery.verifyFreeze(snapshot))) {
+                return false;
+            }
+        }
+        for (PlayerSnapshot snapshot : snapshots) {
+            if (!runRecoveryStep(attempt, storage, () -> recovery.recoverStaffMode(snapshot))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean publishRecoveredState(Attempt attempt, S storage) {
+        return runRecoveryStep(attempt, storage, recovery::initializeVanish)
+                && runRecoveryStep(attempt, storage, () -> recovery.attachAlerts(storage))
+                && runRecoveryStep(attempt, storage, () -> recovery.publishOperationalState(storage));
+    }
+
+    private boolean runRecoveryStep(Attempt attempt, S storage, Runnable step) {
+        if (shouldAbort(attempt, storage)) {
+            cleanupFromGlobal(attempt, storage, null, false);
+            return false;
+        }
+        step.run();
+        return true;
+    }
+
+    private void runFollowUp(Attempt attempt, S storage) {
+        if (shouldAbort(attempt, storage)) {
+            closeFromWorker(attempt, storage, null, false);
             return;
         }
         try {
             followUp.run(storage);
-            terminal.set(true);
+            if (retire(attempt)) {
+                terminal.set(true);
+                storagePhase.recovered(attempt.number());
+            }
         } catch (RuntimeException exception) {
             if (!stopping.getAsBoolean()) {
                 logger.log(Level.SEVERE, "Storage bootstrap asynchronous follow-up failed", exception);
                 followUp.failed(exception);
             }
-            terminal.set(true);
+            if (retire(attempt)) {
+                terminal.set(true);
+            }
         }
     }
 
-    private void cleanupFromGlobal(S storage, RuntimeException failure) {
-        if (!terminal.compareAndSet(false, true)) {
+    private void cleanupFromGlobal(
+            Attempt attempt,
+            S storage,
+            RuntimeException failure,
+            boolean retryAfterClose
+    ) {
+        if (!attempt.cleanupStarted().compareAndSet(false, true)) {
             return;
         }
+        RuntimeException reported = failure;
         try {
             recovery.detachAlerts();
         } catch (RuntimeException detachFailure) {
-            if (failure == null) {
-                failure = detachFailure;
+            if (reported == null) {
+                reported = detachFailure;
             } else {
-                failure.addSuppressed(detachFailure);
+                reported.addSuppressed(detachFailure);
             }
         }
-        submitCleanup(storage, failure);
+        submitCleanup(attempt, storage, reported, retryAfterClose);
     }
 
-    private void submitWorkerCleanup(S storage) {
-        if (!terminal.compareAndSet(false, true)) {
+    private void submitWorkerCleanup(
+            Attempt attempt,
+            S storage,
+            RuntimeException failure,
+            boolean retryAfterClose
+    ) {
+        if (!attempt.cleanupStarted().compareAndSet(false, true)) {
             return;
         }
-        submitCleanup(storage, null);
+        submitCleanup(attempt, storage, failure, retryAfterClose);
     }
 
-    private void submitCleanup(S storage, RuntimeException failure) {
-        if (workers.submit(() -> {
-            storagePhase.removeAndClose(storage);
-            if (failure != null && !stopping.getAsBoolean()) {
-                storagePhase.failed(failure);
-            }
-        })) {
+    private void submitCleanup(
+            Attempt attempt,
+            S storage,
+            RuntimeException failure,
+            boolean retryAfterClose
+    ) {
+        if (workers.submit(() -> closeFromWorker(attempt, storage, failure, retryAfterClose))) {
             return;
         }
         if (stopping.getAsBoolean()) {
-            // Keep the conditionally published storage visible. Normal plugin shutdown drains
-            // accepted workers and closes the remaining MariaDB runtime afterward.
+            retire(attempt);
+            terminal.set(true);
             return;
         }
-        if (!cleanupRetry.schedule(() -> submitCleanup(storage, failure))) {
+        if (!retries.schedule(
+                () -> submitCleanup(attempt, storage, failure, retryAfterClose),
+                CLEANUP_RETRY_DELAY_MILLIS
+        )) {
             logger.log(Level.SEVERE,
                     "MariaDB bootstrap cleanup could not be rescheduled; shutdown will close the runtime",
                     failure);
+            retire(attempt);
+            terminal.set(true);
             if (failure != null) {
                 storagePhase.failed(failure);
             }
         }
     }
 
-    private void closeFromWorker(S storage) {
-        if (!terminal.compareAndSet(false, true)) {
+    private void closeFromWorker(
+            Attempt attempt,
+            S storage,
+            RuntimeException failure,
+            boolean retryAfterClose
+    ) {
+        if (!isActive(attempt)) {
             return;
         }
         storagePhase.removeAndClose(storage);
+        if (retryAfterClose && failure != null) {
+            failAttempt(attempt, failure);
+        } else {
+            retire(attempt);
+            if (stopping.getAsBoolean()) {
+                terminal.set(true);
+            }
+        }
     }
 
-    private boolean shouldAbort(S storage) {
-        return shouldStop() || !storagePhase.isPublished(storage);
+    private void failAttempt(Attempt attempt, RuntimeException failure) {
+        if (!retire(attempt)) {
+            return;
+        }
+        if (stopping.getAsBoolean()) {
+            terminal.set(true);
+            return;
+        }
+        if (logger.isLoggable(Level.WARNING)) {
+            logger.log(Level.WARNING,
+                    "MariaDB bootstrap attempt " + attempt.number() + " failed; runtime remains unavailable",
+                    failure);
+        }
+        scheduleRetry(attempt, failure);
+    }
+
+    @SuppressWarnings("PMD.GuardLogStatement")
+    // java.util.logging receives the throwable lazily and retry exhaustion is exceptional.
+    private void scheduleRetry(Attempt failedAttempt, RuntimeException failure) {
+        if (failedAttempt.number() >= retryPolicy.maximumAttempts()) {
+            terminal.set(true);
+            logger.log(Level.SEVERE,
+                    "MariaDB bootstrap retry limit reached; destructive actions remain disabled",
+                    failure);
+            storagePhase.failed(failure);
+            return;
+        }
+        long delayMillis = retryPolicy.delayAfterFailure(failedAttempt.number());
+        int nextAttempt = failedAttempt.number() + 1;
+        if (!retryScheduled.compareAndSet(false, true)) {
+            terminal.set(true);
+            storagePhase.failed(new IllegalStateException(
+                    "duplicate storage bootstrap retry scheduling was rejected", failure));
+            return;
+        }
+        boolean scheduled = retries.schedule(() -> {
+            retryScheduled.set(false);
+            if (shouldStop()) {
+                terminal.set(true);
+                return;
+            }
+            submitAttempt();
+        }, delayMillis);
+        if (!scheduled) {
+            retryScheduled.set(false);
+            terminal.set(true);
+            RuntimeException schedulingFailure = new IllegalStateException(
+                    "storage bootstrap retry scheduling was rejected", failure);
+            logger.log(Level.SEVERE, "MariaDB bootstrap retry could not be scheduled", schedulingFailure);
+            storagePhase.failed(schedulingFailure);
+            return;
+        }
+        storagePhase.retrying(nextAttempt, retryPolicy.maximumAttempts(), delayMillis, failure);
+    }
+
+    private boolean shouldAbort(Attempt attempt) {
+        return shouldStop() || !isActive(attempt);
+    }
+
+    private boolean shouldAbort(Attempt attempt, S storage) {
+        return shouldAbort(attempt) || !storagePhase.isPublished(storage);
     }
 
     private boolean shouldStop() {
         return terminal.get() || stopping.getAsBoolean();
+    }
+
+    private boolean isActive(Attempt attempt) {
+        return activeAttempt.get() == attempt;
+    }
+
+    private boolean retire(Attempt attempt) {
+        return activeAttempt.compareAndSet(attempt, null);
+    }
+
+    record RuntimeOptions(Logger logger, RetryPolicy retryPolicy) {
+        RuntimeOptions {
+            Objects.requireNonNull(logger, "logger");
+            Objects.requireNonNull(retryPolicy, "retryPolicy");
+        }
+    }
+
+    record RetryPolicy(int maximumAttempts, long initialDelayMillis, long maximumDelayMillis) {
+        RetryPolicy {
+            if (maximumAttempts < MINIMUM_ATTEMPTS) {
+                throw new IllegalArgumentException("maximumAttempts must be at least one");
+            }
+            if (initialDelayMillis < 1L || maximumDelayMillis < initialDelayMillis) {
+                throw new IllegalArgumentException("retry delays must be positive and ordered");
+            }
+        }
+
+        static RetryPolicy defaults() {
+            return new RetryPolicy(6, 1_000L, 30_000L);
+        }
+
+        long delayAfterFailure(int failedAttempt) {
+            long delay = initialDelayMillis;
+            for (int index = 1; index < failedAttempt && delay < maximumDelayMillis; index++) {
+                delay = Math.min(delay * 2L, maximumDelayMillis);
+            }
+            return delay;
+        }
     }
 
     record PlayerSnapshot(UUID playerId, String playerName, StaffRank rank) {
@@ -275,6 +469,23 @@ final class StorageBootstrapCoordinator<S> {
             if (playerName == null || playerName.isBlank()) {
                 playerName = playerId.toString();
             }
+        }
+    }
+
+    private static final class Attempt {
+        private final int number;
+        private final AtomicBoolean cleanupStarted = new AtomicBoolean();
+
+        private Attempt(int number) {
+            this.number = number;
+        }
+
+        private int number() {
+            return number;
+        }
+
+        private AtomicBoolean cleanupStarted() {
+            return cleanupStarted;
         }
     }
 
@@ -290,7 +501,7 @@ final class StorageBootstrapCoordinator<S> {
 
     @FunctionalInterface
     interface RetryScheduler {
-        boolean schedule(Runnable operation);
+        boolean schedule(Runnable operation, long delayMillis);
     }
 
     interface StoragePhase<S> {
@@ -301,6 +512,17 @@ final class StorageBootstrapCoordinator<S> {
         void removeAndClose(S storage);
 
         void failed(RuntimeException failure);
+
+        default void retrying(
+                int nextAttempt,
+                int maximumAttempts,
+                long delayMillis,
+                RuntimeException failure
+        ) {
+        }
+
+        default void recovered(int attempts) {
+        }
     }
 
     interface BukkitRecovery<S> {

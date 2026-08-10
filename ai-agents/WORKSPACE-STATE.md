@@ -2,122 +2,33 @@
 
 Last updated: 2026-08-09
 
-Live GitHub state overrides stale records, but persistent package state must be reconciled here.
+Live GitHub overrides stale records. This file records the current sequential-worker routing snapshot; detailed evidence remains in package records and canonical handoffs.
 
 ## Current routing
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05` |
-| Parked packages | `ES-R01 — Billing-independent staging bridge recovery`; `ES-P02 — Runtime database recovery and Velocity reload`; `ES-P05 — Report evidence and staff workflow completion` |
-| Active/selected package | None after this worker's terminal ES-P05 repair publication merges. |
-| Ready packages | None while the current ES-R01 disposable staging database blocker remains unchanged. |
-| Current legitimate EnthusiaStaff main before ES-P05 terminal publication | `b0cf67b880856ec7536cf1385fe1559bb18a42a1` |
-| Current legitimate staging main | `d5f77c0b9d1e896443054a82f94d7f8741d36fbc` |
-| ES-R01 public implementation | PR #93, frozen head `cccadbd1885f78db517ff643f941d04bd0fba2a3`, merged normally as `094838fa221476e0832cf821f7b4908b9402d0d9` |
-| ES-R01 private implementation | PR #58 → `570f83e41cb80b498a82c8b5a509c42345558a46`; PR #59 → `313ed2815058eadeb8c823453f4152089cae01d4`; PR #60 → `4036d6e915c2d751bef18849107722dfd1e586a6` |
-| ES-R01 checkpoint | PR #94 frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`, normal merge `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`; containment exact and checkpoint branch auto-deleted |
-| ES-R01 terminal status | `BLOCKED` / `PARKED_BLOCKED` |
-| ES-R01 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-08-es-r01-final-blocked-current-main.md` |
-| ES-R01 blocker | The existing authorized disposable Pi-staging MariaDB endpoint remains unavailable to the guarded disposable boot/restart path from `Lincoln-PI-4`; current-main proof again failed before runtime acceptance could complete |
-| ES-R01 exact unblock | Material evidence that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4` under the current `pi-staging` environment contract |
-| ES-P02 status | `BLOCKED` / `PARKED_BLOCKED`; PR #70; do not synchronize or rerun while ES-R01's external staging-database blocker is unchanged |
-| ES-P05 status | `BLOCKED` / `PARKED_BLOCKED`; PR #81; ReportStore hosted regression fixed and final head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2` is fully hosted-green; correlated private Pi job exists but has zero execution because `Lincoln-PI-4` has not accepted it. |
-| ES-P05 terminal handoff | `ai-agents/reports/package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md` |
-| Migration boundary | V18 remains immutable/current; ES-R01 and ES-P05 changed no migration. |
-| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative. |
-| Next legitimate action | Reconcile live GitHub first. If ES-R01's exact unblock condition changed, normal priority rules still apply. For ES-P05, inspect existing public run `31301426684` and private run `31301734048` before any new staging attempt; if that correlated private run later executed, classify its real terminal result rather than creating a duplicate run. |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02` |
+| Active/selected package | None after the ES-P02 completion-record PR merges. |
+| Highest-priority next continuation | `ES-P05 — Report evidence and staff workflow completion`; existing PR #81 remains the package work to resume. |
+| Newly dependency-ready package | `ES-P07 — Inventory and Ender editing runtime completion`; `READY`, but behind the existing ES-P05 actionable continuation. |
+| ES-P02 implementation | frozen head `90f78f902a25039515d883ca96a1b72c2265418d`; PR #70 merged normally as `df9f4bf39ceda3911b7c084ac0c2caa188b82c7c`. |
+| ES-P02 hosted proof | Coverage `31342778279` / job `93319183473` success; validation artifact `9046404003`, digest `sha256:fc61861c9e1a49270d8686350f791f4ad5d63ef1c4e94f5e81aad89ab6e4f598`; Codacy static `93313758400` success with zero annotations. |
+| ES-P02 review state | all substantive CodeRabbit threads resolved; valid unresolved thread count zero. |
+| ES-P02 canonical Pi proof | public run `31342778432`: build `93319183919` success, bridge `93319918461` success; private run `31343077935` / job `93319937672` success on trusted `Lincoln-PI-4`, runner ID `2`. |
+| ES-P02 private evidence | artifact `9046774374`, digest `sha256:d51574d879a0c3271947d9d1422bc27b24d006703a0e659b7132c0228c4d1ac6`; two storage-ready cycles; Flyway V1–V18 then schema-v18 restart; SHADOW_MIGRATION; clean shutdown/reap; guarded final cleanup; zero failures. |
+| ES-P02 containment/cleanup | feature head is contained in merge commit with no unique commit remaining; no open PR depends on `package/es-p02-runtime-db-recovery`; GitHub auto-deleted the implementation branch. |
+| Migration boundary | V18 remains current and immutable; ES-P02 added no migration. |
+| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative; no production data/infrastructure/authority change. |
+| Shared Sentinel boundary | unrelated SEN-P02 jobs were not cancelled or preempted; its stale-fixture cleanup validation completed before the final ES-P02 Pi run. |
+| Exact next normal sequential-worker action | Resume ES-P05 through existing PR #81, reconcile current `main`, and obtain ES-P05's own exact-head review/hosted/canonical staging proof. Do not activate ES-P07 in this worker. |
 
-## ES-P05 ReportStore repair evidence
+## ES-P02 terminal result
 
-### Hosted regression and root cause
+ES-P02 is complete. The exact implementation head passed fresh hosted validation, static analysis, review, and the complete canonical public→private Pi route. The successful Pi execution verified exact provenance, guarded disposable database setup, two Paper starts, V18 initialization/persistence, SHADOW_MIGRATION operator state, clean shutdown/reap, final database cleanup, sanitized evidence upload, and public transfer cleanup. PR #70 then merged through a normal merge commit, containment was verified, and GitHub removed the merged implementation branch.
 
-The current public hosted regression belonged to ES-P05 because the failing behavior was inside its report lifecycle/evidence contract and existing PR #81 already owned that work.
+Earlier exact-head attempts that ended in a shared-host SIGKILL and a rerun-attempt manifest mismatch remain historical failure evidence only. Neither is represented as a passing gate.
 
-The two failures were:
+## Stop boundary
 
-- `ReportStoreIntegrationTest.stateLifecycleEnforcesAssignmentRevisionAndQueues()` — expected queue membership `true`, observed `false`;
-- `ReportStoreIntegrationTest.duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` — expected two evidence rows, observed zero.
-
-The shared root cause was the integration fixture's fixed `NOW = 2026-08-01T12:00:00Z`. The production report policy uses seven-day evidence retention and a seven-day recently-closed window, while production queries correctly compare against the real database/system clock. By 2026-08-09 the fixture rows had legitimately expired/aged out.
-
-The repair changed only the test fixture clock to current time minus 60 seconds, truncated to microseconds. Existing explicit nine-day-old purge coverage remains expired. No `ReportStore`, persistence query/state/transaction, policy, schema, or Flyway behavior was changed for the two failures.
-
-### Branch synchronization and review
-
-PR #81's old product head was synchronized with current main through two-parent merge commit `5d78a9621f7cc3e5f056b417af88424eaa26e555`; no rebase or force-push. Final reviewed/hosted head is `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`, zero behind starting main.
-
-CodeRabbit found three valid privacy/authorization/bounds issues in the resumed feature diff. All were fixed: delivery-time sensitive-permission recheck, scalar-only client evidence fields, and bounds on every rendered chat text field. All three review threads are resolved and CodeRabbit status is green.
-
-### Exact-head hosted proof
-
-On exact final head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`:
-
-- Wiki run `31301427600`, job `93214726543`: success;
-- Coverage run `31301427623`, job `93214731253`: success on Java 21 with full build/tests, MariaDB/Testcontainers, migration validation, aggregate coverage, runtime-JAR inspection and artifact/Codacy upload;
-- Codacy static `93214975215`: success, zero issues;
-- Codacy diff coverage `93215398455`: success, 47.37%, no configured gate;
-- zero valid unresolved review threads.
-
-Because the complete integration suite passed, both originally failing ReportStore methods pass on the final head. A separate local focused run is not claimed because the reset execution environment had no checkout/network access.
-
-### Canonical Pi state
-
-Automatic public Pi Staging run `31301426684` is exact-head evidence for `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`:
-
-- public build job `93214729981`: success, including exact runtime artifact generation/upload;
-- bridge job `93215481473`: exact artifact download and bounded transfer succeeded; private workflow dispatch and correlation succeeded;
-- correlated private run `31301734048`, title `EnthusiaStaff bridge 31301426684-1 / ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`;
-- private job `93215499833`: queued with `runner_id: 0`, empty runner name, zero steps at terminal publication time.
-
-A private run therefore genuinely exists, but no private prerequisite, database reset, Paper boot, plugin enablement, Flyway, restart, persistence, process-reap, or cleanup assertion executed. This is temporary Pi runner/environment unavailability, **not a Pi product failure and not a staging pass**. No duplicate retry or direct private dispatch was issued.
-
-Sentinel is non-applicable because the PR head has no `.enthusia-test.yml` manifest.
-
-## ES-R01 terminal evidence
-
-### Checkpoint merge and exact-head quality
-
-PR #94 frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`:
-
-- Coverage run `31252575675`, job `93091088422`: success on Java 21 with full build/tests/runtime inspection/aggregate coverage;
-- Codacy static `93091169010`: success;
-- Codacy diff coverage `93091677173`: success;
-- Codacy coverage variation `93091677101`: success;
-- CodeRabbit: success after one valid terminal-status sequencing finding was accepted, fixed, and resolved;
-- normal merge commit `689ff337dd8a33f0bd417d952a7cad5581cb9d9e` has exactly two parents, pre-merge `main` `094838fa221476e0832cf821f7b4908b9402d0d9` and frozen head `3f90ae4e96e969a7ceac45ee9a385f068c0af14a`;
-- compare frozen head → merge: one commit ahead, zero behind, no file differences;
-- the public checkpoint branch was automatically deleted after merge.
-
-### Required fresh current-main proof
-
-Public Pi Staging run `31252997554`, exact source `689ff337dd8a33f0bd417d952a7cad5581cb9d9e`:
-
-- public build job `93092131811` succeeded on ordinary GitHub-hosted `ubuntu-latest` with Java 21 and uploaded the verified runtime package;
-- bridge job `93092964130` successfully required the token, downloaded the exact artifact, published bounded transient transfer, dispatched/correlated the private run, collected failure diagnostics, and removed the transient transfer; its final result is failure, correctly reflecting private staging failure;
-- private run `31253345564` on staging control SHA `4036d6e915c2d751bef18849107722dfd1e586a6`;
-- private job `93092978141` allocated trusted `Lincoln-PI-4`, runner ID `2`;
-- runner identity and exact public bridge artifact verification succeeded;
-- `Run guarded disposable Paper boot and restart test` failed; runtime acceptance therefore did not pass;
-- sanitized evidence upload succeeded as artifact `9020680419`, digest `sha256:5647d2458ab4b1d594e86030d9ffe1a89ac50609093417d3fcb617ecf5b1b677`;
-- this current-main run's step metadata does not expose a fresh SQLState, so none is invented. Earlier captured proof `31250170297` → private `31250450219` / `93085892938` established seven guarded connection attempts, all SQLState `08000`, before Paper boot.
-
-The current-main proof is **NOT A PASS**. It confirms that the repository-side bridge works through exact provenance and trusted Pi allocation while mandatory guarded runtime acceptance remains unavailable at the same external disposable-database boundary. No safe repository-side implementation remains.
-
-## Classification snapshot
-
-- `ES-R01`: terminal `BLOCKED` / `PARKED_BLOCKED`. Resume only after material evidence of the exact database unblock condition.
-- `ES-P02`: `PARKED_BLOCKED`. Open PR #70 and branch drift do not make it actionable. Resume only after ES-R01 is `COMPLETE`.
-- `ES-P05`: `BLOCKED` / `PARKED_BLOCKED`; hosted defect fixed and review/hosted gates green, but canonical Pi runtime has zero execution because the correlated self-hosted job is unallocated.
-- `ES-P07`, `ES-P06`, `ES-P08`, `ES-X01`, `ES-X02`, `ES-X03`, `ES-X04`, and `ES-QA01`: dependency-blocked planned work.
-- `ES-V01`, `ES-V02`, `ES-V03`, and `ES-A01`: deferred private/acceptance work under their existing contracts. Issue #43 is still open and does not authorize production cutover.
-
-## Resume boundary
-
-Do not manually rerun the identical ES-R01 staging failure merely because time passed or documentation changed. Material evidence must first show that the existing authorized disposable staging MariaDB endpoint is reachable from `Lincoln-PI-4`. After that change, resume ES-R01 before any new package and require a fresh exact-current-main proof through public build, exact private provenance, guarded pre-reset, Paper boot cycle 1, restart/cycle 2, guarded post-reset, sanitized evidence, correlated public success, and transfer cleanup. Only then mark ES-R01 complete. Do not begin ES-P02 in that same worker.
-
-For ES-P05, first inspect the already-correlated public/private runs before any new staging attempt. If private run `31301734048` later completes, use that exact result. Do not create a duplicate run merely because time passed. If the global package priority remains otherwise unchanged and ES-R01 is still parked on its exact external condition, a material ES-P05 run-state change can make ES-P05 an actionable continuation under normal live classification.
-
-## Safety boundaries
-
-No production data/configuration, credentials, punishment/player records, raw addresses, private databases, deployment, Flyway repair/history rewrite, LiteBans removal, issue #43 acceptance, production migration/cutover, ES-V02 execution, or unrelated package implementation is authorized by this terminal-state publication.
+After the documentation-only ES-P02 completion record is merged and verified, this worker stops. It does not implement, stage, merge, or otherwise advance ES-P05 or ES-P07.

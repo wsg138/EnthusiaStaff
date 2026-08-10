@@ -2,20 +2,18 @@
 
 Current package handoff:
 
-[`2026-08-09-es-p05-reportstore-repair-blocked-pi.md`](../package-handoffs/2026-08-09-es-p05-reportstore-repair-blocked-pi.md)
+[`2026-08-09-es-p02-runtime-database-recovery-complete.md`](../package-handoffs/2026-08-09-es-p02-runtime-database-recovery-complete.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P05 — Report evidence and staff workflow completion` is currently `BLOCKED` / `PARKED_BLOCKED` on PR #81 at reviewed/hosted-validation head `ebfbaa31d3de2b6a28b9dcbaf2c4366ee8e801e2`.
+`ES-P02 — Runtime database recovery and Velocity reload` is terminal `COMPLETE`.
 
-The two hosted `ReportStoreIntegrationTest` failures were caused by a stale fixed integration-test clock (`2026-08-01T12:00:00Z`) crossing the live seven-day evidence-retention and recently-closed windows. The fixture now uses current time minus one minute at microsecond precision. Production `ReportStore` persistence/query/state/transaction behavior and V18 were not changed for this repair.
+Frozen implementation head `90f78f902a25039515d883ca96a1b72c2265418d` passed fresh exact-head Coverage `31342778279` / job `93319183473`, Codacy static `93313758400` with zero annotations, and zero valid unresolved review threads.
 
-Final exact-head hosted evidence is green: Wiki run `31301427600` / job `93214726543`; Coverage run `31301427623` / job `93214731253` with Java 21 full build/tests, MariaDB/Testcontainers, migration validation, coverage and runtime-JAR inspection; Codacy static `93214975215` with zero issues; Codacy diff coverage `93215398455` success at 47.37%. CodeRabbit found three valid privacy/authorization/bounds issues in the resumed ES-P05 feature diff; all were fixed and all review threads are resolved.
+Fresh canonical Pi public run `31342778432` passed trusted build `93319183919` and bridge `93319918461`. Correlated private run `31343077935` / job `93319937672` succeeded on trusted `Lincoln-PI-4`, runner ID `2`, including exact provenance, guarded disposable database setup, two Paper starts, Flyway V1–V18 initialization and schema-v18 restart persistence, SHADOW_MIGRATION readiness, clean shutdown/reap, final database cleanup, sanitized evidence artifact `9046774374` (`sha256:d51574d879a0c3271947d9d1422bc27b24d006703a0e659b7132c0228c4d1ac6`), and public transient-transfer cleanup.
 
-Automatic Pi Staging run `31301426684` reached farther than the prior public-build failures: public build job `93214729981` succeeded and uploaded the exact runtime artifact; bridge job `93215481473` dispatched and correlated private run `31301734048`. Private job `93215499833` has not executed: at terminal publication time it is queued with `runner_id: 0`, empty runner name, and zero steps because `Lincoln-PI-4` has not accepted it. Therefore this is temporary Pi runner/environment unavailability, **not** a Pi product failure and **not** a staging pass.
+PR #70 merged normally as `df9f4bf39ceda3911b7c084ac0c2caa188b82c7c`. Exact feature-head containment is verified and no open PR depends on the implementation branch. ES-P02 added no migration; V18 remains current/immutable. Issue #43 remains deferred and LiteBans remains authoritative.
 
-Do not issue a duplicate retry merely because time passed. First inspect public run `31301426684` and private run `31301734048`; if the existing run later completed, use its actual terminal result. When the self-hosted environment materially becomes available, complete canonical Pi validation on the exact current merge candidate, then merge PR #81 normally if all gates remain green, verify containment, publish `COMPLETE`, clean the branch, and stop.
-
-Sentinel is non-applicable to the current ES-P05 head because no `.enthusia-test.yml` manifest exists. V18 remains immutable/current, issue #43 remains open/deferred, and LiteBans remains authoritative.
+Dependency-derived routing after ES-P02: `ES-P07` is `READY`, but existing `ES-P05` PR #81 is the highest-priority `ACTIONABLE_CONTINUATION` and must be resumed first by the next sequential worker. This worker does not start either package.
