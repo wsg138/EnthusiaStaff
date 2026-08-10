@@ -16,9 +16,11 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 
 `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
 
-`ES-V01 — Private LiteBans representative-data verification` completed on final frozen PR head `de39e30232df9bd44d4b4df54a8922e815bada76`. PR `#110` merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`; containment is proven and GitHub auto-deleted `package/es-v01-litebans-private-verification`. The private LiteBans database remained local. The seven malformed/rejected rows remain a later data-policy decision and were not silently repaired, discarded, or rewritten.
+`ES-P07 — Inventory and Ender editing runtime completion` is `ACTIVE` on `package/es-p07-inventory-runtime`. The 2026-08-10 sequential worker reconciled live GitHub, found no actionable continuation, verified no existing ES-P07 branch/PR/work, and selected ES-P07 as the lowest-priority-number dependency-complete READY package. Starting `main` is `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
 
-`ES-P07` and `ES-P06` are `READY`. With ES-V01 terminal, `ES-P07` is the highest-priority next package at priority 45. This ES-V01 worker must stop without activating it. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`: its dependencies are complete, but the required supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved.
+`ES-P06` remains `READY` behind the active package. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`: its dependencies are complete, but the required supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved. All other incomplete packages remain parked on their documented dependency or external conditions.
+
+`ES-V01 — Private LiteBans representative-data verification` remains terminal `COMPLETE` on final frozen PR head `de39e30232df9bd44d4b4df54a8922e815bada76`. PR `#110` merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`; containment is proven and GitHub auto-deleted `package/es-v01-litebans-private-verification`. The private LiteBans database remained local. The seven malformed/rejected rows remain a later data-policy decision and were not silently repaired, discarded, or rewritten.
 
 ## Canonical package index
 
@@ -31,22 +33,33 @@ Live GitHub overrides stale text. Historical evidence is retained in each packag
 | `ES-P03` | Bedrock identity correctness | `COMPLETE` | — | 30 | ordinarily `ES-P02`; owner-directed narrow exception | merged PR #75 as `b960e91ea59627a870ff24f89c2f761d0cbb68ab` |
 | `ES-X05` | Website UX, authentication, and appeals | `COMPLETE` | — | 35 | `ES-P01` | merged PR #74 as `2bcf5d46ca6471fddac600f85020c66105b1c0f2` |
 | `ES-P04` | Staff-mode operational tools | `COMPLETE` | — | 40 | `ES-P03` | merged PR #79 as `a530b992232a8a08cbbd13b0eed6606228ceb652` |
-| `ES-P07` | Inventory and Ender editing runtime completion | `READY` | `READY` | 45 | `ES-P02` | dependency complete; highest-priority next package after ES-V01 terminal publication |
+| `ES-P07` | Inventory and Ender editing runtime completion | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 45 | `ES-P02` | generic sequential worker; branch `package/es-p07-inventory-runtime`; start `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`; active handoff `2026-08-10-es-p07-inventory-runtime-active.md` |
 | `ES-P05` | Report evidence and staff workflow completion | `COMPLETE` | — | 50 | `ES-P03`, `ES-P04` | frozen head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`; PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856` |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | merged PR #84 as `a88201524690848f778297f140f7ee2ba5b6ce36`; representative-network acceptance remains ES-V02 |
-| `ES-P06` | Discord notification delivery completion | `READY` | `READY` | 60 | `ES-P05` | dependency complete; follows lower-priority-number READY ES-P07 unless live state changes |
+| `ES-P06` | Discord notification delivery completion | `READY` | `READY` | 60 | `ES-P05` | dependency complete; do not activate while ES-P07 is active |
 | `ES-P08` | Item confiscation and restoration | `PLANNED` | `PARKED_BLOCKED` | 70 | `ES-P07` | dependency blocked until ES-P07 completes |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 as `e605d8ad6094b2ae6842044d209875e13c38906d`; representative acceptance remains ES-V02 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 as `6cd293d9f1abc3ca6ca8b70e953da936f4a22ab0`; representative acceptance remains ES-V02 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | dependencies complete, but supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved; do not invent an API or repository |
 | `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | `PARKED_BLOCKED` | 110 | `ES-P08` | dependency blocked |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | dependencies blocked |
-| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependencies blocked |
+| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependency blocked |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | final head `de39e30232df9bd44d4b4df54a8922e815bada76`; PR #110 merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`; contained and branch cleaned |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | incomplete dependencies plus representative distributed/Java/Bedrock private staging required |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | incomplete destructive-provider dependencies plus private acceptance required |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V01 complete, but ES-V02/ES-V03 plus owner authorization and issue #43 are still required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
+
+## ES-P07 active record
+
+- Selection-time `main`: `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
+- Selection-time open EnthusiaStaff PRs: none.
+- Selection-time ES-P07 branch/commit: none; `package/es-p07-inventory-runtime` was created exactly from the starting `main` head.
+- Classification: newly READY at selection, then `ACTIVE` / `ACTIONABLE_CONTINUATION` after claim.
+- Canonical active handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`.
+- Scope is inventory/Ender runtime completion only. ES-P08 confiscation, external destructive providers, production data and ES-V02 representative private distributed/Bedrock acceptance remain excluded.
+- Migration boundary: V18 is current and immutable; no ES-P07 migration is presently planned.
+- Issue #43 remains deferred; LiteBans remains authoritative; no production data, credentials, infrastructure authority, shadow/cutover or deployment changed.
 
 ## `ES-P05` terminal record
 
@@ -96,6 +109,4 @@ This evidence belongs to ES-V01 because that package owns representative private
 
 ## Next sequential action
 
-ES-V01 is terminal `COMPLETE`. No package is active in this worker. A new sequential worker should reconcile live GitHub and then select `ES-P07 — Inventory and Ender editing runtime completion` as the highest-priority `READY` package if live state still agrees. `ES-P06` remains `READY` behind it; `ES-X01` remains blocked/parked.
-
-Do not activate ES-P07, ES-P06, ES-X01, or any other package in this ES-V01 terminal-publication worker.
+Complete only `ES-P07 — Inventory and Ender editing runtime completion` on `package/es-p07-inventory-runtime`. Do not activate ES-P06, ES-X01, ES-P08 or another package. If ES-P07 stops unmerged, publish its truthful persistent status to `main` through the required documentation-only status PR. After ES-P07 reaches `COMPLETE`, update dependency-derived statuses without activating a second package and stop.
