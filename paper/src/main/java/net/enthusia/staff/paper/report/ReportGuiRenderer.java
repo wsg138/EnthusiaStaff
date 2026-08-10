@@ -128,10 +128,8 @@ final class ReportGuiRenderer {
                 List.of(
                         Component.text("Server: " + summary.serverId(), NamedTextColor.GRAY),
                         Component.text("World: " + details.worldId().orElse("unavailable"), NamedTextColor.GRAY),
-                        Component.text("Reporter: " + details.reporterCoordinates().orElse("unavailable"),
-                                NamedTextColor.DARK_GRAY),
-                        Component.text("Target: " + details.targetCoordinates().orElse("unavailable"),
-                                NamedTextColor.DARK_GRAY)
+                        Component.text("Exact coordinates require the sensitive evidence permission and text view.",
+                                NamedTextColor.YELLOW)
                 )
         ));
         inventory.setItem(configuration.slot("detail-evidence"), item(
