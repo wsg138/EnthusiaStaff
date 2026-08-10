@@ -9,27 +9,33 @@ Live GitHub overrides stale records. This file records the current sequential-wo
 | Field | Value |
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02` |
-| Active/selected package | None after the ES-P05 completion-record PR merges. |
-| Exact next normal package | `ES-P07 — Inventory and Ender editing runtime completion`; `READY`, priority 45. |
-| Other newly/currently ready packages | `ES-P06 — Discord notification delivery completion` (`READY`, priority 60); `ES-X01 — RoseChat provider and communication integration` (`READY`, priority 100). Neither is activated by this worker. |
-| ES-P05 implementation | frozen head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`; PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`. |
+| Active/selected package | ES-P05 terminal routing correction only; no second implementation package is active. |
+| Highest-priority next continuation | `ES-V01 — Private LiteBans representative-data verification`; `PARTIAL` / `ACTIONABLE_CONTINUATION` because owner-provided private execution materially changed its former environment blocker and left local repository fix `22934e33` unpushed. |
+| Ready packages | `ES-P07 — Inventory and Ender editing runtime completion` (`READY`, priority 45) and `ES-P06 — Discord notification delivery completion` (`READY`, priority 60); both remain behind the ES-V01 actionable continuation. |
+| Parked provider package | `ES-X01 — RoseChat provider and communication integration`; `BLOCKED` / `PARKED_BLOCKED` because its dependencies are complete but the supported RoseChat standalone repository/default branch/source/AGENTS remain unresolved. |
+| ES-P05 implementation | frozen head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`; PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`; completion record PR #107 merged normally as `8d5b7dce21bba9c892e8219d0929fa5286aebbcc`. |
 | ES-P05 hosted proof | Wiki `31348316809` success; Coverage `31348316817` / job `93334330436` success; validation artifact `9048186426`, digest `sha256:62c9ad1cad86fa2e5189445a9a9ff5f5b6761f1b19d4c25ebacbea5860d4fff9`; Codacy static `93334591193` success with zero annotations; diff coverage 42.96%; coverage variation +0.03%. |
 | ES-P05 review state | CodeRabbit exact-head status success; all three historical substantive threads resolved; valid unresolved thread count zero. |
 | ES-P05 canonical Pi proof | public run `31348316060`: build `93334328455` success, bridge `93335216891` success; private run `31348651990` / job `93335243975` success on trusted `Lincoln-PI-4`, runner ID `2`. |
 | ES-P05 private evidence | exact provenance/freshness PASS; guarded disposable DB pre-reset PASS; two Paper starts; V1–V18 then schema-v18 restart; 2/2 storage-ready cycles in `SHADOW_MIGRATION`; clean shutdown markers; zero failure scans; post-reset PASS; artifact `9048272564`, digest `sha256:55f61484144ef1911e81678ba26d6ca910d915375f0a0425f9d707a4d8904234`. |
-| ES-P05 containment/cleanup | feature head is fully contained in merge commit (`ahead_by=1`, `behind_by=0`, no file delta); GitHub auto-deleted `package/es-p05-report-workflow`. |
-| Migration boundary | V18 remains current and immutable; ES-P05 added no migration. |
-| Provider boundary | RoseChat PM evidence remains ES-X01; Discord route delivery remains ES-P06; representative distributed/Bedrock acceptance remains ES-V02. |
-| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative; no production data/infrastructure/authority/deployment/cutover change. |
-| External parity | Not applicable for ES-P05; all implementation work was internal to `wsg138/EnthusiaStaff`. |
-| Exact next sequential-worker action | Reconcile live GitHub and classify all incomplete packages again. Absent a new actionable continuation, select ES-P07 as the lowest-priority-number dependency-complete READY package. Do not treat this terminal publication as activation of ES-P07, ES-P06 or ES-X01. |
+| ES-P05 containment/cleanup | feature head is fully contained in merge commit (`ahead_by=1`, `behind_by=0`, no file delta); GitHub auto-deleted `package/es-p05-report-workflow`. External parity is not applicable. |
+| LiteBans private-evidence routing | Sanitized owner evidence belongs to ES-V01. Local commit `22934e33 Support UUID-only LiteBans sanctions` is not on GitHub and must be preserved/reproduced by the next ES-V01 worker. The private database stays local. Seven malformed/rejected rows remain a separate data-policy decision. |
+| Migration boundary | V18 remains current and immutable; ES-P05 added no migration. The owner-provided LiteBans compatibility repair does not alter Flyway history. |
+| Production boundary | issue #43 remains open/deferred; LiteBans remains authoritative; no production data/infrastructure/authority/deployment/shadow/cutover change. |
+| Exact next sequential-worker action | Resume ES-V01 through the canonical package system, preserve/reproduce `22934e33` on the correct package branch, review the actual diff, retain synthetic UUID-only regression coverage and run normal exact-head validation. Do not activate ES-P07, ES-P06 or ES-X01 first. |
 
 ## ES-P05 terminal result
 
-ES-P05 is complete. The worker resumed the existing PR after the canonical bridge freshness/provenance unblock condition materially changed, synchronized legitimate `main` without scope expansion, froze exact head `9e6d5f8afc120b76f5f396a2e3e279bc5f851c85`, re-reviewed the eight-file live diff, and obtained fresh hosted/static/review/canonical public→private Pi proof on that exact SHA. PR #81 then merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`; containment and safe implementation-branch deletion were verified.
+ES-P05 is complete. The final implementation head passed exact hosted/static/review/canonical public→private Pi proof and PR #81 merged normally. The implementation branch was safely auto-deleted after containment. A concurrent documentation-only completion record then merged as PR #107.
 
-The earlier final-candidate freshness failure remains historical failure evidence only. The successful final run did not weaken provenance/freshness or bypass the public→private route.
+This correction exists only because the owner-provided LiteBans evidence was not available to that concurrent finalizer and because live provider reconciliation still shows the RoseChat repository unresolved. No ES-P05 product code, tests, migration, runtime configuration or workflow is changed here.
+
+## Owner-provided LiteBans evidence boundary
+
+The supplied private local run used the repository migration service against a private MariaDB 10.11.6 LiteBans copy. It found a UUID-only ban/mute compatibility defect and produced local fix `22934e33`. After the fix, 153 supported sanctions imported and replayed idempotently without duplicate cases/events or mapped timestamp/expiry mismatches. No private database or row data is stored here.
+
+The seven rejected malformed source/history rows remain unresolved policy input before rehearsal; they do not authorize silent skipping or rewriting. Production cutover, issue #43 acceptance, real shadow migration and punishment-authority changes remain prohibited without separate owner authorization.
 
 ## Stop boundary
 
-After the documentation-only ES-P05 completion record is merged and verified, this worker stops. It does not implement, stage, merge, or otherwise advance ES-P07, ES-P06, ES-X01, or any other package.
+After this documentation-only routing correction is merged and verified, the ES-P05 worker stops. It does not begin, prepare, stage or partially implement ES-V01 or any other package.
