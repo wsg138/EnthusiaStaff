@@ -54,11 +54,13 @@ public final class InventoryImageCodec {
         if (uniqueSlots.contains(null)) {
             throw new IllegalArgumentException("logicalSlots must not contain null");
         }
-        PlayerInventory inventory = player.getInventory();
         for (int logicalSlot : uniqueSlots) {
             if (logicalSlot < 0 || logicalSlot >= InventoryImage.TOTAL_SLOTS) {
                 throw new IllegalArgumentException("logical inventory slot is out of range");
             }
+        }
+        PlayerInventory inventory = player.getInventory();
+        for (int logicalSlot : uniqueSlots) {
             ItemStack replacement = image.item(logicalSlot);
             if (logicalSlot <= InventoryImage.OFFHAND_SLOT) {
                 inventory.setItem(logicalSlot, replacement);
