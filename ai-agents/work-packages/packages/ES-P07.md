@@ -4,7 +4,7 @@
 `ES-P07`; Internal; primary `COMP-STAFF`; priority 45; conditionally parallel only after lifecycle files are stable.
 
 ## 2. Status
-`ACTIVE`; implementation, required direct wiring coverage, substantive CodeRabbit fixes, Codacy fixes and repeated harsh review are complete; tracked content is being re-frozen for exact-head validation. Branch `package/es-p07-inventory-runtime`; ready-for-review PR `#112`; starting `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`.
+`ACTIVE` / `ACTIONABLE_CONTINUATION`; implementation and substantive review fixes are complete. Branch `package/es-p07-inventory-runtime`; ready-for-review PR `#112`; original starting `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`. Current `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` was normally merged into the package branch before final validation. Synchronized candidate `562e8647063c3fa09b4349d167dc41d1a1660553` is now superseded by two valid final CodeRabbit findings described below; the commit containing those fixes is the new immutable validation candidate.
 
 ## 3. Objective
 Complete safe online/offline inventory and Ender viewing/editing, revisions, locks, queued patches, server scopes, and runtime recovery.
@@ -28,15 +28,15 @@ Item confiscation/restoration completion (`ES-P08`); production player data; pro
 Root inventory/domain/persistence/Paper/Velocity/tests/docs only. No external component import or permanent/isolated branch model.
 
 ## 10. Required branches
-Temporary `package/es-p07-inventory-runtime`; created from exact `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`. Delete only after verified merge containment and no unique package work.
+Temporary `package/es-p07-inventory-runtime`; created from exact `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`, later synchronized by a normal merge from current `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5`. Delete only after verified merge containment and no unique package work.
 
 ## 11. Required PRs
-One PR to `wsg138/EnthusiaStaff:main`: ready-for-review PR `#112`.
+One implementation PR to `wsg138/EnthusiaStaff:main`: ready-for-review PR `#112`.
 
 ## 12. Implementation checklist
 - [x] Reconcile live GitHub, open/draft PRs, package branches, issue #43, provider resolution and default heads.
-- [x] Select ES-P07 through canonical continuation/parked/ready rules.
-- [x] Claim exact branch and publish active handoff/routing state.
+- [x] Select ES-P07 through canonical continuation/parked/ready rules and resume it when the Pi unblock condition materially changed.
+- [x] Preserve and reconcile the existing implementation branch/PR rather than starting duplicate work.
 - [x] Trace command/GUI/journal/scope paths, Paper lifecycle ownership, Velocity switch fences, shared confiscation callers and current tests.
 - [x] Replace stale full-image player writes with exact logical dirty-slot application across storage, armor, offhand and Ender slots.
 - [x] Validate every deduplicated dirty logical slot before obtaining/mutating player inventory state, preventing partial application when a later slot is invalid.
@@ -44,18 +44,20 @@ One PR to `wsg138/EnthusiaStaff:main`: ready-for-review PR `#112`.
 - [x] Make same-operation APPLYING lease replay idempotent without weakening competing-operation fencing.
 - [x] Close additional login-recovery mutation windows for damage/resurrection, consume/durability/mending, entity interaction and Paper pick/equipment-swap paths.
 - [x] Add unit and MariaDB/Testcontainers regression coverage for snapshot bounds, slot-set validation and lease replay invariants.
-- [x] Verify direct permission-policy tests cover view/edit rank separation and add direct structural wiring coverage for `invsee`/`endersee`, authoritative target lookup, entity-scheduler handoff and GUI edit gating.
+- [x] Verify direct permission-policy tests cover view/edit rank separation and add structural wiring coverage for `invsee`/`endersee`, authoritative target lookup, entity-scheduler handoff and GUI edit gating.
+- [x] Strengthen the wiring test so both permission nodes must explicitly contain a non-null `default` field before asserting that the defaults are false.
 - [x] Update inventory operational/Wiki documentation without overclaiming private acceptance.
-- [x] Harsh-review the product diff; fix the valid CodeRabbit partial-mutation defect; repeat review; resolve all valid review threads.
-- [x] Inspect exact-head Codacy annotations and remove unnecessary method-level synchronization from the encode-local bounded byte stream; no lock is required because each stream instance is confined to one `encode` invocation.
-- [ ] Freeze the resulting tracked head and validate that exact revision through all applicable hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi gates.
+- [x] Fix the valid CodeRabbit partial-mutation defect and exact-head Codacy synchronization warnings.
+- [x] Normally merge current `main` into the package branch to restore mergeability without changing the reviewed ES-P07 product tree.
+- [x] Re-run harsh review after synchronization and fix the two still-valid final CodeRabbit findings: explicit permission-default presence coverage and stale tracked freeze-state wording.
+- [ ] Validate the resulting immutable head through every required exact-head hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi gate.
 - [ ] Merge normally only after exact-head evidence is complete, prove containment/divergence, clean the branch safely and publish terminal state.
 
 ## 13. Acceptance criteria
 Authorized viewers/editors cannot overwrite stale state; all requested logical slots validate before any mutation; online changes occur on the correct entity thread; offline patches are atomic/idempotent; unrelated live slots are not overwritten by stale mirrors; nested item bytes are preserved; backend ownership/switching is fenced; recovery does not duplicate or lose items.
 
 ## 14. Test requirements
-Existing tests cover inventory image shape/change detection, command outer permissions, authoritative rank permission inheritance, journals, patch decisions, locks/revisions, quarantine and recovery foundations. ES-P07 adds aggregate snapshot-bound tests, mixed-valid/invalid logical-slot validation coverage, MariaDB/Testcontainers same-owner APPLYING-lease replay coverage, and `InventoryWorkflowWiringTest` proving both inventory commands bind to one workflow, preserve authoritative directory/entity-scheduler routing, and keep view/edit GUI authority separate. Representative multi-backend/Bedrock/large-private-inventory acceptance remains ES-V02.
+Existing tests cover inventory image shape/change detection, command outer permissions, authoritative rank permission inheritance, journals, patch decisions, locks/revisions, quarantine and recovery foundations. ES-P07 adds aggregate snapshot-bound tests, mixed-valid/invalid logical-slot validation coverage, MariaDB/Testcontainers same-owner APPLYING-lease replay coverage, and `InventoryWorkflowWiringTest` proving both inventory commands bind to one workflow, preserve authoritative directory/entity-scheduler routing, keep view/edit GUI authority separate, and explicitly declare non-null default-false metadata for both permissions. Representative multi-backend/Bedrock/large-private-inventory acceptance remains ES-V02.
 
 ## 15. Static-analysis requirements
 All configured Java/static-analysis/review-bot gates with zero valid unresolved findings on the final frozen head.
@@ -79,26 +81,26 @@ Velocity already fences backend switches on durable inventory locks and Paper sc
 No external destructive provider work was added. Shared confiscation/restoration callers of `InventoryImageCodec.apply` were reviewed only to preserve their existing checksum/lock semantics; ES-P08 behavior was not implemented here.
 
 ## 22. Completion definition
-Development/runtime scope must be exact-head validated and merged in one implementation PR; no valid review threads; containment/cleanup verified; representative private acceptance remains deferred.
+Development/runtime scope must be exact-head validated and merged in one implementation PR; no valid review threads; containment/cleanup verified; representative broader private acceptance remains deferred where assigned to ES-V02.
 
 ## 23. Resume state
-Generic sequential worker remains on `package/es-p07-inventory-runtime`; PR `#112`; start `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`.
+Generic sequential worker remains on `package/es-p07-inventory-runtime`; PR `#112`; original start `17fb50d02fdc35cffd1cbdc63e28f72cffd88315`; synchronized target main `2d8fcf27b0bac980211149ae8f7f4e7798998ee5`. Canonical active handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md`.
 
 ## 24. Last completed checkpoint
-Implementation, documentation, direct wiring coverage and repeated harsh review are complete. Intermediate sanity head `321a50f3ca120dba7d7e21542450d4d527dabbd3` passed Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR inspection, aggregate JaCoCo/Codacy upload, Wiki and Sentinel artifact sanity checks.
+Product implementation is complete. The branch was normally synchronized with current `main` as merge commit `562e8647063c3fa09b4349d167dc41d1a1660553`, restoring PR mergeability without changing ES-P07 product files. Exact hosted validation on that synchronized candidate passed Java 21 clean/full tests, MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo, Codacy coverage upload and Wiki; CodeRabbit then found two valid final-review issues. The permission metadata test now distinguishes missing `default` fields from explicit `false`, and the tracked package/workspace/handoff state now marks `562e864...` and every earlier head as superseded rather than final.
 
-Freeze `c3545612d370ea237a63394e6a0401edbe650790` was superseded by the direct command/GUI wiring test. Freeze `6c7ec06622b8ee20d00aa3839e5741f44a0f1976` was superseded by the valid CodeRabbit partial-mutation finding. Freeze `2c0ad0543f9f39f242e8a75c532a77ca2afb52de` was superseded when exact-head Codacy static analysis reported two valid warnings on method-level synchronization in the encode-local bounded stream. Those `synchronized` modifiers were removed rather than replaced with unnecessary locks. Every gate tied to those superseded heads remains non-final evidence.
+Earlier sanity/freeze heads `321a50f3ca120dba7d7e21542450d4d527dabbd3`, `c3545612d370ea237a63394e6a0401edbe650790`, `6c7ec06622b8ee20d00aa3839e5741f44a0f1976`, `2c0ad0543f9f39f242e8a75c532a77ca2afb52de`, `b34aade6ae79c7aaada0ada3c87970f937b6db6a`, and `562e8647063c3fa09b4349d167dc41d1a1660553` are all non-final evidence. No result bound to them may be used for final acceptance.
 
-The first recovery-guard compile attempt failed because two Paper events were imported from the Bukkit namespace; the imports were corrected to `io.papermc.paper.event.player`. Exact-head Sentinel attempts on `2c0ad054...` also failed infrastructure resource preconditions (637 MB available versus 700 MB required); those failures are not Paper restart passes. No failed or superseded run is relabeled as passing evidence.
+The first recovery-guard compile attempt remains non-passing. The old synchronized-head canonical Pi attempt and Sentinel job 83 are also superseded by this review-fix commit even if they later execute; final acceptance requires fresh evidence for the resulting head.
 
 ## 25. Remaining checklist
-Complete current handoff/workspace records; take the resulting PR head as the new immutable freeze; require exact frozen-head hosted build/test, static-analysis/coverage, review-thread, Sentinel restart and canonical Pi evidence; merge normally only if unchanged and fully green; verify containment/divergence/cleanup; publish COMPLETE state and dependency-derived routing; stop without starting another package.
+Treat the commit containing this review correction as the new immutable freeze. Require fresh exact-head Java 21 build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, Wiki, configured static analysis/coverage, CodeRabbit/reviewer completion with zero valid unresolved threads, Sentinel exact artifact plus terminal `PAPER_RESTART_OK`, and canonical automatic public→private Pi evidence with correlated provenance/restart/MariaDB/Flyway/cleanup. Merge normally only if unchanged and fully green; then verify containment/divergence/cleanup, publish COMPLETE state and dependency-derived routing, and stop without starting another package.
 
 ## 26. Known blockers
-No current product blocker. Sentinel previously observed a transient Pi resource precondition below its 700 MB threshold; do not repeat the identical restart gate until evidence shows the host resource condition changed. Representative private large-inventory/Java-Bedrock/distributed acceptance remains intentionally deferred to `ES-V02` and is not a blocker to ES-P07 development completion.
+No product blocker remains. Runtime execution depends on the shared Pi becoming available and meeting the existing Sentinel resource gate. Do not cancel or interfere with unrelated legitimate Sentinel or Staging jobs. A queued, stale, wrong-head, cancelled or superseded runtime result is not a pass.
 
 ## 27. Final evidence
-Pending the new frozen head produced after the Codacy fix. All prior validation heads are superseded and may not be cited as final acceptance.
+Pending fresh exact-head evidence for the immutable head produced by this review-fix checkpoint. The synchronized predecessor `562e8647063c3fa09b4349d167dc41d1a1660553` has useful diagnostic passing hosted evidence but is explicitly superseded and cannot be final acceptance.
 
 ## 28. Merge and synchronization record
-Unset pending completion: normal merge/resulting `main`, containment/divergence, temporary branch cleanup; external parity not applicable.
+Current `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` was normally merged into the package branch as `562e8647063c3fa09b4349d167dc41d1a1660553`. Final implementation merge/resulting `main`, containment/divergence and temporary branch cleanup remain unset pending the new exact-head gates. External parity is not applicable for internal `COMP-STAFF` scope.

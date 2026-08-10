@@ -60,8 +60,14 @@ final class InventoryWorkflowWiringTest {
         JsonNode commands = metadata.path("commands");
         assertEquals(VIEW_PERMISSION, commands.path("invsee").path("permission").asText());
         assertEquals(VIEW_PERMISSION, commands.path("endersee").path("permission").asText());
-        assertFalse(metadata.path("permissions").path(VIEW_PERMISSION).path("default").asBoolean());
-        assertFalse(metadata.path("permissions").path(EDIT_PERMISSION).path("default").asBoolean());
+
+        JsonNode permissions = metadata.path("permissions");
+        JsonNode viewPermission = permissions.path(VIEW_PERMISSION);
+        JsonNode editPermission = permissions.path(EDIT_PERMISSION);
+        assertTrue(viewPermission.hasNonNull("default"));
+        assertTrue(editPermission.hasNonNull("default"));
+        assertFalse(viewPermission.path("default").asBoolean());
+        assertFalse(editPermission.path("default").asBoolean());
     }
 
     private static String normalizedSource(Path source) throws IOException {
