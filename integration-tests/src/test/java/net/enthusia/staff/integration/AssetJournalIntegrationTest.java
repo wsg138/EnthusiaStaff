@@ -141,12 +141,15 @@ class AssetJournalIntegrationTest {
             ).orElseThrow();
             assertEquals(InventoryOperationState.APPLYING, claimed.state());
             assertTrue(claimed.fencingToken() > original.fencingToken());
-            assertTrue(store.claimForApply(
+            InventoryPatch replayedClaim = store.claimForApply(
                     original.patchId(),
                     operationId,
                     LEASE,
                     NOW.plusSeconds(5)
-            ).isEmpty());
+            ).orElseThrow();
+            assertEquals(InventoryOperationState.APPLYING, replayedClaim.state());
+            assertEquals(claimed.patchId(), replayedClaim.patchId());
+            assertEquals(claimed.fencingToken(), replayedClaim.fencingToken());
 
             assertEquals(
                     InventoryFinalizeResult.Status.FENCE_LOST,
