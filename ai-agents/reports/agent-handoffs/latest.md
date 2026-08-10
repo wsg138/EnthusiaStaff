@@ -1,23 +1,21 @@
 # Latest AI handoff
 
-Current terminal package handoff:
+Current package handoff:
+
+[`2026-08-10-es-p07-inventory-runtime-blocked.md`](../package-handoffs/2026-08-10-es-p07-inventory-runtime-blocked.md)
+
+Prior terminal package handoff:
 
 [`2026-08-10-es-v01-private-litebans-representative-verification-complete.md`](../package-handoffs/2026-08-10-es-v01-private-litebans-representative-verification-complete.md)
-
-Prior ES-V01 execution handoff:
-
-[`2026-08-09-es-v01-private-litebans-representative-verification.md`](../package-handoffs/2026-08-09-es-v01-private-litebans-representative-verification.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-V01 — Private LiteBans representative-data verification` is terminal `COMPLETE`. Final frozen PR #110 head `de39e30232df9bd44d4b4df54a8922e815bada76` passed final exact-head Java 21/full tests and MariaDB/Testcontainers in Coverage `31353964138` / job `93349968412`; Codacy static `93347267178`; canonical public Pi run `31353964382` with build `93349969346` and bridge `93350945971`; and private run `31354311211` / job `93350973876` on trusted `Lincoln-PI-4`. The private run proved exact artifact/provenance, guarded disposable database reset, V1–V18 first boot, schema-v18 no-op restart, two `SHADOW_MIGRATION` storage-ready cycles, clean shutdowns/failure scans, cleanup, and sanitized evidence artifact `9050381344` (`sha256:34f77c0fe32fee5c79872daf9487371b17404f3308c4212b736b6f011a194bd0`).
+`ES-P07 — Inventory and Ender editing runtime completion` is `BLOCKED` / `PARKED_BLOCKED`. Preserve implementation PR #112 and `package/es-p07-inventory-runtime` at frozen reviewed head `b34aade6ae79c7aaada0ada3c87970f937b6db6a`.
 
-Substantive CodeRabbit review found valid routing/scope inconsistencies and a missing UUID-backed ban integration fixture; all were fixed in `de39e30232df9bd44d4b4df54a8922e815bada76`, all three substantive review threads are resolved/outdated and marked addressed, and valid unresolved count is zero. The later incremental CodeRabbit re-review was rate-limited and is not claimed as a second full review.
+Product implementation and exact-head hosted/static proof are complete: Java 21 full tests plus MariaDB/Testcontainers, Wiki, runtime-JAR/provider-leak inspection, aggregate coverage, Codacy zero-issue static analysis and CodeRabbit/review closure all passed. The package is not mergeable because both required Pi runtime gates remain externally unavailable: correlated private run `31426646043` / job `93579820065` is queued without runner assignment, and exact-head Sentinel restart job 75 is queued because host telemetry reports 120 MB available memory below the 700 MB gate and 82.3 C at/above the 80.0 C limit. No private Paper/MariaDB/Flyway execution and no terminal `PAPER_RESTART_OK` exist.
 
-PR #110 merged normally as `9a6c7240a4f6fffd216af0239709867b79080ddc`. The frozen feature head is fully contained as the merge commit's second parent with no unique feature-tree delta; GitHub auto-deleted `package/es-v01-litebans-private-verification`.
+Resume ES-P07 as `ACTIONABLE_CONTINUATION` before new READY work only when runner availability materially changes and Sentinel memory/temperature materially clears its resource gate. Do not spam identical gate reruns, do not merge PR #112 early, and do not call queued/failed/superseded evidence passing.
 
-The private LiteBans database remained local. Sanitized representative results remain: MariaDB 10.11.6, `litebans_`, 102 bans, 53 mutes, 1,747 history rows, 153 supported sanctions imported/replayed idempotently, zero mapped issue/expiry mismatches, and abandoned-run recovery passed. Seven rows remain explicit later data-policy input: 2 `INVALID_SOURCE_ROW` and 5 `INVALID_HISTORY_ROW`. Warnings/kicks remain intentionally unsupported/audit-only. No production shadow, migration, cutover, authority change, source rewrite, issue #43 activation, or Flyway rewrite occurred.
-
-No package became newly `READY` solely from ES-V01 completion. `ES-P07 — Inventory and Ender editing runtime completion` was already `READY` and is the highest-priority next package; `ES-P06` remains `READY`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`. A new sequential worker must reconcile live GitHub before selecting ES-P07. This ES-V01 terminal-publication worker must stop without starting another package.
+ES-P06 remains READY; ES-P08 remains blocked by ES-P07; ES-X01 remains parked on the unresolved supported RoseChat integration repository/source contract. V18 remains immutable. Issue #43 remains deferred and LiteBans authoritative. No production deployment/data/shadow/cutover/source rewrite occurred.
