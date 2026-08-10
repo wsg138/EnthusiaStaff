@@ -4,7 +4,7 @@
 `ES-V01`; Private validation; primary `COMP-STAFF`; priority 200; conditional execution on a private local/Codex machine.
 
 ## 2. Status
-Initial `DEFERRED`; registry is authoritative.
+`PARTIAL` / `ACTIONABLE_CONTINUATION`; registry is authoritative. Product branch: `package/es-v01-litebans-private-verification`. Product head: `ea07f55a`, reproduced from local repair `22934e33` on starting `main` `b78a62de3876bfde7fa5f57860fedc1415ef3c53`.
 
 ## 3. Objective
 Verify dormant migration behavior against a representative private LiteBans database without exposing data.
@@ -67,19 +67,19 @@ LiteBans is the source system; use verified schema inspection rather than assump
 All private scenarios conclusively run at a pinned revision, sanitized conclusions reviewed, no data leaked, and any optional evidence PR merged/cleaned.
 
 ## 23. Resume state
-Deferred/unassigned; no branch/PR/handoff. Start only with explicit assignment and private environment.
+Private execution and repair reproduction complete; hosted exact-head validation, review, PR merge, containment, and cleanup remain.
 
 ## 24. Last completed checkpoint
-Package definition only; no private DB accessed.
+At `ea07f55a`, the private representative source was exercised only through disposable local databases. The repair accepts UUID-only sanction rows when modern LiteBans omits name columns, while malformed source/history rows retain rejection behavior. Dry-run, import, replay, and abandoned-`RUNNING` recovery passed. No private rows, addresses, credentials, or reconstructable artifacts were tracked.
 
 ## 25. Remaining checklist
-Obtain local copy/environment; execute all scenarios; sanitize/review evidence; update registry/handoff.
+Complete exact-head hosted validation and review; publish a draft PR; resolve every valid finding; merge normally only after the package acceptance criteria and privacy review are satisfied. Keep the seven rejected rows as an explicit pre-rehearsal data-policy decision.
 
 ## 26. Known blockers
-Representative private database and local Codex/private-machine availability.
+No private-environment blocker remains. The remaining gates are hosted exact-head validation, review, PR merge, containment, and temporary-branch cleanup. Production shadow/cutover and the 168-hour authority window remain excluded.
 
 ## 27. Final evidence
-Unset: pinned heads/hashes, environment versions, sanitized counts/outcomes, test commands, privacy review.
+Sanitized private evidence: MariaDB 10.11.6 with `litebans_` tables; 102 bans, 53 mutes, and 1,747 history rows examined. At the reproduced repair head, 153 supported sanctions imported, then replayed without duplicate cases/events; issue/expiry values matched for mapped sanctions. A local abandoned `RUNNING` migration was recovered as failed before safe replay. Seven rows remained explicit rejections: 2 `INVALID_SOURCE_ROW` and 5 `INVALID_HISTORY_ROW`. Warnings and kicks remain audit-only/unsupported. Full hosted/review evidence is pending and must not be inferred from this local result.
 
 ## 28. Merge and synchronization record
-Usually not applicable. If an evidence PR is used, record its head/merge/main containment/temp branch cleanup; no external parity.
+Pending. Canonical handoff: [`2026-08-09-es-v01-private-litebans-representative-verification.md`](../../reports/package-handoffs/2026-08-09-es-v01-private-litebans-representative-verification.md).
