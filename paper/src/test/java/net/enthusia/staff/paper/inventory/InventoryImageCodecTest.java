@@ -63,6 +63,17 @@ final class InventoryImageCodecTest {
     }
 
     @Test
+    void aggregateSnapshotSafetyLimitIsEnforcedBeforeDecodeOrStorage() {
+        byte[] oversized = new byte[InventoryImageCodec.MAX_SNAPSHOT_BYTES + 1];
+
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(oversized));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new InventoryImageCodec.EncodedImage(oversized, "checksum")
+        );
+    }
+
+    @Test
     void encodedImageRequiresCompleteFields() {
         assertThrows(
                 IllegalArgumentException.class,
