@@ -2,7 +2,7 @@
 
 Current package handoff:
 
-[`2026-08-09-es-p05-owner-evidence-routing-correction.md`](../package-handoffs/2026-08-09-es-p05-owner-evidence-routing-correction.md)
+[`2026-08-09-es-v01-private-litebans-representative-verification.md`](../package-handoffs/2026-08-09-es-v01-private-litebans-representative-verification.md)
 
 Canonical ES-P05 terminal handoff:
 
@@ -16,6 +16,6 @@ Canonical package registry:
 
 PR #81 merged normally as `52c0dc47efdc2296827b4b6b743d01a86f72c856`; completion record PR #107 merged as `8d5b7dce21bba9c892e8219d0929fa5286aebbcc`; owner-evidence routing correction PR #108 merged as `b59b3aeec7bb6a890b35c944fbdd070c690c9486`. The implementation and correction heads are contained with no unique work remaining, and GitHub auto-deleted both temporary branches. ES-P05 added no migration; V18 remains current/immutable. Issue #43 remains deferred and LiteBans remains authoritative.
 
-No package is active after ES-P05 finalization. Post-completion routing is corrected by owner-provided private LiteBans evidence. `ES-V01 — Private LiteBans representative-data verification` is `PARTIAL` / `ACTIONABLE_CONTINUATION`: its former private-environment condition changed, representative execution found a UUID-only LiteBans compatibility defect, and local commit `22934e33 Support UUID-only LiteBans sanctions` remains unpushed. The next worker must preserve/reproduce that fix on the correct ES-V01 branch and validate it without uploading the private database. `ES-P07` and `ES-P06` remain `READY` but are behind the actionable continuation. `ES-X01` is `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository remains unresolved despite completed dependencies.
+`ES-V01 — Private LiteBans representative-data verification` is the active `PARTIAL` / `ACTIONABLE_CONTINUATION`. Its UUID-only LiteBans repair was reproduced from local commit `22934e33` as product head `ea07f55a` on `package/es-v01-litebans-private-verification`, based on current starting `main` `b78a62de3876bfde7fa5f57860fedc1415ef3c53`. Sanitized local private validation passed dry-run, import, replay, and abandoned-run recovery on disposable databases. Hosted exact-head validation, review, normal PR merge, containment, and cleanup remain. `ES-P07` and `ES-P06` remain `READY` but are behind ES-V01; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`.
 
 The seven malformed/rejected LiteBans source/history rows remain a separate pre-rehearsal data-policy decision and do not authorize source rewriting, silent skipping, production shadow/cutover, issue #43 acceptance or authority changes.
