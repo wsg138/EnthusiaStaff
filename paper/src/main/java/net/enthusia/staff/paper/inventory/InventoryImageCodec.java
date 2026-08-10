@@ -44,20 +44,12 @@ public final class InventoryImageCodec {
     }
 
     public void applySlots(Player player, InventoryImage image, List<Integer> logicalSlots) {
-        if (player == null || image == null || logicalSlots == null) {
-            throw new IllegalArgumentException("player, image, and logicalSlots must be present");
+        if (player == null || image == null) {
+            throw new IllegalArgumentException("player and image must be present");
         }
-        if (logicalSlots.isEmpty()) {
+        Set<Integer> uniqueSlots = validatedSlots(logicalSlots);
+        if (uniqueSlots.isEmpty()) {
             return;
-        }
-        Set<Integer> uniqueSlots = new LinkedHashSet<>(logicalSlots);
-        if (uniqueSlots.contains(null)) {
-            throw new IllegalArgumentException("logicalSlots must not contain null");
-        }
-        for (int logicalSlot : uniqueSlots) {
-            if (logicalSlot < 0 || logicalSlot >= InventoryImage.TOTAL_SLOTS) {
-                throw new IllegalArgumentException("logical inventory slot is out of range");
-            }
         }
         PlayerInventory inventory = player.getInventory();
         for (int logicalSlot : uniqueSlots) {
@@ -69,6 +61,22 @@ public final class InventoryImageCodec {
             }
         }
         player.updateInventory();
+    }
+
+    static Set<Integer> validatedSlots(List<Integer> logicalSlots) {
+        if (logicalSlots == null) {
+            throw new IllegalArgumentException("logicalSlots must be present");
+        }
+        Set<Integer> uniqueSlots = new LinkedHashSet<>(logicalSlots);
+        if (uniqueSlots.contains(null)) {
+            throw new IllegalArgumentException("logicalSlots must not contain null");
+        }
+        for (int logicalSlot : uniqueSlots) {
+            if (logicalSlot < 0 || logicalSlot >= InventoryImage.TOTAL_SLOTS) {
+                throw new IllegalArgumentException("logical inventory slot is out of range");
+            }
+        }
+        return uniqueSlots;
     }
 
     public byte[] encode(InventoryImage image) {
