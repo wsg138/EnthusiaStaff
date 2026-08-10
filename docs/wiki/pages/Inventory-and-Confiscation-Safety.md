@@ -2,7 +2,7 @@
 
 Inventory viewing, editing, confiscation and restoration can cause item loss or duplication when used incorrectly. This page explains staff procedure. For current implementation status, safety design and direct source-file links, use [[Staff Tools, Investigations, and Player-State Safety]].
 
-> **Current deployment:** Important persistence and rollback foundations exist, but complete concurrent-viewer, offline-owner, provider and recovery behavior still requires live staging. A command opening successfully does not prove that every destructive path is production-ready.
+> **Current implementation boundary:** Inventory/Ender viewing and ordinary editing use durable revision/checksum journals, exact dirty-slot live writes, bounded snapshots, queued offline patches and login recovery guards. Representative multi-backend, Java/Bedrock and large/private-data staging remains separate validation work. Item confiscation/restoration is a separate package and must not be inferred from ordinary inventory editing.
 
 ## Quick navigation
 
@@ -41,7 +41,7 @@ Do not browse inventories out of curiosity or use staff-observed information for
 
 ## Rank limits
 
-Helpers are intended to receive read-only inventory/Ender access for legitimate investigations. They should ask a Mod or above when assets need to be changed, confiscated or restored.
+Helpers receive read-only inventory/Ender access for legitimate investigations. A Mod or above with `enthusiastaff.inventory.edit` is required for ordinary edits.
 
 Do not work around a rank limit by moving items through another container, account or command. See [[Roles and Permissions|Rank-Authority]].
 
@@ -52,35 +52,31 @@ The online player's live inventory is authoritative. Avoid broad edits while the
 For an authorized correction:
 
 1. tell staff what is changing and why;
-2. save the relevant before state when practical;
-3. change only the intended slots/items;
-4. recheck the live inventory;
-5. record the result in the report or case.
+2. change only the intended slots/items;
+3. recheck the live inventory;
+4. record the result in the report or case when the situation requires it.
 
-The intended implementation uses exact dirty-slot updates and synchronized viewers rather than saving a stale full inventory clone.
+The runtime records a durable observation, compares the expected revision/checksum, and applies only the changed logical slots on the target player's scheduler. It does not close a stale full-inventory clone and overwrite unrelated slots. Storage, armor, offhand and Ender slots are represented in one logical image; nested item data remains inside the serialized item stack.
 
-Stop if changes do not appear or another viewer/operation conflicts. Reopening and repeating can overwrite newer state.
+The complete serialized inventory image is bounded before it reaches the journal. Oversized or malformed snapshots fail closed rather than being accepted as recovery evidence.
+
+Multiple viewers share the target's live session and are reconciled from the authoritative live inventory. A stale edit is rejected instead of forcing its old mirror over newer state.
 
 ## Offline players and queued patches
 
-Offline editing is safe only when all of these can be proven:
+Offline editing is allowed only when network-wide presence says the player is offline and the latest authoritative observation belongs to the current inventory scope/backend. The editor works from that observation and closing a changed offline view prepares a durable queued patch; it does **not** guess at or directly rewrite a player `.dat` file.
 
-- the player is offline network-wide;
-- the owning backend/scope is known;
-- an exclusive lease is held;
-- no save is active;
-- the revision is current;
-- a durable before snapshot exists.
+The durable patch carries its expected revision/checksum, replacement checksum/snapshot, changed-slot list, operation identity and fencing token. Replaying the same APPLYING operation while it still owns the exact lease is idempotent and keeps the same fence; another operation cannot take that live lease.
 
-When ownership or timing is uncertain, the correct behavior is a queued patch applied before player interaction on login—not a guessed direct file edit.
+On the next login, the pending patch is discovered before normal player interaction. While verification/application is unresolved, inventory clicks/opening, drop/pickup, held-slot/hand swaps, item consumption, durability/mending, damage/resurrection, entity interaction and Paper pick/equipment-swap paths are blocked. The target's current checksum must match either the expected before state or the already-applied replacement. Anything else is quarantined instead of being overwritten.
 
-Never manually edit player data files or reconstruct an inventory from memory or a screenshot. If the player connects, disconnects or switches servers during a sensitive action, stop and let the recovery workflow decide the outcome.
+Never manually edit player data files or reconstruct an inventory from memory or a screenshot. If the player connects, disconnects or switches servers during a sensitive action, stop and let the durable recovery workflow decide the outcome.
 
 ## Shulkers, bundles and nested items
 
-Nested items are identified by exact paths and fingerprints. Reopen and verify a container before confirming a destructive action.
+Nested contents are preserved as part of each serialized `ItemStack`. Ordinary inventory editing still addresses a top-level logical slot; it does not reinterpret nested contents as unrelated loose items.
 
-Do not assume two visually identical stacks are the same selected item. If a fingerprint changed, reselect instead of forcing the original operation.
+Confiscation-specific exact item paths/fingerprints remain a separate destructive workflow. Do not assume two visually identical stacks are the same selected item. If a fingerprint changed, reselect instead of forcing the original operation.
 
 ## Item confiscation
 
@@ -97,6 +93,8 @@ Do not manually delete items through ordinary editing and call that confiscation
 - allow authorized idempotent restoration.
 
 Before confirming, check the selected items, quantities and nested paths. After commit, verify the player state and the case record.
+
+Confiscation/restoration completion is outside the ordinary inventory-editing package and remains separately validated.
 
 ## Economy confiscation
 
@@ -131,9 +129,9 @@ The operation must remain idempotent and safe when the player's current inventor
 
 Record the report/case, time, selected assets, visible before/after state and exact error. Do not delete rows, edit recovery state or release locks manually.
 
-## Technical status
+## Validation boundary
 
-Current merged-main states, primary managers/stores and remaining online/offline, confiscation, economy and recovery work are listed in [[Staff Tools, Investigations, and Player-State Safety]].
+Automated unit and MariaDB/Testcontainers evidence can prove codec bounds, journal fencing/idempotency and deterministic state transitions. Hosted build/runtime-JAR checks and safe restart/staging gates prove only the exact revision they execute. Representative multi-backend contention, Java/Bedrock usability and large/private inventories remain later private validation; none of those should be inferred from a command opening successfully.
 
 ## Related pages
 

@@ -23,6 +23,7 @@ import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
+import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
@@ -282,6 +283,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().workers()
         );
         registerListener(dependencies.environment().plugin(), inventory);
+        registerListener(dependencies.environment().plugin(), new InventoryRecoveryGuard(inventory));
         return inventory;
     }
 

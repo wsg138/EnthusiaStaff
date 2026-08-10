@@ -113,7 +113,7 @@ final class JdbcInventoryPatchTransitions {
             return Optional.empty();
         }
         if (patch.state() == InventoryOperationState.APPLYING && ownsLease(connection, patch, now)) {
-            return Optional.empty();
+            return Optional.of(patch);
         }
         long fence = JdbcOperationLeaseSupport.acquireAfter(
                 connection,
@@ -219,6 +219,9 @@ final class JdbcInventoryPatchTransitions {
             String scopeId,
             Instant now
     ) throws SQLException {
+        if (playerId == null || scopeId == null || scopeId.isBlank() || now == null) {
+            throw new IllegalArgumentException("inventory lock lookup is invalid");
+        }
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT
                     EXISTS (

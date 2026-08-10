@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -16,6 +19,7 @@ public final class InventoryImageCodec {
     private static final int MAGIC = 0x4553494D;
     private static final int SCHEMA_VERSION = 1;
     private static final int MAX_ITEM_BYTES = 16 * 1024 * 1024;
+    static final int MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024;
 
     public InventoryImage capture(Player player) {
         if (player == null) {
@@ -35,13 +39,44 @@ public final class InventoryImageCodec {
         if (player == null || image == null) {
             throw new IllegalArgumentException("player and image must be present");
         }
+        InventoryImage current = capture(player);
+        applySlots(player, image, current.changedSlots(image));
+    }
+
+    public void applySlots(Player player, InventoryImage image, List<Integer> logicalSlots) {
+        if (player == null || image == null) {
+            throw new IllegalArgumentException("player and image must be present");
+        }
+        Set<Integer> uniqueSlots = validatedSlots(logicalSlots);
+        if (uniqueSlots.isEmpty()) {
+            return;
+        }
         PlayerInventory inventory = player.getInventory();
-        inventory.setStorageContents(image.storage());
-        inventory.setArmorContents(image.armor());
-        inventory.setItemInOffHand(image.offhand());
-        inventory.setHeldItemSlot(image.heldSlot());
-        player.getEnderChest().setStorageContents(image.enderChest());
+        for (int logicalSlot : uniqueSlots) {
+            ItemStack replacement = image.item(logicalSlot);
+            if (logicalSlot <= InventoryImage.OFFHAND_SLOT) {
+                inventory.setItem(logicalSlot, replacement);
+            } else {
+                player.getEnderChest().setItem(logicalSlot - InventoryImage.ENDER_OFFSET, replacement);
+            }
+        }
         player.updateInventory();
+    }
+
+    static Set<Integer> validatedSlots(List<Integer> logicalSlots) {
+        if (logicalSlots == null) {
+            throw new IllegalArgumentException("logicalSlots must be present");
+        }
+        Set<Integer> uniqueSlots = new LinkedHashSet<>(logicalSlots);
+        if (uniqueSlots.contains(null)) {
+            throw new IllegalArgumentException("logicalSlots must not contain null");
+        }
+        for (int logicalSlot : uniqueSlots) {
+            if (logicalSlot < 0 || logicalSlot >= InventoryImage.TOTAL_SLOTS) {
+                throw new IllegalArgumentException("logical inventory slot is out of range");
+            }
+        }
+        return uniqueSlots;
     }
 
     public byte[] encode(InventoryImage image) {
@@ -49,7 +84,7 @@ public final class InventoryImageCodec {
             throw new IllegalArgumentException("image must be present");
         }
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            BoundedByteArrayOutputStream bytes = new BoundedByteArrayOutputStream(MAX_SNAPSHOT_BYTES);
             try (DataOutputStream output = new DataOutputStream(bytes)) {
                 output.writeInt(MAGIC);
                 output.writeInt(SCHEMA_VERSION);
@@ -66,8 +101,8 @@ public final class InventoryImageCodec {
     }
 
     public InventoryImage decode(byte[] encoded) {
-        if (encoded == null || encoded.length == 0) {
-            throw new IllegalArgumentException("encoded inventory image must be present");
+        if (encoded == null || encoded.length == 0 || encoded.length > MAX_SNAPSHOT_BYTES) {
+            throw new IllegalArgumentException("encoded inventory image must be present and within the safety limit");
         }
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
             if (input.readInt() != MAGIC || input.readInt() != SCHEMA_VERSION) {
@@ -152,8 +187,8 @@ public final class InventoryImageCodec {
 
     public record EncodedImage(byte[] bytes, String checksum) {
         public EncodedImage {
-            if (bytes == null || bytes.length == 0 || checksum == null) {
-                throw new IllegalArgumentException("encoded image fields must be present");
+            if (bytes == null || bytes.length == 0 || bytes.length > MAX_SNAPSHOT_BYTES || checksum == null) {
+                throw new IllegalArgumentException("encoded image fields must be present and within the safety limit");
             }
             bytes = bytes.clone();
         }
@@ -161,6 +196,33 @@ public final class InventoryImageCodec {
         @Override
         public byte[] bytes() {
             return bytes.clone();
+        }
+    }
+
+    private static final class BoundedByteArrayOutputStream extends ByteArrayOutputStream {
+        private final int maximumBytes;
+
+        private BoundedByteArrayOutputStream(int maximumBytes) {
+            super(Math.min(maximumBytes, 8192));
+            this.maximumBytes = maximumBytes;
+        }
+
+        @Override
+        public void write(int value) {
+            requireCapacity(1);
+            super.write(value);
+        }
+
+        @Override
+        public void write(byte[] buffer, int offset, int length) {
+            requireCapacity(length);
+            super.write(buffer, offset, length);
+        }
+
+        private void requireCapacity(int additionalBytes) {
+            if (additionalBytes < 0 || count > maximumBytes - additionalBytes) {
+                throw new IllegalArgumentException("encoded inventory image exceeds the safety limit");
+            }
         }
     }
 }

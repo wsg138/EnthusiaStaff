@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
@@ -60,6 +62,31 @@ final class InventoryImageCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.decode(new byte[0]));
         assertThrows(IllegalArgumentException.class, () -> codec.encode(null));
         assertThrows(IllegalArgumentException.class, () -> codec.checksum(null));
+    }
+
+    @Test
+    void dirtySlotValidationRejectsTheWholeSetBeforeApply() {
+        assertEquals(Set.of(0, InventoryImage.OFFHAND_SLOT),
+                InventoryImageCodec.validatedSlots(List.of(0, InventoryImage.OFFHAND_SLOT, 0)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> InventoryImageCodec.validatedSlots(List.of(0, InventoryImage.TOTAL_SLOTS))
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> InventoryImageCodec.validatedSlots(Arrays.asList(0, null))
+        );
+    }
+
+    @Test
+    void aggregateSnapshotSafetyLimitIsEnforcedBeforeDecodeOrStorage() {
+        byte[] oversized = new byte[InventoryImageCodec.MAX_SNAPSHOT_BYTES + 1];
+
+        assertThrows(IllegalArgumentException.class, () -> codec.decode(oversized));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new InventoryImageCodec.EncodedImage(oversized, "checksum")
+        );
     }
 
     @Test

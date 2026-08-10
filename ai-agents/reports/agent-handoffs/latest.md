@@ -1,8 +1,8 @@
 # Latest AI handoff
 
-Current package handoff:
+Current active package handoff:
 
-[`2026-08-10-es-p07-inventory-runtime-blocked.md`](../package-handoffs/2026-08-10-es-p07-inventory-runtime-blocked.md)
+[`2026-08-10-es-p07-inventory-runtime-active.md`](../package-handoffs/2026-08-10-es-p07-inventory-runtime-active.md)
 
 Prior terminal package handoff:
 
@@ -12,10 +12,16 @@ Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P07 — Inventory and Ender editing runtime completion` is `BLOCKED` / `PARKED_BLOCKED`. Preserve implementation PR #112 and `package/es-p07-inventory-runtime` at frozen reviewed head `b34aade6ae79c7aaada0ada3c87970f937b6db6a`.
+`ES-P07 — Inventory and Ender editing runtime completion` is the only active package on `package/es-p07-inventory-runtime`, PR `#112`. The branch started from `main` `17fb50d02fdc35cffd1cbdc63e28f72cffd88315` and was later normally synchronized with current target `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` as merge commit `562e8647063c3fa09b4349d167dc41d1a1660553`. No ES-P07 product file changed in that synchronization.
 
-Product implementation and exact-head hosted/static proof are complete: Java 21 full tests plus MariaDB/Testcontainers, Wiki, runtime-JAR/provider-leak inspection, aggregate coverage, Codacy zero-issue static analysis and CodeRabbit/review closure all passed. The package is not mergeable because both required Pi runtime gates remain externally unavailable: correlated private run `31426646043` / job `93579820065` is queued without runner assignment, and exact-head Sentinel restart job 75 is queued because host telemetry reports 120 MB available memory below the 700 MB gate and 82.3 C at/above the 80.0 C limit. No private Paper/MariaDB/Flyway execution and no terminal `PAPER_RESTART_OK` exist.
+Product implementation is complete: exact dirty-slot inventory/Ender writes, complete dirty-slot-set prevalidation, aggregate snapshot bounds, same-owner lease replay recovery and additional login-recovery mutation guards preserve authoritative target lookup, view/edit permission separation, durable queued offline patches, revision/checksum fencing, Velocity switch locks, nested item serialization and lifecycle ownership.
 
-Resume ES-P07 as `ACTIONABLE_CONTINUATION` before new READY work only when runner availability materially changes and Sentinel memory/temperature materially clears its resource gate. Do not spam identical gate reruns, do not merge PR #112 early, and do not call queued/failed/superseded evidence passing.
+The synchronized candidate `562e8647063c3fa09b4349d167dc41d1a1660553` passed hosted Java/MariaDB/JAR/Wiki/Codacy-upload checks before CodeRabbit identified two valid final-review issues. Review-correction head `8b055b8851dd185ae5e8969148aaa11e0d1985e4` fixed both and resolved all review threads, but exact-head Codacy static analysis then found one valid maintainability warning because the strengthened permission test repeated the `"default"` field literal four times. This checkpoint replaces those repetitions with one `DEFAULT_FIELD` constant while preserving the explicit non-null field-presence and false-value assertions.
 
-ES-P06 remains READY; ES-P08 remains blocked by ES-P07; ES-X01 remains parked on the unresolved supported RoseChat integration repository/source contract. V18 remains immutable. Issue #43 remains deferred and LiteBans authoritative. No production deployment/data/shadow/cutover/source rewrite occurred.
+**The commit produced by this final static-analysis correction is the new immutable final validation head.** PR metadata must record its literal SHA. `8b055b8851dd185ae5e8969148aaa11e0d1985e4` and every earlier candidate are superseded. If any exact-head gate identifies another real defect, fix it, repeat harsh review, freeze the new head, and rerun every exact-head gate before merge.
+
+Final acceptance requires that immutable head to independently pass hosted Java 21 clean/full build and tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, Wiki validation, configured static analysis and coverage, CodeRabbit/reviewer completion with zero valid unresolved findings, Sentinel exact-artifact restart with terminal `PAPER_RESTART_OK`, and canonical automatic public→private Pi staging with correlated private provenance, Paper restart/MariaDB/Flyway evidence and cleanup. Skipped, queued, cancelled, merge-ref-only, wrong-head or superseded checks are not passing evidence.
+
+Any Sentinel or canonical Pi work tied to `8b055b...` or an earlier head is stale for final acceptance after this tracked correction even if it later executes. Do not cancel or interfere with unrelated legitimate Sentinel or Staging jobs. Request fresh exact-head runtime gates only through the canonical paths.
+
+ES-P06 remains READY and must not be started by this worker. ES-X01 remains PARKED_BLOCKED because the supported RoseChat integration repository/source contract is unresolved. ES-P08 remains dependency-blocked until ES-P07 completes. V18 remains the immutable migration boundary. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change or source rewrite is authorized.
