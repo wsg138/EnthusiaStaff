@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 final class InventoryWorkflowWiringTest {
     private static final String VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final String EDIT_PERMISSION = "enthusiastaff.inventory.edit";
+    private static final String DEFAULT_FIELD = "default";
     private static final Path REGISTRAR_SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java"
     );
@@ -64,10 +65,10 @@ final class InventoryWorkflowWiringTest {
         JsonNode permissions = metadata.path("permissions");
         JsonNode viewPermission = permissions.path(VIEW_PERMISSION);
         JsonNode editPermission = permissions.path(EDIT_PERMISSION);
-        assertTrue(viewPermission.hasNonNull("default"));
-        assertTrue(editPermission.hasNonNull("default"));
-        assertFalse(viewPermission.path("default").asBoolean());
-        assertFalse(editPermission.path("default").asBoolean());
+        assertTrue(viewPermission.hasNonNull(DEFAULT_FIELD));
+        assertTrue(editPermission.hasNonNull(DEFAULT_FIELD));
+        assertFalse(viewPermission.path(DEFAULT_FIELD).asBoolean());
+        assertFalse(editPermission.path(DEFAULT_FIELD).asBoolean());
     }
 
     private static String normalizedSource(Path source) throws IOException {
