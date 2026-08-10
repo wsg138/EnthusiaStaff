@@ -39,13 +39,8 @@ public final class InventoryImageCodec {
         if (player == null || image == null) {
             throw new IllegalArgumentException("player and image must be present");
         }
-        PlayerInventory inventory = player.getInventory();
-        inventory.setStorageContents(image.storage());
-        inventory.setArmorContents(image.armor());
-        inventory.setItemInOffHand(image.offhand());
-        inventory.setHeldItemSlot(image.heldSlot());
-        player.getEnderChest().setStorageContents(image.enderChest());
-        player.updateInventory();
+        InventoryImage current = capture(player);
+        applySlots(player, image, current.changedSlots(image));
     }
 
     public void applySlots(Player player, InventoryImage image, List<Integer> logicalSlots) {
