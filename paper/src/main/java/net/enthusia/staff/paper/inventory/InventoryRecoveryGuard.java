@@ -10,6 +10,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemMendEvent;
@@ -17,9 +19,10 @@ import org.bukkit.event.player.PlayerItemMendEvent;
 /**
  * Closes mutation paths that are not inventory-click based while an inventory
  * patch owns the player's state. The coordinator handles ordinary inventory,
- * pickup/drop, held-slot and interaction events; this guard covers durability,
- * consumption, death/totem and direct equipment/pick-item paths so queued login
- * recovery cannot race a vanilla state mutation before final verification.
+ * pickup/drop, held-slot and block/air interaction events; this guard covers
+ * durability, consumption, death/totem, entity interaction, and direct
+ * equipment/pick-item paths so queued login recovery cannot race a vanilla
+ * state mutation before final verification.
  */
 public final class InventoryRecoveryGuard implements Listener {
     private final InventoryLockService locks;
@@ -38,6 +41,20 @@ public final class InventoryRecoveryGuard implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onResurrect(EntityResurrectEvent event) {
         if (event.getEntity() instanceof Player player && locked(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityInteract(PlayerInteractEntityEvent event) {
+        if (locked(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEntityInteractAt(PlayerInteractAtEntityEvent event) {
+        if (locked(event.getPlayer())) {
             event.setCancelled(true);
         }
     }
