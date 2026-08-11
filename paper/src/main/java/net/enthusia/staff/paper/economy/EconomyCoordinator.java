@@ -27,7 +27,6 @@ import net.enthusia.staff.domain.economy.EconomyOperation;
 import net.enthusia.staff.domain.economy.EconomyOperationState;
 import net.enthusia.staff.domain.economy.EconomyPreparation;
 import net.enthusia.staff.domain.economy.EconomyPrepareRequest;
-import net.enthusia.staff.domain.economy.EconomyReconciliationDecision;
 import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -960,9 +959,22 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     }
 
     private void reconcile(Player player, EconomyOperation operation, LeaseGuard guard) {
-        CurrencyAccountState current;
+        Optional<CurrencyAccountState> snapshot = recoverySnapshot(player, operation, guard);
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        CurrencyAccountState current = snapshot.orElseThrow();
+        EconomyRecoveryAssessment assessment = EconomyRecoveryAssessment.assess(operation, current);
+        applyRecoveryAssessment(player, operation, guard, current, assessment);
+    }
+
+    private Optional<CurrencyAccountState> recoverySnapshot(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard
+    ) {
         try {
-            current = currency.snapshot(player);
+            return Optional.of(currency.snapshot(player));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Economy recovery snapshot failed", exception);
             quarantine(
@@ -974,165 +986,90 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "RECOVERY_SNAPSHOT_FAILED",
                     "Currency recovery could not capture the current account"
             );
-            return;
+            return Optional.empty();
         }
-        if (!current.playerId().equals(operation.targetId())) {
-            quarantine(
+    }
+
+    private void applyRecoveryAssessment(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            EconomyRecoveryAssessment assessment
+    ) {
+        switch (assessment) {
+            case EconomyRecoveryAssessment.Release release -> releaseProviderThenJournal(
+                    player, player, operation, guard, release.successMessage()
+            );
+            case EconomyRecoveryAssessment.RollBack rollback -> finishRecoveryRollback(
+                    player, operation, guard, current, rollback
+            );
+            case EconomyRecoveryAssessment.Commit commit -> commitRecoveredState(
+                    player, operation, guard, current, commit.successMessage()
+            );
+            case EconomyRecoveryAssessment.Restore ignored -> restoreBefore(
+                    player, operation, guard, current
+            );
+            case EconomyRecoveryAssessment.Quarantine quarantine -> quarantine(
                     player,
                     player,
                     operation,
                     guard,
                     Optional.of(current),
-                    "RECOVERY_SNAPSHOT_IDENTITY_MISMATCH",
-                    "Currency recovery returned an account snapshot for another player"
+                    quarantine.failureCode(),
+                    quarantine.detail()
             );
-            return;
         }
-        if (operation.state() == EconomyOperationState.COMMITTED) {
-            String expected = operation.resultChecksum()
-                    .or(() -> operation.replacementChecksum())
-                    .orElse("");
-            if (expected.equals(current.checksum()) && resultTotalMatches(current, operation)) {
-                releaseProviderThenJournal(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        "Economy recovery verified the committed state."
-                );
-            } else {
-                quarantine(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        Optional.of(current),
-                        "COMMITTED_RECOVERY_CONFLICT",
-                        "Current Currency state does not match the committed result"
-                );
-            }
-            return;
-        }
-        if (operation.state() == EconomyOperationState.ROLLED_BACK) {
-            if (resultTotalMatches(current, operation)
-                    && (operation.resultChecksum().isEmpty()
-                    || operation.resultChecksum().orElseThrow().equals(current.checksum()))) {
-                releaseProviderThenJournal(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        "Economy recovery verified the rolled-back state."
-                );
-            } else {
-                quarantine(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        Optional.of(current),
-                        "ROLLED_BACK_RECOVERY_CONFLICT",
-                        "Current Currency state does not match the recorded rollback"
-                );
-            }
-            return;
-        }
-        if (handleIncompletePlanEvidence(player, operation, guard, current)) {
-            return;
-        }
-        EconomyReconciliationDecision decision = EconomyReconciliationDecision.decide(
-                current.checksum(),
-                operation.beforeChecksum().orElseThrow(),
-                operation.replacementChecksum().orElseThrow()
-        );
-        switch (decision) {
-            case ROLL_BACK_UNAPPLIED -> rollBackVerified(
+    }
+
+    private void finishRecoveryRollback(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            EconomyRecoveryAssessment.RollBack rollback
+    ) {
+        if (rollback.verified()) {
+            rollBackVerified(
                     player,
                     player,
                     operation,
                     guard,
                     current,
-                    "RECOVERY_UNAPPLIED",
-                    "Economy recovery verified that the plan was not applied"
+                    rollback.failureCode(),
+                    rollback.detail()
             );
-            case COMMIT_ALREADY_APPLIED -> {
-                if (operation.state() != EconomyOperationState.APPLYING) {
-                    quarantine(
-                            player,
-                            player,
-                            operation,
-                            guard,
-                            Optional.of(current),
-                            "REPLACEMENT_IN_INVALID_PHASE",
-                            "Replacement state exists without an APPLYING journal phase"
-                    );
-                    return;
-                }
-                finishOutcome(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        EconomyTerminalUpdate.committed(
-                                current.authoritativeTotal(),
-                                current.checksum(),
-                                codec.snapshot(current)
-                        ),
-                        "Economy recovery finalized the already-applied exact removal."
-                );
-            }
-            case RESTORE_BEFORE_STATE -> {
-                if (operation.state() != EconomyOperationState.APPLYING) {
-                    quarantine(
-                            player,
-                            player,
-                            operation,
-                            guard,
-                            Optional.of(current),
-                            "RECOVERY_STATE_CONFLICT",
-                            "Currency state changed before the operation entered APPLYING"
-                    );
-                    return;
-                }
-                restoreBefore(player, operation, guard, current);
-            }
-            default -> throw new IllegalStateException(
-                    "Unsupported economy reconciliation decision: " + decision
-            );
-        }
-    }
-
-    private boolean handleIncompletePlanEvidence(
-            Player player,
-            EconomyOperation operation,
-            LeaseGuard guard,
-            CurrencyAccountState current
-    ) {
-        if (operation.state() == EconomyOperationState.LOCKED
-                && !operation.hasAnyDurablePlanEvidence()) {
+        } else {
             rollBackUnapplied(
                     player,
                     player,
                     operation,
                     guard,
-                    "RECOVERY_UNAPPLIED",
-                    "Economy recovery found no saved apply plan"
+                    rollback.failureCode(),
+                    rollback.detail()
             );
-            return true;
         }
-        if (operation.hasCompleteDurablePlanEvidence()) {
-            return false;
-        }
-        quarantine(
+    }
+
+    private void commitRecoveredState(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            String successMessage
+    ) {
+        finishOutcome(
                 player,
                 player,
                 operation,
                 guard,
-                Optional.of(current),
-                "RECOVERY_PLAN_INCOMPLETE",
-                "Economy recovery found incomplete durable apply-plan evidence"
+                EconomyTerminalUpdate.committed(
+                        current.authoritativeTotal(),
+                        current.checksum(),
+                        codec.snapshot(current)
+                ),
+                successMessage
         );
-        return true;
     }
 
     private void restoreBefore(
@@ -1256,14 +1193,6 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 failureCode,
                 detail
         );
-    }
-
-    private static boolean resultTotalMatches(
-            CurrencyAccountState current,
-            EconomyOperation operation
-    ) {
-        return operation.resultTotal().isEmpty()
-                || current.authoritativeTotal() == operation.resultTotal().orElseThrow();
     }
 
     private static boolean matchesBeforeState(
