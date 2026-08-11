@@ -107,59 +107,127 @@ def validate_registry_routing(
     priorities: dict[str, int] = {}
 
     for package_id, fields in packages.items():
-        status = fields.get('Status')
-        if status not in VALID_STATUSES:
-            errors.append(f'{package_id} has invalid or missing status {status!r}')
+        _validate_status_and_priority(package_id, fields, priorities, errors)
+        _validate_classification(package_id, fields, errors)
+        _validate_ready_dependencies(package_id, fields, packages, dependencies, errors)
 
-        priority_value = fields.get('Priority')
-        try:
-            priorities[package_id] = int(priority_value or '')
-        except ValueError:
-            errors.append(f'{package_id} has invalid or missing priority {priority_value!r}')
+    return errors, _selected_routing_package(packages, priorities)
 
-        classification = fields.get('Classification')
-        if status in PERSISTENT_STATUSES:
-            if classification not in ROUTING_CLASSIFICATIONS:
-                errors.append(
-                    f'{package_id} status {status} requires routing classification '
-                    'ACTIONABLE_CONTINUATION or PARKED_BLOCKED'
-                )
-        elif status == 'READY' and classification != 'READY':
-            errors.append(f'{package_id} READY status requires READY classification')
-        elif status in {'PLANNED', 'DEFERRED'} and classification != 'PARKED_BLOCKED':
-            errors.append(f'{package_id} status {status} requires PARKED_BLOCKED classification')
-        elif status in {'COMPLETE', 'SUPERSEDED'} and classification is not None:
-            errors.append(
-                f'{package_id} status {status} must not declare persistent '
-                f'classification {classification}'
-            )
 
-        if status == 'READY':
-            incomplete = [
-                dependency
-                for dependency in dependencies.get(package_id, [])
-                if packages.get(dependency, {}).get('Status') != 'COMPLETE'
-            ]
-            if incomplete:
-                errors.append(
-                    f'{package_id} is READY with incomplete dependencies: '
-                    + ', '.join(incomplete)
-                )
+def _validate_status_and_priority(
+    package_id: str,
+    fields: Mapping[str, str],
+    priorities: dict[str, int],
+    errors: list[str],
+) -> None:
+    status = fields.get('Status')
+    if status not in VALID_STATUSES:
+        errors.append(f'{package_id} has invalid or missing status {status!r}')
+    priority_value = fields.get('Priority')
+    try:
+        priorities[package_id] = int(priority_value or '')
+    except ValueError:
+        errors.append(f'{package_id} has invalid or missing priority {priority_value!r}')
 
-    actionable = [
+
+def _validate_classification(
+    package_id: str,
+    fields: Mapping[str, str],
+    errors: list[str],
+) -> None:
+    status = fields.get('Status')
+    classification = fields.get('Classification')
+    error = _classification_error(package_id, status, classification)
+    if error is not None:
+        errors.append(error)
+
+
+def _classification_error(
+    package_id: str,
+    status: str | None,
+    classification: str | None,
+) -> str | None:
+    if status in PERSISTENT_STATUSES:
+        if classification in ROUTING_CLASSIFICATIONS:
+            return None
+        return (
+            f'{package_id} status {status} requires routing classification '
+            'ACTIONABLE_CONTINUATION or PARKED_BLOCKED'
+        )
+    if status == 'READY':
+        return None if classification == 'READY' else (
+            f'{package_id} READY status requires READY classification'
+        )
+    return _non_ready_classification_error(package_id, status, classification)
+
+
+def _non_ready_classification_error(
+    package_id: str,
+    status: str | None,
+    classification: str | None,
+) -> str | None:
+    if status in {'PLANNED', 'DEFERRED'} and classification != 'PARKED_BLOCKED':
+        return f'{package_id} status {status} requires PARKED_BLOCKED classification'
+    if status in {'COMPLETE', 'SUPERSEDED'} and classification is not None:
+        return (
+            f'{package_id} status {status} must not declare persistent '
+            f'classification {classification}'
+        )
+    return None
+
+
+def _validate_ready_dependencies(
+    package_id: str,
+    fields: Mapping[str, str],
+    packages: Mapping[str, Mapping[str, str]],
+    dependencies: Mapping[str, list[str]],
+    errors: list[str],
+) -> None:
+    if fields.get('Status') != 'READY':
+        return
+    incomplete = [
+        dependency
+        for dependency in dependencies.get(package_id, [])
+        if packages.get(dependency, {}).get('Status') != 'COMPLETE'
+    ]
+    if incomplete:
+        errors.append(
+            f'{package_id} is READY with incomplete dependencies: '
+            + ', '.join(incomplete)
+        )
+
+
+def _selected_routing_package(
+    packages: Mapping[str, Mapping[str, str]],
+    priorities: Mapping[str, int],
+) -> str | None:
+    actionable = _matching_prioritized_packages(
+        packages,
+        priorities,
+        'Classification',
+        'ACTIONABLE_CONTINUATION',
+    )
+    ready = _matching_prioritized_packages(
+        packages,
+        priorities,
+        'Status',
+        'READY',
+    )
+    candidates = actionable if actionable else ready
+    return min(candidates, key=lambda package_id: priorities[package_id]) if candidates else None
+
+
+def _matching_prioritized_packages(
+    packages: Mapping[str, Mapping[str, str]],
+    priorities: Mapping[str, int],
+    field: str,
+    expected: str,
+) -> list[str]:
+    return [
         package_id
         for package_id, fields in packages.items()
-        if fields.get('Classification') == 'ACTIONABLE_CONTINUATION'
-        and package_id in priorities
+        if fields.get(field) == expected and package_id in priorities
     ]
-    ready = [
-        package_id
-        for package_id, fields in packages.items()
-        if fields.get('Status') == 'READY' and package_id in priorities
-    ]
-    candidates = actionable or ready
-    selected = min(candidates, key=lambda package_id: priorities[package_id]) if candidates else None
-    return errors, selected
 
 
 def _package_inventory(

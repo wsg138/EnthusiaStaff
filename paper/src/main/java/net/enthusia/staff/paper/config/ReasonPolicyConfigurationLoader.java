@@ -32,19 +32,31 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class ReasonPolicyConfigurationLoader {
     private static final Pattern STABLE_ID = Pattern.compile("[a-z0-9]+(?:[.-][a-z0-9]+)*");
+    private static final String ROOT_PATH = "root";
+    private static final String FAMILY_FIELD = "family";
+    private static final String DECAY_ELIGIBLE_FIELD = "decay-eligible";
+    private static final String PUBLIC_DEFAULT_FIELD = "public-default";
+    private static final String REPORTABLE_FIELD = "reportable";
+    private static final String REQUIRED_RANK_FIELD = "required-rank";
+    private static final String AUTOMATIC_DETECTION_ELIGIBLE_FIELD = "automatic-detection-eligible";
+    private static final String CONFISCATION_OPTIONS_FIELD = "confiscation-options";
+    private static final String ALT_INHERITANCE_FIELD = "alt-inheritance";
+    private static final String DISPLAY_NAME_FIELD = "display-name";
     private static final Set<String> ROOT_FIELDS = Set.of(
             "version", "defaults", "aliases", "removed-reasons", "reasons"
     );
     private static final Set<String> DEFAULT_FIELDS = Set.of(
-            "decay-eligible", "public-default", "reportable", "confiscation-options",
-            "required-rank", "automatic-detection-eligible", "alt-inheritance"
+            DECAY_ELIGIBLE_FIELD, PUBLIC_DEFAULT_FIELD, REPORTABLE_FIELD, CONFISCATION_OPTIONS_FIELD,
+            REQUIRED_RANK_FIELD, AUTOMATIC_DETECTION_ELIGIBLE_FIELD, ALT_INHERITANCE_FIELD
     );
     private static final Set<String> ALIAS_FIELDS = Set.of("id", "target");
-    private static final Set<String> REMOVED_REASON_FIELDS = Set.of("id", "family", "display-name");
+    private static final Set<String> REMOVED_REASON_FIELDS = Set.of(
+            "id", FAMILY_FIELD, DISPLAY_NAME_FIELD
+    );
     private static final Set<String> REASON_FIELDS = Set.of(
-            "id", "family", "display-name", "examples", "severity", "decay-eligible",
-            "public-default", "reportable", "confiscation-options", "required-rank",
-            "automatic-detection-eligible", "alt-inheritance", "ladder"
+            "id", FAMILY_FIELD, DISPLAY_NAME_FIELD, "examples", "severity", DECAY_ELIGIBLE_FIELD,
+            PUBLIC_DEFAULT_FIELD, REPORTABLE_FIELD, CONFISCATION_OPTIONS_FIELD, REQUIRED_RANK_FIELD,
+            AUTOMATIC_DETECTION_ELIGIBLE_FIELD, ALT_INHERITANCE_FIELD, "ladder"
     );
     private static final Set<String> STEP_FIELDS = Set.of("label", "sanctions");
     private static final Set<String> SANCTION_FIELDS = Set.of("type", "duration");
@@ -74,11 +86,11 @@ public final class ReasonPolicyConfigurationLoader {
     private LoadedPolicies load(Reader reader, String sourceName) {
         try {
             JsonNode root = yaml.readTree(reader);
-            requireObject(root, "root");
-            rejectUnknown(root, ROOT_FIELDS, "root");
-            String version = text(root, "version", "root");
-            Defaults defaults = parseDefaults(required(root, "defaults", "root"));
-            ParsedPolicies active = parsePolicies(required(root, "reasons", "root"), defaults);
+            requireObject(root, ROOT_PATH);
+            rejectUnknown(root, ROOT_FIELDS, ROOT_PATH);
+            String version = text(root, "version", ROOT_PATH);
+            Defaults defaults = parseDefaults(required(root, "defaults", ROOT_PATH));
+            ParsedPolicies active = parsePolicies(required(root, "reasons", ROOT_PATH), defaults);
             List<RemovedReason> removedReasons = parseRemovedReasons(
                     root.get("removed-reasons"),
                     active.identifiers()
@@ -136,8 +148,8 @@ public final class ReasonPolicyConfigurationLoader {
         rejectUnknown(node, REMOVED_REASON_FIELDS, path);
         return new RemovedReason(
                 text(node, "id", path),
-                text(node, "family", path),
-                text(node, "display-name", path)
+                text(node, FAMILY_FIELD, path),
+                text(node, DISPLAY_NAME_FIELD, path)
         );
     }
 
@@ -220,16 +232,17 @@ public final class ReasonPolicyConfigurationLoader {
         String path = "root.defaults";
         requireObject(node, path);
         rejectUnknown(node, DEFAULT_FIELDS, path);
-        boolean publicByDefault = bool(node, "public-default", path);
+        boolean publicByDefault = bool(node, PUBLIC_DEFAULT_FIELD, path);
         requirePublicDefault(publicByDefault, path + ".public-default");
         return new Defaults(
-                bool(node, "decay-eligible", path),
+                bool(node, DECAY_ELIGIBLE_FIELD, path),
                 publicByDefault,
-                bool(node, "reportable", path),
-                bool(node, "confiscation-options", path),
-                enumValue(StaffRank.class, text(node, "required-rank", path), path + ".required-rank"),
-                bool(node, "automatic-detection-eligible", path),
-                enumValue(AltInheritanceMode.class, text(node, "alt-inheritance", path), path + ".alt-inheritance")
+                bool(node, REPORTABLE_FIELD, path),
+                bool(node, CONFISCATION_OPTIONS_FIELD, path),
+                enumValue(StaffRank.class, text(node, REQUIRED_RANK_FIELD, path), path + ".required-rank"),
+                bool(node, AUTOMATIC_DETECTION_ELIGIBLE_FIELD, path),
+                enumValue(AltInheritanceMode.class,
+                        text(node, ALT_INHERITANCE_FIELD, path), path + ".alt-inheritance")
         );
     }
 
@@ -258,23 +271,26 @@ public final class ReasonPolicyConfigurationLoader {
         for (int index = 0; index < ladder.size(); index++) {
             steps.add(parseStep(ladder.get(index), index, path + ".ladder[" + index + "]"));
         }
-        boolean publicByDefault = bool(node, "public-default", defaults.publicByDefault(), path);
+        boolean publicByDefault = bool(node, PUBLIC_DEFAULT_FIELD, defaults.publicByDefault(), path);
         requirePublicDefault(publicByDefault, path + ".public-default");
         return new ReasonPolicy(
                 id,
-                text(node, "family", path),
-                text(node, "display-name", path),
+                text(node, FAMILY_FIELD, path),
+                text(node, DISPLAY_NAME_FIELD, path),
                 integer(node, "severity", path, 0, 100),
-                bool(node, "decay-eligible", defaults.decayEligible(), path),
+                bool(node, DECAY_ELIGIBLE_FIELD, defaults.decayEligible(), path),
                 steps,
                 examples,
                 publicByDefault,
-                bool(node, "reportable", defaults.reportable(), path),
-                bool(node, "confiscation-options", defaults.confiscationAllowed(), path),
-                enumValue(StaffRank.class, optionalText(node, "required-rank", defaults.requiredRank().name()), path + ".required-rank"),
-                bool(node, "automatic-detection-eligible", defaults.automaticDetectionAllowed(), path),
+                bool(node, REPORTABLE_FIELD, defaults.reportable(), path),
+                bool(node, CONFISCATION_OPTIONS_FIELD, defaults.confiscationAllowed(), path),
+                enumValue(StaffRank.class,
+                        optionalText(node, REQUIRED_RANK_FIELD, defaults.requiredRank().name()),
+                        path + ".required-rank"),
+                bool(node, AUTOMATIC_DETECTION_ELIGIBLE_FIELD, defaults.automaticDetectionAllowed(), path),
                 enumValue(AltInheritanceMode.class,
-                        optionalText(node, "alt-inheritance", defaults.altInheritance().name()), path + ".alt-inheritance")
+                        optionalText(node, ALT_INHERITANCE_FIELD, defaults.altInheritance().name()),
+                        path + ".alt-inheritance")
         );
     }
 

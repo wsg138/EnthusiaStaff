@@ -21,6 +21,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ClientCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "enthusiastaff.client";
+    private static final String SAVE_ARGUMENT = "save";
+    private static final String UNAVAILABLE_VALUE = "unavailable";
 
     private final JavaPlugin plugin;
     private final ClientEvidenceCollector collector;
@@ -69,7 +71,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         if (arguments.length == 1) {
             return true;
         }
-        if (!arguments[1].equalsIgnoreCase("save")) {
+        if (!arguments[1].equalsIgnoreCase(SAVE_ARGUMENT)) {
             usage(sender, label);
             return true;
         }
@@ -87,23 +89,23 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("Client evidence for " + targetName + ':'));
         sender.sendMessage(Component.text(
                 "Platform=" + snapshot.platform()
-                        + " version=" + snapshot.minecraftVersion().orElse("unavailable")
+                        + " version=" + snapshot.minecraftVersion().orElse(UNAVAILABLE_VALUE)
                         + " protocol=" + snapshot.protocolVersion()
-                                .map(String::valueOf).orElse("unavailable")
+                                .map(String::valueOf).orElse(UNAVAILABLE_VALUE)
         ));
         sender.sendMessage(Component.text(
-                "Reported brand=" + snapshot.reportedBrand().orElse("unavailable")
+                "Reported brand=" + snapshot.reportedBrand().orElse(UNAVAILABLE_VALUE)
         ));
         sender.sendMessage(Component.text(
                 "ViaVersion=" + snapshot.viaVersion()
                         + " plugin-version="
-                        + snapshot.viaVersionPluginVersion().orElse("unavailable")
+                        + snapshot.viaVersionPluginVersion().orElse(UNAVAILABLE_VALUE)
         ));
         sender.sendMessage(Component.text(
                 "Floodgate=" + snapshot.floodgate()
                         + " player=" + snapshot.floodgatePlayer()
-                        + " Bedrock-version=" + snapshot.bedrockVersion().orElse("unavailable")
-                        + " device=" + snapshot.bedrockDevice().orElse("unavailable")
+                        + " Bedrock-version=" + snapshot.bedrockVersion().orElse(UNAVAILABLE_VALUE)
+                        + " device=" + snapshot.bedrockDevice().orElse(UNAVAILABLE_VALUE)
         ));
         sender.sendMessage(Component.text("Geyser=" + snapshot.geyser()));
         AutoClickerHandshakeEvidence handshake = snapshot.autoClickerHandshake().orElse(null);
@@ -125,7 +127,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(Component.text(
                 "Polar=" + snapshot.polar()
-                        + " metadata=" + snapshot.polarMetadata().orElse("unavailable")
+                        + " metadata=" + snapshot.polarMetadata().orElse(UNAVAILABLE_VALUE)
                         + " captured=" + snapshot.capturedAt()
         ));
     }
@@ -200,10 +202,10 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             }
             return names;
         }
-        if (arguments.length == 2 && "save".startsWith(arguments[1].toLowerCase(Locale.ROOT))) {
-            return List.of("save");
+        if (arguments.length == 2 && SAVE_ARGUMENT.startsWith(arguments[1].toLowerCase(Locale.ROOT))) {
+            return List.of(SAVE_ARGUMENT);
         }
-        if (arguments.length == 3 && arguments[1].equalsIgnoreCase("save")
+        if (arguments.length == 3 && arguments[1].equalsIgnoreCase(SAVE_ARGUMENT)
                 && "CONFIRM".startsWith(arguments[2])) {
             return List.of("CONFIRM");
         }

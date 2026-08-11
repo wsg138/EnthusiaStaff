@@ -27,6 +27,8 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private static final String STATUS_PERMISSION = "enthusiastaff.status";
     private static final String VERIFY_PERMISSION = "enthusiastaff.verify";
     private static final String RELOAD_PERMISSION = "enthusiastaff.reload";
+    private static final String RELOAD_OPERATION = "reload";
+    private static final String SANCTION_OPERATION = "sanction";
     private static final int MAX_RELOAD_DETAILS = 5;
 
     private final RuntimeHealth health;
@@ -85,7 +87,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             @NotNull String[] args
     ) {
         SanctionLifecycleCommand lifecycle = sanctionLifecycle;
-        if (args.length > 0 && args[0].equalsIgnoreCase("sanction") && lifecycle != null) {
+        if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.execute(sender, label, args);
         }
 
@@ -104,7 +106,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         if (!requirePermission(sender, permission, denialMessage(operation))) {
             return true;
         }
-        if (operation.equals("reload")) {
+        if (operation.equals(RELOAD_OPERATION)) {
             dispatchReload(sender);
             return true;
         }
@@ -120,7 +122,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             @NotNull String[] args
     ) {
         SanctionLifecycleCommand lifecycle = sanctionLifecycle;
-        if (args.length > 0 && args[0].equalsIgnoreCase("sanction") && lifecycle != null) {
+        if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.complete(sender, args);
         }
         if (args.length != 1) {
@@ -130,9 +132,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         List<String> matches = new ArrayList<>();
         addCompletion(sender, matches, prefix, "status", STATUS_PERMISSION);
         addCompletion(sender, matches, prefix, "verify", VERIFY_PERMISSION);
-        addCompletion(sender, matches, prefix, "reload", RELOAD_PERMISSION);
-        if (lifecycle != null && "sanction".startsWith(prefix) && hasAnySanctionPermission(sender)) {
-            matches.add("sanction");
+        addCompletion(sender, matches, prefix, RELOAD_OPERATION, RELOAD_PERMISSION);
+        if (lifecycle != null && SANCTION_OPERATION.startsWith(prefix)
+                && hasAnySanctionPermission(sender)) {
+            matches.add(SANCTION_OPERATION);
         }
         return List.copyOf(matches);
     }
@@ -223,7 +226,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         return switch (operation) {
             case "status" -> STATUS_PERMISSION;
             case "verify" -> VERIFY_PERMISSION;
-            case "reload" -> RELOAD_PERMISSION;
+            case RELOAD_OPERATION -> RELOAD_PERMISSION;
             default -> null;
         };
     }
@@ -231,7 +234,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private static String denialMessage(String operation) {
         return switch (operation) {
             case "verify" -> "You do not have permission to verify EnthusiaStaff runtime state.";
-            case "reload" -> "You do not have permission to reload EnthusiaStaff configuration.";
+            case RELOAD_OPERATION -> "You do not have permission to reload EnthusiaStaff configuration.";
             default -> "You do not have permission to view EnthusiaStaff status.";
         };
     }

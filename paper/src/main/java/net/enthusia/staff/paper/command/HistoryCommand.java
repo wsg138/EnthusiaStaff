@@ -29,6 +29,7 @@ import org.jetbrains.annotations.NotNull;
 public final class HistoryCommand implements CommandExecutor, TabCompleter {
     public static final String VIEW_PERMISSION = "enthusiastaff.history.view";
     public static final String SENSITIVE_PERMISSION = "enthusiastaff.history.view-sensitive";
+    private static final String ENTRY_SEPARATOR = " | ";
 
     private final JavaPlugin plugin;
     private final Supplier<PlayerDirectory> players;
@@ -116,8 +117,8 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             ));
             for (PlayerIdentity match : ambiguous.matches()) {
                 lines.add(Component.text(
-                        "- " + match.currentUsername().orElse("unknown") + " | "
-                                + match.playerId() + " | " + match.platform()
+                        "- " + match.currentUsername().orElse("unknown") + ENTRY_SEPARATOR
+                                + match.playerId() + ENTRY_SEPARATOR + match.platform()
                 ));
             }
             if (ambiguous.truncated()) {
@@ -195,14 +196,14 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
     ) {
         StringBuilder line = new StringBuilder(128);
         line.append(formatter.format(entry.occurredAt()))
-                .append(" | ")
+                .append(ENTRY_SEPARATOR)
                 .append(human(entry.eventType().name()));
         entry.caseId().ifPresent(value -> line.append(" | case ").append(value.value()));
         entry.sanctionId().ifPresent(value -> line.append(" | sanction ").append(value));
         entry.punishmentRequestId().ifPresent(value -> line.append(" | request ").append(value));
         entry.appealId().ifPresent(value -> line.append(" | appeal ").append(value));
-        entry.punishmentType().ifPresent(value -> line.append(" | ").append(human(value)));
-        line.append(" | ").append(human(entry.status()));
+        entry.punishmentType().ifPresent(value -> line.append(ENTRY_SEPARATOR).append(human(value)));
+        line.append(ENTRY_SEPARATOR).append(human(entry.status()));
         if (!entry.originalExpiration().equals(entry.resultingExpiration())) {
             line.append(" | expiration ")
                     .append(expiration(entry.originalExpiration(), formatter))
