@@ -42,6 +42,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static final int PREPARE_MINIMUM_ARGUMENT_COUNT = 2;
     private static final String CONFIRM_SUBCOMMAND = "confirm";
     private static final String RESUME_SUBCOMMAND = "resume";
+    private static final String CENTRAL_COMMAND = "punish";
     private static final String PERMISSION = "enthusiastaff.punish.configured";
     private static final String PRIVATE_FLAG = "--private";
 
@@ -81,7 +82,8 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
-        if (requestCommands.handles(command.getName(), args)) {
+        String route = CommandRoute.canonicalName(command);
+        if (requestCommands.handles(route, args)) {
             requestCommands.execute(sender, args, actor);
             return true;
         }
@@ -93,7 +95,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length == NO_ARGUMENTS) {
-            usage(sender, label);
+            usage(sender, label, route);
             return true;
         }
         if (CONFIRM_SUBCOMMAND.equalsIgnoreCase(args[0])) {
@@ -101,33 +103,39 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (RESUME_SUBCOMMAND.equalsIgnoreCase(args[0])) {
-            resume(sender, actor, label, args);
+            resume(sender, actor, route, args);
             return true;
         }
-        prepare(sender, actor, label, args);
+        prepare(sender, actor, route, label, args);
         return true;
     }
 
-    private void prepare(CommandSender sender, Actor actor, String label, String[] args) {
-        if (openTargetOnlyGui(sender, label, args)) {
+    private void prepare(CommandSender sender, Actor actor, String route, String label, String[] args) {
+        if (openTargetOnlyGui(sender, route, args)) {
             return;
         }
         if (args.length < PREPARE_MINIMUM_ARGUMENT_COUNT) {
-            usage(sender, label);
+            usage(sender, label, route);
             return;
         }
-        submit(sender, () -> prepareStoredDraft(sender, actor, label, args));
+        submit(sender, () -> prepareStoredDraft(sender, actor, route, label, args));
     }
 
-    private boolean openTargetOnlyGui(CommandSender sender, String label, String[] args) {
+    private boolean openTargetOnlyGui(CommandSender sender, String route, String[] args) {
         if (args.length != SINGLE_ARGUMENT_COUNT || !(sender instanceof Player player)) {
             return false;
         }
-        gui.open(player, args[0], label);
+        gui.open(player, args[0], route);
         return true;
     }
 
-    private void prepareStoredDraft(CommandSender sender, Actor actor, String label, String[] args) {
+    private void prepareStoredDraft(
+            CommandSender sender,
+            Actor actor,
+            String route,
+            String label,
+            String[] args
+    ) {
         PlayerIdentity target = findTarget(sender, args[0]);
         if (target == null) {
             return;
@@ -138,7 +146,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return;
         }
         PunishmentDraftEvaluation evaluation = workflow.prepare(
-                prepareRequest(target, actor, label, args),
+                prepareRequest(target, actor, route, label, args),
                 mode.get()
         );
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
@@ -151,6 +159,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static PreparePunishmentDraftRequest prepareRequest(
             PlayerIdentity target,
             Actor actor,
+            String route,
             String label,
             String[] args
     ) {
@@ -164,7 +173,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 reasonId,
                 draftExplanation(args, label, reasonId),
                 visibility,
-                label.toLowerCase(Locale.ROOT)
+                route
         );
     }
 
@@ -229,13 +238,13 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         ));
     }
 
-    private void resume(CommandSender sender, Actor actor, String label, String[] args) {
+    private void resume(CommandSender sender, Actor actor, String route, String[] args) {
         if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
             sender.sendMessage(Component.text("Usage: /punish resume <target>", NamedTextColor.RED));
             return;
         }
         if (sender instanceof Player player) {
-            gui.resume(player, args[1], label);
+            gui.resume(player, args[1], route);
             return;
         }
         submit(sender, () -> resumeStoredDraft(sender, actor, args[1]));
@@ -397,7 +406,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         return target.currentUsername().orElse("offline target");
     }
 
-    private static void usage(CommandSender sender, String label) {
+    private static void usage(CommandSender sender, String label, String route) {
         sender.sendMessage(Component.text(
                 "Usage: /" + label + " <target> [reason-id] [--private] [internal explanation]",
                 NamedTextColor.YELLOW
@@ -406,7 +415,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 "Draft controls: /punish resume <target> | /punish confirm <draft-id>",
                 NamedTextColor.GRAY
         ));
-        if ("punish".equalsIgnoreCase(label)) {
+        if (CENTRAL_COMMAND.equals(route)) {
             sender.sendMessage(Component.text(
                     "Request review: /punish requests | review | approve | deny",
                     NamedTextColor.GRAY
@@ -416,7 +425,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        List<String> completions = new ArrayList<>(requestCommands.complete(command.getName(), args));
+        List<String> completions = new ArrayList<>(requestCommands.complete(CommandRoute.canonicalName(command), args));
         if (args.length == SINGLE_ARGUMENT_COUNT) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
             if (CONFIRM_SUBCOMMAND.startsWith(prefix)) {

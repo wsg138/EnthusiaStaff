@@ -57,7 +57,7 @@ public final class FreezeCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Freeze changes are disabled while moderation is " + mode.get() + '.'));
             return true;
         }
-        boolean release = label.equalsIgnoreCase("unfreeze");
+        boolean release = CommandRoute.canonicalName(command).equals("unfreeze");
         boolean keep = !release && arguments.length > 0 && arguments[0].equalsIgnoreCase("keep");
         int targetIndex = keep ? 1 : 0;
         int reasonStart = targetIndex + 1;

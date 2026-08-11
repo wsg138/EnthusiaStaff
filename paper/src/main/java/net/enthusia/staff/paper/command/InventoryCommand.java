@@ -24,6 +24,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class InventoryCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "enthusiastaff.inventory.view";
+    private static final int TARGET_ARGUMENT_COUNT = 1;
     private static final Duration SUGGESTION_TTL = Duration.ofSeconds(30);
     private static final int MAX_PREFIX_CACHE = 2_048;
 
@@ -57,11 +58,12 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("This inventory viewer requires an in-game staff viewer.");
             return true;
         }
-        if (arguments.length != 1) {
+        if (arguments.length != TARGET_ARGUMENT_COUNT) {
             viewer.sendMessage(Component.text("Usage: /" + label + " <player|uuid>"));
             return true;
         }
-        if (!submit(() -> resolveAndOpen(viewer, arguments[0], label.equalsIgnoreCase("endersee")))) {
+        boolean enderChest = CommandRoute.canonicalName(command).equals("endersee");
+        if (!submit(() -> resolveAndOpen(viewer, arguments[0], enderChest))) {
             viewer.sendMessage(Component.text("The moderation work queue is full; no inventory was opened."));
         }
         return true;
@@ -93,7 +95,8 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             String alias,
             String[] arguments
     ) {
-        if (!CommandPermissionGate.allows(sender::hasPermission, PERMISSION) || arguments.length != 1) {
+        if (!CommandPermissionGate.allows(sender::hasPermission, PERMISSION)
+                || arguments.length != TARGET_ARGUMENT_COUNT) {
             return List.of();
         }
         String prefix = arguments[0].toLowerCase(Locale.ROOT);
