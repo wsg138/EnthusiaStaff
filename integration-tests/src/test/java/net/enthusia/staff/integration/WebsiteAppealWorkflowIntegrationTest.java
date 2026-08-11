@@ -22,6 +22,7 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 import net.enthusia.staff.persistence.MariaDb;
@@ -37,6 +38,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SuppressWarnings("PMD.NcssCount")
 class WebsiteAppealWorkflowIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-06T12:00:00Z");
+    private static final String OPEN_STATE = "OPEN";
     private static final String PLAYER_NAME = "AppealPlayer";
     private static final String ACCOUNT_ID = uuid(801).toString();
     private static final UUID REVIEWER_ID = uuid(901);
@@ -68,90 +70,84 @@ class WebsiteAppealWorkflowIntegrationTest {
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore store = claimedStore(runtime, fixture, ACCOUNT_ID);
-            assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW).size());
-
-            WebsiteAppealSubmission submitted = store.submitAppeal(
-                    fixture.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
-                    "Please review the exact punishment and its context.",
-                    "submission-workflow-1",
-                    NOW.plusSeconds(1)
-            );
-            appealId = submitted.appeal().appealId();
-            assertFalse(submitted.replayed());
-            assertEquals("OPEN", submitted.appeal().state());
-            assertEquals(1, submitted.appeal().version());
-
-            WebsiteAppealSubmission replay = store.submitAppeal(
-                    fixture.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
-                    "Please review the exact punishment and its context.",
-                    "submission-workflow-1",
-                    NOW.plusSeconds(2)
-            );
-            assertTrue(replay.replayed());
-            assertEquals(appealId, replay.appeal().appealId());
-
-            WebsiteAppealDecisionPreparation information = store.prepareAppealDecision(
-                    appealId,
-                    1,
-                    "request_information",
-                    "Please provide the missing event context.",
-                    REVIEWER_ID,
-                    REVIEWER_RANK,
-                    "decision-information-1",
-                    NOW.plusSeconds(3)
-            );
-            assertFalse(information.requiresAcceptance());
-            assertEquals("INFORMATION_REQUESTED", information.appeal().state());
-            assertEquals(2, information.appeal().version());
-            assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(4)).size());
-
-            WebsiteAppealSubmission resubmitted = store.submitAppeal(
-                    fixture.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
-                    "Additional event context requested by the reviewer is included.",
-                    "submission-workflow-2",
-                    NOW.plusSeconds(5)
-            );
-            assertFalse(resubmitted.replayed());
-            assertEquals("OPEN", resubmitted.appeal().state());
-            assertEquals(3, resubmitted.appeal().version());
-
-            WebsiteModerationException stale = assertThrows(
-                    WebsiteModerationException.class,
-                    () -> store.prepareAppealDecision(
-                            appealId,
-                            1,
-                            "deny",
-                            "This stale decision must not be accepted.",
-                            REVIEWER_ID,
-                            REVIEWER_RANK,
-                            "decision-stale-1",
-                            NOW.plusSeconds(6)
-                    )
-            );
-            assertEquals("STALE_APPEAL_STATE", stale.code());
-
-            WebsiteAppealDecisionPreparation approved = store.prepareAppealDecision(
-                    appealId,
-                    3,
-                    "approve",
-                    "The appeal is supported by the reviewed evidence.",
-                    REVIEWER_ID,
-                    REVIEWER_RANK,
-                    "decision-approve-1",
-                    NOW.plusSeconds(7)
-            );
-            assertTrue(approved.requiresAcceptance());
-            assertEquals(ACCOUNT_ID, approved.playerAccountId());
-            assertEquals("APPROVAL_PENDING", approved.appeal().state());
-            assertEquals(4, approved.appeal().version());
+            appealId = submitAndRequestInformation(store, fixture);
+            resubmitAndApprove(store, fixture, appealId);
         }
 
+        assertApprovalReplayAfterRestart(appealId);
+    }
+
+    private static UUID submitAndRequestInformation(
+            WebsiteModerationStore store,
+            AppealFixture fixture
+    ) {
+        assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW).size());
+        WebsiteAppealSubmission submitted = store.submitAppeal(
+                fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
+                "Please review the exact punishment and its context.",
+                "submission-workflow-1", NOW.plusSeconds(1)
+        );
+        UUID appealId = submitted.appeal().appealId();
+        assertFalse(submitted.replayed());
+        assertEquals(OPEN_STATE, submitted.appeal().state());
+        assertEquals(1, submitted.appeal().version());
+
+        WebsiteAppealSubmission replay = store.submitAppeal(
+                fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
+                "Please review the exact punishment and its context.",
+                "submission-workflow-1", NOW.plusSeconds(2)
+        );
+        assertTrue(replay.replayed());
+        assertEquals(appealId, replay.appeal().appealId());
+
+        WebsiteAppealDecisionPreparation information = store.prepareAppealDecision(
+                appealId, 1, "request_information",
+                "Please provide the missing event context.",
+                REVIEWER_ID, REVIEWER_RANK, "decision-information-1", NOW.plusSeconds(3)
+        );
+        assertFalse(information.requiresAcceptance());
+        assertEquals("INFORMATION_REQUESTED", information.appeal().state());
+        assertEquals(2, information.appeal().version());
+        assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(4)).size());
+        return appealId;
+    }
+
+    private static void resubmitAndApprove(
+            WebsiteModerationStore store,
+            AppealFixture fixture,
+            UUID appealId
+    ) {
+        WebsiteAppealSubmission resubmitted = store.submitAppeal(
+                fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
+                "Additional event context requested by the reviewer is included.",
+                "submission-workflow-2", NOW.plusSeconds(5)
+        );
+        assertFalse(resubmitted.replayed());
+        assertEquals(OPEN_STATE, resubmitted.appeal().state());
+        assertEquals(3, resubmitted.appeal().version());
+
+        WebsiteModerationException stale = assertThrows(
+                WebsiteModerationException.class,
+                () -> store.prepareAppealDecision(
+                        appealId, 1, "deny",
+                        "This stale decision must not be accepted.",
+                        REVIEWER_ID, REVIEWER_RANK, "decision-stale-1", NOW.plusSeconds(6)
+                )
+        );
+        assertEquals("STALE_APPEAL_STATE", stale.code());
+
+        WebsiteAppealDecisionPreparation approved = store.prepareAppealDecision(
+                appealId, 3, "approve",
+                "The appeal is supported by the reviewed evidence.",
+                REVIEWER_ID, REVIEWER_RANK, "decision-approve-1", NOW.plusSeconds(7)
+        );
+        assertTrue(approved.requiresAcceptance());
+        assertEquals(ACCOUNT_ID, approved.playerAccountId());
+        assertEquals("APPROVAL_PENDING", approved.appeal().state());
+        assertEquals(4, approved.appeal().version());
+    }
+
+    private static void assertApprovalReplayAfterRestart(UUID appealId) {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteAppealDecisionPreparation replay = runtime.websiteModerationStore(CODE_PROTECTOR)
                     .prepareAppealDecision(
@@ -217,7 +213,48 @@ class WebsiteAppealWorkflowIntegrationTest {
                     )
             );
             assertEquals("APPEAL_ALREADY_EXISTS", conflict.code());
-            assertEquals(1, store.listAppeals("OPEN", Optional.empty(), 100, NOW).items().size());
+            assertEquals(1, store.listAppeals(OPEN_STATE, Optional.empty(), 100, NOW).items().size());
+        }
+    }
+
+    @Test
+    void appealPaginationUsesTheLastReturnedRowWithoutDuplicates() throws SQLException {
+        AppealFixture older = seedEligiblePunishment(6);
+        AppealFixture newer = seedEligiblePunishment(7);
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            WebsiteModerationStore store = claimedStore(runtime, older, ACCOUNT_ID);
+            claimedStore(runtime, newer, ACCOUNT_ID);
+            UUID olderAppeal = store.submitAppeal(
+                    older.sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The older appeal should appear on the second page.",
+                    "submission-pagination-older",
+                    NOW.plusSeconds(1)
+            ).appeal().appealId();
+            UUID newerAppeal = store.submitAppeal(
+                    newer.sanctionId(),
+                    ACCOUNT_ID,
+                    PLAYER_NAME,
+                    "The newer appeal should appear on the first page.",
+                    "submission-pagination-newer",
+                    NOW.plusSeconds(2)
+            ).appeal().appealId();
+
+            WebsiteAppealPage first = store.listAppeals(OPEN_STATE, Optional.empty(), 1, NOW.plusSeconds(3));
+            assertEquals(1, first.items().size());
+            assertEquals(newerAppeal, first.items().getFirst().appealId());
+            assertTrue(first.nextCursor().isPresent());
+
+            WebsiteAppealPage second = store.listAppeals(
+                    OPEN_STATE,
+                    first.nextCursor(),
+                    1,
+                    NOW.plusSeconds(3)
+            );
+            assertEquals(1, second.items().size());
+            assertEquals(olderAppeal, second.items().getFirst().appealId());
+            assertTrue(second.nextCursor().isEmpty());
         }
     }
 
