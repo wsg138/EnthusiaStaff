@@ -16,8 +16,6 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 
 public final class JdbcStaffSessionStore implements StaffSessionStore {
-    private static final int MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
-
     private final DataSource dataSource;
 
     public JdbcStaffSessionStore(DataSource dataSource) {
@@ -36,54 +34,26 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
             byte[] snapshot,
             Instant now
     ) {
-        validateSnapshot(staffId, serverId, schemaVersion, checksum, snapshot, now);
+        JdbcStaffSessionValidation.validateSnapshot(
+                staffId,
+                serverId,
+                schemaVersion,
+                checksum,
+                snapshot,
+                now
+        );
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                StaffSessionSnapshot existing = active(connection, staffId, true);
-                if (existing != null) {
-                    connection.rollback();
-                    return existing;
-                }
-                UUID sessionId = UUID.randomUUID();
-                try (PreparedStatement session = connection.prepareStatement("""
-                        INSERT INTO staff_sessions(session_id, staff_id, server_id, state,
-                            vanish_active, started_at)
-                        VALUES (?, ?, ?, 'ENTERING', FALSE, ?)
-                        """);
-                     PreparedStatement state = connection.prepareStatement("""
-                        INSERT INTO staff_state_snapshots(snapshot_id, session_id, schema_version,
-                            checksum, snapshot_blob, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """);
-                     PreparedStatement activate = connection.prepareStatement("""
-                        UPDATE staff_sessions SET state = 'ACTIVE', revision = revision + 1
-                        WHERE session_id = ? AND state = 'ENTERING'
-                        """)) {
-                    session.setBytes(1, UuidBytes.toBytes(sessionId));
-                    session.setBytes(2, UuidBytes.toBytes(staffId));
-                    session.setString(3, serverId);
-                    session.setTimestamp(4, Timestamp.from(now));
-                    session.executeUpdate();
-
-                    state.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-                    state.setBytes(2, UuidBytes.toBytes(sessionId));
-                    state.setInt(3, schemaVersion);
-                    state.setString(4, checksum);
-                    state.setBytes(5, snapshot);
-                    state.setTimestamp(6, Timestamp.from(now));
-                    state.executeUpdate();
-
-                    activate.setBytes(1, UuidBytes.toBytes(sessionId));
-                    if (activate.executeUpdate() != 1) {
-                        throw new SQLException("staff session activation lost its state transition");
-                    }
-                }
-                insertAudit(connection, staffId, sessionId, "STAFF_MODE_ENTERED", "Snapshot committed", now);
-                insertDiscord(connection, staffId, sessionId, "STAFF_MODE_ENTERED", now);
-                StaffSessionSnapshot created = active(connection, staffId, true);
-                connection.commit();
-                return created;
+                return beginTransaction(
+                        connection,
+                        staffId,
+                        serverId,
+                        schemaVersion,
+                        checksum,
+                        snapshot,
+                        now
+                );
             } catch (SQLException exception) {
                 rollback(connection, exception);
                 StaffSessionSnapshot existing = activeAfterConflict(staffId);
@@ -97,6 +67,38 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open staff session transaction", exception);
         }
+    }
+
+    private StaffSessionSnapshot beginTransaction(
+            Connection connection,
+            UUID staffId,
+            String serverId,
+            int schemaVersion,
+            String checksum,
+            byte[] snapshot,
+            Instant now
+    ) throws SQLException {
+        StaffSessionSnapshot existing = active(connection, staffId, true);
+        if (existing != null) {
+            connection.rollback();
+            return existing;
+        }
+        UUID sessionId = UUID.randomUUID();
+        JdbcStaffSessionTransitions.insertSessionAndSnapshot(
+                connection,
+                sessionId,
+                staffId,
+                serverId,
+                schemaVersion,
+                checksum,
+                snapshot,
+                now
+        );
+        insertAudit(connection, staffId, sessionId, "STAFF_MODE_ENTERED", "Snapshot committed", now);
+        insertDiscord(connection, staffId, sessionId, "STAFF_MODE_ENTERED", now);
+        StaffSessionSnapshot created = active(connection, staffId, true);
+        connection.commit();
+        return created;
     }
 
     @Override
@@ -156,34 +158,7 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                SessionIdentity session = lockSessionIdentity(connection, sessionId);
-                if (session == null || session.state() != StaffSessionState.EXITING) {
-                    connection.rollback();
-                    return false;
-                }
-                String expected = snapshotChecksum(connection, sessionId);
-                if (!restoredChecksum.equals(expected)) {
-                    markRecovery(connection, sessionId);
-                    insertAudit(connection, session.staffId(), sessionId, "STAFF_MODE_RECOVERY_REQUIRED",
-                            "Restored state checksum mismatch", now);
-                    connection.commit();
-                    return false;
-                }
-                try (PreparedStatement statement = connection.prepareStatement("""
-                        UPDATE staff_sessions
-                        SET state = 'CLOSED', vanish_active = FALSE, ended_at = ?, revision = revision + 1
-                        WHERE session_id = ? AND state = 'EXITING'
-                        """)) {
-                    statement.setTimestamp(1, Timestamp.from(now));
-                    statement.setBytes(2, UuidBytes.toBytes(sessionId));
-                    if (statement.executeUpdate() != 1) {
-                        throw new SQLException("staff session closure lost its state transition");
-                    }
-                }
-                insertAudit(connection, session.staffId(), sessionId, "STAFF_MODE_EXITED", "Restoration verified", now);
-                insertDiscord(connection, session.staffId(), sessionId, "STAFF_MODE_EXITED", now);
-                connection.commit();
-                return true;
+                return completeExitTransaction(connection, sessionId, restoredChecksum, now);
             } catch (SQLException exception) {
                 rollback(connection, exception);
                 throw exception;
@@ -195,11 +170,57 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         }
     }
 
+    private static boolean completeExitTransaction(
+            Connection connection,
+            UUID sessionId,
+            String restoredChecksum,
+            Instant now
+    ) throws SQLException {
+        SessionIdentity session = lockSessionIdentity(connection, sessionId);
+        if (session == null || session.state() != StaffSessionState.EXITING) {
+            connection.rollback();
+            return false;
+        }
+        String expected = snapshotChecksum(connection, sessionId);
+        if (!restoredChecksum.equals(expected)) {
+            markChecksumMismatch(connection, sessionId, session, now);
+            return false;
+        }
+        JdbcStaffSessionTransitions.closeSession(connection, sessionId, now);
+        insertAudit(
+                connection,
+                session.staffId(),
+                sessionId,
+                "STAFF_MODE_EXITED",
+                "Restoration verified",
+                now
+        );
+        insertDiscord(connection, session.staffId(), sessionId, "STAFF_MODE_EXITED", now);
+        connection.commit();
+        return true;
+    }
+
+    private static void markChecksumMismatch(
+            Connection connection,
+            UUID sessionId,
+            SessionIdentity session,
+            Instant now
+    ) throws SQLException {
+        markRecovery(connection, sessionId);
+        insertAudit(
+                connection,
+                session.staffId(),
+                sessionId,
+                "STAFF_MODE_RECOVERY_REQUIRED",
+                "Restored state checksum mismatch",
+                now
+        );
+        connection.commit();
+    }
+
     @Override
     public void recoveryRequired(UUID sessionId, String reason, Instant now) {
-        if (sessionId == null || reason == null || reason.isBlank() || reason.length() > 512 || now == null) {
-            throw new IllegalArgumentException("valid staff recovery fields are required");
-        }
+        JdbcStaffSessionValidation.validateRecoveryRequest(sessionId, reason, now);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -224,7 +245,7 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
 
     @Override
     public int recoveryRequiredForServer(String serverId, String reason, Instant now) {
-        validateServerRecovery(serverId, reason, now);
+        JdbcStaffSessionValidation.validateServerRecovery(serverId, reason, now);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -436,28 +457,6 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
             statement.setTimestamp(5, Timestamp.from(now));
             statement.setTimestamp(6, Timestamp.from(now));
             statement.executeUpdate();
-        }
-    }
-
-    private static void validateSnapshot(
-            UUID staffId,
-            String serverId,
-            int schemaVersion,
-            String checksum,
-            byte[] snapshot,
-            Instant now
-    ) {
-        if (staffId == null || serverId == null || !serverId.matches("[A-Za-z0-9_-]{1,64}")
-                || schemaVersion < 1 || checksum == null || !checksum.matches("[0-9a-f]{64}")
-                || snapshot == null || snapshot.length == 0 || snapshot.length > MAX_SNAPSHOT_BYTES || now == null) {
-            throw new IllegalArgumentException("valid bounded staff snapshot fields are required");
-        }
-    }
-
-    private static void validateServerRecovery(String serverId, String reason, Instant now) {
-        if (serverId == null || !serverId.matches("[A-Za-z0-9_-]{1,64}")
-                || reason == null || reason.isBlank() || reason.length() > 512 || now == null) {
-            throw new IllegalArgumentException("valid server staff-recovery fields are required");
         }
     }
 
