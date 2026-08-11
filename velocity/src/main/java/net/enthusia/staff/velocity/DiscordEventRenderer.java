@@ -119,8 +119,8 @@ final class DiscordEventRenderer {
     }
 
     private static String sanitize(String raw) {
-        StringBuilder result = new StringBuilder(Math.min(raw.length(), MAX_FIELD_CHARACTERS));
-        for (int index = 0; index < raw.length() && result.length() < MAX_FIELD_CHARACTERS; index++) {
+        StringBuilder result = new StringBuilder(raw.length());
+        for (int index = 0; index < raw.length(); index++) {
             char character = raw.charAt(index);
             if (Character.isISOControl(character)) {
                 result.append(' ');
@@ -131,10 +131,7 @@ final class DiscordEventRenderer {
             }
         }
         String normalized = result.toString().trim().replaceAll("\\s+", " ");
-        if (raw.length() > MAX_FIELD_CHARACTERS && normalized.length() >= MAX_FIELD_CHARACTERS) {
-            return truncateWithEllipsis(normalized, MAX_FIELD_CHARACTERS);
-        }
-        return normalized;
+        return truncateWithEllipsis(normalized, MAX_FIELD_CHARACTERS);
     }
 
     static String truncateWithEllipsis(String value, int maximumCharacters) {
