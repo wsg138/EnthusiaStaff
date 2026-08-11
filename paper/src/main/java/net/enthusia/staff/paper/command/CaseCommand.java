@@ -162,8 +162,7 @@ public final class CaseCommand implements CommandExecutor {
             boolean sensitive
     ) {
         CaseReview review = detail.caseReview();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss z")
-                .withZone(settings.historyTimezone());
+        DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text(
                 "Case " + review.caseId().value() + " | subject " + review.targetId()
@@ -213,34 +212,43 @@ public final class CaseCommand implements CommandExecutor {
         }
         lines.add(Component.text("Timeline:"));
         for (ModerationHistoryEntry entry : detail.timeline()) {
-            StringBuilder line = new StringBuilder("- ")
-                    .append(formatter.format(entry.occurredAt()))
-                    .append(" | ")
-                    .append(human(entry.eventType().name()))
-                    .append(" | ")
-                    .append(human(entry.status()));
-            entry.sanctionId().ifPresent(value -> line.append(" | sanction ").append(value));
-            entry.punishmentRequestId().ifPresent(value -> line.append(" | request ").append(value));
-            entry.appealId().ifPresent(value -> line.append(" | appeal ").append(value));
-            if (!entry.originalExpiration().equals(entry.resultingExpiration())) {
-                line.append(" | expiration ")
-                        .append(expiration(entry.originalExpiration(), formatter))
-                        .append(" -> ")
-                        .append(expiration(entry.resultingExpiration(), formatter));
-            }
-            if (!entry.publicReason().isBlank()) {
-                line.append(" | reason: ").append(entry.publicReason());
-            }
-            if (sensitive) {
-                entry.actorName().ifPresentOrElse(
-              value -> line.append(" | actor: ").append(value),
-              () -> entry.actorId().ifPresent(value -> line.append(" | actor: ").append(value))
-      );
-                entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
-            }
-            lines.add(Component.text(line.toString()));
+            lines.add(Component.text(formatTimelineEntry(entry, formatter, sensitive)));
         }
         return List.copyOf(lines);
+    }
+
+    private static String formatTimelineEntry(
+            ModerationHistoryEntry entry,
+            DateTimeFormatter formatter,
+            boolean sensitive
+    ) {
+        StringBuilder line = new StringBuilder(128)
+                .append("- ")
+                .append(formatter.format(entry.occurredAt()))
+                .append(" | ")
+                .append(human(entry.eventType().name()))
+                .append(" | ")
+                .append(human(entry.status()));
+        entry.sanctionId().ifPresent(value -> line.append(" | sanction ").append(value));
+        entry.punishmentRequestId().ifPresent(value -> line.append(" | request ").append(value));
+        entry.appealId().ifPresent(value -> line.append(" | appeal ").append(value));
+        if (!entry.originalExpiration().equals(entry.resultingExpiration())) {
+            line.append(" | expiration ")
+                    .append(expiration(entry.originalExpiration(), formatter))
+                    .append(" -> ")
+                    .append(expiration(entry.resultingExpiration(), formatter));
+        }
+        if (!entry.publicReason().isBlank()) {
+            line.append(" | reason: ").append(entry.publicReason());
+        }
+        if (sensitive) {
+            entry.actorName().ifPresentOrElse(
+                    value -> line.append(" | actor: ").append(value),
+                    () -> entry.actorId().ifPresent(value -> line.append(" | actor: ").append(value))
+            );
+            entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
+        }
+        return line.toString();
     }
 
     private static String recommendation(List<SanctionSpec> sanctions) {

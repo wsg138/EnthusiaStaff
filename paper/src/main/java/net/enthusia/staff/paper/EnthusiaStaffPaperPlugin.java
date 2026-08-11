@@ -74,7 +74,6 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PunishmentRequestAlertController alertController;
     private ConfigurationReloadCoordinator reloadCoordinator;
     private PaperDatabaseConfiguration.Settings databaseSettings;
-    private StorageBootstrapCoordinator<StorageBootstrapContext> storageBootstrap;
     private PaperOperationalTaskCoordinator operationalTasks;
 
     @Override
@@ -274,7 +273,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     }
 
     private void startStorageBootstrap() {
-        storageBootstrap = new StorageBootstrapCoordinator<>(
+        StorageBootstrapCoordinator<StorageBootstrapContext> storageBootstrap =
+                new StorageBootstrapCoordinator<>(
                 this::submitWorker,
                 this::scheduleGlobal,
                 this::scheduleBootstrapRetry,

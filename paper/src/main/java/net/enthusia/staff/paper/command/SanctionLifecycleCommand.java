@@ -39,7 +39,6 @@ public final class SanctionLifecycleCommand {
     public static final String BYPASS_HIERARCHY_PERMISSION = "enthusiastaff.sanction.bypass-hierarchy";
 
     private final JavaPlugin plugin;
-    private final Clock clock;
     private final String originRuntime;
     private final Supplier<OperationalMode> mode;
     private final Supplier<SanctionChangeService> changes;
@@ -62,7 +61,6 @@ public final class SanctionLifecycleCommand {
             throw new IllegalArgumentException("sanction lifecycle dependencies must be present");
         }
         this.plugin = plugin;
-        this.clock = clock;
         this.originRuntime = originRuntime;
         this.mode = mode;
         this.changes = changes;
@@ -175,8 +173,7 @@ public final class SanctionLifecycleCommand {
             ModerationFeatureSettings settings
     ) {
         List<Component> lines = new ArrayList<>();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss z")
-                .withZone(settings.historyTimezone());
+        DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         if (result instanceof ExactSanctionChangeResult.Applied applied) {
             lines.add(Component.text(
                     (applied.replayed() ? "No duplicate change was created; replayed" : "Applied")

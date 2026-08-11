@@ -176,8 +176,7 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
                 "Page " + page.page() + "/" + page.totalPages() + " — "
                         + page.totalEntries() + " timeline entries"
         ));
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss z")
-                .withZone(timezone);
+        DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(timezone);
         for (ModerationHistoryEntry entry : page.entries()) {
             lines.add(Component.text(formatEntry(entry, formatter, sensitive)));
         }
@@ -194,7 +193,7 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
             DateTimeFormatter formatter,
             boolean sensitive
     ) {
-        StringBuilder line = new StringBuilder();
+        StringBuilder line = new StringBuilder(128);
         line.append(formatter.format(entry.occurredAt()))
                 .append(" | ")
                 .append(human(entry.eventType().name()));

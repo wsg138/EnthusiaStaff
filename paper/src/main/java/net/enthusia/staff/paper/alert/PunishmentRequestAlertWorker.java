@@ -168,16 +168,20 @@ public final class PunishmentRequestAlertWorker {
             try {
                 loaded = requests.find(claim.intent().requestId());
             } catch (RuntimeException exception) {
-                logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
-                        + claim.intent().alertId(), exception);
+                if (logger.isLoggable(Level.WARNING)) {
+                    logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
+                            + claim.intent().alertId(), exception);
+                }
                 retryableFailure(claim, REQUEST_LOOKUP_FAILED);
                 continue;
             }
             if (loaded.isEmpty()) {
-                logger.severe("Punishment request alert references a missing request: alert="
-                        + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                        + " recipient=" + claim.deliveryId().recipientId()
-                        + " attempt=" + claim.attemptCount());
+                if (logger.isLoggable(Level.SEVERE)) {
+                    logger.severe("Punishment request alert references a missing request: alert="
+                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                            + " recipient=" + claim.deliveryId().recipientId()
+                            + " attempt=" + claim.attemptCount());
+                }
                 permanentFailure(claim, REQUEST_MISSING);
                 continue;
             }
@@ -190,10 +194,12 @@ public final class PunishmentRequestAlertWorker {
                         displayName(claim.intent().occurrence().actorId())
                 ));
             } catch (RuntimeException exception) {
-                logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
-                        + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                        + " recipient=" + claim.deliveryId().recipientId()
-                        + " attempt=" + claim.attemptCount(), exception);
+                if (logger.isLoggable(Level.SEVERE)) {
+                    logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
+                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                            + " recipient=" + claim.deliveryId().recipientId()
+                            + " attempt=" + claim.attemptCount(), exception);
+                }
                 permanentFailure(claim, INVALID_PRESENTATION_DATA);
             }
         }
@@ -387,9 +393,9 @@ public final class PunishmentRequestAlertWorker {
         PunishmentRequestAlertRecipient recipient = current.orElseThrow();
         List<Outcome> outcomes = new ArrayList<>(presentations.size());
         for (PunishmentRequestAlertPresentation presentation : presentations) {
-            Outcome authorization = authorize(recipient, presentation);
-            if (authorization != null) {
-                outcomes.add(authorization);
+            Optional<Outcome> authorization = authorize(recipient, presentation);
+            if (authorization.isPresent()) {
+                outcomes.add(authorization.orElseThrow());
                 continue;
             }
             try {
@@ -404,36 +410,37 @@ public final class PunishmentRequestAlertWorker {
         queueOutcomes(outcomes, completion);
     }
 
-    private Outcome authorize(
+    private Optional<Outcome> authorize(
             PunishmentRequestAlertRecipient recipient,
             PunishmentRequestAlertPresentation presentation
     ) {
         PunishmentRequestAlertClaim claim = presentation.claim();
         if (!claim.deliveryId().recipientId().equals(recipient.playerId())) {
-            return Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+            return Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
         }
         return switch (claim.intent().audience()) {
             case DIRECT_RECIPIENT -> claim.intent().recipientId().equals(recipient.playerId())
-                    ? null : Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+                    ? Optional.empty()
+                    : Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
             case ELIGIBLE_REVIEWERS -> authorizeReviewer(recipient, presentation);
             case OPERATIONAL_ADMINISTRATORS -> authorizeOperational(recipient, claim);
         };
     }
 
-    private Outcome authorizeReviewer(
+    private Optional<Outcome> authorizeReviewer(
             PunishmentRequestAlertRecipient recipient,
             PunishmentRequestAlertPresentation presentation
     ) {
         PunishmentRequestAlertClaim claim = presentation.claim();
         PunishmentApprovalRequest request = presentation.request();
         if (request.proposal().requester().id().equals(recipient.playerId())) {
-            return Outcome.cancel(claim, REQUESTER_CONFLICT);
+            return Optional.of(Outcome.cancel(claim, REQUESTER_CONFLICT));
         }
         if (!visibilityPermits(request.proposal().visibility(), recipient.rank())) {
-            return Outcome.cancel(claim, VISIBILITY_DENIED);
+            return Optional.of(Outcome.cancel(claim, VISIBILITY_DENIED));
         }
         if (recipient.rank() == null) {
-            return Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+            return Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
         }
         Actor actor = new Actor(recipient.playerId(), recipient.playerName(), recipient.rank());
         if (!recipientPolicy.mayReceiveReviewerAlert(
@@ -441,25 +448,25 @@ public final class PunishmentRequestAlertWorker {
                 claim.intent().excludedRecipientId(),
                 claim.intent().minimumRank()
         ) || !recipientPolicy.mayReceiveReviewerAlert(actor, request)) {
-            return Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+            return Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
         }
         // This is the freshest asynchronous request snapshot available. A database transition can
         // still race the final Bukkit packet presentation; the delivery model is intentionally
         // at-least-once and does not claim atomic state verification across that boundary.
         if (!request.pendingAt(clock.instant())) {
-            return Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+            return Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
         }
-        return null;
+        return Optional.empty();
     }
 
-    private Outcome authorizeOperational(
+    private Optional<Outcome> authorizeOperational(
             PunishmentRequestAlertRecipient recipient,
             PunishmentRequestAlertClaim claim
     ) {
         if (recipient.rank() != StaffRank.ADMIN && recipient.rank() != StaffRank.FOUNDER) {
-            return Outcome.cancel(claim, RECIPIENT_INELIGIBLE);
+            return Optional.of(Outcome.cancel(claim, RECIPIENT_INELIGIBLE));
         }
-        return null;
+        return Optional.empty();
     }
 
     private static boolean visibilityPermits(CaseVisibility visibility, StaffRank rank) {
@@ -504,6 +511,9 @@ public final class PunishmentRequestAlertWorker {
                         now.plus(settings.retryDelay(outcome.claim().attemptCount())),
                         now,
                         settings.maximumAttempts()
+                );
+                default -> throw new IllegalStateException(
+                        "Unsupported punishment request alert outcome: " + outcome.kind()
                 );
             }
         } catch (RuntimeException exception) {

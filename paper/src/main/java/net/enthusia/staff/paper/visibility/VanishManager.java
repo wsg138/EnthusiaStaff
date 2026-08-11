@@ -347,6 +347,7 @@ public final class VanishManager implements Listener {
             case VERIFY_SESSION -> verifyLowerRankSession(player, liveRank);
             case DISABLE -> disableReconciledVanish(player, cachedRank, liveRank, durableRank);
             case NONE -> clearCompletedPendingExit(playerId, vanished, durableRank);
+            default -> throw new IllegalStateException("Unsupported vanish action: " + action);
         }
     }
 

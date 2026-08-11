@@ -33,6 +33,8 @@ import net.enthusia.staff.persistence.UuidBytes;
 
 final class LiteBansTargetImporter {
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 1L);
+    private static final int UNIQUE_CANDIDATE_COUNT = 1;
+    private static final int EXPECTED_UPDATED_ROWS = 1;
 
     private final DataSource target;
     private final ObjectMapper json;
@@ -254,22 +256,22 @@ final class LiteBansTargetImporter {
         List<UUID> usernameCandidates = legacy.username()
                 .map(this::playerIdsForUsername)
                 .orElseGet(List::of);
-        if (usernameCandidates.size() == 1) {
+        if (usernameCandidates.size() == UNIQUE_CANDIDATE_COUNT) {
             return new TargetResolution(Optional.of(usernameCandidates.getFirst()), "");
         }
         if (legacy.type() == LegacySanctionType.IP_BAN && legacy.networkAddress().isPresent()) {
             List<UUID> networkCandidates = playerIdsForNetworkAddress(legacy.networkAddress().orElseThrow());
-            if (usernameCandidates.size() > 1) {
+            if (usernameCandidates.size() > UNIQUE_CANDIDATE_COUNT) {
                 networkCandidates = networkCandidates.stream().filter(usernameCandidates::contains).toList();
             }
-            if (networkCandidates.size() == 1) {
+            if (networkCandidates.size() == UNIQUE_CANDIDATE_COUNT) {
                 return new TargetResolution(Optional.of(networkCandidates.getFirst()), "");
             }
-            if (networkCandidates.size() > 1) {
+            if (networkCandidates.size() > UNIQUE_CANDIDATE_COUNT) {
                 return new TargetResolution(Optional.empty(), "AMBIGUOUS_NETWORK_IDENTITY");
             }
         }
-        if (usernameCandidates.size() > 1) {
+        if (usernameCandidates.size() > UNIQUE_CANDIDATE_COUNT) {
             return new TargetResolution(Optional.empty(), "AMBIGUOUS_USERNAME_IDENTITY");
         }
         return new TargetResolution(
@@ -360,12 +362,12 @@ final class LiteBansTargetImporter {
             setOptionalTimestamp(sanction, 2, legacy.expiresAt());
             setOptionalTimestamp(sanction, 3, projection.endedAt());
             sanction.setBytes(4, UuidBytes.toBytes(current.sanctionId()));
-            if (sanction.executeUpdate() != 1) {
+            if (sanction.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("mapped LiteBans sanction disappeared during reconciliation");
             }
             caseState.setString(1, projection.caseOpen() ? "OPEN" : "CLOSED");
             caseState.setString(2, mapping.caseId().value());
-            if (caseState.executeUpdate() != 1) {
+            if (caseState.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("mapped LiteBans case disappeared during reconciliation");
             }
         }
@@ -522,7 +524,7 @@ final class LiteBansTargetImporter {
             statement.setTimestamp(3, Timestamp.from(now));
             statement.setString(4, legacy.sourceTable());
             statement.setString(5, legacy.externalId());
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("mapped LiteBans record disappeared during reconciliation");
             }
         }
