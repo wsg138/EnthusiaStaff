@@ -37,8 +37,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class InspectCommand implements CommandExecutor, TabCompleter {
+    private static final int IDENTITY_ARGUMENT_COUNT = 1;
+    private static final long MINIMUM_CONFISCATION_AMOUNT = 1L;
     private static final String INSPECT_PERMISSION = "enthusiastaff.inspect";
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
+    private static final String ECONOMY_CONFISCATION_PERMISSION = "enthusiastaff.confiscate.economy";
+    private static final String ECONOMY_SUBCOMMAND = "economy";
+    private static final String ENDER_SUBCOMMAND = "ender";
+    private static final String PLAYER_ABSENT_MESSAGE =
+            "That player is absent from the authoritative directory.";
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -91,13 +98,13 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("The player inspector requires an in-game staff viewer.");
             return true;
         }
-        if (arguments.length == 1) {
+        if (arguments.length == IDENTITY_ARGUMENT_COUNT) {
             submitOrMessage(viewer, () -> showIdentity(viewer, arguments[0]));
             return true;
         }
         if (arguments.length == 2
                 && (arguments[0].equalsIgnoreCase("inventory")
-                || arguments[0].equalsIgnoreCase("ender"))) {
+                || arguments[0].equalsIgnoreCase(ENDER_SUBCOMMAND))) {
             if (!CommandPermissionGate.require(
                     viewer,
                     INVENTORY_VIEW_PERMISSION,
@@ -107,11 +114,15 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             }
             submitOrMessage(
                     viewer,
-                    () -> openInventory(viewer, arguments[1], arguments[0].equalsIgnoreCase("ender"))
+                    () -> openInventory(
+                            viewer,
+                            arguments[1],
+                            arguments[0].equalsIgnoreCase(ENDER_SUBCOMMAND)
+                    )
             );
             return true;
         }
-        if (arguments.length == 5 && arguments[0].equalsIgnoreCase("economy")) {
+        if (arguments.length == 5 && arguments[0].equalsIgnoreCase(ECONOMY_SUBCOMMAND)) {
             if (!canApplyCaseConfiscation(viewer)) {
                 viewer.sendMessage(Component.text("You do not have case confiscation authority."));
                 return true;
@@ -146,7 +157,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         try {
             PlayerIdentity target = loaded.find(targetInput).orElse(null);
             if (target == null) {
-                message(viewer, "That player is absent from the authoritative directory.");
+                message(viewer, PLAYER_ABSENT_MESSAGE);
                 return;
             }
             PlayerPresence presence = loaded.presence(target.playerId()).orElse(null);
@@ -233,7 +244,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         try {
             PlayerIdentity target = loaded.find(targetInput).orElse(null);
             if (target == null) {
-                message(viewer, "That player is absent from the authoritative directory.");
+                message(viewer, PLAYER_ABSENT_MESSAGE);
                 return;
             }
             onViewer(viewer, () -> inventories.open(viewer, target, enderChest));
@@ -244,7 +255,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     }
 
     private void confiscateEconomy(Player viewer, String[] arguments) {
-        if (!viewer.hasPermission("enthusiastaff.confiscate.economy")) {
+        if (!viewer.hasPermission(ECONOMY_CONFISCATION_PERMISSION)) {
             viewer.sendMessage(Component.text("You do not have economy confiscation permission."));
             return;
         }
@@ -305,7 +316,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         try {
             PlayerIdentity target = loadedDirectory.find(targetInput).orElse(null);
             if (target == null) {
-                message(viewer, "That player is absent from the authoritative directory.");
+                message(viewer, PLAYER_ABSENT_MESSAGE);
                 return;
             }
             UUID caseTarget = loadedCases.target(caseId).orElse(null);
@@ -364,7 +375,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         try {
             PlayerIdentity target = loadedDirectory.find(targetInput).orElse(null);
             if (target == null) {
-                message(viewer, "That player is absent from the authoritative directory.");
+                message(viewer, PLAYER_ABSENT_MESSAGE);
                 return;
             }
             UUID caseTarget = loadedCases.target(caseId).orElse(null);
@@ -410,18 +421,18 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         if (!CommandPermissionGate.allows(sender::hasPermission, INSPECT_PERMISSION)) {
             return List.of();
         }
-        if (arguments.length == 1) {
+        if (arguments.length == IDENTITY_ARGUMENT_COUNT) {
             List<String> actions = new ArrayList<>();
             if (CommandPermissionGate.allows(sender::hasPermission, INVENTORY_VIEW_PERMISSION)) {
                 actions.add("inventory");
-                actions.add("ender");
+                actions.add(ENDER_SUBCOMMAND);
             }
             if (canApplyCaseConfiscation(sender)) {
                 if (sender.hasPermission("enthusiastaff.confiscate.items")) {
                     actions.add("items");
                 }
-                if (sender.hasPermission("enthusiastaff.confiscate.economy")) {
-                    actions.add("economy");
+                if (sender.hasPermission(ECONOMY_CONFISCATION_PERMISSION)) {
+                    actions.add(ECONOMY_SUBCOMMAND);
                 }
             }
             return prefix(arguments[0], actions);
@@ -436,21 +447,21 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                     .limit(50)
                     .toList();
         }
-        if (arguments.length == 4 && arguments[0].equalsIgnoreCase("economy")
+        if (arguments.length == 4 && arguments[0].equalsIgnoreCase(ECONOMY_SUBCOMMAND)
                 && canApplyCaseConfiscation(sender)
-                && sender.hasPermission("enthusiastaff.confiscate.economy")) {
+                && sender.hasPermission(ECONOMY_CONFISCATION_PERMISSION)) {
             return prefix(arguments[3], List.of("all"));
         }
-        if (arguments.length == 5 && arguments[0].equalsIgnoreCase("economy")
+        if (arguments.length == 5 && arguments[0].equalsIgnoreCase(ECONOMY_SUBCOMMAND)
                 && canApplyCaseConfiscation(sender)
-                && sender.hasPermission("enthusiastaff.confiscate.economy")) {
+                && sender.hasPermission(ECONOMY_CONFISCATION_PERMISSION)) {
             return prefix(arguments[4], List.of("CONFIRM"));
         }
         return List.of();
     }
 
     private boolean visibleTargetSubcommand(CommandSender sender, String input) {
-        if (input.equalsIgnoreCase("inventory") || input.equalsIgnoreCase("ender")) {
+        if (input.equalsIgnoreCase("inventory") || input.equalsIgnoreCase(ENDER_SUBCOMMAND)) {
             return CommandPermissionGate.allows(sender::hasPermission, INVENTORY_VIEW_PERMISSION);
         }
         if (!canApplyCaseConfiscation(sender)) {
@@ -458,8 +469,8 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         }
         return input.equalsIgnoreCase("items")
                 ? sender.hasPermission("enthusiastaff.confiscate.items")
-                : input.equalsIgnoreCase("economy")
-                        && sender.hasPermission("enthusiastaff.confiscate.economy");
+                : input.equalsIgnoreCase(ECONOMY_SUBCOMMAND)
+                        && sender.hasPermission(ECONOMY_CONFISCATION_PERMISSION);
     }
 
     private boolean canApplyCaseConfiscation(CommandSender sender) {
@@ -478,7 +489,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     private static long parsePositiveAmount(String input) {
         try {
             long amount = Long.parseLong(input);
-            if (amount <= 0L) {
+            if (amount < MINIMUM_CONFISCATION_AMOUNT) {
                 throw new IllegalArgumentException("amount must be positive");
             }
             return amount;
