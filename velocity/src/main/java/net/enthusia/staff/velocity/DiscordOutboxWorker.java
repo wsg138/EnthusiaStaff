@@ -86,12 +86,8 @@ final class DiscordOutboxWorker implements AutoCloseable {
             DiscordEventRenderer renderer,
             DiscordWebhookTransport transport
     ) {
-        if (logger == null || clock == null || store == null || renderer == null || transport == null
-                || maximumAttempts < 1 || failureThreshold < 1
-                || circuitDuration == null || circuitDuration.isZero() || circuitDuration.isNegative()
-                || requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
-            throw new IllegalArgumentException("Discord worker configuration is invalid");
-        }
+        validateDependencies(logger, clock, store, renderer, transport);
+        validatePolicy(maximumAttempts, failureThreshold, circuitDuration, requestTimeout);
         validateRoutes(routes);
         this.plugin = plugin;
         this.proxy = proxy;
@@ -184,6 +180,37 @@ final class DiscordOutboxWorker implements AutoCloseable {
             return DiscordWebhookTransport.Delivery.failed("PAYLOAD_REJECTED");
         }
         return transport.send(route, content);
+    }
+
+    private static void validateDependencies(
+            Logger logger,
+            Clock clock,
+            DiscordOutboxStore store,
+            DiscordEventRenderer renderer,
+            DiscordWebhookTransport transport
+    ) {
+        if (logger == null || clock == null || store == null || renderer == null || transport == null) {
+            throw new IllegalArgumentException("Discord worker dependencies are invalid");
+        }
+    }
+
+    private static void validatePolicy(
+            int maximumAttempts,
+            int failureThreshold,
+            Duration circuitDuration,
+            Duration requestTimeout
+    ) {
+        if (maximumAttempts < 1 || failureThreshold < 1) {
+            throw new IllegalArgumentException("Discord worker retry policy is invalid");
+        }
+        requirePositive(circuitDuration, "Discord worker circuit duration is invalid");
+        requirePositive(requestTimeout, "Discord worker request timeout is invalid");
+    }
+
+    private static void requirePositive(Duration duration, String message) {
+        if (duration == null || duration.isZero() || duration.isNegative()) {
+            throw new IllegalArgumentException(message);
+        }
     }
 
     private static void validateRoutes(Map<String, DiscordWebhookRoute> routes) {
