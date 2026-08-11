@@ -10,6 +10,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
@@ -52,6 +53,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FreezeManager implements Listener {
     private static final Duration OFFLINE_EXPIRATION = Duration.ofMinutes(10);
+    private static final String VERIFICATION_UNAVAILABLE_MESSAGE =
+            "Your freeze status could not be verified. You remain restricted until staff review.";
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -59,6 +62,8 @@ public final class FreezeManager implements Listener {
     private final ExecutorService workers;
     private final PlayerDispatcher playerDispatcher;
     private final Consumer<Runnable> globalScheduler;
+    private final Logger logger;
+    private final Consumer<String> staffAlertSink;
     private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
 
     public FreezeManager(
@@ -78,12 +83,31 @@ public final class FreezeManager implements Listener {
             PlayerDispatcher playerDispatcher,
             Consumer<Runnable> globalScheduler
     ) {
+        this(
+                plugin, clock, store, workers, playerDispatcher, globalScheduler,
+                plugin == null ? Logger.getLogger(FreezeManager.class.getName()) : plugin.getLogger(),
+                null
+        );
+    }
+
+    FreezeManager(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<FreezeStore> store,
+            ExecutorService workers,
+            PlayerDispatcher playerDispatcher,
+            Consumer<Runnable> globalScheduler,
+            Logger logger,
+            Consumer<String> staffAlertSink
+    ) {
         this.plugin = plugin;
         this.clock = clock;
         this.store = store;
         this.workers = workers;
         this.playerDispatcher = playerDispatcher;
         this.globalScheduler = globalScheduler;
+        this.logger = java.util.Objects.requireNonNull(logger, "logger");
+        this.staffAlertSink = staffAlertSink;
     }
 
     public boolean isRestricted(UUID playerId) {
@@ -128,9 +152,11 @@ public final class FreezeManager implements Listener {
         if (submit(() -> verifyStoredState(playerId, displayName, verificationToken))) {
             return;
         }
-        plugin.getLogger().severe("Freeze verification was not scheduled for " + displayName
-                + "; the player remains restricted until staff intervene");
-        alertStaffDuringVerification(playerId, verificationToken,
+        if (logger.isLoggable(Level.SEVERE)) {
+            logger.severe("Freeze verification was not scheduled for " + displayName
+                    + "; the player remains restricted until staff intervene");
+        }
+        reportVerificationUnavailable(playerId, verificationToken,
                 "Freeze verification could not run for " + displayName
                         + ". The player remains restricted. Use /unfreeze after review.");
     }
@@ -140,9 +166,12 @@ public final class FreezeManager implements Listener {
             FreezeStore loaded = store.get();
             if (loaded == null) {
                 if (runtimeState.isVerificationCurrent(playerId, verificationToken)) {
-                    plugin.getLogger().severe(
+                    logger.severe(
                             "Freeze storage is unavailable; the joining player remains restricted"
                     );
+                    reportVerificationUnavailable(playerId, verificationToken,
+                            "Freeze storage is unavailable while " + displayName
+                                    + " is joining. The player remains restricted. Use /unfreeze after review.");
                 }
                 return;
             }
@@ -160,8 +189,11 @@ public final class FreezeManager implements Listener {
                     + ". Use /unfreeze or /freeze keep after review.");
         } catch (RuntimeException exception) {
             if (runtimeState.isVerificationCurrent(playerId, verificationToken)) {
-                plugin.getLogger().log(Level.SEVERE,
+                logger.log(Level.SEVERE,
                         "Freeze recovery lookup failed; the joining player remains restricted", exception);
+                reportVerificationUnavailable(playerId, verificationToken,
+                        "Freeze lookup failed while " + displayName
+                                + " is joining. The player remains restricted. Use /unfreeze after review.");
             }
         }
     }
@@ -408,6 +440,18 @@ public final class FreezeManager implements Listener {
         });
     }
 
+    private void reportVerificationUnavailable(UUID playerId, long generation, String staffMessage) {
+        onEntity(playerId, player -> {
+            if (!runtimeState.isVerificationCurrent(playerId, generation)) {
+                return;
+            }
+            player.leaveVehicle();
+            player.closeInventory();
+            player.sendMessage(Component.text(VERIFICATION_UNAVAILABLE_MESSAGE));
+        });
+        alertStaffDuringVerification(playerId, generation, staffMessage);
+    }
+
     private void scheduleGlobal(Runnable operation) {
         if (globalScheduler != null) {
             globalScheduler.accept(operation);
@@ -417,6 +461,10 @@ public final class FreezeManager implements Listener {
     }
 
     private void sendAlert(String message) {
+        if (staffAlertSink != null) {
+            staffAlertSink.accept(message);
+            return;
+        }
         plugin.getServer().getOnlinePlayers().stream()
                 .filter(player -> player.hasPermission("enthusiastaff.freeze"))
                 .forEach(player -> player.sendMessage(Component.text(message)));
@@ -427,7 +475,7 @@ public final class FreezeManager implements Listener {
             workers.execute(operation);
             return true;
         } catch (RejectedExecutionException exception) {
-            plugin.getLogger().warning("Freeze persistence operation skipped because the bounded queue is full");
+            logger.warning("Freeze persistence operation skipped because the bounded queue is full");
             return false;
         }
     }
