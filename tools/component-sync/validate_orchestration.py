@@ -57,25 +57,35 @@ def _parse_registry_rows(
     packages: dict[str, dict[str, str]] = {}
     duplicate_ids: list[str] = []
     for line in registry.splitlines():
-        cells = _table_cells(line)
-        if cells is None:
+        headers, row = _registry_row(line, headers)
+        if row is None:
             continue
-        if cells and cells[0] == 'ID':
-            headers = cells
-            continue
-        if headers is None or not _is_package_row(cells):
-            continue
-        fields = {
-            header: value
-            for header, value in zip(headers, cells, strict=False)
-            if value not in {'', '-', '—'}
-        }
-        package_id = cells[0]
+        package_id, fields = row
         if package_id in packages:
             duplicate_ids.append(package_id)
-            continue
-        packages[package_id] = fields
+        else:
+            packages[package_id] = fields
     return packages, duplicate_ids
+
+
+def _registry_row(
+    line: str,
+    headers: list[str] | None,
+) -> tuple[list[str] | None, tuple[str, dict[str, str]] | None]:
+    """Decode one package-registry table line and carry the active header."""
+    cells = _table_cells(line)
+    if cells is None:
+        return headers, None
+    if cells and cells[0] == 'ID':
+        return cells, None
+    if headers is None or not _is_package_row(cells):
+        return headers, None
+    fields = {
+        header: value
+        for header, value in zip(headers, cells, strict=False)
+        if value not in {'', '-', '—'}
+    }
+    return headers, (cells[0], fields)
 
 
 def _table_cells(line: str) -> list[str] | None:
