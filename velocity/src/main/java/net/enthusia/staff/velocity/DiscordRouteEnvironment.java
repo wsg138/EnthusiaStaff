@@ -8,12 +8,12 @@ enum DiscordRouteEnvironment {
 
     static DiscordRouteEnvironment parse(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("discord.route-environment must be configured");
+            throw new IllegalArgumentException("Discord route environment must be configured");
         }
         try {
             return valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("discord.route-environment must be STAGING or PRODUCTION", exception);
+            throw new IllegalArgumentException("Discord route environment must be STAGING or PRODUCTION", exception);
         }
     }
 }
