@@ -46,6 +46,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class SanctionLifecycleIntegrationTest {
     private static final String USERNAME = "sanction_lifecycle_user";
     private static final String PASSWORD = UUID.randomUUID().toString();
+    private static final String NETWORK_OUTBOX_TABLE = "network_outbox";
+    private static final String DISCORD_OUTBOX_TABLE = "discord_outbox";
     private static final Actor MODERATOR = new Actor(uuid(900), "Moderator", StaffRank.MOD);
     private static final SanctionActionLimits DEFAULT_LIMITS = SanctionActionLimits.defaults();
 
@@ -68,8 +70,8 @@ class SanctionLifecycleIntegrationTest {
              Connection connection = dataSource.getConnection()) {
             for (String table : List.of(
                     "network_outbox_deliveries",
-                    "network_outbox",
-                    "discord_outbox",
+                    NETWORK_OUTBOX_TABLE,
+                    DISCORD_OUTBOX_TABLE,
                     "audit_events",
                     "sanction_events",
                     "website_appeal_requests",
@@ -587,8 +589,8 @@ class SanctionLifecycleIntegrationTest {
         assertEquals("ACTIVE", stringValue("SELECT status FROM sanctions WHERE sanction_id=?", fixture.sanctionId()));
         assertEquals(0, count("sanction_events"));
         assertEquals(0, count("audit_events"));
-        assertEquals(0, count("network_outbox"));
-        assertEquals(0, count("discord_outbox"));
+        assertEquals(0, count(NETWORK_OUTBOX_TABLE));
+        assertEquals(0, count(DISCORD_OUTBOX_TABLE));
     }
 
     @Test
@@ -979,8 +981,8 @@ class SanctionLifecycleIntegrationTest {
         ));
         assertEquals(0, count("sanction_events"));
         assertEquals(0, count("audit_events"));
-        assertEquals(0, count("network_outbox"));
-        assertEquals(0, count("discord_outbox"));
+        assertEquals(0, count(NETWORK_OUTBOX_TABLE));
+        assertEquals(0, count(DISCORD_OUTBOX_TABLE));
     }
 
     private static void insertPlayer(
@@ -1025,8 +1027,8 @@ class SanctionLifecycleIntegrationTest {
         String sql = switch (table) {
             case "sanction_events" -> "SELECT COUNT(*) FROM sanction_events";
             case "audit_events" -> "SELECT COUNT(*) FROM audit_events";
-            case "network_outbox" -> "SELECT COUNT(*) FROM network_outbox";
-            case "discord_outbox" -> "SELECT COUNT(*) FROM discord_outbox";
+            case NETWORK_OUTBOX_TABLE -> "SELECT COUNT(*) FROM network_outbox";
+            case DISCORD_OUTBOX_TABLE -> "SELECT COUNT(*) FROM discord_outbox";
             default -> throw new IllegalArgumentException("unsupported count table");
         };
         try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
