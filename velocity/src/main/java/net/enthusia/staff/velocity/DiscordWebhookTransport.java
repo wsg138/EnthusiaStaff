@@ -14,7 +14,7 @@ interface DiscordWebhookTransport {
     Delivery send(DiscordWebhookRoute route, String content);
 
     record Delivery(boolean success, String errorCode) {
-        Delivery {
+        public Delivery {
             if (errorCode == null || errorCode.isBlank()) {
                 throw new IllegalArgumentException("Discord delivery error code is required");
             }
