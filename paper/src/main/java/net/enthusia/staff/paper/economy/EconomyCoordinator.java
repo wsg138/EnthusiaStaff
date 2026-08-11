@@ -27,7 +27,6 @@ import net.enthusia.staff.domain.economy.EconomyOperation;
 import net.enthusia.staff.domain.economy.EconomyOperationState;
 import net.enthusia.staff.domain.economy.EconomyPreparation;
 import net.enthusia.staff.domain.economy.EconomyPrepareRequest;
-import net.enthusia.staff.domain.economy.EconomyReconciliationDecision;
 import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -45,6 +44,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class EconomyCoordinator implements Listener, AutoCloseable {
     private static final Duration LEASE_DURATION = Duration.ofMinutes(2);
     private static final long RENEWAL_PERIOD_TICKS = 20L * 30L;
+    private static final long MIN_CONFISCATION_AMOUNT = 1L;
+    private static final int MAX_RECOVERABLE_OPERATIONS = 1;
+    private static final int RECOVERY_LOOKUP_LIMIT = MAX_RECOVERABLE_OPERATIONS + 1;
+    private static final String OPERATION_LOG_PREFIX = "Economy operation ";
     private static final RollbackOutcomeMessages FAILED_ROLLBACK_MESSAGES = new RollbackOutcomeMessages(
             "ROLLBACK_RESULT_MISSING",
             "Currency could not prove the exact compensated account state",
@@ -67,24 +70,19 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public EconomyCoordinator(
-            JavaPlugin plugin,
-            Clock clock,
-            String serverId,
-            Supplier<OperationalMode> mode,
-            AuthorizationPolicy authorization,
-            Supplier<EconomyJournalStore> store,
-            ExecutorService workers,
+            EconomyCoordinatorRuntime runtime,
             CurrencyGateway currency,
             List<CurrencyAssetSource> sourceOrder,
             ObjectMapper json
     ) {
-        this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.serverId = requireIdentifier(serverId);
-        this.mode = java.util.Objects.requireNonNull(mode, "mode");
-        this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
-        this.store = java.util.Objects.requireNonNull(store, "store");
-        this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        EconomyCoordinatorRuntime checked = java.util.Objects.requireNonNull(runtime, "runtime");
+        this.plugin = java.util.Objects.requireNonNull(checked.plugin(), "plugin");
+        this.clock = java.util.Objects.requireNonNull(checked.clock(), "clock");
+        this.serverId = requireIdentifier(checked.serverId());
+        this.mode = java.util.Objects.requireNonNull(checked.mode(), "mode");
+        this.authorization = java.util.Objects.requireNonNull(checked.authorization(), "authorization");
+        this.store = java.util.Objects.requireNonNull(checked.store(), "store");
+        this.workers = java.util.Objects.requireNonNull(checked.workers(), "workers");
         this.currency = java.util.Objects.requireNonNull(currency, "currency");
         this.sourceOrder = validateSourceOrder(sourceOrder);
         this.codec = new CurrencyJournalCodec(json);
@@ -99,25 +97,51 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         if (actor == null || target == null || requestedAmount == null) {
             throw new IllegalArgumentException("actor, target, and requestedAmount must be present");
         }
+        if (rejectUnavailableConfiscation(actor, target)) {
+            return;
+        }
+        Optional<EconomyPrepareRequest> request = prepareRequest(
+                actor,
+                target,
+                caseId,
+                requestedAmount
+        );
+        if (request.isEmpty()) {
+            return;
+        }
+        if (!submit(() -> prepare(actor, target, request.orElseThrow()))) {
+            message(actor, "Economy confiscation queue is full; no operation was created.");
+        }
+    }
+
+    private boolean rejectUnavailableConfiscation(Player actor, Player target) {
         if (!authorize(actor, ModerationAction.APPLY_CASE_CONFISCATION)) {
             message(actor, "You do not have case confiscation authority.");
-            return;
+            return true;
         }
         if (mode.get() != OperationalMode.ACTIVE) {
             message(actor, "Economy confiscation is available only while moderation is ACTIVE.");
-            return;
+            return true;
         }
         if (!target.isOnline()) {
             message(actor, "Economy confiscation requires the target to be online on this backend.");
-            return;
+            return true;
         }
+        return false;
+    }
+
+    private Optional<EconomyPrepareRequest> prepareRequest(
+            Player actor,
+            Player target,
+            String caseId,
+            OptionalLong requestedAmount
+    ) {
         EconomyAmountMode amountMode = requestedAmount.isPresent()
                 ? EconomyAmountMode.CUSTOM
                 : EconomyAmountMode.ALL;
         UUID operationId = UUID.randomUUID();
-        EconomyPrepareRequest request;
         try {
-            request = new EconomyPrepareRequest(
+            return Optional.of(new EconomyPrepareRequest(
                     operationId,
                     new IdempotencyKey("economy:confiscate:" + operationId).value(),
                     caseId,
@@ -127,13 +151,10 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     requestedAmount,
                     serverId,
                     clock.instant()
-            );
+            ));
         } catch (IllegalArgumentException exception) {
             message(actor, "Economy confiscation request is invalid: " + exception.getMessage());
-            return;
-        }
-        if (!submit(() -> prepare(actor, target, request))) {
-            message(actor, "Economy confiscation queue is full; no operation was created.");
+            return Optional.empty();
         }
     }
 
@@ -157,9 +178,9 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             List<EconomyOperation> operations = loaded.recoverableForTarget(
                     event.getUniqueId(),
                     serverId,
-                    2
+                    RECOVERY_LOOKUP_LIMIT
             );
-            if (operations.size() > 1) {
+            if (operations.size() > MAX_RECOVERABLE_OPERATIONS) {
                 event.disallow(
                         AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                         Component.text("Multiple economy recovery operations require staff review.")
@@ -264,56 +285,49 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             EconomyPrepareRequest request,
             EconomyOperation operation
     ) {
-        if (!target.isOnline() || !currency.acquireMovementLock(
-                target.getUniqueId(),
-                operation.operationId(),
-                LEASE_DURATION
-        )) {
-            rollBackBeforeLocalLock(
-                    actor,
-                    operation,
-                    "LOCAL_LOCK_REJECTED",
-                    "EnthusiaCurrency rejected the local movement lock"
-            );
+        if (!acquireLocalMovementLock(actor, target, operation)) {
             return;
         }
         target.closeInventory();
         LeaseGuard guard = startGuard(operation, target.getUniqueId());
+        snapshotAndPlan(actor, target, request, operation, guard);
+    }
+
+    private boolean acquireLocalMovementLock(
+            Player actor,
+            Player target,
+            EconomyOperation operation
+    ) {
+        if (target.isOnline() && currency.acquireMovementLock(
+                target.getUniqueId(),
+                operation.operationId(),
+                LEASE_DURATION
+        )) {
+            return true;
+        }
+        rollBackBeforeLocalLock(
+                actor,
+                operation,
+                "LOCAL_LOCK_REJECTED",
+                "EnthusiaCurrency rejected the local movement lock"
+        );
+        return false;
+    }
+
+    private void snapshotAndPlan(
+            Player actor,
+            Player target,
+            EconomyPrepareRequest request,
+            EconomyOperation operation,
+            LeaseGuard guard
+    ) {
         try {
             CurrencyAccountState before = currency.snapshot(target);
-            if (!before.playerId().equals(operation.targetId())) {
-                quarantine(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        Optional.of(before),
-                        "SNAPSHOT_IDENTITY_MISMATCH",
-                        "EnthusiaCurrency returned a snapshot for another player"
-                );
+            if (!validateSnapshotIdentity(actor, target, operation, guard, before)) {
                 return;
             }
             long amount = request.requestedAmount().orElse(before.authoritativeTotal());
-            if (amount <= 0L) {
-                rollBackUnapplied(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        "NOTHING_TO_CONFISCATE",
-                        "The target has no personal currency to confiscate"
-                );
-                return;
-            }
-            if (amount > before.authoritativeTotal()) {
-                rollBackUnapplied(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        "AMOUNT_EXCEEDS_TOTAL",
-                        "Requested amount exceeds the authoritative personal total"
-                );
+            if (!validateRemovalAmount(actor, target, operation, guard, before, amount)) {
                 return;
             }
             CurrencyRemovalPlanState plan = currency.planRemoval(
@@ -322,17 +336,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     amount,
                     sourceOrder
             );
-            if (!submit(() -> persistPlan(actor, target, operation, guard, before, plan))) {
-                quarantine(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        Optional.of(before),
-                        "WORK_QUEUE_REJECTED",
-                        "The exact plan could not enter the durable work queue"
-                );
-            }
+            enqueuePlanPersistence(actor, target, operation, guard, before, plan);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Currency snapshot or planning failed", exception);
             quarantine(
@@ -369,70 +373,11 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             return;
         }
         try {
-            EconomyValidatedPlan durablePlan = new EconomyValidatedPlan(
-                    before.authoritativeTotal(),
-                    plan.amount(),
-                    before.checksum(),
-                    plan.replacementChecksum(),
-                    codec.snapshot(before),
-                    codec.plan(plan)
-            );
-            EconomyJournalResult saved = loaded.saveValidatedPlan(
-                    operation.operationId(),
-                    operation.fencingToken(),
-                    durablePlan,
-                    clock.instant()
-            );
-            if (!saved.successful()) {
-                rollBackUnapplied(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        "PLAN_JOURNAL_REJECTED",
-                        saved.detail()
-                );
+            EconomyJournalResult saved = savePlan(loaded, operation, before, plan);
+            if (!continueAfterPlanSaved(actor, target, operation, guard, saved)) {
                 return;
             }
-            if (saved.status() == EconomyJournalResult.Status.REPLAYED) {
-                message(actor, "That exact economy plan is already durable; recovery will finish it safely.");
-                return;
-            }
-            EconomyJournalResult applying = loaded.markApplying(
-                    operation.operationId(),
-                    operation.fencingToken(),
-                    clock.instant()
-            );
-            if (!applying.successful()) {
-                rollBackVerified(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        before,
-                        "APPLY_FENCE_REJECTED",
-                        applying.detail()
-                );
-                return;
-            }
-            if (applying.status() == EconomyJournalResult.Status.REPLAYED) {
-                message(actor, "That economy operation is already applying; it was not executed again.");
-                return;
-            }
-            EconomyOperation current = applying.operation().orElse(operation);
-            onEntity(
-                    target,
-                    () -> apply(actor, target, current, guard, before, plan),
-                    () -> rollBackVerified(
-                            actor,
-                            target,
-                            current,
-                            guard,
-                            before,
-                            "TARGET_LEFT_BEFORE_APPLY",
-                            "The target left before the exact removal plan was applied"
-                    )
-            );
+            markApplyingAndSchedule(actor, target, operation, guard, before, plan, loaded);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Economy plan journaling failed", exception);
             quarantine(
@@ -471,25 +416,29 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             );
             return;
         }
+        invokeRemoval(actor, target, operation, guard, before, plan);
+    }
+
+    private void invokeRemoval(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan
+    ) {
         try {
-            currency.applyRemoval(target, plan).whenComplete((outcome, failure) -> {
-                Runnable completion = () -> finishProviderOutcome(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        before,
-                        plan,
-                        outcome,
-                        failure
-                );
-                if (!submit(completion)) {
-                    alertStaff(
-                            "Economy operation " + operation.operationId()
-                                    + " completed in Currency but its journal queue is full; recovery is required."
-                    );
-                }
-            });
+            currency.applyRemoval(target, plan).whenComplete((outcome, failure) ->
+                    enqueueProviderOutcome(
+                            actor,
+                            target,
+                            operation,
+                            guard,
+                            before,
+                            plan,
+                            outcome,
+                            failure
+                    ));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Currency apply invocation failed", exception);
             quarantine(
@@ -514,50 +463,65 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             CurrencyRemovalOutcome outcome,
             Throwable failure
     ) {
-        if (failure != null || outcome == null) {
-            plugin.getLogger().log(Level.SEVERE, "Currency apply completed exceptionally", failure);
-            quarantine(
-                    actor,
-                    target,
-                    operation,
-                    guard,
-                    Optional.empty(),
-                    "CURRENCY_APPLY_EXCEPTION",
-                    "The Currency completion outcome is ambiguous"
-            );
+        Optional<CurrencyRemovalOutcome> completed = completedProviderOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                outcome,
+                failure
+        );
+        if (completed.isEmpty()) {
             return;
         }
+        finishCompletedProviderOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                before,
+                plan,
+                completed.orElseThrow()
+        );
+    }
+
+    private Optional<CurrencyRemovalOutcome> completedProviderOutcome(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyRemovalOutcome outcome,
+            Throwable failure
+    ) {
+        if (failure == null && outcome != null) {
+            return Optional.of(outcome);
+        }
+        plugin.getLogger().log(Level.SEVERE, "Currency apply completed exceptionally", failure);
+        quarantine(
+                actor,
+                target,
+                operation,
+                guard,
+                Optional.empty(),
+                "CURRENCY_APPLY_EXCEPTION",
+                "The Currency completion outcome is ambiguous"
+        );
+        return Optional.empty();
+    }
+
+    private void finishCompletedProviderOutcome(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan,
+            CurrencyRemovalOutcome outcome
+    ) {
         switch (outcome.status()) {
-            case COMMITTED -> {
-                CurrencyAccountState after = outcome.accountState().orElse(null);
-                if (after == null || outcome.amountRemoved() != plan.amount()
-                        || outcome.finalTotal() != plan.expectedFinalTotal()
-                        || !after.checksum().equals(plan.replacementChecksum())) {
-                    quarantine(
-                            actor,
-                            target,
-                            operation,
-                            guard,
-                            outcome.accountState(),
-                            "COMMIT_RESULT_MISMATCH",
-                            "Currency reported commit data that does not match the exact plan"
-                    );
-                    return;
-                }
-                finishOutcome(
-                        actor,
-                        target,
-                        operation,
-                        guard,
-                        EconomyTerminalUpdate.committed(
-                                after.authoritativeTotal(),
-                                after.checksum(),
-                                codec.snapshot(after)
-                        ),
-                        "Confiscated " + plan.amount() + " personal currency into case "
-                                + operation.caseId() + '.'
-                );
-            }
+            case COMMITTED -> finishCommittedProviderOutcome(
+                    actor, target, operation, guard, plan, outcome
+            );
             case FAILED_ROLLED_BACK -> finishVerifiedRollback(
                     actor,
                     target,
@@ -584,10 +548,56 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "CURRENCY_QUARANTINE_REQUIRED",
                     bounded(outcome.detail())
             );
-            default -> throw new IllegalStateException(
-                    "Unsupported Currency outcome status: " + outcome.status()
+            default -> quarantine(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    outcome.accountState(),
+                    "CURRENCY_STATUS_UNKNOWN",
+                    "Currency reported an unrecognized removal status"
             );
         }
+    }
+
+    private void finishCommittedProviderOutcome(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyRemovalPlanState plan,
+            CurrencyRemovalOutcome outcome
+    ) {
+        Optional<CurrencyAccountState> providerState = outcome.accountState();
+        if (providerState.isEmpty()
+                || outcome.amountRemoved() != plan.amount()
+                || outcome.finalTotal() != plan.expectedFinalTotal()
+                || !providerState.orElseThrow().checksum().equals(plan.replacementChecksum())) {
+            quarantine(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    providerState,
+                    "COMMIT_RESULT_MISMATCH",
+                    "Currency reported commit data that does not match the exact plan"
+            );
+            return;
+        }
+        CurrencyAccountState after = providerState.orElseThrow();
+        finishOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                EconomyTerminalUpdate.committed(
+                        after.authoritativeTotal(),
+                        after.checksum(),
+                        codec.snapshot(after)
+                ),
+                "Confiscated " + plan.amount() + " personal currency into case "
+                        + operation.caseId() + '.'
+        );
     }
 
     private void finishRejectedProviderOutcome(
@@ -736,7 +746,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         EconomyJournalStore loaded = store.get();
         if (loaded == null) {
             alertStaff(
-                    "Economy operation " + operation.operationId()
+                    OPERATION_LOG_PREFIX + operation.operationId()
                             + " reached Currency but storage is unavailable; keep the target locked."
             );
             return;
@@ -750,7 +760,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             );
             if (!finished.successful()) {
                 alertStaff(
-                        "Economy operation " + operation.operationId()
+                        OPERATION_LOG_PREFIX + operation.operationId()
                                 + " could not record its terminal outcome: " + finished.detail()
                 );
                 message(actor, "Economy state requires recovery; do not repeat the operation.");
@@ -759,7 +769,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             if (update.outcome() == net.enthusia.staff.domain.economy.EconomyTerminalOutcome.QUARANTINED) {
                 message(actor, "Economy state was quarantined; do not repeat the operation.");
                 alertStaff(
-                        "Economy operation " + operation.operationId()
+                        OPERATION_LOG_PREFIX + operation.operationId()
                                 + " was quarantined for case " + operation.caseId() + '.'
                 );
                 return;
@@ -798,7 +808,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         );
         if (!submit(work)) {
             alertStaff(
-                    "Economy operation " + operation.operationId()
+                    OPERATION_LOG_PREFIX + operation.operationId()
                             + " is ambiguous and its quarantine write queue is full."
             );
         }
@@ -819,7 +829,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             boolean clear = released || !currency.isMovementLocked(operation.targetId());
             if (!clear) {
                 alertStaff(
-                        "Economy operation " + operation.operationId()
+                        OPERATION_LOG_PREFIX + operation.operationId()
                                 + " could not release its local Currency lock."
                 );
                 return;
@@ -827,7 +837,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
             guard.close();
             if (!submit(() -> releaseJournal(actor, operation, successMessage))) {
                 alertStaff(
-                        "Economy operation " + operation.operationId()
+                        OPERATION_LOG_PREFIX + operation.operationId()
                                 + " released locally but its durable unlock queue is full."
                 );
             }
@@ -960,9 +970,22 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     }
 
     private void reconcile(Player player, EconomyOperation operation, LeaseGuard guard) {
-        CurrencyAccountState current;
+        Optional<CurrencyAccountState> snapshot = recoverySnapshot(player, operation, guard);
+        if (snapshot.isEmpty()) {
+            return;
+        }
+        CurrencyAccountState current = snapshot.orElseThrow();
+        EconomyRecoveryAssessment assessment = EconomyRecoveryAssessment.assess(operation, current);
+        applyRecoveryAssessment(player, operation, guard, current, assessment);
+    }
+
+    private Optional<CurrencyAccountState> recoverySnapshot(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard
+    ) {
         try {
-            current = currency.snapshot(player);
+            return Optional.of(currency.snapshot(player));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Economy recovery snapshot failed", exception);
             quarantine(
@@ -974,165 +997,287 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "RECOVERY_SNAPSHOT_FAILED",
                     "Currency recovery could not capture the current account"
             );
-            return;
+            return Optional.empty();
         }
-        if (!current.playerId().equals(operation.targetId())) {
-            quarantine(
+    }
+
+    private void applyRecoveryAssessment(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            EconomyRecoveryAssessment assessment
+    ) {
+        switch (assessment) {
+            case EconomyRecoveryAssessment.Release release -> releaseProviderThenJournal(
+                    player, player, operation, guard, release.successMessage()
+            );
+            case EconomyRecoveryAssessment.RollBack rollback -> finishRecoveryRollback(
+                    player, operation, guard, current, rollback
+            );
+            case EconomyRecoveryAssessment.Commit commit -> commitRecoveredState(
+                    player, operation, guard, current, commit.successMessage()
+            );
+            case EconomyRecoveryAssessment.Restore ignored -> restoreBefore(
+                    player, operation, guard, current
+            );
+            case EconomyRecoveryAssessment.Quarantine quarantine -> quarantine(
                     player,
                     player,
                     operation,
                     guard,
                     Optional.of(current),
-                    "RECOVERY_SNAPSHOT_IDENTITY_MISMATCH",
-                    "Currency recovery returned an account snapshot for another player"
+                    quarantine.failureCode(),
+                    quarantine.detail()
+            );
+        }
+    }
+
+    private void enqueueProviderOutcome(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan,
+            CurrencyRemovalOutcome outcome,
+            Throwable failure
+    ) {
+        Runnable completion = () -> finishProviderOutcome(
+                actor,
+                target,
+                operation,
+                guard,
+                before,
+                plan,
+                outcome,
+                failure
+        );
+        if (!submit(completion)) {
+            alertStaff(
+                    OPERATION_LOG_PREFIX + operation.operationId()
+                            + " completed in Currency but its journal queue is full; recovery is required."
+            );
+        }
+    }
+
+    private EconomyJournalResult savePlan(
+            EconomyJournalStore loaded,
+            EconomyOperation operation,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan
+    ) {
+        EconomyValidatedPlan durablePlan = new EconomyValidatedPlan(
+                before.authoritativeTotal(),
+                plan.amount(),
+                before.checksum(),
+                plan.replacementChecksum(),
+                codec.snapshot(before),
+                codec.plan(plan)
+        );
+        return loaded.saveValidatedPlan(
+                operation.operationId(),
+                operation.fencingToken(),
+                durablePlan,
+                clock.instant()
+        );
+    }
+
+    private boolean continueAfterPlanSaved(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            EconomyJournalResult saved
+    ) {
+        if (!saved.successful()) {
+            rollBackUnapplied(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    "PLAN_JOURNAL_REJECTED",
+                    saved.detail()
+            );
+            return false;
+        }
+        if (saved.status() == EconomyJournalResult.Status.REPLAYED) {
+            message(actor, "That exact economy plan is already durable; recovery will finish it safely.");
+            return false;
+        }
+        return true;
+    }
+
+    private void markApplyingAndSchedule(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan,
+            EconomyJournalStore loaded
+    ) {
+        EconomyJournalResult applying = loaded.markApplying(
+                operation.operationId(),
+                operation.fencingToken(),
+                clock.instant()
+        );
+        if (!applying.successful()) {
+            rollBackVerified(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    before,
+                    "APPLY_FENCE_REJECTED",
+                    applying.detail()
             );
             return;
         }
-        if (operation.state() == EconomyOperationState.COMMITTED) {
-            String expected = operation.resultChecksum()
-                    .or(() -> operation.replacementChecksum())
-                    .orElse("");
-            if (expected.equals(current.checksum()) && resultTotalMatches(current, operation)) {
-                releaseProviderThenJournal(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        "Economy recovery verified the committed state."
-                );
-            } else {
-                quarantine(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        Optional.of(current),
-                        "COMMITTED_RECOVERY_CONFLICT",
-                        "Current Currency state does not match the committed result"
-                );
-            }
+        if (applying.status() == EconomyJournalResult.Status.REPLAYED) {
+            message(actor, "That economy operation is already applying; it was not executed again.");
             return;
         }
-        if (operation.state() == EconomyOperationState.ROLLED_BACK) {
-            if (resultTotalMatches(current, operation)
-                    && (operation.resultChecksum().isEmpty()
-                    || operation.resultChecksum().orElseThrow().equals(current.checksum()))) {
-                releaseProviderThenJournal(
-                        player,
-                        player,
-                        operation,
+        EconomyOperation current = applying.operation().orElse(operation);
+        onEntity(
+                target,
+                () -> apply(actor, target, current, guard, before, plan),
+                () -> rollBackVerified(
+                        actor,
+                        target,
+                        current,
                         guard,
-                        "Economy recovery verified the rolled-back state."
-                );
-            } else {
-                quarantine(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        Optional.of(current),
-                        "ROLLED_BACK_RECOVERY_CONFLICT",
-                        "Current Currency state does not match the recorded rollback"
-                );
-            }
-            return;
-        }
-        if (handleIncompletePlanEvidence(player, operation, guard, current)) {
-            return;
-        }
-        EconomyReconciliationDecision decision = EconomyReconciliationDecision.decide(
-                current.checksum(),
-                operation.beforeChecksum().orElseThrow(),
-                operation.replacementChecksum().orElseThrow()
+                        before,
+                        "TARGET_LEFT_BEFORE_APPLY",
+                        "The target left before the exact removal plan was applied"
+                )
         );
-        switch (decision) {
-            case ROLL_BACK_UNAPPLIED -> rollBackVerified(
+    }
+
+    private boolean validateSnapshotIdentity(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before
+    ) {
+        if (before.playerId().equals(operation.targetId())) {
+            return true;
+        }
+        quarantine(
+                actor,
+                target,
+                operation,
+                guard,
+                Optional.of(before),
+                "SNAPSHOT_IDENTITY_MISMATCH",
+                "EnthusiaCurrency returned a snapshot for another player"
+        );
+        return false;
+    }
+
+    private boolean validateRemovalAmount(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            long amount
+    ) {
+        if (amount < MIN_CONFISCATION_AMOUNT) {
+            rollBackUnapplied(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    "NOTHING_TO_CONFISCATE",
+                    "The target has no personal currency to confiscate"
+            );
+            return false;
+        }
+        if (amount <= before.authoritativeTotal()) {
+            return true;
+        }
+        rollBackUnapplied(
+                actor,
+                target,
+                operation,
+                guard,
+                "AMOUNT_EXCEEDS_TOTAL",
+                "Requested amount exceeds the authoritative personal total"
+        );
+        return false;
+    }
+
+    private void enqueuePlanPersistence(
+            Player actor,
+            Player target,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState before,
+            CurrencyRemovalPlanState plan
+    ) {
+        if (!submit(() -> persistPlan(actor, target, operation, guard, before, plan))) {
+            quarantine(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    Optional.of(before),
+                    "WORK_QUEUE_REJECTED",
+                    "The exact plan could not enter the durable work queue"
+            );
+        }
+    }
+
+    private void finishRecoveryRollback(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            EconomyRecoveryAssessment.RollBack rollback
+    ) {
+        if (rollback.verified()) {
+            rollBackVerified(
                     player,
                     player,
                     operation,
                     guard,
                     current,
-                    "RECOVERY_UNAPPLIED",
-                    "Economy recovery verified that the plan was not applied"
+                    rollback.failureCode(),
+                    rollback.detail()
             );
-            case COMMIT_ALREADY_APPLIED -> {
-                if (operation.state() != EconomyOperationState.APPLYING) {
-                    quarantine(
-                            player,
-                            player,
-                            operation,
-                            guard,
-                            Optional.of(current),
-                            "REPLACEMENT_IN_INVALID_PHASE",
-                            "Replacement state exists without an APPLYING journal phase"
-                    );
-                    return;
-                }
-                finishOutcome(
-                        player,
-                        player,
-                        operation,
-                        guard,
-                        EconomyTerminalUpdate.committed(
-                                current.authoritativeTotal(),
-                                current.checksum(),
-                                codec.snapshot(current)
-                        ),
-                        "Economy recovery finalized the already-applied exact removal."
-                );
-            }
-            case RESTORE_BEFORE_STATE -> {
-                if (operation.state() != EconomyOperationState.APPLYING) {
-                    quarantine(
-                            player,
-                            player,
-                            operation,
-                            guard,
-                            Optional.of(current),
-                            "RECOVERY_STATE_CONFLICT",
-                            "Currency state changed before the operation entered APPLYING"
-                    );
-                    return;
-                }
-                restoreBefore(player, operation, guard, current);
-            }
-            default -> throw new IllegalStateException(
-                    "Unsupported economy reconciliation decision: " + decision
-            );
-        }
-    }
-
-    private boolean handleIncompletePlanEvidence(
-            Player player,
-            EconomyOperation operation,
-            LeaseGuard guard,
-            CurrencyAccountState current
-    ) {
-        if (operation.state() == EconomyOperationState.LOCKED
-                && !operation.hasAnyDurablePlanEvidence()) {
+        } else {
             rollBackUnapplied(
                     player,
                     player,
                     operation,
                     guard,
-                    "RECOVERY_UNAPPLIED",
-                    "Economy recovery found no saved apply plan"
+                    rollback.failureCode(),
+                    rollback.detail()
             );
-            return true;
         }
-        if (operation.hasCompleteDurablePlanEvidence()) {
-            return false;
-        }
-        quarantine(
+    }
+
+    private void commitRecoveredState(
+            Player player,
+            EconomyOperation operation,
+            LeaseGuard guard,
+            CurrencyAccountState current,
+            String successMessage
+    ) {
+        finishOutcome(
                 player,
                 player,
                 operation,
                 guard,
-                Optional.of(current),
-                "RECOVERY_PLAN_INCOMPLETE",
-                "Economy recovery found incomplete durable apply-plan evidence"
+                EconomyTerminalUpdate.committed(
+                        current.authoritativeTotal(),
+                        current.checksum(),
+                        codec.snapshot(current)
+                ),
+                successMessage
         );
-        return true;
     }
 
     private void restoreBefore(
@@ -1256,14 +1401,6 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                 failureCode,
                 detail
         );
-    }
-
-    private static boolean resultTotalMatches(
-            CurrencyAccountState current,
-            EconomyOperation operation
-    ) {
-        return operation.resultTotal().isEmpty()
-                || current.authoritativeTotal() == operation.resultTotal().orElseThrow();
     }
 
     private static boolean matchesBeforeState(
