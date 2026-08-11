@@ -43,6 +43,14 @@ final class DiscordWebhookRouteTest {
                         Set.of("discord.com")
                 )
         );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> DiscordWebhookRoute.approvedStaging(
+                        "reports",
+                        URI.create("https://canary.discord.com/api/webhooks/123/token"),
+                        Set.of("canary.discord.com")
+                )
+        );
     }
 
     @Test

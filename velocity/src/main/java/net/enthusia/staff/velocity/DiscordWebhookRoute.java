@@ -32,7 +32,7 @@ record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environme
             throw new IllegalArgumentException("At least one staging Discord host must be approved");
         }
         String host = normalizedHost(endpoint);
-        if (PRODUCTION_HOSTS.contains(host)) {
+        if (isProductionDiscordDomain(host)) {
             throw new IllegalArgumentException("Production Discord hosts cannot be classified as staging routes");
         }
         boolean approved = approvedHosts.stream()
@@ -77,6 +77,11 @@ record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environme
         if (path == null || !PRODUCTION_PATH.matcher(path).matches()) {
             throw new IllegalArgumentException("Production Discord webhook path is invalid");
         }
+    }
+
+    private static boolean isProductionDiscordDomain(String host) {
+        return PRODUCTION_HOSTS.stream()
+                .anyMatch(root -> host.equals(root) || host.endsWith('.' + root));
     }
 
     private static String normalizedHost(URI endpoint) {

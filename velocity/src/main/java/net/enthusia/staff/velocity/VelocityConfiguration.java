@@ -180,15 +180,7 @@ public record VelocityConfiguration(
         Map<String, DiscordWebhookRoute> routes = new LinkedHashMap<>();
         discordWebhookEnvironments.forEach((destination, environmentName) -> {
             String raw = System.getenv(environmentName);
-            if (raw == null || raw.isBlank()) {
-                throw new IllegalStateException("A required Discord webhook environment variable is missing");
-            }
-            final URI uri;
-            try {
-                uri = URI.create(raw.trim());
-            } catch (IllegalArgumentException exception) {
-                throw new IllegalStateException("A Discord webhook environment variable is not a valid URI", exception);
-            }
+            URI uri = DiscordWebhookUriParser.parse(raw);
             final DiscordWebhookRoute route;
             try {
                 route = routeEnvironment == DiscordRouteEnvironment.STAGING
