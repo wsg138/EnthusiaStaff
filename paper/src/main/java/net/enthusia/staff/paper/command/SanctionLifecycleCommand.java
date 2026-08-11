@@ -173,8 +173,7 @@ public final class SanctionLifecycleCommand {
             ModerationFeatureSettings settings
     ) {
         List<Component> lines = new ArrayList<>();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss z")
-                .withZone(settings.historyTimezone());
+        DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         if (result instanceof ExactSanctionChangeResult.Applied applied) {
             lines.add(Component.text(
                     (applied.replayed() ? "No duplicate change was created; replayed" : "Applied")

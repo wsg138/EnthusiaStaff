@@ -162,8 +162,7 @@ public final class CaseCommand implements CommandExecutor {
             boolean sensitive
     ) {
         CaseReview review = detail.caseReview();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss z")
-                .withZone(settings.historyTimezone());
+        DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text(
                 "Case " + review.caseId().value() + " | subject " + review.targetId()

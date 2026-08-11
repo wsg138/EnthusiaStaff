@@ -2,6 +2,8 @@
 .idea/
 **/build/
 **/run/
+**/__pycache__/
+*.py[cod]
 libs/private/
 *.log
 *.db
