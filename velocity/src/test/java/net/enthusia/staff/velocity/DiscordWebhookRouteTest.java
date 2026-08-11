@@ -35,6 +35,14 @@ final class DiscordWebhookRouteTest {
                         Set.of("discord-staging.example.test")
                 )
         );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> DiscordWebhookRoute.approvedStaging(
+                        "reports",
+                        URI.create("https://discord.com/api/webhooks/123/token"),
+                        Set.of("discord.com")
+                )
+        );
     }
 
     @Test
