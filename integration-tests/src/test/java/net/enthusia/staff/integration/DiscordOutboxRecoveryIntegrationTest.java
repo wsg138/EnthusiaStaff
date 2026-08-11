@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import net.enthusia.staff.domain.discord.DiscordOutboxMessage;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.persistence.MariaDb;
@@ -46,6 +48,7 @@ class DiscordOutboxRecoveryIntegrationTest {
     void expiredLeaseIsRecoveredAfterRuntimeRestart() throws SQLException {
         UUID messageId;
         try (MariaDbRuntime first = MariaDb.initialize(databaseConfig(DATABASE))) {
+            clearTestRows();
             messageId = enqueue(RESTART_DESTINATION, "restart");
             List<DiscordOutboxMessage> claimed = first.discordOutboxStore()
                     .claimDue("velocity-discord:first", 1, LEASE, NOW);
@@ -66,6 +69,7 @@ class DiscordOutboxRecoveryIntegrationTest {
     @Test
     void concurrentWorkersNeverLeaseTheSameMessage() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            clearTestRows();
             UUID firstId = enqueue(CONCURRENT_DESTINATION, "concurrent-a");
             UUID secondId = enqueue(CONCURRENT_DESTINATION, "concurrent-b");
             DiscordOutboxStore store = runtime.discordOutboxStore();
@@ -86,7 +90,7 @@ class DiscordOutboxRecoveryIntegrationTest {
                 assertTrue(concurrentClaims.size() >= 1 && concurrentClaims.size() <= 2);
                 Set<UUID> concurrentIds = concurrentClaims.stream()
                         .map(DiscordOutboxMessage::messageId)
-                        .collect(java.util.stream.Collectors.toSet());
+                        .collect(Collectors.toSet());
                 assertEquals(concurrentClaims.size(), concurrentIds.size());
 
                 if (concurrentClaims.size() == 1) {
@@ -101,11 +105,19 @@ class DiscordOutboxRecoveryIntegrationTest {
                         Set.of(firstId, secondId),
                         concurrentClaims.stream()
                                 .map(DiscordOutboxMessage::messageId)
-                                .collect(java.util.stream.Collectors.toSet())
+                                .collect(Collectors.toSet())
                 );
             } finally {
                 executor.shutdownNow();
             }
+        }
+    }
+
+    private static void clearTestRows() throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DELETE FROM discord_outbox WHERE destination LIKE 'test-%'");
+            statement.executeUpdate("DELETE FROM discord_delivery_channels WHERE destination LIKE 'test-%'");
         }
     }
 
