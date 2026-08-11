@@ -145,7 +145,7 @@ class VelocityAdministrationCommandTest {
 
     private static <T> T interfaceProxy(Class<T> type) {
         return type.cast(Proxy.newProxyInstance(
-                type.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
                 (proxy, method, arguments) -> defaultValue(method.getReturnType())
         ));
