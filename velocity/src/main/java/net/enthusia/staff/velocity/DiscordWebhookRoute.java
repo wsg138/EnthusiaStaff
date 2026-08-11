@@ -32,6 +32,9 @@ record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environme
             throw new IllegalArgumentException("At least one staging Discord host must be approved");
         }
         String host = normalizedHost(endpoint);
+        if (PRODUCTION_HOSTS.contains(host)) {
+            throw new IllegalArgumentException("Production Discord hosts cannot be classified as staging routes");
+        }
         boolean approved = approvedHosts.stream()
                 .map(DiscordWebhookRoute::normalizeConfiguredHost)
                 .anyMatch(host::equals);
