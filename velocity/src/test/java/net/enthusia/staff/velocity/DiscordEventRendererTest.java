@@ -91,6 +91,18 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void unmatchedPayloadSurrogateIsReplacedBeforeDelivery() {
+        String escapedHighSurrogate = "\\u" + "D83D";
+        String rendered = renderer.render(message(
+                "logs-staffmode",
+                "PLAYER_FROZEN",
+                "{\"reason\":\"before" + escapedHighSurrogate + "after\"}"
+        ));
+
+        assertTrue(rendered.endsWith("reason=before�after"));
+    }
+
+    @Test
     void contentTruncationDoesNotSplitSurrogatePair() {
         String value = "a".repeat(1_798) + "😀" + "z";
         String rendered = DiscordEventRenderer.truncateWithEllipsis(value, 1_800);
