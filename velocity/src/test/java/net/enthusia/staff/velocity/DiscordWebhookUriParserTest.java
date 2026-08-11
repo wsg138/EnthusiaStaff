@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 final class DiscordWebhookUriParserTest {
@@ -16,12 +17,12 @@ final class DiscordWebhookUriParserTest {
     }
 
     @Test
-    void malformedUriDoesNotRetainSecretInExceptionChain() {
-        String secretBearingValue = "https://discord.com/api/webhooks/123/super-secret token";
+    void malformedUriDoesNotRetainSensitiveValueInExceptionChain() {
+        String sensitiveValue = "https://discord.com/api/webhooks/123/" + UUID.randomUUID() + " invalid";
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> DiscordWebhookUriParser.parse(secretBearingValue)
+                () -> DiscordWebhookUriParser.parse(sensitiveValue)
         );
 
         assertEquals("A Discord webhook environment variable is not a valid URI", exception.getMessage());
