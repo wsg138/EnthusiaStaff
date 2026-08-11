@@ -78,6 +78,19 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void normalizationCannotHideSurrogatePairSplitAtRawBoundary() {
+        String normalizedTail = "a".repeat(79) + "😀z";
+        String reason = " ".repeat(100) + normalizedTail;
+        String rendered = renderer.render(message(
+                "logs-staffmode",
+                "PLAYER_FROZEN",
+                "{\"reason\":\"" + reason + "\"}"
+        ));
+
+        assertTrue(rendered.endsWith("reason=" + normalizedTail));
+    }
+
+    @Test
     void contentTruncationDoesNotSplitSurrogatePair() {
         String value = "a".repeat(1_798) + "😀" + "z";
         String rendered = DiscordEventRenderer.truncateWithEllipsis(value, 1_800);
