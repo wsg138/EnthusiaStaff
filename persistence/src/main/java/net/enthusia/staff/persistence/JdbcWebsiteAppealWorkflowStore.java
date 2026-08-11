@@ -32,18 +32,16 @@ import net.enthusia.staff.domain.website.WebsiteModerationException;
         "PMD.AvoidLiteralsInIfCondition",
         "PMD.CyclomaticComplexity",
         "PMD.ExcessiveClassLength",
-        "PMD.ExcessiveParameterList",
-        "PMD.NPathComplexity",
-        "PMD.NcssCount",
-        "PMD.NullAssignment"
+        "PMD.NcssCount"
 })
 final class JdbcWebsiteAppealWorkflowStore {
+    private static final String ALL = "ALL";
     private static final String OPEN = "OPEN";
     private static final String INFORMATION_REQUESTED = "INFORMATION_REQUESTED";
     private static final String APPROVAL_PENDING = "APPROVAL_PENDING";
     private static final String DENIED = "DENIED";
     private static final List<String> REVIEW_STATES = List.of(
-            "ALL",
+            ALL,
             OPEN,
             INFORMATION_REQUESTED,
             APPROVAL_PENDING,
@@ -138,7 +136,10 @@ final class JdbcWebsiteAppealWorkflowStore {
             String idempotencyKey,
             Instant now
     ) {
-        validateSubmission(punishmentId, accountId, username, reason, idempotencyKey, now);
+        SubmissionRequest request = new SubmissionRequest(
+                punishmentId, accountId, username, reason, idempotencyKey, now
+        );
+        validateSubmission(request);
         byte[] accountToken = accountToken(accountId);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -151,27 +152,9 @@ final class JdbcWebsiteAppealWorkflowStore {
                 requireEligibleBinding(code, accountToken, now);
                 rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);
                 AppealRow existing = selectByPunishment(connection, punishmentId, true);
-                WebsiteAppealSubmission result = existing == null
-                        ? insertSubmission(
-                                connection,
-                                code,
-                                accountId,
-                                accountToken,
-                                username,
-                                reason,
-                                idempotencyKey,
-                                now
-                        )
-                        : resubmit(
-                                connection,
-                                existing,
-                                accountId,
-                                accountToken,
-                                username,
-                                reason,
-                                idempotencyKey,
-                                now
-                        );
+                WebsiteAppealSubmission result = writeSubmission(
+                        connection, code, existing, accountToken, request
+                );
                 connection.commit();
                 return result;
             } catch (SQLException exception) {
@@ -188,6 +171,18 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
+    private WebsiteAppealSubmission writeSubmission(
+            Connection connection,
+            JdbcPunishmentCodeRepository.CodeRow code,
+            AppealRow existing,
+            byte[] accountToken,
+            SubmissionRequest request
+    ) throws SQLException {
+        return existing == null
+                ? insertSubmission(connection, code, accountToken, request)
+                : resubmit(connection, existing, accountToken, request);
+    }
+
     WebsiteAppealPage list(
             String state,
             Optional<String> encodedCursor,
@@ -195,52 +190,64 @@ final class JdbcWebsiteAppealWorkflowStore {
             Instant now
     ) {
         String normalizedState = normalizeState(state);
-        Cursor cursor = decodeCursor(encodedCursor);
+        Optional<Cursor> cursor = decodeCursor(encodedCursor);
         if (limit < 1 || limit > 100 || now == null) {
             throw invalid("INVALID_APPEAL_LIST", "The appeal list request is invalid");
         }
-        String stateClause = "ALL".equals(normalizedState) ? "" : " AND a.state = ?";
-        String cursorClause = cursor == null ? "" : """
+        AppealListQuery query = new AppealListQuery(normalizedState, cursor, limit);
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(appealListSql(query))) {
+            bindAppealList(statement, query);
+            try (ResultSet result = statement.executeQuery()) {
+                return readAppealPage(result, limit);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Unable to list website appeals", exception);
+        }
+    }
+
+    private static String appealListSql(AppealListQuery query) {
+        String stateClause = ALL.equals(query.state()) ? "" : " AND a.state = ?";
+        String cursorClause = query.cursor().isEmpty() ? "" : """
                  AND (a.updated_at < ? OR (a.updated_at = ? AND a.appeal_id < ?))
                 """;
-        String sql = APPEAL_SELECT + """
+        return APPEAL_SELECT + """
                 WHERE a.player_username IS NOT NULL
                 """ + stateClause + cursorClause + """
                 ORDER BY a.updated_at DESC, a.appeal_id DESC
                 LIMIT ?
                 """;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            int index = 1;
-            if (!"ALL".equals(normalizedState)) {
-                statement.setString(index++, normalizedState);
-            }
-            if (cursor != null) {
-                Timestamp timestamp = Timestamp.from(cursor.updatedAt());
-                statement.setTimestamp(index++, timestamp);
-                statement.setTimestamp(index++, timestamp);
-                statement.setBytes(index++, UuidBytes.toBytes(cursor.appealId()));
-            }
-            statement.setInt(index, limit + 1);
-            try (ResultSet result = statement.executeQuery()) {
-                List<WebsiteAppealView> items = new ArrayList<>();
-                while (result.next()) {
-                    items.add(view(readAppeal(result)));
-                }
-                Optional<String> nextCursor = Optional.empty();
-                if (items.size() > limit) {
-                    WebsiteAppealView overflow = items.removeLast();
-                    WebsiteAppealView last = items.getLast();
-                    nextCursor = Optional.of(encodeCursor(last.updatedAt(), last.appealId()));
-                    if (overflow == null) {
-                        throw new IllegalStateException("Appeal pagination overflow is unavailable");
-                    }
-                }
-                return new WebsiteAppealPage(items, nextCursor);
-            }
-        } catch (SQLException exception) {
-            throw persistence("Unable to list website appeals", exception);
+    }
+
+    private static void bindAppealList(PreparedStatement statement, AppealListQuery query) throws SQLException {
+        int index = 1;
+        if (!ALL.equals(query.state())) {
+            statement.setString(index++, query.state());
         }
+        if (query.cursor().isPresent()) {
+            Cursor cursor = query.cursor().orElseThrow();
+            Timestamp timestamp = Timestamp.from(cursor.updatedAt());
+            statement.setTimestamp(index++, timestamp);
+            statement.setTimestamp(index++, timestamp);
+            statement.setBytes(index++, UuidBytes.toBytes(cursor.appealId()));
+        }
+        statement.setInt(index, query.limit() + 1);
+    }
+
+    private static WebsiteAppealPage readAppealPage(ResultSet result, int limit) throws SQLException {
+        List<WebsiteAppealView> items = new ArrayList<>();
+        while (result.next()) {
+            items.add(view(readAppeal(result)));
+        }
+        if (items.size() <= limit) {
+            return new WebsiteAppealPage(items, Optional.empty());
+        }
+        items.removeLast();
+        WebsiteAppealView last = items.getLast();
+        return new WebsiteAppealPage(
+                items,
+                Optional.of(encodeCursor(last.updatedAt(), last.appealId()))
+        );
     }
 
     WebsiteAppealDecisionPreparation prepareDecision(
@@ -253,7 +260,7 @@ final class JdbcWebsiteAppealWorkflowStore {
             String idempotencyKey,
             Instant now
     ) {
-        validateDecision(
+        DecisionRequest request = DecisionRequest.normalized(
                 appealId,
                 expectedVersion,
                 decision,
@@ -263,72 +270,17 @@ final class JdbcWebsiteAppealWorkflowStore {
                 idempotencyKey,
                 now
         );
-        String normalizedDecision = decision.toUpperCase(Locale.ROOT);
+        validateDecision(request);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                AppealRow existing = selectById(connection, appealId, true);
-                if (existing == null || existing.playerUsername() == null) {
-                    throw notFound("APPEAL_NOT_FOUND", "The appeal could not be found");
-                }
-                WebsiteAppealDecisionPreparation replay = replayDecision(
-                        existing,
-                        normalizedDecision,
-                        note,
-                        reviewerAccountId,
-                        reviewerRank,
-                        idempotencyKey
-                );
-                if (replay != null) {
+                DecisionOutcome outcome = prepareDecision(connection, request);
+                if (outcome.replayed()) {
                     connection.rollback();
-                    return replay;
+                } else {
+                    connection.commit();
                 }
-                if (existing.revision() != expectedVersion) {
-                    throw conflict("STALE_APPEAL_STATE", "The appeal changed; reload it and retry");
-                }
-                if (!OPEN.equals(existing.state())
-                        && !INFORMATION_REQUESTED.equals(existing.state())) {
-                    throw conflict("APPEAL_STATE_CONFLICT", "The appeal is no longer reviewable");
-                }
-                String nextState = switch (normalizedDecision) {
-                    case "APPROVE" -> APPROVAL_PENDING;
-                    case "DENY" -> DENIED;
-                    case "REQUEST_INFORMATION" -> INFORMATION_REQUESTED;
-                    default -> throw invalid("INVALID_APPEAL_DECISION", "The decision is invalid");
-                };
-                long nextRevision = existing.revision() + 1;
-                updateDecision(
-                        connection,
-                        existing,
-                        nextState,
-                        nextRevision,
-                        normalizedDecision,
-                        note,
-                        reviewerAccountId,
-                        reviewerRank,
-                        idempotencyKey,
-                        now
-                );
-                insertEvent(
-                        connection,
-                        appealId,
-                        nextRevision,
-                        eventType(normalizedDecision),
-                        reviewerAccountId,
-                        reviewerRank,
-                        note,
-                        idempotencyKey,
-                        now
-                );
-                AppealRow updated = selectById(connection, appealId, false);
-                connection.commit();
-                boolean requiresAcceptance = "APPROVE".equals(normalizedDecision);
-                return new WebsiteAppealDecisionPreparation(
-                        view(updated),
-                        false,
-                        requiresAcceptance,
-                        requiresAcceptance ? updated.playerAccountId() : null
-                );
+                return outcome.preparation();
             } catch (SQLException exception) {
                 rollback(connection, exception);
                 throw persistence("Unable to prepare the appeal decision", exception);
@@ -343,15 +295,83 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
+    private DecisionOutcome prepareDecision(Connection connection, DecisionRequest request) throws SQLException {
+        AppealRow existing = selectById(connection, request.appealId(), true);
+        requireAppealExists(existing);
+        Optional<WebsiteAppealDecisionPreparation> replay = replayDecision(existing, request);
+        if (replay.isPresent()) {
+            return new DecisionOutcome(replay.orElseThrow(), true);
+        }
+        requireReviewable(existing, request);
+        DecisionTransition transition = decisionTransition(existing, request.decision());
+        updateDecision(connection, existing, transition, request);
+        insertEvent(connection, decisionEvent(request, transition));
+        AppealRow updated = selectById(connection, request.appealId(), false);
+        return new DecisionOutcome(
+                preparation(updated, false, transition.requiresAcceptance()),
+                false
+        );
+    }
+
+    private static void requireAppealExists(AppealRow existing) {
+        if (existing == null || existing.playerUsername() == null) {
+            throw notFound("APPEAL_NOT_FOUND", "The appeal could not be found");
+        }
+    }
+
+    private static void requireReviewable(AppealRow existing, DecisionRequest request) {
+        if (existing.revision() != request.expectedVersion()) {
+            throw conflict("STALE_APPEAL_STATE", "The appeal changed; reload it and retry");
+        }
+        if (!OPEN.equals(existing.state()) && !INFORMATION_REQUESTED.equals(existing.state())) {
+            throw conflict("APPEAL_STATE_CONFLICT", "The appeal is no longer reviewable");
+        }
+    }
+
+    private static DecisionTransition decisionTransition(AppealRow existing, String decision) {
+        return switch (decision) {
+            case "APPROVE" -> new DecisionTransition(
+                    APPROVAL_PENDING, existing.revision() + 1, "APPROVAL_REQUESTED", true
+            );
+            case "DENY" -> new DecisionTransition(DENIED, existing.revision() + 1, DENIED, false);
+            case "REQUEST_INFORMATION" -> new DecisionTransition(
+                    INFORMATION_REQUESTED, existing.revision() + 1, INFORMATION_REQUESTED, false
+            );
+            default -> throw invalid("INVALID_APPEAL_DECISION", "The decision is invalid");
+        };
+    }
+
+    private static AppealEvent decisionEvent(DecisionRequest request, DecisionTransition transition) {
+        return new AppealEvent(
+                request.appealId(),
+                transition.revision(),
+                transition.eventType(),
+                request.reviewerAccountId(),
+                request.reviewerRank(),
+                request.note(),
+                request.idempotencyKey(),
+                request.now()
+        );
+    }
+
+    private static WebsiteAppealDecisionPreparation preparation(
+            AppealRow row,
+            boolean replayed,
+            boolean requiresAcceptance
+    ) {
+        return new WebsiteAppealDecisionPreparation(
+                view(row),
+                replayed,
+                requiresAcceptance,
+                requiresAcceptance ? row.playerAccountId() : null
+        );
+    }
+
     private WebsiteAppealSubmission insertSubmission(
             Connection connection,
             JdbcPunishmentCodeRepository.CodeRow code,
-            String accountId,
             byte[] accountToken,
-            String username,
-            String reason,
-            String idempotencyKey,
-            Instant now
+            SubmissionRequest request
     ) throws SQLException {
         UUID appealId = UUID.randomUUID();
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -365,51 +385,40 @@ final class JdbcWebsiteAppealWorkflowStore {
             statement.setBytes(2, UuidBytes.toBytes(code.sanctionId()));
             statement.setString(3, code.caseId().value());
             statement.setBytes(4, accountToken);
-            statement.setString(5, accountId);
-            statement.setString(6, username);
-            statement.setString(7, reason);
+            statement.setString(5, request.accountId());
+            statement.setString(6, request.username());
+            statement.setString(7, request.reason());
             statement.setString(8, "workflow:" + appealId);
-            statement.setString(9, idempotencyKey);
-            statement.setTimestamp(10, Timestamp.from(now));
-            statement.setTimestamp(11, Timestamp.from(now));
+            statement.setString(9, request.idempotencyKey());
+            statement.setTimestamp(10, Timestamp.from(request.now()));
+            statement.setTimestamp(11, Timestamp.from(request.now()));
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Website appeal was not inserted"
             );
         }
-        insertEvent(
-                connection,
-                appealId,
-                1,
-                "SUBMITTED",
-                null,
-                null,
-                reason,
-                idempotencyKey,
-                now
-        );
+        insertEvent(connection, new AppealEvent(
+                appealId, 1, "SUBMITTED", null, null,
+                request.reason(), request.idempotencyKey(), request.now()
+        ));
         return new WebsiteAppealSubmission(view(selectById(connection, appealId, false)), false);
     }
 
     private WebsiteAppealSubmission resubmit(
             Connection connection,
             AppealRow existing,
-            String accountId,
             byte[] accountToken,
-            String username,
-            String reason,
-            String idempotencyKey,
-            Instant now
+            SubmissionRequest request
     ) throws SQLException {
         if (existing.submissionIdempotencyKey() != null
-                && existing.submissionIdempotencyKey().equals(idempotencyKey)) {
-            requireSameSubmission(existing, accountId, accountToken, username, reason);
+                && existing.submissionIdempotencyKey().equals(request.idempotencyKey())) {
+            requireSameSubmission(existing, accountToken, request);
             return new WebsiteAppealSubmission(view(existing), true);
         }
         if (!INFORMATION_REQUESTED.equals(existing.state())) {
             throw conflict("APPEAL_ALREADY_EXISTS", "That punishment already has an appeal");
         }
-        requireSameAccount(existing, accountId, accountToken, username);
+        requireSameAccount(existing, accountToken, request);
         long nextRevision = existing.revision() + 1;
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE website_appeal_requests
@@ -419,10 +428,10 @@ final class JdbcWebsiteAppealWorkflowStore {
                     decision_note = NULL, decided_at = NULL, updated_at = ?
                 WHERE appeal_id = ? AND revision = ? AND state = 'INFORMATION_REQUESTED'
                 """)) {
-            statement.setString(1, reason);
-            statement.setString(2, idempotencyKey);
+            statement.setString(1, request.reason());
+            statement.setString(2, request.idempotencyKey());
             statement.setLong(3, nextRevision);
-            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setTimestamp(4, Timestamp.from(request.now()));
             statement.setBytes(5, UuidBytes.toBytes(existing.appealId()));
             statement.setLong(6, existing.revision());
             JdbcTransactionSupport.requireSingleUpdate(
@@ -430,17 +439,10 @@ final class JdbcWebsiteAppealWorkflowStore {
                     "Website appeal changed during resubmission"
             );
         }
-        insertEvent(
-                connection,
-                existing.appealId(),
-                nextRevision,
-                "RESUBMITTED",
-                null,
-                null,
-                reason,
-                idempotencyKey,
-                now
-        );
+        insertEvent(connection, new AppealEvent(
+                existing.appealId(), nextRevision, "RESUBMITTED", null, null,
+                request.reason(), request.idempotencyKey(), request.now()
+        ));
         return new WebsiteAppealSubmission(
                 view(selectById(connection, existing.appealId(), false)),
                 false
@@ -450,14 +452,8 @@ final class JdbcWebsiteAppealWorkflowStore {
     private void updateDecision(
             Connection connection,
             AppealRow existing,
-            String nextState,
-            long nextRevision,
-            String decision,
-            String note,
-            UUID reviewerAccountId,
-            String reviewerRank,
-            String idempotencyKey,
-            Instant now
+            DecisionTransition transition,
+            DecisionRequest request
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE website_appeal_requests
@@ -466,17 +462,17 @@ final class JdbcWebsiteAppealWorkflowStore {
                     reviewer_rank = ?, decision_note = ?, decided_at = ?, updated_at = ?
                 WHERE appeal_id = ? AND revision = ?
                 """)) {
-            statement.setString(1, nextState);
-            statement.setLong(2, nextRevision);
-            statement.setString(3, decision);
-            statement.setString(4, idempotencyKey);
-            statement.setBytes(5, UuidBytes.toBytes(reviewerAccountId));
-            statement.setString(6, reviewerRank);
-            statement.setString(7, note);
-            statement.setTimestamp(8, Timestamp.from(now));
-            statement.setTimestamp(9, Timestamp.from(now));
+            statement.setString(1, transition.state());
+            statement.setLong(2, transition.revision());
+            statement.setString(3, request.decision());
+            statement.setString(4, request.idempotencyKey());
+            statement.setBytes(5, UuidBytes.toBytes(request.reviewerAccountId()));
+            statement.setString(6, request.reviewerRank());
+            statement.setString(7, request.note());
+            statement.setTimestamp(8, Timestamp.from(request.now()));
+            statement.setTimestamp(9, Timestamp.from(request.now()));
             statement.setBytes(10, UuidBytes.toBytes(existing.appealId()));
-  statement.setLong(11, existing.revision());
+            statement.setLong(11, existing.revision());
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Website appeal changed during decision"
@@ -484,30 +480,22 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
-    private static WebsiteAppealDecisionPreparation replayDecision(
+    private static Optional<WebsiteAppealDecisionPreparation> replayDecision(
             AppealRow existing,
-            String decision,
-            String note,
-            UUID reviewerAccountId,
-            String reviewerRank,
-            String idempotencyKey
+            DecisionRequest request
     ) {
-        if (!idempotencyKey.equals(existing.decisionIdempotencyKey())) {
-            return null;
+        if (!request.idempotencyKey().equals(existing.decisionIdempotencyKey())) {
+            return Optional.empty();
         }
-        if (!decision.equals(existing.decisionType()) || !note.equals(existing.decisionNote())
-                || !reviewerAccountId.equals(existing.reviewerAccountId())
-                || !reviewerRank.equals(existing.reviewerRank())) {
+        if (!request.decision().equals(existing.decisionType())
+                || !request.note().equals(existing.decisionNote())
+                || !request.reviewerAccountId().equals(existing.reviewerAccountId())
+                || !request.reviewerRank().equals(existing.reviewerRank())) {
             throw conflict("APPEAL_IDEMPOTENCY_CONFLICT", "The decision key conflicts with prior state");
         }
-        boolean requiresAcceptance = "APPROVE".equals(decision)
+        boolean requiresAcceptance = "APPROVE".equals(request.decision())
                 && APPROVAL_PENDING.equals(existing.state());
-        return new WebsiteAppealDecisionPreparation(
-                view(existing),
-                true,
-                requiresAcceptance,
-                requiresAcceptance ? existing.playerAccountId() : null
-        );
+        return Optional.of(preparation(existing, true, requiresAcceptance));
     }
 
     private AppealRow selectByPunishment(Connection connection, UUID punishmentId, boolean lock)
@@ -576,39 +564,29 @@ final class JdbcWebsiteAppealWorkflowStore {
         );
     }
 
-    private static void insertEvent(
-            Connection connection,
-            UUID appealId,
-            long revision,
-            String eventType,
-            UUID actorAccountId,
-            String actorRank,
-            String note,
-            String idempotencyKey,
-            Instant now
-    ) throws SQLException {
+    private static void insertEvent(Connection connection, AppealEvent event) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO website_appeal_events(
                     appeal_id, revision, event_type, actor_account_id,
                     actor_rank, note, idempotency_key, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
-            statement.setBytes(1, UuidBytes.toBytes(appealId));
-            statement.setLong(2, revision);
-            statement.setString(3, eventType);
-            if (actorAccountId == null) {
+            statement.setBytes(1, UuidBytes.toBytes(event.appealId()));
+            statement.setLong(2, event.revision());
+            statement.setString(3, event.type());
+            if (event.actorAccountId() == null) {
                 statement.setNull(4, Types.BINARY);
             } else {
-                statement.setBytes(4, UuidBytes.toBytes(actorAccountId));
+                statement.setBytes(4, UuidBytes.toBytes(event.actorAccountId()));
             }
-            if (actorRank == null) {
+            if (event.actorRank() == null) {
                 statement.setNull(5, Types.VARCHAR);
             } else {
-                statement.setString(5, actorRank);
+                statement.setString(5, event.actorRank());
             }
-            statement.setString(6, note);
-            statement.setString(7, idempotencyKey);
-            statement.setTimestamp(8, Timestamp.from(now));
+            statement.setString(6, event.note());
+            statement.setString(7, event.idempotencyKey());
+            statement.setTimestamp(8, Timestamp.from(event.now()));
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Website appeal event was not inserted"
@@ -628,39 +606,39 @@ final class JdbcWebsiteAppealWorkflowStore {
                 || !MessageDigest.isEqual(code.claimedAccountToken(), accountToken)) {
             throw conflict("BINDING_ACCOUNT_MISMATCH", "The punishment is not bound to this account");
         }
-        boolean active = "ACTIVE".equals(code.codeStatus())
+        if (!appealable(code, now)) {
+            throw conflict("PUNISHMENT_INELIGIBLE", "That punishment is no longer appealable");
+        }
+    }
+
+    private static boolean appealable(JdbcPunishmentCodeRepository.CodeRow code, Instant now) {
+        return "ACTIVE".equals(code.codeStatus())
                 && List.of("ACTIVE", "APPLIED").contains(code.sanctionStatus())
                 && (code.expiration() == null || code.expiration().isAfter(now))
                 && !"FULLY_OVERTURNED".equals(code.caseState())
                 && List.of("BAN", "NETWORK_BAN", "NETWORK_IDENTITY_BAN", "MUTE")
                         .contains(code.sanctionType());
-        if (!active) {
-            throw conflict("PUNISHMENT_INELIGIBLE", "That punishment is no longer appealable");
-        }
     }
 
     private static void requireSameSubmission(
             AppealRow existing,
-            String accountId,
             byte[] accountToken,
-            String username,
-            String reason
+            SubmissionRequest request
     ) {
-        requireSameAccount(existing, accountId, accountToken, username);
-        if (!reason.equals(existing.reason())) {
+        requireSameAccount(existing, accountToken, request);
+        if (!request.reason().equals(existing.reason())) {
             throw conflict("APPEAL_IDEMPOTENCY_CONFLICT", "The appeal key conflicts with prior state");
         }
     }
 
     private static void requireSameAccount(
             AppealRow existing,
-            String accountId,
             byte[] accountToken,
-            String username
+            SubmissionRequest request
     ) {
-        if (!accountId.equals(existing.playerAccountId())
+        if (!request.accountId().equals(existing.playerAccountId())
                 || !MessageDigest.isEqual(accountToken, existing.accountToken())
-                || !username.equals(existing.playerUsername())) {
+                || !request.username().equals(existing.playerUsername())) {
             throw conflict("APPEAL_ACCOUNT_CONFLICT", "The appeal belongs to another account");
         }
     }
@@ -683,9 +661,9 @@ final class JdbcWebsiteAppealWorkflowStore {
         return normalized;
     }
 
-    private static Cursor decodeCursor(Optional<String> encoded) {
+    private static Optional<Cursor> decodeCursor(Optional<String> encoded) {
         if (encoded.isEmpty() || encoded.orElseThrow().isBlank()) {
-            return null;
+            return Optional.empty();
         }
         try {
             String decoded = new String(
@@ -693,10 +671,10 @@ final class JdbcWebsiteAppealWorkflowStore {
                     java.nio.charset.StandardCharsets.US_ASCII
             );
             int separator = decoded.indexOf(':');
-            return new Cursor(
+            return Optional.of(new Cursor(
                     Instant.ofEpochMilli(Long.parseLong(decoded.substring(0, separator))),
                     UUID.fromString(decoded.substring(separator + 1))
-            );
+            ));
         } catch (IllegalArgumentException | IndexOutOfBoundsException exception) {
             throw invalid("INVALID_APPEAL_CURSOR", "The appeal cursor is invalid");
         }
@@ -709,15 +687,6 @@ final class JdbcWebsiteAppealWorkflowStore {
         );
     }
 
-    private static String eventType(String decision) {
-        return switch (decision) {
-            case "APPROVE" -> "APPROVAL_REQUESTED";
-            case "DENY" -> "DENIED";
-            case "REQUEST_INFORMATION" -> "INFORMATION_REQUESTED";
-            default -> throw invalid("INVALID_APPEAL_DECISION", "The decision is invalid");
-        };
-    }
-
     private static void validateAccountRequest(String accountId, int limit, Instant now) {
         if (accountId == null || accountId.isBlank() || accountId.length() > 128
                 || limit < 1 || limit > 100 || now == null) {
@@ -725,41 +694,42 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
-    private static void validateSubmission(
-            UUID punishmentId,
-            String accountId,
-            String username,
-            String reason,
-            String idempotencyKey,
-            Instant now
-    ) {
-        if (punishmentId == null || accountId == null || accountId.isBlank()
-                || accountId.length() > 128 || username == null
-                || !username.matches("[A-Za-z0-9_]{1,16}") || reason == null
-                || reason.length() < 10 || reason.length() > 1_000
-                || !validIdempotencyKey(idempotencyKey) || now == null) {
+    private static void validateSubmission(SubmissionRequest request) {
+        requireValidSubmission(request.punishmentId() != null);
+        requireValidSubmission(validNonBlankLength(request.accountId(), 1, 128));
+        requireValidSubmission(request.username() != null
+                && request.username().matches("[A-Za-z0-9_]{1,16}"));
+        requireValidSubmission(validLength(request.reason(), 10, 1_000));
+        requireValidSubmission(validIdempotencyKey(request.idempotencyKey()));
+        requireValidSubmission(request.now() != null);
+    }
+
+    private static void validateDecision(DecisionRequest request) {
+        requireValidDecision(request.appealId() != null && request.expectedVersion() >= 1);
+        requireValidDecision(List.of("APPROVE", "DENY", "REQUEST_INFORMATION").contains(request.decision()));
+        requireValidDecision(validLength(request.note(), 3, 1_000));
+        requireValidDecision(request.reviewerAccountId() != null);
+        requireValidDecision(List.of("MOD", "ADMIN", "FOUNDER").contains(request.reviewerRank()));
+        requireValidDecision(validIdempotencyKey(request.idempotencyKey()));
+        requireValidDecision(request.now() != null);
+    }
+
+    private static boolean validLength(String value, int minimum, int maximum) {
+        return value != null && value.length() >= minimum && value.length() <= maximum;
+    }
+
+    private static boolean validNonBlankLength(String value, int minimum, int maximum) {
+        return validLength(value, minimum, maximum) && !value.isBlank();
+    }
+
+    private static void requireValidSubmission(boolean valid) {
+        if (!valid) {
             throw invalid("INVALID_APPEAL", "The appeal submission is invalid");
         }
     }
 
-    private static void validateDecision(
-            UUID appealId,
-            long expectedVersion,
-            String decision,
-            String note,
-            UUID reviewerAccountId,
-            String reviewerRank,
-            String idempotencyKey,
-            Instant now
-    ) {
-        String normalizedDecision = decision == null ? "" : decision.toUpperCase(Locale.ROOT);
-        if (appealId == null || expectedVersion < 1
-                || !List.of("APPROVE", "DENY", "REQUEST_INFORMATION")
-                        .contains(normalizedDecision)
-                || note == null || note.length() < 3 || note.length() > 1_000
-                || reviewerAccountId == null || reviewerRank == null
-                || !List.of("MOD", "ADMIN", "FOUNDER").contains(reviewerRank)
-                || !validIdempotencyKey(idempotencyKey) || now == null) {
+    private static void requireValidDecision(boolean valid) {
+        if (!valid) {
             throw invalid("INVALID_APPEAL_DECISION", "The appeal decision is invalid");
         }
     }
@@ -808,6 +778,76 @@ final class JdbcWebsiteAppealWorkflowStore {
     }
 
     private record Cursor(Instant updatedAt, UUID appealId) {
+    }
+
+    private record AppealListQuery(String state, Optional<Cursor> cursor, int limit) {
+    }
+
+    private record SubmissionRequest(
+            UUID punishmentId,
+            String accountId,
+            String username,
+            String reason,
+            String idempotencyKey,
+            Instant now
+    ) {
+    }
+
+    private record DecisionRequest(
+            UUID appealId,
+            long expectedVersion,
+            String decision,
+            String note,
+            UUID reviewerAccountId,
+            String reviewerRank,
+            String idempotencyKey,
+            Instant now
+    ) {
+        private static DecisionRequest normalized(
+                UUID appealId,
+                long expectedVersion,
+                String decision,
+                String note,
+                UUID reviewerAccountId,
+                String reviewerRank,
+                String idempotencyKey,
+                Instant now
+        ) {
+            String normalizedDecision = decision == null ? "" : decision.toUpperCase(Locale.ROOT);
+            return new DecisionRequest(
+                    appealId,
+                    expectedVersion,
+                    normalizedDecision,
+                    note,
+                    reviewerAccountId,
+                    reviewerRank,
+                    idempotencyKey,
+                    now
+            );
+        }
+    }
+
+    private record DecisionTransition(
+            String state,
+            long revision,
+            String eventType,
+            boolean requiresAcceptance
+    ) {
+    }
+
+    private record DecisionOutcome(WebsiteAppealDecisionPreparation preparation, boolean replayed) {
+    }
+
+    private record AppealEvent(
+            UUID appealId,
+            long revision,
+            String type,
+            UUID actorAccountId,
+            String actorRank,
+            String note,
+            String idempotencyKey,
+            Instant now
+    ) {
     }
 
     private record AppealRow(
