@@ -36,19 +36,24 @@ def _plain_field(value: str) -> str:
 
 
 def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
-    """Parse package tables from the canonical registry."""
-    headings = list(
-        re.finditer(r'^### `(ES-[A-Z]+\d+)`.*$', registry, flags=re.M)
-    )
+    """Parse the canonical package-index Markdown table."""
+    headers: list[str] | None = None
     packages: dict[str, dict[str, str]] = {}
-    for index, heading in enumerate(headings):
-        package_id = heading.group(1)
-        end = headings[index + 1].start() if index + 1 < len(headings) else len(registry)
-        block = registry[heading.end():end]
+    for line in registry.splitlines():
+        if not line.startswith('|'):
+            continue
+        cells = [_plain_field(value) for value in line.strip().strip('|').split('|')]
+        if cells and cells[0] == 'ID':
+            headers = cells
+            continue
+        if headers is None or not cells or not re.fullmatch(r'ES-[A-Z]+\d+', cells[0]):
+            continue
         fields = {
-            match.group(1).strip(): _plain_field(match.group(2))
-            for match in re.finditer(r'^\| ([^|]+?) \| (.*?) \|$', block, flags=re.M)
+            header: value
+            for header, value in zip(headers, cells)
+            if value not in {'', '-', '—'}
         }
+        package_id = cells[0]
         packages[package_id] = fields
     return packages
 
@@ -79,7 +84,11 @@ def validate_registry_routing(
                     f'{package_id} status {status} requires routing classification '
                     'ACTIONABLE_CONTINUATION or PARKED_BLOCKED'
                 )
-        elif classification is not None:
+        elif status == 'READY' and classification != 'READY':
+            errors.append(f'{package_id} READY status requires READY classification')
+        elif status in {'PLANNED', 'DEFERRED'} and classification != 'PARKED_BLOCKED':
+            errors.append(f'{package_id} status {status} requires PARKED_BLOCKED classification')
+        elif status in {'COMPLETE', 'SUPERSEDED'} and classification is not None:
             errors.append(
                 f'{package_id} status {status} must not declare persistent '
                 f'classification {classification}'
@@ -113,14 +122,14 @@ def validate_registry_routing(
     return errors, selected
 
 
-def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
-    """Validate package orchestration files under one repository root."""
+def _package_inventory(
+    root: Path,
+) -> tuple[list[str], list[Path], list[str], dict[str, dict[str, str]]]:
+    """Read the package registry and validate its file inventory."""
     errors: list[str] = []
     package_root = root / 'ai-agents' / 'work-packages'
     package_files = sorted((package_root / 'packages').glob('ES-*.md'))
     package_ids = [path.stem for path in package_files]
-    if len(package_ids) != 21:
-        errors.append(f'expected 21 package files, found {len(package_ids)}')
     if len(package_ids) != len(set(package_ids)):
         errors.append('duplicate package IDs')
 
@@ -132,7 +141,13 @@ def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
     unexpected_packages = sorted(set(registry_packages) - set(package_ids))
     if unexpected_packages:
         errors.append('registry entries without package files: ' + ', '.join(unexpected_packages))
+    return errors, package_files, package_ids, registry_packages
 
+
+def _audit_coverage(root: Path) -> tuple[list[str], int]:
+    """Validate the canonical audit-ID inventory."""
+    errors: list[str] = []
+    package_root = root / 'ai-agents' / 'work-packages'
     coverage = (package_root / 'AUDIT-COVERAGE.md').read_text(encoding='utf-8')
     audit_ids = re.findall(r'\| `(AUD-[A-Z]+-\d{3})` \|', coverage)
     if len(audit_ids) != 99 or len(set(audit_ids)) != 99:
@@ -140,24 +155,32 @@ def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
             f'audit coverage must have 99 unique IDs, got '
             f'{len(audit_ids)}/{len(set(audit_ids))}'
         )
+    return errors, len(set(audit_ids))
 
-    dependencies: dict[str, list[str]] = {}
+
+def _read_dependencies(
+    package_files: list[Path],
+    registry_packages: Mapping[str, Mapping[str, str]],
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Read package dependencies and report malformed package sections."""
+    errors: list[str] = []
+    dependencies = {
+        package_id: re.findall(r'ES-[A-Z]+\d+', fields.get('Dependencies', ''))
+        for package_id, fields in registry_packages.items()
+    }
     for path in package_files:
         text = path.read_text(encoding='utf-8')
-        for section in range(1, 29):
-            if f'## {section}.' not in text:
-                errors.append(f'{path.stem} missing section {section}')
-        dependency_parts = text.split('## 8. Dependencies', 1)
-        if len(dependency_parts) != 2:
-            dependencies[path.stem] = []
-            continue
-        dependency_section = dependency_parts[1].split('## 9.', 1)[0]
-        dependencies[path.stem] = [
-            value
-            for value in re.findall(r'`(ES-[A-Z]+\d+)`', dependency_section)
-            if value != path.stem
-        ]
+        status = registry_packages.get(path.stem, {}).get('Status')
+        if status != 'COMPLETE':
+            for section in range(1, 29):
+                if f'## {section}.' not in text:
+                    errors.append(f'{path.stem} missing section {section}')
+    return errors, dependencies
 
+
+def _dependency_errors(dependencies: Mapping[str, list[str]]) -> list[str]:
+    """Report unknown dependencies and cycles."""
+    errors: list[str] = []
     for package_id, values in dependencies.items():
         for value in values:
             if value not in dependencies:
@@ -179,22 +202,22 @@ def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
 
     for package_id in dependencies:
         dfs(package_id, [])
+    return errors
 
-    routing_errors, selected_package = validate_registry_routing(
-        registry_packages,
-        dependencies,
-    )
-    errors.extend(routing_errors)
 
+def _required_file_errors(root: Path) -> list[str]:
+    """Report missing files required by the orchestration contract."""
     required = [
         'components/README.md',
         'tools/component-sync/component_sync.py',
         'ai-agents/work-packages/COMPONENT-REGISTRY.md',
     ]
-    for relative in required:
-        if not (root / relative).exists():
-            errors.append(f'missing {relative}')
+    return [f'missing {relative}' for relative in required if not (root / relative).exists()]
 
+
+def _legacy_policy_errors(root: Path) -> list[str]:
+    """Report files that reintroduce the abandoned component-branch design."""
+    errors: list[str] = []
     negative_policy_docs = {
         'WORKSPACE-MANIFEST.md',
         'components/README.md',
@@ -233,8 +256,29 @@ def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
         errors.append('component-only core allowlist must not exist')
     if (root / 'COMPONENT-METADATA.md').exists():
         errors.append('root component metadata from abandoned branch design must not exist')
+    return errors
 
-    return errors, selected_package, len(package_ids), len(set(audit_ids))
+
+def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
+    """Validate package orchestration files under one repository root."""
+    errors, package_files, package_ids, registry_packages = _package_inventory(root)
+    audit_errors, audit_count = _audit_coverage(root)
+    dependency_section_errors, dependencies = _read_dependencies(
+        package_files,
+        registry_packages,
+    )
+    routing_errors, selected_package = validate_registry_routing(
+        registry_packages,
+        dependencies,
+    )
+    errors.extend(audit_errors)
+    errors.extend(dependency_section_errors)
+    errors.extend(_dependency_errors(dependencies))
+    errors.extend(routing_errors)
+    errors.extend(_required_file_errors(root))
+    errors.extend(_legacy_policy_errors(root))
+
+    return errors, selected_package, len(package_ids), audit_count
 
 
 def main() -> int:

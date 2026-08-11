@@ -14,13 +14,9 @@ SPEC.loader.exec_module(MODULE)
 class RegistryRoutingTest(unittest.TestCase):
     def test_parse_registry_packages_reads_classification(self) -> None:
         registry = """
-### `ES-P02` — Blocked
-
-| Field | Value |
-| --- | --- |
-| Status | `BLOCKED` |
-| Classification | `PARKED_BLOCKED` |
-| Priority | `20` |
+| ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
+| --- | --- | --- | --- | ---: | --- | --- |
+| `ES-P02` | Runtime recovery | `BLOCKED` | `PARKED_BLOCKED` | 20 | `ES-P01` | waiting |
 """
         packages = MODULE.parse_registry_packages(registry)
         self.assertEqual('BLOCKED', packages['ES-P02']['Status'])
@@ -36,7 +32,7 @@ class RegistryRoutingTest(unittest.TestCase):
                 'Classification': 'PARKED_BLOCKED',
                 'Priority': '20',
             },
-            'ES-X05': {'Status': 'READY', 'Priority': '35'},
+            'ES-X05': {'Status': 'READY', 'Classification': 'READY', 'Priority': '35'},
             'ES-P01': {'Status': 'COMPLETE', 'Priority': '10'},
         }
         errors, selected = MODULE.validate_registry_routing(
@@ -53,7 +49,7 @@ class RegistryRoutingTest(unittest.TestCase):
                 'Classification': 'ACTIONABLE_CONTINUATION',
                 'Priority': '20',
             },
-            'ES-X05': {'Status': 'READY', 'Priority': '35'},
+            'ES-X05': {'Status': 'READY', 'Classification': 'READY', 'Priority': '35'},
             'ES-P01': {'Status': 'COMPLETE', 'Priority': '10'},
         }
         errors, selected = MODULE.validate_registry_routing(
@@ -75,7 +71,7 @@ class RegistryRoutingTest(unittest.TestCase):
 
     def test_ready_package_requires_complete_dependencies(self) -> None:
         packages = {
-            'ES-X05': {'Status': 'READY', 'Priority': '35'},
+            'ES-X05': {'Status': 'READY', 'Classification': 'READY', 'Priority': '35'},
             'ES-P01': {
                 'Status': 'PARTIAL',
                 'Priority': '10',
