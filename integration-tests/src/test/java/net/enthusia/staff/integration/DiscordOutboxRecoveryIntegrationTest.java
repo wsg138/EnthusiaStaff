@@ -37,6 +37,8 @@ class DiscordOutboxRecoveryIntegrationTest {
     private static final Duration LEASE = Duration.ofSeconds(2);
     private static final String RESTART_DESTINATION = "test-restart";
     private static final String CONCURRENT_DESTINATION = "test-concurrent";
+    private static final int ONE_MESSAGE = 1;
+    private static final int TWO_MESSAGES = 2;
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -51,18 +53,18 @@ class DiscordOutboxRecoveryIntegrationTest {
             clearTestRows();
             messageId = enqueue(RESTART_DESTINATION, "restart");
             List<DiscordOutboxMessage> claimed = first.discordOutboxStore()
-                    .claimDue("velocity-discord:first", 1, LEASE, NOW);
-            assertEquals(1, claimed.size());
+                    .claimDue("velocity-discord:first", ONE_MESSAGE, LEASE, NOW);
+            assertEquals(ONE_MESSAGE, claimed.size());
             assertEquals(messageId, claimed.getFirst().messageId());
             assertEquals(0, claimed.getFirst().attemptCount());
         }
 
         try (MariaDbRuntime second = MariaDb.initialize(databaseConfig(DATABASE))) {
             List<DiscordOutboxMessage> recovered = second.discordOutboxStore()
-                    .claimDue("velocity-discord:second", 1, LEASE, NOW.plusSeconds(3));
-            assertEquals(1, recovered.size());
+                    .claimDue("velocity-discord:second", ONE_MESSAGE, LEASE, NOW.plusSeconds(3));
+            assertEquals(ONE_MESSAGE, recovered.size());
             assertEquals(messageId, recovered.getFirst().messageId());
-            assertEquals(1, recovered.getFirst().attemptCount());
+            assertEquals(ONE_MESSAGE, recovered.getFirst().attemptCount());
         }
     }
 
@@ -73,31 +75,31 @@ class DiscordOutboxRecoveryIntegrationTest {
             UUID firstId = enqueue(CONCURRENT_DESTINATION, "concurrent-a");
             UUID secondId = enqueue(CONCURRENT_DESTINATION, "concurrent-b");
             DiscordOutboxStore store = runtime.discordOutboxStore();
-            ExecutorService executor = Executors.newFixedThreadPool(2);
+            ExecutorService executor = Executors.newFixedThreadPool(TWO_MESSAGES);
             try {
                 CompletableFuture<List<DiscordOutboxMessage>> first = CompletableFuture.supplyAsync(
-                        () -> store.claimDue("velocity-discord:a", 1, LEASE, NOW),
+                        () -> store.claimDue("velocity-discord:a", ONE_MESSAGE, LEASE, NOW),
                         executor
                 );
                 CompletableFuture<List<DiscordOutboxMessage>> second = CompletableFuture.supplyAsync(
-                        () -> store.claimDue("velocity-discord:b", 1, LEASE, NOW),
+                        () -> store.claimDue("velocity-discord:b", ONE_MESSAGE, LEASE, NOW),
                         executor
                 );
                 List<DiscordOutboxMessage> concurrentClaims = new ArrayList<>();
                 concurrentClaims.addAll(first.get(10, TimeUnit.SECONDS));
                 concurrentClaims.addAll(second.get(10, TimeUnit.SECONDS));
 
-                assertTrue(concurrentClaims.size() >= 1 && concurrentClaims.size() <= 2);
+                assertTrue(concurrentClaims.size() >= ONE_MESSAGE && concurrentClaims.size() <= TWO_MESSAGES);
                 Set<UUID> concurrentIds = concurrentClaims.stream()
                         .map(DiscordOutboxMessage::messageId)
                         .collect(Collectors.toSet());
                 assertEquals(concurrentClaims.size(), concurrentIds.size());
 
-                if (concurrentClaims.size() == 1) {
+                if (concurrentClaims.size() == ONE_MESSAGE) {
                     List<DiscordOutboxMessage> remaining = store.claimDue(
-                            "velocity-discord:c", 1, LEASE, NOW
+                            "velocity-discord:c", ONE_MESSAGE, LEASE, NOW
                     );
-                    assertEquals(1, remaining.size());
+                    assertEquals(ONE_MESSAGE, remaining.size());
                     concurrentClaims.addAll(remaining);
                 }
 
@@ -136,7 +138,7 @@ class DiscordOutboxRecoveryIntegrationTest {
             statement.setString(3, destination);
             statement.setTimestamp(4, Timestamp.from(NOW));
             statement.setTimestamp(5, Timestamp.from(NOW));
-            assertEquals(1, statement.executeUpdate());
+            assertEquals(ONE_MESSAGE, statement.executeUpdate());
         }
         return messageId;
     }
