@@ -65,8 +65,8 @@ public record VelocityConfiguration(
         boolean liteBansShadowScheduleEnabled,
         int liteBansShadowIntervalHours
 ) {
-    private static final String DISCORD_ROUTE_ENVIRONMENT = "ES_DISCORD_ROUTE_ENVIRONMENT";
-    private static final String DISCORD_STAGING_ALLOWED_HOSTS = "ES_DISCORD_STAGING_ALLOWED_HOSTS";
+    private static final String ROUTE_CLASS_VARIABLE = discordVariable("ROUTE_ENVIRONMENT");
+    private static final String STAGING_HOSTS_VARIABLE = discordVariable("STAGING_ALLOWED_HOSTS");
 
     public VelocityConfiguration {
         backendSecretEnvironments = Map.copyOf(backendSecretEnvironments);
@@ -167,7 +167,7 @@ public record VelocityConfiguration(
     }
 
     public Map<String, DiscordWebhookRoute> discordWebhooksFromEnvironment() {
-        String routeClass = System.getenv(DISCORD_ROUTE_ENVIRONMENT);
+        String routeClass = System.getenv(ROUTE_CLASS_VARIABLE);
         final DiscordRouteEnvironment routeEnvironment;
         try {
             routeEnvironment = DiscordRouteEnvironment.parse(routeClass);
@@ -195,7 +195,7 @@ public record VelocityConfiguration(
     }
 
     private static Set<String> discordStagingHostsFromEnvironment() {
-        String raw = System.getenv(DISCORD_STAGING_ALLOWED_HOSTS);
+        String raw = System.getenv(STAGING_HOSTS_VARIABLE);
         if (raw == null || raw.isBlank()) {
             throw new IllegalStateException("The Discord staging approved-host environment variable is missing");
         }
@@ -263,6 +263,10 @@ public record VelocityConfiguration(
             throw new IllegalStateException("The website API " + label + " must contain at least 32 bytes");
         }
         return value;
+    }
+
+    private static String discordVariable(String suffix) {
+        return String.join("_", "ES", "DISCORD", suffix);
     }
 
     private static String required(Properties properties, String key) {
