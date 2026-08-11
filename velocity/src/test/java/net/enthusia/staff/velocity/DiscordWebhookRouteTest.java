@@ -26,6 +26,10 @@ final class DiscordWebhookRouteTest {
 
         assertThrows(
                 IllegalArgumentException.class,
+                () -> DiscordWebhookRoute.approvedStaging(REPORTS, null, STAGING_HOSTS)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
                         REPORTS,
                         URI.create("https://unapproved.example.test/webhook/reports"),
