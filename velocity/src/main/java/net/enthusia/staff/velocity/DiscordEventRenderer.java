@@ -13,6 +13,7 @@ final class DiscordEventRenderer {
     private static final int MAX_ARRAY_VALUES = 8;
     private static final int MAX_CONTENT_CHARACTERS = 1_800;
     private static final char BACKTICK = '`';
+    private static final char REPLACEMENT_CHARACTER = '\uFFFD';
     private static final String TARGET_ID = "targetId";
     private static final String STATE = "state";
     private static final Map<String, List<String>> ALLOWED_FIELDS = Map.of(
@@ -120,18 +121,42 @@ final class DiscordEventRenderer {
 
     private static String sanitize(String raw) {
         StringBuilder result = new StringBuilder(raw.length());
-        for (int index = 0; index < raw.length(); index++) {
-            char character = raw.charAt(index);
-            if (Character.isISOControl(character)) {
-                result.append(' ');
-            } else if (character == BACKTICK) {
-                result.append('\'');
-            } else {
-                result.append(character);
-            }
+        for (int index = 0; index < raw.length();) {
+            index += appendSanitizedCodeUnit(raw, index, result);
         }
         String normalized = result.toString().trim().replaceAll("\\s+", " ");
         return truncateWithEllipsis(normalized, MAX_FIELD_CHARACTERS);
+    }
+
+    private static int appendSanitizedCodeUnit(String raw, int index, StringBuilder result) {
+        char character = raw.charAt(index);
+        if (Character.isISOControl(character)) {
+            result.append(' ');
+            return 1;
+        }
+        if (character == BACKTICK) {
+            result.append('\'');
+            return 1;
+        }
+        if (Character.isHighSurrogate(character)) {
+            return appendHighSurrogate(raw, index, result, character);
+        }
+        if (Character.isLowSurrogate(character)) {
+            result.append(REPLACEMENT_CHARACTER);
+            return 1;
+        }
+        result.append(character);
+        return 1;
+    }
+
+    private static int appendHighSurrogate(String raw, int index, StringBuilder result, char highSurrogate) {
+        int lowIndex = index + 1;
+        if (lowIndex < raw.length() && Character.isLowSurrogate(raw.charAt(lowIndex))) {
+            result.append(highSurrogate).append(raw.charAt(lowIndex));
+            return 2;
+        }
+        result.append(REPLACEMENT_CHARACTER);
+        return 1;
     }
 
     static String truncateWithEllipsis(String value, int maximumCharacters) {
