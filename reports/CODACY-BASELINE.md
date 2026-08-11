@@ -929,7 +929,9 @@ ignoring findings or excluding first-party source:
 | #121 | persistence state transitions | 377 |
 | #122 | registered command-route integrity | 376 |
 | #123 | fail-closed freeze verification visibility | 376 |
-| #124 | Velocity runtime and administration boundaries (active branch) | 346 |
+| #124 | Velocity runtime and administration boundaries | 346 |
+| #125 | website appeal transaction boundaries | 334 |
+| #126 | economy recovery and confiscation coordination | 319 |
 
 PR #120 passed with zero new findings and reduced the active inventory by 38.
 PR #121 passed with zero new findings and reduced it by 25; its PR mapper showed
@@ -1018,6 +1020,39 @@ failure, error or skip. After the nullable-context correction, all 62 persistenc
 unit tests and the five-test MariaDB website appeal workflow passed on the final
 code head. Hosted coverage, Sentinel, exact-head Pi staging and documentation-
 head analysis remain merge gates.
+
+## 2026-08-11 economy recovery checkpoint
+
+Merged PR #125 advanced `main` to
+`9d3cd1eec72581401a9313d200fac654dd15c321`. PR #126 final head
+`446f59f1d260e6ace8bb6b0e842a209638aefdba` separates economy recovery
+assessment from Bukkit scheduling, decomposes confiscation coordination, and
+groups the coordinator's runtime dependencies. Review hardening requires
+complete committed-result evidence, verifies a rollback without recorded result
+evidence against the durable before-state, preserves the safe evidence-free
+pre-plan rollback, and quarantines unknown provider outcomes.
+
+Codacy Cloud reports zero new findings. The complete branch inventory records
+the authoritative reduction from 334 to 319 active warnings:
+
+| Category | PR #125 `main` | PR #126 branch | Change |
+| --- | ---: | ---: | ---: |
+| Complexity | 217 | 205 | -12 |
+| Error-prone | 98 | 95 | -3 |
+| Performance | 19 | 19 | 0 |
+| **Total** | **334** | **319** | **-15** |
+
+The touched economy area retains one visible finding: the 1,509-line
+`EconomyCoordinator` file-length result. No issue, rule, or first-party source
+path was suppressed. The current CLI response still does not expose a repository
+letter grade, so none is claimed.
+
+The final Java 21 cache-disabled clean build passed 39 tasks and 924 tests with
+zero failures, errors, or skips. All 47 MariaDB Testcontainers suites and their
+181 tests executed. Hosted coverage, Sentinel packaging, and the exact-head
+private Pi runtime test passed. CodeRabbit's valid rollback-evidence and unknown
+provider-status findings were fixed; its follow-up run was rate-limited, so no
+follow-up review approval is claimed.
 
 ## Remediation order
 
