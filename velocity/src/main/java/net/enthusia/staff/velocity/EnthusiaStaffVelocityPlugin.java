@@ -96,6 +96,7 @@ public final class EnthusiaStaffVelocityPlugin {
             SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
     );
     private static final String CONFIGURATION_RELOAD_ISSUE = "configuration-reload";
+    private static final int INITIAL_BOOTSTRAP_ATTEMPT = 1;
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -139,10 +140,23 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.AvoidLiteralsInIfCondition"})
-    // SLF4J placeholders defer formatting; attempt one is the only recovery-log threshold.
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
+        registerCommands();
+        health.update(OperationalMode.BOOTSTRAP, Map.of("bootstrap", "MariaDB initialization is in progress"));
+        VelocityBootstrapCoordinator coordinator = new VelocityBootstrapCoordinator(
+                this::submitWorker,
+                this::scheduleBootstrapRetry,
+                this::initializeStorageAttempt,
+                new BootstrapListener(),
+                shuttingDown::get,
+                VelocityBootstrapCoordinator.RetryPolicy.defaults()
+        );
+        bootstrapCoordinator = coordinator;
+        coordinator.start();
+    }
+
+    private void registerCommands() {
         proxy.getCommandManager().register(
                 proxy.getCommandManager().metaBuilder("estaff").plugin(this).build(),
                 new StatusCommand()
@@ -155,73 +169,67 @@ public final class EnthusiaStaffVelocityPlugin {
                 proxy.getCommandManager().metaBuilder("alt").plugin(this).build(),
                 new AltCommand()
         );
-        health.update(OperationalMode.BOOTSTRAP, Map.of("bootstrap", "MariaDB initialization is in progress"));
-        VelocityBootstrapCoordinator coordinator = new VelocityBootstrapCoordinator(
-                this::submitWorker,
-                this::scheduleBootstrapRetry,
-                this::initializeStorageAttempt,
-                new VelocityBootstrapCoordinator.Listener() {
-                    @Override
-                    public void attempting(int attempt, int maximumAttempts) {
-                        authorityMode.set(OperationalMode.BOOTSTRAP);
-                        health.update(OperationalMode.BOOTSTRAP, Map.of(
-                                "mariadb-attempt",
-                                "Velocity storage startup attempt " + attempt + " of " + maximumAttempts
-                                        + " is in progress"
-                        ));
-                    }
+    }
 
-                    @Override
-                    public void retrying(
-                            int nextAttempt,
-                            int maximumAttempts,
-                            long delayMillis,
-                            RuntimeException failure
-                    ) {
-                        health.update(OperationalMode.BOOTSTRAP, Map.of(
-                                "mariadb-retrying",
-                                "Velocity storage startup attempt " + nextAttempt + " of " + maximumAttempts
-                                        + " is scheduled after " + delayMillis + " ms"
-                        ));
-                        logger.warn(
-                                "Velocity storage startup failed; bounded retry {} of {} is scheduled after {} ms ({})",
-                                nextAttempt,
-                                maximumAttempts,
-                                delayMillis,
-                                failure.getClass().getSimpleName()
-                        );
-                    }
+    private final class BootstrapListener implements VelocityBootstrapCoordinator.Listener {
+        @Override
+        public void attempting(int attempt, int maximumAttempts) {
+            authorityMode.set(OperationalMode.BOOTSTRAP);
+            health.update(OperationalMode.BOOTSTRAP, Map.of(
+                    "mariadb-attempt",
+                    "Velocity storage startup attempt " + attempt + " of " + maximumAttempts + " is in progress"
+            ));
+        }
 
-                    @Override
-                    public void recovered(int attempts) {
-                        if (attempts > 1) {
-                            logger.info("Velocity storage recovered on bounded attempt {}", attempts);
-                        }
-                    }
+        @Override
+        public void retrying(
+                int nextAttempt,
+                int maximumAttempts,
+                long delayMillis,
+                RuntimeException failure
+        ) {
+            health.update(OperationalMode.BOOTSTRAP, Map.of(
+                    "mariadb-retrying",
+                    "Velocity storage startup attempt " + nextAttempt + " of " + maximumAttempts
+                            + " is scheduled after " + delayMillis + " ms"
+            ));
+            if (logger.isWarnEnabled()) {
+                logger.warn(
+                        "Velocity storage startup failed; bounded retry {} of {} is scheduled after {} ms ({})",
+                        nextAttempt,
+                        maximumAttempts,
+                        delayMillis,
+                        failure.getClass().getSimpleName()
+                );
+            }
+        }
 
-                    @Override
-                    public void exhausted(int attempts, RuntimeException failure) {
-                        authorityMode.set(OperationalMode.DEGRADED);
-                        String component = failure instanceof VelocityBootstrapCoordinator.PermanentFailure
-                                ? "configuration-or-cutover"
-                                : "mariadb";
-                        health.update(OperationalMode.DEGRADED, Map.of(
-                                component,
-                                "Velocity storage startup is unavailable after " + attempts
-                                        + " attempt(s); use /estaff reload after correcting the cause"
-                        ));
-                        logger.error(
-                                "Velocity storage startup stopped after {} attempt(s) ({})",
-                                attempts,
-                                failure.getClass().getSimpleName()
-                        );
-                    }
-                },
-                shuttingDown::get,
-                VelocityBootstrapCoordinator.RetryPolicy.defaults()
-        );
-        bootstrapCoordinator = coordinator;
-        coordinator.start();
+        @Override
+        public void recovered(int attempts) {
+            if (attempts > INITIAL_BOOTSTRAP_ATTEMPT && logger.isInfoEnabled()) {
+                logger.info("Velocity storage recovered on bounded attempt {}", attempts);
+            }
+        }
+
+        @Override
+        public void exhausted(int attempts, RuntimeException failure) {
+            authorityMode.set(OperationalMode.DEGRADED);
+            String component = failure instanceof VelocityBootstrapCoordinator.PermanentFailure
+                    ? "configuration-or-cutover"
+                    : "mariadb";
+            health.update(OperationalMode.DEGRADED, Map.of(
+                    component,
+                    "Velocity storage startup is unavailable after " + attempts
+                            + " attempt(s); use /estaff reload after correcting the cause"
+            ));
+            if (logger.isErrorEnabled()) {
+                logger.error(
+                        "Velocity storage startup stopped after {} attempt(s) ({})",
+                        attempts,
+                        failure.getClass().getSimpleName()
+                );
+            }
+        }
     }
 
     @Subscribe
@@ -873,8 +881,20 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private void enforceLogin(LoginEvent event) {
         OperationalMode current = authorityMode.get();
+        if (!recordPlayerAndNetworkIdentitySafely(event, current)) {
+            return;
+        }
+        if (current != OperationalMode.ACTIVE) {
+            enforceInactiveLoginPolicy(event);
+            return;
+        }
+        enforceActiveLoginPolicy(event);
+    }
+
+    private boolean recordPlayerAndNetworkIdentitySafely(LoginEvent event, OperationalMode current) {
         try {
             recordPlayerAndNetworkIdentity(event, current);
+            return true;
         } catch (RuntimeException exception) {
             health.update(OperationalMode.DEGRADED, Map.of(
                     "network-identity", "A protected identity observation failed; sensitive values were not logged"
@@ -883,15 +903,19 @@ public final class EnthusiaStaffVelocityPlugin {
             if (current == OperationalMode.ACTIVE) {
                 activeAuthorityObserved = true;
                 denyUnavailable(event);
-                return;
+                return false;
             }
+            return true;
         }
-        if (current != OperationalMode.ACTIVE) {
-            if (activeAuthorityObserved && failClosedConfigured()) {
-                denyUnavailable(event);
-            }
-            return;
+    }
+
+    private void enforceInactiveLoginPolicy(LoginEvent event) {
+        if (activeAuthorityObserved && failClosedConfigured()) {
+            denyUnavailable(event);
         }
+    }
+
+    private void enforceActiveLoginPolicy(LoginEvent event) {
         SanctionLookup lookup = sanctionLookup;
         if (lookup == null) {
             denyUnavailable(event);
@@ -946,26 +970,42 @@ public final class EnthusiaStaffVelocityPlugin {
     private Map<String, String> operationalIssues(OperationalMode mode) {
         Map<String, String> issues = new LinkedHashMap<>();
         VelocityConfiguration loaded = configuration;
+        addChannelIssue(issues, loaded);
+        addNetworkIdentityIssue(issues, loaded);
+        addDiscordIssue(issues, loaded);
+        addWebsiteIssue(issues, loaded);
+        if (mode != OperationalMode.ACTIVE) {
+            issues.put("authority", "LiteBans remains authoritative in " + mode);
+        }
+        return Map.copyOf(issues);
+    }
+
+    private void addChannelIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         PersistentChannelServer channel = channelServer;
         if (loaded == null || channel == null
                 || !channel.connectedServers().containsAll(loaded.backendSecretEnvironments().keySet())) {
             issues.put("channel", "Every configured Paper backend is not authenticated and connected");
         }
+    }
+
+    private void addNetworkIdentityIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.networkIdentityEnabled() || networkIdentityStore == null) {
             issues.put("network-identity", "Protected network identity matching is disabled");
         }
+    }
+
+    private void addDiscordIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.discordEnabled() || discordOutboxWorker == null) {
             issues.put("discord", "Durable webhook delivery is disabled; queued events remain in MariaDB");
         }
+    }
+
+    private void addWebsiteIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.websiteApiEnabled()) {
             issues.put("website-api", "The private punishment and appeal bridge is disabled");
         } else if (websiteApiServer == null || websiteModerationStore == null) {
             issues.put("website-api", "The configured private punishment and appeal bridge failed to start");
         }
-        if (mode != OperationalMode.ACTIVE) {
-            issues.put("authority", "LiteBans remains authoritative in " + mode);
-        }
-        return Map.copyOf(issues);
     }
 
     private void denyUnavailable(LoginEvent event) {
@@ -980,45 +1020,57 @@ public final class EnthusiaStaffVelocityPlugin {
         InventoryJournalStore inventories = inventoryJournalStore;
         EconomyJournalStore economies = economyJournalStore;
         if (inventories == null || economies == null) {
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Asset safety status is temporarily unavailable.");
-            }
+            denyServerSwitchWhenActive(event, "Asset safety status is temporarily unavailable.");
             return;
         }
+        if (!assetFencesAllowSwitch(event, inventories, economies) || event.getPreviousServer() == null) {
+            return;
+        }
+        enforceModerationSwitchSafety(event);
+    }
+
+    private boolean assetFencesAllowSwitch(
+            ServerPreConnectEvent event,
+            InventoryJournalStore inventories,
+            EconomyJournalStore economies
+    ) {
         String requested = event.getOriginalServer().getServerInfo().getName();
         try {
             Optional<String> owningServer = inventories.lockedOwningServer(
                     event.getPlayer().getUniqueId(),
                     Clock.systemUTC().instant()
             );
-            if (owningServer.isPresent() && !owningServer.orElseThrow().equalsIgnoreCase(requested)) {
-                denyServerSwitch(event, "A pending inventory operation must finish on "
-                        + owningServer.orElseThrow() + '.');
-                return;
+            if (denyOwnerMismatch(event, owningServer, requested, "inventory")) {
+                return false;
             }
             Optional<String> economyOwner = economies.lockedOwningServer(
                     event.getPlayer().getUniqueId()
             );
-            if (economyOwner.isPresent() && !economyOwner.orElseThrow().equalsIgnoreCase(requested)) {
-                denyServerSwitch(event, "A pending economy operation must finish on "
-                        + economyOwner.orElseThrow() + '.');
-                return;
-            }
+            return !denyOwnerMismatch(event, economyOwner, requested, "economy");
         } catch (RuntimeException exception) {
             logger.error("Asset fence lookup failed during server connection", exception);
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Asset safety status could not be verified.");
-            }
-            return;
+            denyServerSwitchWhenActive(event, "Asset safety status could not be verified.");
+            return false;
         }
-        if (event.getPreviousServer() == null) {
-            return;
+    }
+
+    private static boolean denyOwnerMismatch(
+            ServerPreConnectEvent event,
+            Optional<String> owner,
+            String requested,
+            String assetType
+    ) {
+        if (owner.isEmpty() || owner.orElseThrow().equalsIgnoreCase(requested)) {
+            return false;
         }
+        denyServerSwitch(event, "A pending " + assetType + " operation must finish on " + owner.orElseThrow() + '.');
+        return true;
+    }
+
+    private void enforceModerationSwitchSafety(ServerPreConnectEvent event) {
         FreezeStore store = freezeStore;
         if (store == null) {
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Server switching is unavailable while moderation status is verified.");
-            }
+            denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
             return;
         }
         try {
@@ -1032,9 +1084,13 @@ public final class EnthusiaStaffVelocityPlugin {
             }
         } catch (RuntimeException exception) {
             logger.error("Moderation safety lookup failed during server switch", exception);
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Server switching is unavailable while moderation status is verified.");
-            }
+            denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
+        }
+    }
+
+    private void denyServerSwitchWhenActive(ServerPreConnectEvent event, String message) {
+        if (authorityMode.get() == OperationalMode.ACTIVE) {
+            denyServerSwitch(event, message);
         }
     }
 
