@@ -3,6 +3,7 @@ package net.enthusia.staff.velocity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -29,20 +30,27 @@ interface DiscordWebhookTransport {
     }
 
     final class Jdk implements DiscordWebhookTransport {
+        @FunctionalInterface
+        interface HttpExchange {
+            int post(URI endpoint, Duration timeout, String body) throws IOException, InterruptedException;
+        }
+
         private final Duration requestTimeout;
         private final ObjectMapper json;
-        private final HttpClient http;
+        private final HttpExchange exchange;
 
         Jdk(Duration requestTimeout) {
-            if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
-                throw new IllegalArgumentException("Discord request timeout must be positive");
+            this(requestTimeout, defaultExchange(requestTimeout));
+        }
+
+        Jdk(Duration requestTimeout, HttpExchange exchange) {
+            if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()
+                    || exchange == null) {
+                throw new IllegalArgumentException("Discord request timeout and HTTP exchange must be valid");
             }
             this.requestTimeout = requestTimeout;
             this.json = new ObjectMapper();
-            this.http = HttpClient.newBuilder()
-                    .connectTimeout(requestTimeout)
-                    .followRedirects(HttpClient.Redirect.NEVER)
-                    .build();
+            this.exchange = exchange;
         }
 
         @Override
@@ -54,13 +62,12 @@ interface DiscordWebhookTransport {
                 ObjectNode body = json.createObjectNode();
                 body.put("content", content);
                 body.putObject("allowed_mentions").putArray("parse");
-                HttpRequest request = HttpRequest.newBuilder(route.endpoint())
-                        .timeout(requestTimeout)
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
-                        .build();
-                HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-                return classify(response.statusCode());
+                int statusCode = exchange.post(
+                        route.endpoint(),
+                        requestTimeout,
+                        json.writeValueAsString(body)
+                );
+                return classify(statusCode);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 return Delivery.failed("INTERRUPTED");
@@ -86,6 +93,25 @@ interface DiscordWebhookTransport {
                 return Delivery.failed("HTTP_4XX");
             }
             return Delivery.failed("HTTP_INVALID_STATUS");
+        }
+
+        private static HttpExchange defaultExchange(Duration requestTimeout) {
+            if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
+                throw new IllegalArgumentException("Discord request timeout must be positive");
+            }
+            HttpClient http = HttpClient.newBuilder()
+                    .connectTimeout(requestTimeout)
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .build();
+            return (endpoint, timeout, body) -> {
+                HttpRequest request = HttpRequest.newBuilder(endpoint)
+                        .timeout(timeout)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build();
+                HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
+                return response.statusCode();
+            };
         }
     }
 }
