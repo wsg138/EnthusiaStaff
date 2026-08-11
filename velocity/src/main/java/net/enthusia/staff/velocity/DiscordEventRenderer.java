@@ -12,19 +12,22 @@ final class DiscordEventRenderer {
     private static final int MAX_FIELD_CHARACTERS = 180;
     private static final int MAX_ARRAY_VALUES = 8;
     private static final int MAX_CONTENT_CHARACTERS = 1_800;
+    private static final char BACKTICK = '`';
+    private static final String TARGET_ID = "targetId";
+    private static final String STATE = "state";
     private static final Map<String, List<String>> ALLOWED_FIELDS = Map.of(
             "punishments", List.of(
-                    "caseId", "targetId", "reasonId", "sanctionId", "sanctionIds",
-                    "requestId", "actorId", "action", "sanctionType", "status", "state", "type",
+                    "caseId", TARGET_ID, "reasonId", "sanctionId", "sanctionIds",
+                    "requestId", "actorId", "action", "sanctionType", "status", STATE, "type",
                     "decision", "outcome"
             ),
-            "reports", List.of("reportId", "targetId", "reasonId", "serverId", "status", "state", "actorId"),
+            "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
             "logs-staffmode", List.of(
-                    "staffId", "targetId", "actorId", "sessionId", "rank", "active", "reason", "serverId", "state"
+                    "staffId", TARGET_ID, "actorId", "sessionId", "rank", "active", "reason", "serverId", STATE
             ),
             "alerts", List.of(
-                    "caseId", "targetId", "sanctionId", "requestId", "reportId", "destination",
-                    "errorCode", "status", "state", "type", "serverId"
+                    "caseId", TARGET_ID, "sanctionId", "requestId", "reportId", "destination",
+                    "errorCode", "status", STATE, "type", "serverId"
             )
     );
 
@@ -98,11 +101,11 @@ final class DiscordEventRenderer {
         StringBuilder safe = new StringBuilder();
         int count = 0;
         for (JsonNode value : values) {
-            if (count >= MAX_ARRAY_VALUES || !value.isValueNode() || value.isNull()) {
+            if (count >= MAX_ARRAY_VALUES) {
                 break;
             }
-            String item = sanitize(value.isTextual() ? value.textValue() : value.asText());
-            if (item.isEmpty()) {
+            String item = safeArrayItem(value);
+            if (item == null) {
                 continue;
             }
             if (!safe.isEmpty()) {
@@ -114,13 +117,21 @@ final class DiscordEventRenderer {
         return safe.isEmpty() ? null : safe.toString();
     }
 
+    private static String safeArrayItem(JsonNode value) {
+        if (!value.isValueNode() || value.isNull()) {
+            return null;
+        }
+        String item = sanitize(value.isTextual() ? value.textValue() : value.asText());
+        return item.isEmpty() ? null : item;
+    }
+
     private static String sanitize(String raw) {
         StringBuilder result = new StringBuilder(Math.min(raw.length(), MAX_FIELD_CHARACTERS));
         for (int index = 0; index < raw.length() && result.length() < MAX_FIELD_CHARACTERS; index++) {
             char character = raw.charAt(index);
             if (Character.isISOControl(character)) {
                 result.append(' ');
-            } else if (character == '`') {
+            } else if (character == BACKTICK) {
                 result.append('\'');
             } else {
                 result.append(character);
