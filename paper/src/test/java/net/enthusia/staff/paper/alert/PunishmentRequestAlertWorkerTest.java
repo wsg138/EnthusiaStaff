@@ -234,6 +234,31 @@ class PunishmentRequestAlertWorkerTest {
     }
 
     @Test
+    void claimFailureCompletesWithoutSchedulingPresentation() {
+        Harness harness = Harness.direct();
+        harness.alerts.throwOnDirectClaim = true;
+
+        harness.runComplete();
+
+        assertTrue(harness.completed.get());
+        assertEquals(0, harness.presenter.presented);
+        assertEquals(0, harness.alerts.failed);
+    }
+
+    @Test
+    void requestLookupFailureRetriesTheClaimedDelivery() {
+        Harness harness = Harness.direct();
+        harness.requests.throwOnFind = true;
+
+        harness.runComplete();
+
+        assertTrue(harness.completed.get());
+        assertEquals(1, harness.alerts.failed);
+        assertEquals(PunishmentRequestAlertWorker.REQUEST_LOOKUP_FAILED, harness.alerts.lastCode);
+        assertEquals(0, harness.presenter.presented);
+    }
+
+    @Test
     void missingRequestDeterministicallyDeadLettersCurrentAttempt() {
         Harness harness = Harness.direct();
         harness.requests.request = Optional.empty();
@@ -526,6 +551,7 @@ class PunishmentRequestAlertWorkerTest {
         private String lastCode;
         private int lastMaximumAttempts;
         private boolean throwOnDelivered;
+        private boolean throwOnDirectClaim;
         private boolean throwOnReconciliation;
 
         private RecordingAlertStore(AtomicReference<Role> role) {
@@ -546,6 +572,9 @@ class PunishmentRequestAlertWorkerTest {
                 Instant now
         ) {
             requireAsync();
+            if (throwOnDirectClaim) {
+                throw new IllegalStateException("simulated direct-claim failure");
+            }
             directLimit = limit;
             return directClaims;
         }
@@ -681,6 +710,7 @@ class PunishmentRequestAlertWorkerTest {
                         PunishmentRequestLifecycleEventType.REQUEST_SUBMITTED)
         );
         private int findCalls;
+        private boolean throwOnFind;
 
         private RecordingRequestStore(AtomicReference<Role> role) {
             this.role = role;
@@ -695,6 +725,9 @@ class PunishmentRequestAlertWorkerTest {
         public Optional<PunishmentApprovalRequest> find(UUID requestId) {
             assertEquals(Role.ASYNC, role.get(), "request lookup must be asynchronous");
             findCalls++;
+            if (throwOnFind) {
+                throw new IllegalStateException("simulated request lookup failure");
+            }
             return request;
         }
 

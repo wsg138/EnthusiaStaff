@@ -27,6 +27,8 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 
 public final class PunishmentRequestAlertWorker {
+    private static final int MINIMUM_CLAIM_COUNT = 1;
+
     static final String RECIPIENT_INELIGIBLE = "RECIPIENT_INELIGIBLE";
     static final String REQUESTER_CONFLICT = "REQUESTER_CONFLICT";
     static final String VISIBILITY_DENIED = "VISIBILITY_DENIED";
@@ -151,63 +153,119 @@ public final class PunishmentRequestAlertWorker {
             completion.run();
             return;
         }
-        List<PunishmentRequestAlertClaim> claims;
-        try {
-            claims = claim(snapshot, claimBudget);
-        } catch (RuntimeException exception) {
-            logger.log(Level.SEVERE, "Punishment request alert claim cycle failed", exception);
-            completion.run();
+        Optional<List<PunishmentRequestAlertClaim>> claimed = claimForDelivery(
+                snapshot,
+                claimBudget,
+                completion
+        );
+        if (claimed.isEmpty()) {
             return;
         }
-        List<PunishmentRequestAlertPresentation> presentations = new ArrayList<>();
-        for (PunishmentRequestAlertClaim claim : claims) {
-            if (stopping.getAsBoolean() || presentations.size() >= settings.presentationLimit()) {
-                break;
-            }
-            Optional<PunishmentApprovalRequest> loaded;
-            try {
-                loaded = requests.find(claim.intent().requestId());
-            } catch (RuntimeException exception) {
-                if (logger.isLoggable(Level.WARNING)) {
-                    logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
-                            + claim.intent().alertId(), exception);
-                }
-                retryableFailure(claim, REQUEST_LOOKUP_FAILED);
-                continue;
-            }
-            if (loaded.isEmpty()) {
-                if (logger.isLoggable(Level.SEVERE)) {
-                    logger.severe("Punishment request alert references a missing request: alert="
-                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                            + " recipient=" + claim.deliveryId().recipientId()
-                            + " attempt=" + claim.attemptCount());
-                }
-                permanentFailure(claim, REQUEST_MISSING);
-                continue;
-            }
-            PunishmentApprovalRequest request = loaded.orElseThrow();
-            try {
-                presentations.add(renderer.render(
-                        claim,
-                        request,
-                        displayName(request.proposal().targetId()),
-                        displayName(claim.intent().occurrence().actorId())
-                ));
-            } catch (RuntimeException exception) {
-                if (logger.isLoggable(Level.SEVERE)) {
-                    logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
-                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                            + " recipient=" + claim.deliveryId().recipientId()
-                            + " attempt=" + claim.attemptCount(), exception);
-                }
-                permanentFailure(claim, INVALID_PRESENTATION_DATA);
-            }
-        }
+        List<PunishmentRequestAlertPresentation> presentations = renderPresentations(
+                claimed.orElseThrow()
+        );
         if (presentations.isEmpty()) {
             completion.run();
             return;
         }
         handoff(snapshot.playerId(), presentations, completion);
+    }
+
+    private Optional<List<PunishmentRequestAlertClaim>> claimForDelivery(
+            PunishmentRequestAlertRecipient snapshot,
+            ClaimBudget claimBudget,
+            Completion completion
+    ) {
+        try {
+            return Optional.of(claim(snapshot, claimBudget));
+        } catch (RuntimeException exception) {
+            logger.log(Level.SEVERE, "Punishment request alert claim cycle failed", exception);
+            completion.run();
+            return Optional.empty();
+        }
+    }
+
+    private List<PunishmentRequestAlertPresentation> renderPresentations(
+            List<PunishmentRequestAlertClaim> claims
+    ) {
+        List<PunishmentRequestAlertPresentation> presentations = new ArrayList<>();
+        for (PunishmentRequestAlertClaim claim : claims) {
+            if (stopping.getAsBoolean() || presentations.size() >= settings.presentationLimit()) {
+                break;
+            }
+            renderPresentation(claim).ifPresent(presentations::add);
+        }
+        return presentations;
+    }
+
+    private Optional<PunishmentRequestAlertPresentation> renderPresentation(
+            PunishmentRequestAlertClaim claim
+    ) {
+        Optional<PunishmentApprovalRequest> loaded = loadRequest(claim);
+        if (loaded.isEmpty()) {
+            return Optional.empty();
+        }
+        PunishmentApprovalRequest request = loaded.orElseThrow();
+        try {
+            return Optional.of(renderer.render(
+                    claim,
+                    request,
+                    displayName(request.proposal().targetId()),
+                    displayName(claim.intent().occurrence().actorId())
+            ));
+        } catch (RuntimeException exception) {
+            logRenderFailure(claim, exception);
+            permanentFailure(claim, INVALID_PRESENTATION_DATA);
+            return Optional.empty();
+        }
+    }
+
+    private Optional<PunishmentApprovalRequest> loadRequest(PunishmentRequestAlertClaim claim) {
+        Optional<PunishmentApprovalRequest> loaded;
+        try {
+            loaded = requests.find(claim.intent().requestId());
+        } catch (RuntimeException exception) {
+            logLookupFailure(claim, exception);
+            retryableFailure(claim, REQUEST_LOOKUP_FAILED);
+            return Optional.empty();
+        }
+        if (loaded.isPresent()) {
+            return loaded;
+        }
+        logMissingRequest(claim);
+        permanentFailure(claim, REQUEST_MISSING);
+        return Optional.empty();
+    }
+
+    private void logLookupFailure(
+            PunishmentRequestAlertClaim claim,
+            RuntimeException exception
+    ) {
+        if (logger.isLoggable(Level.WARNING)) {
+            logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
+                    + claim.intent().alertId(), exception);
+        }
+    }
+
+    private void logMissingRequest(PunishmentRequestAlertClaim claim) {
+        if (logger.isLoggable(Level.SEVERE)) {
+            logger.severe("Punishment request alert references a missing request: alert="
+                    + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                    + " recipient=" + claim.deliveryId().recipientId()
+                    + " attempt=" + claim.attemptCount());
+        }
+    }
+
+    private void logRenderFailure(
+            PunishmentRequestAlertClaim claim,
+            RuntimeException exception
+    ) {
+        if (logger.isLoggable(Level.SEVERE)) {
+            logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
+                    + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                    + " recipient=" + claim.deliveryId().recipientId()
+                    + " attempt=" + claim.attemptCount(), exception);
+        }
     }
 
     private void handoff(
@@ -589,7 +647,7 @@ public final class PunishmentRequestAlertWorker {
         private final AtomicInteger remaining;
 
         public ClaimBudget(int maximum) {
-            if (maximum < 1) {
+            if (maximum < MINIMUM_CLAIM_COUNT) {
                 throw new IllegalArgumentException("claim budget must be positive");
             }
             this.maximum = maximum;
@@ -597,7 +655,7 @@ public final class PunishmentRequestAlertWorker {
         }
 
         int acquire(int requested) {
-            if (requested < 1) {
+            if (requested < MINIMUM_CLAIM_COUNT) {
                 return 0;
             }
             while (true) {
