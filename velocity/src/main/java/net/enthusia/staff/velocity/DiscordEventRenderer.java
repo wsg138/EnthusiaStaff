@@ -65,10 +65,7 @@ final class DiscordEventRenderer {
                 appendField(rendered, field, safe);
             }
         }
-        if (rendered.length() > MAX_CONTENT_CHARACTERS) {
-            return rendered.substring(0, MAX_CONTENT_CHARACTERS - 1) + "…";
-        }
-        return rendered.toString();
+        return truncateWithEllipsis(rendered.toString(), MAX_CONTENT_CHARACTERS);
     }
 
     private JsonNode parseObject(String raw) {
@@ -101,11 +98,11 @@ final class DiscordEventRenderer {
         StringBuilder safe = new StringBuilder();
         int count = 0;
         for (JsonNode value : values) {
-            if (count >= MAX_ARRAY_VALUES) {
+            if (count >= MAX_ARRAY_VALUES || unsupportedArrayValue(value)) {
                 break;
             }
-            String item = safeArrayItem(value);
-            if (item == null) {
+            String item = sanitize(value.isTextual() ? value.textValue() : value.asText());
+            if (item.isEmpty()) {
                 continue;
             }
             if (!safe.isEmpty()) {
@@ -117,12 +114,8 @@ final class DiscordEventRenderer {
         return safe.isEmpty() ? null : safe.toString();
     }
 
-    private static String safeArrayItem(JsonNode value) {
-        if (!value.isValueNode() || value.isNull()) {
-            return null;
-        }
-        String item = sanitize(value.isTextual() ? value.textValue() : value.asText());
-        return item.isEmpty() ? null : item;
+    private static boolean unsupportedArrayValue(JsonNode value) {
+        return !value.isValueNode() || value.isNull();
     }
 
     private static String sanitize(String raw) {
@@ -139,9 +132,20 @@ final class DiscordEventRenderer {
         }
         String normalized = result.toString().trim().replaceAll("\\s+", " ");
         if (raw.length() > MAX_FIELD_CHARACTERS && normalized.length() >= MAX_FIELD_CHARACTERS) {
-            return normalized.substring(0, MAX_FIELD_CHARACTERS - 1) + "…";
+            return truncateWithEllipsis(normalized, MAX_FIELD_CHARACTERS);
         }
         return normalized;
+    }
+
+    static String truncateWithEllipsis(String value, int maximumCharacters) {
+        if (value.length() <= maximumCharacters) {
+            return value;
+        }
+        int boundary = maximumCharacters - 1;
+        if (boundary > 0 && Character.isHighSurrogate(value.charAt(boundary - 1))) {
+            boundary--;
+        }
+        return value.substring(0, boundary) + "…";
     }
 
     private static void appendField(StringBuilder rendered, String field, String value) {
