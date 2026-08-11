@@ -413,6 +413,81 @@ class SanctionLifecycleIntegrationTest {
     }
 
     @Test
+    void punishmentRequestLinkRequiresResolvedMatchingRequest() throws Exception {
+        Fixture fixture = activeFixture(18);
+        Fixture other = activeFixture(19);
+        UUID missingRequestId = UUID.randomUUID();
+        UUID mismatchedRequestId = insertPunishmentRequest(other, "APPROVED");
+        UUID unresolvedRequestId = insertPunishmentRequest(fixture, "DENIED");
+        UUID approvedRequestId = insertPunishmentRequest(fixture, "APPROVED");
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            assertLinkedRequestRejection(
+                    runtime,
+                    fixture,
+                    missingRequestId,
+                    "linked-request-missing",
+                    "PUNISHMENT_REQUEST_NOT_FOUND"
+            );
+            assertLinkedRequestRejection(
+                    runtime,
+                    fixture,
+                    mismatchedRequestId,
+                    "linked-request-mismatch",
+                    "PUNISHMENT_REQUEST_TARGET_MISMATCH"
+            );
+            assertLinkedRequestRejection(
+                    runtime,
+                    fixture,
+                    unresolvedRequestId,
+                    "linked-request-unresolved",
+                    "PUNISHMENT_REQUEST_NOT_RESOLVED"
+            );
+
+            ExactSanctionChangeResult.Applied applied = applyLinkedRequest(
+                    runtime,
+                    fixture,
+                    approvedRequestId
+            );
+            assertEquals(approvedRequestId, applied.linkedPunishmentRequestId().orElseThrow());
+        }
+        assertEquals(1, longValue(
+                "SELECT COUNT(*) FROM sanction_events WHERE linked_punishment_request_id=?",
+                approvedRequestId
+        ));
+    }
+
+    private static Fixture activeFixture(int sequence) throws SQLException {
+        return seed(
+                sequence,
+                "HELPER",
+                SanctionStatus.ACTIVE,
+                now().minusSeconds(3_600),
+                Optional.of(now().plusSeconds(3_600))
+        );
+    }
+
+    private static ExactSanctionChangeResult.Applied applyLinkedRequest(
+            MariaDbRuntime runtime,
+            Fixture fixture,
+            UUID requestId
+    ) {
+        return assertInstanceOf(
+                ExactSanctionChangeResult.Applied.class,
+                runtime.sanctionMutationStore().applyExact(request(
+                        fixture,
+                        0,
+                        SanctionChangeAction.REVOKE,
+                        Optional.empty(),
+                        "Approved request authorizes the linked mutation",
+                        "linked-request-approved",
+                        Optional.empty(),
+                        Optional.of(requestId)
+                ), DEFAULT_LIMITS)
+        );
+    }
+
+    @Test
     void hierarchyAndDurableOperationalModeAreRecheckedInsideTheStoreBoundary() throws Exception {
         Fixture adminIssued = seed(
                 9,
@@ -766,6 +841,42 @@ class SanctionLifecycleIntegrationTest {
         return appealId;
     }
 
+    private static UUID insertPunishmentRequest(Fixture fixture, String status) throws SQLException {
+        UUID requestId = UUID.randomUUID();
+        Instant createdAt = now().minusSeconds(60L);
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT INTO punishment_requests(
+                         request_id, submission_key, match_key, open_match_key, target_id,
+                         requester_id, requester_name, requester_rank, reason_id, sanction_family,
+                         public_reason, internal_explanation, configuration_version, visibility,
+                         required_rank, raw_ordinal, effective_ordinal, selected_ordinal,
+                         recency_bonus, step_label, contribution_json, sanctions_json,
+                         status, revision, resolved_by, resolution_note, resulting_case_id,
+                         created_at, updated_at, expires_at, resolved_at)
+                     VALUES (?, ?, ?, NULL, ?, ?, 'Moderator', 'HELPER', 'integration.request',
+                         'BAN', 'Request public reason', 'Request private reason', 'integration',
+                         'PRIVATE', 'MOD', 1, 1, 1, 0, 'Step 1', JSON_OBJECT(), JSON_ARRAY(),
+                         ?, 1, ?, 'Resolved for integration coverage', ?, ?, ?, ?, ?)
+                     """)) {
+            statement.setBytes(1, uuidBytes(requestId));
+            statement.setString(2, "linked-request-" + requestId);
+            statement.setString(3, requestId.toString().replace("-", "").repeat(2));
+            statement.setBytes(4, uuidBytes(fixture.subjectId()));
+            statement.setBytes(5, uuidBytes(MODERATOR.id()));
+            statement.setString(6, status);
+            statement.setBytes(7, uuidBytes(MODERATOR.id()));
+            statement.setString(8, fixture.caseId().value());
+            statement.setTimestamp(9, Timestamp.from(createdAt));
+            statement.setTimestamp(10, Timestamp.from(createdAt.plusSeconds(1L)));
+            statement.setTimestamp(11, Timestamp.from(createdAt.plusSeconds(600L)));
+            statement.setTimestamp(12, Timestamp.from(createdAt.plusSeconds(1L)));
+            assertEquals(1, statement.executeUpdate());
+        }
+        return requestId;
+    }
+
     private static ExactSanctionChangeRequest request(
             Fixture fixture,
             long expectedRevision,
@@ -774,6 +885,28 @@ class SanctionLifecycleIntegrationTest {
             String reason,
             String key,
             Optional<UUID> appealId
+    ) {
+        return request(
+                fixture,
+                expectedRevision,
+                action,
+                expiration,
+                reason,
+                key,
+                appealId,
+                Optional.empty()
+        );
+    }
+
+    private static ExactSanctionChangeRequest request(
+            Fixture fixture,
+            long expectedRevision,
+            SanctionChangeAction action,
+            Optional<Instant> expiration,
+            String reason,
+            String key,
+            Optional<UUID> appealId,
+            Optional<UUID> punishmentRequestId
     ) {
         return new ExactSanctionChangeRequest(
                 new IdempotencyKey(key),
@@ -784,10 +917,33 @@ class SanctionLifecycleIntegrationTest {
                 expiration,
                 reason,
                 appealId,
-                Optional.empty(),
+                punishmentRequestId,
                 "SMP",
                 false
         );
+    }
+
+    private static void assertLinkedRequestRejection(
+            MariaDbRuntime runtime,
+            Fixture fixture,
+            UUID requestId,
+            String key,
+            String expectedCode
+    ) {
+        ExactSanctionChangeResult.Rejected rejection = assertInstanceOf(
+                ExactSanctionChangeResult.Rejected.class,
+                runtime.sanctionMutationStore().applyExact(request(
+                        fixture,
+                        0,
+                        SanctionChangeAction.REVOKE,
+                        Optional.empty(),
+                        "Rejected link must not mutate the sanction",
+                        key,
+                        Optional.empty(),
+                        Optional.of(requestId)
+                ), DEFAULT_LIMITS)
+        );
+        assertEquals(expectedCode, rejection.code());
     }
 
     private static void insertPlayer(
