@@ -62,73 +62,92 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             Instant now
     ) {
         validateLease(request, leaseDuration, now);
-        return transaction(connection -> {
-            Optional<EconomyOperation> replay = findReplay(connection, request);
-            if (replay.isPresent()) {
-                validateReplay(replay.orElseThrow(), request);
-                return prepared(
-                        EconomyPreparation.Status.REPLAYED,
-                        replay,
-                        "The economy operation was already prepared"
-                );
-            }
-            if (unresolvedForTarget(connection, request.targetId()).isPresent()) {
-                return prepared(
-                        EconomyPreparation.Status.LOCKED,
-                        Optional.empty(),
-                        "Another economy operation requires completion or recovery"
-                );
-            }
-            long fence = JdbcOperationLeaseSupport.acquire(
-                    connection,
-                    resourceKey(request.targetId()),
-                    request.operationId(),
-                    now.plus(leaseDuration),
-                    now
-            );
-            if (fence < MINIMUM_FENCING_TOKEN) {
-                return prepared(
-                        EconomyPreparation.Status.LOCKED,
-                        Optional.empty(),
-                        "Another economy operation owns the network asset lease"
-                );
-            }
-            insertOperation(connection, request, fence, now.plus(leaseDuration), now);
-            insertEvent(
-                    connection,
-                    request.operationId(),
-                    EconomyOperationState.PREPARED,
-                    fence,
-                    Map.of("amountMode", request.amountMode().name()),
-                    now
-            );
-            insertEvent(
-                    connection,
-                    request.operationId(),
-                    EconomyOperationState.LOCKED,
-                    fence,
-                    Map.of("owningServerId", request.owningServerId()),
-                    now
-            );
-            insertAudit(
-                    connection,
-                    request.operationId(),
-                    request.actorId(),
-                    request.targetId(),
-                    request.caseId(),
-                    "ECONOMY_OPERATION_LOCKED",
-                    "LOCKED",
-                    Map.of("amountMode", request.amountMode().name()),
-                    "economy:locked:" + request.operationId(),
-                    now
-            );
-            EconomyOperation operation = lockOperation(connection, request.operationId()).orElseThrow();
+        return transaction(connection -> prepare(connection, request, leaseDuration, now));
+    }
+
+    private EconomyPreparation prepare(
+            Connection connection,
+            EconomyPrepareRequest request,
+            Duration leaseDuration,
+            Instant now
+    ) throws SQLException {
+        Optional<EconomyOperation> replay = findReplay(connection, request);
+        if (replay.isPresent()) {
+            validateReplay(replay.orElseThrow(), request);
             return prepared(
-                    EconomyPreparation.Status.PREPARED,
-                    Optional.of(operation),
-                    "Economy operation and network asset lease committed"
+                    EconomyPreparation.Status.REPLAYED,
+                    replay,
+                    "The economy operation was already prepared"
             );
-        });
+        }
+        if (unresolvedForTarget(connection, request.targetId()).isPresent()) {
+            return prepared(
+                    EconomyPreparation.Status.LOCKED,
+                    Optional.empty(),
+                    "Another economy operation requires completion or recovery"
+            );
+        }
+        Instant leaseUntil = now.plus(leaseDuration);
+        long fence = JdbcOperationLeaseSupport.acquire(
+                connection,
+                resourceKey(request.targetId()),
+                request.operationId(),
+                leaseUntil,
+                now
+        );
+        if (fence < MINIMUM_FENCING_TOKEN) {
+            return prepared(
+                    EconomyPreparation.Status.LOCKED,
+                    Optional.empty(),
+                    "Another economy operation owns the network asset lease"
+            );
+        }
+        persistPreparedOperation(connection, request, fence, leaseUntil, now);
+        return prepared(
+                EconomyPreparation.Status.PREPARED,
+                Optional.of(lockOperation(connection, request.operationId()).orElseThrow()),
+                "Economy operation and network asset lease committed"
+        );
+    }
+
+    private void persistPreparedOperation(
+            Connection connection,
+            EconomyPrepareRequest request,
+            long fence,
+            Instant leaseUntil,
+            Instant now
+    ) throws SQLException {
+        insertOperation(connection, request, fence, leaseUntil, now);
+        insertEvent(
+                connection,
+                request.operationId(),
+                EconomyOperationState.PREPARED,
+                fence,
+                Map.of("amountMode", request.amountMode().name()),
+                now
+        );
+        insertEvent(
+                connection,
+                request.operationId(),
+                EconomyOperationState.LOCKED,
+                fence,
+                Map.of("owningServerId", request.owningServerId()),
+                now
+        );
+        insertAudit(
+                connection,
+                new AuditContext(
+                        request.operationId(),
+                        request.actorId(),
+                        request.targetId(),
+                        request.caseId()
+                ),
+                "ECONOMY_OPERATION_LOCKED",
+                "LOCKED",
+                Map.of("amountMode", request.amountMode().name()),
+                "economy:locked:" + request.operationId(),
+                now
+        );
     }
 
     @Override
@@ -180,20 +199,13 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             if (fence < MINIMUM_FENCING_TOKEN) {
                 return Optional.empty();
             }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE economy_operations
-                    SET lease_owner = ?, lease_until = ?, fencing_token = ?, updated_at = ?
-                    WHERE operation_id = ?
-                    """)) {
-                statement.setString(1, operationId.toString());
-                statement.setTimestamp(2, Timestamp.from(now.plus(leaseDuration)));
-                statement.setLong(3, fence);
-                statement.setTimestamp(4, Timestamp.from(now));
-                statement.setBytes(5, UuidBytes.toBytes(operationId));
-                if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
-                    throw new SQLException("Economy operation disappeared during lease reclaim");
-                }
-            }
+            assignReclaimedLease(
+                    connection,
+                    operationId,
+                    fence,
+                    now.plus(leaseDuration),
+                    now
+            );
             insertEvent(
                     connection,
                     operationId,
@@ -206,6 +218,29 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         });
     }
 
+    private static void assignReclaimedLease(
+            Connection connection,
+            UUID operationId,
+            long fence,
+            Instant leaseUntil,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE economy_operations
+                SET lease_owner = ?, lease_until = ?, fencing_token = ?, updated_at = ?
+                WHERE operation_id = ?
+                """)) {
+            statement.setString(1, operationId.toString());
+            statement.setTimestamp(2, Timestamp.from(leaseUntil));
+            statement.setLong(3, fence);
+            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setBytes(5, UuidBytes.toBytes(operationId));
+            if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
+                throw new SQLException("Economy operation disappeared during lease reclaim");
+            }
+        }
+    }
+
     @Override
     public EconomyJournalResult saveValidatedPlan(
             UUID operationId,
@@ -216,101 +251,194 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || plan == null || now == null) {
             throw new IllegalArgumentException("validated economy plan identity is invalid");
         }
-        return transaction(connection -> {
-            EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
-            if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
-            }
-            if (validatedPlanMatches(operation, plan)
-                    && (operation.state() == EconomyOperationState.VALIDATED
-                    || operation.state() == EconomyOperationState.APPLYING
-                    || operation.state().terminalBeforeUnlock()
-                    || operation.state() == EconomyOperationState.UNLOCKED)) {
-                return result(
-                        EconomyJournalResult.Status.REPLAYED,
-                        operation,
-                        "The exact economy plan was already saved"
-                );
-            }
-            if (operation.state() != EconomyOperationState.LOCKED
-                    && operation.state() != EconomyOperationState.SNAPSHOT_SAVED) {
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "Economy operation cannot accept a plan in " + operation.state()
-                );
-            }
-            if (!ownsFence(connection, operation, fencingToken, now)) {
-                return result(
-                        EconomyJournalResult.Status.FENCE_LOST,
-                        operation,
-                        "Economy asset lease is no longer owned"
-                );
-            }
-            if (operation.amountMode() == EconomyAmountMode.CUSTOM
-                    && (operation.requestedAmount().isEmpty()
-                    || operation.requestedAmount().orElseThrow() != plan.actualRequestedAmount())) {
-                return result(
-                        EconomyJournalResult.Status.STALE,
-                        operation,
-                        "The exact amount no longer matches the prepared request"
-                );
-            }
-            saveSnapshotPhase(connection, operation, plan, now);
-            insertEvent(
-                    connection,
-                    operationId,
-                    EconomyOperationState.SNAPSHOT_SAVED,
-                    fencingToken,
-                    Map.of(
-                            "beforeChecksum", plan.beforeChecksum(),
-                            "authoritativeTotal", plan.authoritativeTotal()
-                    ),
-                    now
-            );
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE economy_operations
-                    SET state = 'VALIDATED', updated_at = ?
-                    WHERE operation_id = ?
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setBytes(2, UuidBytes.toBytes(operationId));
-                statement.executeUpdate();
-            }
-            insertEvent(
-                    connection,
-                    operationId,
-                    EconomyOperationState.VALIDATED,
-                    fencingToken,
-                    Map.of(
-                            "requestedAmount", plan.actualRequestedAmount(),
-                            "replacementChecksum", plan.replacementChecksum()
-                    ),
-                    now
-            );
-            insertAudit(
-                    connection,
-                    operationId,
-                    operation.actorId().orElse(null),
-                    operation.targetId(),
-                    operation.caseId(),
-                    "ECONOMY_PLAN_VALIDATED",
-                    "VALIDATED",
-                    Map.of(
-                            "requestedAmount", plan.actualRequestedAmount(),
-                            "authoritativeTotal", plan.authoritativeTotal(),
-                            "beforeChecksum", plan.beforeChecksum(),
-                            "replacementChecksum", plan.replacementChecksum()
-                    ),
-                    "economy:validated:" + operationId,
-                    now
-            );
-            return result(
-                    EconomyJournalResult.Status.UPDATED,
-                    lockOperation(connection, operationId).orElseThrow(),
-                    "Before snapshot and exact removal plan committed"
-            );
-        });
+        return transaction(connection -> saveValidatedPlan(
+                connection,
+                operationId,
+                fencingToken,
+                plan,
+                now
+        ));
+    }
+
+    private EconomyJournalResult saveValidatedPlan(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            EconomyValidatedPlan plan,
+            Instant now
+    ) throws SQLException {
+        Optional<EconomyOperation> locked = lockOperation(connection, operationId);
+        if (locked.isEmpty()) {
+            return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
+        }
+        EconomyOperation operation = locked.orElseThrow();
+        Optional<EconomyJournalResult> rejected = rejectValidatedPlan(
+                connection,
+                operation,
+                fencingToken,
+                plan,
+                now
+        );
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        persistValidatedPlan(connection, operation, fencingToken, plan, now);
+        return result(
+                EconomyJournalResult.Status.UPDATED,
+                lockOperation(connection, operationId).orElseThrow(),
+                "Before snapshot and exact removal plan committed"
+        );
+    }
+
+    private Optional<EconomyJournalResult> rejectValidatedPlan(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            EconomyValidatedPlan plan,
+            Instant now
+    ) throws SQLException {
+        if (savedPlanCanBeReplayed(operation, plan)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.REPLAYED,
+                    operation,
+                    "The exact economy plan was already saved"
+            ));
+        }
+        if (!acceptsValidatedPlan(operation)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "Economy operation cannot accept a plan in " + operation.state()
+            ));
+        }
+        if (!ownsFence(connection, operation, fencingToken, now)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy asset lease is no longer owned"
+            ));
+        }
+        if (!requestedAmountMatches(operation, plan)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.STALE,
+                    operation,
+                    "The exact amount no longer matches the prepared request"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean savedPlanCanBeReplayed(
+            EconomyOperation operation,
+            EconomyValidatedPlan plan
+    ) {
+        return validatedPlanMatches(operation, plan)
+                && (operation.state() == EconomyOperationState.VALIDATED
+                || operation.state() == EconomyOperationState.APPLYING
+                || operation.state().terminalBeforeUnlock()
+                || operation.state() == EconomyOperationState.UNLOCKED);
+    }
+
+    private static boolean acceptsValidatedPlan(EconomyOperation operation) {
+        return operation.state() == EconomyOperationState.LOCKED
+                || operation.state() == EconomyOperationState.SNAPSHOT_SAVED;
+    }
+
+    private static boolean requestedAmountMatches(
+            EconomyOperation operation,
+            EconomyValidatedPlan plan
+    ) {
+        return operation.amountMode() != EconomyAmountMode.CUSTOM
+                || operation.requestedAmount().isPresent()
+                && operation.requestedAmount().orElseThrow() == plan.actualRequestedAmount();
+    }
+
+    private void persistValidatedPlan(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            EconomyValidatedPlan plan,
+            Instant now
+    ) throws SQLException {
+        saveSnapshotPhase(connection, operation, plan, now);
+        recordSnapshotSaved(connection, operation.operationId(), fencingToken, plan, now);
+        markValidated(connection, operation.operationId(), now);
+        recordValidatedPlan(connection, operation, fencingToken, plan, now);
+    }
+
+    private void recordSnapshotSaved(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            EconomyValidatedPlan plan,
+            Instant now
+    ) throws SQLException {
+        insertEvent(
+                connection,
+                operationId,
+                EconomyOperationState.SNAPSHOT_SAVED,
+                fencingToken,
+                Map.of(
+                        "beforeChecksum", plan.beforeChecksum(),
+                        "authoritativeTotal", plan.authoritativeTotal()
+                ),
+                now
+        );
+    }
+
+    private static void markValidated(
+            Connection connection,
+            UUID operationId,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE economy_operations
+                SET state = 'VALIDATED', updated_at = ?
+                WHERE operation_id = ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(operationId));
+            statement.executeUpdate();
+        }
+    }
+
+    private void recordValidatedPlan(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            EconomyValidatedPlan plan,
+            Instant now
+    ) throws SQLException {
+        insertEvent(
+                connection,
+                operation.operationId(),
+                EconomyOperationState.VALIDATED,
+                fencingToken,
+                Map.of(
+                        "requestedAmount", plan.actualRequestedAmount(),
+                        "replacementChecksum", plan.replacementChecksum()
+                ),
+                now
+        );
+        insertAudit(
+                connection,
+                new AuditContext(
+                        operation.operationId(),
+                        operation.actorId().orElse(null),
+                        operation.targetId(),
+                        operation.caseId()
+                ),
+                "ECONOMY_PLAN_VALIDATED",
+                "VALIDATED",
+                Map.of(
+                        "requestedAmount", plan.actualRequestedAmount(),
+                        "authoritativeTotal", plan.authoritativeTotal(),
+                        "beforeChecksum", plan.beforeChecksum(),
+                        "replacementChecksum", plan.replacementChecksum()
+                ),
+                "economy:validated:" + operation.operationId(),
+                now
+        );
     }
 
     @Override
@@ -318,59 +446,106 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || now == null) {
             throw new IllegalArgumentException("economy apply identity is invalid");
         }
-        return transaction(connection -> {
-            EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
-            if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
-            }
-            if (operation.state() == EconomyOperationState.APPLYING) {
-                if (operation.fencingToken() != fencingToken
-                        || !ownsLiveLease(connection, operation, now)) {
-                    return result(
-                            EconomyJournalResult.Status.FENCE_LOST,
-                            operation,
-                            "Economy operation is already applying under another lease"
-                    );
-                }
-                return result(EconomyJournalResult.Status.REPLAYED, operation, "Economy operation is already applying");
-            }
-            if (operation.state() != EconomyOperationState.VALIDATED) {
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "Economy operation cannot apply in " + operation.state()
-                );
-            }
-            if (!ownsFence(connection, operation, fencingToken, now)) {
-                return result(
-                        EconomyJournalResult.Status.FENCE_LOST,
-                        operation,
-                        "Economy asset lease is no longer owned"
-                );
-            }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE economy_operations
-                    SET state = 'APPLYING', updated_at = ?
-                    WHERE operation_id = ?
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setBytes(2, UuidBytes.toBytes(operationId));
-                statement.executeUpdate();
-            }
-            insertEvent(
-                    connection,
-                    operationId,
-                    EconomyOperationState.APPLYING,
-                    fencingToken,
-                    Map.of(),
-                    now
-            );
+        return transaction(connection -> markApplying(connection, operationId, fencingToken, now));
+    }
+
+    private EconomyJournalResult markApplying(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        Optional<EconomyOperation> locked = lockOperation(connection, operationId);
+        if (locked.isEmpty()) {
+            return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
+        }
+        EconomyOperation operation = locked.orElseThrow();
+        Optional<EconomyJournalResult> rejected = rejectApplyingTransition(
+                connection,
+                operation,
+                fencingToken,
+                now
+        );
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        writeApplyingState(connection, operationId, now);
+        insertEvent(
+                connection,
+                operationId,
+                EconomyOperationState.APPLYING,
+                fencingToken,
+                Map.of(),
+                now
+        );
+        return result(
+                EconomyJournalResult.Status.UPDATED,
+                lockOperation(connection, operationId).orElseThrow(),
+                "Economy operation marked as applying"
+        );
+    }
+
+    private static Optional<EconomyJournalResult> rejectApplyingTransition(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        if (operation.state() == EconomyOperationState.APPLYING) {
+            return Optional.of(existingApplyingResult(connection, operation, fencingToken, now));
+        }
+        if (operation.state() != EconomyOperationState.VALIDATED) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "Economy operation cannot apply in " + operation.state()
+            ));
+        }
+        if (!ownsFence(connection, operation, fencingToken, now)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy asset lease is no longer owned"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private static EconomyJournalResult existingApplyingResult(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        if (operation.fencingToken() != fencingToken
+                || !ownsLiveLease(connection, operation, now)) {
             return result(
-                    EconomyJournalResult.Status.UPDATED,
-                    lockOperation(connection, operationId).orElseThrow(),
-                    "Economy operation marked as applying"
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy operation is already applying under another lease"
             );
-        });
+        }
+        return result(
+                EconomyJournalResult.Status.REPLAYED,
+                operation,
+                "Economy operation is already applying"
+        );
+    }
+
+    private static void writeApplyingState(
+            Connection connection,
+            UUID operationId,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE economy_operations
+                SET state = 'APPLYING', updated_at = ?
+                WHERE operation_id = ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(operationId));
+            statement.executeUpdate();
+        }
     }
 
     @Override
@@ -383,87 +558,145 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || update == null || now == null) {
             throw new IllegalArgumentException("economy terminal update identity is invalid");
         }
-        return transaction(connection -> {
-            EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
-            if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
-            }
-            if (operation.terminalOutcome().orElse(null) == update.outcome()) {
-                if (operation.terminalMatches(update)) {
-                    return result(
-                            EconomyJournalResult.Status.REPLAYED,
-                            operation,
-                            "The exact economy terminal outcome was already committed"
-                    );
-                }
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "Economy terminal outcome is already bound to different evidence"
-                );
-            }
-            if (operation.state() == EconomyOperationState.UNLOCKED
-                    || operation.state().terminalBeforeUnlock()) {
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "Economy operation already has another terminal outcome"
-                );
-            }
-            if (operation.fencingToken() != fencingToken) {
-                return result(
-                        EconomyJournalResult.Status.FENCE_LOST,
-                        operation,
-                        "Economy fencing token changed"
-                );
-            }
-            if (update.outcome() != EconomyTerminalOutcome.QUARANTINED
-                    && !ownsLiveLease(connection, operation, now)) {
-                return result(
-                        EconomyJournalResult.Status.FENCE_LOST,
-                        operation,
-                        "Economy asset lease expired before the terminal update"
-                );
-            }
-            EconomyJournalResult invalid = validateTerminalTransition(operation, update);
-            if (invalid != null) {
-                return invalid;
-            }
-            EconomyOperationState state = switch (update.outcome()) {
-                case COMMITTED -> EconomyOperationState.COMMITTED;
-                case ROLLED_BACK -> EconomyOperationState.ROLLED_BACK;
-                case QUARANTINED -> EconomyOperationState.QUARANTINED;
-            };
-            writeTerminal(connection, operation, state, update, now);
-            insertEvent(
-                    connection,
-                    operationId,
-                    state,
-                    fencingToken,
-                    terminalEvent(update),
-                    now
-            );
-            if (state == EconomyOperationState.QUARANTINED) {
-                insertQuarantine(connection, operation, update, now);
-            }
-            insertAudit(
-                    connection,
-                    operationId,
-                    operation.actorId().orElse(null),
-                    operation.targetId(),
-                    operation.caseId(),
-                    "ECONOMY_OPERATION_" + update.outcome().name(),
-                    update.outcome().name(),
-                    terminalEvent(update),
-                    "economy:terminal:" + operationId,
-                    now
-            );
+        return transaction(connection -> finish(connection, operationId, fencingToken, update, now));
+    }
+
+    private EconomyJournalResult finish(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            EconomyTerminalUpdate update,
+            Instant now
+    ) throws SQLException {
+        Optional<EconomyOperation> locked = lockOperation(connection, operationId);
+        if (locked.isEmpty()) {
+            return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
+        }
+        EconomyOperation operation = locked.orElseThrow();
+        Optional<EconomyJournalResult> rejected = rejectTerminalUpdate(
+                connection,
+                operation,
+                fencingToken,
+                update,
+                now
+        );
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        EconomyOperationState state = terminalState(update.outcome());
+        writeTerminal(connection, operation, state, update, now);
+        recordTerminalEvent(connection, operation, state, update, now);
+        recordTerminalAudit(connection, operation, update, now);
+        return result(
+                EconomyJournalResult.Status.UPDATED,
+                lockOperation(connection, operationId).orElseThrow(),
+                "Economy operation recorded as " + update.outcome()
+        );
+    }
+
+    private static Optional<EconomyJournalResult> rejectTerminalUpdate(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            EconomyTerminalUpdate update,
+            Instant now
+    ) throws SQLException {
+        if (operation.terminalOutcome().isPresent()
+                && operation.terminalOutcome().orElseThrow() == update.outcome()) {
+            return Optional.of(existingTerminalResult(operation, update));
+        }
+        if (operation.state() == EconomyOperationState.UNLOCKED
+                || operation.state().terminalBeforeUnlock()) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "Economy operation already has another terminal outcome"
+            ));
+        }
+        if (operation.fencingToken() != fencingToken) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy fencing token changed"
+            ));
+        }
+        if (update.outcome() != EconomyTerminalOutcome.QUARANTINED
+                && !ownsLiveLease(connection, operation, now)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy asset lease expired before the terminal update"
+            ));
+        }
+        return validateTerminalTransition(operation, update);
+    }
+
+    private static EconomyJournalResult existingTerminalResult(
+            EconomyOperation operation,
+            EconomyTerminalUpdate update
+    ) {
+        if (operation.terminalMatches(update)) {
             return result(
-                    EconomyJournalResult.Status.UPDATED,
-                    lockOperation(connection, operationId).orElseThrow(),
-                    "Economy operation recorded as " + update.outcome()
+                    EconomyJournalResult.Status.REPLAYED,
+                    operation,
+                    "The exact economy terminal outcome was already committed"
             );
-        });
+        }
+        return result(
+                EconomyJournalResult.Status.INVALID_STATE,
+                operation,
+                "Economy terminal outcome is already bound to different evidence"
+        );
+    }
+
+    private static EconomyOperationState terminalState(EconomyTerminalOutcome outcome) {
+        return switch (outcome) {
+            case COMMITTED -> EconomyOperationState.COMMITTED;
+            case ROLLED_BACK -> EconomyOperationState.ROLLED_BACK;
+            case QUARANTINED -> EconomyOperationState.QUARANTINED;
+        };
+    }
+
+    private void recordTerminalEvent(
+            Connection connection,
+            EconomyOperation operation,
+            EconomyOperationState state,
+            EconomyTerminalUpdate update,
+            Instant now
+    ) throws SQLException {
+        insertEvent(
+                connection,
+                operation.operationId(),
+                state,
+                operation.fencingToken(),
+                terminalEvent(update),
+                now
+        );
+        if (state == EconomyOperationState.QUARANTINED) {
+            insertQuarantine(connection, operation, update, now);
+        }
+    }
+
+    private void recordTerminalAudit(
+            Connection connection,
+            EconomyOperation operation,
+            EconomyTerminalUpdate update,
+            Instant now
+    ) throws SQLException {
+        insertAudit(
+                connection,
+                new AuditContext(
+                        operation.operationId(),
+                        operation.actorId().orElse(null),
+                        operation.targetId(),
+                        operation.caseId()
+                ),
+                "ECONOMY_OPERATION_" + update.outcome().name(),
+                update.outcome().name(),
+                terminalEvent(update),
+                "economy:terminal:" + operation.operationId(),
+                now
+        );
     }
 
     @Override
@@ -471,68 +704,116 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || now == null) {
             throw new IllegalArgumentException("economy release identity is invalid");
         }
-        return transaction(connection -> {
-            EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
-            if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
-            }
-            if (operation.state() == EconomyOperationState.UNLOCKED) {
-                return result(EconomyJournalResult.Status.REPLAYED, operation, "Economy operation is already unlocked");
-            }
-            if (operation.state() != EconomyOperationState.COMMITTED
-                    && operation.state() != EconomyOperationState.ROLLED_BACK) {
-                return result(
-                        EconomyJournalResult.Status.INVALID_STATE,
-                        operation,
-                        "Only committed or rolled-back economy operations may unlock"
-                );
-            }
-            if (operation.fencingToken() != fencingToken
-                    || !leaseOwnedOrAbsent(connection, operation)) {
-                return result(
-                        EconomyJournalResult.Status.FENCE_LOST,
-                        operation,
-                        "Economy operation no longer owns its release fence"
-                );
-            }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE economy_operations
-                    SET state = 'UNLOCKED', lease_owner = NULL, lease_until = NULL,
-                        released_at = ?, updated_at = ?
-                    WHERE operation_id = ?
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setTimestamp(2, Timestamp.from(now));
-                statement.setBytes(3, UuidBytes.toBytes(operationId));
-                statement.executeUpdate();
-            }
-            releaseLease(connection, operation);
-            insertEvent(
-                    connection,
-                    operationId,
-                    EconomyOperationState.UNLOCKED,
-                    fencingToken,
-                    Map.of("terminalOutcome", operation.terminalOutcome().orElseThrow().name()),
-                    now
-            );
-            insertAudit(
-                    connection,
-                    operationId,
-                    operation.actorId().orElse(null),
-                    operation.targetId(),
-                    operation.caseId(),
-                    "ECONOMY_OPERATION_UNLOCKED",
-                    operation.terminalOutcome().orElseThrow().name(),
-                    Map.of("fencingToken", fencingToken),
-                    "economy:unlocked:" + operationId,
-                    now
-            );
-            return result(
-                    EconomyJournalResult.Status.UPDATED,
-                    lockOperation(connection, operationId).orElseThrow(),
-                    "Economy operation unlocked"
-            );
-        });
+        return transaction(connection -> release(connection, operationId, fencingToken, now));
+    }
+
+    private EconomyJournalResult release(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        Optional<EconomyOperation> locked = lockOperation(connection, operationId);
+        if (locked.isEmpty()) {
+            return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
+        }
+        EconomyOperation operation = locked.orElseThrow();
+        Optional<EconomyJournalResult> rejected = rejectRelease(
+                connection,
+                operation,
+                fencingToken
+        );
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        writeReleasedState(connection, operationId, now);
+        releaseLease(connection, operation);
+        recordRelease(connection, operation, fencingToken, now);
+        return result(
+                EconomyJournalResult.Status.UPDATED,
+                lockOperation(connection, operationId).orElseThrow(),
+                "Economy operation unlocked"
+        );
+    }
+
+    private static Optional<EconomyJournalResult> rejectRelease(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken
+    ) throws SQLException {
+        if (operation.state() == EconomyOperationState.UNLOCKED) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.REPLAYED,
+                    operation,
+                    "Economy operation is already unlocked"
+            ));
+        }
+        if (operation.state() != EconomyOperationState.COMMITTED
+                && operation.state() != EconomyOperationState.ROLLED_BACK) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.INVALID_STATE,
+                    operation,
+                    "Only committed or rolled-back economy operations may unlock"
+            ));
+        }
+        if (operation.fencingToken() != fencingToken
+                || !leaseOwnedOrAbsent(connection, operation)) {
+            return Optional.of(result(
+                    EconomyJournalResult.Status.FENCE_LOST,
+                    operation,
+                    "Economy operation no longer owns its release fence"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private static void writeReleasedState(
+            Connection connection,
+            UUID operationId,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE economy_operations
+                SET state = 'UNLOCKED', lease_owner = NULL, lease_until = NULL,
+                    released_at = ?, updated_at = ?
+                WHERE operation_id = ?
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setBytes(3, UuidBytes.toBytes(operationId));
+            statement.executeUpdate();
+        }
+    }
+
+    private void recordRelease(
+            Connection connection,
+            EconomyOperation operation,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        String terminalOutcome = operation.terminalOutcome().orElseThrow().name();
+        insertEvent(
+                connection,
+                operation.operationId(),
+                EconomyOperationState.UNLOCKED,
+                fencingToken,
+                Map.of("terminalOutcome", terminalOutcome),
+                now
+        );
+        insertAudit(
+                connection,
+                new AuditContext(
+                        operation.operationId(),
+                        operation.actorId().orElse(null),
+                        operation.targetId(),
+                        operation.caseId()
+                ),
+                "ECONOMY_OPERATION_UNLOCKED",
+                terminalOutcome,
+                Map.of("fencingToken", fencingToken),
+                "economy:unlocked:" + operation.operationId(),
+                now
+        );
     }
 
     @Override
@@ -558,10 +839,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             String owningServerId,
             int limit
     ) {
-        if (targetId == null || owningServerId == null || owningServerId.isBlank()
-                || owningServerId.length() > 64 || limit < 1 || limit > 16) {
-            throw new IllegalArgumentException("economy recovery query is invalid");
-        }
+        validateRecoveryQuery(targetId, owningServerId, limit);
         String sql = """
                 SELECT %s
                 FROM economy_operations
@@ -583,6 +861,17 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             }
         } catch (SQLException exception) {
             throw failure("Unable to load recoverable economy operations", exception);
+        }
+    }
+
+    private static void validateRecoveryQuery(
+            UUID targetId,
+            String owningServerId,
+            int limit
+    ) {
+        if (targetId == null || owningServerId == null || owningServerId.isBlank()
+                || owningServerId.length() > 64 || limit < 1 || limit > 16) {
+            throw new IllegalArgumentException("economy recovery query is invalid");
         }
     }
 
@@ -672,18 +961,18 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         }
     }
 
-    private static EconomyJournalResult validateTerminalTransition(
+    private static Optional<EconomyJournalResult> validateTerminalTransition(
             EconomyOperation operation,
             EconomyTerminalUpdate update
     ) {
         return switch (update.outcome()) {
             case COMMITTED -> validateCommittedTransition(operation, update);
             case ROLLED_BACK -> validateRolledBackTransition(operation, update);
-            case QUARANTINED -> null;
+            case QUARANTINED -> Optional.empty();
         };
     }
 
-    private static EconomyJournalResult validateCommittedTransition(
+    private static Optional<EconomyJournalResult> validateCommittedTransition(
             EconomyOperation operation,
             EconomyTerminalUpdate update
     ) {
@@ -691,57 +980,57 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 || operation.authoritativeTotal().isEmpty()
                 || operation.requestedAmount().isEmpty()
                 || operation.replacementChecksum().isEmpty()) {
-            return result(
+            return Optional.of(result(
                     EconomyJournalResult.Status.INVALID_STATE,
                     operation,
                     "A committed economy outcome requires an applying exact plan"
-            );
+            ));
         }
         long expectedTotal = operation.authoritativeTotal().orElseThrow()
                 - operation.requestedAmount().orElseThrow();
         if (update.resultTotal().orElseThrow() != expectedTotal
                 || !update.resultChecksum().orElseThrow()
                 .equals(operation.replacementChecksum().orElseThrow())) {
-            return result(
+            return Optional.of(result(
                     EconomyJournalResult.Status.STALE,
                     operation,
                     "Committed result does not match the exact removal plan"
-            );
+            ));
         }
-        return null;
+        return Optional.empty();
     }
 
-    private static EconomyJournalResult validateRolledBackTransition(
+    private static Optional<EconomyJournalResult> validateRolledBackTransition(
             EconomyOperation operation,
             EconomyTerminalUpdate update
     ) {
         if (update.resultTotal().isEmpty()) {
             if (operation.state() != EconomyOperationState.LOCKED
                     || operation.hasAnyDurablePlanEvidence()) {
-                return result(
+                return Optional.of(result(
                         EconomyJournalResult.Status.INVALID_STATE,
                         operation,
                         "Evidence-free rollback is restricted to a locked operation without a saved plan"
-                );
+                ));
             }
-            return null;
+            return Optional.empty();
         }
         if (operation.authoritativeTotal().isEmpty() || operation.beforeChecksum().isEmpty()) {
-            return result(
+            return Optional.of(result(
                     EconomyJournalResult.Status.INVALID_STATE,
                     operation,
                     "Verified rollback evidence requires an exact saved before state"
-            );
+            ));
         }
         if (update.resultTotal().orElseThrow() != operation.authoritativeTotal().orElseThrow()
                 || !update.resultChecksum().orElseThrow().equals(operation.beforeChecksum().orElseThrow())) {
-            return result(
+            return Optional.of(result(
                     EconomyJournalResult.Status.STALE,
                     operation,
                     "Rolled-back result does not match the exact authoritative before state"
-            );
+            ));
         }
-        return null;
+        return Optional.empty();
     }
 
     private void writeTerminal(
@@ -912,18 +1201,39 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
     }
 
     private static void validateReplay(EconomyOperation operation, EconomyPrepareRequest request) {
-        boolean amountMatches = request.amountMode() == EconomyAmountMode.ALL
-                || operation.requestedAmount().equals(request.requestedAmount());
-        if (!operation.operationId().equals(request.operationId())
-                || !operation.idempotencyKey().equals(request.idempotencyKey())
-                || !operation.caseId().equals(request.caseId())
-                || !operation.targetId().equals(request.targetId())
-                || !operation.actorId().equals(Optional.of(request.actorId()))
-                || operation.amountMode() != request.amountMode()
-                || !amountMatches
-                || !operation.owningServerId().equals(Optional.of(request.owningServerId()))) {
+        if (!sameReplayIdentity(operation, request)
+                || !sameReplayParticipants(operation, request)
+                || !sameReplayTerms(operation, request)) {
             throw new IllegalArgumentException("idempotency key is already bound to another economy operation");
         }
+    }
+
+    private static boolean sameReplayIdentity(
+            EconomyOperation operation,
+            EconomyPrepareRequest request
+    ) {
+        return operation.operationId().equals(request.operationId())
+                && operation.idempotencyKey().equals(request.idempotencyKey())
+                && operation.caseId().equals(request.caseId());
+    }
+
+    private static boolean sameReplayParticipants(
+            EconomyOperation operation,
+            EconomyPrepareRequest request
+    ) {
+        return operation.targetId().equals(request.targetId())
+                && operation.actorId().equals(Optional.of(request.actorId()));
+    }
+
+    private static boolean sameReplayTerms(
+            EconomyOperation operation,
+            EconomyPrepareRequest request
+    ) {
+        boolean amountMatches = request.amountMode() == EconomyAmountMode.ALL
+                || operation.requestedAmount().equals(request.requestedAmount());
+        return operation.amountMode() == request.amountMode()
+                && amountMatches
+                && operation.owningServerId().equals(Optional.of(request.owningServerId()));
     }
 
     private static boolean validatedPlanMatches(
@@ -957,18 +1267,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             try (ResultSet result = select.executeQuery()) {
                 if (!result.next()) {
                     long fence = operation.fencingToken() + 1L;
-                    try (PreparedStatement insert = connection.prepareStatement("""
-                            INSERT INTO operation_leases(
-                                resource_key, owner_id, fencing_token, lease_until, updated_at
-                            ) VALUES (?, ?, ?, ?, ?)
-                            """)) {
-                        insert.setString(1, key);
-                        insert.setString(2, operation.operationId().toString());
-                        insert.setLong(3, fence);
-                        insert.setTimestamp(4, Timestamp.from(leaseUntil));
-                        insert.setTimestamp(5, Timestamp.from(now));
-                        insert.executeUpdate();
-                    }
+                    insertClaimedLease(connection, key, operation, fence, leaseUntil, now);
                     return fence;
                 }
                 String owner = result.getString("owner_id");
@@ -984,20 +1283,53 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 long fence = liveSameFence
                         ? currentFence
                         : Math.max(currentFence, operation.fencingToken()) + 1L;
-                try (PreparedStatement update = connection.prepareStatement("""
-                        UPDATE operation_leases
-                        SET owner_id = ?, fencing_token = ?, lease_until = ?, updated_at = ?
-                        WHERE resource_key = ?
-                        """)) {
-                    update.setString(1, operation.operationId().toString());
-                    update.setLong(2, fence);
-                    update.setTimestamp(3, Timestamp.from(leaseUntil));
-                    update.setTimestamp(4, Timestamp.from(now));
-                    update.setString(5, key);
-                    update.executeUpdate();
-                }
+                updateClaimedLease(connection, key, operation, fence, leaseUntil, now);
                 return fence;
             }
+        }
+    }
+
+    private static void insertClaimedLease(
+            Connection connection,
+            String key,
+            EconomyOperation operation,
+            long fence,
+            Instant leaseUntil,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement insert = connection.prepareStatement("""
+                INSERT INTO operation_leases(
+                    resource_key, owner_id, fencing_token, lease_until, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """)) {
+            insert.setString(1, key);
+            insert.setString(2, operation.operationId().toString());
+            insert.setLong(3, fence);
+            insert.setTimestamp(4, Timestamp.from(leaseUntil));
+            insert.setTimestamp(5, Timestamp.from(now));
+            insert.executeUpdate();
+        }
+    }
+
+    private static void updateClaimedLease(
+            Connection connection,
+            String key,
+            EconomyOperation operation,
+            long fence,
+            Instant leaseUntil,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE operation_leases
+                SET owner_id = ?, fencing_token = ?, lease_until = ?, updated_at = ?
+                WHERE resource_key = ?
+                """)) {
+            update.setString(1, operation.operationId().toString());
+            update.setLong(2, fence);
+            update.setTimestamp(3, Timestamp.from(leaseUntil));
+            update.setTimestamp(4, Timestamp.from(now));
+            update.setString(5, key);
+            update.executeUpdate();
         }
     }
 
@@ -1122,10 +1454,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
 
     private void insertAudit(
             Connection connection,
-            UUID correlationId,
-            UUID actorId,
-            UUID targetId,
-            String caseId,
+            AuditContext context,
             String eventType,
             String outcome,
             Map<String, ?> detail,
@@ -1139,14 +1468,14 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(correlationId));
-            if (actorId == null) {
+            statement.setBytes(2, UuidBytes.toBytes(context.correlationId()));
+            if (context.actorId() == null) {
                 statement.setNull(3, Types.BINARY);
             } else {
-                statement.setBytes(3, UuidBytes.toBytes(actorId));
+                statement.setBytes(3, UuidBytes.toBytes(context.actorId()));
             }
-            statement.setBytes(4, UuidBytes.toBytes(targetId));
-            statement.setString(5, caseId);
+            statement.setBytes(4, UuidBytes.toBytes(context.targetId()));
+            statement.setString(5, context.caseId());
             statement.setString(6, eventType);
             statement.setString(7, outcome);
             statement.setString(8, json(detail));
@@ -1243,5 +1572,13 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
 
     private static ModerationPersistenceException failure(String message, Exception cause) {
         return new ModerationPersistenceException(message, cause);
+    }
+
+    private record AuditContext(
+            UUID correlationId,
+            UUID actorId,
+            UUID targetId,
+            String caseId
+    ) {
     }
 }
