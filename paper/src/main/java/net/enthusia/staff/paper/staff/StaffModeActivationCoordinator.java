@@ -122,12 +122,14 @@ final class StaffModeActivationCoordinator {
                     );
                     recovery.run();
                 } catch (RuntimeException exception) {
-                    logger.log(
-                            Level.SEVERE,
-                            "Staff activation recovery persistence failed for player " + playerId
-                                    + " session " + session.sessionId() + " during " + path.description,
-                            exception
-                    );
+                    if (logger.isLoggable(Level.SEVERE)) {
+                        logger.log(
+                                Level.SEVERE,
+                                "Staff activation recovery persistence failed for player " + playerId
+                                        + " session " + session.sessionId() + " during " + path.description,
+                                exception
+                        );
+                    }
                     safeMessage(
                             playerId,
                             session,

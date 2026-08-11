@@ -168,16 +168,20 @@ public final class PunishmentRequestAlertWorker {
             try {
                 loaded = requests.find(claim.intent().requestId());
             } catch (RuntimeException exception) {
-                logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
-                        + claim.intent().alertId(), exception);
+                if (logger.isLoggable(Level.WARNING)) {
+                    logger.log(Level.WARNING, "Punishment request alert lookup failed for alert "
+                            + claim.intent().alertId(), exception);
+                }
                 retryableFailure(claim, REQUEST_LOOKUP_FAILED);
                 continue;
             }
             if (loaded.isEmpty()) {
-                logger.severe("Punishment request alert references a missing request: alert="
-                        + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                        + " recipient=" + claim.deliveryId().recipientId()
-                        + " attempt=" + claim.attemptCount());
+                if (logger.isLoggable(Level.SEVERE)) {
+                    logger.severe("Punishment request alert references a missing request: alert="
+                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                            + " recipient=" + claim.deliveryId().recipientId()
+                            + " attempt=" + claim.attemptCount());
+                }
                 permanentFailure(claim, REQUEST_MISSING);
                 continue;
             }
@@ -190,10 +194,12 @@ public final class PunishmentRequestAlertWorker {
                         displayName(claim.intent().occurrence().actorId())
                 ));
             } catch (RuntimeException exception) {
-                logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
-                        + claim.intent().alertId() + " request=" + claim.intent().requestId()
-                        + " recipient=" + claim.deliveryId().recipientId()
-                        + " attempt=" + claim.attemptCount(), exception);
+                if (logger.isLoggable(Level.SEVERE)) {
+                    logger.log(Level.SEVERE, "Punishment request alert cannot be rendered safely: alert="
+                            + claim.intent().alertId() + " request=" + claim.intent().requestId()
+                            + " recipient=" + claim.deliveryId().recipientId()
+                            + " attempt=" + claim.attemptCount(), exception);
+                }
                 permanentFailure(claim, INVALID_PRESENTATION_DATA);
             }
         }

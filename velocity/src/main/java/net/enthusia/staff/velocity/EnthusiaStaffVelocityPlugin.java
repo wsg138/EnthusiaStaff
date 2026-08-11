@@ -747,10 +747,12 @@ public final class EnthusiaStaffVelocityPlugin {
             websiteModerationStore = website.store();
             websiteApiServer = website.server();
             websiteMaintenanceTask = website.maintenance();
-            logger.info(
-                    "Restricted website API started on loopback; {} eligible punishment codes were backfilled",
-                    website.backfilledCodes()
-            );
+            if (logger.isInfoEnabled()) {
+                logger.info(
+                        "Restricted website API started on loopback; {} eligible punishment codes were backfilled",
+                        website.backfilledCodes()
+                );
+            }
         } catch (RuntimeException | java.io.IOException exception) {
             logger.error(
                     "Restricted website API initialization failed; the moderation runtime remains available",
