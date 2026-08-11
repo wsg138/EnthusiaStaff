@@ -9,17 +9,22 @@ import java.util.Set;
 import org.bukkit.Material;
 
 public final class ReportGuiConfiguration {
+    private static final String QUEUE_CLAIMED_KEY = "queue-claimed";
+    private static final String BACK_KEY = "back";
+    private static final String REPORT_GUI_PREFIX = "report GUI ";
+    private static final int MINIMUM_ACTION_SLOTS = 3;
+
     public static final Set<String> SLOT_KEYS = Set.of(
-            "queue-open", "queue-mine", "queue-claimed", "queue-review", "queue-closed",
-            "refresh", "back", "close", "previous", "next", "confirm", "empty",
+            "queue-open", "queue-mine", QUEUE_CLAIMED_KEY, "queue-review", "queue-closed",
+            "refresh", BACK_KEY, "close", "previous", "next", "confirm", "empty",
             "detail-header", "detail-reporter", "detail-target", "detail-location",
             "detail-evidence", "detail-description", "detail-public-chat",
             "detail-private-message", "detail-client-evidence",
             "review-report", "review-action", "review-note"
     );
     public static final Set<String> MATERIAL_KEYS = Set.of(
-            "filler", "empty", "refresh", "back", "close", "previous", "next", "confirm",
-            "active-queue", "queue-open", "queue-mine", "queue-claimed", "queue-review",
+            "filler", "empty", "refresh", BACK_KEY, "close", "previous", "next", "confirm",
+            "active-queue", "queue-open", "queue-mine", QUEUE_CLAIMED_KEY, "queue-review",
             "queue-closed", "reporter", "target", "location", "evidence", "description",
             "public-chat", "private-message", "client-evidence", "private-note",
             "state-open", "state-claimed", "state-awaiting-review", "state-closed",
@@ -28,7 +33,7 @@ public final class ReportGuiConfiguration {
     );
     public static final Set<String> TITLE_KEYS = Set.of("queue", "detail", "review");
     public static final Set<String> MESSAGE_KEYS = Set.of(
-            "queue-open", "queue-mine", "queue-claimed", "queue-review", "queue-closed",
+            "queue-open", "queue-mine", QUEUE_CLAIMED_KEY, "queue-review", "queue-closed",
             "refresh-queue", "reload-report", "back-queue", "close", "previous-page", "next-page",
             "empty-title", "empty-lore", "click-inspect", "current-queue", "click-open",
             "reporter", "target", "location-context", "captured-evidence", "sensitive-evidence",
@@ -67,7 +72,7 @@ public final class ReportGuiConfiguration {
         if (this.contentSlots.isEmpty()) {
             throw new IllegalArgumentException("report GUI content-slots must not be empty");
         }
-        if (this.actionSlots.size() < 3) {
+        if (this.actionSlots.size() < MINIMUM_ACTION_SLOTS) {
             throw new IllegalArgumentException("report GUI action-slots must contain at least three slots");
         }
         this.slots = immutableRequiredMap(slots, SLOT_KEYS, "slots");
@@ -135,12 +140,20 @@ public final class ReportGuiConfiguration {
             return false;
         }
         return inventorySize == that.inventorySize
-                && contentSlots.equals(that.contentSlots)
-                && actionSlots.equals(that.actionSlots)
-                && slots.equals(that.slots)
-                && materials.equals(that.materials)
-                && titles.equals(that.titles)
-                && messages.equals(that.messages);
+                && sameLayout(that)
+                && sameMappings(that);
+    }
+
+    private boolean sameLayout(ReportGuiConfiguration other) {
+        return contentSlots.equals(other.contentSlots)
+                && actionSlots.equals(other.actionSlots);
+    }
+
+    private boolean sameMappings(ReportGuiConfiguration other) {
+        return slots.equals(other.slots)
+                && materials.equals(other.materials)
+                && titles.equals(other.titles)
+                && messages.equals(other.messages);
     }
 
     @Override
@@ -173,7 +186,7 @@ public final class ReportGuiConfiguration {
     private void validateLayouts() {
         requireUnique("queue", combine(
                 contentSlots,
-                namedSlots("queue-open", "queue-mine", "queue-claimed", "queue-review", "queue-closed",
+                namedSlots("queue-open", "queue-mine", QUEUE_CLAIMED_KEY, "queue-review", "queue-closed",
                         "refresh", "close", "previous", "next")
         ));
         requireUnique("detail", combine(
@@ -181,13 +194,13 @@ public final class ReportGuiConfiguration {
                         "detail-header", "detail-reporter", "detail-target", "detail-location",
                         "detail-evidence", "detail-description", "detail-public-chat",
                         "detail-private-message", "detail-client-evidence",
-                        "queue-open", "queue-mine", "queue-claimed", "queue-review", "queue-closed",
-                        "refresh", "back", "close"
+                        "queue-open", "queue-mine", QUEUE_CLAIMED_KEY, "queue-review", "queue-closed",
+                        "refresh", BACK_KEY, "close"
                 ),
                 actionSlots
         ));
         requireUnique("review", namedSlots(
-                "review-report", "review-action", "review-note", "back", "confirm", "close"
+                "review-report", "review-action", "review-note", BACK_KEY, "confirm", "close"
         ));
     }
 
@@ -208,7 +221,7 @@ public final class ReportGuiConfiguration {
 
     private static void requireUnique(String layout, List<Integer> values) {
         if (new HashSet<>(values).size() != values.size()) {
-            throw new IllegalArgumentException("report GUI " + layout + " layout contains overlapping slots");
+            throw new IllegalArgumentException(REPORT_GUI_PREFIX + layout + " layout contains overlapping slots");
         }
     }
 
@@ -216,11 +229,11 @@ public final class ReportGuiConfiguration {
         Objects.requireNonNull(values, path);
         List<Integer> copy = List.copyOf(values);
         if (new HashSet<>(copy).size() != copy.size()) {
-            throw new IllegalArgumentException("report GUI " + path + " contains duplicate slots");
+            throw new IllegalArgumentException(REPORT_GUI_PREFIX + path + " contains duplicate slots");
         }
         for (Integer slot : copy) {
             if (slot == null || slot < 0 || slot >= size) {
-                throw new IllegalArgumentException("report GUI " + path + " contains an invalid slot");
+                throw new IllegalArgumentException(REPORT_GUI_PREFIX + path + " contains an invalid slot");
             }
         }
         return copy;
@@ -233,7 +246,7 @@ public final class ReportGuiConfiguration {
     ) {
         Objects.requireNonNull(values, path);
         if (!values.keySet().equals(required) || values.values().stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("report GUI " + path + " must contain exactly the supported keys");
+            throw new IllegalArgumentException(REPORT_GUI_PREFIX + path + " must contain exactly the supported keys");
         }
         return Map.copyOf(values);
     }
@@ -245,7 +258,7 @@ public final class ReportGuiConfiguration {
     ) {
         Map<String, String> copy = immutableRequiredMap(values, required, path);
         if (copy.values().stream().anyMatch(String::isBlank)) {
-            throw new IllegalArgumentException("report GUI " + path + " values must not be blank");
+            throw new IllegalArgumentException(REPORT_GUI_PREFIX + path + " values must not be blank");
         }
         return copy;
     }

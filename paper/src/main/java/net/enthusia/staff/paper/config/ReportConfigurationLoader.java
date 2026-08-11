@@ -28,8 +28,10 @@ import net.enthusia.staff.paper.report.ReportGuiConfiguration;
 import org.bukkit.Material;
 
 public final class ReportConfigurationLoader {
+    private static final String VERSION_FIELD = "version";
+    private static final String SUBMISSION_PATH_SUFFIX = ".submission";
     private static final Set<String> POLICY_ROOT_FIELDS = Set.of(
-            "version", "submission", "queries", "evidence"
+            VERSION_FIELD, "submission", "queries", "evidence"
     );
     private static final Set<String> SUBMISSION_FIELDS = Set.of(
             "any-cooldown", "target-cooldown", "duplicate-window", "max-open-reports"
@@ -37,7 +39,7 @@ public final class ReportConfigurationLoader {
     private static final Set<String> QUERY_FIELDS = Set.of("max-results", "recently-closed-window");
     private static final Set<String> EVIDENCE_FIELDS = Set.of("retention", "purge-batch-limit");
     private static final Set<String> GUI_ROOT_FIELDS = Set.of(
-            "version", "inventory-size", "content-slots", "action-slots",
+            VERSION_FIELD, "inventory-size", "content-slots", "action-slots",
             "slots", "materials", "titles", "messages"
     );
 
@@ -89,8 +91,8 @@ public final class ReportConfigurationLoader {
             JsonNode policyRoot = yaml.readTree(policyReader);
             JsonNode guiRoot = yaml.readTree(guiReader);
             return new ReportConfigurationSnapshot(
-                    text(policyRoot, "version", policyName),
-                    text(guiRoot, "version", guiName),
+                    text(policyRoot, VERSION_FIELD, policyName),
+                    text(guiRoot, VERSION_FIELD, guiName),
                     parsePolicy(policyRoot, policyName),
                     parseGui(guiRoot, guiName)
             );
@@ -109,14 +111,14 @@ public final class ReportConfigurationLoader {
         JsonNode submission = object(root, "submission", source);
         JsonNode queries = object(root, "queries", source);
         JsonNode evidence = object(root, "evidence", source);
-        rejectUnknown(submission, SUBMISSION_FIELDS, source + ".submission");
+        rejectUnknown(submission, SUBMISSION_FIELDS, source + SUBMISSION_PATH_SUFFIX);
         rejectUnknown(queries, QUERY_FIELDS, source + ".queries");
         rejectUnknown(evidence, EVIDENCE_FIELDS, source + ".evidence");
         return new ReportPolicy(
-                duration(submission, "any-cooldown", source + ".submission"),
-                duration(submission, "target-cooldown", source + ".submission"),
-                duration(submission, "duplicate-window", source + ".submission"),
-                integer(submission, "max-open-reports", source + ".submission", 1, 100),
+                duration(submission, "any-cooldown", source + SUBMISSION_PATH_SUFFIX),
+                duration(submission, "target-cooldown", source + SUBMISSION_PATH_SUFFIX),
+                duration(submission, "duplicate-window", source + SUBMISSION_PATH_SUFFIX),
+                integer(submission, "max-open-reports", source + SUBMISSION_PATH_SUFFIX, 1, 100),
                 integer(queries, "max-results", source + ".queries", 1, 100),
                 duration(queries, "recently-closed-window", source + ".queries"),
                 duration(evidence, "retention", source + ".evidence"),

@@ -17,6 +17,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 final class ReportGuiRenderer {
+    private static final String REFRESH_KEY = "refresh";
+    private static final String CLOSE_KEY = "close";
+    private static final String BACK_KEY = "back";
+    private static final String QUEUE_KEY_PREFIX = "queue-";
+
     Inventory render(ReportGuiState state, ReportGuiConfiguration configuration) {
         ReportGuiHolder holder = new ReportGuiHolder(state, configuration);
         Inventory inventory = Bukkit.createInventory(
@@ -43,6 +48,18 @@ final class ReportGuiRenderer {
     ) {
         int pageSize = configuration.pageSize();
         int offset = state.queuePage() * pageSize;
+        renderQueueEntries(inventory, state, configuration, pageSize, offset);
+        renderQueueControls(inventory, state.queue(), configuration);
+        renderQueueNavigation(inventory, state, configuration, pageSize);
+    }
+
+    private static void renderQueueEntries(
+            Inventory inventory,
+            ReportGuiState.Queue state,
+            ReportGuiConfiguration configuration,
+            int pageSize,
+            int offset
+    ) {
         for (int index = 0; index < pageSize && offset + index < state.reports().size(); index++) {
             ReportSummary summary = state.reports().get(offset + index);
             inventory.setItem(configuration.contentSlots().get(index), item(
@@ -60,15 +77,22 @@ final class ReportGuiRenderer {
                     )
             ));
         }
-        renderQueueControls(inventory, state.queue(), configuration);
-        inventory.setItem(configuration.slot("refresh"), item(
-                configuration.material("refresh"),
+    }
+
+    private static void renderQueueNavigation(
+            Inventory inventory,
+            ReportGuiState.Queue state,
+            ReportGuiConfiguration configuration,
+            int pageSize
+    ) {
+        inventory.setItem(configuration.slot(REFRESH_KEY), item(
+                configuration.material(REFRESH_KEY),
                 configuration.message("refresh-queue"),
                 List.of()
         ));
-        inventory.setItem(configuration.slot("close"), item(
-                configuration.material("close"),
-                configuration.message("close"),
+        inventory.setItem(configuration.slot(CLOSE_KEY), item(
+                configuration.material(CLOSE_KEY),
+                configuration.message(CLOSE_KEY),
                 List.of()
         ));
         if (state.queuePage() > 0) {
@@ -101,6 +125,19 @@ final class ReportGuiRenderer {
     ) {
         ReportDetails details = state.details();
         ReportSummary summary = details.summary();
+        renderDetailHeader(inventory, summary, configuration);
+        renderDetailIdentity(inventory, details, configuration);
+        renderDetailEvidence(inventory, details, configuration);
+        renderQueueControls(inventory, state.queue(), configuration);
+        renderDetailNavigation(inventory, configuration);
+        renderDetailActions(inventory, state, summary, configuration);
+    }
+
+    private static void renderDetailHeader(
+            Inventory inventory,
+            ReportSummary summary,
+            ReportGuiConfiguration configuration
+    ) {
         inventory.setItem(configuration.slot("detail-header"), item(
                 stateMaterial(summary.state(), configuration),
                 "Report " + summary.reportId(),
@@ -112,6 +149,14 @@ final class ReportGuiRenderer {
                         Component.text("Updated: " + summary.updatedAt(), NamedTextColor.DARK_GRAY)
                 )
         ));
+    }
+
+    private static void renderDetailIdentity(
+            Inventory inventory,
+            ReportDetails details,
+            ReportGuiConfiguration configuration
+    ) {
+        ReportSummary summary = details.summary();
         inventory.setItem(configuration.slot("detail-reporter"), item(
                 configuration.material("reporter"),
                 configuration.message("reporter"),
@@ -132,6 +177,13 @@ final class ReportGuiRenderer {
                                 NamedTextColor.YELLOW)
                 )
         ));
+    }
+
+    private static void renderDetailEvidence(
+            Inventory inventory,
+            ReportDetails details,
+            ReportGuiConfiguration configuration
+    ) {
         inventory.setItem(configuration.slot("detail-evidence"), item(
                 configuration.material("evidence"),
                 configuration.message("captured-evidence"),
@@ -167,22 +219,35 @@ final class ReportGuiRenderer {
                 details.clientEvidenceSnapshots(),
                 configuration
         ));
-        renderQueueControls(inventory, state.queue(), configuration);
-        inventory.setItem(configuration.slot("refresh"), item(
-                configuration.material("refresh"),
+    }
+
+    private static void renderDetailNavigation(
+            Inventory inventory,
+            ReportGuiConfiguration configuration
+    ) {
+        inventory.setItem(configuration.slot(REFRESH_KEY), item(
+                configuration.material(REFRESH_KEY),
                 configuration.message("reload-report"),
                 List.of()
         ));
-        inventory.setItem(configuration.slot("back"), item(
-                configuration.material("back"),
+        inventory.setItem(configuration.slot(BACK_KEY), item(
+                configuration.material(BACK_KEY),
                 configuration.message("back-queue"),
                 List.of()
         ));
-        inventory.setItem(configuration.slot("close"), item(
-                configuration.material("close"),
-                configuration.message("close"),
+        inventory.setItem(configuration.slot(CLOSE_KEY), item(
+                configuration.material(CLOSE_KEY),
+                configuration.message(CLOSE_KEY),
                 List.of()
         ));
+    }
+
+    private static void renderDetailActions(
+            Inventory inventory,
+            ReportGuiState.Detail state,
+            ReportSummary summary,
+            ReportGuiConfiguration configuration
+    ) {
         List<ReportAction> actions = ReportGuiAccess.actions(summary, state.viewerId());
         for (int index = 0; index < actions.size() && index < configuration.actionSlots().size(); index++) {
             ReportAction action = actions.get(index);
@@ -222,8 +287,8 @@ final class ReportGuiRenderer {
                 configuration.message("private-note"),
                 wrap(state.note())
         ));
-        inventory.setItem(configuration.slot("back"), item(
-                configuration.material("back"),
+        inventory.setItem(configuration.slot(BACK_KEY), item(
+                configuration.material(BACK_KEY),
                 configuration.message("back-no-change"),
                 List.of()
         ));
@@ -235,8 +300,8 @@ final class ReportGuiRenderer {
                         Component.text(configuration.message("stale-rejected"), NamedTextColor.GRAY)
                 )
         ));
-        inventory.setItem(configuration.slot("close"), item(
-                configuration.material("close"),
+        inventory.setItem(configuration.slot(CLOSE_KEY), item(
+                configuration.material(CLOSE_KEY),
                 configuration.message("close-no-change"),
                 List.of()
         ));
@@ -268,9 +333,9 @@ final class ReportGuiRenderer {
     ) {
         for (ReportQueue queue : ReportQueue.values()) {
             String key = queueKey(queue);
-            inventory.setItem(configuration.slot("queue-" + key), queueItem(
-                    configuration.material("queue-" + key),
-                    configuration.message("queue-" + key),
+            inventory.setItem(configuration.slot(QUEUE_KEY_PREFIX + key), queueItem(
+                    configuration.material(QUEUE_KEY_PREFIX + key),
+                    configuration.message(QUEUE_KEY_PREFIX + key),
                     queue,
                     active,
                     configuration
@@ -314,7 +379,7 @@ final class ReportGuiRenderer {
                     .replace("{action}", actionName(review.action(), configuration)));
         }
         return Component.text(configuration.title("queue")
-                .replace("{queue}", configuration.message("queue-" + queueKey(state.queue()))));
+                .replace("{queue}", configuration.message(QUEUE_KEY_PREFIX + queueKey(state.queue()))));
     }
 
     private static String shortId(UUID id) {
@@ -357,7 +422,7 @@ final class ReportGuiRenderer {
         return switch (action) {
             case CLAIM -> "claim";
             case AWAIT_REVIEW -> "await-review";
-            case CLOSE -> "close";
+            case CLOSE -> CLOSE_KEY;
             case NO_VIOLATION -> "no-violation";
         };
     }
