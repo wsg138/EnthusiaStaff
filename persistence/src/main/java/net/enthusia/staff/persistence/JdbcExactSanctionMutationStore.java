@@ -637,22 +637,26 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                 while (result.next()) {
                     UUID currentId = UuidBytes.fromBytes(result.getBytes("sanction_id"));
                     if (currentId.equals(sanctionId)) {
-                        target = new SanctionRow(
-                                currentId,
-                                new CaseId(result.getString(CASE_ID_COLUMN)),
-                                UuidBytes.fromBytes(result.getBytes("target_id")),
-                                SanctionStatus.valueOf(result.getString("status")),
-                                result.getTimestamp("issued_at").toInstant(),
-                                optionalInstant(result, "expiration_at"),
-                                optionalInstant(result, "ended_at"),
-                                result.getLong("revision"),
-                                issuerRank(result.getString("actor_rank"))
-                        );
+                        target = readSanctionRow(result, currentId);
                     }
                 }
                 return target;
             }
         }
+    }
+
+    private static SanctionRow readSanctionRow(ResultSet result, UUID sanctionId) throws SQLException {
+        return new SanctionRow(
+                sanctionId,
+                new CaseId(result.getString(CASE_ID_COLUMN)),
+                UuidBytes.fromBytes(result.getBytes("target_id")),
+                SanctionStatus.valueOf(result.getString("status")),
+                result.getTimestamp("issued_at").toInstant(),
+                optionalInstant(result, "expiration_at"),
+                optionalInstant(result, "ended_at"),
+                result.getLong("revision"),
+                issuerRank(result.getString("actor_rank"))
+        );
     }
 
     private static StaffRank issuerRank(String stored) {

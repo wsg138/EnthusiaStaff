@@ -40,14 +40,15 @@ def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
     headers: list[str] | None = None
     packages: dict[str, dict[str, str]] = {}
     for line in registry.splitlines():
-        if not line.startswith('|'):
+        cells = _table_cells(line)
+        if cells is None:
             continue
-        cells = [_plain_field(value) for value in line.strip().strip('|').split('|')]
         if cells and cells[0] == 'ID':
             headers = cells
             continue
-        if headers is None or not cells or not re.fullmatch(r'ES-[A-Z]+\d+', cells[0]):
+        if not _is_package_row(headers, cells):
             continue
+        assert headers is not None
         fields = {
             header: value
             for header, value in zip(headers, cells)
@@ -56,6 +57,16 @@ def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
         package_id = cells[0]
         packages[package_id] = fields
     return packages
+
+
+def _table_cells(line: str) -> list[str] | None:
+    if not line.startswith('|'):
+        return None
+    return [_plain_field(value) for value in line.strip().strip('|').split('|')]
+
+
+def _is_package_row(headers: list[str] | None, cells: list[str]) -> bool:
+    return headers is not None and bool(cells) and re.fullmatch(r'ES-[A-Z]+\d+', cells[0]) is not None
 
 
 def validate_registry_routing(
@@ -242,21 +253,32 @@ def _legacy_policy_errors(root: Path) -> list[str]:
         r'Isolated PR \|',
     ]
     for path in root.rglob('*'):
-        if not path.is_file() or path.suffix not in {'.md', '.txt', '.py'}:
-            continue
-        relative = path.relative_to(root).as_posix()
-        if relative == 'tools/component-sync/validate_orchestration.py':
-            continue
-        text = path.read_text(encoding='utf-8')
-        for pattern in legacy_patterns:
-            if re.search(pattern, text, flags=re.I) and relative not in negative_policy_docs:
-                errors.append(f'legacy component-branch requirement in {relative}: {pattern}')
+        errors.extend(_legacy_file_errors(path, root, negative_policy_docs, legacy_patterns))
 
     if (root / 'tools/component-sync/core-allowlist.txt').exists():
         errors.append('component-only core allowlist must not exist')
     if (root / 'COMPONENT-METADATA.md').exists():
         errors.append('root component metadata from abandoned branch design must not exist')
     return errors
+
+
+def _legacy_file_errors(
+    path: Path,
+    root: Path,
+    negative_policy_docs: set[str],
+    legacy_patterns: list[str],
+) -> list[str]:
+    if not path.is_file() or path.suffix not in {'.md', '.txt', '.py'}:
+        return []
+    relative = path.relative_to(root).as_posix()
+    if relative == 'tools/component-sync/validate_orchestration.py' or relative in negative_policy_docs:
+        return []
+    text = path.read_text(encoding='utf-8')
+    return [
+        f'legacy component-branch requirement in {relative}: {pattern}'
+        for pattern in legacy_patterns
+        if re.search(pattern, text, flags=re.I)
+    ]
 
 
 def validate(root: Path = ROOT) -> tuple[list[str], str | None, int, int]:
