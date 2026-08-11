@@ -71,10 +71,10 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             sender.sendMessage(Component.text("You do not have punishment modification authority."));
             return true;
         }
-        String lowerLabel = label.toLowerCase(Locale.ROOT);
-        boolean central = lowerLabel.equals("removepunishment");
+        String route = CommandRoute.canonicalName(command);
+        boolean central = route.equals("removepunishment");
         if (arguments.length == 1 && sender instanceof Player player) {
-            gui.open(player, arguments[0], lowerLabel);
+            gui.open(player, arguments[0], route);
             return true;
         }
         int minimum = central ? 3 : 2;
@@ -86,7 +86,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         }
         SanctionChangeAction action = central
                 ? SanctionChangeAccess.parseAction(arguments[1])
-                : SanctionChangeAccess.aliasAction(lowerLabel);
+                : SanctionChangeAccess.aliasAction(route);
         if (action == null) {
             sender.sendMessage(Component.text("Unknown sanction change action."));
             return true;
@@ -129,14 +129,14 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         }
         Optional<Instant> requestedExpiration = expiration;
         submit(sender, () -> apply(
-                sender, lowerLabel, arguments[0], action, requestedExpiration, reason, actor
+                sender, route, arguments[0], action, requestedExpiration, reason, actor
         ));
         return true;
     }
 
     private void apply(
             CommandSender sender,
-            String label,
+            String route,
             String target,
             SanctionChangeAction action,
             Optional<Instant> expiration,
@@ -150,7 +150,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             send(sender, "Moderation storage is not ready; no change was made.");
             return;
         }
-        Set<SanctionType> types = SanctionChangeAccess.aliasTypes(label);
+        Set<SanctionType> types = SanctionChangeAccess.aliasTypes(route);
         CaseId caseId = resolveCase(target, types, directory, lookup);
         if (caseId == null) {
             send(sender, "No matching case was found for that player, UUID, or case ID.");
@@ -212,8 +212,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             String[] arguments
     ) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        String route = CommandRoute.canonicalName(command);
         if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)
-                || !alias.equalsIgnoreCase("removepunishment") || arguments.length != 2) {
+                || !route.equals("removepunishment") || arguments.length != 2) {
             return List.of();
         }
         String prefix = arguments[1].toLowerCase(Locale.ROOT);

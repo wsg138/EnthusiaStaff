@@ -43,7 +43,7 @@ final class InventoryWorkflowWiringTest {
 
         assertTrue(source.contains("PERMISSION = \"" + VIEW_PERMISSION + "\""));
         assertTrue(source.contains("PlayerIdentity target = loaded.find(targetInput).orElse(null);"));
-        assertTrue(source.contains("label.equalsIgnoreCase(\"endersee\")"));
+        assertTrue(source.contains("CommandRoute.canonicalName(command).equals(\"endersee\")"));
         assertTrue(source.contains("viewer.getScheduler().execute(plugin, () -> inventories.open("));
         assertFalse(source.contains("Bukkit.getOfflinePlayer("));
     }
