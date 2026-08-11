@@ -505,6 +505,9 @@ public final class PunishmentRequestAlertWorker {
                         now,
                         settings.maximumAttempts()
                 );
+                default -> throw new IllegalStateException(
+                        "Unsupported punishment request alert outcome: " + outcome.kind()
+                );
             }
         } catch (RuntimeException exception) {
             // Never issue a competing outcome. The fenced lease is left for normal recovery.
