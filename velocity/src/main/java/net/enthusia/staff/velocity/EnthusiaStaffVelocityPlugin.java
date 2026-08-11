@@ -1318,7 +1318,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    private final class AltCommand implements SimpleCommand {
+    final class AltCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
@@ -1404,7 +1404,7 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    private final class StatusCommand implements SimpleCommand {
+    final class StatusCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();

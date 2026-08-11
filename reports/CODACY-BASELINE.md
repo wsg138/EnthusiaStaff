@@ -928,20 +928,57 @@ ignoring findings or excluding first-party source:
 | #120 | Paper and orchestration maintainability | 402 |
 | #121 | persistence state transitions | 377 |
 | #122 | registered command-route integrity | 376 |
+| #123 | fail-closed freeze verification visibility | 376 |
+| #124 | Velocity runtime and administration boundaries (active branch) | 346 |
 
 PR #120 passed with zero new findings and reduced the active inventory by 38.
 PR #121 passed with zero new findings and reduced it by 25; its PR mapper showed
 three fixes, while the complete branch inventory captured the full reduction.
-PR #122 passed with zero new findings and one fixed finding. All three exact
-heads passed the Java 21 build, hosted coverage, Sentinel artifact validation,
-and private Pi staging. CodeRabbit was rate-limited on PRs #120 and #121; its
-PR #122 check completed without producing a review or inline comment. No
-CodeRabbit approval is claimed.
+PR #122 passed with zero new findings and one fixed finding. PR #123 introduced
+zero findings, retained the 376-finding inventory, reached 96% diff coverage,
+and passed the exact-head Pi staging gate. CodeRabbit was rate-limited on PRs
+#120, #121, #123, and #124; PR #122 completed without producing a review or
+inline comment. No CodeRabbit approval is claimed.
 
 The checked-in PMD ruleset still targets the hosted PMD 6 runner and includes a
 custom XPath rule class that PMD 7 cannot load. Local PMD 7 checks therefore run
 the exact applicable hosted rule IDs on changed files, while Codacy Cloud
 remains authoritative for the complete repository result.
+
+## 2026-08-11 Velocity runtime boundaries checkpoint
+
+Merged PR #123 advanced `main` to
+`f0f82ce94b81502bc898de545a1d47b65d31bd31`. Codacy-analyzed PR #124
+implementation head `ee260dfe93d25086c3d415631c0fb563d8075cac` decomposes the Velocity bootstrap,
+login and server-switch safety, alt operations, and website, migration,
+cutover, and Discord administration paths. Permission-aware completion routing
+is isolated behind direct tests.
+
+Codacy Cloud reports zero new findings. Its pull-request mapper associates six
+fixes with the diff, while the complete branch inventory records the
+authoritative reduction from 376 to 346 active warnings:
+
+| Category | `main` | PR #124 branch | Change |
+| --- | ---: | ---: | ---: |
+| Complexity | 253 | 229 | -24 |
+| Error-prone | 104 | 98 | -6 |
+| Performance | 19 | 19 | 0 |
+| **Total** | **376** | **346** | **-30** |
+
+The branch removes seven method-length, nine cyclomatic-complexity, eight NPath,
+and six literal-condition findings. The existing Velocity composition-root
+file-length finding remains visible; no issue, rule, or first-party source path
+is suppressed. The current CLI response still does not expose a repository
+letter grade, so none is claimed.
+
+Java 21 clean build completed all 46 configured non-Testcontainers tasks. The
+Velocity tests pass, including direct permission, completion, unavailable-
+dependency, and invalid-alt route coverage.
+PMD 7.26.0 and threshold-matched Lizard 1.23.0 report zero applicable findings
+in changed Java. The full Docker-backed MariaDB Testcontainers run passed 47
+suites and 180 tests with zero failures, errors, or skips. Hosted coverage,
+Sentinel, and exact-head Pi results remain merge gates on the documentation
+head until they complete.
 
 ## Remediation order
 
