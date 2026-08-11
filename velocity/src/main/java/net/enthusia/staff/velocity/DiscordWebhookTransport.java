@@ -1,7 +1,6 @@
 package net.enthusia.staff.velocity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -54,9 +53,7 @@ interface DiscordWebhookTransport {
             try {
                 ObjectNode body = json.createObjectNode();
                 body.put("content", content);
-                ObjectNode allowedMentions = body.putObject("allowed_mentions");
-                ArrayNode parse = allowedMentions.putArray("parse");
-                parse.removeAll();
+                body.putObject("allowed_mentions").putArray("parse");
                 HttpRequest request = HttpRequest.newBuilder(route.endpoint())
                         .timeout(requestTimeout)
                         .header("Content-Type", "application/json")
