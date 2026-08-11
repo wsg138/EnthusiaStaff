@@ -30,6 +30,12 @@ interface DiscordWebhookTransport {
     }
 
     final class Jdk implements DiscordWebhookTransport {
+        private static final int HTTP_SUCCESS_MINIMUM = 200;
+        private static final int HTTP_REDIRECT_MINIMUM = 300;
+        private static final int HTTP_CLIENT_ERROR_MINIMUM = 400;
+        private static final int HTTP_TOO_MANY_REQUESTS = 429;
+        private static final int HTTP_SERVER_ERROR_MINIMUM = 500;
+
         @FunctionalInterface
         interface HttpExchange {
             int post(URI endpoint, Duration timeout, String body) throws IOException, InterruptedException;
@@ -77,19 +83,19 @@ interface DiscordWebhookTransport {
         }
 
         static Delivery classify(int statusCode) {
-            if (statusCode >= 200 && statusCode < 300) {
+            if (statusCode >= HTTP_SUCCESS_MINIMUM && statusCode < HTTP_REDIRECT_MINIMUM) {
                 return Delivery.delivered();
             }
-            if (statusCode >= 300 && statusCode < 400) {
+            if (statusCode >= HTTP_REDIRECT_MINIMUM && statusCode < HTTP_CLIENT_ERROR_MINIMUM) {
                 return Delivery.failed("HTTP_REDIRECT_REJECTED");
             }
-            if (statusCode == 429) {
+            if (statusCode == HTTP_TOO_MANY_REQUESTS) {
                 return Delivery.failed("HTTP_429");
             }
-            if (statusCode >= 500) {
+            if (statusCode >= HTTP_SERVER_ERROR_MINIMUM) {
                 return Delivery.failed("HTTP_5XX");
             }
-            if (statusCode >= 400) {
+            if (statusCode >= HTTP_CLIENT_ERROR_MINIMUM) {
                 return Delivery.failed("HTTP_4XX");
             }
             return Delivery.failed("HTTP_INVALID_STATUS");
