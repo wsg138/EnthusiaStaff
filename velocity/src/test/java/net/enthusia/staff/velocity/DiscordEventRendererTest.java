@@ -10,20 +10,23 @@ import net.enthusia.staff.domain.discord.DiscordOutboxMessage;
 import org.junit.jupiter.api.Test;
 
 final class DiscordEventRendererTest {
+    private static final String REPORTS = "reports";
+    private static final String REPORT_CREATED = "REPORT_CREATED";
+
     private final DiscordEventRenderer renderer = new DiscordEventRenderer();
 
     @Test
     void reportRenderingOmitsReporterAndNestedEvidence() {
         String rendered = renderer.render(message(
-                "reports",
-                "REPORT_CREATED",
+                REPORTS,
+                REPORT_CREATED,
                 "{\"reportId\":\"r-1\",\"reporterId\":\"private-reporter\","
                         + "\"targetId\":\"target-1\",\"reasonId\":\"spam\",\"serverId\":\"SMP\","
                         + "\"targetClientEvidence\":{\"client\":\"sensitive\"},"
                         + "\"description\":\"private body\"}"
         ));
 
-        assertTrue(rendered.contains("REPORT_CREATED"));
+        assertTrue(rendered.contains(REPORT_CREATED));
         assertTrue(rendered.contains("reportId=r-1"));
         assertTrue(rendered.contains("targetId=target-1"));
         assertTrue(rendered.contains("reasonId=spam"));
@@ -65,16 +68,16 @@ final class DiscordEventRendererTest {
     void malformedNonObjectAndOversizedPayloadsFailClosed() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> renderer.render(message("reports", "REPORT_CREATED", "not-json"))
+                () -> renderer.render(message(REPORTS, REPORT_CREATED, "not-json"))
         );
         assertThrows(
                 IllegalArgumentException.class,
-                () -> renderer.render(message("reports", "REPORT_CREATED", "[1,2,3]"))
+                () -> renderer.render(message(REPORTS, REPORT_CREATED, "[1,2,3]"))
         );
         String oversized = "{\"reportId\":\"" + "x".repeat(16_500) + "\"}";
         assertThrows(
                 IllegalArgumentException.class,
-                () -> renderer.render(message("reports", "REPORT_CREATED", oversized))
+                () -> renderer.render(message(REPORTS, REPORT_CREATED, oversized))
         );
     }
 
