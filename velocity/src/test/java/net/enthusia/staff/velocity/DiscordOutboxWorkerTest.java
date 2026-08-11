@@ -27,18 +27,21 @@ import org.slf4j.helpers.NOPLogger;
 
 final class DiscordOutboxWorkerTest {
     private static final Instant NOW = Instant.parse("2026-08-10T12:00:00Z");
+    private static final String REPORTS = "reports";
+    private static final String REPORT_CREATED = "REPORT_CREATED";
+    private static final String STAGING_HOST = "discord-staging.example.test";
 
     @Test
     void successfulMessageIsRenderedSentAndCompletedByLeaseOwner() {
         DiscordOutboxMessage message = message(
-                "reports",
-                "REPORT_CREATED",
+                REPORTS,
+                REPORT_CREATED,
                 "{\"reportId\":\"r-1\",\"reporterId\":\"private\",\"targetId\":\"target\"}"
         );
         FakeStore store = new FakeStore(List.of(message));
         AtomicReference<String> sent = new AtomicReference<>();
         DiscordWebhookTransport transport = (route, content) -> {
-            assertEquals("reports", route.destination());
+            assertEquals(REPORTS, route.destination());
             sent.set(content);
             return DiscordWebhookTransport.Delivery.delivered();
         };
@@ -54,7 +57,7 @@ final class DiscordOutboxWorkerTest {
 
     @Test
     void poisonPayloadFailsWithoutCallingTransport() {
-        DiscordOutboxMessage message = message("reports", "REPORT_CREATED", "not-json");
+        DiscordOutboxMessage message = message(REPORTS, REPORT_CREATED, "not-json");
         FakeStore store = new FakeStore(List.of(message));
         AtomicInteger calls = new AtomicInteger();
         DiscordWebhookTransport transport = (route, content) -> {
@@ -86,8 +89,8 @@ final class DiscordOutboxWorkerTest {
 
     @Test
     void circuitOpenedByFirstFailureDefersLaterSameDestinationWithoutAnotherAttempt() {
-        DiscordOutboxMessage first = message("reports", "REPORT_CREATED", "{\"reportId\":\"r-1\"}");
-        DiscordOutboxMessage second = message("reports", "REPORT_CREATED", "{\"reportId\":\"r-2\"}");
+        DiscordOutboxMessage first = message(REPORTS, REPORT_CREATED, "{\"reportId\":\"r-1\"}");
+        DiscordOutboxMessage second = message(REPORTS, REPORT_CREATED, "{\"reportId\":\"r-2\"}");
         FakeStore store = new FakeStore(List.of(first, second));
         Instant openUntil = NOW.plusSeconds(300);
         store.failureOutcome = new DiscordFailureOutcome(false, true, Optional.of(openUntil));
@@ -123,16 +126,16 @@ final class DiscordOutboxWorkerTest {
     }
 
     private static Map<String, DiscordWebhookRoute> routes() {
-        Set<String> hosts = Set.of("discord-staging.example.test");
+        Set<String> hosts = Set.of(STAGING_HOST);
         return Map.of(
                 "punishments", DiscordWebhookRoute.approvedStaging(
-                        "punishments", URI.create("https://discord-staging.example.test/punishments"), hosts),
-                "reports", DiscordWebhookRoute.approvedStaging(
-                        "reports", URI.create("https://discord-staging.example.test/reports"), hosts),
+                        "punishments", URI.create("https://" + STAGING_HOST + "/punishments"), hosts),
+                REPORTS, DiscordWebhookRoute.approvedStaging(
+                        REPORTS, URI.create("https://" + STAGING_HOST + "/reports"), hosts),
                 "logs-staffmode", DiscordWebhookRoute.approvedStaging(
-                        "logs-staffmode", URI.create("https://discord-staging.example.test/staffmode"), hosts),
+                        "logs-staffmode", URI.create("https://" + STAGING_HOST + "/staffmode"), hosts),
                 "alerts", DiscordWebhookRoute.approvedStaging(
-                        "alerts", URI.create("https://discord-staging.example.test/alerts"), hosts)
+                        "alerts", URI.create("https://" + STAGING_HOST + "/alerts"), hosts)
         );
     }
 
