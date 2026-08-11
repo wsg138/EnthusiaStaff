@@ -107,6 +107,16 @@ final class DiscordOutboxWorkerTest {
         assertEquals(openUntil, store.deferredUntil);
     }
 
+    @Test
+    void closeClosesOwnedTransportEvenWithoutScheduledTask() {
+        CloseTrackingTransport transport = new CloseTrackingTransport();
+        DiscordOutboxWorker worker = worker(new FakeStore(List.of()), transport);
+
+        worker.close();
+
+        assertTrue(transport.closed);
+    }
+
     private static DiscordOutboxWorker worker(FakeStore store, DiscordWebhookTransport transport) {
         return new DiscordOutboxWorker(
                 null,
@@ -141,6 +151,20 @@ final class DiscordOutboxWorkerTest {
 
     private static DiscordOutboxMessage message(String destination, String eventType, String payload) {
         return new DiscordOutboxMessage(UUID.randomUUID(), destination, eventType, payload, 0, NOW.minusSeconds(1));
+    }
+
+    private static final class CloseTrackingTransport implements DiscordWebhookTransport, AutoCloseable {
+        private boolean closed;
+
+        @Override
+        public DiscordWebhookTransport.Delivery send(DiscordWebhookRoute route, String content) {
+            return DiscordWebhookTransport.Delivery.delivered();
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
     }
 
     private static final class FakeStore implements DiscordOutboxStore {
