@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 
 record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environment, URI endpoint) {
     private static final Pattern DESTINATION = Pattern.compile("[a-z-]{1,32}");
+    private static final Pattern PRODUCTION_PATH = Pattern.compile("/api/webhooks/[0-9]+/[A-Za-z0-9._-]+");
     private static final Set<String> PRODUCTION_HOSTS = Set.of("discord.com", "discordapp.com");
 
     DiscordWebhookRoute {
@@ -52,7 +53,9 @@ record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environme
                 || endpoint.getUserInfo() != null
                 || endpoint.getFragment() != null
                 || endpoint.getRawQuery() != null) {
-            throw new IllegalArgumentException("Discord webhook routes must be absolute HTTPS endpoints without user info, query, or fragment");
+            throw new IllegalArgumentException(
+                    "Discord webhook routes must be absolute HTTPS endpoints without user info, query, or fragment"
+            );
         }
         if (endpoint.getPort() == 0 || endpoint.getPort() < -1 || endpoint.getPort() > 65_535) {
             throw new IllegalArgumentException("Discord webhook route port is invalid");
@@ -67,8 +70,8 @@ record DiscordWebhookRoute(String destination, DiscordRouteEnvironment environme
         if (endpoint.getPort() != -1 && endpoint.getPort() != 443) {
             throw new IllegalArgumentException("Production Discord webhooks must use the default HTTPS port");
         }
-        String path = endpoint.getPath();
-        if (path == null || !path.startsWith("/api/webhooks/") || path.length() <= "/api/webhooks/".length()) {
+        String path = endpoint.getRawPath();
+        if (path == null || !PRODUCTION_PATH.matcher(path).matches()) {
             throw new IllegalArgumentException("Production Discord webhook path is invalid");
         }
     }
