@@ -25,7 +25,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +54,9 @@ import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.migration.CutoverAssessment;
+import net.enthusia.staff.domain.migration.CutoverEvidence;
+import net.enthusia.staff.domain.migration.DecisionComparison;
 import net.enthusia.staff.domain.migration.FounderOverride;
 import net.enthusia.staff.domain.migration.MigrationMode;
 import net.enthusia.staff.domain.player.PlayerPlatform;
@@ -96,6 +98,28 @@ public final class EnthusiaStaffVelocityPlugin {
             SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
     );
     private static final String CONFIGURATION_RELOAD_ISSUE = "configuration-reload";
+    private static final int INITIAL_BOOTSTRAP_ATTEMPT = 1;
+    private static final int ROOT_OPERATION_INDEX = 0;
+    private static final int SUB_OPERATION_INDEX = 1;
+    private static final int DETAIL_OPERATION_INDEX = 2;
+    private static final int TARGET_INDEX = 3;
+    private static final int CONFIRMATION_INDEX = 4;
+    private static final int SINGLE_OPERATION_ARGUMENT = 1;
+    private static final int MINIMUM_ALT_ARGUMENTS = 4;
+    private static final int WEBSITE_STATUS_ARGUMENTS = 2;
+    private static final int WEBSITE_SHOW_ARGUMENTS = 4;
+    private static final int WEBSITE_MUTATION_ARGUMENTS = 5;
+    private static final int MIGRATION_ARGUMENTS = 2;
+    private static final int MAX_REJECTED_ROWS_SHOWN = 20;
+    private static final int CUTOVER_MINIMUM_ARGUMENTS = 2;
+    private static final int CUTOVER_ACTIVATION_ARGUMENTS = 3;
+    private static final int CUTOVER_REASON_MINIMUM_ARGUMENTS = 4;
+    private static final int DISCORD_STATUS_ARGUMENTS = 2;
+    private static final int DISCORD_RETRY_ARGUMENTS = 4;
+    private static final int DISCORD_RETRY_LIMIT = 500;
+    private static final Set<String> DISCORD_DESTINATIONS =
+            Set.of("punishments", "reports", "logs-staffmode", "alerts");
+    private static final UUID CONSOLE_ACTOR_ID = new UUID(0L, 0L);
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -139,10 +163,23 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     @Subscribe
-    @SuppressWarnings({"PMD.GuardLogStatement", "PMD.AvoidLiteralsInIfCondition"})
-    // SLF4J placeholders defer formatting; attempt one is the only recovery-log threshold.
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
+        registerCommands();
+        health.update(OperationalMode.BOOTSTRAP, Map.of("bootstrap", "MariaDB initialization is in progress"));
+        VelocityBootstrapCoordinator coordinator = new VelocityBootstrapCoordinator(
+                this::submitWorker,
+                this::scheduleBootstrapRetry,
+                this::initializeStorageAttempt,
+                new BootstrapListener(),
+                shuttingDown::get,
+                VelocityBootstrapCoordinator.RetryPolicy.defaults()
+        );
+        bootstrapCoordinator = coordinator;
+        coordinator.start();
+    }
+
+    private void registerCommands() {
         proxy.getCommandManager().register(
                 proxy.getCommandManager().metaBuilder("estaff").plugin(this).build(),
                 new StatusCommand()
@@ -155,73 +192,67 @@ public final class EnthusiaStaffVelocityPlugin {
                 proxy.getCommandManager().metaBuilder("alt").plugin(this).build(),
                 new AltCommand()
         );
-        health.update(OperationalMode.BOOTSTRAP, Map.of("bootstrap", "MariaDB initialization is in progress"));
-        VelocityBootstrapCoordinator coordinator = new VelocityBootstrapCoordinator(
-                this::submitWorker,
-                this::scheduleBootstrapRetry,
-                this::initializeStorageAttempt,
-                new VelocityBootstrapCoordinator.Listener() {
-                    @Override
-                    public void attempting(int attempt, int maximumAttempts) {
-                        authorityMode.set(OperationalMode.BOOTSTRAP);
-                        health.update(OperationalMode.BOOTSTRAP, Map.of(
-                                "mariadb-attempt",
-                                "Velocity storage startup attempt " + attempt + " of " + maximumAttempts
-                                        + " is in progress"
-                        ));
-                    }
+    }
 
-                    @Override
-                    public void retrying(
-                            int nextAttempt,
-                            int maximumAttempts,
-                            long delayMillis,
-                            RuntimeException failure
-                    ) {
-                        health.update(OperationalMode.BOOTSTRAP, Map.of(
-                                "mariadb-retrying",
-                                "Velocity storage startup attempt " + nextAttempt + " of " + maximumAttempts
-                                        + " is scheduled after " + delayMillis + " ms"
-                        ));
-                        logger.warn(
-                                "Velocity storage startup failed; bounded retry {} of {} is scheduled after {} ms ({})",
-                                nextAttempt,
-                                maximumAttempts,
-                                delayMillis,
-                                failure.getClass().getSimpleName()
-                        );
-                    }
+    private final class BootstrapListener implements VelocityBootstrapCoordinator.Listener {
+        @Override
+        public void attempting(int attempt, int maximumAttempts) {
+            authorityMode.set(OperationalMode.BOOTSTRAP);
+            health.update(OperationalMode.BOOTSTRAP, Map.of(
+                    "mariadb-attempt",
+                    "Velocity storage startup attempt " + attempt + " of " + maximumAttempts + " is in progress"
+            ));
+        }
 
-                    @Override
-                    public void recovered(int attempts) {
-                        if (attempts > 1) {
-                            logger.info("Velocity storage recovered on bounded attempt {}", attempts);
-                        }
-                    }
+        @Override
+        public void retrying(
+                int nextAttempt,
+                int maximumAttempts,
+                long delayMillis,
+                RuntimeException failure
+        ) {
+            health.update(OperationalMode.BOOTSTRAP, Map.of(
+                    "mariadb-retrying",
+                    "Velocity storage startup attempt " + nextAttempt + " of " + maximumAttempts
+                            + " is scheduled after " + delayMillis + " ms"
+            ));
+            if (logger.isWarnEnabled()) {
+                logger.warn(
+                        "Velocity storage startup failed; bounded retry {} of {} is scheduled after {} ms ({})",
+                        nextAttempt,
+                        maximumAttempts,
+                        delayMillis,
+                        failure.getClass().getSimpleName()
+                );
+            }
+        }
 
-                    @Override
-                    public void exhausted(int attempts, RuntimeException failure) {
-                        authorityMode.set(OperationalMode.DEGRADED);
-                        String component = failure instanceof VelocityBootstrapCoordinator.PermanentFailure
-                                ? "configuration-or-cutover"
-                                : "mariadb";
-                        health.update(OperationalMode.DEGRADED, Map.of(
-                                component,
-                                "Velocity storage startup is unavailable after " + attempts
-                                        + " attempt(s); use /estaff reload after correcting the cause"
-                        ));
-                        logger.error(
-                                "Velocity storage startup stopped after {} attempt(s) ({})",
-                                attempts,
-                                failure.getClass().getSimpleName()
-                        );
-                    }
-                },
-                shuttingDown::get,
-                VelocityBootstrapCoordinator.RetryPolicy.defaults()
-        );
-        bootstrapCoordinator = coordinator;
-        coordinator.start();
+        @Override
+        public void recovered(int attempts) {
+            if (attempts > INITIAL_BOOTSTRAP_ATTEMPT && logger.isInfoEnabled()) {
+                logger.info("Velocity storage recovered on bounded attempt {}", attempts);
+            }
+        }
+
+        @Override
+        public void exhausted(int attempts, RuntimeException failure) {
+            authorityMode.set(OperationalMode.DEGRADED);
+            String component = failure instanceof VelocityBootstrapCoordinator.PermanentFailure
+                    ? "configuration-or-cutover"
+                    : "mariadb";
+            health.update(OperationalMode.DEGRADED, Map.of(
+                    component,
+                    "Velocity storage startup is unavailable after " + attempts
+                            + " attempt(s); use /estaff reload after correcting the cause"
+            ));
+            if (logger.isErrorEnabled()) {
+                logger.error(
+                        "Velocity storage startup stopped after {} attempt(s) ({})",
+                        attempts,
+                        failure.getClass().getSimpleName()
+                );
+            }
+        }
     }
 
     @Subscribe
@@ -873,8 +904,20 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private void enforceLogin(LoginEvent event) {
         OperationalMode current = authorityMode.get();
+        if (!recordPlayerAndNetworkIdentitySafely(event, current)) {
+            return;
+        }
+        if (current != OperationalMode.ACTIVE) {
+            enforceInactiveLoginPolicy(event);
+            return;
+        }
+        enforceActiveLoginPolicy(event);
+    }
+
+    private boolean recordPlayerAndNetworkIdentitySafely(LoginEvent event, OperationalMode current) {
         try {
             recordPlayerAndNetworkIdentity(event, current);
+            return true;
         } catch (RuntimeException exception) {
             health.update(OperationalMode.DEGRADED, Map.of(
                     "network-identity", "A protected identity observation failed; sensitive values were not logged"
@@ -883,15 +926,19 @@ public final class EnthusiaStaffVelocityPlugin {
             if (current == OperationalMode.ACTIVE) {
                 activeAuthorityObserved = true;
                 denyUnavailable(event);
-                return;
+                return false;
             }
+            return true;
         }
-        if (current != OperationalMode.ACTIVE) {
-            if (activeAuthorityObserved && failClosedConfigured()) {
-                denyUnavailable(event);
-            }
-            return;
+    }
+
+    private void enforceInactiveLoginPolicy(LoginEvent event) {
+        if (activeAuthorityObserved && failClosedConfigured()) {
+            denyUnavailable(event);
         }
+    }
+
+    private void enforceActiveLoginPolicy(LoginEvent event) {
         SanctionLookup lookup = sanctionLookup;
         if (lookup == null) {
             denyUnavailable(event);
@@ -946,26 +993,42 @@ public final class EnthusiaStaffVelocityPlugin {
     private Map<String, String> operationalIssues(OperationalMode mode) {
         Map<String, String> issues = new LinkedHashMap<>();
         VelocityConfiguration loaded = configuration;
+        addChannelIssue(issues, loaded);
+        addNetworkIdentityIssue(issues, loaded);
+        addDiscordIssue(issues, loaded);
+        addWebsiteIssue(issues, loaded);
+        if (mode != OperationalMode.ACTIVE) {
+            issues.put("authority", "LiteBans remains authoritative in " + mode);
+        }
+        return Map.copyOf(issues);
+    }
+
+    private void addChannelIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         PersistentChannelServer channel = channelServer;
         if (loaded == null || channel == null
                 || !channel.connectedServers().containsAll(loaded.backendSecretEnvironments().keySet())) {
             issues.put("channel", "Every configured Paper backend is not authenticated and connected");
         }
+    }
+
+    private void addNetworkIdentityIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.networkIdentityEnabled() || networkIdentityStore == null) {
             issues.put("network-identity", "Protected network identity matching is disabled");
         }
+    }
+
+    private void addDiscordIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.discordEnabled() || discordOutboxWorker == null) {
             issues.put("discord", "Durable webhook delivery is disabled; queued events remain in MariaDB");
         }
+    }
+
+    private void addWebsiteIssue(Map<String, String> issues, VelocityConfiguration loaded) {
         if (loaded == null || !loaded.websiteApiEnabled()) {
             issues.put("website-api", "The private punishment and appeal bridge is disabled");
         } else if (websiteApiServer == null || websiteModerationStore == null) {
             issues.put("website-api", "The configured private punishment and appeal bridge failed to start");
         }
-        if (mode != OperationalMode.ACTIVE) {
-            issues.put("authority", "LiteBans remains authoritative in " + mode);
-        }
-        return Map.copyOf(issues);
     }
 
     private void denyUnavailable(LoginEvent event) {
@@ -980,45 +1043,57 @@ public final class EnthusiaStaffVelocityPlugin {
         InventoryJournalStore inventories = inventoryJournalStore;
         EconomyJournalStore economies = economyJournalStore;
         if (inventories == null || economies == null) {
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Asset safety status is temporarily unavailable.");
-            }
+            denyServerSwitchWhenActive(event, "Asset safety status is temporarily unavailable.");
             return;
         }
+        if (!assetFencesAllowSwitch(event, inventories, economies) || event.getPreviousServer() == null) {
+            return;
+        }
+        enforceModerationSwitchSafety(event);
+    }
+
+    private boolean assetFencesAllowSwitch(
+            ServerPreConnectEvent event,
+            InventoryJournalStore inventories,
+            EconomyJournalStore economies
+    ) {
         String requested = event.getOriginalServer().getServerInfo().getName();
         try {
             Optional<String> owningServer = inventories.lockedOwningServer(
                     event.getPlayer().getUniqueId(),
                     Clock.systemUTC().instant()
             );
-            if (owningServer.isPresent() && !owningServer.orElseThrow().equalsIgnoreCase(requested)) {
-                denyServerSwitch(event, "A pending inventory operation must finish on "
-                        + owningServer.orElseThrow() + '.');
-                return;
+            if (denyOwnerMismatch(event, owningServer, requested, "inventory")) {
+                return false;
             }
             Optional<String> economyOwner = economies.lockedOwningServer(
                     event.getPlayer().getUniqueId()
             );
-            if (economyOwner.isPresent() && !economyOwner.orElseThrow().equalsIgnoreCase(requested)) {
-                denyServerSwitch(event, "A pending economy operation must finish on "
-                        + economyOwner.orElseThrow() + '.');
-                return;
-            }
+            return !denyOwnerMismatch(event, economyOwner, requested, "economy");
         } catch (RuntimeException exception) {
             logger.error("Asset fence lookup failed during server connection", exception);
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Asset safety status could not be verified.");
-            }
-            return;
+            denyServerSwitchWhenActive(event, "Asset safety status could not be verified.");
+            return false;
         }
-        if (event.getPreviousServer() == null) {
-            return;
+    }
+
+    private static boolean denyOwnerMismatch(
+            ServerPreConnectEvent event,
+            Optional<String> owner,
+            String requested,
+            String assetType
+    ) {
+        if (owner.isEmpty() || owner.orElseThrow().equalsIgnoreCase(requested)) {
+            return false;
         }
+        denyServerSwitch(event, "A pending " + assetType + " operation must finish on " + owner.orElseThrow() + '.');
+        return true;
+    }
+
+    private void enforceModerationSwitchSafety(ServerPreConnectEvent event) {
         FreezeStore store = freezeStore;
         if (store == null) {
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Server switching is unavailable while moderation status is verified.");
-            }
+            denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
             return;
         }
         try {
@@ -1032,9 +1107,13 @@ public final class EnthusiaStaffVelocityPlugin {
             }
         } catch (RuntimeException exception) {
             logger.error("Moderation safety lookup failed during server switch", exception);
-            if (authorityMode.get() == OperationalMode.ACTIVE) {
-                denyServerSwitch(event, "Server switching is unavailable while moderation status is verified.");
-            }
+            denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
+        }
+    }
+
+    private void denyServerSwitchWhenActive(ServerPreConnectEvent event, String message) {
+        if (authorityMode.get() == OperationalMode.ACTIVE) {
+            denyServerSwitch(event, message);
         }
     }
 
@@ -1110,7 +1189,7 @@ public final class EnthusiaStaffVelocityPlugin {
             source.sendMessage(Component.text("You do not have permission to reload EnthusiaStaff."));
             return;
         }
-        if (arguments.length != 1) {
+        if (arguments.length != SINGLE_OPERATION_ARGUMENT) {
             source.sendMessage(Component.text("Usage: /estaff reload"));
             return;
         }
@@ -1194,12 +1273,18 @@ public final class EnthusiaStaffVelocityPlugin {
         health.updateIssue(component, reason);
     }
 
+    private static String normalizedArgument(String[] arguments, int index) {
+        return index < arguments.length
+                ? arguments[index].toLowerCase(java.util.Locale.ROOT)
+                : "";
+    }
+
     private final class AltsCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
             String[] arguments = invocation.arguments();
-            if (arguments.length != 1) {
+            if (arguments.length != SINGLE_OPERATION_ARGUMENT) {
                 source.sendMessage(Component.text("Usage: /alts <player>"));
                 return;
             }
@@ -1233,40 +1318,30 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    private final class AltCommand implements SimpleCommand {
+    final class AltCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
             String[] arguments = invocation.arguments();
-            if (arguments.length < 4) {
+            if (arguments.length < MINIMUM_ALT_ARGUMENTS) {
                 source.sendMessage(Component.text(
                         "Usage: /alt <link|approve|household|notrelated|unlink|reopen> <player1> <player2> <reason>"
                 ));
                 return;
             }
-            String operation = arguments[0].toLowerCase(java.util.Locale.ROOT);
-            if (operation.equals("reopen") && !source.hasPermission("enthusiastaff.alts.reopen")) {
-                source.sendMessage(Component.text("Admin permission is required to reopen a not-related decision."));
+            Optional<AltOperation> parsed = AltOperation.parse(normalizedArgument(arguments, ROOT_OPERATION_INDEX));
+            if (parsed.isEmpty()) {
+                source.sendMessage(Component.text("Unknown alt operation."));
                 return;
             }
-            AltRelationshipState state = switch (operation) {
-                case "link" -> AltRelationshipState.CONFIRMED_ALT;
-                case "approve" -> AltRelationshipState.APPROVED_ALT;
-                case "household" -> AltRelationshipState.SHARED_HOUSEHOLD;
-                case "notrelated" -> AltRelationshipState.NOT_RELATED;
-                case "unlink" -> AltRelationshipState.LOW_CONFIDENCE;
-                case "reopen" -> null;
-                default -> {
-                    source.sendMessage(Component.text("Unknown alt operation."));
-                    yield null;
-                }
-            };
-            if (state == null && !operation.equals("reopen")) {
+            AltOperation operation = parsed.orElseThrow();
+            if (operation == AltOperation.REOPEN && !source.hasPermission("enthusiastaff.alts.reopen")) {
+                source.sendMessage(Component.text("Admin permission is required to reopen a not-related decision."));
                 return;
             }
             String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
             submitAltTask(source, () -> changeRelationship(
-                    source, operation, state, arguments[1], arguments[2], reason
+                    source, operation, arguments[1], arguments[2], reason
             ));
         }
 
@@ -1285,8 +1360,7 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private void changeRelationship(
             CommandSource source,
-            String operation,
-            AltRelationshipState state,
+            AltOperation operation,
             String firstInput,
             String secondInput,
             String reason
@@ -1304,10 +1378,11 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         UUID actorId = source instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
-        boolean changed = operation.equals("reopen")
+        boolean changed = operation == AltOperation.REOPEN
                 ? store.reopen(first.playerId(), second.playerId(), actorId, Clock.systemUTC().instant(), reason)
                 : store.setRelationship(
-                        first.playerId(), second.playerId(), state, actorId, Clock.systemUTC().instant(), reason
+                        first.playerId(), second.playerId(), operation.relationshipState(),
+                        actorId, Clock.systemUTC().instant(), reason
                 );
         source.sendMessage(Component.text(changed
                 ? "Alt relationship change committed and audited."
@@ -1329,31 +1404,22 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    private final class StatusCommand implements SimpleCommand {
+    final class StatusCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
             String[] arguments = invocation.arguments();
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("reload")) {
-                executeReload(source, arguments);
-                return;
+            switch (normalizedArgument(arguments, ROOT_OPERATION_INDEX)) {
+                case "reload" -> executeReload(source, arguments);
+                case "migration" -> executeMigration(source, arguments);
+                case "cutover" -> executeCutover(source, arguments);
+                case "discord" -> executeDiscord(source, arguments);
+                case "website" -> executeWebsite(source, arguments);
+                default -> showStatus(source);
             }
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("migration")) {
-                executeMigration(source, arguments);
-                return;
-            }
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("cutover")) {
-                executeCutover(source, arguments);
-                return;
-            }
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("discord")) {
-                executeDiscord(source, arguments);
-                return;
-            }
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("website")) {
-                executeWebsite(source, arguments);
-                return;
-            }
+        }
+
+        private void showStatus(CommandSource source) {
             VelocityRuntimeHealth.Snapshot snapshot = health.snapshot();
             source.sendMessage(Component.text("EnthusiaStaff mode: " + snapshot.mode()));
             VelocityBootstrapCoordinator bootstrap = bootstrapCoordinator;
@@ -1370,68 +1436,16 @@ public final class EnthusiaStaffVelocityPlugin {
 
         @Override
         public List<String> suggest(Invocation invocation) {
-            String[] arguments = invocation.arguments();
-            if (arguments.length <= 1) {
-                List<String> suggestions = new ArrayList<>(List.of("status", "verify"));
-                if (sourceHas(invocation.source(), "enthusiastaff.reload")) {
-                    suggestions.add("reload");
-                }
-                if (sourceHas(invocation.source(), "enthusiastaff.migration")) {
-                    suggestions.add("migration");
-                }
-                if (sourceHas(invocation.source(), "enthusiastaff.cutover")) {
-                    suggestions.add("cutover");
-                }
-                if (sourceHas(invocation.source(), "enthusiastaff.discord.manage")) {
-                    suggestions.add("discord");
-                }
-                if (sourceHas(invocation.source(), "enthusiastaff.website.manage")) {
-                    suggestions.add("website");
-                }
-                return List.copyOf(suggestions);
-            }
-            if (arguments.length == 2 && arguments[0].equalsIgnoreCase("migration")) {
-                return sourceHas(invocation.source(), "enthusiastaff.migration")
-                        ? List.of("inspect", "dry-run", "import", "shadow", "final")
-                        : List.of();
-            }
-            if (arguments.length == 2 && arguments[0].equalsIgnoreCase("cutover")) {
-                if (!sourceHas(invocation.source(), "enthusiastaff.cutover")) {
-                    return List.of();
-                }
-                return sourceHas(invocation.source(), "enthusiastaff.cutover.founder")
-                        ? List.of("status", "maintenance", "abort", "freeze", "activate", "override")
-                        : List.of("status", "maintenance", "activate");
-            }
-            if (arguments.length == 2 && arguments[0].equalsIgnoreCase("discord")) {
-                return sourceHas(invocation.source(), "enthusiastaff.discord.manage")
-                        ? List.of("status", "retry")
-                        : List.of();
-            }
-            if (arguments.length == 3 && arguments[0].equalsIgnoreCase("discord")
-                    && arguments[1].equalsIgnoreCase("retry")) {
-                return sourceHas(invocation.source(), "enthusiastaff.discord.manage")
-                        ? List.of("punishments", "reports", "logs-staffmode", "alerts")
-                        : List.of();
-            }
-            if (arguments.length == 2 && arguments[0].equalsIgnoreCase("website")) {
-                return sourceHas(invocation.source(), "enthusiastaff.website.manage")
-                        ? List.of("status", "code")
-                        : List.of();
-            }
-            if (arguments.length == 3 && arguments[0].equalsIgnoreCase("website")
-                    && arguments[1].equalsIgnoreCase("code")) {
-                return sourceHas(invocation.source(), "enthusiastaff.website.manage")
-                        ? List.of("show", "rotate", "revoke")
-                        : List.of();
-            }
-            return List.of();
+            return VelocityStatusSuggestions.suggest(
+                    invocation.arguments(),
+                    invocation.source()::hasPermission
+            );
         }
 
         @Override
         public boolean hasPermission(Invocation invocation) {
             String[] arguments = invocation.arguments();
-            if (arguments.length > 0 && arguments[0].equalsIgnoreCase("reload")) {
+            if (normalizedArgument(arguments, ROOT_OPERATION_INDEX).equals("reload")) {
                 return invocation.source().hasPermission("enthusiastaff.reload");
             }
             return invocation.source().hasPermission("enthusiastaff.status");
@@ -1442,22 +1456,15 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("You do not have permission to manage website bindings."));
                 return;
             }
-            VelocityConfiguration loaded = configuration;
-            WebsiteModerationStore store = websiteModerationStore;
-            if (arguments.length == 2 && arguments[1].equalsIgnoreCase("status")) {
-                source.sendMessage(Component.text(
-                        loaded != null && loaded.websiteApiEnabled() && websiteApiServer != null
-                                ? "Website API: LISTENING on loopback "
-                                + loaded.websiteApiBindAddress() + ':' + loaded.websiteApiPort()
-                                : "Website API: DISABLED or unavailable"
-                ));
+            if (showWebsiteStatusWhenRequested(source, arguments)) {
                 return;
             }
+            WebsiteModerationStore store = websiteModerationStore;
             if (store == null) {
                 source.sendMessage(Component.text("The website API store is not available."));
                 return;
             }
-            if (arguments.length < 4 || !arguments[1].equalsIgnoreCase("code")) {
+            if (!isWebsiteCodeCommand(arguments)) {
                 source.sendMessage(Component.text(
                         "Usage: /estaff website status | /estaff website code "
                                 + "<show|rotate|revoke> <case|punishment-id> [confirmation]"
@@ -1470,50 +1477,129 @@ public final class EnthusiaStaffVelocityPlugin {
                 ));
                 return;
             }
-            String operation = arguments[2].toLowerCase(java.util.Locale.ROOT);
-            String target = arguments[3];
-            if (operation.equals("show") && arguments.length == 4) {
-                submitWebsiteTask(source, () -> showPunishmentCodes(source, store, target));
+            executeWebsiteCodeOperation(source, staff, store, arguments);
+        }
+
+        private boolean showWebsiteStatusWhenRequested(CommandSource source, String[] arguments) {
+            if (arguments.length != WEBSITE_STATUS_ARGUMENTS
+                    || !normalizedArgument(arguments, SUB_OPERATION_INDEX).equals("status")) {
+                return false;
+            }
+            VelocityConfiguration loaded = configuration;
+            boolean listening = loaded != null && loaded.websiteApiEnabled() && websiteApiServer != null;
+            source.sendMessage(Component.text(listening
+                    ? "Website API: LISTENING on loopback "
+                    + loaded.websiteApiBindAddress() + ':' + loaded.websiteApiPort()
+                    : "Website API: DISABLED or unavailable"));
+            return true;
+        }
+
+        private boolean isWebsiteCodeCommand(String[] arguments) {
+            return arguments.length >= WEBSITE_SHOW_ARGUMENTS
+                    && normalizedArgument(arguments, SUB_OPERATION_INDEX).equals("code");
+        }
+
+        private void executeWebsiteCodeOperation(
+                CommandSource source,
+                Player staff,
+                WebsiteModerationStore store,
+                String[] arguments
+        ) {
+            switch (normalizedArgument(arguments, DETAIL_OPERATION_INDEX)) {
+                case "show" -> executeWebsiteShow(source, store, arguments);
+                case "rotate" -> executeWebsiteRotate(source, staff, store, arguments);
+                case "revoke" -> executeWebsiteRevoke(source, staff, store, arguments);
+                default -> showWebsiteConfirmationUsage(source);
+            }
+        }
+
+        private void executeWebsiteShow(
+                CommandSource source,
+                WebsiteModerationStore store,
+                String[] arguments
+        ) {
+            if (arguments.length != WEBSITE_SHOW_ARGUMENTS) {
+                showWebsiteConfirmationUsage(source);
                 return;
             }
-            if (operation.equals("rotate") && arguments.length == 5
-                    && arguments[4].equals("CONFIRM-CODE-ROTATE")) {
-                UUID punishmentId = parseUuid(target);
-                if (punishmentId == null) {
-                    source.sendMessage(Component.text("Rotation requires a punishment UUID."));
-                    return;
-                }
-                submitWebsiteTask(source, () -> {
-                    PunishmentCodeDisplay code = store.rotateCode(
-                            punishmentId,
-                            staff.getUniqueId(),
-                            Clock.systemUTC().instant()
-                    );
-                    source.sendMessage(Component.text(
-                            "Rotated code for punishment " + code.punishmentId() + ": " + code.code()
-                    ));
-                });
+            String target = arguments[TARGET_INDEX];
+            submitWebsiteTask(source, () -> showPunishmentCodes(source, store, target));
+        }
+
+        private void executeWebsiteRotate(
+                CommandSource source,
+                Player staff,
+                WebsiteModerationStore store,
+                String[] arguments
+        ) {
+            if (!hasConfirmation(arguments, "CONFIRM-CODE-ROTATE")) {
+                showWebsiteConfirmationUsage(source);
                 return;
             }
-            if (operation.equals("revoke") && arguments.length == 5
-                    && arguments[4].equals("CONFIRM-CODE-REVOKE")) {
-                UUID punishmentId = parseUuid(target);
-                if (punishmentId == null) {
-                    source.sendMessage(Component.text("Revocation requires a punishment UUID."));
-                    return;
-                }
-                submitWebsiteTask(source, () -> {
-                    boolean changed = store.revokeCode(
-                            punishmentId,
-                            staff.getUniqueId(),
-                            Clock.systemUTC().instant()
-                    );
-                    source.sendMessage(Component.text(changed
-                            ? "The punishment code was revoked and its binding is now ineligible."
-                            : "No active punishment code changed."));
-                });
+            UUID punishmentId = parseUuid(arguments[TARGET_INDEX]);
+            if (punishmentId == null) {
+                source.sendMessage(Component.text("Rotation requires a punishment UUID."));
                 return;
             }
+            submitWebsiteTask(source, () -> rotatePunishmentCode(source, staff, store, punishmentId));
+        }
+
+        private void rotatePunishmentCode(
+                CommandSource source,
+                Player staff,
+                WebsiteModerationStore store,
+                UUID punishmentId
+        ) {
+            PunishmentCodeDisplay code = store.rotateCode(
+                    punishmentId,
+                    staff.getUniqueId(),
+                    Clock.systemUTC().instant()
+            );
+            source.sendMessage(Component.text(
+                    "Rotated code for punishment " + code.punishmentId() + ": " + code.code()
+            ));
+        }
+
+        private void executeWebsiteRevoke(
+                CommandSource source,
+                Player staff,
+                WebsiteModerationStore store,
+                String[] arguments
+        ) {
+            if (!hasConfirmation(arguments, "CONFIRM-CODE-REVOKE")) {
+                showWebsiteConfirmationUsage(source);
+                return;
+            }
+            UUID punishmentId = parseUuid(arguments[TARGET_INDEX]);
+            if (punishmentId == null) {
+                source.sendMessage(Component.text("Revocation requires a punishment UUID."));
+                return;
+            }
+            submitWebsiteTask(source, () -> revokePunishmentCode(source, staff, store, punishmentId));
+        }
+
+        private void revokePunishmentCode(
+                CommandSource source,
+                Player staff,
+                WebsiteModerationStore store,
+                UUID punishmentId
+        ) {
+            boolean changed = store.revokeCode(
+                    punishmentId,
+                    staff.getUniqueId(),
+                    Clock.systemUTC().instant()
+            );
+            source.sendMessage(Component.text(changed
+                    ? "The punishment code was revoked and its binding is now ineligible."
+                    : "No active punishment code changed."));
+        }
+
+        private static boolean hasConfirmation(String[] arguments, String confirmation) {
+            return arguments.length == WEBSITE_MUTATION_ARGUMENTS
+                    && arguments[CONFIRMATION_INDEX].equals(confirmation);
+        }
+
+        private static void showWebsiteConfirmationUsage(CommandSource source) {
             source.sendMessage(Component.text(
                     "Use show without confirmation, or append CONFIRM-CODE-ROTATE / CONFIRM-CODE-REVOKE."
             ));
@@ -1585,7 +1671,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("You do not have permission to run migration operations."));
                 return;
             }
-            if (arguments.length != 2) {
+            if (arguments.length != MIGRATION_ARGUMENTS) {
                 source.sendMessage(Component.text("Usage: /estaff migration <inspect|dry-run|import|shadow|final>"));
                 return;
             }
@@ -1595,84 +1681,130 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("MariaDB is not ready; no migration action was taken."));
                 return;
             }
-            MigrationMode migrationMode = switch (arguments[1].toLowerCase(java.util.Locale.ROOT)) {
-                case "dry-run", "inspect" -> MigrationMode.DRY_RUN;
-                case "import" -> MigrationMode.IMPORT;
-                case "shadow" -> MigrationMode.SHADOW;
-                case "final" -> MigrationMode.CUTOVER;
-                default -> null;
-            };
-            if (migrationMode == null) {
+            Optional<MigrationMode> parsed = parseMigrationMode(arguments[SUB_OPERATION_INDEX]);
+            if (parsed.isEmpty()) {
                 source.sendMessage(Component.text("Unknown migration operation."));
                 return;
             }
-            if (migrationMode == MigrationMode.SHADOW
-                    && authorityMode.get() != OperationalMode.SHADOW_MIGRATION) {
-                source.sendMessage(Component.text("Shadow runs require SHADOW_MIGRATION mode."));
+            MigrationMode migrationMode = parsed.orElseThrow();
+            Optional<String> blocker = migrationModeBlocker(migrationMode, authorityMode.get());
+            if (blocker.isPresent()) {
+                source.sendMessage(Component.text(blocker.orElseThrow()));
                 return;
             }
-            if (migrationMode == MigrationMode.CUTOVER && authorityMode.get() != OperationalMode.MAINTENANCE) {
-                source.sendMessage(Component.text("The final import and comparison require MAINTENANCE mode."));
-                return;
-            }
-            if (migrationMode == MigrationMode.IMPORT && authorityMode.get() != OperationalMode.SHADOW_MIGRATION
-                    && authorityMode.get() != OperationalMode.MAINTENANCE) {
-                source.sendMessage(Component.text("Imports require SHADOW_MIGRATION or MAINTENANCE mode."));
-                return;
-            }
+            startMigration(source, runtime, loaded, migrationMode);
+        }
+
+        private Optional<MigrationMode> parseMigrationMode(String operation) {
+            return switch (operation.toLowerCase(java.util.Locale.ROOT)) {
+                case "dry-run", "inspect" -> Optional.of(MigrationMode.DRY_RUN);
+                case "import" -> Optional.of(MigrationMode.IMPORT);
+                case "shadow" -> Optional.of(MigrationMode.SHADOW);
+                case "final" -> Optional.of(MigrationMode.CUTOVER);
+                default -> Optional.empty();
+            };
+        }
+
+        private Optional<String> migrationModeBlocker(MigrationMode mode, OperationalMode authority) {
+            return switch (mode) {
+                case SHADOW -> authority == OperationalMode.SHADOW_MIGRATION
+                        ? Optional.empty()
+                        : Optional.of("Shadow runs require SHADOW_MIGRATION mode.");
+                case CUTOVER -> authority == OperationalMode.MAINTENANCE
+                        ? Optional.empty()
+                        : Optional.of("The final import and comparison require MAINTENANCE mode.");
+                case IMPORT -> authority == OperationalMode.SHADOW_MIGRATION
+                        || authority == OperationalMode.MAINTENANCE
+                        ? Optional.empty()
+                        : Optional.of("Imports require SHADOW_MIGRATION or MAINTENANCE mode.");
+                default -> Optional.empty();
+            };
+        }
+
+        private void startMigration(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                VelocityConfiguration loaded,
+                MigrationMode migrationMode
+        ) {
             if (!migrationRunning.compareAndSet(false, true)) {
                 source.sendMessage(Component.text("Another migration operation is already running."));
                 return;
             }
             source.sendMessage(Component.text("Migration operation accepted; results will be reported when durable."));
             try {
-                workers.execute(() -> {
-                    try {
-                        MigrationExecutionReport report = migrationService(runtime, migrationMode).execute(
-                                loaded.liteBansDatabaseFromEnvironment(),
-                                loaded.liteBansTablePrefix(),
-                                loaded.liteBansBatchSize(),
-                                migrationMode
-                        );
-                        source.sendMessage(Component.text(
-                                "Migration " + report.mode() + " run " + report.runId() + ": source="
-                                        + report.sourceRecords() + ", imported=" + report.importedRecords()
-                                        + ", reconciled=" + report.reconciledRecords()
-                                        + ", replayed=" + report.replayedRecords() + ", rejected="
-                                        + report.rejectedRows().size() + ", schema-blockers="
-                                        + report.schema().blockers().size() + ", protected-identities="
-                                        + report.protectedIdentityRecords() + '/' + report.networkIdentityRecords()
-                        ));
-                        report.shadowSummary().ifPresent(summary -> source.sendMessage(Component.text(
-                                "Comparison: mismatches=" + summary.mismatchCount()
-                                        + ", counts=" + summary.countsMatch()
-                                        + ", checksums=" + summary.checksumsMatch()
-                                        + ", active=" + summary.activeSanctionsMatch()
-                                        + ", UUIDs=" + summary.uuidMappingsMatch()
-                                        + ", expirations=" + summary.expirationsMatch()
-                                        + ", login=" + comparison(summary.loginDecisions())
-                                        + ", mute=" + comparison(summary.muteDecisions())
-                                        + ", IP-ban=" + comparison(summary.ipBanDecisions())
-                        )));
-                        report.rejectedRows().stream().limit(20).forEach(row -> source.sendMessage(Component.text(
-                                "Rejected " + row.tableName() + '#' + row.externalId() + ": " + row.reasonCode()
-                        )));
-                        if (report.rejectedRows().size() > 20) {
-                            source.sendMessage(Component.text(
-                                    (report.rejectedRows().size() - 20)
-                                            + " additional rejected rows are recorded in the durable migration report."
-                            ));
-                        }
-                    } catch (RuntimeException exception) {
-                        logger.error("Migration command failed", exception);
-                        source.sendMessage(Component.text("Migration failed; inspect the sanitized proxy log and durable run record."));
-                    } finally {
-                        migrationRunning.set(false);
-                    }
-                });
+                workers.execute(() -> runMigration(source, runtime, loaded, migrationMode));
             } catch (RejectedExecutionException exception) {
                 migrationRunning.set(false);
                 source.sendMessage(Component.text("The bounded work queue is full; migration did not start."));
+            }
+        }
+
+        private void runMigration(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                VelocityConfiguration loaded,
+                MigrationMode migrationMode
+        ) {
+            try {
+                MigrationExecutionReport report = migrationService(runtime, migrationMode).execute(
+                        loaded.liteBansDatabaseFromEnvironment(),
+                        loaded.liteBansTablePrefix(),
+                        loaded.liteBansBatchSize(),
+                        migrationMode
+                );
+                showMigrationReport(source, report);
+            } catch (RuntimeException exception) {
+                logger.error("Migration command failed", exception);
+                source.sendMessage(Component.text(
+                        "Migration failed; inspect the sanitized proxy log and durable run record."
+                ));
+            } finally {
+                migrationRunning.set(false);
+            }
+        }
+
+        private void showMigrationReport(CommandSource source, MigrationExecutionReport report) {
+            source.sendMessage(Component.text(
+                    "Migration " + report.mode() + " run " + report.runId() + ": source="
+                            + report.sourceRecords() + ", imported=" + report.importedRecords()
+                            + ", reconciled=" + report.reconciledRecords()
+                            + ", replayed=" + report.replayedRecords() + ", rejected="
+                            + report.rejectedRows().size() + ", schema-blockers="
+                            + report.schema().blockers().size() + ", protected-identities="
+                            + report.protectedIdentityRecords() + '/' + report.networkIdentityRecords()
+            ));
+            report.shadowSummary().ifPresent(summary -> showShadowComparison(source, summary));
+            showRejectedRows(source, report);
+        }
+
+        private void showShadowComparison(
+                CommandSource source,
+                net.enthusia.staff.persistence.migration.ShadowSummary summary
+        ) {
+            source.sendMessage(Component.text(
+                    "Comparison: mismatches=" + summary.mismatchCount()
+                            + ", counts=" + summary.countsMatch()
+                            + ", checksums=" + summary.checksumsMatch()
+                            + ", active=" + summary.activeSanctionsMatch()
+                            + ", UUIDs=" + summary.uuidMappingsMatch()
+                            + ", expirations=" + summary.expirationsMatch()
+                            + ", login=" + comparison(summary.loginDecisions())
+                            + ", mute=" + comparison(summary.muteDecisions())
+                            + ", IP-ban=" + comparison(summary.ipBanDecisions())
+            ));
+        }
+
+        private void showRejectedRows(CommandSource source, MigrationExecutionReport report) {
+            report.rejectedRows().stream().limit(MAX_REJECTED_ROWS_SHOWN).forEach(row ->
+                    source.sendMessage(Component.text(
+                            "Rejected " + row.tableName() + '#' + row.externalId() + ": " + row.reasonCode()
+                    )));
+            int hiddenRows = report.rejectedRows().size() - MAX_REJECTED_ROWS_SHOWN;
+            if (hiddenRows > 0) {
+                source.sendMessage(Component.text(
+                        hiddenRows + " additional rejected rows are recorded in the durable migration report."
+                ));
             }
         }
 
@@ -1681,7 +1813,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("You do not have permission to manage cutover."));
                 return;
             }
-            if (arguments.length < 2) {
+            if (arguments.length < CUTOVER_MINIMUM_ARGUMENTS) {
                 source.sendMessage(Component.text(
                         "Usage: /estaff cutover <status|maintenance|abort|freeze|activate|override>"
                 ));
@@ -1692,130 +1824,177 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("MariaDB is not ready; no cutover action was taken."));
                 return;
             }
-            String operation = arguments[1].toLowerCase(java.util.Locale.ROOT);
-            if (operation.equals("status")) {
-                submitCutover(source, () -> {
-                    net.enthusia.staff.persistence.migration.CutoverCoordinator coordinator =
-                            runtime.cutoverCoordinator();
-                    coordinator.latestEvidence().ifPresentOrElse(evidence -> {
-                        long observedHours = Duration.between(
-                                evidence.shadowStartedAt(), evidence.shadowEndedAt()
-                        ).toHours();
-                        source.sendMessage(Component.text(
-                                "Shadow evidence: observed=" + observedHours + "h, summaries="
-                                        + evidence.successfulShadowSummaries().size() + ", unresolved="
-                                        + evidence.unresolvedOperations() + ", migration-idle="
-                                        + evidence.migrationIdle() + ", writes-frozen=" + evidence.writesFrozen()
-                                        + ", final-import=" + evidence.finalIncrementalImportComplete()
-                        ));
-                        source.sendMessage(Component.text(
-                                "Checks: counts=" + evidence.countsMatch()
-                                        + ", checksums=" + evidence.checksumsMatch()
-                                        + ", active=" + evidence.activeSanctionsMatch()
-                                        + ", UUIDs=" + evidence.uuidMappingsMatch()
-                                        + ", expirations=" + evidence.expirationsMatch()
-                                        + ", login=" + comparison(evidence.loginDecisions())
-                                        + ", mute=" + comparison(evidence.muteDecisions())
-                                        + ", IP-ban=" + comparison(evidence.ipBanDecisions())
-                        ));
-                    }, () -> source.sendMessage(Component.text("No complete shadow evidence is available.")));
-                    net.enthusia.staff.domain.migration.CutoverAssessment assessment = coordinator.assess(
-                            java.util.Optional.empty()
-                    );
-                    source.sendMessage(Component.text("Cutover allowed: " + assessment.allowed()
-                            + "; blockers: " + String.join(", ", assessment.blockers())));
-                });
+            UUID actorId = actorId(source);
+            routeCutoverOperation(source, runtime, actorId, arguments);
+        }
+
+        private void routeCutoverOperation(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                UUID actorId,
+                String[] arguments
+        ) {
+            switch (normalizedArgument(arguments, SUB_OPERATION_INDEX)) {
+                case "status" -> executeCutoverStatus(source, runtime);
+                case "maintenance" -> executeMaintenance(source, runtime, actorId);
+                case "abort" -> executeMaintenanceAbort(source, runtime, actorId, arguments);
+                case "freeze" -> executeAuthorityFreeze(source, runtime, actorId, arguments);
+                case "activate" -> executeCutoverActivation(source, actorId, arguments);
+                case "override" -> executeCutoverOverride(source, actorId, arguments);
+                default -> source.sendMessage(Component.text("Unknown cutover operation."));
+            }
+        }
+
+        private void executeCutoverStatus(CommandSource source, MariaDbRuntime runtime) {
+            submitCutover(source, () -> showCutoverStatus(source, runtime));
+        }
+
+        private void showCutoverStatus(CommandSource source, MariaDbRuntime runtime) {
+            net.enthusia.staff.persistence.migration.CutoverCoordinator coordinator = runtime.cutoverCoordinator();
+            coordinator.latestEvidence().ifPresentOrElse(
+                    evidence -> showCutoverEvidence(source, evidence),
+                    () -> source.sendMessage(Component.text("No complete shadow evidence is available."))
+            );
+            CutoverAssessment assessment = coordinator.assess(Optional.empty());
+            source.sendMessage(Component.text("Cutover allowed: " + assessment.allowed()
+                    + "; blockers: " + String.join(", ", assessment.blockers())));
+        }
+
+        private void showCutoverEvidence(CommandSource source, CutoverEvidence evidence) {
+            long observedHours = Duration.between(evidence.shadowStartedAt(), evidence.shadowEndedAt()).toHours();
+            source.sendMessage(Component.text(
+                    "Shadow evidence: observed=" + observedHours + "h, summaries="
+                            + evidence.successfulShadowSummaries().size() + ", unresolved="
+                            + evidence.unresolvedOperations() + ", migration-idle="
+                            + evidence.migrationIdle() + ", writes-frozen=" + evidence.writesFrozen()
+                            + ", final-import=" + evidence.finalIncrementalImportComplete()
+            ));
+            source.sendMessage(Component.text(
+                    "Checks: counts=" + evidence.countsMatch()
+                            + ", checksums=" + evidence.checksumsMatch()
+                            + ", active=" + evidence.activeSanctionsMatch()
+                            + ", UUIDs=" + evidence.uuidMappingsMatch()
+                            + ", expirations=" + evidence.expirationsMatch()
+                            + ", login=" + comparison(evidence.loginDecisions())
+                            + ", mute=" + comparison(evidence.muteDecisions())
+                            + ", IP-ban=" + comparison(evidence.ipBanDecisions())
+            ));
+        }
+
+        private void executeMaintenance(CommandSource source, MariaDbRuntime runtime, UUID actorId) {
+            submitCutover(source, () -> {
+                boolean changed = runtime.cutoverCoordinator().enterMaintenance(
+                        actorId, "Cutover preparation requested through Velocity"
+                );
+                source.sendMessage(Component.text(changed
+                        ? "Maintenance committed. Run the final incremental import, then reassess cutover."
+                        : "Maintenance was not entered; the current mode is not SHADOW_MIGRATION or changed concurrently."));
+            });
+        }
+
+        private void executeMaintenanceAbort(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                UUID actorId,
+                String[] arguments
+        ) {
+            if (!founderAuthorized(source, "Founder permission is required to abort cutover maintenance.")) {
                 return;
             }
-            UUID actorId = source instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
-            if (operation.equals("maintenance")) {
-                submitCutover(source, () -> {
-                    boolean changed = runtime.cutoverCoordinator().enterMaintenance(
-                            actorId, "Cutover preparation requested through Velocity"
-                    );
-                    source.sendMessage(Component.text(changed
-                            ? "Maintenance committed. Run the final incremental import, then reassess cutover."
-                            : "Maintenance was not entered; the current mode is not SHADOW_MIGRATION or changed concurrently."));
-                });
+            Optional<String> reason = confirmedReason(arguments, "CONFIRM-ABORT-MAINTENANCE");
+            if (reason.isEmpty()) {
+                source.sendMessage(Component.text("Abort requires the exact acknowledgement and a written reason."));
                 return;
             }
-            if (operation.equals("abort")) {
-                if (!source.hasPermission("enthusiastaff.cutover.founder")) {
-                    source.sendMessage(Component.text("Founder permission is required to abort cutover maintenance."));
-                    return;
-                }
-                if (arguments.length < 4 || !arguments[2].equals("CONFIRM-ABORT-MAINTENANCE")) {
-                    source.sendMessage(Component.text(
-                            "Abort requires the exact acknowledgement and a written reason."
-                    ));
-                    return;
-                }
-                String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
-                submitCutover(source, () -> {
-                    boolean changed = runtime.cutoverCoordinator().abortMaintenance(actorId, reason);
-                    source.sendMessage(Component.text(changed
-                            ? "Maintenance aborted; LiteBans remains authoritative and the shadow gate must be reassessed."
-                            : "Maintenance was not aborted because the current mode is not MAINTENANCE."));
-                });
+            submitCutover(source, () -> {
+                boolean changed = runtime.cutoverCoordinator().abortMaintenance(actorId, reason.orElseThrow());
+                source.sendMessage(Component.text(changed
+                        ? "Maintenance aborted; LiteBans remains authoritative and the shadow gate must be reassessed."
+                        : "Maintenance was not aborted because the current mode is not MAINTENANCE."));
+            });
+        }
+
+        private void executeAuthorityFreeze(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                UUID actorId,
+                String[] arguments
+        ) {
+            if (!founderAuthorized(source, "Founder permission is required to freeze active authority.")) {
                 return;
             }
-            if (operation.equals("freeze")) {
-                if (!source.hasPermission("enthusiastaff.cutover.founder")) {
-                    source.sendMessage(Component.text("Founder permission is required to freeze active authority."));
-                    return;
-                }
-                if (arguments.length < 4 || !arguments[2].equals("CONFIRM-READ-ONLY-FAILURE")) {
-                    source.sendMessage(Component.text(
-                            "Emergency freeze requires the exact acknowledgement and a written reason."
-                    ));
-                    return;
-                }
-                String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
-                submitCutover(source, () -> {
-                    boolean changed = runtime.cutoverCoordinator().freezeActiveAuthority(actorId, reason);
-                    source.sendMessage(Component.text(changed
-                            ? "ACTIVE authority is now READ_ONLY_FAILURE; destructive writes are disabled and logins fail closed."
-                            : "Authority was not frozen because the current mode is not ACTIVE."));
-                });
-                return;
-            }
-            if (operation.equals("activate")) {
-                if (arguments.length != 3 || !arguments[2].equals("CONFIRM-ACTIVE-CUTOVER")) {
-                    source.sendMessage(Component.text(
-                            "Activation requires: /estaff cutover activate CONFIRM-ACTIVE-CUTOVER"
-                    ));
-                    return;
-                }
-                submitCutover(source, () -> activateCutover(source, actorId, java.util.Optional.empty()));
-                return;
-            }
-            if (operation.equals("override")) {
-                if (!source.hasPermission("enthusiastaff.cutover.founder")) {
-                    source.sendMessage(Component.text("Founder permission is required for a blocked cutover override."));
-                    return;
-                }
-                if (arguments.length < 4
-                        || !arguments[2].equals(FounderOverride.REQUIRED_ACKNOWLEDGEMENT)) {
-                    source.sendMessage(Component.text(
-                            "Override requires the exact acknowledgement and a written reason."
-                    ));
-                    return;
-                }
-                String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
-                FounderOverride founderOverride = new FounderOverride(actorId, arguments[2], reason);
-                submitCutover(source, () -> activateCutover(
-                        source, actorId, java.util.Optional.of(founderOverride)
+            Optional<String> reason = confirmedReason(arguments, "CONFIRM-READ-ONLY-FAILURE");
+            if (reason.isEmpty()) {
+                source.sendMessage(Component.text(
+                        "Emergency freeze requires the exact acknowledgement and a written reason."
                 ));
                 return;
             }
-            source.sendMessage(Component.text("Unknown cutover operation."));
+            submitCutover(source, () -> {
+                boolean changed = runtime.cutoverCoordinator().freezeActiveAuthority(actorId, reason.orElseThrow());
+                source.sendMessage(Component.text(changed
+                        ? "ACTIVE authority is now READ_ONLY_FAILURE; destructive writes are disabled and logins fail closed."
+                        : "Authority was not frozen because the current mode is not ACTIVE."));
+            });
         }
 
-        private boolean sourceHas(CommandSource source, String permission) {
-            return source.hasPermission(permission);
+        private void executeCutoverActivation(CommandSource source, UUID actorId, String[] arguments) {
+            if (arguments.length != CUTOVER_ACTIVATION_ARGUMENTS
+                    || !arguments[DETAIL_OPERATION_INDEX].equals("CONFIRM-ACTIVE-CUTOVER")) {
+                source.sendMessage(Component.text(
+                        "Activation requires: /estaff cutover activate CONFIRM-ACTIVE-CUTOVER"
+                ));
+                return;
+            }
+            submitCutover(source, () -> activateCutover(source, actorId, Optional.empty()));
         }
 
-        private String comparison(net.enthusia.staff.domain.migration.DecisionComparison value) {
+        private void executeCutoverOverride(CommandSource source, UUID actorId, String[] arguments) {
+            if (!founderAuthorized(
+                    source,
+                    "Founder permission is required for a blocked cutover override."
+            )) {
+                return;
+            }
+            Optional<String> reason = confirmedReason(arguments, FounderOverride.REQUIRED_ACKNOWLEDGEMENT);
+            if (reason.isEmpty()) {
+                source.sendMessage(Component.text(
+                        "Override requires the exact acknowledgement and a written reason."
+                ));
+                return;
+            }
+            FounderOverride founderOverride = new FounderOverride(
+                    actorId,
+                    arguments[DETAIL_OPERATION_INDEX],
+                    reason.orElseThrow()
+            );
+            submitCutover(source, () -> activateCutover(source, actorId, Optional.of(founderOverride)));
+        }
+
+        private boolean founderAuthorized(CommandSource source, String failureMessage) {
+            if (source.hasPermission("enthusiastaff.cutover.founder")) {
+                return true;
+            }
+            source.sendMessage(Component.text(failureMessage));
+            return false;
+        }
+
+        private Optional<String> confirmedReason(String[] arguments, String acknowledgement) {
+            if (arguments.length < CUTOVER_REASON_MINIMUM_ARGUMENTS
+                    || !arguments[DETAIL_OPERATION_INDEX].equals(acknowledgement)) {
+                return Optional.empty();
+            }
+            return Optional.of(String.join(
+                    " ",
+                    Arrays.copyOfRange(arguments, TARGET_INDEX, arguments.length)
+            ));
+        }
+
+        private UUID actorId(CommandSource source) {
+            return source instanceof Player player ? player.getUniqueId() : CONSOLE_ACTOR_ID;
+        }
+
+        private String comparison(DecisionComparison value) {
             return value.mismatched() + "/" + value.compared() + " mismatched";
         }
 
@@ -1829,54 +2008,88 @@ public final class EnthusiaStaffVelocityPlugin {
                 source.sendMessage(Component.text("MariaDB is not ready; Discord status is unavailable."));
                 return;
             }
-            if (arguments.length == 2 && arguments[1].equalsIgnoreCase("status")) {
-                try {
-                    workers.execute(() -> {
-                        try {
-                            Instant now = Clock.systemUTC().instant();
-                            for (net.enthusia.staff.domain.discord.DiscordChannelStatus status
-                                    : runtime.discordOutboxStore().channelStatuses()) {
-                                source.sendMessage(Component.text(status.destination()
-                                        + ": pending=" + status.pendingMessages()
-                                        + ", dead=" + status.deadLetterMessages()
-                                        + ", failures=" + status.consecutiveFailures()
-                                        + ", circuit=" + (status.circuitOpen(now) ? "OPEN" : "CLOSED")));
-                            }
-                        } catch (RuntimeException exception) {
-                            logger.error("Discord status command failed", exception);
-                            source.sendMessage(Component.text("Discord status failed; inspect the sanitized proxy log."));
-                        }
-                    });
-                } catch (RejectedExecutionException exception) {
-                    source.sendMessage(Component.text("The bounded work queue is full; status was not read."));
-                }
+            switch (normalizedArgument(arguments, SUB_OPERATION_INDEX)) {
+                case "status" -> executeDiscordStatus(source, runtime, arguments);
+                case "retry" -> executeDiscordRetry(source, runtime, arguments);
+                default -> showDiscordUsage(source);
+            }
+        }
+
+        private void executeDiscordStatus(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                String[] arguments
+        ) {
+            if (arguments.length != DISCORD_STATUS_ARGUMENTS) {
+                showDiscordUsage(source);
                 return;
             }
-            if (arguments.length == 4 && arguments[1].equalsIgnoreCase("retry")
-                    && arguments[3].equals("CONFIRM-DISCORD-RETRY")) {
-                String destination = arguments[2].toLowerCase(java.util.Locale.ROOT);
-                if (!Set.of("punishments", "reports", "logs-staffmode", "alerts").contains(destination)) {
-                    source.sendMessage(Component.text("Unknown Discord destination."));
-                    return;
+            try {
+                workers.execute(() -> showDiscordStatus(source, runtime));
+            } catch (RejectedExecutionException exception) {
+                source.sendMessage(Component.text("The bounded work queue is full; status was not read."));
+            }
+        }
+
+        private void showDiscordStatus(CommandSource source, MariaDbRuntime runtime) {
+            try {
+                Instant now = Clock.systemUTC().instant();
+                for (net.enthusia.staff.domain.discord.DiscordChannelStatus status
+                        : runtime.discordOutboxStore().channelStatuses()) {
+                    source.sendMessage(Component.text(status.destination()
+                            + ": pending=" + status.pendingMessages()
+                            + ", dead=" + status.deadLetterMessages()
+                            + ", failures=" + status.consecutiveFailures()
+                            + ", circuit=" + (status.circuitOpen(now) ? "OPEN" : "CLOSED")));
                 }
-                try {
-                    workers.execute(() -> {
-                        try {
-                            int retried = runtime.discordOutboxStore().retryDestination(
-                                    destination, Clock.systemUTC().instant(), 500
-                            );
-                            source.sendMessage(Component.text("Discord circuit reset; queued " + retried
-                                    + " dead-letter events for another bounded attempt."));
-                        } catch (RuntimeException exception) {
-                            logger.error("Discord retry command failed", exception);
-                            source.sendMessage(Component.text("Discord retry failed; inspect the sanitized proxy log."));
-                        }
-                    });
-                } catch (RejectedExecutionException exception) {
-                    source.sendMessage(Component.text("The bounded work queue is full; retry did not start."));
-                }
+            } catch (RuntimeException exception) {
+                logger.error("Discord status command failed", exception);
+                source.sendMessage(Component.text("Discord status failed; inspect the sanitized proxy log."));
+            }
+        }
+
+        private void executeDiscordRetry(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                String[] arguments
+        ) {
+            if (arguments.length != DISCORD_RETRY_ARGUMENTS
+                    || !arguments[TARGET_INDEX].equals("CONFIRM-DISCORD-RETRY")) {
+                showDiscordUsage(source);
                 return;
             }
+            String destination = normalizedArgument(arguments, DETAIL_OPERATION_INDEX);
+            if (!DISCORD_DESTINATIONS.contains(destination)) {
+                source.sendMessage(Component.text("Unknown Discord destination."));
+                return;
+            }
+            try {
+                workers.execute(() -> retryDiscordDestination(source, runtime, destination));
+            } catch (RejectedExecutionException exception) {
+                source.sendMessage(Component.text("The bounded work queue is full; retry did not start."));
+            }
+        }
+
+        private void retryDiscordDestination(
+                CommandSource source,
+                MariaDbRuntime runtime,
+                String destination
+        ) {
+            try {
+                int retried = runtime.discordOutboxStore().retryDestination(
+                        destination,
+                        Clock.systemUTC().instant(),
+                        DISCORD_RETRY_LIMIT
+                );
+                source.sendMessage(Component.text("Discord circuit reset; queued " + retried
+                        + " dead-letter events for another bounded attempt."));
+            } catch (RuntimeException exception) {
+                logger.error("Discord retry command failed", exception);
+                source.sendMessage(Component.text("Discord retry failed; inspect the sanitized proxy log."));
+            }
+        }
+
+        private static void showDiscordUsage(CommandSource source) {
             source.sendMessage(Component.text(
                     "Usage: /estaff discord status | /estaff discord retry <destination> CONFIRM-DISCORD-RETRY"
             ));
@@ -1935,6 +2148,38 @@ public final class EnthusiaStaffVelocityPlugin {
             InventoryJournalStore inventories,
             EconomyJournalStore economies
     ) {
+    }
+
+    private enum AltOperation {
+        LINK,
+        APPROVE,
+        HOUSEHOLD,
+        NOT_RELATED,
+        UNLINK,
+        REOPEN;
+
+        private static Optional<AltOperation> parse(String operation) {
+            return switch (operation) {
+                case "link" -> Optional.of(LINK);
+                case "approve" -> Optional.of(APPROVE);
+                case "household" -> Optional.of(HOUSEHOLD);
+                case "notrelated" -> Optional.of(NOT_RELATED);
+                case "unlink" -> Optional.of(UNLINK);
+                case "reopen" -> Optional.of(REOPEN);
+                default -> Optional.empty();
+            };
+        }
+
+        private AltRelationshipState relationshipState() {
+            return switch (this) {
+                case LINK -> AltRelationshipState.CONFIRMED_ALT;
+                case APPROVE -> AltRelationshipState.APPROVED_ALT;
+                case HOUSEHOLD -> AltRelationshipState.SHARED_HOUSEHOLD;
+                case NOT_RELATED -> AltRelationshipState.NOT_RELATED;
+                case UNLINK -> AltRelationshipState.LOW_CONFIDENCE;
+                case REOPEN -> throw new IllegalStateException("Reopen does not set a relationship state");
+            };
+        }
     }
 
     private record WebsiteRuntime(

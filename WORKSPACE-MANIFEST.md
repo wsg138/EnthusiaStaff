@@ -10,14 +10,14 @@ This manifest records project orchestration and authority boundaries. It does no
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Setup baseline | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
-| Current `main` | `e5352a7918d7c19bb1878117e182aac607ca9297` (merged PR #122) |
+| Current `main` | `f0f82ce94b81502bc898de545a1d47b65d31bd31` (merged PR #123) |
 | Canonical package registry | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
 | Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
-| Latest completed checkpoints | PR #120 maintainability, PR #121 persistence transitions, PR #122 command-route integrity |
-| Active implementation | Fail-closed freeze verification visibility and staff notification |
-| Codacy checkpoint | 376 active warnings on `main`; grade is not asserted because the current CLI response does not expose it |
-| Migration boundary | V18; V1–V18 immutable |
+| Latest completed checkpoints | PR #121 persistence transitions, PR #122 command-route integrity, PR #123 freeze verification visibility |
+| Active implementation | PR #124 Velocity runtime and administration complexity |
+| Codacy checkpoint | 376 active warnings on `main`; 346 on the exact PR #124 branch; grade is not asserted because the current CLI response does not expose it |
+| Migration boundary | V18; V1-V18 immutable |
 | Production authority | LiteBans remains authoritative |
 
 ## Repository model
