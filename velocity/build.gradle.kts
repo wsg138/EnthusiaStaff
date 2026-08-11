@@ -10,6 +10,7 @@ dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     compileOnly("org.slf4j:slf4j-api:2.0.17")
+    testImplementation("org.slf4j:slf4j-api:2.0.17")
 }
 
 tasks.jar {
