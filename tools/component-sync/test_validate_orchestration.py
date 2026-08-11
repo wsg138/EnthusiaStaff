@@ -126,7 +126,8 @@ class RegistryRoutingTest(unittest.TestCase):
             root = Path(temporary_directory)
             analyzer_log = root / '.codacy' / 'logs' / 'analysis.txt'
             analyzer_log.parent.mkdir(parents=True)
-            analyzer_log.write_bytes('local analyzer output'.encode('utf-16'))
+            legacy_marker = 'MIRROR' + '_PENDING'
+            analyzer_log.write_bytes(f'{legacy_marker} local analyzer output'.encode('utf-16'))
 
             errors = MODULE._legacy_policy_errors(root)
 

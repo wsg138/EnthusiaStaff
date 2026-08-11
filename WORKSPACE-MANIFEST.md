@@ -10,13 +10,13 @@ This manifest records project orchestration and authority boundaries. It does no
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Setup baseline | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
-| Current `main` | `efcd2275b9825a059f3ff2e1b0974be97f4e1191` (merged PR #126) |
+| Current `main` | `efcd2275b9825a059f3ff2e1b0974be97f4e1191` (PR #126 merge commit; second parent `446f59f1d260e6ace8bb6b0e842a209638aefdba`) |
 | Canonical package registry | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
 | Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
 | Latest completed checkpoints | PR #124 Velocity runtime boundaries, PR #125 website appeal transactions, PR #126 economy recovery and confiscation coordination |
 | Active implementation | `section/plugin`: exact-sanction transaction and link-validation boundaries |
-| Codacy checkpoint | 319 active warnings on exact merged PR #126 head `446f59f1d260e6ace8bb6b0e842a209638aefdba`, down from 334 on its base; grade is not asserted because the current CLI response does not expose it |
+| Codacy checkpoint | 319 active warnings on PR #126 code head `446f59f1d260e6ace8bb6b0e842a209638aefdba`, down from 334 on its base; merge commit `efcd2275b9825a059f3ff2e1b0974be97f4e1191`; grade is not asserted because the current CLI response does not expose it |
 | Migration boundary | V18; V1-V18 immutable |
 | Production authority | LiteBans remains authoritative |
 

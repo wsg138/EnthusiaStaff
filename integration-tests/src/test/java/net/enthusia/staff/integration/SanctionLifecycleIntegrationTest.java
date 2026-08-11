@@ -429,6 +429,7 @@ class SanctionLifecycleIntegrationTest {
                     "linked-request-missing",
                     "PUNISHMENT_REQUEST_NOT_FOUND"
             );
+            assertSanctionUnchanged(fixture);
             assertLinkedRequestRejection(
                     runtime,
                     fixture,
@@ -436,6 +437,7 @@ class SanctionLifecycleIntegrationTest {
                     "linked-request-mismatch",
                     "PUNISHMENT_REQUEST_TARGET_MISMATCH"
             );
+            assertSanctionUnchanged(fixture);
             assertLinkedRequestRejection(
                     runtime,
                     fixture,
@@ -443,6 +445,7 @@ class SanctionLifecycleIntegrationTest {
                     "linked-request-unresolved",
                     "PUNISHMENT_REQUEST_NOT_RESOLVED"
             );
+            assertSanctionUnchanged(fixture);
 
             ExactSanctionChangeResult.Applied applied = applyLinkedRequest(
                     runtime,
@@ -454,6 +457,25 @@ class SanctionLifecycleIntegrationTest {
         assertEquals(1, longValue(
                 "SELECT COUNT(*) FROM sanction_events WHERE linked_punishment_request_id=?",
                 approvedRequestId
+        ));
+    }
+
+    @Test
+    void fulfilledExternallyRequestAuthorizesLinkedMutation() throws Exception {
+        Fixture fixture = activeFixture(20);
+        UUID requestId = insertPunishmentRequest(fixture, "FULFILLED_EXTERNALLY");
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            ExactSanctionChangeResult.Applied applied = applyLinkedRequest(
+                    runtime,
+                    fixture,
+                    requestId
+            );
+            assertEquals(requestId, applied.linkedPunishmentRequestId().orElseThrow());
+        }
+        assertEquals(1, longValue(
+                "SELECT COUNT(*) FROM sanction_events WHERE linked_punishment_request_id=?",
+                requestId
         ));
     }
 
@@ -479,8 +501,8 @@ class SanctionLifecycleIntegrationTest {
                         0,
                         SanctionChangeAction.REVOKE,
                         Optional.empty(),
-                        "Approved request authorizes the linked mutation",
-                        "linked-request-approved",
+                        "Resolved request authorizes the linked mutation",
+                        "linked-request-" + requestId,
                         Optional.empty(),
                         Optional.of(requestId)
                 ), DEFAULT_LIMITS)
@@ -944,6 +966,21 @@ class SanctionLifecycleIntegrationTest {
                 ), DEFAULT_LIMITS)
         );
         assertEquals(expectedCode, rejection.code());
+    }
+
+    private static void assertSanctionUnchanged(Fixture fixture) throws SQLException {
+        assertEquals("ACTIVE", stringValue(
+                "SELECT status FROM sanctions WHERE sanction_id=?",
+                fixture.sanctionId()
+        ));
+        assertEquals(0, longValue(
+                "SELECT revision FROM sanctions WHERE sanction_id=?",
+                fixture.sanctionId()
+        ));
+        assertEquals(0, count("sanction_events"));
+        assertEquals(0, count("audit_events"));
+        assertEquals(0, count("network_outbox"));
+        assertEquals(0, count("discord_outbox"));
     }
 
     private static void insertPlayer(

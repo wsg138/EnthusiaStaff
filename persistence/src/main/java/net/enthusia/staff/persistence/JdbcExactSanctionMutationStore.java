@@ -24,6 +24,9 @@ import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
+import net.enthusia.staff.persistence.ExactSanctionMutationDecision.Apply;
+import net.enthusia.staff.persistence.ExactSanctionMutationDecision.NoChange;
+import net.enthusia.staff.persistence.ExactSanctionMutationDecision.Rejected;
 
 final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     private static final int EXPECTED_UPDATED_ROWS = 1;
@@ -215,17 +218,18 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
             ExactSanctionMutationDecision decision,
             Instant now
     ) throws SQLException, JsonProcessingException {
-        if (decision instanceof ExactSanctionMutationDecision.NoChange noChange) {
+        if (decision instanceof NoChange noChange) {
             return rollbackAndReturn(connection, noChange.result());
         }
-        if (decision instanceof ExactSanctionMutationDecision.Rejected rejected) {
+        if (decision instanceof Rejected rejected) {
             return rollbackAndReturn(connection, rejected.result());
         }
-        ExactSanctionMutationDecision.Apply mutation =
-                (ExactSanctionMutationDecision.Apply) decision;
-        persistMutation(connection, request, row, mutation, now);
-        connection.commit();
-        return applied(request, row, mutation, now, false);
+        if (decision instanceof Apply mutation) {
+            persistMutation(connection, request, row, mutation, now);
+            connection.commit();
+            return applied(request, row, mutation, now, false);
+        }
+        throw new IllegalStateException("Unsupported exact sanction mutation decision");
     }
 
     private void persistMutation(
@@ -457,10 +461,6 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
         } else {
             statement.setNull(index, java.sql.Types.TIMESTAMP);
         }
-    }
-
-    private static String truncate(String value, int maximum) {
-        return value.length() <= maximum ? value : value.substring(0, maximum);
     }
 
     private static void rollback(Connection connection, Exception original) {
