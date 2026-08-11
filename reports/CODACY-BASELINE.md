@@ -2,7 +2,7 @@
 
 Captured: 2026-07-27 (America/Indianapolis)
 
-Last updated: 2026-08-01 (America/Indianapolis)
+Last updated: 2026-08-11 (America/Indianapolis)
 
 This report records the state of `agent/complete-staff-platform` at pushed commit
 `c4fd4129f7a34ad011f87f146fb72c236e611b89` before the current remediation.
@@ -888,6 +888,60 @@ PMD 7 and threshold-matched Lizard report zero findings in changed Java. No
 issue or rule is suppressed. The full clean build, complete MariaDB suite,
 hosted Codacy, exact-head Pi staging, and final review remain required before
 merge.
+
+## 2026-08-11 current main checkpoint
+
+The exact `main` revision after merged PR #122 is
+`e5352a7918d7c19bb1878117e182aac607ca9297`. Codacy Cloud reports 376 active
+findings, all at Warning severity and all in Java. The current CLI response does
+not expose a repository letter grade, so this report does not claim one.
+
+| Category | Active findings |
+| --- | ---: |
+| Complexity | 253 |
+| Error-prone | 104 |
+| Performance | 19 |
+| **Total** | **376** |
+
+| Pattern | Active findings |
+| --- | ---: |
+| Lizard cyclomatic complexity | 95 |
+| Lizard method length | 69 |
+| PMD duplicate literals | 49 |
+| PMD literals in conditions | 49 |
+| PMD NPath complexity | 33 |
+| Lizard file length | 29 |
+| Lizard parameter count | 18 |
+| PMD object allocation in loops | 11 |
+| PMD excessive parameters | 9 |
+| PMD method-level synchronization | 7 |
+| PMD null assignment | 6 |
+| PMD unguarded logging | 1 |
+
+The latest remediation sequence reduced the exact active inventory without
+ignoring findings or excluding first-party source:
+
+| Pull request | Checkpoint | Active findings after analysis |
+| --- | --- | ---: |
+| #118 | punishment alert lifecycle complexity | 452 |
+| #119 | configuration reload complexity | 440 |
+| #120 | Paper and orchestration maintainability | 402 |
+| #121 | persistence state transitions | 377 |
+| #122 | registered command-route integrity | 376 |
+
+PR #120 passed with zero new findings and reduced the active inventory by 38.
+PR #121 passed with zero new findings and reduced it by 25; its PR mapper showed
+three fixes, while the complete branch inventory captured the full reduction.
+PR #122 passed with zero new findings and one fixed finding. All three exact
+heads passed the Java 21 build, hosted coverage, Sentinel artifact validation,
+and private Pi staging. CodeRabbit was rate-limited on PRs #120 and #121; its
+PR #122 check completed without producing a review or inline comment. No
+CodeRabbit approval is claimed.
+
+The checked-in PMD ruleset still targets the hosted PMD 6 runner and includes a
+custom XPath rule class that PMD 7 cannot load. Local PMD 7 checks therefore run
+the exact applicable hosted rule IDs on changed files, while Codacy Cloud
+remains authoritative for the complete repository result.
 
 ## Remediation order
 

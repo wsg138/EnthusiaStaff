@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-08-05 (`America/Indiana/Indianapolis`)
+Last updated: 2026-08-11 (`America/Indiana/Indianapolis`)
 
 This manifest records project orchestration and authority boundaries. It does not authorize deployment, production data, LiteBans cutover, or punishment authority.
 
@@ -10,12 +10,14 @@ This manifest records project orchestration and authority boundaries. It does no
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Setup baseline | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
+| Current `main` | `e5352a7918d7c19bb1878117e182aac607ca9297` (merged PR #122) |
 | Canonical package registry | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
-| Intended state | `PACKAGE-PLANNING READY` |
-| Next assigned package | `ES-P01` |
-| Active implementation | `NONE` |
-| Migration boundary | V16; V1–V16 immutable |
+| Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
+| Latest completed checkpoints | PR #120 maintainability, PR #121 persistence transitions, PR #122 command-route integrity |
+| Active implementation | Fail-closed freeze verification visibility and staff notification |
+| Codacy checkpoint | 376 active warnings on `main`; grade is not asserted because the current CLI response does not expose it |
+| Migration boundary | V18; V1–V18 immutable |
 | Production authority | LiteBans remains authoritative |
 
 ## Repository model

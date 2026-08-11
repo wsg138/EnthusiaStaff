@@ -66,7 +66,7 @@ If the database may have committed before the client timed out, look up the exac
 
 ## Schema checksum or future version
 
-Stop unsafe startup/work. Confirm migrations match the exact runtime artifacts. Current merged history is through V17.
+Stop unsafe startup/work. Confirm migrations match the exact runtime artifacts. Current merged history is through V18.
 
 Do not edit an applied migration or use Flyway repair simply to make a modified historical file pass. Follow an approved database recovery plan with backup/evidence when history itself is genuinely damaged.
 
@@ -156,6 +156,19 @@ Do not assume Bukkit `hidePlayer` proves other visibility layers. See [[Vanish I
 ## Freeze bypass
 
 Record the exact bypass, client/platform, backend and sequence. Release or hand off the freeze when the investigation cannot continue safely. Do not repeatedly exercise an unsafe bypass on a live player merely to collect more attempts.
+
+## Freeze status cannot be verified
+
+Freeze recovery fails closed when the durable store is unavailable, the lookup
+fails, or the bounded worker queue is saturated. The joining player remains
+restricted, is removed from a vehicle, has any open inventory closed, and is
+told that staff review is required. Online staff with freeze authority receive
+an alert identifying the affected player.
+
+Check the database and worker health before deciding whether the durable freeze
+is active. Use `/unfreeze` only after reviewing authoritative state; do not
+interpret the temporary fail-closed restriction as proof that a freeze row
+exists. Reconnect after storage recovery to repeat the fenced verification.
 
 ## Outbox delivery stalled
 
