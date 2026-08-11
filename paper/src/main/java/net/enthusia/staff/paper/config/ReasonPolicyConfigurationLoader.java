@@ -32,19 +32,25 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class ReasonPolicyConfigurationLoader {
     private static final Pattern STABLE_ID = Pattern.compile("[a-z0-9]+(?:[.-][a-z0-9]+)*");
+    private static final String ROOT_PATH = "root";
+    private static final String CONFISCATION_OPTIONS_FIELD = "confiscation-options";
+    private static final String ALT_INHERITANCE_FIELD = "alt-inheritance";
+    private static final String DISPLAY_NAME_FIELD = "display-name";
     private static final Set<String> ROOT_FIELDS = Set.of(
             "version", "defaults", "aliases", "removed-reasons", "reasons"
     );
     private static final Set<String> DEFAULT_FIELDS = Set.of(
-            "decay-eligible", "public-default", "reportable", "confiscation-options",
-            "required-rank", "automatic-detection-eligible", "alt-inheritance"
+            "decay-eligible", "public-default", "reportable", CONFISCATION_OPTIONS_FIELD,
+            "required-rank", "automatic-detection-eligible", ALT_INHERITANCE_FIELD
     );
     private static final Set<String> ALIAS_FIELDS = Set.of("id", "target");
-    private static final Set<String> REMOVED_REASON_FIELDS = Set.of("id", "family", "display-name");
+    private static final Set<String> REMOVED_REASON_FIELDS = Set.of(
+            "id", "family", DISPLAY_NAME_FIELD
+    );
     private static final Set<String> REASON_FIELDS = Set.of(
-            "id", "family", "display-name", "examples", "severity", "decay-eligible",
-            "public-default", "reportable", "confiscation-options", "required-rank",
-            "automatic-detection-eligible", "alt-inheritance", "ladder"
+            "id", "family", DISPLAY_NAME_FIELD, "examples", "severity", "decay-eligible",
+            "public-default", "reportable", CONFISCATION_OPTIONS_FIELD, "required-rank",
+            "automatic-detection-eligible", ALT_INHERITANCE_FIELD, "ladder"
     );
     private static final Set<String> STEP_FIELDS = Set.of("label", "sanctions");
     private static final Set<String> SANCTION_FIELDS = Set.of("type", "duration");
@@ -74,11 +80,11 @@ public final class ReasonPolicyConfigurationLoader {
     private LoadedPolicies load(Reader reader, String sourceName) {
         try {
             JsonNode root = yaml.readTree(reader);
-            requireObject(root, "root");
-            rejectUnknown(root, ROOT_FIELDS, "root");
-            String version = text(root, "version", "root");
-            Defaults defaults = parseDefaults(required(root, "defaults", "root"));
-            ParsedPolicies active = parsePolicies(required(root, "reasons", "root"), defaults);
+            requireObject(root, ROOT_PATH);
+            rejectUnknown(root, ROOT_FIELDS, ROOT_PATH);
+            String version = text(root, "version", ROOT_PATH);
+            Defaults defaults = parseDefaults(required(root, "defaults", ROOT_PATH));
+            ParsedPolicies active = parsePolicies(required(root, "reasons", ROOT_PATH), defaults);
             List<RemovedReason> removedReasons = parseRemovedReasons(
                     root.get("removed-reasons"),
                     active.identifiers()
@@ -137,7 +143,7 @@ public final class ReasonPolicyConfigurationLoader {
         return new RemovedReason(
                 text(node, "id", path),
                 text(node, "family", path),
-                text(node, "display-name", path)
+                text(node, DISPLAY_NAME_FIELD, path)
         );
     }
 
@@ -226,10 +232,11 @@ public final class ReasonPolicyConfigurationLoader {
                 bool(node, "decay-eligible", path),
                 publicByDefault,
                 bool(node, "reportable", path),
-                bool(node, "confiscation-options", path),
+                bool(node, CONFISCATION_OPTIONS_FIELD, path),
                 enumValue(StaffRank.class, text(node, "required-rank", path), path + ".required-rank"),
                 bool(node, "automatic-detection-eligible", path),
-                enumValue(AltInheritanceMode.class, text(node, "alt-inheritance", path), path + ".alt-inheritance")
+                enumValue(AltInheritanceMode.class,
+                        text(node, ALT_INHERITANCE_FIELD, path), path + ".alt-inheritance")
         );
     }
 
@@ -263,18 +270,19 @@ public final class ReasonPolicyConfigurationLoader {
         return new ReasonPolicy(
                 id,
                 text(node, "family", path),
-                text(node, "display-name", path),
+                text(node, DISPLAY_NAME_FIELD, path),
                 integer(node, "severity", path, 0, 100),
                 bool(node, "decay-eligible", defaults.decayEligible(), path),
                 steps,
                 examples,
                 publicByDefault,
                 bool(node, "reportable", defaults.reportable(), path),
-                bool(node, "confiscation-options", defaults.confiscationAllowed(), path),
+                bool(node, CONFISCATION_OPTIONS_FIELD, defaults.confiscationAllowed(), path),
                 enumValue(StaffRank.class, optionalText(node, "required-rank", defaults.requiredRank().name()), path + ".required-rank"),
                 bool(node, "automatic-detection-eligible", defaults.automaticDetectionAllowed(), path),
                 enumValue(AltInheritanceMode.class,
-                        optionalText(node, "alt-inheritance", defaults.altInheritance().name()), path + ".alt-inheritance")
+                        optionalText(node, ALT_INHERITANCE_FIELD, defaults.altInheritance().name()),
+                        path + ".alt-inheritance")
         );
     }
 
