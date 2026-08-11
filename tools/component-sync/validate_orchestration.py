@@ -46,9 +46,8 @@ def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
         if cells and cells[0] == 'ID':
             headers = cells
             continue
-        if not _is_package_row(headers, cells):
+        if headers is None or not _is_package_row(cells):
             continue
-        assert headers is not None
         fields = {
             header: value
             for header, value in zip(headers, cells)
@@ -65,8 +64,8 @@ def _table_cells(line: str) -> list[str] | None:
     return [_plain_field(value) for value in line.strip().strip('|').split('|')]
 
 
-def _is_package_row(headers: list[str] | None, cells: list[str]) -> bool:
-    return headers is not None and bool(cells) and re.fullmatch(r'ES-[A-Z]+\d+', cells[0]) is not None
+def _is_package_row(cells: list[str]) -> bool:
+    return bool(cells) and re.fullmatch(r'ES-[A-Z]+\d+', cells[0]) is not None
 
 
 def validate_registry_routing(
