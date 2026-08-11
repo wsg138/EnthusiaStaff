@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 from typing import Mapping
+
+MINIMUM_PYTHON = (3, 10)
+if sys.version_info < MINIMUM_PYTHON:
+    raise RuntimeError('validate_orchestration.py requires Python 3.10 or newer')
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = ROOT / 'ai-agents' / 'work-packages'
@@ -37,8 +41,21 @@ def _plain_field(value: str) -> str:
 
 def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
     """Parse the canonical package-index Markdown table."""
+    packages, duplicate_ids = _parse_registry_rows(registry)
+    if duplicate_ids:
+        raise ValueError(
+            'duplicate registry IDs: ' + ', '.join(sorted(set(duplicate_ids)))
+        )
+    return packages
+
+
+def _parse_registry_rows(
+    registry: str,
+) -> tuple[dict[str, dict[str, str]], list[str]]:
+    """Parse package rows while preserving duplicate-ID evidence."""
     headers: list[str] | None = None
     packages: dict[str, dict[str, str]] = {}
+    duplicate_ids: list[str] = []
     for line in registry.splitlines():
         cells = _table_cells(line)
         if cells is None:
@@ -50,12 +67,15 @@ def parse_registry_packages(registry: str) -> dict[str, dict[str, str]]:
             continue
         fields = {
             header: value
-            for header, value in zip(headers, cells)
+            for header, value in zip(headers, cells, strict=False)
             if value not in {'', '-', '—'}
         }
         package_id = cells[0]
+        if package_id in packages:
+            duplicate_ids.append(package_id)
+            continue
         packages[package_id] = fields
-    return packages
+    return packages, duplicate_ids
 
 
 def _table_cells(line: str) -> list[str] | None:
@@ -144,7 +164,11 @@ def _package_inventory(
         errors.append('duplicate package IDs')
 
     registry = (package_root / 'PACKAGE-REGISTRY.md').read_text(encoding='utf-8')
-    registry_packages = parse_registry_packages(registry)
+    registry_packages, duplicate_registry_ids = _parse_registry_rows(registry)
+    errors.extend(
+        f'duplicate registry entry {package_id}'
+        for package_id in sorted(set(duplicate_registry_ids))
+    )
     for package_id in package_ids:
         if package_id not in registry_packages:
             errors.append(f'{package_id} missing registry entry')

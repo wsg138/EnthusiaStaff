@@ -161,7 +161,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (operationId == null) {
             throw new IllegalArgumentException("operationId must be present");
         }
-        validateLeaseIdentity(operationId, 1L, leaseDuration, now);
+        validateLeaseIdentity(operationId, MINIMUM_FENCING_TOKEN, leaseDuration, now);
         return transaction(connection -> {
             EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
             if (operation == null || operation.state().released()
@@ -213,7 +213,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             EconomyValidatedPlan plan,
             Instant now
     ) {
-        if (operationId == null || fencingToken < 1L || plan == null || now == null) {
+        if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || plan == null || now == null) {
             throw new IllegalArgumentException("validated economy plan identity is invalid");
         }
         return transaction(connection -> {
@@ -315,7 +315,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
 
     @Override
     public EconomyJournalResult markApplying(UUID operationId, long fencingToken, Instant now) {
-        if (operationId == null || fencingToken < 1L || now == null) {
+        if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || now == null) {
             throw new IllegalArgumentException("economy apply identity is invalid");
         }
         return transaction(connection -> {
@@ -380,7 +380,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             EconomyTerminalUpdate update,
             Instant now
     ) {
-        if (operationId == null || fencingToken < 1L || update == null || now == null) {
+        if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || update == null || now == null) {
             throw new IllegalArgumentException("economy terminal update identity is invalid");
         }
         return transaction(connection -> {
@@ -468,7 +468,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
 
     @Override
     public EconomyJournalResult release(UUID operationId, long fencingToken, Instant now) {
-        if (operationId == null || fencingToken < 1L || now == null) {
+        if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || now == null) {
             throw new IllegalArgumentException("economy release identity is invalid");
         }
         return transaction(connection -> {
@@ -1197,7 +1197,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         if (request == null) {
             throw new IllegalArgumentException("request must be present");
         }
-        validateLeaseIdentity(request.operationId(), 1L, leaseDuration, now);
+        validateLeaseIdentity(request.operationId(), MINIMUM_FENCING_TOKEN, leaseDuration, now);
     }
 
     private static void validateLeaseIdentity(
@@ -1206,7 +1206,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             Duration leaseDuration,
             Instant now
     ) {
-        if (operationId == null || fencingToken < 1L || leaseDuration == null
+        if (operationId == null || fencingToken < MINIMUM_FENCING_TOKEN || leaseDuration == null
                 || leaseDuration.isNegative() || leaseDuration.isZero()
                 || leaseDuration.compareTo(MAXIMUM_LEASE) > 0 || now == null) {
             throw new IllegalArgumentException("economy lease fields are invalid");

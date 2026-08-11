@@ -2,6 +2,8 @@
 
 `component_sync.py` calculates deterministic manifests and compares an aggregate external-component directory with a checkout of its standalone repository. It is read-only.
 
+Python 3.10 or newer is required for the component comparison and orchestration validation tools.
+
 ```bash
 python tools/component-sync/component_sync.py manifest components/enthusia-currency --revision <aggregate-main-sha>
 python tools/component-sync/component_sync.py compare \
