@@ -14,11 +14,11 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 ## Canonical current state
 
-`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
+`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
 
-`ES-P07 — Inventory and Ender editing runtime completion` completed on frozen implementation head `70b279998bbcc9a3ddd68b5f6e060d5a60662323`. PR #112 merged normally as `c96b0a2047e2e720bb4f18d32cf8c254d0302508`; the merge has pre-merge `main` `2d8fcf27b0bac980211149ae8f7f4e7798998ee5` and the frozen head as its two parents, is one commit ahead of the frozen head with zero file delta, and the implementation branch was automatically deleted after merge.
+`ES-P06 — Discord notification delivery completion` completed on frozen implementation head `7e21edb1d32a75727dc65df826f9de964adcfff3`. PR #115 merged normally as `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`; the merge has pre-merge `main` `449461b410c0b06d27bfd98a2940023aa0d9913f` and the frozen head as its two parents, shares the frozen head's tree exactly, and the implementation branch was automatically deleted after merge.
 
-`ES-P06` remains `READY` at priority 60. ES-P07 completion makes `ES-P08` dependency-complete and therefore `READY` at priority 70. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved. This ES-P07 worker does not activate another package.
+`ES-P08` remains dependency-complete and `READY` at priority 70. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved. ES-P06 completion removes one ES-V02 dependency, but ES-V02 remains parked on incomplete ES-X01, ES-X03, and ES-X04. This ES-P06 worker does not activate another package.
 
 ## Canonical package index
 
@@ -34,8 +34,8 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 | `ES-P07` | Inventory and Ender editing runtime completion | `COMPLETE` | — | 45 | `ES-P02` | frozen `70b279998bbcc9a3ddd68b5f6e060d5a60662323`; PR #112 merged normally as `c96b0a2047e2e720bb4f18d32cf8c254d0302508`; contained; branch cleaned |
 | `ES-P05` | Report evidence and staff workflow completion | `COMPLETE` | — | 50 | `ES-P03`, `ES-P04` | merged PR #81 |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | merged PR #84 |
-| `ES-P06` | Discord notification delivery completion | `READY` | `READY` | 60 | `ES-P05` | dependency complete; not activated by ES-P07 worker |
-| `ES-P08` | Item confiscation and restoration | `READY` | `READY` | 70 | `ES-P07` | dependency complete after ES-P07; not activated by ES-P07 worker |
+| `ES-P06` | Discord notification delivery completion | `COMPLETE` | — | 60 | `ES-P05` | frozen `7e21edb1d32a75727dc65df826f9de964adcfff3`; PR #115 merged normally as `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`; contained; branch cleaned |
+| `ES-P08` | Item confiscation and restoration | `READY` | `READY` | 70 | `ES-P07` | dependency complete; not activated by ES-P06 worker |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
@@ -43,10 +43,27 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | dependencies incomplete |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependencies incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
-| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-P06, ES-X01, ES-X03 and ES-X04 remain incomplete |
+| `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-P06 is complete; ES-X01, ES-X03 and ES-X04 remain incomplete |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | dependencies incomplete |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
+
+## ES-P06 terminal record
+
+- Original/pre-merge `main`: `449461b410c0b06d27bfd98a2940023aa0d9913f`.
+- Final frozen implementation head: `7e21edb1d32a75727dc65df826f9de964adcfff3`.
+- Hosted exact-head validation: Validate Wiki run `31450684263` passed; Coverage run `31450684287` attempt 2 / job `93657195445` passed Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo, validation artifact, and Codacy coverage upload. Aggregate coverage was 47.56% lines, 38.74% branches, and 50.23% instructions.
+- Hosted validation artifact `9086657350`, digest `sha256:329ed42f108776e19713bac57dc36b47020f74dd78571296fc9a28cfde0be248`.
+- Runtime JARs: Paper SHA-256 `74fbc2f1ac487a4191ccc5d83b6d7c68ba857dd4c2fd8b060c13fff138c0fe33`; Velocity SHA-256 `e3705f7729d3e1e48797635d4c88345aea68e9e3845bce47547c6879ab9920e2`; provider API leaks 0.
+- Exact-head Codacy static check `93654428681` passed with zero findings. Diff coverage was 72.52%; coverage variation +0.43% against the -1.0% target.
+- Review: three substantive CodeRabbit findings were fixed with regression coverage and all threads resolved. The final incremental CodeRabbit rerun was rate-limited and is not counted as a pass. An exact-head manual review found no additional valid defect; final valid unresolved thread count is zero.
+- Non-passing hosted history: Coverage attempt 1 / job `93654716868` failed in an untouched punishment-request alert concurrency test on a transient MariaDB race; that attempt remains non-passing. The unchanged exact SHA passed the full rerun in attempt 2.
+- Canonical Pi: public run `31450682744` attempt 1, build job `93654251245`, and bridge job `93655372240` succeeded. Correlated private run `31451077909` / job `93655393387` succeeded on trusted `Lincoln-PI-4` with exact source/provenance verification, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 applied on cycle 1, schema v18 current/no-op on restart, clean shutdown/failure scans, and guarded disposal of 69 database objects. Sanitized evidence artifact `9086623670`, digest `sha256:98627335ce81a862a2d77287548a03d2ef85e238c8d14e5b4e932d471b230ce7`.
+- The configured Sentinel PR artifact-build check passed on the exact head; no live Sentinel restart is claimed or substituted for canonical staging because ES-P06's changed runtime is Velocity-side.
+- No production Discord route was contacted; isolated fake/in-memory delivery was used for route/body behavior. ES-P06 added no migration; V18 remains immutable.
+- PR #115 merged by normal merge commit `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`. Its parents are pre-merge `main` and the frozen feature head; both feature head and merge commit share tree `8f7b7dae841779af573012df3e30fb6302580654`. `package/es-p06-discord-delivery` is deleted/404.
+- Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, punishment-authority change, source rewrite, or unrelated package implementation occurred.
+- Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p06-discord-delivery-complete.md`.
 
 ## ES-P07 terminal record
 
@@ -64,4 +81,4 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 ## Next sequential action
 
-This worker stops after terminal publication. A new worker must reconcile live GitHub before selecting work. If no `ACTIONABLE_CONTINUATION` appears, normal priority currently places `ES-P06` (60) before `ES-P08` (70). Do not treat this routing note as activation of either package.
+This worker stops after terminal publication. A new worker must reconcile live GitHub before selecting work. If no `ACTIONABLE_CONTINUATION` appears, the next dependency-complete eligible `READY` package is currently `ES-P08` at priority 70. Do not treat this routing note as activation of ES-P08.
