@@ -548,6 +548,15 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
                     "CURRENCY_QUARANTINE_REQUIRED",
                     bounded(outcome.detail())
             );
+            default -> quarantine(
+                    actor,
+                    target,
+                    operation,
+                    guard,
+                    outcome.accountState(),
+                    "CURRENCY_STATUS_UNKNOWN",
+                    "Currency reported an unrecognized removal status"
+            );
         }
     }
 

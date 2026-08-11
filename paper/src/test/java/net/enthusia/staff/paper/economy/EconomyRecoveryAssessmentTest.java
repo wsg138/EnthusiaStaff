@@ -66,6 +66,19 @@ final class EconomyRecoveryAssessmentTest {
     }
 
     @Test
+    void committedStateWithoutCompleteResultEvidenceIsQuarantined() {
+        EconomyRecoveryAssessment.Quarantine quarantine = assertInstanceOf(
+                EconomyRecoveryAssessment.Quarantine.class,
+                EconomyRecoveryAssessment.assess(
+                        operation(EconomyOperationState.COMMITTED, Evidence.COMPLETE),
+                        account(TARGET_ID, REPLACEMENT_TOTAL, REPLACEMENT_CHECKSUM)
+                )
+        );
+
+        assertEquals("COMMITTED_RECOVERY_EVIDENCE_INCOMPLETE", quarantine.failureCode());
+    }
+
+    @Test
     void rolledBackStateUsesRecordedEvidenceWhenItExists() {
         EconomyOperation operation = operationWithResult(
                 EconomyOperationState.ROLLED_BACK,
@@ -88,6 +101,38 @@ final class EconomyRecoveryAssessmentTest {
                 )
         );
         assertEquals("ROLLED_BACK_RECOVERY_CONFLICT", conflict.failureCode());
+    }
+
+    @Test
+    void rolledBackStateWithoutResultEvidenceVerifiesDurableBeforeState() {
+        EconomyOperation operation = operation(EconomyOperationState.ROLLED_BACK, Evidence.COMPLETE);
+
+        assertInstanceOf(
+                EconomyRecoveryAssessment.Release.class,
+                EconomyRecoveryAssessment.assess(
+                        operation,
+                        account(TARGET_ID, BEFORE_TOTAL, BEFORE_CHECKSUM)
+                )
+        );
+        EconomyRecoveryAssessment.Quarantine diverged = assertInstanceOf(
+                EconomyRecoveryAssessment.Quarantine.class,
+                EconomyRecoveryAssessment.assess(
+                        operation,
+                        account(TARGET_ID, BEFORE_TOTAL + 1L, DIVERGED_CHECKSUM)
+                )
+        );
+        assertEquals("ROLLED_BACK_RECOVERY_CONFLICT", diverged.failureCode());
+    }
+
+    @Test
+    void evidenceFreeRollbackWithoutAnApplyPlanReleases() {
+        assertInstanceOf(
+                EconomyRecoveryAssessment.Release.class,
+                EconomyRecoveryAssessment.assess(
+                        operation(EconomyOperationState.ROLLED_BACK, Evidence.NONE),
+                        account(TARGET_ID, BEFORE_TOTAL + 1L, DIVERGED_CHECKSUM)
+                )
+        );
     }
 
     @Test

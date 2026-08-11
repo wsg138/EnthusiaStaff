@@ -29,10 +29,13 @@ sealed interface EconomyRecoveryAssessment {
             EconomyOperation operation,
             CurrencyAccountState current
     ) {
-        String expected = operation.resultChecksum()
-                .or(() -> operation.replacementChecksum())
-                .orElse("");
-        if (expected.equals(current.checksum()) && resultTotalMatches(operation, current)) {
+        if (!hasCompleteResultEvidence(operation)) {
+            return quarantine(
+                    "COMMITTED_RECOVERY_EVIDENCE_INCOMPLETE",
+                    "Committed Currency recovery is missing its verified result evidence"
+            );
+        }
+        if (recordedResultMatches(operation, current)) {
             return new Release("Economy recovery verified the committed state.");
         }
         return quarantine(
@@ -45,14 +48,24 @@ sealed interface EconomyRecoveryAssessment {
             EconomyOperation operation,
             CurrencyAccountState current
     ) {
-        boolean checksumMatches = operation.resultChecksum().isEmpty()
-                || operation.resultChecksum().orElseThrow().equals(current.checksum());
-        if (checksumMatches && resultTotalMatches(operation, current)) {
+        if (hasCompleteResultEvidence(operation) && recordedResultMatches(operation, current)) {
             return new Release("Economy recovery verified the rolled-back state.");
+        }
+        if (hasAnyResultEvidence(operation)) {
+            return quarantine(
+                    "ROLLED_BACK_RECOVERY_CONFLICT",
+                    "Current Currency state does not match the recorded rollback"
+            );
+        }
+        if (!operation.hasAnyDurablePlanEvidence()) {
+            return new Release("Economy recovery verified that no apply plan existed.");
+        }
+        if (operation.hasCompleteDurablePlanEvidence() && beforeStateMatches(operation, current)) {
+            return new Release("Economy recovery verified the durable state from before the operation.");
         }
         return quarantine(
                 "ROLLED_BACK_RECOVERY_CONFLICT",
-                "Current Currency state does not match the recorded rollback"
+                "Current Currency state does not match the durable state from before the rollback"
         );
     }
 
@@ -107,12 +120,32 @@ sealed interface EconomyRecoveryAssessment {
         };
     }
 
-    private static boolean resultTotalMatches(
+    private static boolean recordedResultMatches(
             EconomyOperation operation,
             CurrencyAccountState current
     ) {
-        return operation.resultTotal().isEmpty()
-                || current.authoritativeTotal() == operation.resultTotal().orElseThrow();
+        return operation.resultChecksum().orElseThrow().equals(current.checksum())
+                && current.authoritativeTotal() == operation.resultTotal().orElseThrow();
+    }
+
+    private static boolean beforeStateMatches(
+            EconomyOperation operation,
+            CurrencyAccountState current
+    ) {
+        return operation.beforeChecksum().orElseThrow().equals(current.checksum())
+                && current.authoritativeTotal() == operation.authoritativeTotal().orElseThrow();
+    }
+
+    private static boolean hasAnyResultEvidence(EconomyOperation operation) {
+        return operation.resultTotal().isPresent()
+                || operation.resultChecksum().isPresent()
+                || operation.resultSnapshotJson().isPresent();
+    }
+
+    private static boolean hasCompleteResultEvidence(EconomyOperation operation) {
+        return operation.resultTotal().isPresent()
+                && operation.resultChecksum().isPresent()
+                && operation.resultSnapshotJson().isPresent();
     }
 
     private static Quarantine quarantine(String failureCode, String detail) {
