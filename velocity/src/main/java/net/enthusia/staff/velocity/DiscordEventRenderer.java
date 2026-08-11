@@ -15,7 +15,8 @@ final class DiscordEventRenderer {
     private static final Map<String, List<String>> ALLOWED_FIELDS = Map.of(
             "punishments", List.of(
                     "caseId", "targetId", "reasonId", "sanctionId", "sanctionIds",
-                    "requestId", "actorId", "status", "state", "type", "decision", "outcome"
+                    "requestId", "actorId", "action", "sanctionType", "status", "state", "type",
+                    "decision", "outcome"
             ),
             "reports", List.of("reportId", "targetId", "reasonId", "serverId", "status", "state", "actorId"),
             "logs-staffmode", List.of(
