@@ -29,7 +29,7 @@ interface DiscordWebhookTransport {
         }
     }
 
-    final class Jdk implements DiscordWebhookTransport {
+    final class Jdk implements DiscordWebhookTransport, AutoCloseable {
         private static final int HTTP_SUCCESS_MINIMUM = 200;
         private static final int HTTP_REDIRECT_MINIMUM = 300;
         private static final int HTTP_CLIENT_ERROR_MINIMUM = 400;
@@ -44,19 +44,29 @@ interface DiscordWebhookTransport {
         private final Duration requestTimeout;
         private final ObjectMapper json;
         private final HttpExchange exchange;
+        private final Runnable closeAction;
 
         Jdk(Duration requestTimeout) {
-            this(requestTimeout, defaultExchange(requestTimeout));
+            this(requestTimeout, createClient(requestTimeout));
+        }
+
+        private Jdk(Duration requestTimeout, HttpClient client) {
+            this(requestTimeout, exchangeFor(client), client::close);
         }
 
         Jdk(Duration requestTimeout, HttpExchange exchange) {
+            this(requestTimeout, exchange, () -> { });
+        }
+
+        private Jdk(Duration requestTimeout, HttpExchange exchange, Runnable closeAction) {
             if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()
-                    || exchange == null) {
+                    || exchange == null || closeAction == null) {
                 throw new IllegalArgumentException("Discord request timeout and HTTP exchange must be valid");
             }
             this.requestTimeout = requestTimeout;
             this.json = new ObjectMapper();
             this.exchange = exchange;
+            this.closeAction = closeAction;
         }
 
         @Override
@@ -101,14 +111,22 @@ interface DiscordWebhookTransport {
             return Delivery.failed("HTTP_INVALID_STATUS");
         }
 
-        private static HttpExchange defaultExchange(Duration requestTimeout) {
+        @Override
+        public void close() {
+            closeAction.run();
+        }
+
+        private static HttpClient createClient(Duration requestTimeout) {
             if (requestTimeout == null || requestTimeout.isZero() || requestTimeout.isNegative()) {
                 throw new IllegalArgumentException("Discord request timeout must be positive");
             }
-            HttpClient http = HttpClient.newBuilder()
+            return HttpClient.newBuilder()
                     .connectTimeout(requestTimeout)
                     .followRedirects(HttpClient.Redirect.NEVER)
                     .build();
+        }
+
+        private static HttpExchange exchangeFor(HttpClient http) {
             return (endpoint, timeout, body) -> {
                 HttpRequest request = HttpRequest.newBuilder(endpoint)
                         .timeout(timeout)
