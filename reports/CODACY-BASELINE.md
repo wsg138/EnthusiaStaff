@@ -1054,6 +1054,50 @@ private Pi runtime test passed. CodeRabbit's valid rollback-evidence and unknown
 provider-status findings were fixed; its follow-up run was rate-limited, so no
 follow-up review approval is claimed.
 
+## 2026-08-11 exact-sanction transaction checkpoint
+
+Merged PR #127 advanced `main` to
+`7c032c6af32f7281f518a01ed6dc3b0252cabb5b`. Final code head
+`efd8cb507d8b7e4c2d2ac493a98e847442496072` separates exact-sanction row
+state, linked-record validation, mutation planning, and transactional event,
+audit, and outbox writes. The original row-lock order, revision check,
+idempotent replay, rollback behavior, and single commit boundary remain intact.
+
+Review hardening verifies that rejected punishment-request links leave sanction
+state, revision, events, audit, and outboxes unchanged, and covers both approved
+and externally fulfilled requests. The orchestration validator now excludes
+generated analyzer and build directories without exceeding its configured
+complexity threshold.
+
+Codacy Cloud reports zero new issues. The complete branch inventory records the
+authoritative reduction from 319 to 311 active warnings:
+
+| Category | PR #126 `main` | PR #127 branch | Change |
+| --- | ---: | ---: | ---: |
+| Complexity | 205 | 197 | -8 |
+| Error-prone | 95 | 95 | 0 |
+| Performance | 19 | 19 | 0 |
+| **Total** | **319** | **311** | **-8** |
+
+No changed exact-sanction production file or orchestration validator retains a
+Codacy result. No finding, analyzer rule, or first-party source path was ignored
+or suppressed. The current CLI response still does not expose a repository
+letter grade, so none is claimed.
+
+The final Java 21 cache-disabled clean build passed 39 tasks and 926 tests with
+zero failures, errors, or skips. All 47 MariaDB Testcontainers suites and their
+183 tests executed. The Paper runtime jar is 9,190,872 bytes with SHA-256
+`4FF32B9B413537DA255473578F88647A380F9C4BA673E529D46A1C73C924543D`; the
+Velocity runtime jar is 7,937,851 bytes with SHA-256
+`C45D571A42F4C36EBE6703BE19048A340ACA85070E3A560B2D8C17AAF7498E2B`.
+Hosted aggregate coverage, Sentinel packaging, and the exact-head guarded Pi
+boot/restart test passed.
+
+Focused PMD 7.26.0, threshold-matched Lizard, configured Opengrep, and
+100-token CPD checks introduced no changed-production finding. CodeRabbit's
+initial valid test and documentation observations were addressed; its follow-up
+run was rate-limited, so no follow-up approval is claimed.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
