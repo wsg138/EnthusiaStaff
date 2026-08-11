@@ -37,6 +37,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CaseCommand implements CommandExecutor {
     private static final String RESTORE_PERMISSION = "enthusiastaff.case.restoreitems";
+    private static final String ENTRY_SEPARATOR = " | ";
 
     private final JavaPlugin plugin;
     private final Supplier<CaseLookup> cases;
@@ -166,7 +167,8 @@ public final class CaseCommand implements CommandExecutor {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text(
                 "Case " + review.caseId().value() + " | subject " + review.targetId()
-                        + " | " + human(review.sanctionFamily()) + " | " + human(review.state().name())
+                        + ENTRY_SEPARATOR + human(review.sanctionFamily())
+                        + ENTRY_SEPARATOR + human(review.state().name())
         ));
         lines.add(Component.text(
                 "Created " + formatter.format(review.issuedAt()) + " | public reason: " + review.publicReason()
@@ -196,8 +198,8 @@ public final class CaseCommand implements CommandExecutor {
             lines.add(Component.text("Sanctions:"));
             for (SanctionReview sanction : review.sanctions()) {
                 lines.add(Component.text(
-                        "- " + sanction.sanctionId() + " | " + human(sanction.type().name())
-                                + " | " + human(effectiveStatus(sanction).name())
+                        "- " + sanction.sanctionId() + ENTRY_SEPARATOR + human(sanction.type().name())
+                                + ENTRY_SEPARATOR + human(effectiveStatus(sanction).name())
                                 + " | issued " + formatter.format(sanction.issuedAt())
                                 + " | original expiration " + expiration(
                                         originalExpiration(detail.timeline(), sanction),
@@ -225,9 +227,9 @@ public final class CaseCommand implements CommandExecutor {
         StringBuilder line = new StringBuilder(128)
                 .append("- ")
                 .append(formatter.format(entry.occurredAt()))
-                .append(" | ")
+                .append(ENTRY_SEPARATOR)
                 .append(human(entry.eventType().name()))
-                .append(" | ")
+                .append(ENTRY_SEPARATOR)
                 .append(human(entry.status()));
         entry.sanctionId().ifPresent(value -> line.append(" | sanction ").append(value));
         entry.punishmentRequestId().ifPresent(value -> line.append(" | request ").append(value));
