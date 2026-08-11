@@ -8,37 +8,42 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class DiscordWebhookRouteTest {
+    private static final String REPORTS = "reports";
+    private static final String PUNISHMENTS = "punishments";
+    private static final String STAGING_HOST = "discord-staging.example.test";
+    private static final Set<String> STAGING_HOSTS = Set.of(STAGING_HOST);
+
     @Test
     void stagingRequiresExactApprovedHttpsHost() {
         DiscordWebhookRoute route = DiscordWebhookRoute.approvedStaging(
-                "reports",
-                URI.create("https://discord-staging.example.test/webhook/reports"),
-                Set.of("discord-staging.example.test")
+                REPORTS,
+                URI.create("https://" + STAGING_HOST + "/webhook/reports"),
+                STAGING_HOSTS
         );
 
         assertEquals(DiscordRouteEnvironment.STAGING, route.environment());
-        assertEquals("discord-staging.example.test", route.endpoint().getHost());
+        assertEquals(STAGING_HOST, route.endpoint().getHost());
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
+                        REPORTS,
                         URI.create("https://unapproved.example.test/webhook/reports"),
-                        Set.of("discord-staging.example.test")
+                        STAGING_HOSTS
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
-                        URI.create("http://discord-staging.example.test/webhook/reports"),
-                        Set.of("discord-staging.example.test")
+                        REPORTS,
+                        URI.create("http://" + STAGING_HOST + "/webhook/reports"),
+                        STAGING_HOSTS
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
+                        REPORTS,
                         URI.create("https://discord.com/api/webhooks/123/token"),
                         Set.of("discord.com")
                 )
@@ -46,7 +51,7 @@ final class DiscordWebhookRouteTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
+                        REPORTS,
                         URI.create("https://canary.discord.com/api/webhooks/123/token"),
                         Set.of("canary.discord.com")
                 )
@@ -55,30 +60,28 @@ final class DiscordWebhookRouteTest {
 
     @Test
     void unsafeUriComponentsAreRejected() {
-        Set<String> hosts = Set.of("discord-staging.example.test");
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
-                        URI.create("https://user@discord-staging.example.test/webhook/reports"),
-                        hosts
+                        REPORTS,
+                        URI.create("https://user@" + STAGING_HOST + "/webhook/reports"),
+                        STAGING_HOSTS
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
-                        URI.create("https://discord-staging.example.test/webhook/reports?secret=1"),
-                        hosts
+                        REPORTS,
+                        URI.create("https://" + STAGING_HOST + "/webhook/reports?secret=1"),
+                        STAGING_HOSTS
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedStaging(
-                        "reports",
-                        URI.create("https://discord-staging.example.test/webhook/reports#fragment"),
-                        hosts
+                        REPORTS,
+                        URI.create("https://" + STAGING_HOST + "/webhook/reports#fragment"),
+                        STAGING_HOSTS
                 )
         );
     }
@@ -86,7 +89,7 @@ final class DiscordWebhookRouteTest {
     @Test
     void productionAcceptsOnlyDiscordWebhookEndpoints() {
         DiscordWebhookRoute route = DiscordWebhookRoute.approvedProduction(
-                "punishments",
+                PUNISHMENTS,
                 URI.create("https://discord.com/api/webhooks/123/token")
         );
         assertEquals(DiscordRouteEnvironment.PRODUCTION, route.environment());
@@ -94,21 +97,21 @@ final class DiscordWebhookRouteTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedProduction(
-                        "punishments",
+                        PUNISHMENTS,
                         URI.create("https://example.test/api/webhooks/123/token")
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedProduction(
-                        "punishments",
+                        PUNISHMENTS,
                         URI.create("https://discord.com/channels/123")
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> DiscordWebhookRoute.approvedProduction(
-                        "punishments",
+                        PUNISHMENTS,
                         URI.create("https://discord.com:8443/api/webhooks/123/token")
                 )
         );
