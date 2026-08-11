@@ -980,6 +980,45 @@ suites and 180 tests with zero failures, errors, or skips. Hosted coverage,
 Sentinel, and exact-head Pi results remain merge gates on the documentation
 head until they complete.
 
+## 2026-08-11 website appeal workflow checkpoint
+
+Merged PR #124 advanced `main` to
+`d06ff33725023d5b43c756d9b5274178b644b803`. PR #125 code head
+`57a94cc71f74f36c2f5f65fb2851232d87a3afaf` decomposes website appeal
+submission, pagination, decision, replay and event-write paths while retaining
+their row locks and transaction boundary. A MariaDB regression test proves that
+the continuation cursor identifies the last returned row rather than the
+lookahead row, so consecutive one-item pages neither skip nor duplicate an
+appeal.
+
+Codacy Cloud reports zero new findings on the code head. Its pull-request mapper
+associates three fixes with the diff, while the complete branch inventory records
+the authoritative reduction from 346 to 334 active warnings:
+
+| Category | `main` | PR #125 branch | Change |
+| --- | ---: | ---: | ---: |
+| Complexity | 229 | 217 | -12 |
+| Error-prone | 98 | 98 | 0 |
+| Performance | 19 | 19 | 0 |
+| **Total** | **346** | **334** | **-12** |
+
+The branch removes five method-length, five cyclomatic-complexity and two
+parameter-count findings. A newly mapped null-assignment result in the first
+implementation head was fixed without suppression; the final null-assignment
+inventory remains six. Three no-longer-required broad PMD suppressions were
+removed. No issue, rule or first-party source path was ignored or excluded. The
+current CLI response still does not expose a repository letter grade, so none is
+claimed.
+
+Threshold-matched Lizard 1.23.0 reports zero finding in changed Java, and the
+focused PMD 7.26.0 run reports zero applicable finding. The Java 21 clean build
+on the implementation head passed 168 suites and 733 non-container tests. The
+complete Docker-backed MariaDB run passed 47 suites and 181 tests with no
+failure, error or skip. After the nullable-context correction, all 62 persistence
+unit tests and the five-test MariaDB website appeal workflow passed on the final
+code head. Hosted coverage, Sentinel, exact-head Pi staging and documentation-
+head analysis remain merge gates.
+
 ## Remediation order
 
 1. Fix reachable correctness, security, transaction, resource-ownership, and
