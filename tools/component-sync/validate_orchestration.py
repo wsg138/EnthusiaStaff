@@ -371,7 +371,11 @@ def _legacy_file_errors(
 ) -> list[str]:
     if not path.is_file() or path.suffix not in {'.md', '.txt', '.py'}:
         return []
-    relative = path.relative_to(root).as_posix()
+    relative_path = path.relative_to(root)
+    if any(part in {'.git', '.gradle', '.codacy', 'build', 'node_modules'}
+           for part in relative_path.parts):
+        return []
+    relative = relative_path.as_posix()
     if relative == 'tools/component-sync/validate_orchestration.py' or relative in negative_policy_docs:
         return []
     text = path.read_text(encoding='utf-8')

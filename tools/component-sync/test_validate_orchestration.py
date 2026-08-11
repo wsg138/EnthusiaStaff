@@ -121,6 +121,17 @@ class RegistryRoutingTest(unittest.TestCase):
             any('READY with incomplete dependencies' in error for error in errors)
         )
 
+    def test_legacy_scan_ignores_local_analyzer_outputs(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            analyzer_log = root / '.codacy' / 'logs' / 'analysis.txt'
+            analyzer_log.parent.mkdir(parents=True)
+            analyzer_log.write_bytes('local analyzer output'.encode('utf-16'))
+
+            errors = MODULE._legacy_policy_errors(root)
+
+        self.assertEqual([], errors)
+
 
 if __name__ == '__main__':
     unittest.main()
