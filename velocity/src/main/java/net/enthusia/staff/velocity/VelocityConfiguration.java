@@ -3,13 +3,15 @@ package net.enthusia.staff.velocity;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Properties;
-import java.util.Map;
-import java.util.LinkedHashMap;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.persistence.DatabaseConfig;
@@ -48,6 +50,8 @@ public record VelocityConfiguration(
         int networkIdentityEncryptionKeyVersion,
         String networkIdentityEncryptionSecretEnvironment,
         boolean discordEnabled,
+        String discordRouteEnvironment,
+        String discordStagingAllowedHostsEnvironment,
         Map<String, String> discordWebhookEnvironments,
         int discordMaximumAttempts,
         int discordFailureThreshold,
@@ -120,6 +124,8 @@ public record VelocityConfiguration(
                 integer(properties, "network-identity.encryption-key-version", 1, Integer.MAX_VALUE),
                 required(properties, "network-identity.encryption-secret-environment"),
                 bool(properties, "discord.enabled"),
+                required(properties, "discord.route-environment"),
+                required(properties, "discord.staging-allowed-hosts-environment"),
                 discordWebhookEnvironments(properties),
                 integer(properties, "discord.maximum-attempts", 1, 100),
                 integer(properties, "discord.failure-threshold", 1, 100),
@@ -143,11 +149,11 @@ public record VelocityConfiguration(
         Map<String, String> secrets = new LinkedHashMap<>();
         for (String key : properties.stringPropertyNames()) {
             if (key.startsWith(prefix) && key.endsWith(suffix)) {
-                String serverId = key.substring(prefix.length(), key.length() - suffix.length());
-                if (!serverId.matches("[A-Za-z0-9_-]{1,64}")) {
+                String backendId = key.substring(prefix.length(), key.length() - suffix.length());
+                if (!backendId.matches("[A-Za-z0-9_-]{1,64}")) {
                     throw new IllegalArgumentException("Invalid backend server ID in channel configuration");
                 }
-                secrets.put(serverId, required(properties, key));
+                secrets.put(backendId, required(properties, key));
             }
         }
         return secrets;
@@ -161,26 +167,52 @@ public record VelocityConfiguration(
         return environments;
     }
 
-    public Map<String, URI> discordWebhooksFromEnvironment() {
-        Map<String, URI> webhooks = new LinkedHashMap<>();
-        discordWebhookEnvironments.forEach((destination, environment) -> {
-            String raw = System.getenv(environment);
+    public Map<String, DiscordWebhookRoute> discordWebhookRoutesFromEnvironment() {
+        DiscordRouteEnvironment routeEnvironment = DiscordRouteEnvironment.parse(discordRouteEnvironment);
+        Set<String> stagingHosts = routeEnvironment == DiscordRouteEnvironment.STAGING
+                ? discordStagingHostsFromEnvironment()
+                : Set.of();
+        Map<String, DiscordWebhookRoute> routes = new LinkedHashMap<>();
+        discordWebhookEnvironments.forEach((destination, environmentName) -> {
+            String raw = System.getenv(environmentName);
             if (raw == null || raw.isBlank()) {
                 throw new IllegalStateException("A required Discord webhook environment variable is missing");
             }
-            URI uri;
+            final URI uri;
             try {
                 uri = URI.create(raw.trim());
             } catch (IllegalArgumentException exception) {
                 throw new IllegalStateException("A Discord webhook environment variable is not a valid URI", exception);
             }
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
-                    || uri.getUserInfo() != null || uri.getFragment() != null) {
-                throw new IllegalStateException("Discord webhook URIs must be absolute HTTPS endpoints");
+            final DiscordWebhookRoute route;
+            try {
+                route = routeEnvironment == DiscordRouteEnvironment.STAGING
+                        ? DiscordWebhookRoute.approvedStaging(destination, uri, stagingHosts)
+                        : DiscordWebhookRoute.approvedProduction(destination, uri);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalStateException("A Discord webhook route failed destination policy validation", exception);
             }
-            webhooks.put(destination, uri);
+            routes.put(destination, route);
         });
-        return Map.copyOf(webhooks);
+        return Map.copyOf(routes);
+    }
+
+    private Set<String> discordStagingHostsFromEnvironment() {
+        String raw = System.getenv(discordStagingAllowedHostsEnvironment);
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalStateException("The Discord staging approved-host environment variable is missing");
+        }
+        Set<String> hosts = new LinkedHashSet<>();
+        for (String candidate : raw.split(",")) {
+            String host = candidate.trim();
+            if (!host.isEmpty()) {
+                hosts.add(host);
+            }
+        }
+        if (hosts.isEmpty()) {
+            throw new IllegalStateException("The Discord staging approved-host environment variable is empty");
+        }
+        return Set.copyOf(hosts);
     }
 
     public DatabaseConfig databaseFromEnvironment() {
@@ -228,20 +260,20 @@ public record VelocityConfiguration(
     }
 
     private static String websiteSecret(String environment, String label) {
-        String value = System.getenv(environment);
-        if (value == null || value.isBlank()
-                || value.getBytes(StandardCharsets.UTF_8).length < 32) {
+        String configured = System.getenv(environment);
+        if (configured == null || configured.isBlank()
+                || configured.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalStateException("The website API " + label + " must contain at least 32 bytes");
         }
-        return value;
+        return configured;
     }
 
     private static String required(Properties properties, String key) {
-        String value = properties.getProperty(key);
-        if (value == null || value.isBlank()) {
+        String configured = properties.getProperty(key);
+        if (configured == null || configured.isBlank()) {
             throw new IllegalArgumentException(key + " must be configured");
         }
-        return value.trim();
+        return configured.trim();
     }
 
     private static String value(Properties properties, String key, String defaultValue) {
@@ -269,11 +301,11 @@ public record VelocityConfiguration(
 
     private static int integer(Properties properties, String key, int minimum, int maximum) {
         try {
-            int value = Integer.parseInt(required(properties, key));
-            if (value < minimum || value > maximum) {
+            int parsed = Integer.parseInt(required(properties, key));
+            if (parsed < minimum || parsed > maximum) {
                 throw new IllegalArgumentException(key + " must be between " + minimum + " and " + maximum);
             }
-            return value;
+            return parsed;
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException(key + " must be an integer", exception);
         }
@@ -294,11 +326,11 @@ public record VelocityConfiguration(
     }
 
     private static boolean bool(Properties properties, String key) {
-        String value = required(properties, key);
-        if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+        String configured = required(properties, key);
+        if (!configured.equalsIgnoreCase("true") && !configured.equalsIgnoreCase("false")) {
             throw new IllegalArgumentException(key + " must be true or false");
         }
-        return Boolean.parseBoolean(value);
+        return Boolean.parseBoolean(configured);
     }
 
     private static boolean bool(Properties properties, String key, boolean defaultValue) {
