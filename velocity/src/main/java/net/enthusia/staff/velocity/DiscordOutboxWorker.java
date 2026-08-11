@@ -236,5 +236,12 @@ final class DiscordOutboxWorker implements AutoCloseable {
         if (task != null) {
             task.cancel();
         }
+        if (transport instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception exception) {
+                logger.warn("Discord transport cleanup failed ({})", exception.getClass().getSimpleName());
+            }
+        }
     }
 }
