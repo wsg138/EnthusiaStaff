@@ -30,7 +30,11 @@ import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 
 public final class JdbcEconomyJournalStore implements EconomyJournalStore {
+    private static final int EXPECTED_UPDATED_ROWS = 1;
+    private static final long MINIMUM_FENCING_TOKEN = 1L;
     private static final Duration MAXIMUM_LEASE = Duration.ofMinutes(15);
+    private static final String FENCING_TOKEN_COLUMN = "fencing_token";
+    private static final String OPERATION_NOT_FOUND_MESSAGE = "Economy operation was not found";
     private static final String COLUMNS = """
             operation_id, idempotency_key, case_id, target_id, actor_id,
             amount_mode, requested_amount, authoritative_total, owning_server_id,
@@ -82,7 +86,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                     now.plus(leaseDuration),
                     now
             );
-            if (fence < 1L) {
+            if (fence < MINIMUM_FENCING_TOKEN) {
                 return prepared(
                         EconomyPreparation.Status.LOCKED,
                         Optional.empty(),
@@ -173,7 +177,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                     now.plus(leaseDuration),
                     now
             );
-            if (fence < 1L) {
+            if (fence < MINIMUM_FENCING_TOKEN) {
                 return Optional.empty();
             }
             try (PreparedStatement statement = connection.prepareStatement("""
@@ -186,7 +190,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 statement.setLong(3, fence);
                 statement.setTimestamp(4, Timestamp.from(now));
                 statement.setBytes(5, UuidBytes.toBytes(operationId));
-                if (statement.executeUpdate() != 1) {
+                if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                     throw new SQLException("Economy operation disappeared during lease reclaim");
                 }
             }
@@ -215,7 +219,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         return transaction(connection -> {
             EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
             if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, "Economy operation was not found");
+                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
             }
             if (validatedPlanMatches(operation, plan)
                     && (operation.state() == EconomyOperationState.VALIDATED
@@ -317,7 +321,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         return transaction(connection -> {
             EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
             if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, "Economy operation was not found");
+                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
             }
             if (operation.state() == EconomyOperationState.APPLYING) {
                 if (operation.fencingToken() != fencingToken
@@ -382,7 +386,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         return transaction(connection -> {
             EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
             if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, "Economy operation was not found");
+                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
             }
             if (operation.terminalOutcome().orElse(null) == update.outcome()) {
                 if (operation.terminalMatches(update)) {
@@ -470,7 +474,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
         return transaction(connection -> {
             EconomyOperation operation = lockOperation(connection, operationId).orElse(null);
             if (operation == null) {
-                return result(EconomyJournalResult.Status.NOT_FOUND, null, "Economy operation was not found");
+                return result(EconomyJournalResult.Status.NOT_FOUND, null, OPERATION_NOT_FOUND_MESSAGE);
             }
             if (operation.state() == EconomyOperationState.UNLOCKED) {
                 return result(EconomyJournalResult.Status.REPLAYED, operation, "Economy operation is already unlocked");
@@ -662,7 +666,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             statement.setString(6, plan.replacementChecksum());
             statement.setTimestamp(7, Timestamp.from(now));
             statement.setBytes(8, UuidBytes.toBytes(operation.operationId()));
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("Economy operation disappeared while saving its snapshot");
             }
         }
@@ -768,7 +772,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             }
             statement.setTimestamp(9, Timestamp.from(now));
             statement.setBytes(10, UuidBytes.toBytes(operation.operationId()));
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("Economy operation disappeared during terminal update");
             }
         }
@@ -878,7 +882,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                 Optional.ofNullable(result.getString("owning_server_id")),
                 EconomyOperationState.valueOf(result.getString("state")),
                 optionalEnum(result.getString("terminal_outcome")),
-                result.getLong("fencing_token"),
+                result.getLong(FENCING_TOKEN_COLUMN),
                 optionalInstant(result.getTimestamp("lease_until")),
                 Optional.ofNullable(result.getString("before_checksum")),
                 Optional.ofNullable(result.getString("replacement_checksum")),
@@ -968,7 +972,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
                     return fence;
                 }
                 String owner = result.getString("owner_id");
-                long currentFence = result.getLong("fencing_token");
+                long currentFence = result.getLong(FENCING_TOKEN_COLUMN);
                 Instant currentExpiry = result.getTimestamp("lease_until").toInstant();
                 if (currentExpiry.isAfter(now)
                         && !owner.equals(operation.operationId().toString())) {
@@ -1021,7 +1025,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             try (ResultSet result = statement.executeQuery()) {
                 return result.next()
                         && result.getString("owner_id").equals(operation.operationId().toString())
-                        && result.getLong("fencing_token") == operation.fencingToken()
+                        && result.getLong(FENCING_TOKEN_COLUMN) == operation.fencingToken()
                         && result.getTimestamp("lease_until").toInstant().isAfter(now);
             }
         }
@@ -1041,7 +1045,7 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             try (ResultSet result = statement.executeQuery()) {
                 return !result.next()
                         || result.getString("owner_id").equals(operation.operationId().toString())
-                        && result.getLong("fencing_token") == operation.fencingToken();
+                        && result.getLong(FENCING_TOKEN_COLUMN) == operation.fencingToken();
             }
         }
     }
@@ -1067,14 +1071,14 @@ public final class JdbcEconomyJournalStore implements EconomyJournalStore {
             lease.setString(3, resourceKey(operation.targetId()));
             lease.setString(4, operation.operationId().toString());
             lease.setLong(5, operation.fencingToken());
-            if (lease.executeUpdate() != 1) {
+            if (lease.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("Economy lease disappeared during renewal");
             }
             operationUpdate.setTimestamp(1, Timestamp.from(leaseUntil));
             operationUpdate.setTimestamp(2, Timestamp.from(now));
             operationUpdate.setBytes(3, UuidBytes.toBytes(operation.operationId()));
             operationUpdate.setLong(4, operation.fencingToken());
-            if (operationUpdate.executeUpdate() != 1) {
+            if (operationUpdate.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("Economy operation disappeared during lease renewal");
             }
         }
