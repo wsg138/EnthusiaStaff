@@ -363,8 +363,15 @@ final class JdbcWebsiteAppealWorkflowStore {
                 view(row),
                 replayed,
                 requiresAcceptance,
-                requiresAcceptance ? row.playerAccountId() : null
+                acceptanceAccountId(row, requiresAcceptance)
         );
+    }
+
+    private static String acceptanceAccountId(AppealRow row, boolean requiresAcceptance) {
+        if (requiresAcceptance) {
+            return row.playerAccountId();
+        }
+        return null;
     }
 
     private WebsiteAppealSubmission insertSubmission(
