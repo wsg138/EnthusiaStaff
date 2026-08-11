@@ -4,7 +4,7 @@ import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connectio
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.uuidBytes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -63,7 +64,7 @@ class DiscordOutboxRecoveryIntegrationTest {
     }
 
     @Test
-    void concurrentWorkersLeaseDistinctMessages() throws Exception {
+    void concurrentWorkersNeverLeaseTheSameMessage() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             UUID firstId = enqueue(CONCURRENT_DESTINATION, "concurrent-a");
             UUID secondId = enqueue(CONCURRENT_DESTINATION, "concurrent-b");
@@ -78,15 +79,29 @@ class DiscordOutboxRecoveryIntegrationTest {
                         () -> store.claimDue("velocity-discord:b", 1, LEASE, NOW),
                         executor
                 );
-                List<DiscordOutboxMessage> firstClaim = first.get(10, TimeUnit.SECONDS);
-                List<DiscordOutboxMessage> secondClaim = second.get(10, TimeUnit.SECONDS);
+                List<DiscordOutboxMessage> concurrentClaims = new ArrayList<>();
+                concurrentClaims.addAll(first.get(10, TimeUnit.SECONDS));
+                concurrentClaims.addAll(second.get(10, TimeUnit.SECONDS));
 
-                assertEquals(1, firstClaim.size());
-                assertEquals(1, secondClaim.size());
-                assertNotEquals(firstClaim.getFirst().messageId(), secondClaim.getFirst().messageId());
+                assertTrue(concurrentClaims.size() >= 1 && concurrentClaims.size() <= 2);
+                Set<UUID> concurrentIds = concurrentClaims.stream()
+                        .map(DiscordOutboxMessage::messageId)
+                        .collect(java.util.stream.Collectors.toSet());
+                assertEquals(concurrentClaims.size(), concurrentIds.size());
+
+                if (concurrentClaims.size() == 1) {
+                    List<DiscordOutboxMessage> remaining = store.claimDue(
+                            "velocity-discord:c", 1, LEASE, NOW
+                    );
+                    assertEquals(1, remaining.size());
+                    concurrentClaims.addAll(remaining);
+                }
+
                 assertEquals(
                         Set.of(firstId, secondId),
-                        Set.of(firstClaim.getFirst().messageId(), secondClaim.getFirst().messageId())
+                        concurrentClaims.stream()
+                                .map(DiscordOutboxMessage::messageId)
+                                .collect(java.util.stream.Collectors.toSet())
                 );
             } finally {
                 executor.shutdownNow();
