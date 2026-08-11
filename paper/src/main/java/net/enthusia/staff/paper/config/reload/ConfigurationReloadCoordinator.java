@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.config.reload;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
@@ -14,6 +15,8 @@ import net.enthusia.staff.paper.config.PaperConfigurationValidationException;
 import net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader;
 
 public final class ConfigurationReloadCoordinator implements ConfigurationReloadAction {
+    private static final String POLICY_RESTORATION_FAILED = "Reason-policy restoration failed: ";
+
     private final Supplier<PaperConfigurationSnapshot> configurationCandidates;
     private final Supplier<ReasonPolicyConfigurationLoader.LoadedPolicies> reasonPolicyCandidates;
     private final ReasonPolicyPublisher policyPublisher;
@@ -64,7 +67,13 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
     }
 
     @Override
-    public synchronized ConfigurationReloadResult reload() {
+    public ConfigurationReloadResult reload() {
+        synchronized (this) {
+            return reloadLocked();
+        }
+    }
+
+    private ConfigurationReloadResult reloadLocked() {
         Candidate candidate;
         try {
             candidate = new Candidate(configurationCandidates.get(), reasonPolicyCandidates.get());
@@ -76,7 +85,10 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
         } catch (RuntimeException exception) {
             return validationFailed(List.of("Configuration candidate could not be loaded"));
         }
+        return reloadCandidate(candidate);
+    }
 
+    private ConfigurationReloadResult reloadCandidate(Candidate candidate) {
         ConfigurationReloadResult restartRejection = rejectRestartRequired(candidate);
         if (restartRejection != null) {
             return restartRejection;
@@ -146,7 +158,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
             details.add(publicationFailure.getClass().getSimpleName());
         }
         if (restorationFailure != null) {
-            details.add("Reason-policy restoration failed: "
+            details.add(POLICY_RESTORATION_FAILED
                     + restorationFailure.getClass().getSimpleName());
         }
 
@@ -200,24 +212,8 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
             PunishmentRequestAlertController.ApplyResult alertResult
     ) {
         ReasonPolicyPublisher.Snapshot policies = policyPublisher.snapshot();
-        if (alertController.currentSettings().equals(candidate.configuration().punishmentRequestAlerts())
-                && policies.matches(candidate.policies())
-                && !alertController.shuttingDown()) {
-            active = candidate.configuration();
-            activePolicies = policies;
-            boolean policiesChanged = !previous.policies().matches(candidate.policies());
-            ConfigurationReloadResult.Outcome outcome = switch (alertResult.outcome()) {
-                case NO_CHANGES -> policiesChanged
-                        ? ConfigurationReloadResult.Outcome.APPLIED
-                        : ConfigurationReloadResult.Outcome.NO_CHANGES;
-                case WAITING_FOR_STORAGE -> ConfigurationReloadResult.Outcome.WAITING_FOR_STORAGE;
-                default -> ConfigurationReloadResult.Outcome.APPLIED;
-            };
-            String message = policiesChanged
-                    && alertResult.outcome() == PunishmentRequestAlertController.Outcome.NO_CHANGES
-                    ? "Reason policies reloaded atomically; alert-worker settings were unchanged"
-                    : alertResult.message();
-            return result(outcome, message, List.of(), policiesChanged, "");
+        if (candidateIsFullyActive(candidate, policies)) {
+            return commitVerifiedCandidate(candidate, previous, alertResult, policies);
         }
         return rollbackFromCandidate(
                 candidate,
@@ -225,6 +221,56 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                 "Final commit verification detected divergent alert or policy state",
                 List.of("Candidate verification failed after alert commit")
         );
+    }
+
+    private boolean candidateIsFullyActive(
+            Candidate candidate,
+            ReasonPolicyPublisher.Snapshot policies
+    ) {
+        return alertController.currentSettings().equals(
+                candidate.configuration().punishmentRequestAlerts()
+        ) && policies.matches(candidate.policies()) && !alertController.shuttingDown();
+    }
+
+    private ConfigurationReloadResult commitVerifiedCandidate(
+            Candidate candidate,
+            Previous previous,
+            PunishmentRequestAlertController.ApplyResult alertResult,
+            ReasonPolicyPublisher.Snapshot policies
+    ) {
+        active = candidate.configuration();
+        activePolicies = policies;
+        boolean policiesChanged = !previous.policies().matches(candidate.policies());
+        return result(
+                committedOutcome(alertResult.outcome(), policiesChanged),
+                committedMessage(alertResult, policiesChanged),
+                List.of(),
+                policiesChanged,
+                ""
+        );
+    }
+
+    private static ConfigurationReloadResult.Outcome committedOutcome(
+            PunishmentRequestAlertController.Outcome alertOutcome,
+            boolean policiesChanged
+    ) {
+        return switch (alertOutcome) {
+            case NO_CHANGES -> policiesChanged
+                    ? ConfigurationReloadResult.Outcome.APPLIED
+                    : ConfigurationReloadResult.Outcome.NO_CHANGES;
+            case WAITING_FOR_STORAGE -> ConfigurationReloadResult.Outcome.WAITING_FOR_STORAGE;
+            default -> ConfigurationReloadResult.Outcome.APPLIED;
+        };
+    }
+
+    private static String committedMessage(
+            PunishmentRequestAlertController.ApplyResult alertResult,
+            boolean policiesChanged
+    ) {
+        return policiesChanged
+                && alertResult.outcome() == PunishmentRequestAlertController.Outcome.NO_CHANGES
+                ? "Reason policies reloaded atomically; alert-worker settings were unchanged"
+                : alertResult.message();
     }
 
     private ConfigurationReloadResult restoreAfterCandidateFailure(
@@ -236,7 +282,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
         ReasonPolicyPublisher.Snapshot policies = policyPublisher.snapshot();
         List<String> details = new ArrayList<>(failureDetails(alertResult));
         if (policyRestoreFailure != null) {
-            details.add("Reason-policy restoration failed: "
+            details.add(POLICY_RESTORATION_FAILED
                     + policyRestoreFailure.getClass().getSimpleName());
         }
         if (alertController.currentSettings().equals(previous.alertSettings())
@@ -274,7 +320,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                 alertController.apply(previous.alertSettings());
         List<String> details = new ArrayList<>(failureDetails(alertResult));
         if (policyRestoreFailure != null) {
-            details.add("Reason-policy restoration failed: "
+            details.add(POLICY_RESTORATION_FAILED
                     + policyRestoreFailure.getClass().getSimpleName());
         }
         return settleRollback(candidate, previous, rollback, policies,
@@ -293,7 +339,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                 alertController.apply(previous.alertSettings());
         List<String> reported = new ArrayList<>(details);
         if (policyRestoreFailure != null) {
-            reported.add("Reason-policy restoration failed: "
+            reported.add(POLICY_RESTORATION_FAILED
                     + policyRestoreFailure.getClass().getSimpleName());
         }
         return settleRollback(candidate, previous, rollback, policies, message, reported);
@@ -312,56 +358,124 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
             activePolicies = policyPublisher.snapshot();
             return shuttingDown(rollback.message());
         }
-        if (accepted(rollback.outcome())
-                && alertController.currentSettings().equals(previous.alertSettings())
-                && policies.sameAs(previous.policies())) {
-            active = previous.configuration();
-            activePolicies = policies;
-            return result(
-                    ConfigurationReloadResult.Outcome.RESTORED,
+        if (previousStateWasRestored(rollback, previous, policies)) {
+            return restoredPreviousResult(
+                    previous,
+                    policies,
                     context + "; previous alert settings and policies were restored",
-                    details,
-                    false,
-                    ""
+                    details
             );
         }
         if (rollback.outcome() == PunishmentRequestAlertController.Outcome.RESTORED) {
-            // RESTORED here means the lifecycle active immediately before this rollback attempt
-            // survived. During rollback that lifecycle is normally the candidate lifecycle.
-            if (alertController.currentSettings().equals(
-                    candidate.configuration().punishmentRequestAlerts())
-                    && alertController.active()) {
-                return preserveSurvivingCandidate(candidate, previous, policies, details);
-            }
-            if (alertController.currentSettings().equals(previous.alertSettings())
-                    && policies.sameAs(previous.policies())) {
-                active = previous.configuration();
-                activePolicies = policies;
-                return result(
-                        ConfigurationReloadResult.Outcome.RESTORED,
-                        context + "; previous lifecycle survived rollback",
-                        details,
-                        false,
-                        ""
-                );
-            }
-        }
-        if (rollback.outcome() == PunishmentRequestAlertController.Outcome.UNAVAILABLE
-                || !alertController.active()) {
-            return unavailableForObservedState(
+            Optional<ConfigurationReloadResult> restored = settleRestoredRollback(
                     candidate,
                     previous,
                     policies,
-                    context + "; rollback replacement and restoration both failed",
-                    appendFailure(details, rollback)
+                    context,
+                    details
             );
+            if (restored.isPresent()) {
+                return restored.orElseThrow();
+            }
         }
+        return unavailableAfterRollback(
+                candidate,
+                previous,
+                rollback,
+                policies,
+                context,
+                details
+        );
+    }
+
+    private ConfigurationReloadResult unavailableAfterRollback(
+            Candidate candidate,
+            Previous previous,
+            PunishmentRequestAlertController.ApplyResult rollback,
+            ReasonPolicyPublisher.Snapshot policies,
+            String context,
+            List<String> details
+    ) {
+        boolean replacementFailed = rollback.outcome()
+                == PunishmentRequestAlertController.Outcome.UNAVAILABLE
+                || !alertController.active();
+        String issue = replacementFailed
+                ? context + "; rollback replacement and restoration both failed"
+                : context + "; rollback result did not match observed runtime state";
         return unavailableForObservedState(
                 candidate,
                 previous,
                 policies,
-                context + "; rollback result did not match observed runtime state",
+                issue,
                 appendFailure(details, rollback)
+        );
+    }
+
+    private boolean previousStateWasRestored(
+            PunishmentRequestAlertController.ApplyResult rollback,
+            Previous previous,
+            ReasonPolicyPublisher.Snapshot policies
+    ) {
+        return accepted(rollback.outcome())
+                && previousRuntimeIsActive(previous, policies);
+    }
+
+    private Optional<ConfigurationReloadResult> settleRestoredRollback(
+            Candidate candidate,
+            Previous previous,
+            ReasonPolicyPublisher.Snapshot policies,
+            String context,
+            List<String> details
+    ) {
+        // RESTORED means the lifecycle active immediately before rollback survived. During
+        // rollback that lifecycle is normally the candidate lifecycle.
+        if (candidateLifecycleIsActive(candidate)) {
+            return Optional.of(preserveSurvivingCandidate(
+                    candidate,
+                    previous,
+                    policies,
+                    details
+            ));
+        }
+        if (previousRuntimeIsActive(previous, policies)) {
+            return Optional.of(restoredPreviousResult(
+                    previous,
+                    policies,
+                    context + "; previous lifecycle survived rollback",
+                    details
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private boolean candidateLifecycleIsActive(Candidate candidate) {
+        return alertController.currentSettings().equals(
+                candidate.configuration().punishmentRequestAlerts()
+        ) && alertController.active();
+    }
+
+    private boolean previousRuntimeIsActive(
+            Previous previous,
+            ReasonPolicyPublisher.Snapshot policies
+    ) {
+        return alertController.currentSettings().equals(previous.alertSettings())
+                && policies.sameAs(previous.policies());
+    }
+
+    private ConfigurationReloadResult restoredPreviousResult(
+            Previous previous,
+            ReasonPolicyPublisher.Snapshot policies,
+            String message,
+            List<String> details
+    ) {
+        active = previous.configuration();
+        activePolicies = policies;
+        return result(
+                ConfigurationReloadResult.Outcome.RESTORED,
+                message,
+                details,
+                false,
+                ""
         );
     }
 
@@ -415,10 +529,7 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
     ) {
         PunishmentRequestAlertController.ApplyResult reconciliation = alertController.apply(
                 candidate.configuration().punishmentRequestAlerts());
-        if (accepted(reconciliation.outcome())
-                && alertController.currentSettings().equals(
-                        candidate.configuration().punishmentRequestAlerts())
-                && policyPublisher.snapshot().matches(candidate.policies())) {
+        if (candidateReconciliationSucceeded(candidate, reconciliation)) {
             active = candidate.configuration();
             activePolicies = policyPublisher.snapshot();
             return result(
@@ -429,33 +540,12 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                     ""
             );
         }
-        if (reconciliation.outcome() == PunishmentRequestAlertController.Outcome.RESTORED
-                && alertController.currentSettings().equals(previous.alertSettings())
-                && alertController.active()) {
-            RuntimeException restorationFailure = restorePolicies(previous.policies());
-            ReasonPolicyPublisher.Snapshot restoredPolicies = policyPublisher.snapshot();
-            List<String> reported = new ArrayList<>(appendFailure(details, reconciliation));
-            if (restorationFailure != null) {
-                reported.add("Reason-policy restoration retry failed: "
-                        + restorationFailure.getClass().getSimpleName());
-            }
-            if (restoredPolicies.sameAs(previous.policies())) {
-                active = previous.configuration();
-                activePolicies = restoredPolicies;
-                return result(
-                        ConfigurationReloadResult.Outcome.RESTORED,
-                        "Candidate alert retry failed; the previous lifecycle and policies remain active",
-                        reported,
-                        false,
-                        ""
-                );
-            }
-            return unavailableForObservedState(
+        if (previousLifecycleSurvivedReconciliation(previous, reconciliation)) {
+            return restorePreviousPoliciesAfterReconciliation(
                     candidate,
                     previous,
-                    restoredPolicies,
-                    "Candidate alert retry restored the previous lifecycle but previous policies could not be restored",
-                    reported
+                    reconciliation,
+                    details
             );
         }
         return unavailableForObservedState(
@@ -464,6 +554,58 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
                 policyPublisher.snapshot(),
                 "Alert replacement failed and policy restoration also failed",
                 appendFailure(details, reconciliation)
+        );
+    }
+
+    private boolean candidateReconciliationSucceeded(
+            Candidate candidate,
+            PunishmentRequestAlertController.ApplyResult reconciliation
+    ) {
+        return accepted(reconciliation.outcome())
+                && alertController.currentSettings().equals(
+                        candidate.configuration().punishmentRequestAlerts()
+                ) && policyPublisher.snapshot().matches(candidate.policies());
+    }
+
+    private boolean previousLifecycleSurvivedReconciliation(
+            Previous previous,
+            PunishmentRequestAlertController.ApplyResult reconciliation
+    ) {
+        return reconciliation.outcome() == PunishmentRequestAlertController.Outcome.RESTORED
+                && alertController.currentSettings().equals(previous.alertSettings())
+                && alertController.active();
+    }
+
+    private ConfigurationReloadResult restorePreviousPoliciesAfterReconciliation(
+            Candidate candidate,
+            Previous previous,
+            PunishmentRequestAlertController.ApplyResult reconciliation,
+            List<String> details
+    ) {
+        RuntimeException restorationFailure = restorePolicies(previous.policies());
+        ReasonPolicyPublisher.Snapshot restoredPolicies = policyPublisher.snapshot();
+        List<String> reported = new ArrayList<>(appendFailure(details, reconciliation));
+        if (restorationFailure != null) {
+            reported.add("Reason-policy restoration retry failed: "
+                    + restorationFailure.getClass().getSimpleName());
+        }
+        if (restoredPolicies.sameAs(previous.policies())) {
+            active = previous.configuration();
+            activePolicies = restoredPolicies;
+            return result(
+                    ConfigurationReloadResult.Outcome.RESTORED,
+                    "Candidate alert retry failed; the previous lifecycle and policies remain active",
+                    reported,
+                    false,
+                    ""
+            );
+        }
+        return unavailableForObservedState(
+                candidate,
+                previous,
+                restoredPolicies,
+                "Candidate alert retry restored the previous lifecycle but previous policies could not be restored",
+                reported
         );
     }
 
@@ -571,12 +713,16 @@ public final class ConfigurationReloadCoordinator implements ConfigurationReload
         return new ConfigurationReloadResult(outcome, message, details, policiesReloaded);
     }
 
-    public synchronized PaperConfigurationSnapshot activeSnapshot() {
-        return active;
+    public PaperConfigurationSnapshot activeSnapshot() {
+        synchronized (this) {
+            return active;
+        }
     }
 
-    public synchronized ReasonPolicyPublisher.Snapshot activeReasonPolicies() {
-        return activePolicies;
+    public ReasonPolicyPublisher.Snapshot activeReasonPolicies() {
+        synchronized (this) {
+            return activePolicies;
+        }
     }
 
     private static boolean accepted(PunishmentRequestAlertController.Outcome outcome) {
