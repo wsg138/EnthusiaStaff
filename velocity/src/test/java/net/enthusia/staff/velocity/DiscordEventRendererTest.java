@@ -65,6 +65,29 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void fieldTruncationDoesNotSplitSurrogatePair() {
+        String reason = "a".repeat(178) + "😀" + "z";
+        String rendered = renderer.render(message(
+                "logs-staffmode",
+                "PLAYER_FROZEN",
+                "{\"reason\":\"" + reason + "\"}"
+        ));
+
+        assertTrue(rendered.endsWith("…"));
+        assertFalse(Character.isHighSurrogate(rendered.charAt(rendered.length() - 2)));
+    }
+
+    @Test
+    void contentTruncationDoesNotSplitSurrogatePair() {
+        String value = "a".repeat(1_798) + "😀" + "z";
+        String rendered = DiscordEventRenderer.truncateWithEllipsis(value, 1_800);
+
+        assertTrue(rendered.endsWith("…"));
+        assertFalse(Character.isHighSurrogate(rendered.charAt(rendered.length() - 2)));
+        assertTrue(rendered.length() <= 1_800);
+    }
+
+    @Test
     void malformedNonObjectAndOversizedPayloadsFailClosed() {
         assertThrows(
                 IllegalArgumentException.class,
