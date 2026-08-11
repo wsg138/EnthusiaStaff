@@ -3,13 +3,15 @@ package net.enthusia.staff.velocity;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Properties;
-import java.util.Map;
-import java.util.LinkedHashMap;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.persistence.DatabaseConfig;
@@ -63,6 +65,9 @@ public record VelocityConfiguration(
         boolean liteBansShadowScheduleEnabled,
         int liteBansShadowIntervalHours
 ) {
+    private static final String ROUTE_CLASS_VARIABLE = discordVariable("ROUTE_ENVIRONMENT");
+    private static final String STAGING_HOSTS_VARIABLE = discordVariable("STAGING_ALLOWED_HOSTS");
+
     public VelocityConfiguration {
         backendSecretEnvironments = Map.copyOf(backendSecretEnvironments);
         discordWebhookEnvironments = Map.copyOf(discordWebhookEnvironments);
@@ -161,26 +166,50 @@ public record VelocityConfiguration(
         return environments;
     }
 
-    public Map<String, URI> discordWebhooksFromEnvironment() {
-        Map<String, URI> webhooks = new LinkedHashMap<>();
-        discordWebhookEnvironments.forEach((destination, environment) -> {
-            String raw = System.getenv(environment);
-            if (raw == null || raw.isBlank()) {
-                throw new IllegalStateException("A required Discord webhook environment variable is missing");
-            }
-            URI uri;
+    public Map<String, DiscordWebhookRoute> discordWebhooksFromEnvironment() {
+        String routeClass = System.getenv(ROUTE_CLASS_VARIABLE);
+        final DiscordRouteEnvironment routeEnvironment;
+        try {
+            routeEnvironment = DiscordRouteEnvironment.parse(routeClass);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("The Discord route environment is missing or invalid", exception);
+        }
+        Set<String> stagingHosts = routeEnvironment == DiscordRouteEnvironment.STAGING
+                ? discordStagingHostsFromEnvironment()
+                : Set.of();
+        Map<String, DiscordWebhookRoute> routes = new LinkedHashMap<>();
+        discordWebhookEnvironments.forEach((destination, environmentName) -> {
+            String raw = System.getenv(environmentName);
+            URI uri = DiscordWebhookUriParser.parse(raw);
+            final DiscordWebhookRoute route;
             try {
-                uri = URI.create(raw.trim());
+                route = routeEnvironment == DiscordRouteEnvironment.STAGING
+                        ? DiscordWebhookRoute.approvedStaging(destination, uri, stagingHosts)
+                        : DiscordWebhookRoute.approvedProduction(destination, uri);
             } catch (IllegalArgumentException exception) {
-                throw new IllegalStateException("A Discord webhook environment variable is not a valid URI", exception);
+                throw new IllegalStateException("A Discord webhook route failed destination policy validation", exception);
             }
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
-                    || uri.getUserInfo() != null || uri.getFragment() != null) {
-                throw new IllegalStateException("Discord webhook URIs must be absolute HTTPS endpoints");
-            }
-            webhooks.put(destination, uri);
+            routes.put(destination, route);
         });
-        return Map.copyOf(webhooks);
+        return Map.copyOf(routes);
+    }
+
+    private static Set<String> discordStagingHostsFromEnvironment() {
+        String raw = System.getenv(STAGING_HOSTS_VARIABLE);
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalStateException("The Discord staging approved-host environment variable is missing");
+        }
+        Set<String> hosts = new LinkedHashSet<>();
+        for (String candidate : raw.split(",")) {
+            String host = candidate.trim();
+            if (!host.isEmpty()) {
+                hosts.add(host);
+            }
+        }
+        if (hosts.isEmpty()) {
+            throw new IllegalStateException("The Discord staging approved-host environment variable is empty");
+        }
+        return Set.copyOf(hosts);
     }
 
     public DatabaseConfig databaseFromEnvironment() {
@@ -234,6 +263,10 @@ public record VelocityConfiguration(
             throw new IllegalStateException("The website API " + label + " must contain at least 32 bytes");
         }
         return value;
+    }
+
+    private static String discordVariable(String suffix) {
+        return String.join("_", "ES", "DISCORD", suffix);
     }
 
     private static String required(Properties properties, String key) {

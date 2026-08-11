@@ -1,20 +1,13 @@
 package net.enthusia.staff.velocity;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -27,6 +20,9 @@ import org.slf4j.Logger;
 
 final class DiscordOutboxWorker implements AutoCloseable {
     private static final int BATCH_SIZE = 4;
+    private static final Set<String> EXPECTED_DESTINATIONS = Set.of(
+            "punishments", "reports", "logs-staffmode", "alerts"
+    );
 
     private final Object plugin;
     private final ProxyServer proxy;
@@ -34,14 +30,13 @@ final class DiscordOutboxWorker implements AutoCloseable {
     private final Clock clock;
     private final ExecutorService workers;
     private final DiscordOutboxStore store;
-    private final Map<String, URI> webhooks;
+    private final Map<String, DiscordWebhookRoute> routes;
     private final int maximumAttempts;
     private final int failureThreshold;
     private final Duration circuitDuration;
-    private final Duration requestTimeout;
     private final Duration lease;
-    private final ObjectMapper json = new ObjectMapper();
-    private final HttpClient http;
+    private final DiscordEventRenderer renderer;
+    private final DiscordWebhookTransport transport;
     private final String owner = "velocity-discord:" + UUID.randomUUID();
     private final AtomicBoolean running = new AtomicBoolean();
     private ScheduledTask task;
@@ -53,36 +48,66 @@ final class DiscordOutboxWorker implements AutoCloseable {
             Clock clock,
             ExecutorService workers,
             DiscordOutboxStore store,
-            Map<String, URI> webhooks,
+            Map<String, DiscordWebhookRoute> routes,
             int maximumAttempts,
             int failureThreshold,
             Duration circuitDuration,
             Duration requestTimeout
     ) {
-        if (webhooks.size() != 4 || maximumAttempts < 1 || failureThreshold < 1
-                || circuitDuration.isZero() || circuitDuration.isNegative()
-                || requestTimeout.isZero() || requestTimeout.isNegative()) {
-            throw new IllegalArgumentException("Discord worker configuration is invalid");
-        }
+        this(
+                plugin,
+                proxy,
+                logger,
+                clock,
+                workers,
+                store,
+                routes,
+                maximumAttempts,
+                failureThreshold,
+                circuitDuration,
+                requestTimeout,
+                new DiscordEventRenderer(),
+                new DiscordWebhookTransport.Jdk(requestTimeout)
+        );
+    }
+
+    DiscordOutboxWorker(
+            Object plugin,
+            ProxyServer proxy,
+            Logger logger,
+            Clock clock,
+            ExecutorService workers,
+            DiscordOutboxStore store,
+            Map<String, DiscordWebhookRoute> routes,
+            int maximumAttempts,
+            int failureThreshold,
+            Duration circuitDuration,
+            Duration requestTimeout,
+            DiscordEventRenderer renderer,
+            DiscordWebhookTransport transport
+    ) {
+        validateDependencies(logger, clock, store, renderer, transport);
+        validatePolicy(maximumAttempts, failureThreshold, circuitDuration, requestTimeout);
+        validateRoutes(routes);
         this.plugin = plugin;
         this.proxy = proxy;
         this.logger = logger;
         this.clock = clock;
         this.workers = workers;
         this.store = store;
-        this.webhooks = Map.copyOf(webhooks);
+        this.routes = Map.copyOf(routes);
         this.maximumAttempts = maximumAttempts;
         this.failureThreshold = failureThreshold;
         this.circuitDuration = circuitDuration;
-        this.requestTimeout = requestTimeout;
         this.lease = requestTimeout.multipliedBy(BATCH_SIZE).plusSeconds(10);
-        this.http = HttpClient.newBuilder()
-                .connectTimeout(requestTimeout)
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+        this.renderer = renderer;
+        this.transport = transport;
     }
 
     void start() {
+        if (plugin == null || proxy == null || workers == null) {
+            throw new IllegalStateException("Discord worker scheduling dependencies are unavailable");
+        }
         task = proxy.getScheduler().buildTask(plugin, this::scheduleRun)
                 .repeat(2, TimeUnit.SECONDS)
                 .schedule();
@@ -109,7 +134,7 @@ final class DiscordOutboxWorker implements AutoCloseable {
     }
 
     @SuppressWarnings("PMD.GuardLogStatement") // SLF4J placeholders defer formatting; arguments are cheap scalar accessors.
-    private void runOnce() {
+    void runOnce() {
         Instant now = clock.instant();
         Map<String, Instant> openedThisPass = new HashMap<>();
         for (DiscordOutboxMessage message : store.claimDue(owner, BATCH_SIZE, lease, now)) {
@@ -118,7 +143,7 @@ final class DiscordOutboxWorker implements AutoCloseable {
                 store.deferWithoutAttempt(message.messageId(), owner, blockedUntil);
                 continue;
             }
-            Delivery delivery = deliver(message);
+            DiscordWebhookTransport.Delivery delivery = deliver(message);
             if (delivery.success()) {
                 if (!store.delivered(message.messageId(), owner, clock.instant())) {
                     logger.warn("Discord outbox completion lost its lease for message {}", message.messageId());
@@ -143,39 +168,66 @@ final class DiscordOutboxWorker implements AutoCloseable {
         }
     }
 
-    private Delivery deliver(DiscordOutboxMessage message) {
-        URI webhook = webhooks.get(message.destination());
-        if (webhook == null) {
-            return Delivery.failed("UNCONFIGURED_DESTINATION");
+    private DiscordWebhookTransport.Delivery deliver(DiscordOutboxMessage message) {
+        DiscordWebhookRoute route = routes.get(message.destination());
+        if (route == null) {
+            return DiscordWebhookTransport.Delivery.failed("UNCONFIGURED_DESTINATION");
         }
+        final String content;
         try {
-            ObjectNode body = json.createObjectNode();
-            String summary = message.eventType() + "\n" + message.payloadJson();
-            body.put("content", summary.length() <= 1900 ? summary : summary.substring(0, 1900));
-            ObjectNode allowedMentions = body.putObject("allowed_mentions");
-            ArrayNode parse = allowedMentions.putArray("parse");
-            parse.removeAll();
-            HttpRequest request = HttpRequest.newBuilder(webhook)
-                    .timeout(requestTimeout)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))
-                    .build();
-            HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return Delivery.delivered();
+            content = renderer.render(message);
+        } catch (IllegalArgumentException exception) {
+            return DiscordWebhookTransport.Delivery.failed("PAYLOAD_REJECTED");
+        }
+        return transport.send(route, content);
+    }
+
+    private static void validateDependencies(
+            Logger logger,
+            Clock clock,
+            DiscordOutboxStore store,
+            DiscordEventRenderer renderer,
+            DiscordWebhookTransport transport
+    ) {
+        if (logger == null || clock == null || store == null || renderer == null || transport == null) {
+            throw new IllegalArgumentException("Discord worker dependencies are invalid");
+        }
+    }
+
+    private static void validatePolicy(
+            int maximumAttempts,
+            int failureThreshold,
+            Duration circuitDuration,
+            Duration requestTimeout
+    ) {
+        if (maximumAttempts < 1 || failureThreshold < 1) {
+            throw new IllegalArgumentException("Discord worker retry policy is invalid");
+        }
+        requirePositive(circuitDuration, "Discord worker circuit duration is invalid");
+        requirePositive(requestTimeout, "Discord worker request timeout is invalid");
+    }
+
+    private static void requirePositive(Duration duration, String message) {
+        if (duration == null || duration.isZero() || duration.isNegative()) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    private static void validateRoutes(Map<String, DiscordWebhookRoute> routes) {
+        if (routes == null || !routes.keySet().equals(EXPECTED_DESTINATIONS)) {
+            throw new IllegalArgumentException("Discord worker requires the complete approved destination matrix");
+        }
+        DiscordRouteEnvironment environment = null;
+        for (Map.Entry<String, DiscordWebhookRoute> entry : routes.entrySet()) {
+            DiscordWebhookRoute route = entry.getValue();
+            if (route == null || !entry.getKey().equals(route.destination())) {
+                throw new IllegalArgumentException("Discord route key and destination must match");
             }
-            if (response.statusCode() == 429) {
-                return Delivery.failed("HTTP_429");
+            if (environment == null) {
+                environment = route.environment();
+            } else if (environment != route.environment()) {
+                throw new IllegalArgumentException("Discord routes must not mix staging and production destinations");
             }
-            if (response.statusCode() >= 500) {
-                return Delivery.failed("HTTP_5XX");
-            }
-            return Delivery.failed("HTTP_4XX");
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            return Delivery.failed("INTERRUPTED");
-        } catch (IOException | RuntimeException exception) {
-            return Delivery.failed("IO_OR_ENCODING_FAILURE");
         }
     }
 
@@ -184,15 +236,12 @@ final class DiscordOutboxWorker implements AutoCloseable {
         if (task != null) {
             task.cancel();
         }
-    }
-
-    private record Delivery(boolean success, String errorCode) {
-        private static Delivery delivered() {
-            return new Delivery(true, "NONE");
-        }
-
-        private static Delivery failed(String errorCode) {
-            return new Delivery(false, errorCode);
+        if (transport instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception exception) {
+                logger.warn("Discord transport cleanup failed ({})", exception.getClass().getSimpleName());
+            }
         }
     }
 }
