@@ -22,6 +22,7 @@ import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
 import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
+import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
@@ -169,8 +170,16 @@ final class PaperIntegrationManager {
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {
         EconomyCoordinator discoveredEconomy = new EconomyCoordinator(
-                plugin(), clock(), dependencies.environment().serverId(), dependencies.policy().writeMode(),
-                dependencies.policy().authorization(), dependencies.stores().economyJournal(), workers(), gateway,
+                new EconomyCoordinatorRuntime(
+                        plugin(),
+                        clock(),
+                        dependencies.environment().serverId(),
+                        dependencies.policy().writeMode(),
+                        dependencies.policy().authorization(),
+                        dependencies.stores().economyJournal(),
+                        workers()
+                ),
+                gateway,
                 removalOrder, dependencies.environment().json()
         );
         ConfiscationCoordinator discoveredConfiscation = new ConfiscationCoordinator(
