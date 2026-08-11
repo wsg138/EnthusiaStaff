@@ -29,6 +29,10 @@ import net.enthusia.staff.domain.sanction.SanctionStatus;
 
 final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     private static final int PROTOCOL_VERSION = 1;
+    private static final int EXPECTED_UPDATED_ROWS = 1;
+    private static final String APPLIED_STATE = "APPLIED";
+    private static final String CASE_ID_COLUMN = "case_id";
+    private static final String OVERTURNED_STATUS = "OVERTURNED";
 
     private final DataSource dataSource;
     private final ObjectMapper json;
@@ -207,7 +211,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                         );
                     }
                     UUID punishmentId = UuidBytes.fromBytes(result.getBytes("punishment_id"));
-                    String caseId = result.getString("case_id");
+                    String caseId = result.getString(CASE_ID_COLUMN);
                     String state = result.getString("state");
                     if (!punishmentId.equals(row.sanctionId()) || !caseId.equals(row.caseId().value())) {
                         return new ExactSanctionChangeResult.Rejected(
@@ -215,7 +219,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                                 "The linked appeal does not belong to this sanction and case"
                         );
                     }
-                    if (!"APPLIED".equals(state)) {
+                    if (!APPLIED_STATE.equals(state)) {
                         return new ExactSanctionChangeResult.Rejected(
                                 "APPEAL_NOT_ACCEPTED",
                                 "The linked appeal has not been accepted"
@@ -424,7 +428,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
             setInstant(statement, 3, mutation.resultingEndedAt());
             statement.setBytes(4, UuidBytes.toBytes(row.sanctionId()));
             statement.setLong(5, row.revision());
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != EXPECTED_UPDATED_ROWS) {
                 throw new SQLException("locked sanction revision changed unexpectedly");
             }
         }
@@ -442,7 +446,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
             statement.setString(1, caseId.value());
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
-                    if (!"OVERTURNED".equals(result.getString("status"))) {
+                    if (!OVERTURNED_STATUS.equals(result.getString("status"))) {
                         remaining++;
                     }
                 }
@@ -615,7 +619,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                 if (!result.next()) {
                     return null;
                 }
-                caseId = result.getString("case_id");
+                caseId = result.getString(CASE_ID_COLUMN);
             }
         }
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -635,7 +639,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                     if (currentId.equals(sanctionId)) {
                         target = new SanctionRow(
                                 currentId,
-                                new CaseId(result.getString("case_id")),
+                                new CaseId(result.getString(CASE_ID_COLUMN)),
                                 UuidBytes.fromBytes(result.getBytes("target_id")),
                                 SanctionStatus.valueOf(result.getString("status")),
                                 result.getTimestamp("issued_at").toInstant(),
@@ -681,7 +685,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
                     return null;
                 }
                 return new ExactSanctionChangeResult.Applied(
-                        new CaseId(result.getString("case_id")),
+                        new CaseId(result.getString(CASE_ID_COLUMN)),
                         UuidBytes.fromBytes(result.getBytes("sanction_id")),
                         UuidBytes.fromBytes(result.getBytes("subject_id")),
                         SanctionChangeAction.valueOf(result.getString("event_type")),
