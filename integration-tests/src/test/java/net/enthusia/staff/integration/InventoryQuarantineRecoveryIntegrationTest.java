@@ -43,6 +43,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-11T20:00:00Z");
     private static final Duration LEASE = Duration.ofMinutes(2);
     private static final String SCOPE = "survival";
+    private static final String ENDER_SCOPE = "ender";
     private static final String SERVER = "paper-1";
     private static final String STATE_PENDING = "PENDING";
     private static final String STATE_QUARANTINED = "QUARANTINED";
@@ -211,6 +212,29 @@ class InventoryQuarantineRecoveryIntegrationTest {
             assertState(prepared.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
             assertFalse(quarantineResolved(prepared.operationId()));
             assertEquals(0L, recoveryAuditCount(prepared.operationId()));
+        }
+    }
+
+    @Test
+    void multipleUnresolvedCaseItemOperationsRemainAmbiguousAndUntouched() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            Fixture fixture = fixture("01J0000000008106");
+            PreparedOperation survival = quarantinedConfiscation(runtime, fixture, SCOPE, NOW);
+            PreparedOperation ender = quarantinedConfiscation(
+                    runtime, fixture, ENDER_SCOPE, NOW.plusSeconds(10)
+            );
+
+            InventoryRecoveryResult result = runtime.inventoryRecoveryStore().requeueCaseAssets(
+                    fixture.caseId(), fixture.founderId(), NOW.plusSeconds(20)
+            );
+
+            assertEquals(InventoryRecoveryResult.Status.AMBIGUOUS, result.status());
+            assertState(survival.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
+            assertState(ender.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
+            assertFalse(quarantineResolved(survival.operationId()));
+            assertFalse(quarantineResolved(ender.operationId()));
+            assertEquals(0L, recoveryAuditCount(survival.operationId()));
+            assertEquals(0L, recoveryAuditCount(ender.operationId()));
         }
     }
 
