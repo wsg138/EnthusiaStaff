@@ -128,7 +128,7 @@ commands:
     permission: enthusiastaff.inspect
   case:
     description: View case detail or perform case-linked recovery actions
-    usage: /case [view] <case-id> | /case restoreitems <case-id>
+    usage: /case [view] <case-id> | /case restoreitems <case-id> | /case recoveritems <case-id>
 permissions:
   enthusiastaff.status:
     default: false
