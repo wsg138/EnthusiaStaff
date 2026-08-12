@@ -87,7 +87,8 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             throws SQLException {
         String sql = """
                 SELECT q.patch_id, q.operation_id, q.profile_id, q.case_id,
-                    p.player_id, p.scope_id, p.owning_server_id, q.fencing_token,
+                    p.player_id, c.target_id AS case_target_id,
+                    p.scope_id, p.owning_server_id, q.fencing_token,
                     q.state AS patch_state, o.state AS operation_state,
                     o.fencing_token AS operation_fencing_token,
                     o.profile_id AS operation_profile_id, o.operation_type,
@@ -95,7 +96,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
-                JOIN cases c ON c.case_id = q.case_id AND c.target_id = p.player_id
+                JOIN cases c ON c.case_id = q.case_id
                 JOIN recovery_quarantine rq
                     ON rq.operation_type = 'INVENTORY'
                     AND rq.operation_id = q.operation_id
@@ -153,7 +154,8 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             throws SQLException {
         String sql = """
                 SELECT q.patch_id, q.operation_id, q.profile_id, q.case_id,
-                    p.player_id, p.scope_id, p.owning_server_id, q.fencing_token,
+                    p.player_id, c.target_id AS case_target_id,
+                    p.scope_id, p.owning_server_id, q.fencing_token,
                     q.state AS patch_state, o.state AS operation_state,
                     o.fencing_token AS operation_fencing_token,
                     o.profile_id AS operation_profile_id, o.operation_type,
@@ -161,7 +163,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
-                JOIN cases c ON c.case_id = q.case_id AND c.target_id = p.player_id
+                JOIN cases c ON c.case_id = q.case_id
                 LEFT JOIN recovery_quarantine rq
                     ON rq.operation_type = 'INVENTORY'
                     AND rq.operation_id = q.operation_id
@@ -193,6 +195,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 UuidBytes.fromBytes(result.getBytes("profile_id")),
                 result.getString("case_id"),
                 playerId,
+                UuidBytes.fromBytes(result.getBytes("case_target_id")),
                 scopeId,
                 result.getString("owning_server_id"),
                 result.getLong("fencing_token"),
@@ -235,7 +238,8 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
     }
 
     private static void requireIdentityCoherence(RecoveryCandidate candidate) throws SQLException {
-        if (!candidate.profileId().equals(candidate.operationProfileId())
+        if (!candidate.playerId().equals(candidate.caseTargetId())
+                || !candidate.profileId().equals(candidate.operationProfileId())
                 || candidate.fencingToken() != candidate.operationFencingToken()
                 || !candidate.resourceKey().equals(resourceKey(candidate.playerId(), candidate.scopeId()))) {
             throw new SQLException("Item recovery journal identity or fencing evidence diverged");
@@ -391,6 +395,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             UUID profileId,
             String caseId,
             UUID playerId,
+            UUID caseTargetId,
             String scopeId,
             String owningServerId,
             long fencingToken,
