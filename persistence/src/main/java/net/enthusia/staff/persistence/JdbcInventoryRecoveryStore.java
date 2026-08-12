@@ -53,7 +53,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             Instant now
     ) throws SQLException {
         List<RecoveryCandidate> candidates = lockOpenCandidates(connection, caseId);
-        if (candidates.size() > 1) {
+        if (candidates.size() >= OPEN_CANDIDATE_LIMIT) {
             return result(
                     InventoryRecoveryResult.Status.AMBIGUOUS,
                     Optional.empty(),
