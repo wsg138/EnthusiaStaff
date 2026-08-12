@@ -86,12 +86,12 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
     private List<RecoveryCandidate> lockOpenCandidates(Connection connection, CaseId caseId)
             throws SQLException {
         String sql = """
-                SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id,
-                    p.scope_id, p.owning_server_id, q.fencing_token,
+                SELECT q.patch_id, q.operation_id, q.profile_id, q.case_id,
+                    p.player_id, p.scope_id, p.owning_server_id, q.fencing_token,
                     q.state AS patch_state, o.state AS operation_state,
                     o.fencing_token AS operation_fencing_token,
                     o.profile_id AS operation_profile_id, o.operation_type,
-                    rq.quarantine_id, rq.resource_key, rq.reason_code
+                    rq.quarantine_id, rq.resource_key, rq.reason_code, rq.resolved_at
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
@@ -151,13 +151,12 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
     private Optional<RecoveryCandidate> lockLatestItemCandidate(Connection connection, CaseId caseId)
             throws SQLException {
         String sql = """
-                SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id,
-                    p.scope_id, p.owning_server_id, q.fencing_token,
+                SELECT q.patch_id, q.operation_id, q.profile_id, q.case_id,
+                    p.player_id, p.scope_id, p.owning_server_id, q.fencing_token,
                     q.state AS patch_state, o.state AS operation_state,
                     o.fencing_token AS operation_fencing_token,
                     o.profile_id AS operation_profile_id, o.operation_type,
-                    rq.quarantine_id, rq.resource_key, rq.reason_code,
-                    rq.resolved_at
+                    rq.quarantine_id, rq.resource_key, rq.reason_code, rq.resolved_at
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
@@ -183,22 +182,14 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
 
     private static RecoveryCandidate readCandidate(ResultSet result) throws SQLException {
         byte[] quarantineBytes = result.getBytes("quarantine_id");
-        Timestamp resolvedAt;
-        try {
-            resolvedAt = result.getTimestamp("resolved_at");
-        } catch (SQLException missingColumn) {
-            resolvedAt = null;
-        }
         String scopeId = result.getString("scope_id");
         UUID playerId = UuidBytes.fromBytes(result.getBytes("player_id"));
-        String resourceKey = result.getString("resource_key");
-        if (resourceKey == null) {
-            resourceKey = resourceKey(playerId, scopeId);
-        }
+        String storedResourceKey = result.getString("resource_key");
         return new RecoveryCandidate(
                 UuidBytes.fromBytes(result.getBytes("patch_id")),
                 UuidBytes.fromBytes(result.getBytes("operation_id")),
                 UuidBytes.fromBytes(result.getBytes("profile_id")),
+                result.getString("case_id"),
                 playerId,
                 scopeId,
                 result.getString("owning_server_id"),
@@ -209,9 +200,9 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 UuidBytes.fromBytes(result.getBytes("operation_profile_id")),
                 result.getString("operation_type"),
                 quarantineBytes == null ? Optional.empty() : Optional.of(UuidBytes.fromBytes(quarantineBytes)),
-                resourceKey,
+                storedResourceKey == null ? resourceKey(playerId, scopeId) : storedResourceKey,
                 Optional.ofNullable(result.getString("reason_code")),
-                resolvedAt != null
+                result.getTimestamp("resolved_at") != null
         );
     }
 
@@ -396,6 +387,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             UUID patchId,
             UUID operationId,
             UUID profileId,
+            String caseId,
             UUID playerId,
             String scopeId,
             String owningServerId,
@@ -410,8 +402,5 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             Optional<String> reasonCode,
             boolean quarantineResolved
     ) {
-        String caseId() {
-            return null;
-        }
     }
 }
