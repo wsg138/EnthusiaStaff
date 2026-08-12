@@ -8,7 +8,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 - Classify every incomplete package before selection and work exactly one package per worker.
 - Existing `ACTIONABLE_CONTINUATION` work takes priority over newly `READY` work.
-- Use normal merge commits only; never relabel missing, skipped, cancelled, superseded, queued, timed-out, wrong-revision, resource-gated, or failed validation as passing evidence.
+- Use normal merge commits only; never relabel missing, skipped, cancelled, superseded, queued, timed-out, wrong-revision, resource-gated, merge-ref-only, or failed validation as passing evidence.
 - Do not weaken staging, provenance, migration, review, static-analysis, privacy, or production-authority boundaries.
 - Issue #43 remains open/deferred and LiteBans remains authoritative until separately approved.
 - A package whose only remaining executable gate is unavailable for the same unchanged external resource condition is `PARKED_BLOCKED`; do not repeatedly rerun the identical unavailable-infrastructure gate without evidence that condition changed.
