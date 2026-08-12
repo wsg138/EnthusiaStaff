@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.CaseCommand;
+import net.enthusia.staff.paper.command.CaseRecoveryCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
 import net.enthusia.staff.paper.command.EstaffCommand;
 import net.enthusia.staff.paper.command.FreezeCommand;
@@ -45,6 +46,7 @@ import net.enthusia.staff.paper.integration.ReputationIntegration;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
+import net.enthusia.staff.paper.inventory.InventoryRecoveryCoordinator;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
@@ -231,10 +233,14 @@ final class PaperCommandRegistrar {
                 plugin(), players, histories, moderationSettings::current, workers()
         );
         bindCompleting("history", history, history);
-        bind("case", new CaseCommand(
+        CaseCommand caseCommand = new CaseCommand(
                 plugin(), cases, dependencies.integrations().confiscation(), histories,
                 moderationSettings::current, authorization(), workers()
-        ));
+        );
+        InventoryRecoveryCoordinator recovery = new InventoryRecoveryCoordinator(
+                clock(), storage(PaperStorageBindings::inventoryRecoveryStore), authorization()
+        );
+        bind("case", new CaseRecoveryCommand(plugin(), caseCommand, recovery, workers()));
     }
 
     private void bind(String name, CommandExecutor executor) {
