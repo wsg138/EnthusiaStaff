@@ -39,6 +39,21 @@ final class InventoryRecoveryCoordinatorTest {
     }
 
     @Test
+    void unresolvedActorCannotReachRecoveryStore() {
+        AtomicInteger calls = new AtomicInteger();
+        InventoryRecoveryStore store = (caseId, actorId, now) -> {
+            calls.incrementAndGet();
+            return requeued();
+        };
+        InventoryRecoveryCoordinator coordinator = coordinator(store);
+
+        InventoryRecoveryResult result = coordinator.recover(null, CASE_ID);
+
+        assertEquals(InventoryRecoveryResult.Status.UNAUTHORIZED, result.status());
+        assertEquals(0, calls.get());
+    }
+
+    @Test
     void founderAuthorizationDelegatesExactCaseActorAndClock() {
         UUID actorId = UUID.randomUUID();
         AtomicInteger calls = new AtomicInteger();
