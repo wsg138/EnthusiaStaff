@@ -44,6 +44,8 @@ class InventoryQuarantineRecoveryIntegrationTest {
     private static final Duration LEASE = Duration.ofMinutes(2);
     private static final String SCOPE = "survival";
     private static final String SERVER = "paper-1";
+    private static final String STATE_PENDING = "PENDING";
+    private static final String STATE_QUARANTINED = "QUARANTINED";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -64,7 +66,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
 
             assertEquals(InventoryRecoveryResult.Status.REQUEUED, recovered.status());
             assertEquals(prepared.operationId(), recovered.operationId().orElseThrow());
-            assertState(prepared.operationId(), "PENDING", "PENDING");
+            assertState(prepared.operationId(), STATE_PENDING, STATE_PENDING);
             assertTrue(quarantineResolved(prepared.operationId()));
             assertEquals(fixture.founderId(), quarantineResolver(prepared.operationId()));
             assertEquals(1L, recoveryAuditCount(prepared.operationId()));
@@ -90,7 +92,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
                     NOW.plusSeconds(13)
             );
 
-            assertState(prepared.operationId(), "QUARANTINED", "QUARANTINED");
+            assertState(prepared.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
             assertFalse(quarantineResolved(prepared.operationId()));
             assertEquals("RETRY_STILL_AMBIGUOUS", quarantineReason(prepared.operationId()));
 
@@ -146,7 +148,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
             );
 
             assertEquals(InventoryRecoveryResult.Status.NOT_FOUND, result.status());
-            assertState(operationId, "QUARANTINED", "QUARANTINED");
+            assertState(operationId, STATE_QUARANTINED, STATE_QUARANTINED);
             assertFalse(quarantineResolved(operationId));
             assertEquals(0L, recoveryAuditCount(operationId));
         }
@@ -164,7 +166,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
             );
 
             assertEquals(InventoryRecoveryResult.Status.AMBIGUOUS, result.status());
-            assertState(prepared.operationId(), "QUARANTINED", "QUARANTINED");
+            assertState(prepared.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
             assertFalse(quarantineResolved(prepared.operationId()));
             assertEquals(0L, recoveryAuditCount(prepared.operationId()));
         }
@@ -175,7 +177,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             Fixture fixture = fixture("01J0000000008104");
             PreparedOperation prepared = quarantinedConfiscation(runtime, fixture, SCOPE, NOW);
-            forceOperationState(prepared.operationId(), "PENDING");
+            forceOperationState(prepared.operationId(), STATE_PENDING);
 
             assertThrows(
                     ModerationPersistenceException.class,
@@ -184,7 +186,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
                     )
             );
 
-            assertState(prepared.operationId(), "QUARANTINED", "PENDING");
+            assertState(prepared.operationId(), STATE_QUARANTINED, STATE_PENDING);
             assertFalse(quarantineResolved(prepared.operationId()));
             assertEquals(0L, recoveryAuditCount(prepared.operationId()));
         }
@@ -206,7 +208,7 @@ class InventoryQuarantineRecoveryIntegrationTest {
                     )
             );
 
-            assertState(prepared.operationId(), "QUARANTINED", "QUARANTINED");
+            assertState(prepared.operationId(), STATE_QUARANTINED, STATE_QUARANTINED);
             assertFalse(quarantineResolved(prepared.operationId()));
             assertEquals(0L, recoveryAuditCount(prepared.operationId()));
         }
