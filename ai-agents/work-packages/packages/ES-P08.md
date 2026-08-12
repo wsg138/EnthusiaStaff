@@ -39,7 +39,7 @@ A documentation-only status-publication PR may publish this blocker state to `ma
 - Recovery accepts only case-linked `CONFISCATION` or `RESTORE_CONFISCATED` operations.
 - Bukkit `enthusiastaff.owner.recovery` and service-level Founder `RESTORE_ASSETS` authorization both gate persistence.
 - An unresolved command sender fails before dispatch with a cause-accurate message; the coordinator separately fails closed on a null/non-Founder actor.
-- Persistence independently verifies case-target/profile binding, patch/operation state/profile/fence coherence, stored quarantine `resource_key`, unresolved quarantine identity, and absence of a competing live lease.
+- Persistence independently verifies case-target/profile binding, patch/operation state/profile/fence coherence, the stored quarantine `resource_key`, unresolved quarantine identity, and absence of a competing live lease.
 - Missing or mismatched recovery resource evidence fails closed; no synthetic fallback resource key is used.
 - Multiple unresolved item quarantines for one case are `AMBIGUOUS`; no candidate is guessed or changed.
 - Successful authorization atomically requeues only the exact pair to `PENDING`, resolves quarantine metadata, and requires exactly one append-only `INVENTORY_QUARANTINE_REQUEUED` audit write.
@@ -71,14 +71,14 @@ Canonical Pi public run `31555950970` attempt 1 and correlated private run `3155
 The required live Sentinel restart is the sole unresolved executable gate:
 - job `150`: non-passing `RESTART_CYCLE_1_RESOURCE_GATE_FAILED` before product acceptance because temperature was 80.3 C at/above the 80.0 C ceiling;
 - job `151`: remained resource-gated and ultimately timed out; non-passing;
-- job `153`: exact-head restart remains queued under the trusted resource gate; latest observed host state was 596 MB available below the 700 MB minimum and 83.3 C at/above the 80.0 C ceiling.
+- job `153`: completed restart cycle 1 but failed before cycle 2 at `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` because temperature was 81.8 C at/above the 80.0 C ceiling; non-passing.
 
-Queued, timed-out, resource-gated, skipped, cancelled, superseded, merge-ref-only, or wrong-revision results are not passing evidence. No infrastructure exception is authorized for ES-P08.
+Failed, timed-out, resource-gated, queued, skipped, cancelled, superseded, merge-ref-only, or wrong-revision results are not passing evidence. No infrastructure exception is authorized for ES-P08.
 
 ## 16. Resume and completion rule
-Current blocker is environmental Sentinel host capacity/temperature, not a demonstrated product defect. Do not repeatedly issue identical restart requests merely to probe the same unavailable condition.
+Current blocker is environmental Sentinel host capacity/temperature, not a demonstrated product defect. Job `153` proves the host briefly admitted cycle 1, but the required two-cycle restart still could not complete because the cycle-2 resource gate became unsafe. Do not repeatedly issue identical restart requests merely to probe the same unavailable condition.
 
-Exact unblock condition: live evidence must show the trusted Sentinel resource condition changed, or currently queued exact-head job `153` must reach terminal `PAPER_RESTART_OK`. Then reclassify ES-P08 as `ACTIONABLE_CONTINUATION`, reconcile live `main`, PR #128/head/reviews/checks, and obtain/verify literal exact-head `PAPER_RESTART_OK` before merge.
+Exact unblock condition: concrete live evidence must show the trusted Sentinel resource condition changed enough to sustain the required two-cycle restart. Then reclassify ES-P08 as `ACTIONABLE_CONTINUATION`, reconcile live `main`, PR #128/head/reviews/checks, run one fresh exact-head restart if needed, and require literal `PAPER_RESTART_OK` before merge.
 
 When all required exact-head gates pass, merge PR #128 by a normal merge commit only. Verify feature-head containment, resulting-main divergence, and safe implementation-branch cleanup; publish generated merge facts in PR #128 metadata. Then mark ES-P08 `COMPLETE` and update dependency-derived statuses without activating `ES-X02` in the same worker.
 

@@ -40,18 +40,15 @@ The selected package additionally requires an independent live Sentinel restart 
 
 - Fresh same-head job `150` did not reach product acceptance. It ended `RESTART_CYCLE_1_RESOURCE_GATE_FAILED` because temperature was 80.3 C against the configured 80.0 C ceiling.
 - Same-head job `151` remained host-resource-gated and ultimately timed out. It is explicitly non-passing infrastructure history.
-- Same-head job `153`, created from source command comment `5271163479`, remains queued under Sentinel's guarded host gate. Latest observed bot state reported 596 MB available against a 700 MB minimum and 83.3 C against an 80.0 C maximum.
+- Same-head job `153` progressed further: restart cycle 1 completed, then Sentinel refused cycle 2 at `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` because temperature was 81.8 C against the configured 80.0 C ceiling. It is also non-passing infrastructure history; one completed cycle is not the required two-cycle `PAPER_RESTART_OK` result.
 
-The trusted Sentinel implementation requeues heavy jobs while host health is unsafe and only enters the two restart cycles after resource admission. Therefore the current blocker is unavailable execution environment, not a successful product test and not currently a demonstrated ES-P08 code failure.
+The trusted Sentinel implementation rechecks host resources before each restart cycle. Therefore the current blocker remains unavailable execution environment, not a successful package test and not currently a demonstrated ES-P08 code defect.
 
 ## Exact unblock condition
 
-Do not send repeated identical restart commands while the same resource condition persists. Preserve queued job `153` and unrelated legitimate Pi work.
+Do not send repeated identical restart commands while the same resource condition persists. Preserve unrelated legitimate Pi work.
 
-A future sequential worker must first reconcile live GitHub and Sentinel state. ES-P08 becomes `ACTIONABLE_CONTINUATION` when either:
-
-1. queued exact-head job `153` reaches terminal `PAPER_RESTART_OK`; or
-2. there is concrete evidence the Sentinel host resource condition changed enough to admit work, permitting one fresh exact-head restart if needed.
+A future sequential worker must first reconcile live GitHub and Sentinel state. ES-P08 becomes `ACTIONABLE_CONTINUATION` only after concrete live evidence shows the trusted Sentinel resource condition changed enough to sustain the required two-cycle restart. Then, if no valid exact-head success already exists, run one fresh exact-head restart and require literal `PAPER_RESTART_OK`.
 
 After that, verify `main`, PR #128, exact PR head, all review threads/checks, and exact-head `PAPER_RESTART_OK`. Only then normally merge PR #128. After merge verify two-parent merge identity, resulting `main`, frozen-head containment/divergence, and safe deletion/cleanup of `package/es-p08-item-confiscation`, record GitHub-generated facts in PR #128 metadata, mark ES-P08 `COMPLETE`, update dependency-derived statuses, and stop.
 
