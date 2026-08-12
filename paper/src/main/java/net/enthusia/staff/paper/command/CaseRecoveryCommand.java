@@ -64,6 +64,10 @@ public final class CaseRecoveryCommand implements CommandExecutor {
             return true;
         }
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null) {
+            sender.sendMessage(Component.text("Unable to resolve your staff identity; nothing changed."));
+            return true;
+        }
         CaseId caseId;
         try {
             caseId = new CaseId(arguments[1]);
