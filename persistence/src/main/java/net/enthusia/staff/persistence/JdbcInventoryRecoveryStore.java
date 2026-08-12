@@ -95,6 +95,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                JOIN cases c ON c.case_id = q.case_id AND c.target_id = p.player_id
                 JOIN recovery_quarantine rq
                     ON rq.operation_type = 'INVENTORY'
                     AND rq.operation_id = q.operation_id
@@ -160,6 +161,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 FROM inventory_pending_patches q
                 JOIN inventory_operations o ON o.operation_id = q.operation_id
                 JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                JOIN cases c ON c.case_id = q.case_id AND c.target_id = p.player_id
                 LEFT JOIN recovery_quarantine rq
                     ON rq.operation_type = 'INVENTORY'
                     AND rq.operation_id = q.operation_id
