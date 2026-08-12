@@ -190,6 +190,28 @@ class InventoryQuarantineRecoveryIntegrationTest {
         }
     }
 
+    @Test
+    void caseTargetDivergenceFailsClosedInsteadOfHidingTheQuarantine() throws SQLException {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            Fixture fixture = fixture("01J0000000008105");
+            PreparedOperation prepared = quarantinedConfiscation(runtime, fixture, SCOPE, NOW);
+            UUID wrongTargetId = UUID.randomUUID();
+            insertPlayer(DATABASE, wrongTargetId, username("RW", wrongTargetId), NOW);
+            forceCaseTarget(fixture.caseId(), wrongTargetId);
+
+            assertThrows(
+                    ModerationPersistenceException.class,
+                    () -> runtime.inventoryRecoveryStore().requeueCaseAssets(
+                            fixture.caseId(), fixture.founderId(), NOW.plusSeconds(10)
+                    )
+            );
+
+            assertState(prepared.operationId(), "QUARANTINED", "QUARANTINED");
+            assertFalse(quarantineResolved(prepared.operationId()));
+            assertEquals(0L, recoveryAuditCount(prepared.operationId()));
+        }
+    }
+
     private static PreparedOperation quarantinedConfiscation(
             MariaDbRuntime runtime,
             Fixture fixture,
@@ -365,6 +387,17 @@ class InventoryQuarantineRecoveryIntegrationTest {
                      """)) {
             statement.setString(1, state);
             statement.setBytes(2, uuidBytes(operationId));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void forceCaseTarget(CaseId caseId, UUID targetId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE cases SET target_id = ? WHERE case_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(targetId));
+            statement.setString(2, caseId.value());
             assertEquals(1, statement.executeUpdate());
         }
     }
