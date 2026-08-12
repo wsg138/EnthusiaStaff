@@ -205,7 +205,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 UuidBytes.fromBytes(result.getBytes("operation_profile_id")),
                 result.getString("operation_type"),
                 quarantineBytes == null ? Optional.empty() : Optional.of(UuidBytes.fromBytes(quarantineBytes)),
-                storedResourceKey == null ? resourceKey(playerId, scopeId) : storedResourceKey,
+                storedResourceKey,
                 Optional.ofNullable(result.getString("reason_code")),
                 result.getTimestamp("resolved_at") != null
         );
@@ -238,10 +238,12 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
     }
 
     private static void requireIdentityCoherence(RecoveryCandidate candidate) throws SQLException {
+        String expectedResourceKey = resourceKey(candidate.playerId(), candidate.scopeId());
         if (!candidate.playerId().equals(candidate.caseTargetId())
                 || !candidate.profileId().equals(candidate.operationProfileId())
                 || candidate.fencingToken() != candidate.operationFencingToken()
-                || !candidate.resourceKey().equals(resourceKey(candidate.playerId(), candidate.scopeId()))) {
+                || candidate.resourceKey() == null
+                || !candidate.resourceKey().equals(expectedResourceKey)) {
             throw new SQLException("Item recovery journal identity or fencing evidence diverged");
         }
     }
@@ -256,7 +258,11 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 """)) {
             statement.setString(1, resourceKey);
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getTimestamp("lease_until").toInstant().isAfter(now);
+                if (!result.next()) {
+                    return false;
+                }
+                Timestamp leaseUntil = result.getTimestamp("lease_until");
+                return leaseUntil != null && leaseUntil.toInstant().isAfter(now);
             }
         }
     }
