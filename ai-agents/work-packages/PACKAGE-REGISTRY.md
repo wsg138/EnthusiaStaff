@@ -11,14 +11,15 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 - Use normal merge commits only; never relabel missing, skipped, cancelled, superseded, wrong-revision, or failed validation as passing evidence.
 - Do not weaken staging, provenance, migration, review, static-analysis, privacy, or production-authority boundaries.
 - Issue #43 remains open/deferred and LiteBans remains authoritative until separately approved.
+- Post-merge GitHub-generated merge/containment/branch-cleanup facts belong in PR verification metadata; do not create a follow-up `main` commit solely to insert self-referential evidence.
 
 ## Canonical current state
 
-`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
+`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are already `COMPLETE` on `main`.
 
-`ES-P08 — Item confiscation and restoration` is `ACTIVE` / `ACTIONABLE_CONTINUATION` on `package/es-p08-item-confiscation`. Exact package start is `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; implementation PR #128 is ready for review. Implementation, tests, documentation, and harsh manual review are complete and `VALIDATION_READY`. The remaining package work is to freeze the resulting canonical-state head, run every required exact-head hosted/static/Sentinel/Pi gate, merge normally, prove containment/cleanup, publish terminal state, and stop.
+Implementation PR #128 carries the terminal tracked state for `ES-P08 — Item confiscation and restoration`. While PR #128 is unmerged it remains the sole `ACTIONABLE_CONTINUATION`. This registry row intentionally records ES-P08 as `COMPLETE` because the row becomes canonical on `main` only if the final frozen feature SHA passes every required exact-head gate and PR #128 is normally merged. If a gate fails, the feature branch must be corrected and refrozen before merge.
 
-`ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved. `ES-X02`, `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions. This worker must complete exactly ES-P08 and must not activate a downstream package.
+`ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS contract remain unresolved. After ES-P08 is canonical `COMPLETE`, `ES-X02` may become dependency-ready, but this worker must stop rather than activate or implement it. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
 
 ## Canonical package index
 
@@ -35,16 +36,16 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 | `ES-P05` | Report evidence and staff workflow completion | `COMPLETE` | — | 50 | `ES-P03`, `ES-P04` | merged PR #81 |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | merged PR #84 |
 | `ES-P06` | Discord notification delivery completion | `COMPLETE` | — | 60 | `ES-P05` | frozen `7e21edb1d32a75727dc65df826f9de964adcfff3`; PR #115 merged normally as `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`; contained; branch cleaned |
-| `ES-P08` | Item confiscation and restoration | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 70 | `ES-P07` | branch `package/es-p08-item-confiscation`; PR #128 ready; start `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; implementation `VALIDATION_READY`; exact final validation pending |
+| `ES-P08` | Item confiscation and restoration | `COMPLETE` | merge-gated terminal state | 70 | `ES-P07` | implementation PR #128; package start `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; final frozen SHA/evidence recorded in PR metadata; row becomes canonical only on normal merge |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | `PARKED_BLOCKED` | 110 | `ES-P08` | dependency ES-P08 is active/incomplete |
-| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | dependencies incomplete |
-| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | dependencies incomplete |
+| `ES-X02` | EnthusiaCurrency destructive provider | `PLANNED` | next dependency candidate after ES-P08 merge; not activated by this worker | 110 | `ES-P08` | reconcile in a later worker only |
+| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
+| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
-| `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | ES-P08 active; provider dependencies incomplete |
+| `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | provider dependencies remain incomplete |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
 
@@ -79,19 +80,19 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 - V18 remains the immutable migration ceiling; ES-P07 added no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production data, deployment, shadow window, cutover, punishment-authority change, source rewrite, or unrelated package work occurred.
 - Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-complete.md`.
 
-## ES-P08 active record
+## ES-P08 terminal tracked record
 
-- Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; `main` remained at this exact SHA through implementation review.
-- Branch: `package/es-p08-item-confiscation`; PR #128 is ready for review.
-- Migration ceiling: V18; no migration added because `recovery_quarantine` already provides `resolved_at`, `resolved_by`, and `resolution_json`.
-- Existing item foundations retained: durable profiles/operations/patches, network leases/fencing, nested paths/fingerprints, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, bounded work, and restart/login patch recovery.
-- New bounded recovery authority: Founder-only `/case recoveritems <case-id>` uses `enthusiastaff.owner.recovery` plus service-level `RESTORE_ASSETS`; persistence accepts only case-linked confiscation/restoration operations and rechecks case-target/profile binding, pair state/profile/fence coherence, quarantine identity/resource key, and competing leases. The command never applies inventory.
-- Multiple unresolved same-case item operations are ambiguous and untouched. A successful authorization atomically requeues one exact pair, resolves quarantine metadata, and requires exactly one append-only recovery audit write. Duplicate authorization is an explicit replay. A failed newer-fence retry reopens quarantine resolution fields while prior authorizations remain in audit.
-- New tests cover authorization, missing storage, generic-operation exclusion, no inventory revision mutation during authorization, duplicate retry, competing lease, paired-state divergence rollback, case-target corruption rollback, same-case multi-scope ambiguity, and re-quarantine/re-recovery. Existing adjacent tests cover exact restoration binding, duplicate finalization, failed/quarantined reservation cancellation, restore-once semantics, nested item paths, aggregate codec limits, generic journal fencing, and restart recovery.
-- Manual review fixed two substantive issues: hidden case-target divergence and optional recovery-audit insertion. Four Codacy code-quality findings on a superseded head were also fixed. CodeRabbit did not complete a substantive review because the repository review quota was exhausted; its generic status is not counted as a pass and no review threads exist.
-- Validation-ready handoff: `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-validation-ready.md`.
-- The next canonical-state publication creates the frozen feature head. All final hosted/static/review/Sentinel/Pi evidence must match that literal SHA; earlier checks remain diagnostic/superseded.
+- Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; `main` remained at this exact SHA through implementation and final tracked-state preparation.
+- Implementation PR: #128. The literal final frozen feature SHA and final validation identifiers are recorded in PR metadata to avoid self-referential tracked commits.
+- Migration ceiling: V18; no migration added.
+- Existing item foundations retained: durable profiles/operations/patches, leases/fencing, nested paths/fingerprints, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, bounded work, and restart/login recovery.
+- New Founder-only `/case recoveritems <case-id>` recovery authority requires Bukkit and service-level Founder authorization, rejects unresolved actor identity, accepts only case-linked confiscation/restoration operations, verifies case-target/profile/state/fence/quarantine/resource/lease evidence, refuses multiple candidates, and never applies inventory directly.
+- Recovery authorization atomically requeues the exact pair, resolves quarantine metadata, and requires exactly one append-only audit write. Duplicate authorization is explicit replay. Failed newer-fence retries reopen quarantine resolution fields while prior authorizations remain in audit.
+- New tests cover authorization/unresolved identity, missing storage, generic-operation exclusion, no profile-revision mutation during authorization, duplicate replay, competing lease, paired-state divergence rollback, case-target corruption rollback, same-case multi-scope ambiguity, and re-quarantine/re-recovery. Existing adjacent tests cover exact restoration binding, duplicate finalization, cancellation, restore-once, nested paths, aggregate codec limits, generic fencing, and restart recovery.
+- Valid manual/Codacy/CodeRabbit findings were fixed. Merge is prohibited until the final frozen SHA has zero valid unresolved review threads and all exact-head hosted/static/Sentinel/Pi gates pass.
+- Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md`.
+- After normal merge, record merge SHA/resulting main/containment/divergence/branch deletion in PR #128 verification metadata; do not create a follow-up source PR solely for those facts.
 
 ## Next sequential action
 
-Complete only ES-P08 on PR #128. Capture the validation-ready canonical-state head as the frozen SHA, run every required exact-head gate, merge normally, prove containment/cleanup, publish terminal state, and stop. Do not select or activate ES-X02 or any other package in this worker.
+Finish only PR #128: freeze the terminal tracked-state head, complete every required exact-head gate, merge normally, verify containment/cleanup, record post-merge GitHub-generated facts in PR metadata, and stop. Do not activate or implement ES-X02 in this worker.
