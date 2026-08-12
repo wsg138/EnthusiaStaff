@@ -2,7 +2,7 @@
 
 Status: `BLOCKED`; classification: `PARKED_BLOCKED`.
 
-This handoff publishes the true unmerged ES-P08 continuation state to `main` while preserving implementation PR #128 and `package/es-p08-item-confiscation`. It does not call the implementation complete and does not authorize another package.
+This handoff publishes the true unmerged ES-P08 continuation state to `main` while preserving implementation PR #128 and `package/es-p08-item-confiscation`. Documentation-only status-publication PR #129 uses `status/es-p08-sentinel-blocked-20260812`; it was opened non-draft and mergeable and is intended to merge normally as the canonical blocker-state publication. It does not call the implementation complete, alter PR #128, or authorize another package. GitHub metadata is authoritative for PR #129's later merged/closed state.
 
 ## Live package identity
 
@@ -10,6 +10,8 @@ This handoff publishes the true unmerged ES-P08 continuation state to `main` whi
 - Implementation branch: `package/es-p08-item-confiscation`.
 - Implementation PR: #128, open/non-draft/mergeable at the last reconciliation.
 - Frozen product head: `27b20bb56e540161f695e624916f91620261457d`.
+- Status-publication branch: `status/es-p08-sentinel-blocked-20260812`.
+- Status-publication PR: #129, documentation-only and intended for normal merge into `main`.
 - V18 remains the immutable migration ceiling; ES-P08 adds no migration.
 - Issue #43 remains open/deferred; LiteBans remains authoritative.
 
@@ -56,4 +58,4 @@ If the resource condition remains unchanged, keep ES-P08 `PARKED_BLOCKED`; do no
 
 ## Production and stop boundary
 
-No production data was read or written; no deployment, shadow window, source rewrite, private-data acceptance, LiteBans authority change, issue #43 acceptance, or cutover occurred. This worker publishes blocker/routing state only after exhausting meaningful same-head work permitted by repository policy, then stops without beginning a second package.
+No production data was read or written; no deployment, shadow window, source rewrite, private-data acceptance, LiteBans authority change, issue #43 acceptance, or cutover occurred. This worker publishes blocker/routing state through documentation-only PR #129 after exhausting meaningful same-head work permitted by repository policy, then stops without beginning a second package.

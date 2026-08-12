@@ -8,6 +8,8 @@
 
 Implementation is preserved in PR #128 on temporary branch `package/es-p08-item-confiscation`. Frozen product head: `27b20bb56e540161f695e624916f91620261457d`. Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 
+Documentation-only status-publication PR #129 uses `status/es-p08-sentinel-blocked-20260812` into `main`. It was opened non-draft and mergeable and is intended to merge normally as the canonical blocker-state publication while preserving PR #128. GitHub metadata is authoritative for PR #129's later merged/closed state.
+
 The product implementation and every required exact-head gate except the independent live Sentinel restart are complete. The package is not `COMPLETE` and PR #128 must not merge until live Sentinel produces literal exact-head `PAPER_RESTART_OK`.
 
 ## 3. Objective
@@ -31,7 +33,7 @@ Root inventory/asset/domain/persistence/Paper/tests/docs only. No external provi
 ## 9. Branch and PR policy
 Temporary implementation branch `package/es-p08-item-confiscation`; implementation PR #128 is the only product PR into `main` for this package. Preserve both while blocked.
 
-A documentation-only status-publication PR may publish this blocker state to `main` under the universal worker protocol. It must not merge or close PR #128 or alter product code. After eventual implementation merge, record merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata; do not create a follow-up product commit solely for self-referential merge facts.
+Documentation-only status-publication PR #129 on `status/es-p08-sentinel-blocked-20260812` publishes this blocker state under the universal worker protocol. It must not merge or close PR #128 or alter product code. After eventual implementation merge, record merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata; do not create a follow-up product commit solely for self-referential merge facts.
 
 ## 10. Implementation result
 - Existing durable profiles, paired operations/patches, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, nested item identity, leases/fencing, checksum/revision guards, and restart/login recovery were retained.

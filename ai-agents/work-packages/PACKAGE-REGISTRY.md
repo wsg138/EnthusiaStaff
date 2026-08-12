@@ -19,6 +19,8 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 `ES-P08 — Item confiscation and restoration` is `BLOCKED` / `PARKED_BLOCKED`. Its preserved implementation is PR #128 on `package/es-p08-item-confiscation`, frozen product head `27b20bb56e540161f695e624916f91620261457d`, package start `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`. Exact-head Wiki, Java 21 build/tests, runtime-JAR/provider-leak inspection, coverage, Codacy static, review disposition, Sentinel artifact, and canonical public→private Pi staging passed. The required independent live Sentinel restart has not passed: job `150` failed before product acceptance at the cycle-1 host temperature gate; job `151` timed out while resource-gated; job `153` completed restart cycle 1 but failed before cycle 2 at `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` with 81.8 C against the 80.0 C ceiling. No infrastructure exception is authorized. PR #128 must remain unmerged until literal exact-head `PAPER_RESTART_OK` is obtained.
 
+The canonical blocker publication is documentation-only PR #129 on `status/es-p08-sentinel-blocked-20260812` into `main`. It was opened non-draft and mergeable and is intended to merge normally without altering or closing implementation PR #128. GitHub metadata is authoritative for PR #129's later merged/closed state.
+
 `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS files required for integration remain unresolved. `ES-X02` remains parked because ES-P08 is incomplete. All other downstream packages retain their documented dependencies and external conditions.
 
 ## Canonical package index
@@ -36,7 +38,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 | `ES-P05` | Report evidence and staff workflow completion | `COMPLETE` | — | 50 | `ES-P03`, `ES-P04` | merged PR #81 |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | merged PR #84 |
 | `ES-P06` | Discord notification delivery completion | `COMPLETE` | — | 60 | `ES-P05` | frozen `7e21edb1d32a75727dc65df826f9de964adcfff3`; PR #115 merged normally as `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`; contained; branch cleaned |
-| `ES-P08` | Item confiscation and restoration | `BLOCKED` | `PARKED_BLOCKED` | 70 | `ES-P07` | PR #128 / `package/es-p08-item-confiscation`; frozen `27b20bb56e540161f695e624916f91620261457d`; only remaining gate is live Sentinel `PAPER_RESTART_OK`; job `153` failed the cycle-2 resource gate |
+| `ES-P08` | Item confiscation and restoration | `BLOCKED` | `PARKED_BLOCKED` | 70 | `ES-P07` | implementation PR #128 / `package/es-p08-item-confiscation`, frozen `27b20bb56e540161f695e624916f91620261457d`; blocker publication PR #129 / `status/es-p08-sentinel-blocked-20260812`; only remaining product gate is live Sentinel `PAPER_RESTART_OK`; job `153` failed the cycle-2 resource gate |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
@@ -54,6 +56,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 - Package start and frozen product base: `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 - Frozen product head: `27b20bb56e540161f695e624916f91620261457d`.
 - Implementation PR/branch: #128 / `package/es-p08-item-confiscation`; preserve while blocked.
+- Status-publication PR/branch: #129 / `status/es-p08-sentinel-blocked-20260812`; documentation-only blocker-state publication intended for normal merge into `main`, with no product-code changes and no change to PR #128.
 - Hosted exact-head proof: Wiki run `31555952998` passed; Coverage run `31555953013` / job `93988340387` passed Java 21 full build/tests with MariaDB/Testcontainers, warnings-as-errors, runtime JAR/provider-leak checks, aggregate JaCoCo, and Codacy coverage upload. Aggregate coverage was 48.99% lines, 40.07% branches, 51.52% instructions.
 - Codacy static check `93988413158` passed with zero issues; coverage variation +0.2% against the -1.0% target; diff coverage 74.5% with no configured diff gate.
 - Review: all valid CodeRabbit findings are addressed and all threads resolved. Exact-head manual review found no additional valid release blocker; valid unresolved review-thread count is zero. The docstring-coverage UI warning is advisory and is not counted as a repository-gate pass.
@@ -97,4 +100,4 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 ## Next sequential action
 
-This ES-P08 worker stops after the documentation-only blocked state is normally merged to `main`; it does not alter or close PR #128 and does not activate another package. A future worker must reconcile live GitHub first. If concrete Sentinel host evidence shows the resource condition changed enough to sustain both required restart cycles, resume ES-P08 as `ACTIONABLE_CONTINUATION` and run one fresh exact-head restart if needed. If the condition is unchanged, keep ES-P08 parked. `ES-X02` is not dependency-ready while ES-P08 remains incomplete.
+This ES-P08 worker stops after documentation-only PR #129 on `status/es-p08-sentinel-blocked-20260812` is normally merged to `main`; it does not alter or close PR #128 and does not activate another package. A future worker must reconcile live GitHub first. If concrete Sentinel host evidence shows the resource condition changed enough to sustain both required restart cycles, resume ES-P08 as `ACTIONABLE_CONTINUATION` and run one fresh exact-head restart if needed. If the condition is unchanged, keep ES-P08 parked. `ES-X02` is not dependency-ready while ES-P08 remains incomplete.
