@@ -347,7 +347,7 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
                 "action", "REQUEUE_FOR_VERIFIED_RETRY"
         ));
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT IGNORE INTO audit_events(
+                INSERT INTO audit_events(
                     event_id, correlation_id, actor_id, target_id, case_id,
                     event_type, outcome, event_json, idempotency_key, occurred_at
                 ) VALUES (?, ?, ?, ?, ?, 'INVENTORY_QUARANTINE_REQUEUED',
@@ -362,9 +362,9 @@ public final class JdbcInventoryRecoveryStore implements InventoryRecoveryStore 
             statement.setString(7, "inventory:quarantine-requeue:"
                     + candidate.operationId() + ':' + candidate.fencingToken());
             statement.setTimestamp(8, Timestamp.from(now));
-            JdbcTransactionSupport.requireOptionalSingleUpdate(
+            JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
-                    "Multiple inventory recovery audit rows were written"
+                    "Inventory recovery audit was not written exactly once"
             );
         }
     }
