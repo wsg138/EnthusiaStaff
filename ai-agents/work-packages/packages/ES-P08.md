@@ -4,95 +4,90 @@
 `ES-P08`; Internal; primary `COMP-STAFF`; priority 70; sequential around shared inventory journals/destructive recovery.
 
 ## 2. Status
-`ACTIVE` / `ACTIONABLE_CONTINUATION`; implementation is `VALIDATION_READY` on `package/es-p08-item-confiscation`. Exact package start: reconciled `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`. Implementation PR: #128.
+Terminal tracked state: `COMPLETE`. This record is carried by implementation PR #128 and becomes canonical only when that PR is normally merged to `main` after all exact-head gates pass. Until then, PR #128 remains the sole `ACTIONABLE_CONTINUATION` for this package.
+
+Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 
 ## 3. Objective
-Complete transactional case-linked item confiscation, snapshots, reservations, rollback, restoration, and owner recovery.
+Complete transactional case-linked item confiscation, snapshots, reservations, rollback, restoration, and explicit owner recovery.
 
-## 4. Why the package exists
-The audit classified item destruction/restoration as critical: foundations existed but owner recovery from ambiguous quarantined item operations and direct item-specific failure evidence were incomplete.
-
-## 5. Included audit IDs
+## 4. Included audit IDs
 `AUD-ASSET-001` and item-specific portions of `AUD-ASSET-005`.
 
-## 6. Included behavior
-Exact item/path selection including nested containers; durable before/after snapshots and operation IDs; reservations and duplicate prevention; checked/unchecked failure rollback; restart recovery/quarantine; authorized exact restoration; explicit owner-authorized retry; bounded work and audit.
+## 5. Included behavior
+Exact item/path selection including nested containers; durable before/after snapshots and operation IDs; reservations and duplicate prevention; checked/unchecked failure rollback; restart recovery/quarantine; authorized exact restoration; explicit Founder-authorized quarantine retry; bounded work and audit.
 
-## 7. Explicit exclusions
-Currency (`ES-X02`), market (`ES-X03`), reputation (`ES-X04`), production inventories, whole-server rollback.
+## 6. Explicit exclusions
+Currency (`ES-X02`), market (`ES-X03`), reputation (`ES-X04`), production inventories, whole-server rollback, and representative destructive/load acceptance assigned to `ES-V03`.
 
-## 8. Dependencies
+## 7. Dependencies
 `ES-P07` is `COMPLETE`.
 
-## 9. Component and repository boundaries
-Root inventory/asset/domain/persistence/Paper/tests/docs only. No external component source or permanent/isolated branch.
+## 8. Component and repository boundaries
+Root inventory/asset/domain/persistence/Paper/tests/docs only. No external provider source or permanent/isolated branch.
 
-## 10. Required branches
-Temporary `package/es-p08-item-confiscation`; delete after verified merge containment.
+## 9. Branch and PR policy
+Temporary branch `package/es-p08-item-confiscation`; implementation PR #128 is the only source PR into `main` for this package.
 
-## 11. Required PRs
-One implementation PR to `wsg138/EnthusiaStaff:main`; a post-merge docs-only finalization PR is permitted only if needed to publish facts that cannot truthfully exist before the implementation merge.
+Record post-merge merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata. Do **not** create a follow-up `main` commit or PR solely to insert those self-referential facts into tracked files.
 
-## 12. Implementation checklist
-- [x] Reconcile live journal/coordinator/codecs, package dependencies, current migration boundary, GitHub branches/PRs, and production boundary.
-- [x] Define and document the item-operation/recovery state machine against current code.
-- [x] Implement explicit Founder-only, audited, idempotent recovery for quarantined item confiscation/restoration operations without guessing live state.
-- [x] Complete exact reservation/removal/rollback/restore/recovery correctness fixes found by review.
-- [x] Add failure-injection, duplicate/restart/recovery, authorization, nested/large-codec, stale-state, transaction-rollback, ambiguity, and target-binding tests required by this package.
-- [x] Update operator/Wiki/package documentation and canonical active state/handoff.
-- [x] Harsh full-diff review; resolve all valid manual/Codacy/CI findings. CodeRabbit's attempted substantive review is quota-limited and is not counted as a pass; no review threads were created.
-- [ ] Freeze one exact head and complete hosted/static/runtime-JAR/Wiki/Sentinel/Pi validation required by policy.
-- [ ] Merge normally, prove containment/divergence, clean the temporary branch, publish terminal state, and stop.
+## 10. Implementation result
+- Existing durable profiles, paired operations/patches, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, nested item identity, leases/fencing, checksum/revision guards, and restart/login recovery were retained.
+- Added a dedicated `InventoryRecoveryStore`, JDBC implementation, Paper coordinator, and `/case recoveritems <case-id>` route rather than expanding the existing mutation coordinator.
+- Recovery accepts only case-linked `CONFISCATION` or `RESTORE_CONFISCATED` operations.
+- Bukkit `enthusiastaff.owner.recovery` and service-level Founder `RESTORE_ASSETS` authorization both gate persistence.
+- An unresolved command sender fails before dispatch with a cause-accurate message; the coordinator separately fails closed on a null/non-Founder actor.
+- Persistence independently verifies case-target/profile binding, patch/operation state/profile/fence coherence, the stored quarantine `resource_key`, unresolved quarantine identity, and absence of a competing live lease.
+- Missing or mismatched recovery resource evidence fails closed; no synthetic fallback resource key is used.
+- Multiple unresolved item quarantines for one case are `AMBIGUOUS`; no candidate is guessed or changed.
+- Successful authorization atomically requeues only the exact pair to `PENDING`, resolves quarantine metadata, and requires exactly one append-only `INVENTORY_QUARANTINE_REQUEUED` audit write.
+- The owner command never applies inventory. Normal claim/checksum/revision recovery must acquire a newer fence and prove live state before finalization.
+- A failed newer-fence retry re-quarantines and clears the prior resolution fields so the new unsafe state is visibly unresolved while earlier authorization remains in audit.
+- Nullable JDBC reads are handled defensively even where the current V18 schema declares the fields `NOT NULL`.
 
-## 13. Acceptance criteria
-No item duplication/loss across success, rejection, timeout, crash, retry, or restore; nested identity/path is exact; audit links case/actor/operation; owner recovery is explicit and idempotent; work is bounded.
+## 11. Test result
+New unit/integration coverage proves:
+- non-Founder and unresolved actors never reach recovery persistence;
+- missing storage fails closed;
+- exact Founder actor/case/time delegation;
+- generic inventory-edit quarantines cannot use case-item recovery;
+- recovery authorization does not advance the inventory profile revision;
+- duplicate authorization replays without duplicate audit;
+- live competing leases block without mutation;
+- paired-state divergence and case-target corruption roll back;
+- two unresolved same-case item quarantines across scopes remain untouched/ambiguous;
+- failed newer-fence recovery reopens quarantine and can be independently re-authorized.
 
-## 14. Test requirements
-Nested/large item codecs, online/offline paths, concurrent edits, partial mutation, transaction rollback, process interruption/restart, duplicate requests, stale restoration, quarantine/owner recovery, multiple-candidate ambiguity, target corruption, and authorization tests.
+Existing adjacent suites continue to cover exact restoration target/case/profile/scope binding, duplicate finalization, failed/quarantined reservation cancellation, restore-once semantics, nested path depth/index/round-trip behavior, aggregate inventory-image size limits, generic journal fencing/leases, and restart-style already-replaced recovery.
 
-## 15. Static-analysis requirements
-All configured Java/static-analysis/review gates; zero valid unresolved findings. Four Codacy findings found on an earlier implementation head were fixed: two repeated test state literals and two conditional magic-number literals. No superseded check is final evidence.
+## 12. Review/static result
+Valid findings were fixed rather than waived:
+- manual review: hidden case-target divergence and optional privileged recovery-audit insertion;
+- Codacy: four code-quality findings on a superseded head;
+- CodeRabbit: follow-up-merge-evidence policy, canonical-handoff state, unresolved sender reporting/test coverage, missing stored recovery resource evidence, and nullable lease timestamp handling.
 
-## 16. Documentation requirements
-Confiscation/restoration workflow, permissions, recovery/quarantine, limits, failure handling, Wiki, package state/handoff.
+PR #128 must have zero valid unresolved review threads before merge. Superseded/rate-limited/aborted bot states are not passing evidence.
 
-## 17. Security and privacy requirements
-Financial-grade authorization/audit; no player inventory data in recovery evidence; fail closed on uncertain state; immutable operation linkage. Recovery authorization requires both Bukkit `enthusiastaff.owner.recovery` and service-level Founder `RESTORE_ASSETS` authority.
+## 13. Migration impact
+V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the existing quarantine schema already provides `resolved_at`, `resolved_by`, and `resolution_json`. V1–V18 remain byte-immutable.
 
-## 18. Migration impact
-V18 remains the current immutable Flyway boundary. ES-P08 adds no migration because the existing `recovery_quarantine` schema already provides resolver/time/resolution metadata. V1–V18 remain byte-immutable.
+## 14. Security/privacy and distributed guarantees
+No inventory contents are written to owner-recovery audit metadata. Uncertain identity/state/resource/fence/lease evidence fails closed. Recovery authorization is idempotent and does not bypass normal fenced application. No production data, deployment, authority change, cutover, private-data acceptance, or source rewrite is part of this package.
 
-## 19. Bedrock considerations
-Recovery is a text command and does not depend on a Java-only UI. Broader Java/Bedrock acceptance remains deferred to `ES-V02`/`ES-V03`.
+## 15. Final validation gate
+PR #128 may merge only after one immutable feature SHA passes all required exact-head evidence:
+- Wiki validation;
+- Java 21 full build/tests including MariaDB/Testcontainers;
+- Paper/Velocity runtime-JAR inspection and zero provider-API leaks;
+- aggregate JaCoCo and configured Codacy coverage gate;
+- Codacy static analysis with zero valid new findings;
+- exact-head manual/review-thread disposition with zero valid unresolved findings;
+- exact Sentinel Paper artifact and live restart to terminal `PAPER_RESTART_OK`;
+- canonical public→private Pi staging on trusted `Lincoln-PI-4` with exact provenance, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 first-cycle/current restart behavior, clean shutdown/failure scans, sanitized evidence, and guarded cleanup.
 
-## 20. Distributed-runtime considerations
-Ownership, leases, duplicate requests, backend switching, process death, database latency, case-target binding, and fencing divergence fail closed. Owner authorization never applies an inventory image directly; normal claim/checksum/revision recovery must acquire a newer fence and prove live state.
+The literal frozen SHA and all final run/job/artifact/hash evidence are recorded externally in PR #128 metadata so this tracked file does not require a self-referential post-validation commit.
 
-## 21. External-provider considerations
-Shared item operation contracts remain isolated; no currency/market/reputation provider source is implemented in this package.
+## 16. Completion and stop rule
+When PR #128 has all required exact-head passes, merge it by a normal merge commit only. Verify feature-head containment, resulting-main divergence, and branch deletion; record those GitHub-generated facts in PR #128 metadata. Then stop this worker. Do not activate or implement `ES-X02` in this session.
 
-## 22. Completion definition
-Item-specific criteria, tests, review and exact-head validation pass; implementation PR merges normally; branch cleanup verified; destructive production-like staging remains `ES-V03` and does not authorize production use.
-
-## 23. Resume state
-PR #128 on `package/es-p08-item-confiscation` is the only actionable continuation. Implementation is complete and validation-ready. Existing confiscation/restoration foundations were retained; the package adds a dedicated recovery store/coordinator/command rather than expanding the already-large mutation coordinator.
-
-## 24. Last completed checkpoint
-Implementation/review checkpoint: Founder-only `/case recoveritems <case-id>` can only requeue one coherent unresolved `CONFISCATION`/`RESTORE_CONFISCATED` pair from `QUARANTINED` to `PENDING`. Persistence independently rechecks case-target/profile binding, patch/operation profile/state/fence coherence, unresolved quarantine identity/resource key, and absence of a competing live lease. The same transaction resolves quarantine metadata and requires exactly one append-only recovery audit write. Normal fenced recovery remains the only path that can apply/finalize inventory. A failed retry reopens quarantine resolution metadata while prior authorization remains in audit. Multiple unresolved same-case item operations are rejected without guessing.
-
-## 25. Test/review checkpoint
-New unit/integration coverage proves non-Founder denial, missing-storage fail-closed behavior, exact actor/case/time delegation, generic-operation exclusion, no profile-revision mutation during authorization, duplicate replay, competing-lease rejection, paired-state rollback, case-target corruption rollback, same-case multi-scope ambiguity, re-quarantine/re-recovery, and audit count/idempotency across newer fencing tokens. Existing package-adjacent suites continue to cover exact restoration binding, duplicate finalization, failed/quarantined reservation cancellation, restored-once semantics, nested item paths, aggregate inventory-image size limits, generic paired journal fencing, and restart-style recovery.
-
-Harsh manual review found two substantive implementation issues and fixed them before freeze: case-target corruption was changed from being filtered out to explicit fail-closed divergence, and privileged recovery audit writes were strengthened from optional `INSERT IGNORE` behavior to an exactly-one transactional insert. CodeRabbit did not complete a substantive review because the repository review quota was exhausted; its superficial success status is not treated as review evidence. No CodeRabbit review threads exist.
-
-## 26. Remaining checklist
-Publish the validation-ready canonical state, capture that resulting literal feature SHA as the frozen head, run every required hosted/static/Wiki/runtime-JAR/Sentinel/Pi gate on that exact SHA, merge PR #128 normally, prove containment/divergence, delete the package branch, publish terminal canonical state, and stop. Do not activate ES-X02 in this worker.
-
-## 27. Known blockers
-No implementation blocker is known. Representative destructive/load/private-data acceptance intentionally remains `ES-V03`; issue #43 and production cutover remain outside this package.
-
-## 28. Final evidence
-Unset until the validation-ready state publication creates one immutable frozen head and that literal SHA completes all required final gates. Earlier passing, cancelled, superseded, or diagnostic runs are not final ES-P08 evidence.
-
-## 29. Merge and synchronization record
-Start: `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`; feature branch `package/es-p08-item-confiscation`; implementation PR #128. `main` remained at the exact start SHA through the final implementation review, so no upstream merge/rebase was necessary. Final frozen feature head, merge commit, resulting main, containment, divergence, and branch deletion remain unset until verified.
+Issue #43 remains open/deferred and LiteBans remains authoritative.
