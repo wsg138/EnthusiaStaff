@@ -17,6 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CaseRecoveryCommand implements CommandExecutor {
     private static final String RECOVERY_PERMISSION = "enthusiastaff.owner.recovery";
+    private static final int RECOVERY_ARGUMENT_COUNT = 2;
 
     private final JavaPlugin plugin;
     private final CaseCommand delegate;
@@ -58,7 +59,7 @@ public final class CaseRecoveryCommand implements CommandExecutor {
         )) {
             return true;
         }
-        if (arguments.length != 2) {
+        if (arguments.length != RECOVERY_ARGUMENT_COUNT) {
             sender.sendMessage(Component.text("Usage: /" + label + " recoveritems <case-id>"));
             return true;
         }
