@@ -1,11 +1,11 @@
 # ES-X02 — EnthusiaCurrency destructive provider — complete handoff
 
 Date: 2026-08-13
-Status: `HISTORICAL — SUPERSEDED BY ACTIONABLE CONTINUATION`
+Status: `HISTORICAL — SUPERSEDED BY CORRECTIVE COMPLETION`
 
 ## Supersession notice
 
-This handoff accurately records the state reviewed and merged through Staff PRs #133 and #135, but it is no longer the canonical current-state handoff. A later targeted review found two valid fail-closed state-ordering defects. Standalone Currency PR #14 repaired them and merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`; the corrected aggregate follow-up is still completing exact-head gates.
+This handoff accurately records the state reviewed and merged through Staff PRs #133 and #135, but it is no longer the canonical current-state handoff. A later targeted review found two valid fail-closed state-ordering defects. Standalone Currency PR #14 and Staff PR #137 repaired and synchronized them; the corrective handoff records the current terminal evidence.
 
 Current handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md`.
 
@@ -48,4 +48,4 @@ No production/private balances, production data, credentials, cutover, deploymen
 
 ## Next routing
 
-This was the routing decision at the time of the historical handoff. It is superseded: the current registry reopens ES-X02 as an `ACTIONABLE_CONTINUATION`, and ES-X03/ES-X04 remain parked until the corrected follow-up completes. `ES-X01` remains independently parked.
+This was the routing decision at the time of the historical handoff. It is superseded: the current registry marks ES-X02 `COMPLETE` from the corrected tree and derives ES-X03/ES-X04 as `READY`. `ES-X01` remains independently parked.
