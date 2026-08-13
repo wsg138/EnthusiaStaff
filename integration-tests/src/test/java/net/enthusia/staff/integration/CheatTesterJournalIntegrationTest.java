@@ -44,7 +44,7 @@ class CheatTesterJournalIntegrationTest {
         createActiveSessionAndCheckpointEvidence();
         recoverCompleteAndReuseTarget();
         assertEquals(4, testerAuditCount());
-        assertEquals(18, latestMigrationVersion());
+        assertEquals(19, latestMigrationVersion());
     }
 
     private static void createActiveSessionAndCheckpointEvidence() throws Exception {
