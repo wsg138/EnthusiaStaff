@@ -56,8 +56,8 @@ class MarketComplianceJournalIntegrationTest {
             MarketComplianceStore store = runtime.marketComplianceStore();
             assertEquals(1, store.emitDueReviewAlerts(NOW.plus(Duration.ofDays(8)), 10));
             assertEquals(0, store.emitDueReviewAlerts(NOW.plus(Duration.ofDays(8)), 10));
-            assertEquals(1, count("staff_alerts", "alert_type = 'MARKET_REVIEW_DUE'"));
-            assertEquals(1, count("discord_outbox", "event_type = 'MARKET_REVIEW_DUE'"));
+            assertEquals(1, countReviewStaffAlerts());
+            assertEquals(1, countReviewDiscordAlerts());
 
             MarketComplianceOperation alerted = store.find(OPERATION).orElseThrow();
             MarketComplianceResult held = store.update(
@@ -119,7 +119,7 @@ class MarketComplianceJournalIntegrationTest {
                 assertEquals(1L, statuses.stream()
                         .filter(status -> status == MarketComplianceResult.Status.REPLAYED)
                         .count());
-                assertEquals(1, count("market_compliance_cases", "case_id = '" + caseId + "'"));
+                assertEquals(1, countMarketOperations(caseId));
             }
         }
     }
@@ -187,11 +187,33 @@ class MarketComplianceJournalIntegrationTest {
         }
     }
 
-    private static int count(String table, String predicate) throws Exception {
+    private static int countReviewStaffAlerts() throws Exception {
         try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT COUNT(*) FROM " + table + " WHERE " + predicate);
-             ResultSet result = statement.executeQuery()) {
+                     "SELECT COUNT(*) FROM staff_alerts WHERE alert_type = 'MARKET_REVIEW_DUE'")) {
+            return readCount(statement);
+        }
+    }
+
+    private static int countReviewDiscordAlerts() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM discord_outbox WHERE event_type = 'MARKET_REVIEW_DUE'")) {
+            return readCount(statement);
+        }
+    }
+
+    private static int countMarketOperations(String caseId) throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+            PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM market_compliance_cases WHERE case_id = ?")) {
+            statement.setString(1, caseId);
+            return readCount(statement);
+        }
+    }
+
+    private static int readCount(PreparedStatement statement) throws Exception {
+        try (ResultSet result = statement.executeQuery()) {
             result.next();
             return result.getInt(1);
         }
