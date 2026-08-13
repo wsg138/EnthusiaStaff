@@ -4,13 +4,15 @@
 `ES-P08`; Internal; primary `COMP-STAFF`; priority 70; sequential around shared inventory journals/destructive recovery.
 
 ## 2. Status
-Terminal tracked state: `COMPLETE` on normal merge of implementation PR #128. Until that merge occurs, PR #128 / `package/es-p08-item-confiscation` is the sole `ACTIONABLE_CONTINUATION` for this package.
+`COMPLETE`.
+
+Implementation PR #128 merged normally. The final synchronized implementation branch head was `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; its merge is exactly one commit ahead with zero file differences, and `package/es-p08-item-confiscation` is deleted.
 
 Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 
 Frozen executable-validation head: `27b20bb56e540161f695e624916f91620261457d`.
 
-A later merge candidate may contain only canonical process/state/documentation reconciliation required after blocker publication PR #129 and the owner-directed validation-policy correction. Under `VALIDATION-POLICY.md`, prior executable evidence remains valid only when an exact compare proves that no product source, product tests, migrations, workflows, build/runtime configuration, dependencies, artifact contracts, Sentinel manifests, or other executable inputs changed after the frozen product head.
+The post-frozen-head delta was proven to contain only eight canonical process/state/documentation Markdown files. Under `VALIDATION-POLICY.md`, executable evidence remains correctly attributed to the frozen product head because no product source, product tests, migrations, workflows, build/runtime configuration, dependencies, artifact contracts, Sentinel manifests, or other executable inputs changed.
 
 ## 3. Objective
 Complete transactional case-linked item confiscation, snapshots, reservations, rollback, restoration, and explicit owner recovery.
@@ -30,10 +32,10 @@ Currency (`ES-X02`), market (`ES-X03`), reputation (`ES-X04`), production invent
 ## 8. Component and repository boundaries
 Root inventory/asset/domain/persistence/Paper/tests/docs only. No external provider source or permanent/isolated branch.
 
-## 9. Branch and PR policy
-Temporary branch `package/es-p08-item-confiscation`; implementation PR #128 is the only source PR into `main` for this package.
+## 9. Branch and PR result
+Implementation PR #128 merged normally to `main`. GitHub post-merge verification proves the synchronized head is contained with zero file delta and the temporary implementation branch is deleted.
 
-Record post-merge merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata. Do **not** create a follow-up `main` commit or PR solely to insert self-referential merge facts into tracked files.
+Post-merge merge SHA/parent/containment facts are retained in GitHub/PR #128 verification metadata rather than creating self-referential tracked history solely to embed those identifiers.
 
 ## 10. Implementation result
 - Existing durable profiles, paired operations/patches, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, nested item identity, leases/fencing, checksum/revision guards, and restart/login recovery were retained.
@@ -70,7 +72,7 @@ Valid findings were fixed rather than waived:
 - Codacy: four code-quality findings on a superseded head;
 - CodeRabbit: follow-up-merge-evidence policy, canonical-handoff state, unresolved sender reporting/test coverage, missing stored recovery resource evidence, and nullable lease timestamp handling.
 
-Frozen product head `27b20bb56e540161f695e624916f91620261457d` has zero valid unresolved review threads and passed the recorded hosted/static review gates. Any later state-only merge candidate must independently pass applicable documentation/package/static review and retain zero valid unresolved threads.
+Frozen product head `27b20bb56e540161f695e624916f91620261457d` ended with zero valid unresolved review threads and passed the recorded hosted/static review gates. The final documentation-only synchronization head also passed Wiki, Codacy static, CodeRabbit review, and retained zero valid unresolved review threads.
 
 ## 13. Migration impact
 V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the existing quarantine schema already provides `resolved_at`, `resolved_by`, and `resolution_json`. V1–V18 remain byte-immutable.
@@ -78,8 +80,8 @@ V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the 
 ## 14. Security/privacy and distributed guarantees
 No inventory contents are written to owner-recovery audit metadata. Uncertain identity/state/resource/fence/lease evidence fails closed. Recovery authorization is idempotent and does not bypass normal fenced application. No production data, deployment, authority change, cutover, private-data acceptance, or source rewrite is part of this package.
 
-## 15. Final validation gate
-The authoritative package contract at package start did not require an independent live Sentinel restart. ES-P08 destructive representative/load acceptance was explicitly deferred to `ES-V03`. A later worker-added tracking requirement for `PAPER_RESTART_OK` was therefore not a legitimate new merge dependency and has been corrected under the package-contract-integrity rule in `VALIDATION-POLICY.md`.
+## 15. Final validation result
+The authoritative package contract at package start did not require an independent live Sentinel restart. ES-P08 destructive representative/load acceptance was explicitly deferred to `ES-V03`. A later worker-added tracking requirement for `PAPER_RESTART_OK` was therefore not a legitimate new merge dependency and was corrected under the package-contract-integrity rule in `VALIDATION-POLICY.md`.
 
 Required executable evidence for the frozen product head is complete:
 - Wiki validation passed;
@@ -93,9 +95,9 @@ Required executable evidence for the frozen product head is complete:
 
 Live Sentinel restart jobs 150, 151, and 153 remain explicit **non-passing diagnostic history**. They are not relabeled as passes and are not substituted for any required gate: job 150 failed its cycle-1 temperature resource gate, job 151 timed out, and job 153 completed cycle 1 but failed the cycle-2 temperature resource gate. Those diagnostics do not reopen the original package acceptance contract.
 
-## 16. Completion and stop rule
-After normal synchronization with current `main`, require an exact compare proving the post-`27b20bb...` delta is process/state/documentation-only as defined by `VALIDATION-POLICY.md`. Validate that state-only delta, keep zero valid unresolved review threads, and merge PR #128 using a normal merge commit only.
+## 16. Completion and next routing
+ES-P08 is `COMPLETE`. Its implementation PR is merged, the validated executable head is durably recorded, synchronized-head containment is exact, and the temporary implementation branch is deleted.
 
-After merge, verify feature-head containment, resulting-main divergence, and branch deletion; record those GitHub-generated facts in PR #128 metadata. Then stop this worker. Do not activate or implement `ES-X02` in this session.
+`ES-X02 — EnthusiaCurrency destructive provider` is now dependency-complete and `READY`. A new sequential worker may select it after live reconciliation, unless a newly discovered higher-precedence `ACTIONABLE_CONTINUATION` exists. This finalization does not activate or implement ES-X02.
 
 Issue #43 remains open/deferred and LiteBans remains authoritative.
