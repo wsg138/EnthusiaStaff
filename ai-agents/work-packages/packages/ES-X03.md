@@ -4,7 +4,7 @@
 `ES-X03`; External/multi-repository; primary `COMP-STAFF`; other `COMP-MARKET`; priority 120; conditional parallelism only without shared destructive-state overlap.
 
 ## 2. Status
-Initial `PLANNED`; registry is authoritative.
+`ACTIVE`; registry is authoritative.
 
 ## 3. Objective
 Implement durable market restriction, reservation, confiscation, rollback, and exact restoration across EnthusiaStaff and EnthusiaMarket.
@@ -67,19 +67,19 @@ Use verified `wsg138/EnthusiaMarket` contracts and AGENTS/CI; no reflection or i
 Both exact-head PRs merge normally; checks/reviews pass; aggregate parity true; metadata/evidence recorded; temp branches handled. Private destructive acceptance remains `ES-V03`.
 
 ## 23. Resume state
-Unassigned; no branch/PR/handoff. Start only after dependencies and assignment.
+Claimed on 2026-08-13 after live reconciliation. Staff and Market use temporary branch `package/es-x03-market-provider`, based respectively on `49e5aa999b43193181aafabbb75811c820fa03c7` and `bc24f1010642d6042307bc13a32fb33cc94e8883`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x03-market-provider.md`.
 
 ## 24. Last completed checkpoint
-Definition/metadata only; no implementation began.
+Dependencies, standalone availability, default heads, branch/PR conflicts, repository rules, migration ceilings, and package boundaries were reconciled. Isolated same-ID branches were created from both exact default heads without disturbing unrelated work.
 
 ## 25. Remaining checklist
-All two-repo implementation, tests, review, merge, parity, and evidence remain.
+Define and test the provider contract/state machine; implement durable Market operations and acquisition fencing; integrate the Staff journal/coordinator and commands; import the exact standalone tree; document recovery and operator behavior; open cross-linked draft PRs; run all exact-head gates and reviews; merge normally; prove parity; clean temporary branches; publish terminal state.
 
 ## 26. Known blockers
-Dependencies; private destructive environment deferred to `ES-V03`.
+No implementation blocker. Representative private destructive/load acceptance remains deferred to `ES-V03`; no production listings or player data are authorized.
 
 ## 27. Final evidence
-Unset: two bases/heads/PRs/merges, contract version, checks/reviews, parity manifests/hashes.
+Starting bases recorded above. Final heads, PRs, merges, contract version, checks/reviews, parity manifests, and hashes remain pending.
 
 ## 28. Merge and synchronization record
 Unset. One-sided merge means `SYNC_PENDING`; completion requires both merges, parity, metadata, containment, and temp branch cleanup.

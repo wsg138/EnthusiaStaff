@@ -22,7 +22,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted. `ES-X03` and `ES-X04` are now `READY`. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
+`ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted. `ES-X03` is now `ACTIVE`; `ES-X04` remains `READY`. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
 
 ## Canonical package index
 
@@ -44,7 +44,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| `ES-X03` | EnthusiaMarket destructive provider | `READY` | `READY` | 120 | `ES-P08`, `ES-X02` | dependencies complete; eligible for a fresh worker after live reconciliation |
+| `ES-X03` | EnthusiaMarket destructive provider | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 120 | `ES-P08`, `ES-X02` | Staff and Market branch `package/es-x03-market-provider`; starts `49e5aa99...` / `bc24f101...`; canonical handoff `2026-08-13-es-x03-market-provider.md` |
 | `ES-X04` | EnthusiaCommend reputation provider | `READY` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; eligible after higher-priority routing is reconciled |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
@@ -120,4 +120,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-This ES-X02 worker stops after terminal-state publication and does not activate another package. A fresh worker must reconcile live GitHub before selection. Absent a new actionable continuation, `ES-X03 — EnthusiaMarket destructive provider` is the next eligible `READY` package by priority; ES-X04 is also `READY`. ES-X01 remains parked on the unresolved supported RoseChat repository/source contract.
+Continue only `ES-X03 — EnthusiaMarket destructive provider`: publish the versioned provider contract, implement durable reservation/restriction/confiscation/restoration, integrate the Staff coordinator, prove both repositories, merge normally, verify parity, and clean up both temporary branches. Do not activate ES-X04 in this worker.
