@@ -24,6 +24,7 @@ public record MarketComplianceRequest(
         Instant createdAt
 ) {
     private static final Duration MAXIMUM_RECOVERY_WINDOW = Duration.ofDays(31);
+    private static final long MINIMUM_PROVIDER_REVISION = 1L;
 
     public MarketComplianceRequest {
         operationId = Objects.requireNonNull(operationId, "operationId");
@@ -60,21 +61,36 @@ public record MarketComplianceRequest(
             Optional<Instant> blacklistExpiresAt,
             OptionalLong expectedBlacklistRevision
     ) {
+        validateStallShape(kind, stallId);
+        if (kind == MarketComplianceKind.BLACKLIST_REMOVE) {
+            validateBlacklistRemoval(blacklistExpiresAt, expectedBlacklistRevision);
+        } else if (expectedBlacklistRevision.isPresent()) {
+            throw new IllegalArgumentException("only blacklist removal can contain a provider revision");
+        }
+    }
+
+    private static void validateStallShape(
+            MarketComplianceKind kind,
+            Optional<String> stallId
+    ) {
         if (kind == MarketComplianceKind.STALL && stallId.isEmpty()) {
             throw new IllegalArgumentException("stall operations require a stall id");
         }
         if (kind != MarketComplianceKind.STALL && stallId.isPresent()) {
             throw new IllegalArgumentException("blacklist operations cannot contain a stall id");
         }
-        if (kind == MarketComplianceKind.BLACKLIST_REMOVE) {
-            if (expectedBlacklistRevision.isEmpty() || expectedBlacklistRevision.orElseThrow() < 1L) {
-                throw new IllegalArgumentException("blacklist removal requires a positive provider revision");
-            }
-            if (blacklistExpiresAt.isPresent()) {
-                throw new IllegalArgumentException("blacklist removal cannot contain an expiration");
-            }
-        } else if (expectedBlacklistRevision.isPresent()) {
-            throw new IllegalArgumentException("only blacklist removal can contain a provider revision");
+    }
+
+    private static void validateBlacklistRemoval(
+            Optional<Instant> blacklistExpiresAt,
+            OptionalLong expectedBlacklistRevision
+    ) {
+        if (expectedBlacklistRevision.isEmpty()
+                || expectedBlacklistRevision.orElseThrow() < MINIMUM_PROVIDER_REVISION) {
+            throw new IllegalArgumentException("blacklist removal requires a positive provider revision");
+        }
+        if (blacklistExpiresAt.isPresent()) {
+            throw new IllegalArgumentException("blacklist removal cannot contain an expiration");
         }
     }
 

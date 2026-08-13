@@ -30,6 +30,39 @@ public final class MarketCaseCommand implements TabExecutor {
     private static final String PERMISSION = "enthusiastaff.market.restrict";
     private static final String RESTORE_PERMISSION = "enthusiastaff.market.restore";
     private static final String CONFIRM = "CONFIRM";
+    private static final String USAGE_PREFIX = "Usage: /";
+    private static final String ACTION_PREPARE = "prepare";
+    private static final String ACTION_APPROVE = "approve";
+    private static final String ACTION_RELEASE = "release";
+    private static final String ACTION_RESTORE = "restore";
+    private static final String ACTION_BLACKLIST = "blacklist";
+    private static final String ACTION_UNBLACKLIST = "unblacklist";
+    private static final String ACTION_STATUS = "status";
+    private static final List<String> ACTIONS = List.of(
+            ACTION_PREPARE,
+            ACTION_APPROVE,
+            ACTION_RELEASE,
+            ACTION_RESTORE,
+            ACTION_BLACKLIST,
+            ACTION_UNBLACKLIST,
+            ACTION_STATUS
+    );
+    private static final List<String> OPERATION_ACTIONS = List.of(
+            ACTION_APPROVE,
+            ACTION_RELEASE,
+            ACTION_RESTORE
+    );
+    private static final List<String> CONFIRMATION_ACTIONS = List.of(
+            ACTION_PREPARE,
+            ACTION_BLACKLIST,
+            ACTION_UNBLACKLIST
+    );
+    private static final int ACTION_ARGUMENT_COUNT = 1;
+    private static final int STATUS_ARGUMENT_COUNT = 2;
+    private static final int OPERATION_ARGUMENT_COUNT = 3;
+    private static final int EXPIRATION_ARGUMENT_COUNT = 4;
+    private static final int TARGET_OPERATION_ARGUMENT_COUNT = 5;
+    private static final long MINIMUM_REVISION = 1L;
 
     private final JavaPlugin plugin;
     private final Supplier<MarketComplianceCoordinator> coordinators;
@@ -83,17 +116,17 @@ public final class MarketCaseCommand implements TabExecutor {
             MarketComplianceCoordinator coordinator
     ) {
         return switch (arguments[0].toLowerCase(Locale.ROOT)) {
-            case "prepare" -> prepare(sender, label, arguments, actor, coordinator);
-            case "approve" -> operation(
-                    sender, label, arguments, actor, "approve", coordinator::approveConfiscation
+            case ACTION_PREPARE -> prepare(sender, label, arguments, actor, coordinator);
+            case ACTION_APPROVE -> operation(
+                    sender, label, arguments, actor, ACTION_APPROVE, coordinator::approveConfiscation
             );
-            case "release" -> operation(
-                    sender, label, arguments, actor, "release", coordinator::release
+            case ACTION_RELEASE -> operation(
+                    sender, label, arguments, actor, ACTION_RELEASE, coordinator::release
             );
-            case "restore" -> restore(sender, label, arguments, actor, coordinator);
-            case "blacklist" -> blacklist(sender, label, arguments, actor, coordinator);
-            case "unblacklist" -> unblacklist(sender, label, arguments, actor, coordinator);
-            case "status" -> status(sender, label, arguments, actor, coordinator);
+            case ACTION_RESTORE -> restore(sender, label, arguments, actor, coordinator);
+            case ACTION_BLACKLIST -> blacklist(sender, label, arguments, actor, coordinator);
+            case ACTION_UNBLACKLIST -> unblacklist(sender, label, arguments, actor, coordinator);
+            case ACTION_STATUS -> status(sender, label, arguments, actor, coordinator);
             default -> {
                 usage(sender, label);
                 yield true;
@@ -108,9 +141,9 @@ public final class MarketCaseCommand implements TabExecutor {
             Actor actor,
             MarketComplianceCoordinator coordinator
     ) {
-        if (arguments.length != 5 || !confirmed(arguments[4])) {
+        if (arguments.length != TARGET_OPERATION_ARGUMENT_COUNT || !confirmed(arguments[4])) {
             sender.sendMessage(Component.text(
-                    "Usage: /" + label + " prepare <player|uuid> <case-id> <stall-id> CONFIRM"
+                    USAGE_PREFIX + label + " prepare <player|uuid> <case-id> <stall-id> CONFIRM"
             ));
             return true;
         }
@@ -127,9 +160,9 @@ public final class MarketCaseCommand implements TabExecutor {
             Actor actor,
             MarketComplianceCoordinator coordinator
     ) {
-        if (arguments.length != 5 || !confirmed(arguments[4])) {
+        if (arguments.length != TARGET_OPERATION_ARGUMENT_COUNT || !confirmed(arguments[4])) {
             sender.sendMessage(Component.text(
-                    "Usage: /" + label
+                    USAGE_PREFIX + label
                             + " blacklist <player|uuid> <case-id> <permanent|ISO-8601> CONFIRM"
             ));
             return true;
@@ -151,9 +184,9 @@ public final class MarketCaseCommand implements TabExecutor {
             Actor actor,
             MarketComplianceCoordinator coordinator
     ) {
-        if (arguments.length != 5 || !confirmed(arguments[4])) {
+        if (arguments.length != TARGET_OPERATION_ARGUMENT_COUNT || !confirmed(arguments[4])) {
             sender.sendMessage(Component.text(
-                    "Usage: /" + label
+                    USAGE_PREFIX + label
                             + " unblacklist <player|uuid> <case-id> <expected-revision> CONFIRM"
             ));
             return true;
@@ -178,7 +211,9 @@ public final class MarketCaseCommand implements TabExecutor {
         boolean permitted = CommandPermissionGate.require(
                 sender, RESTORE_PERMISSION, "Only the Founder may restore Market assets."
         );
-        return !permitted || operation(sender, label, arguments, actor, "restore", coordinator::restore);
+        return !permitted || operation(
+                sender, label, arguments, actor, ACTION_RESTORE, coordinator::restore
+        );
     }
 
     private boolean operation(
@@ -189,9 +224,9 @@ public final class MarketCaseCommand implements TabExecutor {
             String action,
             OperationAction operation
     ) {
-        if (arguments.length != 3 || !confirmed(arguments[2])) {
+        if (arguments.length != OPERATION_ARGUMENT_COUNT || !confirmed(arguments[2])) {
             sender.sendMessage(Component.text(
-                    "Usage: /" + label + ' ' + action + " <operation-id> CONFIRM"
+                    USAGE_PREFIX + label + ' ' + action + " <operation-id> CONFIRM"
             ));
             return true;
         }
@@ -209,8 +244,8 @@ public final class MarketCaseCommand implements TabExecutor {
             Actor actor,
             MarketComplianceCoordinator coordinator
     ) {
-        if (arguments.length != 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " status <operation-id>"));
+        if (arguments.length != STATUS_ARGUMENT_COUNT) {
+            sender.sendMessage(Component.text(USAGE_PREFIX + label + " status <operation-id>"));
             return true;
         }
         UUID operationId = operationId(sender, arguments[1]);
@@ -313,7 +348,7 @@ public final class MarketCaseCommand implements TabExecutor {
     private static Long positiveLong(CommandSender sender, String value) {
         try {
             long parsed = Long.parseLong(value);
-            if (parsed > 0L) {
+            if (parsed >= MINIMUM_REVISION) {
                 return parsed;
             }
         } catch (NumberFormatException ignored) {
@@ -341,7 +376,7 @@ public final class MarketCaseCommand implements TabExecutor {
 
     private static void usage(CommandSender sender, String label) {
         sender.sendMessage(Component.text(
-                "Usage: /" + label
+                USAGE_PREFIX + label
                         + " <prepare|approve|release|restore|blacklist|unblacklist|status> ..."
         ));
     }
@@ -356,23 +391,26 @@ public final class MarketCaseCommand implements TabExecutor {
         if (!sender.hasPermission(PERMISSION)) {
             return List.of();
         }
-        if (arguments.length == 1) {
-            return matches(
-                    arguments[0],
-                    List.of("prepare", "approve", "release", "restore", "blacklist", "unblacklist", "status")
-            );
-        }
         String action = arguments[0].toLowerCase(Locale.ROOT);
-        if (arguments.length == 3 && List.of("approve", "release", "restore").contains(action)) {
-            return matches(arguments[2], List.of(CONFIRM));
-        }
-        if (arguments.length == 4 && action.equals("blacklist")) {
-            return matches(arguments[3], List.of("permanent"));
-        }
-        if (arguments.length == 5 && List.of("prepare", "blacklist", "unblacklist").contains(action)) {
-            return matches(arguments[4], List.of(CONFIRM));
-        }
-        return List.of();
+        return switch (arguments.length) {
+            case ACTION_ARGUMENT_COUNT -> matches(arguments[0], ACTIONS);
+            case OPERATION_ARGUMENT_COUNT -> operationConfirmation(action, arguments[2]);
+            case EXPIRATION_ARGUMENT_COUNT -> expirationCompletion(action, arguments[3]);
+            case TARGET_OPERATION_ARGUMENT_COUNT -> targetConfirmation(action, arguments[4]);
+            default -> List.of();
+        };
+    }
+
+    private static List<String> operationConfirmation(String action, String prefix) {
+        return OPERATION_ACTIONS.contains(action) ? matches(prefix, List.of(CONFIRM)) : List.of();
+    }
+
+    private static List<String> expirationCompletion(String action, String prefix) {
+        return ACTION_BLACKLIST.equals(action) ? matches(prefix, List.of("permanent")) : List.of();
+    }
+
+    private static List<String> targetConfirmation(String action, String prefix) {
+        return CONFIRMATION_ACTIONS.contains(action) ? matches(prefix, List.of(CONFIRM)) : List.of();
     }
 
     private static List<String> matches(String prefix, List<String> candidates) {

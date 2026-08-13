@@ -43,7 +43,7 @@ class MarketIntegrationTest {
 
     @Test
     void missingPluginDoesNotAttemptToResolveAProvider() {
-        MarketIntegration integration = MarketIntegration.discover(new TestServices(null), false);
+        MarketIntegration integration = MarketIntegration.discover(new StubServices(null), false);
 
         assertEquals(IntegrationAvailability.NOT_INSTALLED, integration.availability());
         assertThrows(IllegalStateException.class, integration::requireApi);
@@ -79,11 +79,7 @@ class MarketIntegrationTest {
                     new Class<?>[] {isolatedServicesType},
                     (proxy, method, arguments) -> null
             );
-            Class<?> integrationType = Class.forName(
-                    MarketIntegration.class.getName(),
-                    true,
-                    isolated
-            );
+            Class<?> integrationType = isolated.loadClass(MarketIntegration.class.getName());
             Object integration = MethodHandles.publicLookup().findStatic(
                     integrationType,
                     "discover",
@@ -96,8 +92,8 @@ class MarketIntegrationTest {
 
     @Test
     void missingAndMismatchedServicesFailClosed() {
-        MarketIntegration missing = MarketIntegration.discover(new TestServices(null), true);
-        MarketIntegration mismatch = MarketIntegration.discover(new TestServices(new StubApi(2)), true);
+        MarketIntegration missing = MarketIntegration.discover(new StubServices(null), true);
+        MarketIntegration mismatch = MarketIntegration.discover(new StubServices(new StubApi(2)), true);
 
         assertEquals(IntegrationAvailability.INCOMPATIBLE, missing.availability());
         assertEquals(IntegrationAvailability.INCOMPATIBLE, mismatch.availability());
@@ -127,7 +123,7 @@ class MarketIntegrationTest {
                 Instant.parse("2026-08-13T12:00:00Z")
         ));
 
-        MarketIntegration integration = MarketIntegration.discover(new TestServices(provider), true);
+        MarketIntegration integration = MarketIntegration.discover(new StubServices(provider), true);
         MarketIntegration.PlayerMarketStatus status = integration.status(PLAYER_ID)
                 .toCompletableFuture()
                 .join();
@@ -138,10 +134,10 @@ class MarketIntegrationTest {
         assertEquals(expiration, status.blacklist().orElseThrow().expirationAt().orElseThrow());
     }
 
-    private static final class TestServices implements ServicesManager {
+    private static final class StubServices implements ServicesManager {
         private final MarketModerationApi provider;
 
-        private TestServices(MarketModerationApi provider) {
+        private StubServices(MarketModerationApi provider) {
             this.provider = provider;
         }
 

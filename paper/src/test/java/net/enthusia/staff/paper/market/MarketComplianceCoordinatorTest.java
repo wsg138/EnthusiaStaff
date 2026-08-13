@@ -50,6 +50,7 @@ class MarketComplianceCoordinatorTest {
     private static final UUID OPERATION_ID = UUID.fromString("32e4327f-8647-4772-988a-527c37c44029");
     private static final CaseId CASE_ID = new CaseId("01HZX3K8M2N4P6QR");
     private static final String CHECKSUM = "a".repeat(64);
+    private static final String STALL_ID = "stall-1";
 
     private final FakeStore store = new FakeStore();
     private final FakeGateway gateway = new FakeGateway();
@@ -82,7 +83,7 @@ class MarketComplianceCoordinatorTest {
         };
 
         MarketCoordinationResult result = coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
 
         assertEquals(MarketCoordinationResult.Status.UPDATED, result.status());
@@ -97,7 +98,7 @@ class MarketComplianceCoordinatorTest {
         );
 
         MarketCoordinationResult failed = coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
 
         assertEquals(MarketCoordinationResult.Status.UNAVAILABLE, failed.status());
@@ -118,7 +119,7 @@ class MarketComplianceCoordinatorTest {
                 operationResult(request, MarketOperationRecord.State.PREPARED)
         );
         coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
         gateway.find = ignored -> completed(Optional.of(gateway.record));
 
@@ -152,7 +153,7 @@ class MarketComplianceCoordinatorTest {
         };
 
         MarketCoordinationResult result = coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
 
         assertEquals(MarketCoordinationResult.Status.QUARANTINED, result.status());
@@ -165,7 +166,7 @@ class MarketComplianceCoordinatorTest {
                 operationResult(request, MarketOperationRecord.State.PREPARED)
         );
         coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
         gateway.confiscate = approval -> {
             gateway.confiscations.incrementAndGet();
@@ -191,7 +192,7 @@ class MarketComplianceCoordinatorTest {
         mode = OperationalMode.MAINTENANCE;
 
         MarketCoordinationResult result = coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
 
         assertEquals(MarketCoordinationResult.Status.UNAVAILABLE, result.status());
@@ -204,7 +205,7 @@ class MarketComplianceCoordinatorTest {
                 operationResult(request, MarketOperationRecord.State.PREPARED)
         );
         coordinator.prepareStall(
-                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
         gateway.availability = IntegrationAvailability.UNAVAILABLE;
 

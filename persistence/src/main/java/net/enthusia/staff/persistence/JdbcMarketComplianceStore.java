@@ -23,6 +23,7 @@ import net.enthusia.staff.domain.ports.MarketComplianceStore;
 
 /** Staff-side durable intent, audit, and recovery journal for EnthusiaMarket. */
 public final class JdbcMarketComplianceStore implements MarketComplianceStore {
+    private static final long MINIMUM_JOURNAL_REVISION = 0L;
     private static final int MAXIMUM_BATCH = 256;
     private static final String COLUMNS = """
             compliance_id, idempotency_key, case_id, target_id, stall_id, state,
@@ -74,7 +75,7 @@ public final class JdbcMarketComplianceStore implements MarketComplianceStore {
     ) {
         Objects.requireNonNull(operationId, "operationId");
         Objects.requireNonNull(update, "update");
-        if (expectedJournalRevision < 0L) {
+        if (expectedJournalRevision < MINIMUM_JOURNAL_REVISION) {
             throw new IllegalArgumentException("expectedJournalRevision cannot be negative");
         }
         return JdbcTransactionSupport.execute(

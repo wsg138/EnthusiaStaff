@@ -430,16 +430,31 @@ public final class MarketComplianceCoordinator {
         if (actor == null || !authorization.permits(actor, action)) {
             return Optional.of(rejected("You do not have authority for this market operation"));
         }
-        if (providerMutation && mode.get() != OperationalMode.ACTIVE) {
-            return Optional.of(unavailable("Market writes require ACTIVE moderation mode"));
+        Optional<MarketCoordinationResult> providerRejection = rejectProvider(providerMutation);
+        if (providerRejection.isPresent()) {
+            return providerRejection;
         }
-        if (providerMutation && market.availability() != IntegrationAvailability.AVAILABLE) {
-            return Optional.of(unavailable(market.issue()));
-        }
-        if (stores.get() == null || (providerMutation && cases.get() == null)) {
+        if (dependenciesUnavailable(providerMutation)) {
             return Optional.of(unavailable("Market compliance storage is unavailable"));
         }
         return Optional.empty();
+    }
+
+    private Optional<MarketCoordinationResult> rejectProvider(boolean providerMutation) {
+        if (!providerMutation) {
+            return Optional.empty();
+        }
+        if (mode.get() != OperationalMode.ACTIVE) {
+            return Optional.of(unavailable("Market writes require ACTIVE moderation mode"));
+        }
+        if (market.availability() != IntegrationAvailability.AVAILABLE) {
+            return Optional.of(unavailable(market.issue()));
+        }
+        return Optional.empty();
+    }
+
+    private boolean dependenciesUnavailable(boolean providerMutation) {
+        return stores.get() == null || (providerMutation && cases.get() == null);
     }
 
     private MarketComplianceStore requireStore() {
