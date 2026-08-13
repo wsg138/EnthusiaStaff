@@ -1,0 +1,30 @@
+name: ES-X02 Retire Stale Status Branch
+
+on:
+  push:
+    branches:
+      - status/es-x02-pi-runner-blocked-20260813
+
+permissions:
+  contents: write
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: status/es-x02-pi-runner-blocked-20260813
+          fetch-depth: 0
+      - name: Merge current main into stale branch and align tree exactly
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git merge --no-ff -s ours origin/main -m 'chore(es-x02): join stale status history to current main'
+          git read-tree --reset -u origin/main
+          git commit -m 'chore(es-x02): align stale status branch tree to main'
+          git push origin HEAD:status/es-x02-pi-runner-blocked-20260813
