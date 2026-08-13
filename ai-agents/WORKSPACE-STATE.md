@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registry, package records, canonical handoffs, and PR verification ledgers.
 
@@ -8,21 +8,17 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | `ES-X02 — EnthusiaCurrency destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Standalone Currency PR #11 is open at exact head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`; the Staff same-ID branch is reserved but has no aggregate product import yet. |
-| ES-P08 frozen executable head | `27b20bb56e540161f695e624916f91620261457d`; all package-required executable evidence remains attributed to this head. |
-| ES-P08 final synchronized head | `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; exact comparison from the frozen executable head changed only eight `ai-agents` Markdown process/state/handoff files. The normal merge has zero file delta from this synchronized head. |
-| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md` |
-| Required executable evidence | Wiki; Java 21 full build/tests with MariaDB/Testcontainers and warnings-as-errors; runtime-JAR/provider-leak inspection; aggregate JaCoCo/Codacy coverage; Codacy static with zero issues; review with zero valid unresolved threads; Sentinel artifact build; and canonical public→private Pi staging all passed for frozen product head `27b20bb...`. |
-| Canonical Pi proof | Public run `31555950970` attempt 1 and correlated private run `31556350997` / job `93989465759` passed exact provenance, V1–V18 first-cycle migration, V18 restart no-op, two Paper/storage-ready `SHADOW_MIGRATION` cycles, clean shutdown/failure scans, sanitized evidence, guarded disposable-database cleanup, and public transfer cleanup. |
-| Sentinel diagnostic history | Live restart jobs `150`, `151`, and `153` remain non-passing history: cycle-1 temperature resource-gate failure, timeout, and cycle-2 temperature resource-gate failure respectively. None is called a pass. The authoritative ES-P08 package-start contract did not require that independent live restart; representative destructive/load acceptance remains assigned to `ES-V03`. |
-| Migration / production boundary | V18 remains current and immutable; ES-P08 added no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, private-data acceptance, or source rewrite is authorized. |
-| Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS contract is unresolved. This does not block unrelated dependency-complete work. |
-| ES-X02 validation state | Currency Java 21 `mvn -B -ntp verify` run `31657088614` passed on exact head `5d9dfc7...`. Codacy still reports 29 unresolved new findings (2 critical, 1 high, 26 medium), and individual details are not available through the current GitHub evidence path; no static pass, Pi pass, merge, or parity pass is claimed. |
-| Exact next action | Treat ES-X02 as `PARKED_BLOCKED` while the Codacy finding-detail condition is unchanged. Resume it before new work when individual PR #11 findings become accessible: inspect/disposition all findings, fix every valid issue, rerun static/review gates, then continue Pi → standalone merge → exact aggregate import/PR → aggregate gates/merge → parity/cleanup. While unchanged, normal routing may skip this parked package per worker protocol. |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
+| Active package | None. This worker completed exactly `ES-X02 — EnthusiaCurrency destructive provider` and stops. |
+| ES-X02 final standalone | Currency `main` `b922c5af30860a6c205f9ee16b817349a7677cd0` after normal PR merges #11/#12/#13. |
+| ES-X02 final aggregate | Staff PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9` after exact-head build/static/review/Sentinel/canonical-Pi validation. |
+| ES-X02 parity | `tools/component-sync/component_sync.py compare` returned `parity: true`; standalone/aggregate hash `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c`; no added, missing, or modified product files. Component metadata is `IN_SYNC`. |
+| Canonical Pi | Public run `31692610056` and private run `31693194558` / job `94424932390` passed on trusted `Lincoln-PI-4`; two Paper/storage-ready cycles, clean shutdown/failure scans, guarded disposable DB reset, sanitized evidence artifact `9178996362`, and public transfer cleanup all passed. |
+| Next dependency-safe routing | `ES-X03 — EnthusiaMarket destructive provider` is now `READY` at priority 120. `ES-X04 — EnthusiaCommend reputation provider` is also dependency-complete and `READY` at priority 125. A new worker must reconcile live GitHub before selecting either; this worker does not start them. |
+| Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` on its unresolved supported repository/source/AGENTS contract and does not block unrelated ready work. |
+| Production boundary | Representative destructive/latency/load acceptance remains `ES-V03`; issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, cutover, authority change, or representative destructive production test occurred in ES-X02. |
+| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-complete.md` |
 
-## ES-P08 terminal boundary
+## ES-X02 terminal boundary
 
-ES-P08 is `COMPLETE`. The earlier documentation-only Sentinel-blocker publication remains historical evidence and is not rewritten as passing evidence. The later reconciliation corrected only gate applicability: a worker-added diagnostic restart requirement could not become a new package acceptance dependency after selection.
-
-Post-merge SHA/parent/containment/branch-cleanup facts remain in GitHub/PR #128 verification metadata rather than being used to create self-referential source history. This finalization changes routing state because ES-P08 is now actually complete and ES-X02 is now actually ready; it is not a PR solely to insert merge identifiers.
+ES-X02 is `COMPLETE`. Standalone and aggregate histories remain normal merge history, final component parity is exact, and the package does not authorize production balance changes or replace the later `ES-V03` acceptance package.
