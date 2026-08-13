@@ -11,6 +11,6 @@
 | Last synchronized aggregate-main SHA | `UNSET` |
 | Synchronization state | `SYNC_PENDING` |
 | Content-hash method | `tools/component-sync/component_sync.py`; SHA-256 over sorted POSIX paths and raw bytes; `COMPONENT-METADATA.md` excluded as aggregate-only orchestration metadata |
-| Current blockers | Exact-head aggregate hosted/static/review/Pi validation, normal Staff merge, and post-merge parity remain pending. |
+| Current blockers | Vault lifecycle correction is imported; exact-head aggregate hosted/static/review/Pi validation, normal Staff merge, and post-merge parity remain pending. |
 
 Exact merged standalone content is imported on `package/es-x02-currency-provider`. The aggregate-main SHA is recorded only after the normal EnthusiaStaff merge and successful post-merge parity proof.
