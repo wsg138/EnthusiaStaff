@@ -9,7 +9,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Field | Value |
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | None. ES-P08 implementation PR #128 merged normally and its implementation branch is deleted. |
+| Active package | `ES-X02 — EnthusiaCurrency destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Standalone Currency PR #11 is open at exact head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`; the Staff same-ID branch is reserved but has no aggregate product import yet. |
 | ES-P08 frozen executable head | `27b20bb56e540161f695e624916f91620261457d`; all package-required executable evidence remains attributed to this head. |
 | ES-P08 final synchronized head | `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; exact comparison from the frozen executable head changed only eight `ai-agents` Markdown process/state/handoff files. The normal merge has zero file delta from this synchronized head. |
 | Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md` |
@@ -18,8 +18,8 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Sentinel diagnostic history | Live restart jobs `150`, `151`, and `153` remain non-passing history: cycle-1 temperature resource-gate failure, timeout, and cycle-2 temperature resource-gate failure respectively. None is called a pass. The authoritative ES-P08 package-start contract did not require that independent live restart; representative destructive/load acceptance remains assigned to `ES-V03`. |
 | Migration / production boundary | V18 remains current and immutable; ES-P08 added no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, private-data acceptance, or source rewrite is authorized. |
 | Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS contract is unresolved. This does not block unrelated dependency-complete work. |
-| Ready package | `ES-X02 — EnthusiaCurrency destructive provider` is dependency-complete and `READY` at priority 110. It is not activated by this finalization. |
-| Exact next action | A new sequential worker must reconcile live GitHub. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X02 — EnthusiaCurrency destructive provider`, work exactly that package, publish durable state, and stop. |
+| ES-X02 validation state | Currency Java 21 `mvn -B -ntp verify` run `31657088614` passed on exact head `5d9dfc7...`. Codacy still reports 29 unresolved new findings (2 critical, 1 high, 26 medium), and individual details are not available through the current GitHub evidence path; no static pass, Pi pass, merge, or parity pass is claimed. |
+| Exact next action | Treat ES-X02 as `PARKED_BLOCKED` while the Codacy finding-detail condition is unchanged. Resume it before new work when individual PR #11 findings become accessible: inspect/disposition all findings, fix every valid issue, rerun static/review gates, then continue Pi → standalone merge → exact aggregate import/PR → aggregate gates/merge → parity/cleanup. While unchanged, normal routing may skip this parked package per worker protocol. |
 
 ## ES-P08 terminal boundary
 

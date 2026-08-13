@@ -22,7 +22,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is now dependency-complete and `READY` at priority 110. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS contract remain unresolved. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
+`ES-X02 — EnthusiaCurrency destructive provider` is `BLOCKED` / `PARKED_BLOCKED` after actionable implementation and exact-head hosted validation reached standalone Currency PR #11 at `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`. The configured Java 21 Maven suite passed on that exact head (run `31657088614`), and a manual rollback review defect was fixed, but Codacy still reports 29 unresolved new findings (2 critical, 1 high, 26 medium) without exposing the individual findings through the available GitHub evidence path. The package cannot be frozen or merged until those findings are individually inspected and every valid finding is fixed or explicitly invalidated. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
 
 ## Canonical package index
 
@@ -43,7 +43,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `READY` | `READY` | 110 | `ES-P08` | dependency complete; exact next normal package absent a higher-precedence actionable continuation |
+| `ES-X02` | EnthusiaCurrency destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 110 | `ES-P08` | Currency PR #11 head `5d9dfc7...`; Java 21 Maven run `31657088614` passed; Codacy reports 29 unresolved findings whose individual details are not available through current GitHub evidence; aggregate branch reserved but intentionally not imported/opened until standalone merge |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
@@ -51,6 +51,21 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | provider dependencies remain incomplete; representative destructive/load acceptance lives here |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
+
+
+## ES-X02 active blocked record
+
+- Package start: Staff `main` `4831b1442e572914c86fd8e202e7de6f546868e2`; Currency `main` `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
+- Required package branch reserved in both repositories: `package/es-x02-currency-provider`.
+- Standalone Currency implementation PR #11 is open and non-draft at exact current head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`.
+- Exact-head configured hosted validation passed: Currency CI run `31657088614`, Java 21, `mvn -B -ntp verify`.
+- Manual harsh review found a valid rollback-status defect: compensation could report `FAILED_ROLLED_BACK` without verifying rollback. It was repaired so unverifiable compensation returns `QUARANTINE_REQUIRED`; the exact-head CI rerun passed after the fix.
+- CodeRabbit could not perform a final automated review because its service reported a temporary review limit. That unavailable review is not called a pass; manual review remains required and no CodeRabbit finding is being suppressed.
+- Codacy currently reports 29 new unresolved findings: 2 critical security, 1 high performance, and 26 medium. The available GitHub comment exposes aggregate counts and an external link but not the individual findings needed for a valid/invalid disposition. Under `VALIDATION-POLICY.md`, the package cannot merge around unresolved static-analysis findings.
+- Aggregate Staff branch is reserved at the package-start Staff head but has no imported Currency product delta and no aggregate implementation PR. This is intentional: the standalone repository must merge first, then its exact merged state is imported and parity-proved.
+- Canonical Pi, aggregate hosted validation, standalone merge, aggregate import/PR, final parity, and temporary-branch cleanup have not run and are not claimed. Representative live destructive balances remain assigned to `ES-V03` by the original package contract.
+- Exact unblock condition: individual Codacy PR #11 findings become accessible through a usable evidence path; inspect every finding, fix every valid finding (or record a concrete invalid disposition), rerun static analysis to zero valid unresolved findings on the same frozen head, then resume remaining ES-X02 review/Pi/merge/import/parity gates.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-12-es-x02-currency-provider-blocked.md`.
 
 ## ES-P08 terminal record
 
