@@ -4,9 +4,13 @@
 `ES-P08`; Internal; primary `COMP-STAFF`; priority 70; sequential around shared inventory journals/destructive recovery.
 
 ## 2. Status
-Terminal tracked state: `COMPLETE`. This record is carried by implementation PR #128 and becomes canonical only when that PR is normally merged to `main` after all exact-head gates pass. Until then, PR #128 remains the sole `ACTIONABLE_CONTINUATION` for this package.
+Terminal tracked state: `COMPLETE` on normal merge of implementation PR #128. Until that merge occurs, PR #128 / `package/es-p08-item-confiscation` is the sole `ACTIONABLE_CONTINUATION` for this package.
 
 Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
+
+Frozen executable-validation head: `27b20bb56e540161f695e624916f91620261457d`.
+
+A later merge candidate may contain only canonical process/state/documentation reconciliation required after blocker publication PR #129 and the owner-directed validation-policy correction. Under `VALIDATION-POLICY.md`, prior executable evidence remains valid only when an exact compare proves that no product source, product tests, migrations, workflows, build/runtime configuration, dependencies, artifact contracts, Sentinel manifests, or other executable inputs changed after the frozen product head.
 
 ## 3. Objective
 Complete transactional case-linked item confiscation, snapshots, reservations, rollback, restoration, and explicit owner recovery.
@@ -29,7 +33,7 @@ Root inventory/asset/domain/persistence/Paper/tests/docs only. No external provi
 ## 9. Branch and PR policy
 Temporary branch `package/es-p08-item-confiscation`; implementation PR #128 is the only source PR into `main` for this package.
 
-Record post-merge merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata. Do **not** create a follow-up `main` commit or PR solely to insert those self-referential facts into tracked files.
+Record post-merge merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata. Do **not** create a follow-up `main` commit or PR solely to insert self-referential merge facts into tracked files.
 
 ## 10. Implementation result
 - Existing durable profiles, paired operations/patches, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, nested item identity, leases/fencing, checksum/revision guards, and restart/login recovery were retained.
@@ -66,7 +70,7 @@ Valid findings were fixed rather than waived:
 - Codacy: four code-quality findings on a superseded head;
 - CodeRabbit: follow-up-merge-evidence policy, canonical-handoff state, unresolved sender reporting/test coverage, missing stored recovery resource evidence, and nullable lease timestamp handling.
 
-PR #128 must have zero valid unresolved review threads before merge. Superseded/rate-limited/aborted bot states are not passing evidence.
+Frozen product head `27b20bb56e540161f695e624916f91620261457d` has zero valid unresolved review threads and passed the recorded hosted/static review gates. Any later state-only merge candidate must independently pass applicable documentation/package/static review and retain zero valid unresolved threads.
 
 ## 13. Migration impact
 V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the existing quarantine schema already provides `resolved_at`, `resolved_by`, and `resolution_json`. V1–V18 remain byte-immutable.
@@ -75,19 +79,23 @@ V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the 
 No inventory contents are written to owner-recovery audit metadata. Uncertain identity/state/resource/fence/lease evidence fails closed. Recovery authorization is idempotent and does not bypass normal fenced application. No production data, deployment, authority change, cutover, private-data acceptance, or source rewrite is part of this package.
 
 ## 15. Final validation gate
-PR #128 may merge only after one immutable feature SHA passes all required exact-head evidence:
-- Wiki validation;
-- Java 21 full build/tests including MariaDB/Testcontainers;
-- Paper/Velocity runtime-JAR inspection and zero provider-API leaks;
-- aggregate JaCoCo and configured Codacy coverage gate;
-- Codacy static analysis with zero valid new findings;
-- exact-head manual/review-thread disposition with zero valid unresolved findings;
-- exact Sentinel Paper artifact and live restart to terminal `PAPER_RESTART_OK`;
-- canonical public→private Pi staging on trusted `Lincoln-PI-4` with exact provenance, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 first-cycle/current restart behavior, clean shutdown/failure scans, sanitized evidence, and guarded cleanup.
+The authoritative package contract at package start did not require an independent live Sentinel restart. ES-P08 destructive representative/load acceptance was explicitly deferred to `ES-V03`. A later worker-added tracking requirement for `PAPER_RESTART_OK` was therefore not a legitimate new merge dependency and has been corrected under the package-contract-integrity rule in `VALIDATION-POLICY.md`.
 
-The literal frozen SHA and all final run/job/artifact/hash evidence are recorded externally in PR #128 metadata so this tracked file does not require a self-referential post-validation commit.
+Required executable evidence for the frozen product head is complete:
+- Wiki validation passed;
+- Java 21 full build/tests including MariaDB/Testcontainers passed;
+- Paper/Velocity runtime-JAR inspection and zero provider-API leaks passed;
+- aggregate JaCoCo and configured Codacy coverage passed;
+- Codacy static analysis passed with zero valid new findings;
+- manual/CodeRabbit review disposition has zero valid unresolved findings;
+- canonical public→private Pi staging passed on trusted `Lincoln-PI-4` with exact provenance, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 first-cycle/current restart behavior, clean shutdown/failure scans, sanitized evidence, guarded cleanup, and public transfer cleanup;
+- the exact-head Sentinel artifact-producing workflow passed.
+
+Live Sentinel restart jobs 150, 151, and 153 remain explicit **non-passing diagnostic history**. They are not relabeled as passes and are not substituted for any required gate: job 150 failed its cycle-1 temperature resource gate, job 151 timed out, and job 153 completed cycle 1 but failed the cycle-2 temperature resource gate. Those diagnostics do not reopen the original package acceptance contract.
 
 ## 16. Completion and stop rule
-When PR #128 has all required exact-head passes, merge it by a normal merge commit only. Verify feature-head containment, resulting-main divergence, and branch deletion; record those GitHub-generated facts in PR #128 metadata. Then stop this worker. Do not activate or implement `ES-X02` in this session.
+After normal synchronization with current `main`, require an exact compare proving the post-`27b20bb...` delta is process/state/documentation-only as defined by `VALIDATION-POLICY.md`. Validate that state-only delta, keep zero valid unresolved review threads, and merge PR #128 using a normal merge commit only.
+
+After merge, verify feature-head containment, resulting-main divergence, and branch deletion; record those GitHub-generated facts in PR #128 metadata. Then stop this worker. Do not activate or implement `ES-X02` in this session.
 
 Issue #43 remains open/deferred and LiteBans remains authoritative.
