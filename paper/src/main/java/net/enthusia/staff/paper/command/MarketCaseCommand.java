@@ -115,10 +115,7 @@ public final class MarketCaseCommand implements TabExecutor {
             return true;
         }
         CaseId caseId = caseId(sender, arguments[2]);
-        if (caseId == null) {
-            return true;
-        }
-        return withTarget(sender, arguments[1], target -> coordinator.prepareStall(
+        return caseId == null || withTarget(sender, arguments[1], target -> coordinator.prepareStall(
                 actor, target.playerId(), caseId, arguments[3], Optional.empty()
         ));
     }
@@ -178,12 +175,10 @@ public final class MarketCaseCommand implements TabExecutor {
             Actor actor,
             MarketComplianceCoordinator coordinator
     ) {
-        if (!CommandPermissionGate.require(
+        boolean permitted = CommandPermissionGate.require(
                 sender, RESTORE_PERMISSION, "Only the Founder may restore Market assets."
-        )) {
-            return true;
-        }
-        return operation(sender, label, arguments, actor, "restore", coordinator::restore);
+        );
+        return !permitted || operation(sender, label, arguments, actor, "restore", coordinator::restore);
     }
 
     private boolean operation(

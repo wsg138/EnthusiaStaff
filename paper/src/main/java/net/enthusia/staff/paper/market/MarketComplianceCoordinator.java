@@ -1,9 +1,12 @@
 package net.enthusia.staff.paper.market;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -504,7 +507,9 @@ public final class MarketComplianceCoordinator {
 
     private static String safeMessage(Throwable failure) {
         Throwable current = failure;
-        while (current.getCause() != null && current.getCause() != current) {
+        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        visited.add(current);
+        while (current.getCause() != null && visited.add(current.getCause())) {
             current = current.getCause();
         }
         String message = current.getMessage();
