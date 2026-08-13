@@ -15,9 +15,9 @@ This manifest records project orchestration and authority boundaries. It does no
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
 | Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
 | Latest completed checkpoints | ES-X02 Currency provider correction PR #137 and terminal-state publication PR #138 |
-| Active implementation | ES-X03 on `package/es-x03-market-provider` in Staff and Market; durable Market provider, Staff coordination, review, and merge validation in progress |
+| Active implementation | ES-X03 on `package/es-x03-market-provider` in Staff and Market; durable provider and Staff coordination implemented, local exact-head validation complete, paired hosted review/merge pending |
 | Codacy checkpoint | Hosted `main` reports 311 active Java warnings; grade is not asserted because the available response does not expose it. ES-X03 local delta analysis has zero PMD, Opengrep, or Trivy findings and no new Lizard findings. |
-| Migration boundary | `main`: V18 immutable; ES-X03 candidate: V19 added, V1-V18 unchanged |
+| Migration boundary | Staff `main`: V18 immutable; ES-X03 candidate: V19 added with V1-V18 unchanged. Market candidate adds V025 with V1-V024 unchanged. |
 | Production authority | LiteBans remains authoritative |
 
 ## Repository model

@@ -1080,8 +1080,20 @@ path was suppressed or excluded.
 The four visible Staff Lizard results are the same baseline findings in
 `EnthusiaStaffPaperPlugin` and `MariaDbRuntime`. Their measured sizes changed
 slightly as ES-X03 wiring was added, but the branch did not create a new finding.
-They remain visible for later root cleanup. Hosted Codacy, full exact-head CI,
-and PR review remain pending and must not be inferred from these local results.
+They remain visible for later root cleanup. Both local exact-head Java 21 clean
+builds now pass. Staff reports 951 tests with zero skips, including 192
+integration tests; Market reports 628 tests with one unrelated skip, and all
+three Market provider MariaDB tests executed. Hosted Codacy, hosted CI, Pi
+staging, and PR review remain pending and must not be inferred from these local
+results.
+
+The Staff runtime gate produced exactly one Paper and one Velocity JAR. Their
+SHA-256 values are respectively
+`e275fd6912dd8b282d65ea735a72eb4f258a8e4e7ed5b9224abe44cb5be35d15`
+and `85fee16bbdaf4eb8916f1a64506dd4dcd3b3b195a383ab1adb5d7c3c632affac`;
+neither includes the Market contract. The standalone Market JAR SHA-256 is
+`eca7943d23f2c65492653a1848d1ba3fd251e698db72cebd1b0d19ad94e186cd`
+and correctly owns its API classes.
 
 ## Remediation order
 
