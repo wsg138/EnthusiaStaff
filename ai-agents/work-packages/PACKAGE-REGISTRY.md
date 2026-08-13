@@ -16,13 +16,13 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 ## Canonical current state
 
-`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are already `COMPLETE` on `main`.
+`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
 
-Implementation PR #128 carries terminal tracked state for `ES-P08 — Item confiscation and restoration`. Until PR #128 merges it remains the sole `ACTIONABLE_CONTINUATION`. Frozen executable-validation head `27b20bb56e540161f695e624916f91620261457d` passed the package's required executable gates. The later live Sentinel restart attempts remain explicit non-passing diagnostic history, but the canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`. The worker-added Sentinel blocker published through PR #129 has therefore been corrected under `VALIDATION-POLICY.md`.
+`ES-P08 — Item confiscation and restoration` completed through implementation PR #128. Frozen executable-validation head `27b20bb56e540161f695e624916f91620261457d` passed the package's required executable gates. Final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b` differed from the frozen product head only in eight `ai-agents` Markdown process/state/handoff files, passed the applicable documentation/static/review gates, merged normally, is exactly contained with zero file delta, and its temporary implementation branch is deleted.
 
-After normal synchronization with current `main`, PR #128 may reuse the frozen executable evidence only if exact comparison proves every post-`27b20bb...` change is process/state/documentation-only. Any executable/test/migration/workflow/config/dependency/artifact-contract change requires fresh executable validation.
+The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS contract remain unresolved. Once PR #128 makes ES-P08 canonical `COMPLETE`, `ES-X02` is dependency-complete and `READY`; this ES-P08 worker must stop without activating it. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
+`ES-X02 — EnthusiaCurrency destructive provider` is now dependency-complete and `READY` at priority 110. `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository, default branch, source, and AGENTS contract remain unresolved. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
 
 ## Canonical package index
 
@@ -39,11 +39,11 @@ After normal synchronization with current `main`, PR #128 may reuse the frozen e
 | `ES-P05` | Report evidence and staff workflow completion | `COMPLETE` | — | 50 | `ES-P03`, `ES-P04` | merged PR #81 |
 | `ES-P09` | Alt and network-identity completion | `COMPLETE` | — | 55 | `ES-P03` | merged PR #84 |
 | `ES-P06` | Discord notification delivery completion | `COMPLETE` | — | 60 | `ES-P05` | frozen `7e21edb1d32a75727dc65df826f9de964adcfff3`; PR #115 merged normally as `d78a5165493f810dbb3fd4d11e5e9d4b80ffed71`; contained; branch cleaned |
-| `ES-P08` | Item confiscation and restoration | terminal tracked `COMPLETE` on merge | `ACTIONABLE_CONTINUATION` until PR #128 merges | 70 | `ES-P07` | implementation PR #128 / `package/es-p08-item-confiscation`; frozen executable head `27b20bb56e540161f695e624916f91620261457d`; synchronize state-only delta, validate docs/review, merge normally |
+| `ES-P08` | Item confiscation and restoration | `COMPLETE` | — | 70 | `ES-P07` | frozen executable head `27b20bb56e540161f695e624916f91620261457d`; final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; PR #128 merged normally; contained; branch cleaned |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `READY` on canonical ES-P08 merge | `READY` after PR #128 merge; not activated here | 110 | `ES-P08` | next dependency-complete package after ES-P08, absent a higher-precedence continuation |
+| `ES-X02` | EnthusiaCurrency destructive provider | `READY` | `READY` | 110 | `ES-P08` | dependency complete; exact next normal package absent a higher-precedence actionable continuation |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
@@ -52,20 +52,21 @@ After normal synchronization with current `main`, PR #128 may reuse the frozen e
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
 
-## ES-P08 terminal continuation record
+## ES-P08 terminal record
 
 - Package start: `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 - Frozen executable-validation head: `27b20bb56e540161f695e624916f91620261457d`.
-- Implementation PR/branch: #128 / `package/es-p08-item-confiscation`.
+- Final synchronized head: `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`.
+- Implementation PR: #128, merged normally. GitHub verification proves the synchronized head is one merge commit behind resulting `main`, zero behind in containment terms, with zero file differences; the temporary implementation branch is deleted.
 - Documentation-only blocker publication PR #129 remains historical evidence of the temporary Sentinel-blocked classification; it changed no product code.
-- Hosted exact-head proof: Wiki run `31555952998` passed; Coverage run `31555953013` / job `93988340387` passed Java 21 full build/tests with MariaDB/Testcontainers, warnings-as-errors, runtime JAR/provider-leak checks, aggregate JaCoCo, and Codacy coverage upload. Aggregate coverage was 48.99% lines, 40.07% branches, 51.52% instructions.
+- Hosted frozen-head proof: Wiki run `31555952998` passed; Coverage run `31555953013` / job `93988340387` passed Java 21 full build/tests with MariaDB/Testcontainers, warnings-as-errors, runtime JAR/provider-leak checks, aggregate JaCoCo, and Codacy coverage upload. Aggregate coverage was 48.99% lines, 40.07% branches, 51.52% instructions.
 - Codacy static check `93988413158` passed with zero issues; coverage variation +0.2% against the -1.0% target; diff coverage 74.5% with no configured diff gate.
-- Review: all valid CodeRabbit findings are addressed and all threads resolved. Exact-head manual review found no additional valid release blocker; valid unresolved review-thread count is zero. The docstring-coverage UI warning is advisory and is not counted as a repository-gate pass.
+- Frozen-head review: all valid CodeRabbit findings are addressed and all threads resolved. Exact-head manual review found no additional valid release blocker; valid unresolved review-thread count was zero. The docstring-coverage UI warning is advisory and is not counted as a repository-gate pass.
 - Exact Sentinel artifact run `31555953004` passed.
 - Canonical Pi: public run `31555950970` attempt 1 and correlated private run `31556350997` / job `93989465759` passed on trusted `Lincoln-PI-4` with exact provenance, V1–V18 fresh migration, V18 restart no-op, two storage-ready `SHADOW_MIGRATION` cycles, clean shutdown/failure scans, sanitized evidence, guarded disposable-database cleanup, and public transfer cleanup.
-- Live Sentinel diagnostics are not passed: job `150` ended at `RESTART_CYCLE_1_RESOURCE_GATE_FAILED` (80.3 C >= 80.0 C); job `151` timed out; job `153` completed restart cycle 1 then ended `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` (81.8 C >= 80.0 C). None is relabeled. The correction is gate applicability: the original ES-P08 contract did not require this independent live restart, while destructive representative acceptance was deferred to ES-V03.
-- Final merge path: normally synchronize current `main`; prove every post-frozen-head change is process/state/documentation-only under `VALIDATION-POLICY.md`; pass applicable documentation/package/static review with zero valid unresolved threads; normally merge PR #128; verify containment/cleanup; stop.
-- V18 remains immutable; ES-P08 adds no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, source rewrite, or second package implementation occurred.
+- State-only synchronization: exact compare `27b20bb...` → `f398fd5...` contained only eight `ai-agents` Markdown process/state/handoff files. The final synchronization head passed Wiki, Codacy static, CodeRabbit review, remained mergeable, and had zero valid unresolved review threads.
+- Live Sentinel diagnostics are not passed: job `150` ended at `RESTART_CYCLE_1_RESOURCE_GATE_FAILED` (80.3 C >= 80.0 C); job `151` timed out; job `153` completed restart cycle 1 then ended `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` (81.8 C >= 80.0 C). None is relabeled. The correction was gate applicability: the original ES-P08 contract did not require this independent live restart, while destructive representative acceptance was deferred to ES-V03.
+- V18 remains immutable; ES-P08 added no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, source rewrite, or second package implementation occurred.
 - Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md`.
 
 ## ES-P06 terminal record
@@ -101,4 +102,4 @@ After normal synchronization with current `main`, PR #128 may reuse the frozen e
 
 ## Next sequential action
 
-Finish only PR #128. After its normal merge and containment/cleanup verification, ES-P08 is canonical `COMPLETE`. A new sequential worker must reconcile live GitHub; absent a newly discovered higher-precedence actionable continuation, `ES-X02 — EnthusiaCurrency destructive provider` is the next dependency-complete `READY` package. `ES-X01` remains parked on the unresolved RoseChat integration repository/source contract and must not block unrelated ready work.
+No package is active. A new sequential worker must reconcile live GitHub and classify every incomplete package. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X02 — EnthusiaCurrency destructive provider`, which is dependency-complete and `READY` at priority 110. Work exactly ES-X02, publish durable state, and stop. `ES-X01` remains parked on the unresolved supported RoseChat repository/source contract and must not block ES-X02.
