@@ -8,17 +8,17 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | None. This worker completed exactly `ES-X02 — EnthusiaCurrency destructive provider` and stops. |
-| ES-X02 final standalone | Currency `main` `b922c5af30860a6c205f9ee16b817349a7677cd0` after normal PR merges #11/#12/#13. |
-| ES-X02 final aggregate | Staff PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9` after exact-head build/static/review/Sentinel/canonical-Pi validation. |
-| ES-X02 parity | `tools/component-sync/component_sync.py compare` returned `parity: true`; standalone/aggregate hash `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c`; no added, missing, or modified product files. Component metadata is `IN_SYNC`. |
-| Canonical Pi | Public run `31692610056` and private run `31693194558` / job `94424932390` passed on trusted `Lincoln-PI-4`; two Paper/storage-ready cycles, clean shutdown/failure scans, guarded disposable DB reset, sanitized evidence artifact `9178996362`, and public transfer cleanup all passed. |
-| Next dependency-safe routing | `ES-X03 — EnthusiaMarket destructive provider` is now `READY` at priority 120. `ES-X04 — EnthusiaCommend reputation provider` is also dependency-complete and `READY` at priority 125. A new worker must reconcile live GitHub before selecting either; this worker does not start them. |
-| Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` on its unresolved supported repository/source/AGENTS contract and does not block unrelated ready work. |
-| Production boundary | Representative destructive/latency/load acceptance remains `ES-V03`; issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, cutover, authority change, or representative destructive production test occurred in ES-X02. |
-| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-complete.md` |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
+| Active package | `ES-X02 — EnthusiaCurrency destructive provider`; `ACTIVE` / `ACTIONABLE_CONTINUATION` after a post-merge correctness review. |
+| Standalone correction | Currency PR #14 merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`. It validates removal plans before accepting committed replay and requires a monotonic bank revision before treating assets as already restored. |
+| Aggregate continuation | The exact corrected Currency tree is imported on `package/es-x02-currency-provider`. Staff PR #133 and completion PR #135 remain historical merges; a follow-up Staff PR and new exact-head gates are pending. |
+| Candidate parity | Pre-merge `tools/component-sync/component_sync.py compare` reports `parity: true` with standalone and aggregate hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb` and no added, missing, or modified product files. Component metadata is `SYNC_PENDING`. |
+| Local validation | Standalone and aggregate component Java 21 Maven verification passed 11 tests. The Staff Java 21 clean task graph completed with daemon exit 0: 218 suites / 936 tests, including 48 MariaDB Testcontainers suites / 189 tests, with zero failures, errors, or skips. Focused PMD 7 and Lizard report zero findings. |
+| Required remaining gates | Commit/push the reconciled branch, open the follow-up Staff PR, pass exact-head hosted build/static/review/Sentinel/canonical-Pi gates, merge normally, prove post-merge parity, and republish terminal state. |
+| Downstream routing | `ES-X03` and `ES-X04` are parked until ES-X02 is complete again. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. |
+| Production boundary | Representative destructive/latency/load acceptance remains `ES-V03`; issue #43 remains open/deferred and LiteBans remains authoritative. No production balance, deployment, cutover, or authority change is authorized. |
+| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md` |
 
-## ES-X02 terminal boundary
+## Prior completion publication
 
-ES-X02 is `COMPLETE`. Standalone and aggregate histories remain normal merge history, final component parity is exact, and the package does not authorize production balance changes or replace the later `ES-V03` acceptance package.
+PRs #133 and #135 accurately record the previously reviewed `b922c5af...` standalone tree and `a3b6f2f7...` aggregate merge. They are superseded as current routing authority because later review found and repaired two valid fail-closed state-ordering defects. Their evidence remains historical and is not relabeled.

@@ -1,11 +1,13 @@
 # Latest package-worker handoff
 
-Current package: none; the previous worker completed `ES-X02 — EnthusiaCurrency destructive provider` and stopped.
+Current package: `ES-X02 — EnthusiaCurrency destructive provider`.
 
-Status: `ES-X02` is `COMPLETE`.
+Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`.
 
-Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-complete.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md`.
 
-Final Currency `main` is `b922c5af30860a6c205f9ee16b817349a7677cd0`; Staff product PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`; canonical Pi passed; post-merge component parity is true with identical hash `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c`; component metadata is `IN_SYNC`.
+After Staff completion PR #135 merged, a targeted correctness review found two valid provider state-ordering defects. Standalone Currency PR #14 fixed both and merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`. The exact corrected tree is imported on the reopened `package/es-x02-currency-provider` branch with candidate parity hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb`.
 
-For the next sequential worker, reconcile live GitHub first. Absent a newly discovered higher-precedence actionable continuation, `ES-X03 — EnthusiaMarket destructive provider` is dependency-complete and `READY` at priority 120; `ES-X04` is also `READY` at priority 125. `ES-X01` remains parked on its unresolved supported repository/source contract. Do not treat ES-X02 completion as production destructive acceptance; that remains `ES-V03`.
+Local Java 21 verification is green: component Maven verification passed 11 tests; the Staff clean task graph completed 218 suites / 936 tests, including 48 MariaDB Testcontainers suites / 189 tests, with zero failures, errors, or skips. Focused PMD 7 and threshold-matched Lizard report zero findings.
+
+Do not select ES-X03 or ES-X04 yet. Finish the ES-X02 follow-up Staff PR, exact-head hosted/static/review/Sentinel/Pi gates, normal merge, post-merge parity, and terminal-state republication first. Prior PRs #133/#135 and their evidence remain historical; they are not current completion authority for the corrected tree.
