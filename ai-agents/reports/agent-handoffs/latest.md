@@ -1,25 +1,21 @@
 # Latest AI handoff
 
-Current package handoff:
+Current package terminal handoff:
 
-[`2026-08-12-es-p08-item-confiscation-blocked.md`](../package-handoffs/2026-08-12-es-p08-item-confiscation-blocked.md)
+[`2026-08-11-es-p08-item-confiscation-complete.md`](../package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md)
 
 Canonical package registry:
 
 [`PACKAGE-REGISTRY.md`](../../work-packages/PACKAGE-REGISTRY.md)
 
-`ES-P08 — Item confiscation and restoration` is `BLOCKED` / `PARKED_BLOCKED`, not complete.
+`ES-P08 — Item confiscation and restoration` is the sole current package continuation in implementation PR #128. Frozen executable-validation head `27b20bb56e540161f695e624916f91620261457d` has completed the package's required product validation.
 
-Implementation PR #128 and `package/es-p08-item-confiscation` are preserved at frozen product head `27b20bb56e540161f695e624916f91620261457d`, based on package start `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
+Owner-directed reconciliation established that the later live Sentinel `PAPER_RESTART_OK` requirement was added by a worker after package selection and was not part of ES-P08's authoritative start contract. The original contract deferred representative destructive/load acceptance to `ES-V03`. Under `VALIDATION-POLICY.md`, a worker cannot manufacture a new package blocker by changing tracking text after selection.
 
-Documentation-only status-publication PR #129 uses `status/es-p08-sentinel-blocked-20260812` into `main`. It was opened non-draft and mergeable and is intended to merge normally as the canonical blocker-state publication while leaving PR #128 untouched; GitHub metadata is authoritative for PR #129's later merged/closed state.
+The failed/timed-out live Sentinel jobs remain explicit non-passing diagnostic history and are not called passes. Required frozen-head evidence includes Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak checks, Wiki, Codacy/static/coverage, zero valid unresolved review threads, Sentinel artifact production, and canonical public→private Pi staging with exact provenance, two storage-ready Paper cycles, V1–V18 then V18 no-op restart, clean shutdown/reap, sanitized evidence, database cleanup, and public transfer cleanup.
 
-The frozen head has successful exact-head Wiki, Java 21 full build/tests with MariaDB/Testcontainers and warnings-as-errors, runtime-JAR/provider-leak inspection, aggregate JaCoCo/Codacy coverage, Codacy static with zero issues, zero valid unresolved review threads, exact-head manual review, Sentinel artifact build, and canonical public→private Pi staging on trusted `Lincoln-PI-4`.
+Because blocker-publication and routing-policy work advanced `main` after the product head froze, PR #128 must be normally synchronized. Reuse of frozen executable evidence is allowed only if exact comparison proves every later change is process/state/documentation-only. Any executable/test/migration/workflow/config/dependency/artifact-contract change requires fresh executable validation.
 
-The sole remaining package gate is the independent live Sentinel restart to literal `PAPER_RESTART_OK`. Job `150` failed before product acceptance at the cycle-1 host temperature gate. Job `151` timed out while resource-gated. Job `153` completed restart cycle 1, then failed before cycle 2 at `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` because temperature was 81.8 C against the 80.0 C ceiling. None is a pass, and no infrastructure exception is authorized.
+V18 remains immutable; no ES-P08 migration was added. Issue #43 remains open/deferred and LiteBans remains authoritative. No production deployment, destructive production acceptance, cutover, source rewrite, private-data acceptance, or downstream provider work is authorized.
 
-Do not issue repeated identical restart requests while the same resource condition persists. A future sequential worker must reconcile live GitHub/Sentinel state. Resume ES-P08 as `ACTIONABLE_CONTINUATION` only after concrete evidence shows the trusted Sentinel resource condition changed enough to sustain the required two-cycle restart. Then run one fresh exact-head restart if needed and require literal `PAPER_RESTART_OK`; before merge, reconfirm live `main`, PR #128/head, checks, and review threads.
-
-V18 remains immutable and ES-P08 adds no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. `ES-X02` remains dependency-blocked on incomplete ES-P08. `ES-X01` remains `PARKED_BLOCKED` on the unresolved supported RoseChat repository/source contract. No production data, deployment, shadow window, cutover, authority change, source rewrite, or second package implementation occurred.
-
-This worker stops after documentation-only PR #129 is normally merged to `main`. It preserves PR #128 and its frozen implementation branch.
+Finish only ES-P08: synchronize PR #128 normally, prove the state-only delta, validate/review that delta, merge PR #128 normally, verify containment/cleanup, and stop. After ES-P08 is canonical `COMPLETE`, a new sequential worker may select dependency-complete ES-X02 if live routing still agrees. ES-X01 remains parked on the unresolved supported RoseChat repository/source contract.

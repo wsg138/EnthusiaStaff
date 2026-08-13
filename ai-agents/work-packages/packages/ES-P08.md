@@ -4,13 +4,13 @@
 `ES-P08`; Internal; primary `COMP-STAFF`; priority 70; sequential around shared inventory journals/destructive recovery.
 
 ## 2. Status
-`BLOCKED`; classification `PARKED_BLOCKED`.
+Terminal tracked state: `COMPLETE` on normal merge of implementation PR #128. Until that merge occurs, PR #128 / `package/es-p08-item-confiscation` is the sole `ACTIONABLE_CONTINUATION` for this package.
 
-Implementation is preserved in PR #128 on temporary branch `package/es-p08-item-confiscation`. Frozen product head: `27b20bb56e540161f695e624916f91620261457d`. Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
+Exact package start: `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
 
-Documentation-only status-publication PR #129 uses `status/es-p08-sentinel-blocked-20260812` into `main`. It was opened non-draft and mergeable and is intended to merge normally as the canonical blocker-state publication while preserving PR #128. GitHub metadata is authoritative for PR #129's later merged/closed state.
+Frozen executable-validation head: `27b20bb56e540161f695e624916f91620261457d`.
 
-The product implementation and every required exact-head gate except the independent live Sentinel restart are complete. The package is not `COMPLETE` and PR #128 must not merge until live Sentinel produces literal exact-head `PAPER_RESTART_OK`.
+A later merge candidate may contain only canonical process/state/documentation reconciliation required after blocker publication PR #129 and the owner-directed validation-policy correction. Under `VALIDATION-POLICY.md`, prior executable evidence remains valid only when an exact compare proves that no product source, product tests, migrations, workflows, build/runtime configuration, dependencies, artifact contracts, Sentinel manifests, or other executable inputs changed after the frozen product head.
 
 ## 3. Objective
 Complete transactional case-linked item confiscation, snapshots, reservations, rollback, restoration, and explicit owner recovery.
@@ -31,9 +31,9 @@ Currency (`ES-X02`), market (`ES-X03`), reputation (`ES-X04`), production invent
 Root inventory/asset/domain/persistence/Paper/tests/docs only. No external provider source or permanent/isolated branch.
 
 ## 9. Branch and PR policy
-Temporary implementation branch `package/es-p08-item-confiscation`; implementation PR #128 is the only product PR into `main` for this package. Preserve both while blocked.
+Temporary branch `package/es-p08-item-confiscation`; implementation PR #128 is the only source PR into `main` for this package.
 
-Documentation-only status-publication PR #129 on `status/es-p08-sentinel-blocked-20260812` publishes this blocker state under the universal worker protocol. It must not merge or close PR #128 or alter product code. After eventual implementation merge, record merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata; do not create a follow-up product commit solely for self-referential merge facts.
+Record post-merge merge SHA, resulting `main`, containment/divergence, branch deletion, and exact validation identifiers in PR #128 verification metadata. Do **not** create a follow-up `main` commit or PR solely to insert self-referential merge facts into tracked files.
 
 ## 10. Implementation result
 - Existing durable profiles, paired operations/patches, before snapshots, confiscated-asset snapshots, restoration reservation/finalization, nested item identity, leases/fencing, checksum/revision guards, and restart/login recovery were retained.
@@ -46,42 +46,56 @@ Documentation-only status-publication PR #129 on `status/es-p08-sentinel-blocked
 - Multiple unresolved item quarantines for one case are `AMBIGUOUS`; no candidate is guessed or changed.
 - Successful authorization atomically requeues only the exact pair to `PENDING`, resolves quarantine metadata, and requires exactly one append-only `INVENTORY_QUARANTINE_REQUEUED` audit write.
 - The owner command never applies inventory. Normal claim/checksum/revision recovery must acquire a newer fence and prove live state before finalization.
-- A failed newer-fence retry re-quarantines and clears prior resolution fields so the new unsafe state is visibly unresolved while earlier authorization remains in audit.
-- Nullable JDBC reads are handled defensively even where V18 declares fields `NOT NULL`.
+- A failed newer-fence retry re-quarantines and clears the prior resolution fields so the new unsafe state is visibly unresolved while earlier authorization remains in audit.
+- Nullable JDBC reads are handled defensively even where the current V18 schema declares the fields `NOT NULL`.
 
 ## 11. Test result
-New unit/integration coverage proves non-Founder/unresolved actors never reach recovery persistence; missing storage fails closed; exact Founder actor/case/time delegation; generic inventory-edit quarantines cannot use case-item recovery; recovery authorization does not advance profile revision; duplicate authorization replays without duplicate audit; live competing leases block without mutation; paired-state divergence and case-target corruption roll back; same-case multi-scope ambiguity remains untouched; and failed newer-fence recovery reopens quarantine and can be independently re-authorized.
+New unit/integration coverage proves:
+- non-Founder and unresolved actors never reach recovery persistence;
+- missing storage fails closed;
+- exact Founder actor/case/time delegation;
+- generic inventory-edit quarantines cannot use case-item recovery;
+- recovery authorization does not advance the inventory profile revision;
+- duplicate authorization replays without duplicate audit;
+- live competing leases block without mutation;
+- paired-state divergence and case-target corruption roll back;
+- two unresolved same-case item quarantines across scopes remain untouched/ambiguous;
+- failed newer-fence recovery reopens quarantine and can be independently re-authorized.
 
 Existing adjacent suites continue to cover exact restoration target/case/profile/scope binding, duplicate finalization, failed/quarantined reservation cancellation, restore-once semantics, nested path depth/index/round-trip behavior, aggregate inventory-image size limits, generic journal fencing/leases, and restart-style already-replaced recovery.
 
 ## 12. Review/static result
-Valid findings were fixed rather than waived. Manual review found and fixed hidden case-target divergence and optional privileged recovery-audit insertion. Codacy findings on superseded heads were fixed. CodeRabbit findings covering merge-evidence policy, canonical handoff state, unresolved sender reporting/test coverage, missing stored recovery resource evidence, and nullable lease timestamp handling are addressed. Exact-head manual review found no additional valid release blocker and valid unresolved review-thread count is zero.
+Valid findings were fixed rather than waived:
+- manual review: hidden case-target divergence and optional privileged recovery-audit insertion;
+- Codacy: four code-quality findings on a superseded head;
+- CodeRabbit: follow-up-merge-evidence policy, canonical-handoff state, unresolved sender reporting/test coverage, missing stored recovery resource evidence, and nullable lease timestamp handling.
 
-Exact frozen-head hosted/static evidence is durable in PR #128. Codacy static reports zero issues. The CodeRabbit docstring-coverage UI item is advisory, not a repository gate, and is not represented as a pass.
+Frozen product head `27b20bb56e540161f695e624916f91620261457d` has zero valid unresolved review threads and passed the recorded hosted/static review gates. Any later state-only merge candidate must independently pass applicable documentation/package/static review and retain zero valid unresolved threads.
 
 ## 13. Migration impact
-V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the existing quarantine schema already provides required resolution fields. V1–V18 remain byte-immutable.
+V18 remains the immutable Flyway boundary. ES-P08 adds no migration because the existing quarantine schema already provides `resolved_at`, `resolved_by`, and `resolution_json`. V1–V18 remain byte-immutable.
 
 ## 14. Security/privacy and distributed guarantees
 No inventory contents are written to owner-recovery audit metadata. Uncertain identity/state/resource/fence/lease evidence fails closed. Recovery authorization is idempotent and does not bypass normal fenced application. No production data, deployment, authority change, cutover, private-data acceptance, or source rewrite is part of this package.
 
-## 15. Exact-head validation state
-Frozen product head `27b20bb56e540161f695e624916f91620261457d` has successful exact-head Wiki; Java 21 full build/tests including MariaDB/Testcontainers; Paper/Velocity runtime-JAR/provider-leak checks; aggregate JaCoCo/Codacy coverage; Codacy static with zero issues; manual/review-thread disposition; Sentinel artifact build; and canonical public→private Pi staging on trusted `Lincoln-PI-4`.
+## 15. Final validation gate
+The authoritative package contract at package start did not require an independent live Sentinel restart. ES-P08 destructive representative/load acceptance was explicitly deferred to `ES-V03`. A later worker-added tracking requirement for `PAPER_RESTART_OK` was therefore not a legitimate new merge dependency and has been corrected under the package-contract-integrity rule in `VALIDATION-POLICY.md`.
 
-Canonical Pi public run `31555950970` attempt 1 and correlated private run `31556350997` / job `93989465759` passed exact provenance, two storage-ready `SHADOW_MIGRATION` Paper cycles, V1–V18 first-cycle migration, V18 restart no-op behavior, clean shutdown/failure scans, sanitized evidence, guarded disposable-database cleanup, and transfer cleanup.
+Required executable evidence for the frozen product head is complete:
+- Wiki validation passed;
+- Java 21 full build/tests including MariaDB/Testcontainers passed;
+- Paper/Velocity runtime-JAR inspection and zero provider-API leaks passed;
+- aggregate JaCoCo and configured Codacy coverage passed;
+- Codacy static analysis passed with zero valid new findings;
+- manual/CodeRabbit review disposition has zero valid unresolved findings;
+- canonical public→private Pi staging passed on trusted `Lincoln-PI-4` with exact provenance, two Paper/storage-ready `SHADOW_MIGRATION` cycles, V1–V18 first-cycle/current restart behavior, clean shutdown/failure scans, sanitized evidence, guarded cleanup, and public transfer cleanup;
+- the exact-head Sentinel artifact-producing workflow passed.
 
-The required live Sentinel restart is the sole unresolved executable gate:
-- job `150`: non-passing `RESTART_CYCLE_1_RESOURCE_GATE_FAILED` before product acceptance because temperature was 80.3 C at/above the 80.0 C ceiling;
-- job `151`: remained resource-gated and ultimately timed out; non-passing;
-- job `153`: completed restart cycle 1 but failed before cycle 2 at `RESTART_CYCLE_2_RESOURCE_GATE_FAILED` because temperature was 81.8 C at/above the 80.0 C ceiling; non-passing.
+Live Sentinel restart jobs 150, 151, and 153 remain explicit **non-passing diagnostic history**. They are not relabeled as passes and are not substituted for any required gate: job 150 failed its cycle-1 temperature resource gate, job 151 timed out, and job 153 completed cycle 1 but failed the cycle-2 temperature resource gate. Those diagnostics do not reopen the original package acceptance contract.
 
-Failed, timed-out, resource-gated, queued, skipped, cancelled, superseded, merge-ref-only, or wrong-revision results are not passing evidence. No infrastructure exception is authorized for ES-P08.
+## 16. Completion and stop rule
+After normal synchronization with current `main`, require an exact compare proving the post-`27b20bb...` delta is process/state/documentation-only as defined by `VALIDATION-POLICY.md`. Validate that state-only delta, keep zero valid unresolved review threads, and merge PR #128 using a normal merge commit only.
 
-## 16. Resume and completion rule
-Current blocker is environmental Sentinel host capacity/temperature, not a demonstrated product defect. Job `153` proves the host briefly admitted cycle 1, but the required two-cycle restart still could not complete because the cycle-2 resource gate became unsafe. Do not repeatedly issue identical restart requests merely to probe the same unavailable condition.
-
-Exact unblock condition: concrete live evidence must show the trusted Sentinel resource condition changed enough to sustain the required two-cycle restart. Then reclassify ES-P08 as `ACTIONABLE_CONTINUATION`, reconcile live `main`, PR #128/head/reviews/checks, run one fresh exact-head restart if needed, and require literal `PAPER_RESTART_OK` before merge.
-
-When all required exact-head gates pass, merge PR #128 by a normal merge commit only. Verify feature-head containment, resulting-main divergence, and safe implementation-branch cleanup; publish generated merge facts in PR #128 metadata. Then mark ES-P08 `COMPLETE` and update dependency-derived statuses without activating `ES-X02` in the same worker.
+After merge, verify feature-head containment, resulting-main divergence, and branch deletion; record those GitHub-generated facts in PR #128 metadata. Then stop this worker. Do not activate or implement `ES-X02` in this session.
 
 Issue #43 remains open/deferred and LiteBans remains authoritative.

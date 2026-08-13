@@ -77,6 +77,13 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
 | `/inspect` | `/inspect <player>` | Player inspector and case-linked actions | `enthusiastaff.inspect` |
 | `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
+| `/case` | `/case recoveritems <case-id>` | Founder-only authorization to requeue one coherent quarantined confiscation/restoration operation; the command itself does not edit inventory | `enthusiastaff.owner.recovery` plus Founder service authorization |
+
+`/case recoveritems` may be issued while the target is offline because it only
+requeues durable state. It rejects non-item quarantines, multiple matching
+quarantines, divergent patch/operation evidence, case-target mismatches and live
+competing inventory leases. Normal checksum/revision recovery must still prove
+the live outcome before any replacement commits.
 
 `/stafftools` requires an active staff-mode session in addition to Bukkit
 permissions. The hotbar and command fallback share the same dispatcher. Random
@@ -201,6 +208,10 @@ enthusiastaff.reputation.restrict
 enthusiastaff.owner.recovery
 ```
 
+`enthusiastaff.owner.recovery` is the Bukkit discovery/early-denial gate for
+`/case recoveritems`; the Paper recovery coordinator independently requires the
+Founder-level `RESTORE_ASSETS` authorization policy before persistence is called.
+
 ## Rank aggregate nodes
 
 Current Paper metadata defines:
@@ -239,7 +250,7 @@ raising, full overturn/approval and selected Market/Reputation restrictions.
 ### Founder
 
 Inherits Admin and adds custom punishment combinations, confiscated-item
-restoration and owner recovery.
+restoration and explicit owner recovery authorization.
 
 See [[Roles and Permissions|Rank-Authority]] for the policy explanation. Always
 compare the Wiki with

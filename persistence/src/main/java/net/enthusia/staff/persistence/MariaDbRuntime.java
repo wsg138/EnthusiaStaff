@@ -22,6 +22,7 @@ import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
@@ -74,6 +75,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final ModerationHistoryStore moderationHistoryStore;
     private final ReportStore reportStore;
     private final InventoryJournalStore inventoryJournalStore;
+    private final InventoryRecoveryStore inventoryRecoveryStore;
     private final EconomyJournalStore economyJournalStore;
     private final ClientEvidenceStore clientEvidenceStore;
     private final PunishmentDraftStore punishmentDraftStore;
@@ -136,6 +138,7 @@ public final class MariaDbRuntime implements AutoCloseable {
                 new JdbcFakeBaseAuditStore(dataSource, json)
         );
         this.inventoryJournalStore = assetJournal;
+        this.inventoryRecoveryStore = new JdbcInventoryRecoveryStore(dataSource, json);
         this.cheatTesterJournalStore = assetJournal;
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
@@ -160,6 +163,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public ModerationHistoryStore moderationHistoryStore() { return moderationHistoryStore; }
     public ReportStore reportStore() { return reportStore; }
     public InventoryJournalStore inventoryJournalStore() { return inventoryJournalStore; }
+    public InventoryRecoveryStore inventoryRecoveryStore() { return inventoryRecoveryStore; }
     public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
     public ClientEvidenceStore clientEvidenceStore() { return clientEvidenceStore; }
     public PunishmentDraftStore punishmentDraftStore() { return punishmentDraftStore; }

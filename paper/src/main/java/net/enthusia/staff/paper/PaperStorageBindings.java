@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -57,6 +58,7 @@ record PaperStorageBindings(
                 runtime.staffSessionStore(),
                 runtime.vanishStore(),
                 runtime.inventoryJournalStore(),
+                runtime.inventoryRecoveryStore(),
                 runtime.economyJournalStore()
         );
         Clock clock = Clock.systemUTC();
@@ -150,6 +152,10 @@ record PaperStorageBindings(
         return assets.inventoryJournalStore();
     }
 
+    InventoryRecoveryStore inventoryRecoveryStore() {
+        return assets.inventoryRecoveryStore();
+    }
+
     EconomyJournalStore economyJournalStore() {
         return assets.economyJournalStore();
     }
@@ -189,6 +195,7 @@ record PaperStorageBindings(
             StaffSessionStore staffSessionStore,
             VanishStore vanishStore,
             InventoryJournalStore inventoryJournalStore,
+            InventoryRecoveryStore inventoryRecoveryStore,
             EconomyJournalStore economyJournalStore
     ) {
     }
