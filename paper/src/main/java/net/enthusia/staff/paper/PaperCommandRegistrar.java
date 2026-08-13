@@ -25,6 +25,7 @@ import net.enthusia.staff.paper.command.FreezeCommand;
 import net.enthusia.staff.paper.command.HistoryCommand;
 import net.enthusia.staff.paper.command.InspectCommand;
 import net.enthusia.staff.paper.command.InventoryCommand;
+import net.enthusia.staff.paper.command.MarketCaseCommand;
 import net.enthusia.staff.paper.command.PunishmentCommand;
 import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
 import net.enthusia.staff.paper.command.ReportCommand;
@@ -47,6 +48,7 @@ import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryCoordinator;
+import net.enthusia.staff.paper.market.MarketComplianceCoordinator;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
@@ -110,6 +112,7 @@ final class PaperCommandRegistrar {
         registerStaffCommands();
         registerInventoryCommands();
         registerInspectionCommands();
+        registerMarketCommand();
     }
 
     private void configureEstaff() {
@@ -243,6 +246,16 @@ final class PaperCommandRegistrar {
         bind("case", new CaseRecoveryCommand(plugin(), caseCommand, recovery, workers()));
     }
 
+    private void registerMarketCommand() {
+        MarketCaseCommand command = new MarketCaseCommand(
+                plugin(),
+                dependencies.integrations().marketCompliance(),
+                storage(PaperStorageBindings::playerDirectory),
+                workers()
+        );
+        bindCompleting("marketcase", command, command);
+    }
+
     private void bind(String name, CommandExecutor executor) {
         requiredCommand(name).setExecutor(executor);
     }
@@ -349,6 +362,7 @@ final class PaperCommandRegistrar {
             Supplier<ConfiscationCoordinator> confiscation,
             Supplier<RoseChatIntegration> roseChat,
             Supplier<MarketIntegration> market,
+            Supplier<MarketComplianceCoordinator> marketCompliance,
             Supplier<ReputationIntegration> reputation
     ) {
     }

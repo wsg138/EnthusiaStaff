@@ -814,6 +814,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         integrations::confiscation,
                         integrations::roseChat,
                         integrations::market,
+                        integrations::marketCompliance,
                         integrations::reputation
                 ),
                 new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
