@@ -2,27 +2,27 @@
 
 Last updated: 2026-08-12
 
-Live GitHub overrides stale records. Detailed package evidence remains in the registry, selected package record, canonical handoff, and PR verification ledger.
+Live GitHub overrides stale records. Detailed package evidence remains in the registry, package records, canonical handoffs, and PR verification ledgers.
 
 ## Current routing
 
 | Field | Value |
 | --- | --- |
-| Completed packages before PR #128 merge | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Selected package | `ES-P08 — Item confiscation and restoration` is the sole `ACTIONABLE_CONTINUATION` / merge lineage in PR #128 on `package/es-p08-item-confiscation`. Its frozen executable-validation head is `27b20bb56e540161f695e624916f91620261457d`. |
+| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
+| Active package | None. ES-P08 implementation PR #128 merged normally and its implementation branch is deleted. |
+| ES-P08 frozen executable head | `27b20bb56e540161f695e624916f91620261457d`; all package-required executable evidence remains attributed to this head. |
+| ES-P08 final synchronized head | `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; exact comparison from the frozen executable head changed only eight `ai-agents` Markdown process/state/handoff files. The normal merge has zero file delta from this synchronized head. |
 | Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-11-es-p08-item-confiscation-complete.md` |
-| Package-contract correction | The canonical ES-P08 contract at package start did not require an independent live Sentinel restart and explicitly deferred representative destructive/load acceptance to `ES-V03`. A later worker-added `PAPER_RESTART_OK` tracking requirement was an accidental new merge gate and is not authoritative under `VALIDATION-POLICY.md`. |
-| Required executable evidence | Frozen product head `27b20bb56e540161f695e624916f91620261457d` passed Wiki; Java 21 full build/tests with MariaDB/Testcontainers and warnings-as-errors; runtime-JAR/provider-leak inspection; aggregate JaCoCo/Codacy coverage; Codacy static with zero issues; review with zero valid unresolved threads; Sentinel artifact build; and canonical public→private Pi staging. |
+| Required executable evidence | Wiki; Java 21 full build/tests with MariaDB/Testcontainers and warnings-as-errors; runtime-JAR/provider-leak inspection; aggregate JaCoCo/Codacy coverage; Codacy static with zero issues; review with zero valid unresolved threads; Sentinel artifact build; and canonical public→private Pi staging all passed for frozen product head `27b20bb...`. |
 | Canonical Pi proof | Public run `31555950970` attempt 1 and correlated private run `31556350997` / job `93989465759` passed exact provenance, V1–V18 first-cycle migration, V18 restart no-op, two Paper/storage-ready `SHADOW_MIGRATION` cycles, clean shutdown/failure scans, sanitized evidence, guarded disposable-database cleanup, and public transfer cleanup. |
-| Sentinel diagnostic history | Live restart jobs `150`, `151`, and `153` remain non-passing history: cycle-1 temperature resource-gate failure, timeout, and cycle-2 temperature resource-gate failure respectively. None is called a pass. They are diagnostic because live Sentinel restart was not part of the authoritative ES-P08 start contract. |
-| State-only synchronization rule | Any PR #128 head after frozen product head `27b20bb...` may reuse the executable evidence only when exact comparison proves every later change is process/state/documentation-only under `VALIDATION-POLICY.md`; any executable/test/config/workflow/migration/dependency change requires new exact-head executable validation. |
-| Migration / production boundary | V18 remains current and immutable; ES-P08 adds no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, private-data acceptance, or source rewrite is authorized. |
+| Sentinel diagnostic history | Live restart jobs `150`, `151`, and `153` remain non-passing history: cycle-1 temperature resource-gate failure, timeout, and cycle-2 temperature resource-gate failure respectively. None is called a pass. The authoritative ES-P08 package-start contract did not require that independent live restart; representative destructive/load acceptance remains assigned to `ES-V03`. |
+| Migration / production boundary | V18 remains current and immutable; ES-P08 added no migration. Issue #43 remains open/deferred and LiteBans remains authoritative. No production data, deployment, shadow window, cutover, authority change, private-data acceptance, or source rewrite is authorized. |
 | Parked provider package | `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS contract is unresolved. This does not block unrelated dependency-complete work. |
-| Next dependency state after PR #128 merge | Once ES-P08 is canonical `COMPLETE`, `ES-X02 — EnthusiaCurrency destructive provider` becomes dependency-complete and `READY`, absent a newly discovered higher-precedence actionable continuation. This worker must not activate it. |
-| Exact next action | Finish only ES-P08: prove the post-frozen-head delta is state/documentation-only, validate that delta and reviews, normally merge PR #128, verify containment/cleanup, then stop. |
+| Ready package | `ES-X02 — EnthusiaCurrency destructive provider` is dependency-complete and `READY` at priority 110. It is not activated by this finalization. |
+| Exact next action | A new sequential worker must reconcile live GitHub. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X02 — EnthusiaCurrency destructive provider`, work exactly that package, publish durable state, and stop. |
 
-## ES-P08 stop boundary
+## ES-P08 terminal boundary
 
-PR #128 contains the completed ES-P08 product implementation. The earlier documentation-only blocker publication remains valid historical evidence of what the worker believed at that time, but the later reconciliation established that the live Sentinel restart requirement was self-added after package selection and was not part of the authoritative package acceptance contract.
+ES-P08 is `COMPLETE`. The earlier documentation-only Sentinel-blocker publication remains historical evidence and is not rewritten as passing evidence. The later reconciliation corrected only gate applicability: a worker-added diagnostic restart requirement could not become a new package acceptance dependency after selection.
 
-No Sentinel failure has been erased or relabeled. Canonical Pi remains the successful exact-head runtime/restart/MariaDB/Flyway evidence for ES-P08. Broader destructive acceptance remains assigned to `ES-V03`.
+Post-merge SHA/parent/containment/branch-cleanup facts remain in GitHub/PR #128 verification metadata rather than being used to create self-referential source history. This finalization changes routing state because ES-P08 is now actually complete and ES-X02 is now actually ready; it is not a PR solely to insert merge identifiers.
