@@ -1,0 +1,37 @@
+name: ES-X02 Finalize Terminal State
+
+on:
+  push:
+    branches:
+      - status/es-x02-complete-20260813
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: status/es-x02-complete-20260813
+          fetch-depth: 0
+      - name: Publish final ES-X02 routing and handoff state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 tools/es_x02_finalize_state.py
+          rm tools/es_x02_finalize_state.py
+          rm .github/workflows/es-x02-finalize-state.yml
+          git diff --check
+      - name: Commit final terminal state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'docs(es-x02): publish terminal package state'
+          git push origin HEAD:status/es-x02-complete-20260813
