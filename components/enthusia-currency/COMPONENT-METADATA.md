@@ -7,10 +7,10 @@
 | Standalone default branch | `main` |
 | Aggregate path | `components/enthusia-currency/` |
 | Verified standalone head at setup | `9696501a01cc11f6e5220c5297a6f34b64204e61` |
-| Last synchronized external SHA | `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2` |
+| Last synchronized external SHA | `7a9f67ed57de3d4eb7529c91a625efd017bfa88e` |
 | Last synchronized aggregate-main SHA | `UNSET` |
 | Synchronization state | `SYNC_PENDING` |
 | Content-hash method | `tools/component-sync/component_sync.py`; SHA-256 over sorted POSIX paths and raw bytes; `COMPONENT-METADATA.md` excluded as aggregate-only orchestration metadata |
-| Current blockers | Aggregate ES-X02 validation/merge and post-merge parity remain pending. |
+| Current blockers | Aggregate ES-X02 exact-head validation/merge and post-merge parity remain pending. |
 
 Exact merged standalone content is imported on `package/es-x02-currency-provider`. The aggregate-main SHA is recorded only after the normal EnthusiaStaff merge and successful post-merge parity proof.
