@@ -1,113 +1,109 @@
 # `ES-X02` — EnthusiaCurrency destructive provider
 
 ## 1. Package identity
-`ES-X02`; External/multi-repository; primary `COMP-STAFF`; other `COMP-CURRENCY`; priority 110; sequential around shared destructive journals.
+`ES-X02`; external/multi-repository; primary `COMP-STAFF`; other `COMP-CURRENCY`; priority 110.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED`; standalone implementation exists but static-analysis findings cannot yet be individually dispositioned.
+`IN_PROGRESS` / `ACTIONABLE_CONTINUATION`.
+
+The earlier terminal publication through Staff PR #135 is historical. A later targeted review found two valid correctness defects, so ES-X02 was reopened before any downstream provider package began.
 
 ## 3. Objective
 Implement transactional currency removal and exact restoration across EnthusiaStaff and EnthusiaCurrency.
 
 ## 4. Why the package exists
-The audit marks currency destruction critical and provider-blocked: runtime paths require a compatible first-party contract plus private acceptance later.
+The audit required a supported first-party destructive-currency contract with exact failure/recovery semantics instead of reflective/read-only integration.
 
 ## 5. Included audit IDs
-`AUD-ASSET-002` and currency portion of `AUD-ASSET-005`.
+`AUD-ASSET-002` and the currency portion of `AUD-ASSET-005`.
 
 ## 6. Included behavior
-Versioned supported API; reservation/operation IDs; exact bank/inventory/Ender Chest snapshots; source-ordered removal; persistent bank revisions; stale rejection; idempotent apply/restore; verified rollback or quarantine; provider present/missing/version mismatch; case/audit linkage; matching aggregate copy/parity.
+Versioned provider API; operation-owned expiring leases; exact bank/inventory/Ender Chest snapshots and checksums; source-ordered removal; persistent bank revisions; stale/CAS protection; idempotent apply/restore; verified compensation or quarantine; provider absence/version mismatch fail-closed behavior; exact aggregate mirror/parity.
 
 ## 7. Explicit exclusions
-Production balances; representative live destructive testing (`ES-V03`); market/reputation; economy redesign outside required contract.
+Production balances; representative live destructive acceptance (`ES-V03`); market/reputation work; production deployment/cutover.
 
 ## 8. Dependencies
-`ES-P08` is `COMPLETE`.
+`ES-P08` was complete before selection.
 
 ## 9. Component and repository boundaries
-EnthusiaStaff integration/root plus `components/enthusia-currency/`, and `wsg138/EnthusiaCurrency`; no unrelated components, permanent branches, or isolated product PR.
+`wsg138/EnthusiaStaff` plus `components/enthusia-currency/`, and standalone `wsg138/EnthusiaCurrency` only.
 
 ## 10. Required branches
-`package/es-x02-currency-provider` exists in both repos. Preserve both while blocked; delete only after verified package completion.
+The same temporary `package/es-x02-currency-provider` lineage is reopened in Staff for the aggregate correction. The standalone branch was deleted after Currency PR #14 merged and containment was verified.
 
 ## 11. Required PRs
-Standalone Currency PR #11 exists. The matching aggregate Staff product PR is intentionally not opened yet because policy requires standalone merge before importing its exact merged state.
+Standalone Currency PRs #11, #12, #13, and corrective PR #14 merged normally. Staff PR #133 and state PR #135 are historical merges for the prior tree. One follow-up Staff PR is required for the exact PR #14 tree.
 
 ## 12. Implementation checklist
-- [x] Reconcile both repositories, AGENTS, live heads, and package registry.
-- [x] Reserve same-ID package branches in both repositories.
-- [x] Define/import versioned moderation contract into standalone Currency.
-- [x] Implement operation-owned expiring movement leases.
-- [x] Implement exact bank/inventory/Ender Chest snapshot/checksum and source-ordered planning.
-- [x] Persist bank revision and use compare-and-set stale-state protection.
-- [x] Implement idempotent apply and exact restore with monotonic revision.
-- [x] Register provider through Bukkit ServicesManager and fail closed from Staff gateway when missing/version-mismatched.
-- [x] Add lock/allocation/persistent-revision regression tests and documentation.
-- [x] Fix manual-review rollback defect so unverifiable compensation quarantines instead of claiming rollback.
-- [x] Exact current Currency head passes configured Java 21 Maven verification.
-- [ ] Inspect/disposition every Codacy finding and reach zero valid unresolved static findings.
-- [ ] Freeze final standalone head and finish zero-finding review gate.
-- [ ] Execute required canonical Pi validation for the frozen executable scope.
-- [ ] Merge standalone PR normally.
-- [ ] Import exact merged standalone state into aggregate mirror and update component metadata.
-- [ ] Open/cross-link aggregate Staff product PR, run aggregate exact-head gates, and merge normally.
-- [ ] Prove post-merge standalone/aggregate parity and clean package branches.
+- [x] Preserve all previously completed API, persistence, lease, compensation, lifecycle, and integration work.
+- [x] Validate a supplied removal plan before accepting committed replay.
+- [x] Require an advanced bank revision before accepting an idempotent restore.
+- [x] Add direct regression coverage for both defects and the valid idempotent cases.
+- [x] Merge standalone Currency PR #14 normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`.
+- [x] Import the exact corrected standalone tree and prove candidate parity.
+- [x] Pass local Java 21 component and full Staff validation, including MariaDB Testcontainers.
+- [ ] Push the reconciled Staff branch and open the follow-up PR.
+- [ ] Pass exact-head hosted build/coverage, Codacy, review, Sentinel, and canonical Pi gates.
+- [ ] Merge the Staff follow-up normally and prove post-merge parity.
+- [ ] Republish terminal package state and clean the temporary branch.
 
 ## 13. Acceptance criteria
-No balance loss/duplication under success, rejection, timeout, duplicate, crash, or restoration; snapshots/audit are exact; missing/incompatible provider fails safe; both PRs merge and aggregate copy matches standalone.
+Not yet satisfied. The corrected product logic and local validation are complete; exact-head hosted/runtime gates, normal Staff merge, and post-merge parity remain.
 
 ## 14. Test requirements
-Both repos' suites plus reservation/idempotency, concurrent changes, partial failure/rollback, restart/retry, stale restoration, provider absent/version mismatch, authorization/audit, and bounded work tests. Exact current standalone hosted suite passed; remaining runtime/aggregate proof has not run.
+Local evidence is green:
+
+- standalone and aggregate component Java 21 Maven verification: 11 tests each;
+- Staff Java 21 clean task graph: 218 suites / 936 tests;
+- MariaDB Testcontainers subset: 48 suites / 189 tests;
+- zero failures, errors, or skips;
+- aggregate JaCoCo XML and both runtime JARs produced.
+
+Hosted exact-head and canonical Pi reruns remain required because product code changed after the prior frozen head.
 
 ## 15. Static-analysis requirements
-All configured checks in both repos; zero valid human/CodeRabbit/Codacy findings. Current blocker: Codacy PR #11 summary reports 29 new findings (2 critical, 1 high, 26 medium) but the current GitHub evidence path does not expose individual findings for disposition.
+Standalone PR #14 Codacy reported zero new issues and up-to-standards status. Focused PMD 7.26.0 and threshold-matched Lizard 1.23.0 report zero findings in both source copies. The full standalone Opengrep result is one unrelated pre-existing leaderboard finding; it remains visible and unsuppressed. Staff hosted Codacy remains pending on the follow-up head.
 
 ## 16. Documentation requirements
-Contract/version, commands/permissions, operation states, recovery/restoration, provider setup/missing behavior, component metadata, package handoff, PR cross-links.
+Current routing, component metadata, superseded completion history, and this follow-up handoff must remain accurate through the final merge and parity proof.
 
 ## 17. Security and privacy requirements
-Financial-grade authorization/audit; no real balances/player rows in artifacts; fail closed; bounded/redacted logging.
+No production balances, private databases, credentials, raw private evidence, or production authority changes may be committed. Financial state must fail closed on ambiguity, corruption, stale state, or unverified recovery.
 
 ## 18. Migration impact
-No new migration was added. Existing SQLite balances schema is upgraded in owning-repo initialization with a persistent revision column; history is not rewritten.
+Currency owns its SQLite revision-column upgrade; published migration history was not rewritten. Staff adds no migration in this follow-up.
 
 ## 19. Bedrock considerations
-Staff controls retain text fallback and identity correctness; private client/destructive acceptance remains later.
+Staff-facing controls retain text fallback and platform-neutral identity. Representative client/destructive acceptance remains later.
 
 ## 20. Distributed-runtime considerations
-Operation ownership, concurrent balance changes, duplicate calls, reconnect, process death, and DB latency are handled through lease ownership, checksums, persistent revisions, idempotency, and quarantine outcomes; private acceptance remains later.
+Operation ownership, concurrency, duplicate calls, reconnect/process failure, asynchronous persistence, and restart recovery remain handled through leases, checksums, persistent revisions, idempotency, durable journals, and quarantine outcomes.
 
 ## 21. External-provider considerations
-Uses the verified `wsg138/EnthusiaCurrency` API; no reflection/invented runtime contract. Standalone AGENTS/CI remain mandatory.
+Uses the verified first-party `wsg138/EnthusiaCurrency` contract only; no reflection or invented provider API remains in the destructive path.
 
 ## 22. Completion definition
-Both exact-head PRs merge normally; all required checks/reviews pass; parity true; metadata/merges/hashes recorded; temporary branches cleaned. Private representative destructive acceptance remains `ES-V03`.
+Standalone and aggregate corrections merged normally; all required exact-head gates passed; post-merge parity true; component metadata/evidence updated; temporary branches verified clean and deleted.
 
 ## 23. Resume state
-Resume standalone Currency PR #11 at exact current package head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`. Do not import/merge the aggregate mirror yet. First obtain individual Codacy finding details, disposition each, fix all valid findings, and rerun static/review gates. The package is parked while that evidence remains inaccessible.
+Continue exactly this ES-X02 follow-up. Do not select ES-X03 or ES-X04 until completion is republished from the corrected aggregate-main tree.
 
 ## 24. Last completed checkpoint
-Standalone provider implementation plus compensation repair is durable on PR #11. Exact-head Currency CI run `31657088614` passed Java 21 `mvn -B -ntp verify` on `5d9dfc7...`.
+Standalone PR #14 merged as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`. Corrected aggregate product commit `260098756bf1fd658199bb9b54c7ea2848817fd7` passed local validation before reconciliation with current Staff `main`. Candidate parity hash is `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb` on both trees.
 
 ## 25. Remaining checklist
-Codacy dispositions; final harsh review/freeze; canonical Pi; standalone normal merge; exact aggregate import/metadata/PR; aggregate hosted/Pi gates as applicable; aggregate normal merge; post-merge parity; containment and branch cleanup.
+Finish branch reconciliation and publication; pass exact-head hosted/static/review/Sentinel/Pi gates; merge normally; prove post-merge parity; update `IN_SYNC` metadata and terminal records.
 
 ## 26. Known blockers
-Codacy reports 29 unresolved new PR findings, including 2 critical and 1 high, while the available GitHub evidence does not provide individual finding details. Exact unblock: make those finding details accessible, resolve every valid issue or record concrete invalid dispositions, and rerun static analysis on the frozen current head. CodeRabbit also reported a temporary review-rate limit; it is not called a pass and is not used to waive manual review.
+No implementation blocker. External hosted and private staging jobs must run on the final follow-up PR head.
 
-## 27. Current evidence
-- Staff package start `main`: `4831b1442e572914c86fd8e202e7de6f546868e2`.
-- Currency package start `main`: `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
-- Currency implementation branch: `package/es-x02-currency-provider`.
-- Staff reserved package branch: `package/es-x02-currency-provider` (no aggregate product import yet).
-- Currency PR: #11, open/non-draft.
-- Current Currency head: `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`.
-- Hosted exact-head run: `31657088614`, success, Java 21 `mvn -B -ntp verify`.
-- Manual review repair: unverifiable compensation now returns `QUARANTINE_REQUIRED`; exact-head CI passed after repair.
-- Codacy summary: 29 unresolved new findings (2 critical, 1 high, 26 medium); not passed.
-- CodeRabbit: final automated review unavailable due temporary rate limit; not counted as a pass.
-- Canonical Pi/staging: not executed; no pass claimed. Representative live destructive balances remain deferred to `ES-V03`.
-- Handoff: `ai-agents/reports/package-handoffs/2026-08-12-es-x02-currency-provider-blocked.md`.
+## 27. Evidence
+- Prior standalone merges: #11 -> `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2`; #12 -> `7a9f67ed57de3d4eb7529c91a625efd017bfa88e`; #13 -> `b922c5af30860a6c205f9ee16b817349a7677cd0`.
+- Corrective standalone PR #14: commit `fd5ea106f4dc27160810b96a82059bc282cdf3f1`; merge `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`; hosted verify and Codacy passed; zero review threads.
+- Historical Staff product merge: PR #133 -> `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`.
+- Historical completion publication: PR #135 -> `0c34478db01cfc9f6f181e47d9fe055e0df84f19`.
+- Current handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md`.
 
 ## 28. Merge and synchronization record
-No product merge has occurred. One-sided merge is intentionally avoided while standalone static review is blocked. Completion still requires both normal merges, exact post-merge parity, metadata, containment, and temporary branch cleanup.
+Current standalone `main`: `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`. Corrected aggregate-main SHA is unset. Component metadata is `SYNC_PENDING`; exact candidate parity is true, while required post-merge parity remains pending.

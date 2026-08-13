@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -22,7 +22,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is `BLOCKED` / `PARKED_BLOCKED` after actionable implementation and exact-head hosted validation reached standalone Currency PR #11 at `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`. The configured Java 21 Maven suite passed on that exact head (run `31657088614`), and a manual rollback review defect was fixed, but Codacy still reports 29 unresolved new findings (2 critical, 1 high, 26 medium) without exposing the individual findings through the available GitHub evidence path. The package cannot be frozen or merged until those findings are individually inspected and every valid finding is fixed or explicitly invalidated. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
+`ES-X02 — EnthusiaCurrency destructive provider` is `IN_PROGRESS` / `ACTIONABLE_CONTINUATION`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Standalone Currency PR #14 repaired both and merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`; the exact corrected tree is imported on the reopened Staff package branch with candidate parity hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb`. Exact-head Staff hosted/static/review/Sentinel/Pi gates, normal merge, and post-merge parity remain pending. `ES-X03` and `ES-X04` are parked on ES-X02 again. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
 
 ## Canonical package index
 
@@ -43,9 +43,9 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 110 | `ES-P08` | Currency PR #11 head `5d9dfc7...`; Java 21 Maven run `31657088614` passed; Codacy reports 29 unresolved findings whose individual details are not available through current GitHub evidence; aggregate branch reserved but intentionally not imported/opened until standalone merge |
-| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
-| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
+| `ES-X02` | EnthusiaCurrency destructive provider | `IN_PROGRESS` | `ACTIONABLE_CONTINUATION` | 110 | `ES-P08` | Currency PR #14 merge `2b4c8bf...`; corrected Staff package branch active; exact-head gates and merge pending |
+| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | corrected ES-X02 follow-up incomplete |
+| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | corrected ES-X02 follow-up incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | provider dependencies remain incomplete; representative destructive/load acceptance lives here |
@@ -53,19 +53,19 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
 
 
-## ES-X02 active blocked record
+## ES-X02 actionable continuation
 
-- Package start: Staff `main` `4831b1442e572914c86fd8e202e7de6f546868e2`; Currency `main` `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
-- Required package branch reserved in both repositories: `package/es-x02-currency-provider`.
-- Standalone Currency implementation PR #11 is open and non-draft at exact current head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`.
-- Exact-head configured hosted validation passed: Currency CI run `31657088614`, Java 21, `mvn -B -ntp verify`.
-- Manual harsh review found a valid rollback-status defect: compensation could report `FAILED_ROLLED_BACK` without verifying rollback. It was repaired so unverifiable compensation returns `QUARANTINE_REQUIRED`; the exact-head CI rerun passed after the fix.
-- CodeRabbit could not perform a final automated review because its service reported a temporary review limit. That unavailable review is not called a pass; manual review remains required and no CodeRabbit finding is being suppressed.
-- Codacy currently reports 29 new unresolved findings: 2 critical security, 1 high performance, and 26 medium. The available GitHub comment exposes aggregate counts and an external link but not the individual findings needed for a valid/invalid disposition. Under `VALIDATION-POLICY.md`, the package cannot merge around unresolved static-analysis findings.
-- Aggregate Staff branch is reserved at the package-start Staff head but has no imported Currency product delta and no aggregate implementation PR. This is intentional: the standalone repository must merge first, then its exact merged state is imported and parity-proved.
-- Canonical Pi, aggregate hosted validation, standalone merge, aggregate import/PR, final parity, and temporary-branch cleanup have not run and are not claimed. Representative live destructive balances remain assigned to `ES-V03` by the original package contract.
-- Exact unblock condition: individual Codacy PR #11 findings become accessible through a usable evidence path; inspect every finding, fix every valid finding (or record a concrete invalid disposition), rerun static analysis to zero valid unresolved findings on the same frozen head, then resume remaining ES-X02 review/Pi/merge/import/parity gates.
-- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-12-es-x02-currency-provider-blocked.md`.
+- Package start: Staff `4831b1442e572914c86fd8e202e7de6f546868e2`; Currency `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
+- Currency PRs #11/#12/#13 merged normally for the original provider tree. Corrective PR #14 later merged normally as current standalone `main` `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe` after 11 Java 21 tests, hosted verify, Codacy zero-new-issue status, and zero review threads passed.
+- Staff frozen product head `fbba02d10301b6bc6d80ada4ad7113f80ff95514` passed Coverage/full build `31692612391` / job `94423135991`, Staff Codacy `94423669170`, zero unresolved review threads, Sentinel artifact `31692612386` / job `94423077006`, and canonical Pi public run `31692610056` correlated with private run `31693194558` / job `94424932390` on trusted `Lincoln-PI-4`.
+- Private Pi sanitized evidence: `result=PASS`, exact source, two Paper starts, two storage-ready `SHADOW_MIGRATION` cycles, clean shutdown/failure scans, disposable DB reset, unrelated host-service preservation, artifact `9178996362` digest `sha256:3bdf2a97d47678ffd9a2f5875268f451bc08a237b2b30b434add1c918dab4b72`. Public bridge cleanup/result passed.
+- Staff PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`; completion publication PR #135 merged as `0c34478db01cfc9f6f181e47d9fe055e0df84f19`. Both remain historical evidence for the prior Currency tree.
+- Later review found that invalid supplied plans could be classified as committed before validation and that an unchanged before-state could be classified as restored without a new revision. These defects are fixed in Currency PR #14 and imported into the reopened Staff branch.
+- Corrected candidate parity against Currency `2b4c8bf...` is true with identical hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb`. Component metadata is `SYNC_PENDING`; post-merge parity remains required.
+- Local corrected-tree validation passed component Maven 11 tests and the Staff Java 21 clean task graph with 218 suites / 936 tests, including 48 MariaDB Testcontainers suites / 189 tests. Focused PMD 7 and Lizard report zero findings.
+- Remaining: follow-up Staff PR, exact-head hosted/static/review/Sentinel/Pi gates, normal merge, post-merge parity, terminal republication, and branch cleanup.
+- Representative live destructive balances remain assigned to `ES-V03`; ES-X02 changed no production authority/data/cutover state.
+- Canonical current handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md`.
 
 ## ES-P08 terminal record
 
@@ -117,4 +117,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-No package is active. A new sequential worker must reconcile live GitHub and classify every incomplete package. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X02 — EnthusiaCurrency destructive provider`, which is dependency-complete and `READY` at priority 110. Work exactly ES-X02, publish durable state, and stop. `ES-X01` remains parked on the unresolved supported RoseChat repository/source contract and must not block ES-X02.
+Continue exactly `ES-X02 — EnthusiaCurrency destructive provider` as the active `ACTIONABLE_CONTINUATION`. Publish and validate the corrected Staff follow-up, merge normally, prove post-merge parity, and republish terminal state. Do not select ES-X03 or ES-X04 until ES-X02 is complete again. ES-X01 remains parked on the unresolved supported RoseChat repository/source contract.
