@@ -1,20 +1,21 @@
 # ES-P08 — Item confiscation and restoration — terminal handoff
 
-Tracked terminal status: `COMPLETE` on normal merge of implementation PR #128. Until that merge, PR #128 remains the sole `ACTIONABLE_CONTINUATION` for ES-P08.
+Status: `COMPLETE`.
 
 ## Scope and reconciliation
 
 - Package start: `main` `7c032c6af32f7281f518a01ed6dc3b0252cabb5b`.
-- Package branch: `package/es-p08-item-confiscation`.
-- Implementation PR: #128.
+- Implementation PR: #128, normally merged.
 - Frozen executable-validation head: `27b20bb56e540161f695e624916f91620261457d`.
+- Final synchronized head: `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`.
+- Final synchronized head is exactly contained by the normal merge with zero file delta; the temporary implementation branch is deleted.
 - V18 remains the immutable Flyway boundary; ES-P08 adds no migration.
 - Issue #43 remains open/deferred and LiteBans remains authoritative.
 - No production data, deployment, cutover, authority change, source rewrite, or downstream provider implementation is included.
 
-A documentation-only blocker publication later advanced `main` after the product head was frozen. Owner-directed reconciliation then confirmed that the blocker's live Sentinel restart requirement had been added by the worker after package selection; it did not exist in the canonical ES-P08 contract at package start. The authoritative contract explicitly deferred representative destructive/load acceptance to `ES-V03`.
+A documentation-only blocker publication advanced `main` after the product head was frozen. Owner-directed reconciliation confirmed that the blocker's live Sentinel restart requirement had been added by the worker after package selection; it did not exist in the canonical ES-P08 contract at package start. The authoritative contract explicitly deferred representative destructive/load acceptance to `ES-V03`.
 
-Under the package-contract-integrity and frozen-product-head rules in `VALIDATION-POLICY.md`, PR #128 may preserve its executable evidence only if its final synchronization delta after `27b20bb...` is proven process/state/documentation-only. Any executable change invalidates that reuse and requires fresh executable validation.
+Under the package-contract-integrity and frozen-product-head rules in `VALIDATION-POLICY.md`, executable evidence remained valid because exact comparison from `27b20bb...` to final synchronized head `f398fd5...` changed only eight `ai-agents` Markdown process/state/handoff files. No product source, product tests, migrations, workflows, build/runtime configuration, dependencies, artifact contracts, Sentinel manifests, or other executable inputs changed.
 
 ## Completed implementation
 
@@ -40,6 +41,8 @@ Existing adjacent suites cover exact restoration target/case/profile/scope bindi
 
 Valid findings were fixed rather than waived. Manual review found hidden case-target divergence and optional privileged recovery-audit insertion. Codacy found four code-quality issues on a superseded head. CodeRabbit identified the no-follow-up-merge-evidence policy, stale canonical handoff state, unresolved sender reporting/test coverage, missing stored resource evidence, and nullable lease timestamp handling. Frozen product head review ended with zero valid unresolved threads.
 
+The final state-only synchronization head independently passed Wiki, Codacy static, and CodeRabbit review and retained zero valid unresolved review threads.
+
 ## Required executable evidence — PASS on frozen product head
 
 All executable evidence below is bound to `27b20bb56e540161f695e624916f91620261457d`:
@@ -61,10 +64,10 @@ The later live Sentinel restart attempts remain useful diagnostic history but ar
 
 None is relabeled as passed. They are not substituted for a required gate. The correction is that the original ES-P08 contract never required this independent live Sentinel restart; broader destructive acceptance remains assigned to `ES-V03`.
 
-## Merge, cleanup, and stop rule
+## Merge, cleanup, and next routing
 
-Synchronize PR #128 with current `main` using a normal merge, preserving the frozen executable tree. Prove by exact comparison that every change after `27b20bb...` is process/state/documentation-only under `VALIDATION-POLICY.md`. Run the applicable documentation/package/static/review gates for that synchronization head and require zero valid unresolved review threads.
+PR #128 merged using a normal merge commit. The final synchronized head is exactly contained with zero file differences, and `package/es-p08-item-confiscation` is deleted. GitHub/PR #128 metadata remains the source for the exact merge SHA and parent identities; no tracked commit exists solely to embed self-referential merge identifiers.
 
-Then merge PR #128 using a normal merge commit only. Verify feature-head containment, resulting-main divergence, merge parents, and safe branch cleanup. Record GitHub-generated post-merge facts in PR #128 metadata/comments.
+ES-P08 is terminal `COMPLETE`.
 
-After verification, this worker stops. It does not activate or implement ES-X02 or any other package. On canonical ES-P08 completion, ES-X02 becomes dependency-complete and may be selected by a new sequential worker.
+`ES-X02 — EnthusiaCurrency destructive provider` is now dependency-complete and `READY`. A new sequential worker must reconcile live GitHub and, absent a higher-precedence `ACTIONABLE_CONTINUATION`, select ES-X02. `ES-X01` remains independently parked on the unresolved supported RoseChat repository/default-branch/source/AGENTS contract and must not block ES-X02.
