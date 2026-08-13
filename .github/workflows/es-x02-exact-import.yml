@@ -1,0 +1,77 @@
+name: ES-X02 Exact Currency Import
+
+on:
+  push:
+    branches:
+      - package/es-x02-currency-provider
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: ${{ github.event.head_commit.message == 'chore(es-x02): stage exact Currency import' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out aggregate package branch
+        uses: actions/checkout@v4
+        with:
+          ref: package/es-x02-currency-provider
+          fetch-depth: 0
+
+      - name: Check out exact merged EnthusiaCurrency source
+        uses: actions/checkout@v4
+        with:
+          repository: wsg138/EnthusiaCurrency
+          ref: 6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2
+          path: .es-x02-currency-source
+          persist-credentials: false
+
+      - name: Import exact component tree and update metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          actual="$(git -C .es-x02-currency-source rev-parse HEAD)"
+          [[ "$actual" == '6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2' ]] || {
+            echo "::error::Unexpected Currency checkout $actual"
+            exit 1
+          }
+
+          find components/enthusia-currency -mindepth 1 -maxdepth 1 \
+            ! -name COMPONENT-METADATA.md -exec rm -rf {} +
+          rsync -a --delete --exclude='.git/' \
+            .es-x02-currency-source/ components/enthusia-currency/
+          rm -rf .es-x02-currency-source
+
+          cat > components/enthusia-currency/COMPONENT-METADATA.md <<'EOF'
+          # Component metadata — enthusia-currency
+
+          | Field | Value |
+          | --- | --- |
+          | Component ID | `COMP-CURRENCY` |
+          | Standalone repository | `wsg138/EnthusiaCurrency` |
+          | Standalone default branch | `main` |
+          | Aggregate path | `components/enthusia-currency/` |
+          | Verified standalone head at setup | `9696501a01cc11f6e5220c5297a6f34b64204e61` |
+          | Last synchronized external SHA | `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2` |
+          | Last synchronized aggregate-main SHA | `UNSET` |
+          | Synchronization state | `SYNC_PENDING` |
+          | Content-hash method | `tools/component-sync/component_sync.py`; SHA-256 over sorted POSIX paths and raw bytes; `COMPONENT-METADATA.md` excluded as aggregate-only orchestration metadata |
+          | Current blockers | Aggregate ES-X02 validation/merge and post-merge parity remain pending. |
+
+          Exact merged standalone content is imported on `package/es-x02-currency-provider`. The aggregate-main SHA is recorded only after the normal EnthusiaStaff merge and successful post-merge parity proof.
+          EOF
+
+          rm .github/workflows/es-x02-exact-import.yml
+
+      - name: Commit exact aggregate import
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat(es-x02): import merged EnthusiaCurrency component'
+          git push origin HEAD:package/es-x02-currency-provider
