@@ -16,13 +16,13 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 ## Canonical current state
 
-`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
+`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
 
 `ES-P08 — Item confiscation and restoration` completed through implementation PR #128. Frozen executable-validation head `27b20bb56e540161f695e624916f91620261457d` passed the package's required executable gates. Final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b` differed from the frozen product head only in eight `ai-agents` Markdown process/state/handoff files, passed the applicable documentation/static/review gates, merged normally, is exactly contained with zero file delta, and its temporary implementation branch is deleted.
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is `BLOCKED` / `PARKED_BLOCKED` after completing standalone implementation/fixes and every non-Pi aggregate gate. Final Currency main is `b922c5af30860a6c205f9ee16b817349a7677cd0`; Staff product PR #133 is frozen at `fbba02d10301b6bc6d80ada4ad7113f80ff95514`, mergeable, static-clean, review-clean, and hosted-build-clean. Canonical Pi public run `31692610056` dispatched private run `31693194558`, but private job `94424932390` has no allocated runner (`runner_id: 0`, empty runner name, zero steps). No owner-approved infrastructure exception exists, so the package cannot merge or complete until actual private staging executes successfully. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their documented dependencies/external conditions.
+`ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. Standalone Currency final `main` is `b922c5af30860a6c205f9ee16b817349a7677cd0`; aggregate Staff PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9` after all required exact-head hosted/static/review/Sentinel/Pi gates passed; post-merge `component_sync.py` parity is true with identical hash `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c` and component metadata `IN_SYNC`. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. `ES-X03` and `ES-X04` are now dependency-complete and `READY`; `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain parked on their remaining documented dependencies/authorization conditions.
 
 ## Canonical package index
 
@@ -43,9 +43,9 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 110 | `ES-P08` | Staff PR #133 frozen `fbba02d...`; all non-Pi gates green; private Pi run `31693194558` / job `94424932390` queued with `runner_id: 0`, zero steps; no exception approved |
-| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
-| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | ES-X02 incomplete |
+| `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency main `b922c5af...`; Staff PR #133 merge `a3b6f2f7...`; canonical Pi passed; post-merge parity `d6797acb...`; `IN_SYNC` |
+| `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `READY` | 120 | `ES-P08`, `ES-X02` | dependencies complete; unassigned; no branch/PR/handoff yet |
+| `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; unassigned; no branch/PR/handoff yet |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | provider dependencies remain incomplete; representative destructive/load acceptance lives here |
@@ -53,19 +53,16 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
 
 
-## ES-X02 active blocked record
+## ES-X02 terminal record
 
-- Package start: Staff `main` `4831b1442e572914c86fd8e202e7de6f546868e2`; Currency `main` `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
-- Standalone Currency work is merged normally: PR #11 -> `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2`; PR #12 -> `7a9f67ed57de3d4eb7529c91a625efd017bfa88e`; PR #13 -> final main `b922c5af30860a6c205f9ee16b817349a7677cd0`.
-- Final standalone validation head `a968f04b09c11dc1816f2b802626adbcef0f73c8` passed true branch-head Java 21 `mvn -B -ntp verify` in run `31692395919` / job `94422400756` with 7 tests and shaded runtime JAR; Codacy suite `85973637978` succeeded; CodeRabbit status succeeded; valid unresolved thread count was zero.
-- Aggregate Staff PR #133 is open, non-draft, mergeable, and frozen at exact product head `fbba02d10301b6bc6d80ada4ad7113f80ff95514`. The exact mirror is Git-object-identical to Currency main `b922c5af...` for `.github`, `.gitignore`, `AGENTS.md`, `README.md`, `pom.xml`, and the complete `src` subtree; `COMPONENT-METADATA.md` is the sole aggregate-only file.
-- Exact aggregate Coverage run `31692612391` / job `94423135991` passed the full Java 21 clean build/tests, runtime-JAR/provider-leak inspection, JaCoCo, validation artifact, and Codacy coverage upload. Coverage measured 48.98% lines, 40.05% branches, and 51.52% instructions. Staff Codacy check `94423669170` passed with zero issues. Final valid unresolved review-thread count is zero. Sentinel artifact run `31692612386` / job `94423077006` passed.
-- Canonical Pi public run `31692610056` built/verified the exact Staff runtime, uploaded it, published the bounded transient transfer, dispatched private staging, and located private run `31693194558`.
-- Private staging job `94424932390` (`Verify bridge and boot/restart runtime on Lincoln-PI-4`) is queued for labels `self-hosted`, `Linux`, `ARM64`, `enthusia-staging` with `runner_id: 0`, empty runner name, and zero executed steps. No Paper boot, restart, MariaDB/Flyway, persistence, cleanup, or product-validation step has executed in that private run. This is infrastructure-unavailable evidence, not a pass and not a product failure.
-- No ES-X02 owner approval exists for `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`; no exception is claimed or self-approved.
-- Exact unblock condition: the trusted Pi runner becomes allocatable. Reconcile the existing public/private run first; if it has since completed, inspect and require all private runtime/persistence/restart/cleanup assertions plus public transfer cleanup. If it has not, run one fresh exact-head canonical Pi only after the infrastructure condition changes. Do not merge PR #133 without actual successful private staging or a separately explicit valid owner-approved exception.
-- After Pi passes: merge Staff PR #133 normally at expected head `fbba02d...`, run required post-merge `tools/component-sync/component_sync.py` parity against Currency main `b922c5af...`, update component metadata to `IN_SYNC`, publish ES-X02 `COMPLETE`, verify containment/cleanup, and stop. Representative live destructive balances remain deferred to `ES-V03`.
-- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-pi-blocked.md`.
+- Package start: Staff `4831b1442e572914c86fd8e202e7de6f546868e2`; Currency `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
+- Currency PRs #11/#12/#13 merged normally; final standalone main `b922c5af30860a6c205f9ee16b817349a7677cd0`. Final standalone validated head `a968f04b09c11dc1816f2b802626adbcef0f73c8` passed exact branch-head Java 21 run `31692395919` / job `94422400756`, 7 tests + shaded JAR, Codacy suite `85973637978`, and zero unresolved review threads.
+- Staff frozen product head `fbba02d10301b6bc6d80ada4ad7113f80ff95514` passed Coverage/full build `31692612391` / job `94423135991`, Staff Codacy `94423669170`, zero unresolved review threads, Sentinel artifact `31692612386` / job `94423077006`, and canonical Pi public run `31692610056` correlated with private run `31693194558` / job `94424932390` on trusted `Lincoln-PI-4`.
+- Private Pi sanitized evidence: `result=PASS`, exact source, two Paper starts, two storage-ready `SHADOW_MIGRATION` cycles, clean shutdown/failure scans, disposable DB reset, unrelated host-service preservation, artifact `9178996362` digest `sha256:3bdf2a97d47678ffd9a2f5875268f451bc08a237b2b30b434add1c918dab4b72`. Public bridge cleanup/result passed.
+- Staff PR #133 merged normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`.
+- Required post-merge `tools/component-sync/component_sync.py compare` against Currency `b922c5af30860a6c205f9ee16b817349a7677cd0` returned `parity: true`, aggregate hash = standalone hash = `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c`, with no added, missing, or modified product files. Component metadata is `IN_SYNC`.
+- Representative live destructive balances remain assigned to `ES-V03`; ES-X02 changed no production authority/data/cutover state.
+- Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-complete.md`.
 
 ## ES-P08 terminal record
 
@@ -117,4 +114,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-No package is active. A new sequential worker must reconcile live GitHub and classify every incomplete package. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X02 — EnthusiaCurrency destructive provider`, which is dependency-complete and `READY` at priority 110. Work exactly ES-X02, publish durable state, and stop. `ES-X01` remains parked on the unresolved supported RoseChat repository/source contract and must not block ES-X02.
+No package is active. A new sequential worker must reconcile live GitHub and classify every incomplete package. Absent a newly discovered higher-precedence `ACTIONABLE_CONTINUATION`, select `ES-X03 — EnthusiaMarket destructive provider`, now dependency-complete and `READY` at priority 120. `ES-X04 — EnthusiaCommend reputation provider` is also `READY` at priority 125. `ES-X01` remains parked on the unresolved supported RoseChat repository/source contract. Work exactly one package, publish durable state, and stop.

@@ -1,104 +1,102 @@
 # `ES-X02` — EnthusiaCurrency destructive provider
 
 ## 1. Package identity
-`ES-X02`; External/multi-repository; primary `COMP-STAFF`; other `COMP-CURRENCY`; priority 110; sequential around shared destructive journals.
+`ES-X02`; External/multi-repository; primary `COMP-STAFF`; other `COMP-CURRENCY`; priority 110.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED`; implementation and every non-Pi gate are complete, but canonical private Pi staging has not received a trusted runner.
+`COMPLETE`.
 
 ## 3. Objective
 Implement transactional currency removal and exact restoration across EnthusiaStaff and EnthusiaCurrency.
 
 ## 4. Why the package exists
-The audit marks currency destruction critical and provider-blocked: runtime paths require a compatible first-party contract plus private acceptance later.
+The audit required a supported first-party destructive-currency contract with exact failure/recovery semantics instead of reflective/read-only integration.
 
 ## 5. Included audit IDs
 `AUD-ASSET-002` and currency portion of `AUD-ASSET-005`.
 
 ## 6. Included behavior
-Versioned supported API; reservation/operation IDs; exact bank/inventory/Ender Chest snapshots; source-ordered removal; persistent bank revisions; stale rejection; idempotent apply/restore; verified rollback or quarantine; provider present/missing/version mismatch; case/audit linkage; matching aggregate copy/parity.
+Versioned provider API; operation-owned expiring leases; exact bank/inventory/Ender Chest snapshots and checksums; source-ordered removal; persistent bank revisions; stale/CAS protection; idempotent apply/restore; verified compensation or quarantine; provider absence/version mismatch fail-closed behavior; exact aggregate mirror/parity.
 
 ## 7. Explicit exclusions
-Production balances; representative live destructive testing (`ES-V03`); market/reputation; economy redesign outside required contract.
+Production balances; representative live destructive acceptance (`ES-V03`); market/reputation work; production deployment/cutover.
 
 ## 8. Dependencies
-`ES-P08` is `COMPLETE`.
+`ES-P08` was complete before selection.
 
 ## 9. Component and repository boundaries
-EnthusiaStaff integration/root plus `components/enthusia-currency/`, and `wsg138/EnthusiaCurrency`; no unrelated components, permanent branches, or isolated product PR.
+`wsg138/EnthusiaStaff` plus `components/enthusia-currency/`, and standalone `wsg138/EnthusiaCurrency` only.
 
 ## 10. Required branches
-`package/es-x02-currency-provider` is preserved for open Staff PR #133. Standalone Currency work is already merged to `main`; branch cleanup waits for verified package completion. The blocker publication uses docs-only `status/es-x02-pi-runner-blocked-20260813`.
+Temporary `package/es-x02-currency-provider` branches were used in both repositories. Completion publication uses `status/es-x02-complete-20260813`; cleanup is verified after publication merge.
 
 ## 11. Required PRs
-Standalone Currency PRs #11, #12, and #13 merged normally. Aggregate Staff product PR #133 is open, non-draft, mergeable, frozen at `fbba02d10301b6bc6d80ada4ad7113f80ff95514`, and intentionally unmerged while canonical Pi is unavailable.
+Standalone Currency PRs #11, #12, and #13 merged normally; aggregate Staff PR #133 merged normally. No squash/rebase/force-push/auto-merge was used.
 
 ## 12. Implementation checklist
-- [x] Reconcile both repositories, AGENTS, live heads, and package registry.
-- [x] Define and implement versioned moderation provider in standalone Currency.
-- [x] Implement expiring operation-owned locks, exact snapshots/checksums, source-ordered removal, persistent revisions, stale/CAS protection, idempotent apply/restore, verified compensation/quarantine, and provider registration.
-- [x] Fix all valid standalone and aggregate static/review findings, including async durability exactness, lease timing/overflow, movement-lock gaps, failed-CAS phantom state, aggregate PMD debt, and Vault-missing startup continuation.
-- [x] Merge standalone Currency work normally through PRs #11/#12/#13; final `main` `b922c5af30860a6c205f9ee16b817349a7677cd0`.
-- [x] Import exact merged standalone state into Staff and prove pre-merge Git-object identity.
-- [x] Open aggregate Staff PR #133 and freeze exact product head `fbba02d10301b6bc6d80ada4ad7113f80ff95514`.
-- [x] Pass exact aggregate hosted build/tests/coverage, runtime-JAR/provider-leak, static analysis, review, and Sentinel artifact gates.
-- [ ] Execute canonical private Pi runtime/persistence/restart/cleanup validation. Current private job has no runner allocation.
-- [ ] Merge Staff PR #133 normally.
-- [ ] Prove post-merge standalone/aggregate parity with `component_sync.py`, update metadata to `IN_SYNC`, verify containment, and clean temporary branches.
+- [x] Reconciled live repositories, AGENTS, package contract, registry, and validation policy.
+- [x] Implemented the supported versioned Currency moderation API and exact transaction state machine.
+- [x] Added persistent revisions, stale protection, exact restoration, durability verification, movement locking, recovery/quarantine behavior, and tests.
+- [x] Resolved all valid standalone and aggregate review/static findings, including the Vault-missing lifecycle defect.
+- [x] Passed exact-head standalone Java 21 build/tests/JAR/static/review gates.
+- [x] Merged standalone Currency work normally to final `main` `b922c5af30860a6c205f9ee16b817349a7677cd0`.
+- [x] Imported the exact merged standalone tree into Staff and proved object identity.
+- [x] Passed exact-head Staff full build/tests/coverage, runtime-JAR/provider-leak, static, review, Sentinel artifact, and canonical private Pi staging gates.
+- [x] Merged Staff PR #133 normally as `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`.
+- [x] Ran `tools/component-sync/component_sync.py compare` post-merge and proved exact parity.
+- [x] Updated component metadata to `IN_SYNC` and published durable completion evidence.
 
 ## 13. Acceptance criteria
-No balance loss/duplication under success, rejection, timeout, duplicate, crash, or restoration; snapshots/audit are exact; missing/incompatible provider fails safe; both repositories merge normally and aggregate copy matches standalone. Canonical Pi must actually execute successfully before aggregate merge.
+Satisfied. No valid unresolved provider, transaction, rollback, lifecycle, static, review, staging, or parity blocker remains for ES-X02.
 
 ## 14. Test requirements
-Both repos' suites plus reservation/idempotency, concurrent changes, partial failure/rollback, restart/retry, stale restoration, provider absent/version mismatch, authorization/audit, and bounded work tests. Representative live destructive balance acceptance remains deferred to `ES-V03`.
+Satisfied through standalone Maven verification and aggregate Staff multi-module/coverage plus canonical Pi boot/restart/database validation. Representative destructive production-like acceptance remains intentionally deferred to `ES-V03`.
 
 ## 15. Static-analysis requirements
-Satisfied on current product heads: final standalone Codacy suite `85973637978` succeeded; final Staff Codacy check `94423669170` reports zero issues. No valid unresolved CodeRabbit/human review thread remains.
+Satisfied. Final standalone Codacy suite `85973637978` succeeded. Final aggregate Codacy check `94423669170` reported zero issues/annotations.
 
 ## 16. Documentation requirements
-Contract/version, provider setup/missing behavior, operation states, recovery/restoration, component metadata, package handoff, and PR cross-links are present; final completion/parity metadata remains pending.
+Satisfied: contract/provider behavior, startup boundary, operation semantics, component metadata, PR evidence, parity evidence, and canonical handoff are recorded.
 
 ## 17. Security and privacy requirements
-Financial-grade authorization/audit; no real balances/player rows in artifacts; fail closed; bounded/redacted logging. No private databases, production rows, secrets, or reconstructable private evidence were committed.
+Satisfied. No production balances, private databases, credentials, raw private evidence, or production authority changes were committed. Financial state fails closed on ambiguity/corruption.
 
 ## 18. Migration impact
-No new Staff migration. Existing Currency SQLite balance schema is upgraded by the owning repository with a persistent revision column; history is not rewritten.
+Currency owns its SQLite revision-column upgrade; published migration history was not rewritten. Staff added no new migration in ES-X02.
 
 ## 19. Bedrock considerations
-Staff controls retain text fallback and identity correctness; representative client/destructive acceptance remains later.
+Staff-facing controls retain text fallback/platform-neutral identity. Representative client/destructive acceptance remains later.
 
 ## 20. Distributed-runtime considerations
-Operation ownership, concurrent balance changes, duplicate calls, reconnect, process death, and DB latency are handled through lease ownership, checksums, persistent revisions, idempotency, and quarantine outcomes; private representative acceptance remains `ES-V03`.
+Operation ownership, concurrency, duplicate calls, reconnect/process failure, asynchronous persistence, and restart recovery are handled through leases, checksums, persistent revisions, idempotency, durable journals, and quarantine outcomes.
 
 ## 21. External-provider considerations
-Uses the verified first-party `wsg138/EnthusiaCurrency` API; no reflection or invented runtime contract. Final standalone main is `b922c5af30860a6c205f9ee16b817349a7677cd0`.
+Uses the verified first-party `wsg138/EnthusiaCurrency` contract only; no reflection/invented provider API remains in the destructive path.
 
 ## 22. Completion definition
-Standalone and aggregate product PRs merge normally; all required checks/reviews/Pi pass; post-merge parity is true; metadata/merges/hashes recorded; temporary branches cleaned. Private representative destructive acceptance remains `ES-V03`.
+Met: standalone and aggregate PRs merged normally, all required gates passed, post-merge parity true, metadata/evidence recorded, and cleanup verified after completion publication.
 
 ## 23. Resume state
-Resume Staff PR #133 at exact frozen product head `fbba02d10301b6bc6d80ada4ad7113f80ff95514`. First reconcile public Pi run `31692610056` and private run `31693194558` / job `94424932390`. If the private job has actually allocated and completed since this publication, inspect exact logs/evidence and require every applicable runtime, persistence/restart, cleanup, and public-transfer assertion. If it remains unallocated, do not rerun the same path until the trusted runner condition changes.
+Terminal. Do not reopen ES-X02 unless live GitHub reveals a new regression or an explicit new package/change request. New workers should reconcile the registry and choose the next dependency-safe package.
 
 ## 24. Last completed checkpoint
-Every non-Pi gate is green. Coverage run `31692612391` passed the full aggregate Java 21 suite and runtime-JAR/provider-leak inspection; Staff Codacy `94423669170` is zero-issue; review debt is zero; Sentinel artifact run `31692612386` passed. The canonical public Pi build/bridge dispatched the exact private run, but no private runner has allocated.
+Post-merge parity passed between Staff aggregate merge `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9` and Currency main `b922c5af30860a6c205f9ee16b817349a7677cd0` with identical content hash `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c` and zero added/missing/modified files.
 
 ## 25. Remaining checklist
-Actual private Pi execution and public bridge cleanup/final result; normal Staff merge; post-merge `component_sync.py` parity; metadata `IN_SYNC`; containment and branch cleanup; canonical `COMPLETE` publication.
+None inside ES-X02. `ES-V03` separately owns representative destructive/latency/load acceptance.
 
 ## 26. Known blockers
-Private staging job `94424932390` in run `31693194558` is queued with `runner_id: 0`, empty runner name, and zero steps for required labels `self-hosted/Linux/ARM64/enthusia-staging`. No owner-approved infrastructure exception exists for ES-X02. Do not call this a Pi pass or product failure.
+None for ES-X02.
 
-## 27. Current evidence
-- Staff package start: `4831b1442e572914c86fd8e202e7de6f546868e2`.
-- Currency package start: `922223cfff8c325e36f58b6af6adf6d74e4a5417`.
-- Currency normal merges: #11 `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2`; #12 `7a9f67ed57de3d4eb7529c91a625efd017bfa88e`; #13 / final main `b922c5af30860a6c205f9ee16b817349a7677cd0`.
-- Final standalone validation head: `a968f04b09c11dc1816f2b802626adbcef0f73c8`; exact branch-head CI run `31692395919` / job `94422400756`; 7 tests + shaded JAR; Codacy suite `85973637978`; CodeRabbit success; zero review threads.
-- Staff PR #133 frozen head: `fbba02d10301b6bc6d80ada4ad7113f80ff95514`; mergeable, non-draft.
-- Staff Coverage: run `31692612391` / job `94423135991`; 48.98% lines / 40.05% branches / 51.52% instructions; Paper SHA-256 `a142d0c30cbe4d085dea0901287f1d1bf9d84cb2143a0322091afb908342c6a6`; Velocity SHA-256 `c891d4744ed142edffa0352b4c20f39428fbc379c46313dbbe234878345ec1c7`; validation artifact `9178197820`.
-- Staff static/review: Codacy `94423669170` zero issues; zero valid unresolved review threads; final CodeRabbit status success/rate-limited with no new finding.
-- Sentinel artifact: run `31692612386` / job `94423077006`, artifact `9178016407`, success.
-- Canonical Pi public run `31692610056`: exact public build success and private dispatch complete. Private run `31693194558` / job `94424932390`: queued, `runner_id: 0`, empty runner, zero steps; no Pi pass claimed.
-- Handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-pi-blocked.md`.
+## 27. Final evidence
+- Currency normal merges: PR #11 -> `6fd8947d3b2d2c470548f77f4fbf253fcc86b7e2`; PR #12 -> `7a9f67ed57de3d4eb7529c91a625efd017bfa88e`; PR #13/final main -> `b922c5af30860a6c205f9ee16b817349a7677cd0`.
+- Final standalone validated head: `a968f04b09c11dc1816f2b802626adbcef0f73c8`; Java 21 run `31692395919` / job `94422400756`, 7 tests + shaded JAR; Codacy suite `85973637978`; zero review threads.
+- Staff frozen product head: `fbba02d10301b6bc6d80ada4ad7113f80ff95514`.
+- Aggregate Coverage run `31692612391` / job `94423135991`; Staff Codacy `94423669170`; Sentinel artifact run `31692612386` / job `94423077006`.
+- Canonical Pi: public run `31692610056`; private run `31693194558` / job `94424932390` on trusted `Lincoln-PI-4` (`runner_id: 2`), result `PASS`, two starts/storage-ready cycles, clean shutdown/failure scans, disposable DB reset, sanitized evidence artifact `9178996362` digest `sha256:3bdf2a97d47678ffd9a2f5875268f451bc08a237b2b30b434add1c918dab4b72`; public bridge cleanup/result success.
+- Staff PR #133 normal merge: `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`.
+- Parity evidence: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-component-parity.json`; both hashes `d6797acbd50bb6547ce724bff946974872795e9f2343c664c2c9e8bde28e5e2c`; `parity: true`.
+- Terminal handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-complete.md`.
 
 ## 28. Merge and synchronization record
-Standalone is merged. Aggregate remains intentionally unmerged at `fbba02d...` pending actual canonical Pi. Pre-merge object identity is proven; post-merge parity and final metadata are pending and must not be predeclared.
+Standalone final main `b922c5af30860a6c205f9ee16b817349a7677cd0`; aggregate product merge `a3b6f2f7c1e9f6b7fe1667974aa0d050533605a9`; post-merge parity true; component metadata `IN_SYNC`. Completion-publication merge and branch-cleanup facts are verified from live GitHub after the state PR merges.
