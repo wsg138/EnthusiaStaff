@@ -4,7 +4,7 @@
 `ES-X02`; external/multi-repository; primary `COMP-STAFF`; other `COMP-CURRENCY`; priority 110.
 
 ## 2. Status
-`IN_PROGRESS` / `ACTIONABLE_CONTINUATION`.
+`ACTIVE` / `ACTIONABLE_CONTINUATION`.
 
 The earlier terminal publication through Staff PR #135 is historical. A later targeted review found two valid correctness defects, so ES-X02 was reopened before any downstream provider package began.
 

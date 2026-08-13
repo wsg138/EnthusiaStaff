@@ -1,7 +1,7 @@
 # ES-X02 — currency provider correctness follow-up
 
 Date: 2026-08-13
-Status: `IN_PROGRESS` / `ACTIONABLE_CONTINUATION`
+Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`
 
 ## Trigger
 

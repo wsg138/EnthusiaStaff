@@ -2,7 +2,7 @@
 
 Current package: `ES-X02 — EnthusiaCurrency destructive provider`.
 
-Status: `IN_PROGRESS` / `ACTIONABLE_CONTINUATION`.
+Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`.
 
 Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-followup.md`.
 

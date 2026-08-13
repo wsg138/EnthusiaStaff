@@ -9,7 +9,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Field | Value |
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | `ES-X02 — EnthusiaCurrency destructive provider`; `IN_PROGRESS` / `ACTIONABLE_CONTINUATION` after a post-merge correctness review. |
+| Active package | `ES-X02 — EnthusiaCurrency destructive provider`; `ACTIVE` / `ACTIONABLE_CONTINUATION` after a post-merge correctness review. |
 | Standalone correction | Currency PR #14 merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`. It validates removal plans before accepting committed replay and requires a monotonic bank revision before treating assets as already restored. |
 | Aggregate continuation | The exact corrected Currency tree is imported on `package/es-x02-currency-provider`. Staff PR #133 and completion PR #135 remain historical merges; a follow-up Staff PR and new exact-head gates are pending. |
 | Candidate parity | Pre-merge `tools/component-sync/component_sync.py compare` reports `parity: true` with standalone and aggregate hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb` and no added, missing, or modified product files. Component metadata is `SYNC_PENDING`. |

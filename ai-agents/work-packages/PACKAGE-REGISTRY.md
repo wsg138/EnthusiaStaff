@@ -22,7 +22,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is `IN_PROGRESS` / `ACTIONABLE_CONTINUATION`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Standalone Currency PR #14 repaired both and merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`; the exact corrected tree is imported on the reopened Staff package branch with candidate parity hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb`. Exact-head Staff hosted/static/review/Sentinel/Pi gates, normal merge, and post-merge parity remain pending. `ES-X03` and `ES-X04` are parked on ES-X02 again. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
+`ES-X02 — EnthusiaCurrency destructive provider` is `ACTIVE` / `ACTIONABLE_CONTINUATION`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Standalone Currency PR #14 repaired both and merged normally as `2b4c8bf6d8e8ef1c8c6b042cd3147e66ffc660fe`; the exact corrected tree is imported on the reopened Staff package branch with candidate parity hash `c5820e3121372f81c8611de9b6015f77e28f5c2160037da035f650660ed090eb`. Exact-head Staff hosted/static/review/Sentinel/Pi gates, normal merge, and post-merge parity remain pending. `ES-X03` and `ES-X04` are parked on ES-X02 again. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
 
 ## Canonical package index
 
@@ -43,7 +43,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
-| `ES-X02` | EnthusiaCurrency destructive provider | `IN_PROGRESS` | `ACTIONABLE_CONTINUATION` | 110 | `ES-P08` | Currency PR #14 merge `2b4c8bf...`; corrected Staff package branch active; exact-head gates and merge pending |
+| `ES-X02` | EnthusiaCurrency destructive provider | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 110 | `ES-P08` | Currency PR #14 merge `2b4c8bf...`; corrected Staff package branch active; exact-head gates and merge pending |
 | `ES-X03` | EnthusiaMarket destructive provider | `PLANNED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | corrected ES-X02 follow-up incomplete |
 | `ES-X04` | EnthusiaCommend reputation provider | `PLANNED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | corrected ES-X02 follow-up incomplete |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
