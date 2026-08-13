@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   import:
-    if: ${{ github.event.head_commit.message == 'chore(es-x02): stage exact Currency import' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
