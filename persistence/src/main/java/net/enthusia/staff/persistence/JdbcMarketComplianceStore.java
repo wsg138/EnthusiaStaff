@@ -97,7 +97,8 @@ public final class JdbcMarketComplianceStore implements MarketComplianceStore {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT %s FROM market_compliance_cases
-                     WHERE idempotency_key IS NOT NULL AND state = 'PREPARING'
+                     WHERE idempotency_key IS NOT NULL
+                       AND state IN ('PREPARING', 'PREPARED', 'MODERATION_HOLD')
                      ORDER BY updated_at, compliance_id LIMIT ?
                      """.formatted(COLUMNS))) {
             statement.setInt(1, bounded);

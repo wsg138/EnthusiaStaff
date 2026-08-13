@@ -7,15 +7,25 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
+import net.enthusia.market.api.moderation.MarketBlacklistRemoval;
+import net.enthusia.market.api.moderation.MarketBlacklistRequest;
+import net.enthusia.market.api.moderation.MarketBlacklistResult;
+import net.enthusia.market.api.moderation.MarketConfiscationApproval;
 import net.enthusia.market.api.moderation.MarketModerationApi;
+import net.enthusia.market.api.moderation.MarketOperationRecord;
+import net.enthusia.market.api.moderation.MarketOperationRequest;
+import net.enthusia.market.api.moderation.MarketOperationResult;
 import net.enthusia.market.api.moderation.MarketOwnership;
+import net.enthusia.market.api.moderation.MarketRestoreRequest;
 import net.enthusia.market.api.moderation.MarketStallRecord;
 import net.enthusia.market.api.moderation.StallBlacklistState;
 import net.enthusia.staff.domain.evidence.IntegrationAvailability;
+import net.enthusia.staff.paper.market.MarketGateway;
 import org.bukkit.plugin.ServicesManager;
 
 /** Typed, provider-owned EnthusiaMarket service boundary. */
-public final class MarketIntegration {
+public final class MarketIntegration implements MarketGateway {
     private final IntegrationAvailability availability;
     private final String issue;
     private final MarketModerationApi api;
@@ -93,6 +103,46 @@ public final class MarketIntegration {
         return api;
     }
 
+    @Override
+    public CompletionStage<MarketOperationResult> prepare(MarketOperationRequest request) {
+        return invoke(() -> api.prepare(request), "prepare");
+    }
+
+    @Override
+    public CompletionStage<MarketOperationResult> confiscate(MarketConfiscationApproval approval) {
+        return invoke(() -> api.confiscate(approval), "confiscate");
+    }
+
+    @Override
+    public CompletionStage<MarketOperationResult> restore(MarketRestoreRequest request) {
+        return invoke(() -> api.restore(request), "restore");
+    }
+
+    @Override
+    public CompletionStage<MarketOperationResult> release(UUID operationId, String snapshotChecksum) {
+        return invoke(() -> api.release(operationId, snapshotChecksum), "release");
+    }
+
+    @Override
+    public CompletionStage<Optional<MarketOperationRecord>> findOperation(UUID operationId) {
+        return invoke(() -> api.findOperation(operationId), "find operation");
+    }
+
+    @Override
+    public CompletionStage<Optional<StallBlacklistState>> getBlacklist(UUID targetId) {
+        return invoke(() -> api.getStallBlacklist(targetId), "read blacklist");
+    }
+
+    @Override
+    public CompletionStage<MarketBlacklistResult> applyBlacklist(MarketBlacklistRequest request) {
+        return invoke(() -> api.applyBlacklist(request), "apply blacklist");
+    }
+
+    @Override
+    public CompletionStage<MarketBlacklistResult> removeBlacklist(MarketBlacklistRemoval removal) {
+        return invoke(() -> api.removeBlacklist(removal), "remove blacklist");
+    }
+
     public IntegrationAvailability availability() {
         return availability;
     }
@@ -103,6 +153,22 @@ public final class MarketIntegration {
 
     public int apiVersion() {
         return requireApi().apiVersion();
+    }
+
+    private <T> CompletionStage<T> invoke(Supplier<CompletionStage<T>> invocation, String operation) {
+        if (availability != IntegrationAvailability.AVAILABLE) {
+            return CompletableFuture.failedStage(new IllegalStateException(issue));
+        }
+        try {
+            return Objects.requireNonNull(
+                    invocation.get(),
+                    "Market API returned no stage for " + operation
+            );
+        } catch (RuntimeException exception) {
+            return CompletableFuture.failedStage(
+                    new IllegalStateException("Market API could not " + operation, exception)
+            );
+        }
     }
 
     private static PlayerMarketStatus toStatus(

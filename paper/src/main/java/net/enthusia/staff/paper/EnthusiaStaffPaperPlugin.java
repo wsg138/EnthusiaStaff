@@ -511,6 +511,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     exception);
         }
         if (!lifecycle.stopping()) {
+            integrations.storageReady();
             registerOperationalStateTask();
         }
     }
@@ -848,7 +849,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 new PaperIntegrationManager.Stores(
                         () -> storageValue(PaperStorageBindings::punishmentService),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
-                        () -> storageValue(PaperStorageBindings::inventoryJournalStore)
+                        () -> storageValue(PaperStorageBindings::inventoryJournalStore),
+                        () -> storageValue(PaperStorageBindings::marketComplianceStore),
+                        () -> storageValue(PaperStorageBindings::caseLookup)
                 ),
                 new PaperIntegrationManager.PlayerComponents(
                         runtimeComponents.freeze(),
