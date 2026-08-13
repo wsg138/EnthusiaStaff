@@ -4,8 +4,10 @@ Current package: `ES-X02 — EnthusiaCurrency destructive provider`
 
 Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-12-es-x02-currency-provider-blocked.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x02-currency-provider-pi-blocked.md`.
 
-Standalone Currency PR #11 is open at exact head `5d9dfc7f03d33ee2147141fef4c777ba0e67d939`. Its configured Java 21 Maven suite passed in run `31657088614` after a manual-review compensation defect was repaired. Codacy still reports 29 unresolved findings (2 critical, 1 high, 26 medium), while the current GitHub evidence path exposes only aggregate counts rather than individual findings. No static-analysis pass, canonical Pi pass, product merge, aggregate import, or parity pass is claimed.
+All standalone work is merged normally; final Currency `main` is `b922c5af30860a6c205f9ee16b817349a7677cd0`. Aggregate Staff PR #133 is frozen at `fbba02d10301b6bc6d80ada4ad7113f80ff95514`, mergeable, and has passed all non-Pi hosted/static/review/Sentinel artifact gates. Its exact mirror is pre-merge object-identical to Currency main.
 
-Resume ES-X02 when individual Codacy PR #11 findings become accessible; disposition/fix all valid findings first, then continue the remaining exact-head review/Pi/merge/import/parity sequence. While that external condition is unchanged, treat ES-X02 as parked per `WORKER-PROTOCOL.md` and do not repeatedly rerun the same unavailable review path.
+The only remaining package gate is canonical private Pi staging. Public run `31692610056` dispatched private run `31693194558`, but job `94424932390` remains queued with `runner_id: 0`, empty runner name, and zero executed steps for the trusted `Lincoln-PI-4` labels. No Pi pass or product failure is claimed, and no owner-approved infrastructure exception exists.
+
+Resume ES-X02 before new dependent work when the trusted Pi runner condition changes. Reconcile the existing run first; require actual private execution plus public transfer cleanup before merging PR #133, then finish normal aggregate merge, post-merge `component_sync.py` parity, metadata/containment/branch cleanup, and canonical `COMPLETE` publication. Representative destructive balances remain deferred to `ES-V03`.
