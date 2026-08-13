@@ -198,6 +198,23 @@ class MarketComplianceCoordinatorTest {
         assertTrue(store.operations.isEmpty());
     }
 
+    @Test
+    void statusRemainsAvailableDuringProviderOutage() {
+        gateway.prepare = request -> completed(
+                operationResult(request, MarketOperationRecord.State.PREPARED)
+        );
+        coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, "stall-1", Optional.empty()
+        ).toCompletableFuture().join();
+        gateway.availability = IntegrationAvailability.UNAVAILABLE;
+
+        MarketCoordinationResult result = coordinator.find(admin(), OPERATION_ID)
+                .toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.REPLAYED, result.status());
+        assertEquals(MarketComplianceState.PREPARED, result.operation().orElseThrow().state());
+    }
+
     private static Actor admin() {
         return new Actor(ACTOR_ID, "admin", StaffRank.ADMIN);
     }
@@ -358,6 +375,7 @@ class MarketComplianceCoordinatorTest {
     }
 
     private static final class FakeGateway implements MarketGateway {
+        private IntegrationAvailability availability = IntegrationAvailability.AVAILABLE;
         private java.util.function.Function<MarketOperationRequest,
                 CompletionStage<MarketOperationResult>> prepare = ignored -> null;
         private java.util.function.Function<MarketConfiscationApproval,
@@ -370,7 +388,7 @@ class MarketComplianceCoordinatorTest {
 
         @Override
         public IntegrationAvailability availability() {
-            return IntegrationAvailability.AVAILABLE;
+            return availability;
         }
 
         @Override

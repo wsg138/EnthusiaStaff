@@ -425,18 +425,18 @@ public final class MarketComplianceCoordinator {
     private Optional<MarketCoordinationResult> reject(
             Actor actor,
             ModerationAction action,
-            boolean destructive
+            boolean providerMutation
     ) {
         if (actor == null || !authorization.permits(actor, action)) {
             return Optional.of(rejected("You do not have authority for this market operation"));
         }
-        if (destructive && mode.get() != OperationalMode.ACTIVE) {
+        if (providerMutation && mode.get() != OperationalMode.ACTIVE) {
             return Optional.of(unavailable("Market writes require ACTIVE moderation mode"));
         }
-        if (market.availability() != IntegrationAvailability.AVAILABLE) {
+        if (providerMutation && market.availability() != IntegrationAvailability.AVAILABLE) {
             return Optional.of(unavailable(market.issue()));
         }
-        if (stores.get() == null || cases.get() == null) {
+        if (stores.get() == null || (providerMutation && cases.get() == null)) {
             return Optional.of(unavailable("Market compliance storage is unavailable"));
         }
         return Optional.empty();
