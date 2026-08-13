@@ -11,6 +11,14 @@ The shared version 1 contract lives in `integration-contracts` under
 the provider through Paper's services manager. The Paper runtime JAR must not contain the
 provider API classes; the Market plugin supplies the one runtime copy.
 
+Staff authenticates the command actor and authorizes each case action before calling the
+provider. The Paper services boundary assumes installed plugins are trusted code; it is
+not a sandbox against a malicious co-resident plugin that can inspect JVM services,
+memory, or server configuration. Operators must restrict plugin installation and update
+access to trusted artifacts and administrators. Market independently validates request
+identity, checksums, revisions, and state transitions rather than trusting caller-supplied
+outcomes.
+
 New writes fail closed when any of these conditions is true:
 
 - moderation mode is not `ACTIVE`;

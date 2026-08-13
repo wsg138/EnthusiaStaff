@@ -1059,14 +1059,16 @@ follow-up review approval is claimed.
 `main` is `49e5aa999b43193181aafabbb75811c820fa03c7`. The current hosted inventory
 contains 311 active Java warnings: 197 complexity, 95 error-prone, and 19
 performance. The available response does not expose a letter grade, so none is
-claimed. The ES-X03 branch has not yet produced a hosted branch inventory.
+claimed. Staff PR #139 subsequently reported 991 newly visible findings when the
+complete first-party Market component entered the aggregate repository; hosted
+Codacy remains `ACTION_REQUIRED`. No component source was excluded or ignored.
 
 Local Codacy CLI v2 analysis was scoped to the ES-X03 product delta in both
 repositories:
 
 | Repository/scope | Lizard | PMD | Opengrep | Trivy |
 | --- | ---: | ---: | ---: | ---: |
-| EnthusiaMarket Kotlin/Java candidate | 35 total, versus 36 on the clean base; zero new | 0 | 0 | 0 |
+| EnthusiaMarket Kotlin/Java candidate | 40 across source/test/tool files; 35 production; no new changed-method finding | 0 on the supported Java scope | 1 pre-existing workflow action pinning finding; zero touched | 0 |
 | EnthusiaStaff ES-X03 Java delta | 4 unchanged baseline findings; zero new | 0 | 0 | 0 |
 
 The Market branch initially introduced one listener-complexity and one file-
@@ -1080,19 +1082,25 @@ path was suppressed or excluded.
 The four visible Staff Lizard results are the same baseline findings in
 `EnthusiaStaffPaperPlugin` and `MariaDbRuntime`. Their measured sizes changed
 slightly as ES-X03 wiring was added, but the branch did not create a new finding.
-They remain visible for later root cleanup. Both local exact-head Java 21 clean
-builds now pass. Staff reports 951 tests with zero skips, including 192
-integration tests; Market reports 628 tests with one unrelated skip, and all
-three Market provider MariaDB tests executed. Hosted Codacy, hosted CI, Pi
-staging, and PR review remain pending and must not be inferred from these local
-results.
+They remain visible for later root cleanup. Staff's local exact-head Java 21
+clean build passed 951 tests with zero skips, including 192 integration tests.
+Market `6240869` passed the complete clean graph over 120 suites and 637 tests;
+the Windows graph skipped five Docker cases and one unrelated remote-auth case.
+A separate clean Docker-enabled Java 21 run then executed all five provider
+MariaDB tests with zero failures, errors, or skips. Staff hosted Coverage, Wiki,
+Sentinel, and private Pi staging passed at `085a7d83`; hosted Codacy did not pass.
+Staff CodeRabbit skipped due to the 545-file review limit. Market's valid bounded
+review findings were fixed, but its incremental rerun was rate-limited and no
+final approval is claimed. These statuses are recorded separately and are not
+promoted into analyzer approval.
 
 The Staff runtime gate produced exactly one Paper and one Velocity JAR. Their
 SHA-256 values are respectively
 `e275fd6912dd8b282d65ea735a72eb4f258a8e4e7ed5b9224abe44cb5be35d15`
 and `85fee16bbdaf4eb8916f1a64506dd4dcd3b3b195a383ab1adb5d7c3c632affac`;
-neither includes the Market contract. The standalone Market JAR SHA-256 is
-`eca7943d23f2c65492653a1848d1ba3fd251e698db72cebd1b0d19ad94e186cd`
+neither includes the Market contract. The standalone Market JAR is 4,138,102
+bytes with SHA-256
+`ba821a7fdc509f2a94ba155d911351c04ab540c15f8da21e5f1c31dd333f9d6f`
 and correctly owns its API classes.
 
 ## Remediation order
