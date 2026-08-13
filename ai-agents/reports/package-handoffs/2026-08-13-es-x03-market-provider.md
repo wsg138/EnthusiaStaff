@@ -2,49 +2,91 @@
 
 ## Current status
 
-`ACTIVE` on 2026-08-13.
+`ACTIVE` on 2026-08-13. Implementation and local analyzer cleanup are complete; exact-head
+full validation, paired PR review/merge, post-merge parity, and branch cleanup remain.
 
 ## Starting authority
 
 - EnthusiaStaff `main`: `49e5aa999b43193181aafabbb75811c820fa03c7`.
 - EnthusiaMarket `main`: `bc24f1010642d6042307bc13a32fb33cc94e8883`.
 - Temporary branch in both repositories: `package/es-x03-market-provider`.
-- Staff migration ceiling: V18, immutable.
-- Market migration ceiling: V024, immutable.
-- No prior ES-X03 branch, PR, implementation, or package handoff existed.
+- Staff starting migration ceiling: V18, immutable.
+- Market starting migration ceiling: V024, immutable.
+- Issue #43 and production LiteBans authority are unchanged.
 
-## Live reconciliation
+## Implemented behavior
 
-- EnthusiaStaff has no open PR.
-- EnthusiaMarket PR #1 is unrelated and targets `feat/website-market-sync`, not the default branch.
-- The supported standalone repository and default branch are available.
-- The standalone repository has no repository-local `AGENTS.md`; the parent Enthusia rules apply.
-- The standalone fork default head remains the package authority. Newer detached upstream history is not imported or rewritten by this package.
-- Issue #43 remains outside this package; LiteBans remains authoritative.
+EnthusiaMarket publishes `MarketModerationApi` version 1 with JDK-only models. V025 adds
+the durable provider operation journal, stall locks, player acquisition fences, revisioned
+blacklists, and stall moderation revisions. Preparation atomically snapshots and freezes
+the target-owned stall while retaining ownership. Confiscation requires a named human
+reviewer and exact checksum. Release/restoration verify current state, restore exact
+provider-owned fields, and release reservations. Ambiguous state is quarantined.
 
-## Scope in progress
+Acquisition and conflicting shop paths consult durable fences before money, items, or
+ownership change. Snapshots are limited to 100 shops and 1 MiB. Exact retries replay;
+identity, checksum, and revision mismatches do not overwrite newer state.
 
-1. Define a supported versioned moderation API and immutable operation models.
-2. Add durable stall reservation, compliance restriction, acquisition blacklist, confiscation hold, rollback, and exact restoration.
-3. Fence acquisition and listing races without bypassing existing market transactions or rent behavior.
-4. Add Staff-side case authorization, durable coordination, recovery, commands, audit, and provider absence/version handling.
-5. Import the exact standalone product tree into `components/enthusia-market/` and maintain deterministic parity.
-6. Prove both repositories, resolve valid findings, merge both PRs normally, verify post-merge parity, and clean temporary branches.
+EnthusiaStaff compiles against the typed contract without shading it. V19 adds durable
+idempotency, recovery, revision, and review-alert metadata. Staff records `PREPARING`
+intent before provider calls, validates the case target, reconciles bounded restart work,
+and never automatically approves a prepared confiscation. `/marketcase` provides explicit
+prepare, approve, release, Founder-only restore, blacklist, unblacklist, and status paths.
+All mutations require uppercase `CONFIRM`. Local status remains readable during provider
+outage when Staff storage is available; writes remain fail-closed.
 
-## Evidence and findings
+## Current heads and synchronization
 
-- Local and hosted validation have not yet run for this package.
-- No ES-X03 review threads or analyzer findings exist yet.
-- Existing Market transaction and ownership services are authoritative and must be extended, not bypassed.
+- Market candidate: `daed4d08d96f69f4513431c8bff8b90ada8faa70`.
+- Staff committed candidate before the final docs/state checkpoint:
+  `1034efc817fb95b9587cff00cd63b5b90e8cd009`.
+- Aggregate Market tree exactly matches the standalone candidate before merge.
+- Product-tree hash: `761b6e1e6168782b752cca5bffe6ca8b9330694b38f13b9c19d3a82dbecdaf67`.
+- Component metadata remains `SYNC_PENDING` until both normal merges and post-merge parity.
+
+## Validation completed so far
+
+- Market focused tests and Detekt passed after analyzer cleanup.
+- Market MariaDB Testcontainers provider lifecycle, concurrent-preparation, and fencing
+  scenarios passed on the provider implementation checkpoint.
+- Market local Codacy: Lizard 35 findings versus 36 on the clean base; no ES-X03 delta.
+  PMD, Opengrep, and Trivy report zero.
+- Staff focused persistence/command/coordinator tests pass, including provider-outage
+  journal status.
+- Staff V19 journal and V18-to-V19 upgrade tests passed against disposable MariaDB on the
+  implementation checkpoint.
+- Staff local Codacy package delta: PMD, Opengrep, and Trivy zero. Four Lizard findings are
+  the same pre-existing `EnthusiaStaffPaperPlugin`/`MariaDbRuntime` findings as the base;
+  the ES-X03 JDBC store file-length finding was removed without suppression.
+- Component synchronization tests pass: 8 tests, 3 skipped by design. Orchestration
+  validation passes for 23 packages and 99 audit IDs.
+- Full exact-head clean builds, final MariaDB reruns, runtime-JAR inspection, hosted CI,
+  hosted Codacy, and PR review remain to be recorded.
+
+## Static-analysis notes
+
+No analyzer rule, first-party source path, or valid finding was suppressed or excluded.
+The four surviving Staff Lizard items are visible baseline findings; this package does not
+claim they are resolved. Hosted Codacy grade is not asserted because the available response
+does not expose it. CodeRabbit has not yet reviewed the final PR heads; no approval is
+claimed.
 
 ## Boundaries
 
-- Do not use production listings or player records.
-- Do not access credentials, production databases, or deployment routes.
-- Do not run cutover or alter punishment authority.
-- Representative destructive, latency, and load acceptance remains assigned to ES-V03.
-- Do not disturb unrelated Staff worktrees or unrelated Market branches/PRs.
+- No production listings, player records, credentials, databases, or deployment routes
+  were accessed.
+- No cutover, punishment authority, or issue #43 state changed.
+- No full EnthusiaRollback project work was started.
+- Representative destructive, latency, process-kill, and load acceptance remains assigned
+  to ES-V03.
+- The pre-existing full Market migration chain has a V001 MariaDB incompatibility because
+  indexed identifier columns are declared as `TEXT`; ES-X03 did not rewrite immutable
+  history. The representative V025 upgrade fixture passes and this limitation remains
+  explicit for later migration-history remediation.
 
 ## Exact next action
 
-Add the provider requirements, API contract, operation state machine, persistence migration, and race/recovery tests on the standalone branch; then mirror the exact contract into Staff integration and publish cross-linked draft PRs after the first coherent implementation checkpoint.
+Commit and push the final synchronized docs/state checkpoint. Run full Java 21 clean builds
+and all applicable MariaDB tests on both exact heads, inspect Staff runtime packaging, open
+and cross-link the two PRs, resolve valid hosted findings, merge normally, prove post-merge
+parity/containment, remove both temporary branches, and publish the terminal package record.

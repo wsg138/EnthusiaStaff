@@ -44,7 +44,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| `ES-X03` | EnthusiaMarket destructive provider | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 120 | `ES-P08`, `ES-X02` | Staff and Market branch `package/es-x03-market-provider`; starts `49e5aa99...` / `bc24f101...`; canonical handoff `2026-08-13-es-x03-market-provider.md` |
+| `ES-X03` | EnthusiaMarket destructive provider | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 120 | `ES-P08`, `ES-X02` | Staff `1034efc8...` plus pending docs; Market `daed4d08...`; local implementation/analyzer/parity gates pass, full exact-head/hosted review and paired merges remain; canonical handoff `2026-08-13-es-x03-market-provider.md` |
 | `ES-X04` | EnthusiaCommend reputation provider | `READY` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; eligible after higher-priority routing is reconciled |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |

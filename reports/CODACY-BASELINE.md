@@ -2,7 +2,7 @@
 
 Captured: 2026-07-27 (America/Indianapolis)
 
-Last updated: 2026-08-11 (America/Indianapolis)
+Last updated: 2026-08-13 (America/Indianapolis)
 
 This report records the state of `agent/complete-staff-platform` at pushed commit
 `c4fd4129f7a34ad011f87f146fb72c236e611b89` before the current remediation.
@@ -1053,6 +1053,35 @@ zero failures, errors, or skips. All 47 MariaDB Testcontainers suites and their
 private Pi runtime test passed. CodeRabbit's valid rollback-evidence and unknown
 provider-status findings were fixed; its follow-up run was rate-limited, so no
 follow-up review approval is claimed.
+
+## 2026-08-13 ES-X03 Market provider checkpoint
+
+`main` is `49e5aa999b43193181aafabbb75811c820fa03c7`. The current hosted inventory
+contains 311 active Java warnings: 197 complexity, 95 error-prone, and 19
+performance. The available response does not expose a letter grade, so none is
+claimed. The ES-X03 branch has not yet produced a hosted branch inventory.
+
+Local Codacy CLI v2 analysis was scoped to the ES-X03 product delta in both
+repositories:
+
+| Repository/scope | Lizard | PMD | Opengrep | Trivy |
+| --- | ---: | ---: | ---: | ---: |
+| EnthusiaMarket Kotlin/Java candidate | 35 total, versus 36 on the clean base; zero new | 0 | 0 | 0 |
+| EnthusiaStaff ES-X03 Java delta | 4 unchanged baseline findings; zero new | 0 | 0 | 0 |
+
+The Market branch initially introduced one listener-complexity and one file-
+length result; both were removed by extracting state routing and moderation-
+fence queries. The Staff branch initially introduced one JDBC-store file-length
+result and four PMD results; the payload codec was separated, command flow was
+simplified, an unused parameter was removed, and cause traversal gained an
+identity-set cycle guard. No analyzer rule, valid finding, or first-party source
+path was suppressed or excluded.
+
+The four visible Staff Lizard results are the same baseline findings in
+`EnthusiaStaffPaperPlugin` and `MariaDbRuntime`. Their measured sizes changed
+slightly as ES-X03 wiring was added, but the branch did not create a new finding.
+They remain visible for later root cleanup. Hosted Codacy, full exact-head CI,
+and PR review remain pending and must not be inferred from these local results.
 
 ## Remediation order
 

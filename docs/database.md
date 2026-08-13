@@ -107,3 +107,26 @@ V14 and older rows remain readable with both new columns null. The application r
 `V16__punishment_decay_eligibility_snapshots.sql` adds nullable `decay_eligible` metadata to `punishment_steps` and `punishment_requests`. New policy evaluations store the creating reason policy's explicit decay eligibility in the same transaction as the recommendation, applied sanctions, audit records and outboxes. Durable approval requests preserve the same value across restart so later approval cannot silently convert it to unknown. Related-history loading uses the stored value for each prior offense instead of reinterpreting history through the later reason selected by staff.
 
 The shared clean-period clock remains based on the latest contributing, non-overturned related offense. Each 90-day interval reduces only contributions whose stored metadata is `TRUE`; serious or otherwise explicitly non-decaying history remains unchanged. V15 and older rows retain `NULL`, load as `UNKNOWN`, and do not decay because reconstructing their historical policy from current configuration would invent evidence. No legacy row is rewritten. V1–V15 remain byte-identical and Flyway repair remains prohibited.
+
+## V17: website appeal workflow
+
+`V17__website_appeal_workflow.sql` adds revisioned appeal decisions, submission and
+decision idempotency, bounded player/reviewer fields, append-only appeal events, and
+durable rate buckets/keys. Existing migrations remain immutable.
+
+## V18: cheat tester session journal
+
+`V18__cheat_tester_session_journal.sql` adds one durable session row per test with a
+single active-session fence per target, bounded state transitions, exact snapshots,
+configuration/evidence payloads, expiration, and optimistic revision metadata.
+
+## V19: Market compliance journal
+
+`V19__market_compliance_journal.sql` extends `market_compliance_cases` with a unique
+idempotency key, recovery deadline, optimistic journal revision, creation time, and
+review-alert claim. New case-linked Market operations persist `PREPARING` intent before a
+provider call. Recovery queries only versioned rows with an idempotency key and bound each
+pass. Review alert claim, Staff alert, and Discord outbox insertion share one transaction.
+V1–V18 remain byte-identical; future changes require V20 or later.
+
+See `docs/market-moderation.md` for the cross-provider state machine and recovery rules.

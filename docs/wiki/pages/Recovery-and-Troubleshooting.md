@@ -191,11 +191,28 @@ Confirm only the dependent feature is disabled when that is safe. Examples:
 - RoseChat unavailable: affected chat/staff/PM-evidence/automod paths degrade;
 - Voice unavailable: text moderation may remain while voice enforcement is unavailable;
 - Currency unavailable: economy confiscation is hidden/blocked;
-- Market unavailable: market moderation confirmation is blocked;
+- Market unavailable: new market mutations are blocked, while `/marketcase status` may read Staff's durable journal;
 - ProtocolLib unavailable/incompatible: dependent vanish/spectator presentation fails conservatively;
 - Polar unsupported/unavailable: Polar automation remains disabled.
 
 See [[Integrations]].
+
+## Market moderation recovery
+
+Do not create a replacement operation ID and do not edit Staff or Market rows directly.
+
+1. Run `/marketcase status <operation-id>` and record the case, target, stall, state,
+   Staff/provider revisions, reviewer, and checksums.
+2. Restore Market API version 1 and MariaDB availability before any mutation.
+3. `PREPARING` may be replayed by the bounded recovery worker.
+4. `PREPARED` requires an explicit choice: approve after human review or release.
+5. `MODERATION_HOLD` can be restored only by Founder authority against the exact held
+   checksum.
+6. `QUARANTINED` preserves ambiguous evidence and locks for investigation. Do not force a
+   terminal state or manually release the fence.
+
+Due-review alerts do not confiscate ownership. Exact retries use the same operation ID;
+changed identity or stale revisions remain conflicts.
 
 ## Migration mismatch
 

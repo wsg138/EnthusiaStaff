@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-08-11 (`America/Indiana/Indianapolis`)
+Last updated: 2026-08-13 (`America/Indiana/Indianapolis`)
 
 This manifest records project orchestration and authority boundaries. It does not authorize deployment, production data, LiteBans cutover, or punishment authority.
 
@@ -10,19 +10,19 @@ This manifest records project orchestration and authority boundaries. It does no
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Setup baseline | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
-| Current `main` | `efcd2275b9825a059f3ff2e1b0974be97f4e1191` (PR #126 merge commit; second parent `446f59f1d260e6ace8bb6b0e842a209638aefdba`) |
+| Current `main` | `49e5aa999b43193181aafabbb75811c820fa03c7` (PR #138 merge commit) |
 | Canonical package registry | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
 | Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
-| Latest completed checkpoints | PR #124 Velocity runtime boundaries, PR #125 website appeal transactions, PR #126 economy recovery and confiscation coordination |
-| Active implementation | `section/plugin`: exact-sanction transaction and link-validation boundaries |
-| Codacy checkpoint | 319 active warnings on PR #126 code head `446f59f1d260e6ace8bb6b0e842a209638aefdba`, down from 334 on its base; merge commit `efcd2275b9825a059f3ff2e1b0974be97f4e1191`; grade is not asserted because the current CLI response does not expose it |
-| Migration boundary | V18; V1-V18 immutable |
+| Latest completed checkpoints | ES-X02 Currency provider correction PR #137 and terminal-state publication PR #138 |
+| Active implementation | ES-X03 on `package/es-x03-market-provider` in Staff and Market; durable Market provider, Staff coordination, review, and merge validation in progress |
+| Codacy checkpoint | Hosted `main` reports 311 active Java warnings; grade is not asserted because the available response does not expose it. ES-X03 local delta analysis has zero PMD, Opengrep, or Trivy findings and no new Lizard findings. |
+| Migration boundary | `main`: V18 immutable; ES-X03 candidate: V19 added, V1-V18 unchanged |
 | Production authority | LiteBans remains authoritative |
 
 ## Repository model
 
-`main` is the complete aggregate workspace. The core EnthusiaStaff plugin remains at the repository root. At setup, metadata-only external component directories live under `components/`; no external source has been imported. An assigned external package may later populate its designated directory as the tracked aggregate copy after verifying the standalone repository, source revision, license/history, exclusions, and reviewability. There are no permanent component branches, generated split branches, or isolated-component PRs.
+`main` is the complete aggregate workspace. The core EnthusiaStaff plugin remains at the repository root. Assigned external packages populate their designated `components/` directory only after verifying the standalone repository, source revision, license/history, exclusions, and reviewability. There are no permanent component branches, generated split branches, or isolated-component PRs.
 
 Internal packages normally use one temporary branch and one PR to `EnthusiaStaff:main`. External packages normally use one temporary branch/PR in the standalone repository and one temporary branch/PR to `EnthusiaStaff:main`; the PRs share a package ID, cross-reference each other, and must reach deterministic parity. Temporary branches are deleted after merge when safe.
 
@@ -38,4 +38,4 @@ Internal packages normally use one temporary branch and one PR to `EnthusiaStaff
 
 ## Boundaries
 
-No setup action changes product Java/Kotlin/SQL, migrations, runtime configuration, workflows, deployment, authority, private data, issue #43, or production systems. Source import and every implementation package remain separate assigned work.
+ES-X03 changes only project source, tests, V19/V025 forward migrations, documentation, and temporary package branches. It does not authorize deployment, production data, credentials, issue #43, LiteBans cutover, or production authority changes.

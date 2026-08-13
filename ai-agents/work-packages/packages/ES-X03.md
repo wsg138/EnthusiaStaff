@@ -70,16 +70,16 @@ Both exact-head PRs merge normally; checks/reviews pass; aggregate parity true; 
 Claimed on 2026-08-13 after live reconciliation. Staff and Market use temporary branch `package/es-x03-market-provider`, based respectively on `49e5aa999b43193181aafabbb75811c820fa03c7` and `bc24f1010642d6042307bc13a32fb33cc94e8883`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x03-market-provider.md`.
 
 ## 24. Last completed checkpoint
-Dependencies, standalone availability, default heads, branch/PR conflicts, repository rules, migration ceilings, and package boundaries were reconciled. Isolated same-ID branches were created from both exact default heads without disturbing unrelated work.
+Market API version 1, V025 provider journal/locks/fences, snapshot/checksum lifecycle, blacklist revisions, acquisition/write fencing, exact restoration, and MariaDB race tests are implemented. Staff V19 intent/recovery journal, typed adapter, coordinator, confirmed command surface, review alerts, provider-outage status, migration tests, and exact aggregate import are implemented. Local scoped Codacy analysis has zero valid ES-X03 findings, and aggregate/standalone parity is exact at hash `761b6e1e6168782b752cca5bffe6ca8b9330694b38f13b9c19d3a82dbecdaf67` before the paired merges.
 
 ## 25. Remaining checklist
-Define and test the provider contract/state machine; implement durable Market operations and acquisition fencing; integrate the Staff journal/coordinator and commands; import the exact standalone tree; document recovery and operator behavior; open cross-linked draft PRs; run all exact-head gates and reviews; merge normally; prove parity; clean temporary branches; publish terminal state.
+Commit the final synchronized documentation/state checkpoint; run both full Java 21 clean builds and all applicable MariaDB Testcontainers tests; inspect runtime packaging; open the two cross-linked PRs; resolve hosted Codacy, CI, and bounded CodeRabbit findings; merge normally; prove post-merge parity and containment; remove both temporary branches; publish terminal state.
 
 ## 26. Known blockers
 No implementation blocker. Representative private destructive/load acceptance remains deferred to `ES-V03`; no production listings or player data are authorized.
 
 ## 27. Final evidence
-Starting bases recorded above. Final heads, PRs, merges, contract version, checks/reviews, parity manifests, and hashes remain pending.
+Starting bases are recorded above. Current standalone head is `daed4d08d96f69f4513431c8bff8b90ada8faa70`; current committed Staff head before final documentation is `1034efc817fb95b9587cff00cd63b5b90e8cd009`. Contract version is 1. Local Market Lizard is 35 versus 36 on its base, with PMD/Opengrep/Trivy at zero. Local Staff package PMD/Opengrep/Trivy are zero; four Lizard findings are unchanged baseline findings in `EnthusiaStaffPaperPlugin` and `MariaDbRuntime`. PR, hosted, merge, post-merge parity, and branch-cleanup evidence remain pending.
 
 ## 28. Merge and synchronization record
 Unset. One-sided merge means `SYNC_PENDING`; completion requires both merges, parity, metadata, containment, and temp branch cleanup.
