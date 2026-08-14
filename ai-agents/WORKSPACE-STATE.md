@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registry, package records, canonical handoffs, and PR verification ledgers.
 
@@ -9,16 +9,18 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Field | Value |
 | --- | --- |
 | Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | `ES-X03 — EnthusiaMarket destructive provider`; claimed after live reconciliation from Staff `49e5aa999b43193181aafabbb75811c820fa03c7` and Market `bc24f1010642d6042307bc13a32fb33cc94e8883`. |
-| Standalone candidate | Market `62408695063d03303026766befb065a0f1f51044`: API v1, V025 durable moderation journal/locks/fences, snapshot/checksum lifecycle, complete replay identity, human-reviewed hold, exact restoration, blacklist revisions, atomic acquisition/blacklist races, analyzer cleanup, and operator documentation. |
-| Aggregate candidate | Staff last pushed head before final synchronization is `085a7d83264d36242cdbf1e90b31d16e83ef47ba`: exact contract mirror, V19 Staff journal, coordinator/recovery/alerts, confirmed `/marketcase` workflow, provider-outage status, and exact Market component import. |
-| Pre-merge parity | Aggregate component and standalone Market candidate are exact with hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b`; no added, missing, or modified files. State remains `SYNC_PENDING` until both PRs merge and parity is repeated. |
-| Local validation | Staff's prior exact-head clean build passed 951 tests with 192 integration tests. Market `6240869` passed the complete clean Java 21 task graph over 120 suites/637 tests; the Windows run skipped five Docker cases and one unrelated remote-auth case, then a clean Docker-enabled Java 21 run executed all five MariaDB cases with zero skips. Final touched Market methods have zero new local analyzer findings; no rule or source path was suppressed. |
-| Hosted validation | Staff Coverage, Wiki, Sentinel, and private Pi staging passed at `085a7d83`; the final aggregate synchronization is not pushed yet. Staff hosted Codacy remains `ACTION_REQUIRED` with 991 newly visible aggregate findings. Staff CodeRabbit skipped at its 545-file limit. Market's prior review findings were addressed or classified, but its incremental rerun was rate-limited and no final approval is claimed. PRs #139 and #3 remain open. |
-| Downstream routing | `ES-X03` is `ACTIVE`; `ES-X04` remains `READY` but is not activated by this worker. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. |
-| Production boundary | Representative destructive/latency/load acceptance remains `ES-V03`; issue #43 remains open/deferred and LiteBans remains authoritative. No production balance, deployment, cutover, or authority change is authorized. |
-| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-13-es-x03-market-provider.md` |
+| Active package | None. `ES-X03 — EnthusiaMarket destructive provider` is parked `BLOCKED` / `PARKED_BLOCKED` after this explicitly assigned continuation worker completed all safe actionable work. |
+| ES-X03 live PRs | Market PR #3 remains open at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; Staff PR #139 remains open at synchronized head `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. Neither implementation PR merged. |
+| Scope reconciliation | Market post-candidate cleanup after reviewed `6240869` was classified rather than trusted. Valid X03 remediation `825fc2c` was retained. Broad unrelated cleanup through former head `556b4b4` was removed with an ordinary forward commit and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`; no force-push/rebase/squash/reset. |
+| Review state | All live Market inline review threads are resolved after current-code verification. Valid late findings were fixed, including stale blacklist snapshot restoration fencing and bounded MariaDB future waits. Staff PR #139 has no live inline review threads. Automated suggestions rejected as technically invalid are documented in the PR/handoff rather than hidden. |
+| Candidate parity | Aggregate Market product bytes match standalone `aa7cf6025bd8634c1106e6457cd49e7baa182f51` under the canonical `COMPONENT-METADATA.md` exclusion. `src/` = `49a69707e465e9befeb6fb16d93ef64c629cb3bb`, `src/main/` = `eafeefa085cd99463e898f445713535c5d4433cf`, and `src/test/` = `2c3d1d612b0a89ca7c9f27758bb928f3c74a7d71` in both copies. The old normalized hash `8d27f4d9...` belongs to obsolete candidate `6240869` and is not reused; final canonical SHA-256 rerun is pending. |
+| Validation blocker | `wsg138/EnthusiaMarket` has zero GitHub Actions runs in repository history and no exact-head ordinary CI evidence for `aa7cf60...`. The connected GitHub worker cannot dispatch a workflow. Older candidate tests/static/artifact evidence remains historical only and cannot validate the changed final head. |
+| Staff hosted state | Fresh Staff exact-head `Validate Wiki` run `31777937947`, `Sentinel Restart Artifact` run `31777937952`, and Coverage/full-build run `31777937958` all completed successfully on `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. This does not complete ES-X03 because the required exact-head ordinary Market validation remains unavailable. |
+| Privacy boundary | No private Enthusia Pi/staging runner config, private runner labels, Staff-Staging reference, private bridge/dispatch, secrets/topology/credentials, artifact-transfer mechanism, or Sentinel infrastructure was added to Market/BadgersMC repositories. Market remains ordinary `ubuntu-latest` CI only. Representative private destructive/load/process-kill acceptance remains `ES-V03`. |
+| Downstream routing | `ES-X03` is parked blocked and does not block unrelated dependency-complete work. `ES-X04 — EnthusiaCommend reputation provider` remains `READY` and is the next sequential eligible package for a fresh worker after live reconciliation. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. This worker does not activate ES-X04. |
+| Production boundary | No production listing, balance, item, private player row, database, deployment, cutover, or authority state was changed. Issue #43 remains open/deferred and LiteBans remains authoritative. |
+| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md` |
 
-## Historical record
+## Unblock condition
 
-PRs #133 and #135 accurately record the previously reviewed `b922c5af...` standalone tree and `a3b6f2f7...` aggregate merge. They remain superseded historical evidence because later review found and repaired two valid fail-closed state-ordering defects. Corrective PRs Currency #14 and Staff #137 are the current completion authority.
+Restore or enable ordinary repository-owned GitHub Actions execution for `wsg138/EnthusiaMarket` (or make an existing repository-owned workflow runnable through connected tooling), validate the exact scoped Market head, apply only valid in-scope repairs, resynchronize Staff if needed, recompute canonical parity, rerun invalidated Staff gates, and only then merge both implementation PRs normally.

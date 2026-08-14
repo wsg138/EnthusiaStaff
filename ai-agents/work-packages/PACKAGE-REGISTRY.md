@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -22,7 +22,9 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 
 The later live Sentinel restart attempts remain explicit non-passing diagnostic history. The canonical ES-P08 contract at package start did not require that independent restart and explicitly deferred representative destructive/load acceptance to `ES-V03`; the worker-added blocker was corrected under `VALIDATION-POLICY.md` without relabeling any failed diagnostic as a pass.
 
-`ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted. `ES-X03` is now `ACTIVE`; `ES-X04` remains `READY`. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
+`ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted.
+
+`ES-X03 — EnthusiaMarket destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Existing Market PR #3 is stabilized at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; existing Staff PR #139 is synchronized at `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. All live Market inline review threads are resolved after current-code verification. Broad post-candidate Market cleanup was removed from X03 with ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`. Aggregate provider bytes match the standalone scoped head under canonical exclusions, but the old normalized `8d27f4d9...` hash belongs only to obsolete candidate `6240869` and is not reused. The hard blocker is exact-head ordinary Market validation: `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in repository history and the connected worker cannot dispatch a workflow. Both implementation PRs remain open and unmerged. `ES-X04` remains `READY`; `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
 
 ## Canonical package index
 
@@ -44,14 +46,25 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| `ES-X03` | EnthusiaMarket destructive provider | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 120 | `ES-P08`, `ES-X02` | Staff PR #139 / last pushed `085a7d83...`; Market PR #3 / `6240869...`; review fixes, exact local builds, Docker/MariaDB tests, Wiki, and parity pass; final Staff sync/hosted gates and paired merges remain; canonical handoff `2026-08-13-es-x03-market-provider.md` |
-| `ES-X04` | EnthusiaCommend reputation provider | `READY` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; eligible after higher-priority routing is reconciled |
+| `ES-X03` | EnthusiaMarket destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | Market PR #3 `aa7cf60...` and Staff PR #139 `fb0afbe...` remain open; scope/review/parity stabilized; exact-head ordinary Market GitHub Actions unavailable because repository Actions history is empty; resume the existing PRs after repository-owned CI becomes runnable |
+| `ES-X04` | EnthusiaCommend reputation provider | `READY` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; next eligible package for a fresh worker after live reconciliation while ES-X03 is parked |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | ES-X03 and ES-X04 remain incomplete; representative destructive/load acceptance lives here |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
 
+## ES-X03 parked record
+
+- Continuation started from Staff `main` `49e5aa999b43193181aafabbb75811c820fa03c7`, Staff PR #139 head `e6ad4cb4bf7d91ecdfaa43b3e278992c919347b2`, Market `main` `bc24f1010642d6042307bc13a32fb33cc94e8883`, and Market PR #3 head `556b4b42e0d730f74c8f5423de4453c6cd8946b4`.
+- Market's 16 commits after reviewed candidate `62408695063d03303026766befb065a0f1f51044` were classified. `825fc2cf5aa4981a8eb6c73c385e1118cb50f618` is retained as valid X03 API/static remediation. Broad complexity/refactor cleanup beginning at `45d6bf8c8ace0af4de41810388365d8f54fa1f94` through former head `556b4b42e0d730f74c8f5423de4453c6cd8946b4` was removed from X03 using ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`.
+- Current scoped Market head is `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; synchronized Staff implementation head is `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. Both implementation PRs remain open and explicitly blocked from merge.
+- Zero valid unresolved live Market review-thread findings remain; Staff #139 has no live inline threads. Late X03 fixes include optimistic operation/revision fencing for stale blacklist snapshot restoration and bounded MariaDB concurrency future waits. Technically invalid suggestions are documented rather than suppressed or blindly implemented.
+- Aggregate provider content matches standalone `aa7cf60...` under the canonical aggregate-only metadata exclusion. Exact shared Git trees are `src/` `49a69707e465e9befeb6fb16d93ef64c629cb3bb`, `src/main/` `eafeefa085cd99463e898f445713535c5d4433cf`, and `src/test/` `2c3d1d612b0a89ca7c9f27758bb928f3c74a7d71`. The prior normalized hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b` is obsolete candidate evidence only; final canonical SHA-256 rerun is pending.
+- Historical Market candidate `6240869` passed the Java 21 11-task graph with 120 suites / 637 tests, and a separate disposable MariaDB 11.8.3 run passed all 5 provider tests. Those results are historical only because the final scoped executable/test tree later changed. Historical standalone static baseline was Lizard 40 repository / 35 production, PMD 0, Trivy 0, and one pre-existing Opengrep action-pin finding; retained `825fc2c` pins the action and removes X03 API analyzer findings without suppressing analyzer rules or hiding first-party paths.
+- Hard blocker: `wsg138/EnthusiaMarket` Actions history currently returns zero runs and there is no exact-head ordinary repository-owned validation for `aa7cf60...`; the connected GitHub worker has no workflow-dispatch capability. Missing validation is not called passing. Unblock by restoring/enabling ordinary Market Actions execution, validating the exact scoped head, applying only valid in-scope repairs, resynchronizing Staff, recomputing canonical parity, rerunning invalidated Staff gates, then merging both implementation PRs normally.
+- No private Enthusia Pi/staging infrastructure was added or referenced in Market or BadgersMC repositories. Representative destructive/load/process-kill acceptance remains `ES-V03`; no production listing/balance/item/player/database/authority/cutover state changed.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
 
 ## ES-X02 terminal record
 
@@ -91,7 +104,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 - Original/pre-merge `main`: `449461b410c0b06d27bfd98a2940023aa0d9913f`.
 - Final frozen implementation head: `7e21edb1d32a75727dc65df826f9de964adcfff3`.
-- Hosted exact-head validation: Validate Wiki run `31450684263` passed; Coverage run `31450684287` attempt 2 / job `93657195445` passed Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo, validation artifact, and Codacy coverage upload. Aggregate coverage was 47.56% lines, 38.74% branches, and 50.23% instructions.
+- Hosted exact-head validation: Validate Wiki run `31450684263` passed; Coverage run `31450684287` attempt 2 / job `93657195445` passed Java 21 full build/tests with MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, Wiki, aggregate JaCoCo, and Codacy upload. Aggregate coverage was 47.56% lines, 38.74% branches, and 50.23% instructions.
 - Hosted validation artifact `9086657350`, digest `sha256:329ed42f108776e19713bac57dc36b47020f74dd78571296fc9a28cfde0be248`.
 - Runtime JARs: Paper SHA-256 `74fbc2f1ac487a4191ccc5d83b6d7c68ba857dd4c2fd8b060c13fff138c0fe33`; Velocity SHA-256 `e3705f7729d3e1e48797635d4c88345aea68e9e3845bce47547c6879ab9920e2`; provider API leaks 0.
 - Exact-head Codacy static check `93654428681` passed with zero findings. Diff coverage was 72.52%; coverage variation +0.43% against the -1.0% target.
@@ -120,4 +133,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-Continue only `ES-X03 — EnthusiaMarket destructive provider`: publish the versioned provider contract, implement durable reservation/restriction/confiscation/restoration, integrate the Staff coordinator, prove both repositories, merge normally, verify parity, and clean up both temporary branches. Do not activate ES-X04 in this worker.
+This ES-X03 worker stops after durable `BLOCKED` publication and does not activate another package. `ES-X03` is `PARKED_BLOCKED` on unavailable exact-head ordinary Market CI. Under the parked-package rule, `ES-X04 — EnthusiaCommend reputation provider` is the next eligible `READY` package for a separate fresh worker after live reconciliation. `ES-X01` remains independently parked blocked. No downstream package was started here.

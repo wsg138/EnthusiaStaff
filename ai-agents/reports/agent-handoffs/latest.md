@@ -2,10 +2,22 @@
 
 Current package: `ES-X03 — EnthusiaMarket destructive provider`.
 
-Status: `ACTIVE`.
+Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-13-es-x03-market-provider.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
 
-Staff starts from `49e5aa999b43193181aafabbb75811c820fa03c7`; Market starts from `bc24f1010642d6042307bc13a32fb33cc94e8883`. Both use `package/es-x03-market-provider`. API v1, Market V025 provider state/fencing/restoration, Staff V19 coordination/recovery/commands, analyzer cleanup, documentation, and exact aggregate import are implemented.
+Existing implementation PRs remain open: Market PR #3 at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51` and Staff PR #139 at synchronized head `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. Neither implementation PR merged.
 
-Current Market head is `62408695063d03303026766befb065a0f1f51044`; the last pushed Staff head before final component synchronization is `085a7d83264d36242cdbf1e90b31d16e83ef47ba`. Pre-merge component parity is exact at hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b`. Market's exact-head clean graph passed 637 tests with six environment skips; a separate clean Docker-enabled run executed all five MariaDB provider tests, leaving only the unrelated remote-auth skip unexecuted. Final touched methods have zero new local analyzer findings. Staff hosted CI and private Pi staging passed at `085a7d83`, while hosted Codacy remains `ACTION_REQUIRED` with 991 newly visible aggregate findings. Market review fixes are pushed, but the incremental CodeRabbit run was rate-limited and no final approval is claimed. PRs #139 and #3 are open. The next action is final Staff synchronization validation, hosted checks, normal merges, post-merge parity, and branch cleanup. No production listings, player rows, credentials, deployment, authority change, or issue #43 cutover work is authorized.
+The post-`6240869` Market delta was reconciled rather than trusted wholesale. Valid ES-X03 analyzer remediation `825fc2cf5aa4981a8eb6c73c385e1118cb50f618` was retained. Broad historical Market complexity/refactor cleanup through former head `556b4b42e0d730f74c8f5423de4453c6cd8946b4` was removed from the ES-X03 candidate using ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`. No force-push, rebase, squash, or destructive reset was used.
+
+All live Market inline review threads are resolved after current-code verification; Staff PR #139 has no live inline threads. Late valid X03 repairs include operation/revision-fenced blacklist snapshot restoration and bounded MariaDB concurrency futures. Suggestions that conflict with the trusted same-JVM provider model or persistence ordering are documented as rejected rather than blindly implemented.
+
+Aggregate Market provider content matches standalone `aa7cf60...` under the canonical aggregate-only metadata exclusion. Exact shared Git trees are `src/` `49a69707e465e9befeb6fb16d93ef64c629cb3bb`, `src/main/` `eafeefa085cd99463e898f445713535c5d4433cf`, and `src/test/` `2c3d1d612b0a89ca7c9f27758bb928f3c74a7d71`. The old normalized hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b` belongs only to obsolete candidate `6240869` and is not current evidence; the final canonical SHA-256 rerun remains pending.
+
+The hard blocker is exact-head ordinary Market validation. `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in repository history and the connected GitHub worker cannot dispatch a workflow, so there is no valid exact-head ordinary build/test/MariaDB/static/security/wiki/artifact result for `aa7cf60...`. Older candidate validation remains historical only and is not relabeled as a pass.
+
+Staff exact-head hosted evidence is green at `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`: `Validate Wiki` run `31777937947`, `Sentinel Restart Artifact` run `31777937952`, and Coverage/full-build run `31777937958` all completed successfully. That Staff-side success cannot substitute for missing exact-head Market validation.
+
+No private Enthusia Pi/staging infrastructure was added or referenced in Market or any BadgersMC repository. Representative destructive/load/process-kill acceptance remains assigned to `ES-V03`, and no production data, deployment, cutover, or authority changed.
+
+Unblock by restoring/enabling ordinary repository-owned GitHub Actions execution for Market, validating the exact scoped head, applying only valid in-scope repairs, resynchronizing Staff if executable content changes, recomputing canonical parity, rerunning invalidated Staff gates, and then merging both implementation PRs with normal merge commits. This worker stops on ES-X03. `ES-X04` remains `READY` for a separate fresh worker after live reconciliation; it was not started here.
