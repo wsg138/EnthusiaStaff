@@ -6,18 +6,18 @@ Status: `BLOCKED` / `PARKED_BLOCKED`.
 
 Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
 
-Existing implementation PRs remain open: Market PR #3 at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51` and Staff PR #139 at synchronized head `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. Neither implementation PR merged.
+Frozen implementation PRs remain open and unmerged:
+- Market PR #3: `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`.
+- Staff PR #139: `5b003225b305db76b47db7d75cf5b6a2943934df`.
 
-The post-`6240869` Market delta was reconciled rather than trusted wholesale. Valid ES-X03 analyzer remediation `825fc2cf5aa4981a8eb6c73c385e1118cb50f618` was retained. Broad historical Market complexity/refactor cleanup through former head `556b4b42e0d730f74c8f5423de4453c6cd8946b4` was removed from the ES-X03 candidate using ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`. No force-push, rebase, squash, or destructive reset was used.
+Market exact-head repository CI is now restored and green: Wiki `31852806668`, build `31852806638`, Detekt, security, actual PR-head checkout, Java 21, pinned dependency verification, current RoseChat compilation, Market tests/shadowJar/JaCoCo, final CodeRabbit status, and zero valid inline threads all pass on `addb0f53...`.
 
-All live Market inline review threads are resolved after current-code verification; Staff PR #139 has no live inline threads. Late valid X03 repairs include operation/revision-fenced blacklist snapshot restoration and bounded MariaDB concurrency futures. Suggestions that conflict with the trusted same-JVM provider model or persistence ordering are documented as rejected rather than blindly implemented.
+Staff exact-head hosted validation is also green on `5b003225...`: Wiki `31852845661`, Coverage/full build `31852845645`, Sentinel Restart Artifact `31852845696`, runtime artifact/provider-leak inspection, and zero live inline threads.
 
-Aggregate Market provider content matches standalone `aa7cf60...` under the canonical aggregate-only metadata exclusion. Exact shared Git trees are `src/` `49a69707e465e9befeb6fb16d93ef64c629cb3bb`, `src/main/` `eafeefa085cd99463e898f445713535c5d4433cf`, and `src/test/` `2c3d1d612b0a89ca7c9f27758bb928f3c74a7d71`. The old normalized hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b` belongs only to obsolete candidate `6240869` and is not current evidence; the final canonical SHA-256 rerun remains pending.
+The hard blocker is required owner-controlled runtime readiness. Canonical Pi staging `31852844656` reached the exact verified Staff artifact and executed Paper but timed out before the first readiness marker within the configured 240-second window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 stack trace or migration failure before timeout. Independent Sentinel restart job `174` on the same SHA also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT`. Because Paper executed, neither failure qualifies for a zero-execution infrastructure exception and neither is called a pass.
 
-The hard blocker is exact-head ordinary Market validation. `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in repository history and the connected GitHub worker cannot dispatch a workflow, so there is no valid exact-head ordinary build/test/MariaDB/static/security/wiki/artifact result for `aa7cf60...`. Older candidate validation remains historical only and is not relabeled as a pass.
+Resume only after live evidence shows the validation host's cooling/runtime capacity materially improved. Rerun the exact frozen Staff runtime gates, then—only if both pass—recheck both PRs, merge both normally, compute canonical post-merge parity with `tools/component-sync/component_sync.py`, publish terminal state, and clean safely contained temporary branches.
 
-Staff exact-head hosted evidence is green at `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`: `Validate Wiki` run `31777937947`, `Sentinel Restart Artifact` run `31777937952`, and Coverage/full-build run `31777937958` all completed successfully. That Staff-side success cannot substitute for missing exact-head Market validation.
+No private staging implementation or credentials were added to Market/BadgersMC, no production authority/data changed, LiteBans remains authoritative, and representative destructive/load/process-kill acceptance remains ES-V03.
 
-No private Enthusia Pi/staging infrastructure was added or referenced in Market or any BadgersMC repository. Representative destructive/load/process-kill acceptance remains assigned to `ES-V03`, and no production data, deployment, cutover, or authority changed.
-
-Unblock by restoring/enabling ordinary repository-owned GitHub Actions execution for Market, validating the exact scoped head, applying only valid in-scope repairs, resynchronizing Staff if executable content changes, recomputing canonical parity, rerunning invalidated Staff gates, and then merging both implementation PRs with normal merge commits. This worker stops on ES-X03. `ES-X04` remains `READY` for a separate fresh worker after live reconciliation; it was not started here.
+`ES-X04` remains `READY` for a separate future worker under normal routing; it was not started here.

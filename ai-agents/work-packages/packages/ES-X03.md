@@ -4,95 +4,82 @@
 `ES-X03`; External/multi-repository; primary `COMP-STAFF`; other `COMP-MARKET`; priority 120; conditional parallelism only without shared destructive-state overlap.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED`. Implementation and review are stabilized on the existing paired PRs, but exact-head ordinary repository-owned GitHub Actions validation is unavailable in `wsg138/EnthusiaMarket`. Registry is authoritative.
+`BLOCKED` / `PARKED_BLOCKED`. Implementation, standalone exact-head CI, hosted Staff validation, and review are stabilized on the existing paired PRs. The remaining blocker is owner-controlled runtime readiness: both required exact-head Staff runtime gates timed out starting Paper on a thermally/resource-constrained host. Registry remains the canonical status index.
 
 ## 3. Objective
 Implement durable market restriction, reservation, confiscation, rollback, and exact restoration across EnthusiaStaff and EnthusiaMarket.
 
-## 4. Why the package exists
-The audit found only read-only/reflection integration and no transactional market operation or recovery path.
-
-## 5. Included audit IDs
-`AUD-ASSET-003` and market portions of `AUD-ASSET-005`.
-
-## 6. Included behavior
+## 4. Included behavior
 Supported versioned provider contract; listing/reservation ownership; durable snapshots/operation IDs; restriction/confiscation; idempotent rollback/restoration; retry/restart/race handling; provider missing/version mismatch; matching aggregate copy and parity.
 
-## 7. Explicit exclusions
+## 5. Explicit exclusions
 Production listings; whole-market rollback; currency/reputation work; unverified reflection against provider internals; representative destructive/load/process-kill acceptance assigned to `ES-V03`.
 
-## 8. Dependencies
+## 6. Dependencies
 `ES-P08` and `ES-X02` are `COMPLETE`.
 
-## 9. Component and repository boundaries
-EnthusiaStaff integration/root plus `components/enthusia-market/`, and `wsg138/EnthusiaMarket`; no unrelated components, permanent branches, or isolated PR. The external Market repository may use only its ordinary repository-owned/public CI. Enthusia private staging/Pi infrastructure must remain outside Market and BadgersMC repositories.
+## 7. Repository and privacy boundaries
+Use only existing Market PR #3 and Staff PR #139 on `package/es-x03-market-provider`. Market may use only ordinary public repository CI. No private Pi/staging runner config, labels, private bridge/dispatch implementation, staging secrets/topology/credentials, private artifact-transfer mechanism, or Sentinel infrastructure may enter Market or BadgersMC repositories. Preserve `preserve/es-x03-post-candidate-556b4b4-20260814` while it contains unique unrelated work.
 
-## 10. Required branches
-Existing `package/es-x03-market-provider` remains open in both repos until verified paired merges. Market preservation branch `preserve/es-x03-post-candidate-556b4b4-20260814` retains unrelated post-candidate cleanup history and must not be deleted while unique work remains only there.
+## 8. Frozen implementation heads
+- Market `main`: `bc24f1010642d6042307bc13a32fb33cc94e8883`.
+- Market PR #3: `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`.
+- Staff `main`: `0d82b0840ae837d4d923a2407b6e8a4190e4e448`.
+- Staff PR #139: `5b003225b305db76b47db7d75cf5b6a2943934df`.
+- Neither implementation PR merged.
 
-## 11. Required PRs
-Existing paired PRs only: Market PR `wsg138/EnthusiaMarket#3` and Staff PR `wsg138/EnthusiaStaff#139`. Both remain open and unmerged. No third product PR was created.
+The branch history retains valid X03 remediation while broad unrelated Market cleanup remains preserved separately. No force-push, rebase, squash, or destructive reset was used.
 
-## 12. Implementation checkpoint
-Continuation started from Staff `main` `49e5aa999b43193181aafabbb75811c820fa03c7`, Staff PR head `e6ad4cb4bf7d91ecdfaa43b3e278992c919347b2`, Market `main` `bc24f1010642d6042307bc13a32fb33cc94e8883`, and Market PR head `556b4b42e0d730f74c8f5423de4453c6cd8946b4`.
+## 9. Final implementation/review fixes
+- Stale blacklist restoration remains operation/revision fenced and replay-safe.
+- Bounded MariaDB concurrency waits remain in place.
+- `restoreBlacklist` was decomposed without suppressing Detekt after exact-head `ThrowsCount` feedback.
+- Market CI now consumes BadgersMC LumaGuilds `v2.1.24`, verifies asset SHA-256 `54ad645587f2ce895738eff3ee05123eb19e5687d80fa6d657aa3092031004c2`, compiles current RoseChat, bounds the download, and validates Market normally.
+- Market build/detekt/security/Wiki workflows explicitly check out the PR head instead of GitHub's synthetic merge ref.
+- Zero valid unresolved Market or Staff inline review threads remain. Market final CodeRabbit status is green. Staff's >500-file aggregate diff cannot receive a full CodeRabbit review and no approval is claimed for one that did not execute.
 
-The 16 Market commits after reviewed candidate `62408695063d03303026766befb065a0f1f51044` were classified. `825fc2cf5aa4981a8eb6c73c385e1118cb50f618` is retained as valid ES-X03 API/static remediation. Broad historical Market complexity/refactor cleanup beginning at `45d6bf8c8ace0af4de41810388365d8f54fa1f94` through `556b4b42e0d730f74c8f5423de4453c6cd8946b4` is outside X03 scope, was removed from the candidate using an ordinary forward commit, and is preserved intact on the preservation branch. No force-push, rebase, squash, or destructive reset was used.
+## 10. Current synchronization evidence
+Standalone and aggregate use identical blobs for the final touched Market files:
+- `MarketRestrictionJournal.kt`: `83758cff61c998b8d56907b706a8339bddc78721`.
+- `.github/workflows/build.yml`: `563ed55bb6f4496f2392f7bd82656922b6338c0a`.
+- `.github/workflows/wiki-checks.yml`: `424b57cad79bee95f07cbde4546baed2fdda6453`.
 
-Current scoped Market head is `aa7cf6025bd8634c1106e6457cd49e7baa182f51`. Current synchronized Staff implementation head is `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`.
+`COMPONENT-METADATA.md` records Market `addb0f53...`, `SYNC_PENDING`, and `PENDING_FINAL_CANONICAL_HASH`. The old normalized hash `8d27f4d9...` belongs only to obsolete candidate `6240869` and is not current evidence. Final canonical comparator execution remains a post-merge requirement.
 
-## 13. Acceptance criteria
-No listing/item loss or double action during concurrent sale/reservation/confiscation, timeout, crash, retry, or restoration; ownership/audit exact; provider absence safe; both PRs merged and parity true.
+## 11. Exact-head Market validation
+Market `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`:
+- Wiki Checks `31852806668`: `success`.
+- build `31852806638`: `success`.
+- build job `94931681707`: actual PR-head checkout proven; Java 21; pinned dependency digest verified; current RoseChat `shadowJar` passed; Market `test shadowJar jacocoTestReport` passed.
+- detekt `94932532843`: `success`.
+- security `94932532864`: `success`.
 
-## 14. Test requirements
-Both repos' suites plus listing/reservation races, partial failure/rollback, restart/retry, stale restore, provider absent/version mismatch, authorization/audit, and bounded query/work tests. Final exact-head Market execution is currently blocked by unavailable ordinary Actions; older candidate tests are historical evidence only.
+Historical startup failures, pre-fix Detekt failure, upstream dependency failures, and merge-ref-only runs remain non-passing/superseded history.
 
-## 15. Static-analysis requirements
-All configured checks/review bots in both repos; zero valid unresolved findings. Standalone Market baseline at `6240869` was Lizard 40 repository / 35 production, PMD 0, Trivy 0, and one pre-existing unpinned Codacy action finding. Retained `825fc2c` pins that action and removes X03 API analyzer findings. Historical aggregate-import Market debt is not relabeled clean or used to justify a general refactor.
+## 12. Exact-head Staff hosted validation
+Staff `5b003225b305db76b47db7d75cf5b6a2943934df`:
+- Validate Wiki `31852845661`: `success`.
+- Coverage/full build `31852845645`: `success`; Java 21.0.12; 49-task build; aggregate JaCoCo lines 49.45%, branches 39.99%, instructions 51.96%; Paper and Velocity runtime creation and provider-leak inspection passed.
+- Sentinel Restart Artifact `31852845696`: `success`.
+- zero live inline review threads.
 
-## 16. Documentation requirements
-Contract/version, operation states, permissions, recovery/restoration, provider setup/failure, component metadata, package handoff, cross-links. Current PRs and component metadata document the blocker and parity state.
+## 13. Required runtime blocker
+Canonical Pi staging `31852844656` reached the verified exact Staff artifact and executed Paper. The first server start did not reach the trusted readiness marker within the repository-configured 240-second readiness window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 stack trace or migration failure before the timeout. No storage-ready cycle completed.
 
-## 17. Security and privacy requirements
-Financial-grade authorization/audit; no production listings/player rows; fail closed; bounded/redacted evidence. No private Pi/staging runner configuration, labels, Staff-Staging identifiers, bridge/dispatch, private staging secrets/topology/credentials, artifact-transfer mechanisms, or private Sentinel infrastructure were added to Market or BadgersMC repositories.
+The independent Sentinel restart for the same exact Staff SHA, job `174`, also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT` after passing its thermal prerequisite. This corroborates the current host-readiness problem.
 
-## 18. Migration impact
-Market V001–V024 remain immutable; ES-X03 owns V025 only. Staff V1–V18 remain immutable; ES-X03 owns V19 only. No Flyway repair or historical migration rewrite. The pre-existing Market V001 MariaDB clean-install indexed-`TEXT` limitation remains visible and separate; V024→V025 is the applicable upgrade boundary.
+Because a runner was allocated and Paper executed, the owner-approved zero-execution infrastructure exception does not apply. These failures are not passes and are not waived. Extending the trusted readiness timeout solely to make the package pass is prohibited.
 
-## 19. Bedrock considerations
-Staff controls need text fallback; item/listing identity must be platform-neutral; representative acceptance remains later work.
+## 14. Migration impact
+Market V001–V024 remain immutable; ES-X03 owns V025 only. Staff V1–V18 remain immutable; ES-X03 owns V19 only. No Flyway repair or historical migration rewrite occurred.
 
-## 20. Distributed-runtime considerations
-Multiple processes, listing ownership, concurrent purchases, duplicate requests, reconnect, process death, and DB latency. Current provider code uses durable moderation/player fences, full immutable replay identity, optimistic revisions/checksums, bounded snapshot/list/executor work, and explicit shutdown/timeout conflict handling.
+## 15. Completion definition
+Both paired PRs must merge normally only after every required gate is green. After both merges, run `tools/component-sync/component_sync.py`, require exact aggregate/standalone parity, record the canonical SHA-256 and resulting default heads, update component/package state to terminal, and clean only safely contained temporary branches. Representative destructive/load/process-kill acceptance remains `ES-V03`.
 
-## 21. External-provider considerations
-The provider is a Bukkit service for trusted installed same-JVM plugins. EnthusiaStaff authenticates/authorizes the human operator before calling it; Market independently validates operation identity, target, stall, case, checksum, revision, and durable state transition. A caller-supplied token inside the same JVM is not treated as a sandbox boundary.
+## 16. Resume / unblock condition
+`BLOCKED` / `PARKED_BLOCKED`. Do not create replacement product PRs and do not start another ES-X03 branch.
 
-## 22. Completion definition
-Both exact-head PRs must merge normally only after required checks/reviews pass; aggregate parity must be recomputed with `tools/component-sync/component_sync.py`; metadata/evidence must be terminal; temporary branches may be cleaned only after containment. Private destructive acceptance remains `ES-V03`.
+Resume only after live evidence shows the owner-controlled validation host's cooling/runtime capacity materially improved. Rerun the exact frozen Staff runtime gates at the unchanged head. If either still fails, diagnose the new runtime evidence; do not relabel it. If both pass, recheck both PR heads/default heads/mergeability/review state and proceed through the paired normal-merge/parity/finalization sequence.
 
-## 23. Resume state
-`BLOCKED` / `PARKED_BLOCKED`. Resume the existing PRs only after ordinary repository-owned GitHub Actions execution becomes available for `wsg138/EnthusiaMarket`. Do not create replacement product PRs or begin another ES-X03 branch.
-
-## 24. Last completed checkpoint
-Post-candidate scope was reconciled and preserved; all live Market inline review threads are resolved after current-code verification; valid late findings were fixed, including stale blacklist snapshot restoration fencing and bounded MariaDB concurrency waits; aggregate provider bytes are synchronized to Market `aa7cf6025bd8634c1106e6457cd49e7baa182f51` under canonical exclusions.
-
-Current parity evidence: `src/` tree `49a69707e465e9befeb6fb16d93ef64c629cb3bb`, `src/main/` `eafeefa085cd99463e898f445713535c5d4433cf`, and `src/test/` `2c3d1d612b0a89ca7c9f27758bb928f3c74a7d71` are identical in standalone and aggregate. All other product blobs/subtrees match; `gradlew` bytes match and its aggregate mode difference is intentionally ignored by the canonical content comparator. The old normalized hash `8d27f4d9c64ca52feecd1df6200a45314610fa0df4b27da9d39b444152007c3b` belongs only to obsolete candidate `6240869` and is not current evidence.
-
-## 25. Remaining checklist
-1. Restore/enable ordinary Market GitHub Actions execution or expose an existing repository-owned workflow through connected tooling.
-2. Freeze the exact resulting Market head and run required Java 21 build/test, disposable Docker/MariaDB provider tests, detekt/static/security, Wiki/docs, and runtime-artifact inspection.
-3. Apply only valid in-scope findings; if executable content changes, resynchronize Staff and invalidate/re-run affected gates.
-4. Recompute final canonical aggregate/standalone SHA-256 parity.
-5. Finish/re-run all required exact-head Staff hosted/static/runtime/review/Sentinel gates. Private Pi staging is not substituted for missing Market CI; representative destructive runtime acceptance remains ES-V03.
-6. Merge both implementation PRs with normal merge commits in the live-policy order, verify parents/containment/default heads, prove post-merge parity, update component metadata to `IN_SYNC`, publish terminal canonical state, then clean only safely contained temporary branches.
-
-## 26. Known blockers
-Hard blocker: `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in its repository history, including no run for exact head `aa7cf6025bd8634c1106e6457cd49e7baa182f51`. The connected GitHub worker cannot dispatch a workflow, and the current repository-owned build workflow has no manual dispatch trigger. Missing exact-head ordinary Market validation cannot be called passing.
-
-## 27. Current evidence
-Historical reviewed candidate `6240869`: Java 21 clean Market graph 11 tasks; 120 suites / 637 tests, zero failures/errors; separate disposable MariaDB 11.8.3 provider run all 5 tests passed; runtime JAR 4,138,102 bytes SHA-256 `ba821a7fdc509f2a94ba155d911351c04ab540c15f8da21e5f1c31dd333f9d6f`. These results are not reused as final-head validation after later executable/test changes.
-
-Historical Staff provider-integrated evidence: 39-task Java 21 graph; 222 suites / 951 tests; 50 integration suites / 192 tests with no skips/failures; Paper SHA-256 `e275fd6912dd8b282d65ea735a72eb4f258a8e4e7ed5b9224abe44cb5be35d15`; Velocity SHA-256 `85fee16bbdaf4eb8916f1a64506dd4dcd3b3b195a383ab1adb5d7c3c632affac`; provider API leakage 0. Fresh Staff exact-head hosted runs are recorded on PR #139 and remain secondary to the Market hard blocker.
-
-## 28. Merge and synchronization record
-No ES-X03 implementation merge occurred. Market `main` remains `bc24f1010642d6042307bc13a32fb33cc94e8883`; Staff implementation base remains `49e5aa999b43193181aafabbb75811c820fa03c7`. Both implementation PRs stay open. One-sided merge is forbidden while blocked. Current aggregate product content matches standalone candidate `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; final canonical hash/post-merge parity remain pending.
+## 17. Production boundary
+No production listing, balance, item, private player row, database, deployment, cutover, or authority state changed. LiteBans remains authoritative and issue #43 remains deferred.
