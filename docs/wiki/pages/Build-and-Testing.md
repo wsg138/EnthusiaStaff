@@ -88,7 +88,10 @@ Persistence changes should exercise the applicable combination of:
 - duplicate/out-of-order delivery;
 - concurrent runtimes where the workflow can contend.
 
-Current merged `main` includes Flyway migrations through `V17__website_appeal_workflow.sql`. V1-V17 are immutable history; new schema work adds a new forward migration.
+The ES-X03 candidate includes Flyway migrations through
+`V19__market_compliance_journal.sql`. V1–V19 are immutable once applied; new schema work
+adds a forward migration. Before ES-X03 merges, the default branch remains at its earlier
+recorded migration ceiling.
 
 Do not use Flyway repair or migration-history edits merely to make a changed historical migration pass.
 

@@ -7,6 +7,8 @@ dependencies {
     implementation(project(":persistence"))
     implementation(project(":protocol"))
     compileOnly(project(":integration-contracts"))
+    testImplementation(project(":integration-contracts"))
+    testRuntimeOnly(files(rootProject.project(":integration-contracts").layout.buildDirectory.dir("classes/java/main")))
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")

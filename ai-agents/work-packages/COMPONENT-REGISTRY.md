@@ -1,6 +1,6 @@
 # Component registry
 
-Last verified: 2026-08-05 through the connected `wsg138` GitHub account.
+Last verified: 2026-08-14 through the connected `wsg138` GitHub account.
 
 | Component ID | Component | Aggregate location | Standalone repository | Default branch | Verified setup head | Sync state | Purpose/notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -8,7 +8,7 @@ Last verified: 2026-08-05 through the connected `wsg138` GitHub account.
 | `COMP-SITE` | enthusia-site | `components/enthusia-site/` | `wsg138/enthusia-site` | `main` | `9408166c75def0b55caa8d38fb546c6e77ea1f7d` | `NOT_IMPORTED` | Website UX, authentication, punishment pages, appeals, and staff web interface. |
 | `COMP-ROSECHAT` | Enthusia-RoseChat | `components/enthusia-rosechat/` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `BLOCKED_UNRESOLVED_REPOSITORY` | Supported communication provider, staff chat, private-message evidence, and presence integration. |
 | `COMP-CURRENCY` | EnthusiaCurrency | `components/enthusia-currency/` | `wsg138/EnthusiaCurrency` | `main` | `9696501a01cc11f6e5220c5297a6f34b64204e61` | `NOT_IMPORTED` | Transactional currency removal and restoration provider. |
-| `COMP-MARKET` | EnthusiaMarket | `components/enthusia-market/` | `wsg138/EnthusiaMarket` | `main` | `bc24f1010642d6042307bc13a32fb33cc94e8883` | `NOT_IMPORTED` | Market restriction, reservation, confiscation, rollback, and restoration provider. |
+| `COMP-MARKET` | EnthusiaMarket | `components/enthusia-market/` | `wsg138/EnthusiaMarket` | `main` | `bc24f1010642d6042307bc13a32fb33cc94e8883` | `SYNC_PENDING` | ES-X03 aggregate product content is synchronized to standalone `aa7cf6025bd8634c1106e6457cd49e7baa182f51`. Git-object byte identity confirms current parity under the canonical `COMPONENT-METADATA.md` exclusion; the obsolete `8d27f4d9...` normalized hash belongs only to candidate `6240869` and is not reused. A final canonical hash rerun and paired normal merges remain blocked on exact-head ordinary Market CI. |
 | `COMP-COMMEND` | EnthusiaCommend | `components/enthusia-commend/` | `wsg138/EnthusiaCommend` | `main` | `2083061b8aeaa7fb3adaf89746f91a45e3a03e59` | `NOT_IMPORTED` | Exact reputation mutation and restoration provider. |
 
 ## Rules

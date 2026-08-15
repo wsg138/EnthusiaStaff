@@ -92,6 +92,22 @@ teleport requires `enthusiastaff.stafftools.teleport`; follow/spectate requires
 `enthusiastaff.stafftools.menu`. See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
 for target filters, cooldowns, stale-tool rejection and Bedrock behavior.
 
+### Market case coordination
+
+| Command | Purpose | Primary permission |
+| --- | --- | --- |
+| `/marketcase prepare <player\|uuid> <case-id> <stall-id> CONFIRM` | Prepare and reserve a target-owned stall for human review | `enthusiastaff.market.restrict` |
+| `/marketcase approve <operation-id> CONFIRM` | Place the exact prepared snapshot into a reviewed hold | `enthusiastaff.market.restrict` |
+| `/marketcase release <operation-id> CONFIRM` | Cancel a preparation without removing ownership | `enthusiastaff.market.restrict` |
+| `/marketcase restore <operation-id> CONFIRM` | Founder-only exact restoration of a held operation | `enthusiastaff.market.restore` plus Founder service authority |
+| `/marketcase blacklist <player\|uuid> <case-id> <permanent\|ISO-8601> CONFIRM` | Apply a case-linked acquisition blacklist | `enthusiastaff.market.restrict` |
+| `/marketcase unblacklist <player\|uuid> <case-id> <expected-revision> CONFIRM` | Remove a blacklist at the expected provider revision | `enthusiastaff.market.restrict` |
+| `/marketcase status <operation-id>` | Read the durable Staff journal, including during provider outage | `enthusiastaff.market.restrict` |
+
+Every mutation requires the literal uppercase `CONFIRM`. The service rechecks actor rank,
+case target, operational mode, storage, and provider availability after Bukkit's early
+permission check. A review deadline never invokes `approve` automatically.
+
 ## Velocity commands
 
 The proxy currently registers:
@@ -204,6 +220,7 @@ enthusiastaff.confiscate.economy
 enthusiastaff.confiscate.items
 enthusiastaff.case.restoreitems
 enthusiastaff.market.restrict
+enthusiastaff.market.restore
 enthusiastaff.reputation.restrict
 enthusiastaff.owner.recovery
 ```

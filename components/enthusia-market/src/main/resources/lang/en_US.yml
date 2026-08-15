@@ -1,0 +1,594 @@
+# EnthusiaMarket — en_US locale.
+#
+# All values are MiniMessage strings. See https://docs.advntr.dev/minimessage/format.html
+# Placeholders use <name> syntax and are populated at call site, e.g. <stall>, <count>.
+#
+# Bedrock/Cumulus paths render these to legacy §-codes via LegacyComponentSerializer.
+
+prefix: "<gradient:#FF7272:#FFC976><shadow:#000000:1>[Mar</shadow></gradient><#FFC976><shadow:#000000:1>ket]</shadow></#FFC976> "
+
+common:
+  unknown_player: "<shadow:#000000:1>Unknown</shadow>"
+
+admin:
+  import:
+    result: "<prefix><shadow:#000000:1>import: created=<green><created></green> skipped=<yellow><skipped></yellow> provisioned=<green><provisioned></green> <gray>(world=<world>, prefix=<region_prefix>)</shadow>"
+  rent:
+    resync:
+      result: "<prefix><shadow:#000000:1>rent resync: <green><count></green> <gray>stall(s) updated to the current default rent terms</shadow>"
+  reload:
+    success: "<prefix><shadow:#000000:1>config reloaded <gray>(world=<world>, prefix=<region_prefix>)</shadow>"
+    failure: "<prefix><shadow:#000000:1><red>reload failed: <reason></shadow>"
+  list:
+    line: "<shadow:#000000:1>  <aqua><id></aqua> <gray>[<state>]</gray> region=<world>:<region></shadow>"
+  rg_resync:
+    result: "<prefix><shadow:#000000:1>WG resync: fixed=<green><fixed></green> skipped=<yellow><skipped></yellow> errors=<red><errors></shadow>"
+  auction:
+    start:
+      success: "<prefix><shadow:#000000:1><green>Auction created:</green> <gray>for stall</gray> <stall> <gray>starting at</gray> <gold><starting_bid></shadow>"
+      failure: "<prefix><shadow:#000000:1><red>Failed to create auction: <reason></shadow>"
+      not_found: "<prefix><shadow:#000000:1><red>Stall not found</shadow>"
+    cancel:
+      success: "<prefix><shadow:#000000:1><green>Auction cancelled:</green> <stall></shadow>"
+      failure: "<prefix><shadow:#000000:1><red>Failed to cancel auction: <reason></shadow>"
+      not_found: "<prefix><shadow:#000000:1><red>Auction not found</shadow>"
+    startall:
+      result: "<prefix><shadow:#000000:1><green>mass auction:</green> created=<green><created></green> skipped=<yellow><skipped></yellow> errors=<red><errors></red></shadow>"
+      failure: "<prefix><shadow:#000000:1><red>mass auction failed: <reason></shadow>"
+    cancelall:
+      done: "<prefix><shadow:#000000:1><green><count> auction(s) cancelled.</green> Current high bidders refunded.</shadow>"
+    extend:
+      success: "<prefix><shadow:#000000:1><green>Auction extended:</green> <id> <gray>on stall</gray> <stall> <gray>now ends at</gray> <white><end_at></shadow>"
+      failure: "<prefix><shadow:#000000:1><red>Failed to extend auction: <reason></shadow>"
+      not_found: "<prefix><shadow:#000000:1><red>Auction not found</shadow>"
+    clear:
+      done: "<prefix><shadow:#000000:1><green>Cleared stale bid data</green> <gray>for</gray> <aqua><stall></aqua><gray>:</gray> <white><count></white> <gray>auction(s) cleaned</gray></shadow>"
+  bid:
+    success: "<prefix><shadow:#000000:1><green>Bid placed:</green> <gold><amount></gold> <gray>on</gray> <stall></shadow>"
+    failure: "<prefix><shadow:#000000:1><red>Bid rejected: <reason></shadow>"
+    not_found: "<prefix><shadow:#000000:1><red>Auction not found</shadow>"
+  evict:
+    success: "<prefix><shadow:#000000:1><green>Evicted</green> <aqua><stall></aqua> <green>— reset to unowned and WG cleared.</shadow>"
+    not_found: "<prefix><shadow:#000000:1><red>Stall not found:</red> <stall></shadow>"
+    not_owned: "<prefix><shadow:#000000:1><yellow>Stall</yellow> <aqua><stall></aqua> <yellow>is not currently owned.</shadow>"
+  limit:
+    header: "<shadow:#000000:1><gold>Your stall limits</shadow>"
+    total: "<shadow:#000000:1><gray>Total: <white><used></white> / <yellow><cap></shadow>"
+    kind: "<shadow:#000000:1><gray>  <white><kind></white>: <white><used></white> / <yellow><cap></shadow>"
+    unlimited: "<shadow:#000000:1><green>∞</shadow>"
+  refreshsigns:
+    result: "<prefix><shadow:#000000:1>Sign refresh: fixed=<green><fixed></green> skipped=<yellow><skipped></yellow> errors=<red><errors></red></shadow>"
+
+# REQ-250..253 — physical purchase signs. Four lines max per Bukkit sign.
+# Render templates are state-driven by PurchaseSignRenderer.
+purchase_sign:
+  buyable:
+    line1: "<dark_gray><shadow:#000000:1>[<gold>EM</gold>]</shadow>"
+    line2: "<shadow:#000000:1><aqua><stall></shadow>"
+    line3: "<shadow:#000000:1><gold><price></shadow>"
+    line4: "<shadow:#000000:1><green>Click to buy</shadow>"
+  auction:
+    line1: "<dark_gray><shadow:#000000:1>[<gold>EM</gold>]</shadow>"
+    line2: "<shadow:#000000:1><aqua><stall></shadow>"
+    line3: "<shadow:#000000:1><yellow>Bid: <bid></shadow>"
+    line4: "<shadow:#000000:1><gray>/em bid</shadow>"
+  emergency_auction:
+    line1: "<dark_gray><shadow:#000000:1>[<dark_red>EM</dark_red>]</shadow>"
+    line2: "<shadow:#000000:1><red><stall></shadow>"
+    line3: "<shadow:#000000:1><gold>Bid: <bid></shadow>"
+    line4: "<shadow:#000000:1><red>Emergency!</red></shadow>"
+  owned:
+    line1: "<shadow:#000000:1><dark_gray>[<gold>EM</gold>] <aqua><stall></shadow>"
+    line2: "<shadow:#000000:1><yellow><owner></shadow>"
+    line3: "<shadow:#000000:1><gray>$<rent>/day</shadow>"
+    line4: "<shadow:#000000:1><green><time></shadow>"
+    overdue: "<shadow:#000000:1><red>Overdue</shadow>"
+  grace:
+    line1: "<shadow:#000000:1><dark_gray>[<dark_red>EM</dark_red>] <aqua><stall></shadow>"
+    line2: "<shadow:#000000:1><yellow><owner></shadow>"
+    line3: "<shadow:#000000:1><red>Expires in…</shadow>"
+    line4: "<shadow:#000000:1><gold><time></shadow>"
+  moderation_hold:
+    line1: "<shadow:#000000:1><dark_red>[Staff Review]</dark_red></shadow>"
+    line2: "<shadow:#000000:1><aqua><stall></aqua></shadow>"
+    line3: "<shadow:#000000:1><red>Unavailable</red></shadow>"
+    line4: "<shadow:#000000:1><gray>Contact staff</gray></shadow>"
+  missing:
+    line1: "<shadow:#000000:1><dark_gray>[<gold>EM</gold>]</shadow>"
+    line2: "<shadow:#000000:1><red>?<stall></shadow>"
+  msg:
+    created: "<prefix><shadow:#000000:1><green>Sign linked to</green> <aqua><stall></aqua> <gray>for</gray> <gold><price></shadow>"
+    invalid_stall: "<prefix><shadow:#000000:1><red>Unknown stall:</red> <stall></shadow>"
+    invalid_price: "<prefix><shadow:#000000:1><red>Sign line 3 must be a positive whole number; got:</red> <price></shadow>"
+    no_permission: "<prefix><shadow:#000000:1><red>You don't have permission to create purchase signs</shadow>"
+    already_exists: "<prefix><shadow:#000000:1><red>A purchase sign already exists at this location — break it first to re-link</shadow>"
+    purchased: "<prefix><shadow:#000000:1><green>Purchased</green> <aqua><stall></aqua> <gray>for</gray> <gold><price></shadow>"
+    purchased_guild: "<prefix><shadow:#000000:1><green>Purchased</green> <aqua><stall></aqua> <gray>for your guild — you paid</gray> <gold><price></shadow>"
+    not_in_guild: "<prefix><shadow:#000000:1><red>You are not in a guild — cannot buy for guild</shadow>"
+    no_guild_permission: "<prefix><shadow:#000000:1><red>You do not have MANAGE_SHOPS in your guild</shadow>"
+    stall_missing: "<prefix><shadow:#000000:1><red>Stall not found:</red> <stall></shadow>"
+    auction_live: "<prefix><shadow:#000000:1><yellow>Auction is live on</yellow> <aqua><stall></aqua> <gray>— use /em bid</shadow>"
+    moderation_hold: "<prefix><shadow:#000000:1><yellow>This stall is unavailable during staff review.</yellow></shadow>"
+    emergency_auction_alert: "<prefix><shadow:#000000:1><dark_red>EMERGENCY AUCTION:</dark_red> <red><stall></red> <gray>rent overdue — starting bid <gold><bid></gold>. Use <click:run_command:'/em bid'><aqua>/em bid</aqua></click> to participate!</shadow>"
+    already_owned: "<prefix><shadow:#000000:1><gray>This stall is already owned</shadow>"
+    buy_no_permission: "<prefix><shadow:#000000:1><red>You do not have permission to buy stalls (enthusiamarket.stall.buyout)</shadow>"
+    rejected: "<prefix><shadow:#000000:1><red>Purchase rejected: <reason></shadow>"
+    broken: "<prefix><shadow:#000000:1><yellow>Purchase sign removed from</yellow> <aqua><stall></shadow>"
+    confirm_extend: "<prefix><shadow:#000000:1><yellow>Right-click again within <seconds>s to extend rent on</yellow> <aqua><stall></shadow>"
+    method_title: "Buy <aqua><stall></aqua> — <gold><price>"
+    method_personal: "<green>Buy for yourself"
+    method_personal_lore: "<gray>Own this stall as a personal plot"
+    method_guild: "<gold>Buy for your guild"
+    method_guild_lore: "<gray>Own this stall as a guild stall"
+    method_guild_buyer: "<gray>Guild: <gold><guild_name>"
+    confirm_title: "Confirm purchase"
+    confirm_personal: "<green>Buy <aqua><stall></aqua> <gray>for</gray> <gold><price></gold> <gray>(personal)"
+    confirm_guild: "<gold>Buy <aqua><stall></aqua> <gray>for your guild</gray> <gold><price>"
+    confirm_yes: "<green>Confirm purchase"
+    confirm_no: "<red>Cancel"
+    extended: "<prefix><shadow:#000000:1><green>Rent extended on</green> <aqua><stall></aqua> <gray>(paid <gold><amount><gray>)</shadow>"
+    not_owner: "<prefix><shadow:#000000:1><red>You do not own</red> <aqua><stall></shadow>"
+
+stall:
+  members:
+    added: "<prefix><shadow:#000000:1><green>Added</green> <player> <gray>as a member of</gray> <aqua><stall></shadow>"
+    removed: "<prefix><shadow:#000000:1><yellow>Removed</yellow> <player> <gray>from</gray> <aqua><stall></shadow>"
+    list_header: "<prefix><shadow:#000000:1><gray>Members of</gray> <aqua><stall></aqua> <gray>(</gray><count><gray>):</shadow>"
+    list_entry: "<shadow:#000000:1>  <white>- <player></shadow>"
+    list_empty: "<prefix><shadow:#000000:1><gray>No members on</gray> <aqua><stall></shadow>"
+    not_found: "<prefix><shadow:#000000:1><red>Stall not found:</red> <stall></shadow>"
+    not_authorised: "<prefix><shadow:#000000:1><red>You do not have permission to manage</red> <stall></shadow>"
+    rejected: "<prefix><shadow:#000000:1><red>Cannot add member: <reason></shadow>"
+    unknown_player: "<prefix><shadow:#000000:1><red>Unknown player:</red> <player></shadow>"
+
+  setkind:
+    ok: "<shadow:#000000:1><green>Stall <stall> kind set to <kind></shadow>"
+    missing: "<shadow:#000000:1><red>No stall named <stall></shadow>"
+  entitylimit:
+    ok: "<shadow:#000000:1><green>Stall <stall>: <type> extra allowance set to <extra></shadow>"
+    missing: "<shadow:#000000:1><red>No stall named <stall></shadow>"
+  recount:
+    ok: "<shadow:#000000:1><green>Stall <stall> entity count rescanned (<total> entities)</shadow>"
+    missing: "<shadow:#000000:1><red>No stall named <stall></shadow>"
+  info:
+    card: |
+      <gold>━━━ Stall <stall> ━━━
+      <gray>Kind: <white><kind>  <gray>State: <white><state>
+      <gray>Owner: <white><owner>  <gray>Members: <white><members>
+      <gray>Rent: <white><rent>  <gray>Next: <white><next>
+      <gray>Size: <white><width>x<height>x<length>
+      <gray>Available: <white><available>
+    missing: "<shadow:#000000:1><red>No stall named <stall></shadow>"
+  outline:
+    ok: "<shadow:#000000:1><green>Outlining stall <stall> for <seconds>s</shadow>"
+    missing: "<shadow:#000000:1><red>No stall named <stall></shadow>"
+    no_region: "<shadow:#000000:1><red>Stall <stall> has no WorldGuard region</shadow>"
+    player_only: "<shadow:#000000:1><red>Only players can request an outline</shadow>"
+
+sellback:
+  warn:
+    header: "<prefix><shadow:#000000:1><yellow>Sellback quote for</yellow> <aqua><stall></aqua><yellow>: refund <gold><refund></gold> (<periods> period(s) prepaid, current period excluded). Confirm within <seconds>s.</shadow>"
+    wipe: "<shadow:#000000:1><gray>This will delete <yellow><shops></yellow> shop(s) bound to the stall.</shadow>"
+    belongings: "<shadow:#000000:1><red>Any items or chests inside the region will stay where they are — you are responsible for removing them BEFORE selling back. They are not refunded.</shadow>"
+    schematic: "<shadow:#000000:1><gray>Schematic restore is pending TDD-270 — region geometry will NOT be reverted yet.</shadow>"
+    confirm: "<shadow:#000000:1><aqua>Run /em sellback confirm <stall></aqua> <gray>to proceed.</shadow>"
+  success: "<prefix><shadow:#000000:1><green>Stall</green> <aqua><stall></aqua> <green>released. Refunded</green> <gold><refund></gold> <green>and wiped</green> <yellow><shops></yellow> <green>shop(s).</shadow>"
+  stall_not_found: "<prefix><shadow:#000000:1><red>Stall not found:</red> <stall></shadow>"
+  not_owned: "<prefix><shadow:#000000:1><red>Stall is not currently owned:</red> <stall></shadow>"
+  not_authorised: "<prefix><shadow:#000000:1><red>You do not own or have authority over</red> <aqua><stall></shadow>"
+  no_pending: "<prefix><shadow:#000000:1><gray>No pending sellback for</gray> <aqua><stall></aqua> <gray>— run /em sellback <stall> first.</shadow>"
+  rejected: "<prefix><shadow:#000000:1><red>Sellback failed: <reason></shadow>"
+
+offer:
+  created: "<prefix><shadow:#000000:1><green>Offer listed:</green> <aqua><stall></aqua> <gray>for</gray> <gold><price></shadow>"
+  cancelled: "<prefix><shadow:#000000:1><yellow>Offer cancelled on</yellow> <aqua><stall></shadow>"
+  purchased: "<prefix><shadow:#000000:1><green>Purchased</green> <aqua><stall></aqua> <gray>for</gray> <gold><total></gold> <gray>(price <price> + tax <tax>)</shadow>"
+  not_found: "<prefix><shadow:#000000:1><red>No open offer on</red> <aqua><stall></shadow>"
+  stall_not_found: "<prefix><shadow:#000000:1><red>Stall not found:</red> <stall></shadow>"
+  not_authorised: "<prefix><shadow:#000000:1><red>You do not have permission to manage</red> <stall></shadow>"
+  auction_open: "<prefix><shadow:#000000:1><red>This stall has an open auction; close it first.</shadow>"
+  rejected: "<prefix><shadow:#000000:1><red>Offer rejected: <reason></shadow>"
+
+command:
+  players_only: "<prefix><shadow:#000000:1><red>This command must be run by a player</shadow>"
+
+shop:
+  trade:
+    success: "<prefix><shadow:#000000:1><green><message></shadow>"
+    failure: "<prefix><shadow:#000000:1><red><reason></shadow>"
+    partial_failure: "<prefix><shadow:#000000:1><gold><completed> of <total> trades completed. <red>Last: <reason></shadow>"
+    partial_compensation: "<prefix><shadow:#000000:1><gold><completed> of <total> trades completed. <red>Last failed: <error></shadow>"
+    compensation_failed: "<prefix><shadow:#000000:1><red>Trade failed: <error></shadow>"
+    compensation_note: "<shadow:#000000:1><gray>  Compensation: <compensation></shadow>"
+    multiplier_capped: "<prefix><shadow:#000000:1><yellow>Stock changed while menu was open — buying <available> instead of <asked></shadow>"
+  create:
+    already_shop: "<shadow:#000000:1><red>This sign is already a shop</shadow>"
+    needs_container: "<shadow:#000000:1><red>Sign must be attached to a container (chest, barrel, shulker)</shadow>"
+    not_in_stall: "<shadow:#000000:1><red>Sign must be inside a registered stall</shadow>"
+    no_authority: "<shadow:#000000:1><red>You do not own or rent this stall</shadow>"
+    guild_unavailable: "<shadow:#000000:1><red>LumaGuilds integration is not available</shadow>"
+    success: "<shadow:#000000:1><green>Shop created!</shadow>"
+    sign_failed: "<shadow:#000000:1><red>Failed to write sign text — the sign may have been destroyed.</shadow>"
+    invalid_input: "<shadow:#000000:1><red>Invalid amount or price — both must be positive whole numbers</shadow>"
+    no_permission: "<shadow:#000000:1><red>You do not have permission to create shops (enthusiamarket.shop.create)</shadow>"
+    needs_wallsign: "<shadow:#000000:1><red>Shop signs must be wall-mounted on the side of a container</shadow>"
+    empty_container: "<shadow:#000000:1><red>Container is empty — place items inside before creating a shop</shadow>"
+    no_held_item: "<shadow:#000000:1><red>Hold the item you want to trade in your main hand before placing the sign</shadow>"
+    no_guild_trade: "<shadow:#000000:1><red>Guild-owned stalls can't host [TRADE] shops.</shadow>"
+    invalid_trade_cost: "<shadow:#000000:1><red>Line 3 must be '<amount> <item>', e.g. '16 diamond'.</shadow>"
+  help:
+    unknown_topic: "<shadow:#000000:1><red>Unknown topic '<topic>'. Run /em help to see available topics.</shadow>"
+    line1: "<shadow:#000000:1><gold>━━ Shop Tutorial ━━</shadow>"
+    line2: "<shadow:#000000:1><gray>1. Place a wall sign on a container (chest, barrel, etc.) inside your stall.</shadow>"
+    line3: "<shadow:#000000:1><gray>2. A configuration menu will open — choose BUY, SELL, or TRADE.</shadow>"
+    line4: "<shadow:#000000:1><gray>3. Set the amount per trade and the price (or cost item for TRADE).</shadow>"
+    line5: "<shadow:#000000:1><gray>4. Confirm to create the shop. Use /shop edit to manage your shops.</shadow>"
+  edit:
+    not_owner: "<shadow:#000000:1><red>You don't own this shop</shadow>"
+    frozen: "<shadow:#000000:1><red>Shop frozen</shadow>"
+    unfrozen: "<shadow:#000000:1><green>Shop unfrozen</shadow>"
+    updated: "<shadow:#000000:1><green>Shop updated</shadow>"
+    saved: "<shadow:#000000:1><green>Shop updated.</shadow>"
+  protect:
+    use_edit_menu: "<prefix><shadow:#000000:1>Use the edit menu to delete this shop (coming in TDD-57)</shadow>"
+    cannot_break_sign: "<shadow:#000000:1><red>You cannot break this shop sign</shadow>"
+    sign_broken_deleted: "<prefix><shadow:#000000:1>Sign broken — this shop has been deleted.</shadow>"
+    container_has_shops: "<shadow:#000000:1><red>This container has active shops. Only the owner can break it.</shadow>"
+    deleted: "<shadow:#000000:1><green>Deleted <count> shop(s) linked to this container</shadow>"
+    delete_error: "<shadow:#000000:1><red>An error occurred while deleting shops. Please contact an admin.</shadow>"
+  trust:
+    open_chat_prompt: "<shadow:#000000:1><yellow>Type the name of the player to trust in chat</shadow>"
+    removed: "<shadow:#000000:1><green>Removed trusted player</shadow>"
+  cmd:
+    players_only: "<shadow:#000000:1><red>Players only.</shadow>"
+    none_owned: "<shadow:#000000:1><gray>You own no shops.</shadow>"
+    list_header: "<shadow:#000000:1><gold>Your shops (<count>)</shadow>"
+    list_line: "<shadow:#000000:1><gray>- <white><world> <x>,<y>,<z> <dark_gray>| <green><sell_amt>x <sell> <gray>for <gold><cost></shadow>"
+    unknown_player: "<shadow:#000000:1><red>Unknown player: <name></shadow>"
+    trusted_all: "<shadow:#000000:1><green>Trusted <white><name> <green>on all your shops (<count>).</shadow>"
+    untrusted_all: "<shadow:#000000:1><yellow>Untrusted <white><name> <yellow>on all your shops (<count>).</shadow>"
+    deleted_all: "<shadow:#000000:1><yellow>Deleted <count> shop(s).</shadow>"
+    breakdelete_on: "<shadow:#000000:1><green>Break-delete mode enabled for <minutes> minute(s).</shadow>"
+    breakdelete_off: "<shadow:#000000:1><yellow>Break-delete mode disabled.</shadow>"
+    search:
+      usage: "<shadow:#000000:1><gray>Usage: /shop search <item> [sell|buy|any] [page]</shadow>"
+      unknown_item: "<shadow:#000000:1><red>Unknown item: <query></shadow>"
+      buy_unavailable: "<shadow:#000000:1><yellow>Searching by what a shop buys isn't available yet (item trading coming later).</shadow>"
+      none: "<shadow:#000000:1><gray>No searchable shops sell <white><query></white>.</shadow>"
+      header: "<shadow:#000000:1><gold>Shops selling <white><query></white> (page <page>/<pages>)</shadow>"
+      line: "<shadow:#000000:1><gray>- <white><world> <x>,<y>,<z> <dark_gray>| <green><sell_amt>x <gray>for <gold><cost> <dark_gray>| <aqua><trades> in stock <dark_gray>| <yellow><owner></shadow>"
+    no_permission: "<shadow:#000000:1><red>You don't have permission for that.</shadow>"
+  notify:
+    sold: "<prefix><shadow:#000000:1><green>Sale: <white><qty>x <item></white> for <gold><price></gold> <gray>to</gray> <yellow><buyer></shadow>"
+    away_summary: "<prefix><shadow:#000000:1><gold>While you were away, your shops made <white><count></white> sale(s). <gray>Use /shop history.</shadow>"
+  info:
+    line1: "<shadow:#000000:1><gold>━━ Shop <gray>(<dir>) ━━</shadow>"
+    line2: "<shadow:#000000:1><gray>Item: <white><qty>x <item></shadow>"
+    line3: "<shadow:#000000:1><gray>Price: <gold><price></shadow>"
+    line4: "<shadow:#000000:1><gray>Owner: <yellow><owner></yellow>  <dark_gray>|  <gray>Stock: <aqua><stock></shadow>"
+  history:
+    header: "<shadow:#000000:1><gold>Your shop history <gray>(page <page>)</shadow>"
+    sold: "<shadow:#000000:1><gray>- <white><when></white> <dark_gray>| <green>sold <qty>x <item></green> <dark_gray>for <gold><price></gold> <dark_gray>to <yellow><buyer></shadow>"
+    bought: "<shadow:#000000:1><gray>- <white><when></white> <dark_gray>| <green>bought <qty>x <item></green> <dark_gray>for <gold><price></gold> <dark_gray>from <yellow><seller></shadow>"
+    more: "<shadow:#000000:1><gray>More → <click:run_command:'/shop history <page>'><aqua>/shop history <page></aqua></click></shadow>"
+    empty: "<shadow:#000000:1><gray>No transactions yet.</shadow>"
+  admin:
+    no_target: "<shadow:#000000:1><red>You're not looking at a shop sign or container.</shadow>"
+    contents:
+      unavailable: "<shadow:#000000:1><yellow>Can't read that shop's container — its chunk isn't loaded or the block is gone.</shadow>"
+    info:
+      header: "<shadow:#000000:1><gold>━━ Shop owned by <yellow><owner></yellow> ━━</shadow>"
+      where: "<shadow:#000000:1><gray>Sign <white><world> <x>,<y>,<z></white>  <dark_gray>|  <gray>Chest <white><cworld> <cx>,<cy>,<cz></shadow>"
+      trade: "<shadow:#000000:1><gray>Mode <white><dir></white>  <dark_gray>|  <green><sell_amt>x <sell></green>  <dark_gray>|  <gold><cost></shadow>"
+      flags: "<shadow:#000000:1><gray>Trusted <white><trusted></white>  <dark_gray>|  <gray>Frozen <white><frozen></white>  <dark_gray>|  <gray>Searchable <white><searchable></shadow>"
+    remove:
+      done: "<shadow:#000000:1><green>Shop removed.</shadow>"
+      not_found: "<shadow:#000000:1><red>That shop no longer exists.</shadow>"
+    fix:
+      done: "<shadow:#000000:1><green>Sign re-rendered; container OK.</shadow>"
+      container_missing: "<shadow:#000000:1><yellow>Sign re-rendered, but the linked container is gone — use /shop admin remove.</shadow>"
+      not_a_sign: "<shadow:#000000:1><red>The stored sign block isn't a sign anymore — use /shop admin remove.</shadow>"
+    fixall:
+      result: "<prefix><shadow:#000000:1>Sign fixall: fixed=<green><fixed></green> skipped=<yellow><skipped></yellow> errors=<red><errors></red></shadow>"
+    breakothers:
+      enabled: "<shadow:#000000:1><green>Break-others mode ON for <gold><minutes></gold> minute(s). Break any shop sign to delete it.</shadow>"
+      disabled: "<shadow:#000000:1><gray>Break-others mode disabled.</shadow>"
+      deleted: "<shadow:#000000:1><green>Admin-broke and deleted that shop.</shadow>"
+  delete:
+    done: "<shadow:#000000:1><yellow>Shop deleted.</shadow>"
+  store:
+    url: "<shadow:#000000:1><green>Our web store: <aqua><click:open_url:'<url>'><url></click></shadow>"
+
+gui:
+  common:
+    prev: "<gray>« Previous</gray>"
+    next: "<gray>Next »</gray>"
+    back: "<gray>« Back</gray>"
+  guildpolicy:
+    title: "<dark_red>Guild Trade Policy</dark_red>"
+    add: "<green>+ Add a guild</green>"
+    invalid: "<red><reason></red>"
+    denied: "<red>You no longer have the MANAGE_SHOPS guild permission.</red>"
+    icon_tariff: "<gold><target></gold> <yellow>— tariff <red><rate>%</red></yellow>"
+    icon_embargo: "<gold><target></gold> <red>— EMBARGOED</red>"
+    icon_controls: "<gray>L +5% · R -5% · Shift-L embargo · Shift-R remove</gray>"
+  guildpicker:
+    title: "<dark_aqua>Pick a guild to target</dark_aqua>"
+    entry: "<yellow><name></yellow>"
+    invalid: "<red><reason></red>"
+  shop:
+    title: "<dark_gray>Shop"
+    arrow_name: "<gray>→"
+    # Create menu
+    create:
+      title: "<dark_gray>Create Shop"
+      dir_sell: "<green>Sell<sel>"
+      dir_buy: "<gold>Buy<sel>"
+      dir_trade: "<light_purple>Trade<sel>"
+      price: "<green>Price: <gold><price>"
+      amount: "<green>Amount: <gold><amount>"
+      btn_plus1: "<green>+1 → <val>"
+      btn_plus5: "<green>+5 → <val>"
+      btn_plus10: "<green>+10 → <val>"
+      btn_minus10: "<red><val> ← -10"
+      btn_minus5: "<red><val> ← -5"
+      btn_minus1: "<red><val> ← -1"
+      cost_item_set: "<light_purple>Cost item (click to change)"
+      cost_item_lore: "<gray>Click this slot while holding an item on your cursor"
+      cost_item_empty: "<gray>Drop cost item here"
+      cost_item_empty_lore: "<gray>Pick up an item then click this slot to set it as the trade cost"
+      cost_amount: "<green>Cost: <gold><amount>"
+      confirm: "<green>Confirm & create shop"
+      cancel: "<red>Cancel"
+      custom_price: "<gold>Custom Price <gray>(click to type)"
+      custom_price_prompt: "<prefix><shadow:#000000:1><yellow>Type the price in chat, or type <red>cancel</red>.</shadow>"
+      custom_price_timeout: "<prefix><shadow:#000000:1><gray>Custom price prompt timed out after 60 seconds.</shadow>"
+      custom_price_cancelled: "<prefix><shadow:#000000:1><gray>Custom price cancelled.</shadow>"
+      custom_price_invalid: "<prefix><shadow:#000000:1><red>Invalid price — must be a positive number. Try again or type <red>cancel</red>.</shadow>"
+    # Purchase menu — trade interaction
+    receive_label: "<green>YOU RECEIVE"
+    give_label: "<red>YOU GIVE"
+    receive_sell: "<green><amount>x <item>"
+    receive_currency: "<gold><cost> currency"
+    receive_currency_lore: "<gray>Deposited to your balance"
+    give_currency: "<gold><cost> currency"
+    give_currency_lore: "<gray>Withdrawn from your balance"
+    give_item: "<red>Your <amount>x <item>"
+    give_trade_item: "<red>Your <amount>x <item>"
+    give_trade_item_lore: "<gray>You must have <amount>x in your inventory"
+    trade_place_item: "<red>Place <amount>x <item> here"
+    trade_place_lore: "<gray>Drop <amount>x <item> into this slot"
+    trade_place_lore2: "<gray>Item will be sent to the shop owner"
+    trade_drop_hint: "<yellow>▼ Drop item below ▼"
+    confirm_buy: "<green>BUY"
+    confirm_sell: "<yellow>SELL"
+    confirm_trade: "<light_purple>TRADE"
+    confirm_lore: "<gray>Click to complete <direction> transaction"
+    confirm_ready: "<green>Ready to purchase"
+    confirm_unaffordable: "<red>You cannot afford this quantity"
+    purchase_status: "<gold>Purchase Summary <gray>(<trades> trades)"
+    purchase_stock: "<gray>Stall stock: <aqua><trades> trades"
+    purchase_affordable: "<gray>You can afford: <green><trades> trades"
+    purchase_receive: "<gray>You receive: <green><amount> items"
+    purchase_pay: "<gray>You pay: <gold><amount>"
+    bulk_button: "<gold>Choose Purchase Amount"
+    bulk_button_lore: "<gray>Current amount: <white><trades> trades"
+    bulk_title: "<dark_gray>Choose Purchase Amount"
+    bulk_status: "<gold>Bulk Purchase Status"
+    bulk_stock: "<gray>Stall stock: <aqua><trades> trades"
+    bulk_affordable: "<gray>You can afford: <green><trades> trades"
+    bulk_receive: "<gray>You receive: <green><amount> items"
+    bulk_pay: "<gray>You pay: <gold><amount>"
+    bulk_quantity: "<green>Purchase <trades> trades"
+    bulk_max: "<green>Purchase Maximum <white>(<trades>)"
+    bulk_custom: "<aqua>Custom Amount"
+    bulk_custom_lore: "<gray>Click, then type a number in chat"
+    bulk_prompt: "<prefix><yellow>Type the number of trades to purchase, or type <red>cancel</red>.</yellow>"
+    bulk_invalid: "<prefix><red>Enter a whole number from 1 to 10,000, or type <yellow>cancel</yellow>.</red>"
+    bulk_cancelled: "<prefix><gray>Bulk purchase cancelled.</gray>"
+    bulk_back: "<gray>Back to Purchase"
+    close: "<red>Close"
+    chat_reminder_buy: "<prefix><shadow:#000000:1><green>YOU are BUYING <amount>x <item> <gray>from <yellow><owner></shadow>"
+    chat_reminder_sell: "<prefix><shadow:#000000:1><yellow>YOU are SELLING <amount>x <item> <gray>to <yellow><owner></shadow>"
+    chat_reminder_trade: "<prefix><shadow:#000000:1><light_purple>TRADE: <gray>exchange <amount>x <item> <gray>with <yellow><owner></shadow>"
+    sell_lore_stock: "<gray>Stock: <aqua><stock> trades</aqua>"
+    sell_lore_owner: "<gray>Owner: <yellow><owner></yellow>"
+    search:
+      title: "<dark_gray>Shops selling <query>"
+      in_stock: "<green>In Stock</green> <dark_gray>—</dark_gray> <white><item>"
+      out_of_stock: "<red>Out of Stock</red> <dark_gray>—</dark_gray> <white><item>"
+      location_heading: "<gold>Shop Location"
+      coordinates: "<gray>Coordinates: <white><x>, <y>, <z>"
+      owner: "<gray>Owner: <yellow><owner>"
+      stall: "<gray>Stall: <aqua><stall>"
+      price: "<gray>Price: <gold><cost></gold> <gray>for <green><amount>x"
+      stock: "<gray>Stock: <aqua><stock> trades"
+      direction: "<gray>Shop type: <direction>"
+      contains: "<gray>Container match: <light_purple><item>"
+      click_location: "<yellow>Click to send the location in chat"
+      click_teleport: "<yellow>Click to teleport to this shop"
+      unknown: "Unknown"
+      unlimited: "Unlimited"
+      clicked: "<shadow:#000000:1><gray>Shop at <white><world> <x> <y> <z> <gray>— pasted to chat.</shadow>"
+      teleported: "<shadow:#000000:1><green>Teleported to shop at <white><world> <x> <y> <z></white>.</shadow>"
+      prev: "<yellow><- Previous page"
+      next: "<yellow>Next page ->"
+      page: "<white>Page <page>/<pages> <gray>(<count> shops)"
+      close: "<red>Close"
+      sort_name: "<gold>Sort Results"
+      sort_selected: "<gray>Current: <white><sort>"
+      sort_click: "<yellow>Click to change sorting"
+      sort_price_low: "Price: Low to High"
+      sort_price_high: "Price: High to Low"
+      sort_stock_high: "Stock: High to Low"
+      stock_filter_name: "<gold>Out-of-Stock Shops"
+      stock_filter_on: "<green>Shown"
+      stock_filter_off: "<gray>Hidden by default"
+      stock_filter_click: "<yellow>Click to toggle"
+      ticker_name: "<green>Market Price</green>"
+      ticker_lore_avg: "<gray>Avg: <gold><avg></gold> <gray>(<count> trades)</gray>"
+      ticker_lore_listing: "<gray>Avg listing: <gold><avg></gold> <gray>(<count> shops)</gray>"
+      ticker_lore_up: "<gray><label>: <green>▲ <change>%</green>"
+      ticker_lore_down: "<gray><label>: <red>▼ <change>%</red>"
+      ticker_lore_flat: "<gray><label>: <white>—</white>"
+      ticker_lore_no_change: "<gray><label>: <dark_gray>no data</dark_gray>"
+      ticker_lore_no_data: "<gray>No price history yet</gray>"
+    owned:
+      title: "<dark_gray>Your shops (click to edit)"
+      icon: "<green><sell_amt>x <gray>for <gold><cost> <dark_gray>| <white><world> <x>,<y>,<z>"
+      dir_lore: "<gray>Direction: <white><direction>"
+      stock_lore: "<gray>Stock: <aqua><trades> trades</aqua>"
+      frozen_lore: "<gray>Status: <frozen>"
+      status_frozen: "<red>Frozen"
+      status_active: "<green>Active"
+    edit:
+      title: "<dark_gray>Edit shop"
+      direction: "<gray>Direction: <white><direction>"
+      stock: "<gray>Stock: <aqua><stock> trades</aqua>"
+      stock_unknown: "<gray>Stock: <dark_gray>unknown (item changed)</dark_gray>"
+      sell_up: "<green>Sell +1 (<amount>)"
+      sell_amount: "<green>Sell amount: <amount>"
+      sell_down: "<red>Sell -1 (<amount>)"
+      cost_up: "<green>Cost +10 (<cost>)"
+      cost: "<gold>Cost: <cost>"
+      cost_down: "<red>Cost -10 (<cost>)"
+      hopper_in: "<gray>Hopper in: <state>"
+      hopper_out: "<gray>Hopper out: <state>"
+      freeze: "<gray>Freeze: <state>"
+      search: "<green>Searchable: <gold><state>"
+      cost_item: "<gray>Cost item (click: set from hand)"
+      cost_amount_up: "<green>+1 cost (<amount>)"
+      cost_amount_down: "<red>-1 cost (<amount>)"
+      save: "<green>Save"
+      delete: "<red>Delete"
+    trust:
+      title: "<dark_gray>Trust <name> on…"
+      icon: "<white><world> <x>,<y>,<z> <gray>(<sel>)"
+      confirm: "<green>Confirm"
+    delete:
+      title: "<dark_red>Delete shops"
+      icon: "<white><world> <x>,<y>,<z> <gray>(click to arm)"
+      icon_armed: "<red>Click again to DELETE <white><world> <x>,<y>,<z>"
+  vault:
+    title: "<dark_gray>Your barter vault"
+    amount_lore: "<gray>Stored: <aqua><amount>"
+    withdrew: "<green>Withdrew <white><amount>x <item></white>."
+    full: "<yellow>Inventory full — <white><left></white> left in the vault."
+    empty: "<gray>Your barter vault is empty."
+    redeem_all_name: "<green>Redeem All"
+    redeem_all_lore: "<gray>Click to withdraw everything"
+    redeem_all_partial: "<yellow>Inventory full — some items remain in your vault. Clear space and try again."
+  vault_admin:
+    title: "<dark_gray><name>'s barter vault"
+    amount_lore: "<gray>Stored: <aqua><amount>"
+  shop_contents:
+    title: "<dark_gray>Shop container contents"
+  shulker_preview:
+    title: "<dark_gray>Shulker Box Preview"
+    name: "<gold>Preview contents"
+    lore: "<gray>Click to view what's inside this shulker box"
+  edit:
+    title: "<dark_gray>Edit Shop"
+    frozen_name: "<red>SHOP FROZEN"
+    frozen_lore_blocked: "<gray>Trades are currently BLOCKED"
+    frozen_lore_click_unfreeze: "<yellow>Click to unfreeze"
+    active_name: "<green>SHOP ACTIVE"
+    active_lore_allowed: "<gray>Trades are currently allowed"
+    active_lore_click_freeze: "<yellow>Click to freeze"
+    hopper_in_on: "<green>Hopper In: ON"
+    hopper_in_on_lore_1: "<gray>Hoppers can insert items"
+    hopper_in_on_lore_2: "<yellow>Click to disable"
+    hopper_in_off: "<red>Hopper In: OFF"
+    hopper_in_off_lore_1: "<gray>Hoppers cannot insert items"
+    hopper_in_off_lore_2: "<yellow>Click to enable"
+    hopper_out_on: "<green>Hopper Out: ON"
+    hopper_out_on_lore_1: "<gray>Hoppers can extract items"
+    hopper_out_on_lore_2: "<yellow>Click to disable"
+    hopper_out_off: "<red>Hopper Out: OFF"
+    hopper_out_off_lore_1: "<gray>Hoppers cannot extract items"
+    hopper_out_off_lore_2: "<yellow>Click to enable"
+    manage_trusted: "<yellow>Manage Trusted Players"
+    manage_trusted_lore_count: "<gray>Currently trusted: <count>"
+    manage_trusted_lore_click: "<yellow>Click to open"
+  trust:
+    title: "<dark_gray>Manage Trusted Players"
+    member_name: "<yellow><name>"
+    member_lore_uuid: "<gray>UUID: <uuid>"
+    member_lore_remove: "<red>Left-click to remove"
+    add_name: "<green>ADD TRUSTED PLAYER"
+    add_lore: "<gray>Type a player name in chat to add"
+  auctions:
+    title: "<dark_gray>Auctions"
+    prev: "<yellow>← Previous Page"
+    next: "<yellow>Next Page →"
+    sort_name: "<aqua>Sort:</aqua> <white><mode>"
+    sort_lore_click: "<gray>Click to cycle sort modes"
+    page_indicator: "<gray>Page <white><current></white> / <white><total>"
+    page_lore_count: "<gray><count> open auction(s)"
+    close: "<red>Close"
+    entry_name: "<green><stall>"
+    entry_lore_region: "<gray>Region: <white><world>:<region>"
+    entry_lore_current_with_bidder: "<gray>Current bid: <gold><amount></gold> <gray>(<yellow><bidder><gray>)"
+    entry_lore_current_no_bids: "<gray>Current bid: <gold><amount></gold> <gray>(<dark_gray>no bids<gray>)"
+    entry_lore_starting: "<gray>Starting bid: <white><amount>"
+    entry_lore_time_left: "<gray>Time left: <white><time>"
+    entry_lore_id: "<dark_gray><id>"
+    entry_lore_click: "<green>Click to bid"
+    sort_highest_bid: "Highest Bid"
+    sort_lowest_bid: "Lowest Bid"
+    sort_ending_soon: "Ending Soon"
+    sort_ending_latest: "Ending Latest"
+    sort_stall_name: "Stall Number"
+    time_ended: "ended"
+  auction_bid:
+    title: "<dark_gray>Bid on <stall>"
+    summary: "<green><stall>"
+    current: "<gray>Current bid: <gold><amount>"
+    amount: "<gold>Bid <amount>"
+    close: "<red>Close"
+    no_permission: "<red>You do not have permission to bid in auctions."
+    custom: "<gold>Custom amount..."
+    custom_prompt: "<prefix><shadow:#000000:1><yellow>Type your bid amount in chat for</yellow> <aqua><stall></shadow>"
+    custom_invalid: "<prefix><shadow:#000000:1><red>Invalid bid amount: <input> — must be a positive whole number</shadow>"
+    custom_timeout: "<prefix><shadow:#000000:1><gray>Bid prompt for</gray> <aqua><stall></aqua> <gray>expired — open the menu again to bid.</shadow>"
+
+auction:
+  outbid: "<prefix><shadow:#000000:1><yellow>You have been outbid on</yellow> <aqua><stall></aqua><yellow>! New bid: <gold><amount></gold> <gray>by</gray> <white><bidder></shadow>"
+  won: "<prefix><shadow:#000000:1><green>You won the auction for</green> <aqua><stall></aqua><green>!</green> <gray>Final bid: <gold><amount></shadow>"
+  lost: "<prefix><shadow:#000000:1><gray>Auction for</gray> <aqua><stall></aqua> <gray>ended. You did not win.</shadow>"
+  no_bids: "<prefix><shadow:#000000:1><gray>Auction for</gray> <aqua><stall></aqua> <gray>ended with no bids.</shadow>"
+  ending_soon: "<prefix><shadow:#000000:1><yellow>Auction for</yellow> <aqua><stall></aqua> <yellow>ends in <time>!</yellow> <gray>Current: <gold><amount></shadow>"
+
+bedrock:
+  unavailable: "<red>Bedrock forms are not available on this server"
+  menu_error: "<red>Unable to open menu. Please try again or use the Java interface."
+  purchase:
+    title: "Shop"
+    content: "Item: <amount>x\nPrice: <price> each\nOwner: <owner>\nStatus: <status>"
+    status_frozen: "<red>Frozen"
+    status_active: "<green>Active"
+    button_buy: "<green>BUY"
+    button_sell: "<yellow>SELL"
+    button_trade: "<light_purple>TRADE"
+    button_back: "<gray>Back"
+  edit:
+    title: "Shop Settings"
+    label: "<dark_gray>Shop Settings"
+    toggle_freeze: "Freeze shop (block trades)"
+    toggle_hopper_in: "Allow hopper input"
+    toggle_hopper_out: "Allow hopper output"
+  search:
+    title: "<dark_gray>Shops selling <query>"
+    result: "<green><sell_amt>x <gray>for <gold><cost>  <dark_gray>| <aqua><trades> trades  <dark_gray>| <yellow><owner>"
+    clicked: "<gray>Shop at <white><world> <x> <y> <z> <gray>— pasted to chat."
+
+sign_header:
+  sell: "<shadow:#000000:1><aqua>[SELL]</aqua></shadow>"
+  sell_out: "<shadow:#000000:1><red>[SELL]</red></shadow>"
+
+container_sign:
+  stock_line: "<shadow:#000000:1><gray>Stock: <trades></shadow>"
+
+guildpolicy:
+  not_in_guild: "<shadow:#000000:1><red>You must be in a guild to manage trade policy.</red></shadow>"
+  no_permission: "<shadow:#000000:1><red>You need the MANAGE_SHOPS guild permission for that.</red></shadow>"

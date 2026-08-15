@@ -73,7 +73,16 @@ The supported provider API required for all of those paths is still incomplete/u
 
 Used for supported stall moderation, review, ownership/restriction changes and restoration while preserving the market plugin's own transaction/rent semantics.
 
-Current state: contract boundaries exist; complete provider implementation and end-to-end staging remain incomplete.
+Version 1 now provides a typed, JDK-only service contract, durable stall snapshots and
+reservations, human-reviewed confiscation holds, exact release/restoration, revisioned
+acquisition blacklists, and operation lookup. Staff persists intent before the provider
+call and replays only safe recovery steps. Review deadlines alert staff but never approve
+confiscation automatically.
+
+New mutations fail closed when the provider is missing, incompatible, unavailable, or
+Staff is outside `ACTIVE` mode. `/marketcase status` can still read Staff's local journal
+during a provider outage. Representative destructive/process-kill/load staging remains a
+separate release gate; do not interpret unit or MariaDB tests as production acceptance.
 
 ## Floodgate and Geyser
 
