@@ -14,6 +14,7 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 
 public final class JdbcDiscordModerationPersistenceStore implements DiscordModerationPersistenceStore {
     private final JdbcDiscordIdentityRepository identities;
+    private final JdbcDiscordMainAccountRepository mainAccounts;
     private final JdbcDiscordOperationalRepository operations;
 
     public JdbcDiscordModerationPersistenceStore(DataSource dataSource) {
@@ -21,6 +22,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             throw new IllegalArgumentException("dataSource must be present");
         }
         this.identities = new JdbcDiscordIdentityRepository(dataSource);
+        this.mainAccounts = new JdbcDiscordMainAccountRepository(dataSource, identities);
         this.operations = new JdbcDiscordOperationalRepository(dataSource);
     }
 
@@ -84,7 +86,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             long expectedSubjectRevision,
             Instant selectedAt
     ) {
-        return identities.setMainMinecraftAccount(
+        return mainAccounts.setMainMinecraftAccount(
                 subjectId,
                 mainAccount,
                 expectedSubjectRevision,
