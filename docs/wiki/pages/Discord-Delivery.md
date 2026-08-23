@@ -2,6 +2,8 @@
 
 EnthusiaStaff writes Discord notification intent to MariaDB in the same durable workflow as the originating action. Velocity leases due rows, renders a bounded staff-facing projection, sends to an approved HTTPS route, and then records delivery or retry/dead-letter state. Discord failure never rolls back a valid moderation/report/staff action.
 
+> This page describes the **current webhook-delivery subsystem only**. The planned interactive staff bot, account linking, Discord punishments, AutoMod, native-ban migration and public bot are separate work. See [[Discord Moderation Platform]].
+
 For the source-oriented contract and full event matrix, see [`docs/discord-delivery.md`](../../../docs/discord-delivery.md).
 
 ## Safety defaults
@@ -29,7 +31,7 @@ Important examples:
 - malformed/non-object/oversized payloads fail closed as `PAYLOAD_REJECTED`;
 - Discord mention parsing is disabled with an empty `allowed_mentions.parse` list.
 
-Adding a new outbox producer does not automatically expose its fields. Review and deliberately extend the renderer when a new field is actually required.
+Adding a new outbox producer does not automatically expose new payload fields. Review and deliberately extend the renderer when a new field is actually required.
 
 ## Delivery semantics
 
