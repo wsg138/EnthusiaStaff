@@ -20,6 +20,11 @@ public record DiscordAuthorizationRequest(
         if (operation == null || platforms == null || consequences == null) {
             throw new IllegalArgumentException("operation, platforms and consequences must be present");
         }
+        for (DiscordConsequenceIntent consequence : consequences) {
+            if (consequence == null) {
+                throw new IllegalArgumentException("consequence must be present");
+            }
+        }
         platforms = Set.copyOf(platforms);
         consequences = List.copyOf(consequences);
         if (platforms.isEmpty()) {
@@ -32,9 +37,6 @@ public record DiscordAuthorizationRequest(
             }
             EnumSet<ModerationPlatform> consequencePlatforms = EnumSet.noneOf(ModerationPlatform.class);
             for (DiscordConsequenceIntent consequence : consequences) {
-                if (consequence == null) {
-                    throw new IllegalArgumentException("consequence must be present");
-                }
                 if (!consequencePlatforms.add(consequence.platform())) {
                     throw new IllegalArgumentException("only one consequence per platform is permitted");
                 }

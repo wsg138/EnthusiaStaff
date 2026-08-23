@@ -7,6 +7,7 @@ import static net.enthusia.staff.domain.auth.DiscordAuthorizationTestFixtures.mi
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import net.enthusia.staff.domain.moderation.ModerationPlatform;
@@ -35,6 +36,15 @@ class DiscordAuthorizationRequestTest {
                         discord(DiscordConsequenceType.WARNING, SanctionLength.instant(), false, false),
                         discord(DiscordConsequenceType.KICK, SanctionLength.instant(), false, false)
                 )
+        ));
+    }
+
+    @Test
+    void requestRejectsNullConsequenceElementsAsInvalidInput() {
+        assertThrows(IllegalArgumentException.class, () -> new DiscordAuthorizationRequest(
+                DiscordModerationOperation.ISSUE_SANCTION,
+                Set.of(ModerationPlatform.DISCORD),
+                Collections.singletonList(null)
         ));
     }
 

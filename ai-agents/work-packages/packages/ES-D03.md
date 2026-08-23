@@ -14,7 +14,7 @@ No bot UX, Discord API enforcement, schema redesign beyond strictly necessary D0
 ## Branch and starting state
 - Starting `main`: `3c340d6333d7e25b33b2f2af1e32a5cc15d5ee4b`.
 - Branch: `package/es-d03-discord-authorization`.
-- Draft PR: open immediately after the first coherent implementation checkpoint.
+- PR: #149.
 - Highest live Flyway migration at claim: `V19__discord_moderation_persistence.sql`; D03 adds no migration.
 - Only open Staff PR at claim: parked ES-X03 PR #139; no D03/website/competition implementation overlap was found.
 
@@ -30,7 +30,7 @@ No bot UX, Discord API enforcement, schema redesign beyond strictly necessary D0
 - [x] Add confirmation snapshots and exact-request reauthorization that fails closed on actor/target authority changes.
 - [x] Add table-driven rank/action/scope/duration/hierarchy/staleness tests.
 - [x] Add developer-facing authorization contract documentation.
-- [ ] Open draft implementation PR and inspect exact changed paths.
+- [x] Open implementation PR #149 and inspect exact changed paths.
 - [ ] Run full repository exact-head validation and inspect static/review findings.
 - [ ] Harshly review the complete diff and repair every valid finding.
 - [ ] Freeze final product head and require zero valid unresolved review threads.
@@ -40,9 +40,9 @@ No bot UX, Discord API enforcement, schema redesign beyond strictly necessary D0
 Table-driven policy tests covering every rank/action/scope/duration/hierarchy edge, stale reauthorization and denial paths; full repository gates and zero valid review findings.
 
 ## Completion
-All entry points can later call one domain authorization service and cannot elevate through Discord roles, command origin, stale UI or cross-platform defaults.
+The domain authorization service provides the authoritative policy contract for future Discord moderation entry points. Future entry points must call this service before enforcement; this package does not add Discord runtime enforcement.
 
 ## Current checkpoint
-Implementation, focused tests, contract documentation and active package state are committed as the first coherent checkpoint. No schema, runtime, website, competition, production Discord, deployment, LiteBans authority or issue #43 path is changed.
+Implementation, focused tests, contract documentation and active package state are committed. PR #149 is the implementation PR; exact-head validation and review-finding resolution are in progress. No schema, runtime, website, competition, production Discord, deployment, LiteBans authority or issue #43 path is changed.
 
 Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-23-es-d03-discord-authorization.md`.
