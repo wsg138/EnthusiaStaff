@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 public record ModerationSubject(
         ModerationSubjectId subjectId,
         Set<ModerationIdentity> identities,
-        Optional<UUID> mainMinecraftAccount
+        Optional<MainMinecraftAccount> mainMinecraftAccount
 ) {
     public ModerationSubject {
         if (subjectId == null || identities == null || mainMinecraftAccount == null) {
@@ -19,7 +19,7 @@ public record ModerationSubject(
         }
         identities = Set.copyOf(identities);
         if (mainMinecraftAccount.isPresent()
-                && !identities.contains(new MinecraftIdentityRef(mainMinecraftAccount.orElseThrow()))) {
+                && !identities.contains(new MinecraftIdentityRef(mainMinecraftAccount.orElseThrow().playerId()))) {
             throw new IllegalArgumentException("main Minecraft account must belong to the moderation subject");
         }
     }

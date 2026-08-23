@@ -29,6 +29,7 @@ class ModerationSubjectTest {
     void supportsSeveralMinecraftIdentitiesWithOneDiscordIdentity() {
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
+        MainMinecraftAccount main = new MainMinecraftAccount(first, MainAccountSelectionSource.AUTOMATIC);
         ModerationSubject subject = new ModerationSubject(
                 new ModerationSubjectId(UUID.randomUUID()),
                 Set.of(
@@ -36,11 +37,25 @@ class ModerationSubjectTest {
                         new MinecraftIdentityRef(first),
                         new MinecraftIdentityRef(second)
                 ),
-                Optional.of(first)
+                Optional.of(main)
         );
 
         assertEquals(Set.of(first, second), subject.minecraftAccountIds());
+        assertEquals(Optional.of(main), subject.mainMinecraftAccount());
         assertTrue(subject.linkedAcrossPlatforms());
+    }
+
+    @Test
+    void preservesStaffOverrideAsPartOfEffectiveMainIdentity() {
+        UUID playerId = UUID.randomUUID();
+        MainMinecraftAccount main = new MainMinecraftAccount(playerId, MainAccountSelectionSource.STAFF_OVERRIDE);
+        ModerationSubject subject = new ModerationSubject(
+                new ModerationSubjectId(UUID.randomUUID()),
+                Set.of(new MinecraftIdentityRef(playerId)),
+                Optional.of(main)
+        );
+
+        assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, subject.mainMinecraftAccount().orElseThrow().source());
     }
 
     @Test
@@ -48,7 +63,7 @@ class ModerationSubjectTest {
         assertThrows(IllegalArgumentException.class, () -> new ModerationSubject(
                 new ModerationSubjectId(UUID.randomUUID()),
                 Set.of(new DiscordIdentityRef(new DiscordUserId("846729778400460871"))),
-                Optional.of(UUID.randomUUID())
+                Optional.of(new MainMinecraftAccount(UUID.randomUUID(), MainAccountSelectionSource.AUTOMATIC))
         ));
     }
 
