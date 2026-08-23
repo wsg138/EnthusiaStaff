@@ -1,6 +1,7 @@
 package net.enthusia.staff.domain.casefile;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -32,5 +33,15 @@ class CaseInactivityPolicyTest {
 
         assertFalse(policy.shouldClose(CaseState.CLOSED, LAST_ACTIVITY, later));
         assertFalse(policy.shouldClose(CaseState.FULLY_OVERTURNED, LAST_ACTIVITY, later));
+    }
+
+    @Test
+    void missingActivityTimestampFailsClosedForAnyState() {
+        CaseInactivityPolicy policy = new CaseInactivityPolicy();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> policy.shouldClose(CaseState.CLOSED, null, LAST_ACTIVITY)
+        );
     }
 }

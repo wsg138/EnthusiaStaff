@@ -31,8 +31,8 @@ public final class CaseInactivityPolicy {
     }
 
     public boolean shouldClose(CaseState state, Instant lastActivityAt, Instant now) {
-        if (state == null || now == null) {
-            throw new IllegalArgumentException("case state and current time must be present");
+        if (state == null || lastActivityAt == null || now == null) {
+            throw new IllegalArgumentException("case state, last activity, and current time must be present");
         }
         return state == CaseState.OPEN && !now.isBefore(closesAt(lastActivityAt));
     }
