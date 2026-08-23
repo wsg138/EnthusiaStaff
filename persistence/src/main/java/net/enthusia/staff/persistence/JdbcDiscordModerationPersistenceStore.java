@@ -14,16 +14,20 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 
 public final class JdbcDiscordModerationPersistenceStore implements DiscordModerationPersistenceStore {
     private final JdbcDiscordIdentityRepository identities;
+    private final JdbcDiscordLinkRepository links;
     private final JdbcDiscordMainAccountRepository mainAccounts;
     private final JdbcDiscordOperationalRepository operations;
+    private final JdbcDiscordReplayGuard replayGuard;
 
     public JdbcDiscordModerationPersistenceStore(DataSource dataSource) {
         if (dataSource == null) {
             throw new IllegalArgumentException("dataSource must be present");
         }
         this.identities = new JdbcDiscordIdentityRepository(dataSource);
+        this.links = new JdbcDiscordLinkRepository(dataSource);
         this.mainAccounts = new JdbcDiscordMainAccountRepository(dataSource, identities);
         this.operations = new JdbcDiscordOperationalRepository(dataSource);
+        this.replayGuard = new JdbcDiscordReplayGuard(dataSource);
     }
 
     @Override
@@ -59,7 +63,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant linkedAt
     ) {
-        return identities.link(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+        return links.link(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
     }
 
     @Override
@@ -70,13 +74,23 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant unlinkedAt
     ) {
-        return identities.unlink(
+        VersionedLink stored = identities.unlink(
                 discordUserId,
                 minecraftPlayerId,
                 expectedRevision,
                 operationKey,
                 unlinkedAt
         );
+        if (stored.replayed()) {
+            replayGuard.verifyUnlinkReplay(
+                    stored,
+                    discordUserId,
+                    minecraftPlayerId,
+                    expectedRevision,
+                    operationKey
+            );
+        }
+        return stored;
     }
 
     @Override
@@ -101,12 +115,25 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant now
     ) {
-        return operations.recordEnforcementTarget(subjectId, target, operationKey, now);
+        StoredEnforcementTarget stored = operations.recordEnforcementTarget(
+                subjectId,
+                target,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifyEnforcementReplay(stored, subjectId, target, operationKey);
+        }
+        return stored;
     }
 
     @Override
     public StoredEvidence recordEvidence(EvidenceMetadata metadata) {
-        return operations.recordEvidence(metadata);
+        StoredEvidence stored = operations.recordEvidence(metadata);
+        if (stored.replayed()) {
+            replayGuard.verifyEvidenceReplay(metadata, stored);
+        }
+        return stored;
     }
 
     @Override
@@ -117,7 +144,23 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant now
     ) {
-        return operations.activateSecurityLock(subjectId, discordUserId, reasonCode, operationKey, now);
+        SecurityLock stored = operations.activateSecurityLock(
+                subjectId,
+                discordUserId,
+                reasonCode,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifySecurityActivationReplay(
+                    stored,
+                    subjectId,
+                    discordUserId,
+                    reasonCode,
+                    operationKey
+            );
+        }
+        return stored;
     }
 
     @Override
@@ -127,7 +170,16 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant now
     ) {
-        return operations.releaseSecurityLock(lockId, expectedRevision, operationKey, now);
+        SecurityLock stored = operations.releaseSecurityLock(
+                lockId,
+                expectedRevision,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifySecurityReleaseReplay(stored, lockId, expectedRevision, operationKey);
+        }
+        return stored;
     }
 
     @Override
