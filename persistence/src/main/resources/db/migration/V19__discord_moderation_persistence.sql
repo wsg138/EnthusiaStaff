@@ -27,7 +27,9 @@ CREATE TABLE moderation_subject_discord_identities (
     PRIMARY KEY (discord_user_id),
     UNIQUE KEY uq_subject_current_discord (subject_id),
     CONSTRAINT fk_subject_discord_subject
-        FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id)
+        FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
+    CONSTRAINT ck_subject_discord_snowflake
+        CHECK (discord_user_id BETWEEN 1 AND 18446744073709551615)
 ) ENGINE=InnoDB;
 
 CREATE TABLE moderation_subject_main_accounts (
@@ -69,6 +71,8 @@ CREATE TABLE discord_minecraft_links (
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
     CONSTRAINT fk_discord_links_player
         FOREIGN KEY (minecraft_player_id) REFERENCES players(player_id),
+    CONSTRAINT ck_discord_links_user_snowflake
+        CHECK (discord_user_id BETWEEN 1 AND 18446744073709551615),
     CONSTRAINT ck_discord_links_time
         CHECK (unlinked_at IS NULL OR unlinked_at >= linked_at)
 ) ENGINE=InnoDB;
@@ -96,7 +100,8 @@ CREATE TABLE moderation_enforcement_targets (
         (platform = 'MINECRAFT' AND minecraft_player_id IS NOT NULL AND discord_user_id IS NULL
             AND scope_type IN ('MINECRAFT_SERVER', 'MINECRAFT_NETWORK'))
         OR
-        (platform = 'DISCORD' AND minecraft_player_id IS NULL AND discord_user_id IS NOT NULL
+        (platform = 'DISCORD' AND minecraft_player_id IS NULL
+            AND discord_user_id BETWEEN 1 AND 18446744073709551615
             AND scope_type = 'DISCORD_GUILD')
     )
 ) ENGINE=InnoDB;
@@ -124,6 +129,12 @@ CREATE TABLE discord_evidence_metadata (
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
     CONSTRAINT fk_discord_evidence_case
         FOREIGN KEY (case_id) REFERENCES cases(case_id),
+    CONSTRAINT ck_discord_evidence_snowflakes CHECK (
+        guild_id BETWEEN 1 AND 18446744073709551615
+        AND channel_id BETWEEN 1 AND 18446744073709551615
+        AND message_id BETWEEN 1 AND 18446744073709551615
+        AND author_user_id BETWEEN 1 AND 18446744073709551615
+    ),
     CONSTRAINT ck_discord_evidence_retention CHECK (retain_until >= captured_at)
 ) ENGINE=InnoDB;
 
@@ -148,6 +159,8 @@ CREATE TABLE discord_security_locks (
     INDEX idx_security_lock_subject (subject_id, locked_at),
     CONSTRAINT fk_security_lock_subject
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
+    CONSTRAINT ck_security_lock_snowflake
+        CHECK (discord_user_id BETWEEN 1 AND 18446744073709551615),
     CONSTRAINT ck_security_lock_release CHECK (
         (state = 'ACTIVE' AND released_at IS NULL)
         OR (state = 'RELEASED' AND released_at IS NOT NULL AND released_at >= locked_at)
