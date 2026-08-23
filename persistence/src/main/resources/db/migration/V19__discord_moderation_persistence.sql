@@ -100,7 +100,7 @@ CREATE TABLE moderation_enforcement_targets (
         (platform = 'MINECRAFT' AND minecraft_player_id IS NOT NULL AND discord_user_id IS NULL
             AND scope_type IN ('MINECRAFT_SERVER', 'MINECRAFT_NETWORK'))
         OR
-        (platform = 'DISCORD' AND minecraft_player_id IS NULL
+        (platform = 'DISCORD' AND minecraft_player_id IS NULL AND discord_user_id IS NOT NULL
             AND discord_user_id BETWEEN 1 AND 18446744073709551615
             AND scope_type = 'DISCORD_GUILD')
     )
