@@ -9,6 +9,7 @@
 - [[Staff Handbook]]
 - [[Helper Guide]]
 - [[Punishment System]]
+- [[Discord Moderation Platform]]
 - [[Reports and Evidence]]
 - [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
 - [[Inventory and Confiscation Safety]]
@@ -22,6 +23,7 @@
 - [[Roles and Permissions|Rank-Authority]]
 - [[Configuration]]
 - [[Integrations]]
+- [[Discord Moderation Platform]]
 
 ## Operations
 
@@ -53,5 +55,6 @@
 ## Authoritative sources
 
 - [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
+- [Discord moderation specification](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/discord-moderation-platform.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
 - [Repository](https://github.com/wsg138/EnthusiaStaff)
