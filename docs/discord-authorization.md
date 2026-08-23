@@ -6,7 +6,7 @@
 
 `DiscordModerationAuthorizationService` is the single domain policy for staff actions initiated through Discord. Discord roles and command visibility are deliberately absent from its authorization inputs. A Discord role may hide/show commands and the service may return `DISCORD_ROLE_HIERARCHY` as an external enforcement precondition, but satisfying that precondition never grants permission.
 
-The service also does not accept command origin as authority. The final selected platform set is explicit. Origin may choose a UI default only; it cannot silently broaden a request to both platforms.
+The caller must resolve the Discord invoker to an authoritative linked Enthusia `Actor` before calling this service; Discord role membership alone cannot construct authority. The service also does not accept command origin as authority. The final selected platform set is explicit. Origin may choose a UI default only; it cannot silently broaden a request to both platforms.
 
 ## Rank policy
 
@@ -25,7 +25,7 @@ D03 deliberately defines no production duration numbers. `DiscordAuthorizationLi
 
 Sanction issuance uses one `DiscordConsequenceIntent` per selected platform. The selected platform set must exactly match those intents and only one intent may exist per platform. This allows Discord and Minecraft to have different consequences and prevents a magic `BOTH` value from silently cloning one consequence across platforms.
 
-Any Minecraft mutation is checked against the existing `AuthorizationPolicy`. Minecraft custom-duration and custom-combination flags require the corresponding existing Minecraft capabilities. Discord-specific ceilings never replace Minecraft policy.
+Any Minecraft mutation is checked against the existing `AuthorizationPolicy`. Minecraft custom-duration and custom-combination flags require the corresponding existing Minecraft capabilities. In addition, every allowed Minecraft mutation returns `MINECRAFT_PUNISHMENT_POLICY_REVALIDATION`: later Discord/cross-platform code must pass the exact final Minecraft action through the existing authoritative Minecraft punishment/case policy immediately before commit. D03 never authorizes applying its raw Minecraft consequence intent directly. This prevents Discord UI flags or stale recommendation state from bypassing Minecraft escalation/custom-consequence rules.
 
 ## Target protection
 
@@ -37,4 +37,4 @@ A permitted request may be captured as `DiscordAuthorizationSnapshot` when the c
 
 ## External enforcement preconditions
 
-For Discord actions that require native role-sensitive side effects, an allowed decision includes `DISCORD_ROLE_HIERARCHY`. The Discord adapter added by later packages must verify it immediately before the external action. The precondition set is empty on denied decisions and can never be used to convert a denial into authorization.
+For Discord actions that require native role-sensitive side effects, an allowed decision includes `DISCORD_ROLE_HIERARCHY`. For Minecraft mutations, an allowed decision includes `MINECRAFT_PUNISHMENT_POLICY_REVALIDATION`. Later adapters/orchestrators must satisfy every returned precondition immediately before the corresponding commit/side effect. The precondition set is empty on denied decisions and can never be used to convert a denial into authorization.

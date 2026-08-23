@@ -249,10 +249,21 @@ public final class DiscordModerationAuthorizationService {
     }
 
     private static Set<DiscordEnforcementPrecondition> requiredPreconditions(DiscordAuthorizationRequest request) {
-        if (!request.platforms().contains(ModerationPlatform.DISCORD) || !request.operation().isMutation()) {
-            return Set.of();
+        EnumSet<DiscordEnforcementPrecondition> required = EnumSet.noneOf(DiscordEnforcementPrecondition.class);
+        if (request.operation().isMutation() && request.platforms().contains(ModerationPlatform.MINECRAFT)) {
+            required.add(DiscordEnforcementPrecondition.MINECRAFT_PUNISHMENT_POLICY_REVALIDATION);
         }
-        boolean hierarchyRequired = switch (request.operation()) {
+        if (requiresDiscordRoleHierarchy(request)) {
+            required.add(DiscordEnforcementPrecondition.DISCORD_ROLE_HIERARCHY);
+        }
+        return required;
+    }
+
+    private static boolean requiresDiscordRoleHierarchy(DiscordAuthorizationRequest request) {
+        if (!request.platforms().contains(ModerationPlatform.DISCORD) || !request.operation().isMutation()) {
+            return false;
+        }
+        return switch (request.operation()) {
             case ISSUE_SANCTION -> request.consequences().stream()
                     .filter(intent -> intent.platform() == ModerationPlatform.DISCORD)
                     .anyMatch(intent -> intent.type() != DiscordConsequenceType.WARNING);
@@ -260,8 +271,5 @@ public final class DiscordModerationAuthorizationService {
             case END_SANCTION, REVOKE_SANCTION, APPROVE_SANCTION_REQUEST, APPROVE_OVERTURN, FULL_OVERTURN -> true;
             case VIEW_LINKED_ACCOUNTS, VIEW_HISTORY, VIEW_NOTES, VIEW_EVIDENCE -> false;
         };
-        return hierarchyRequired
-                ? EnumSet.of(DiscordEnforcementPrecondition.DISCORD_ROLE_HIERARCHY)
-                : Set.of();
     }
 }
