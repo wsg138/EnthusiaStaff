@@ -20,6 +20,11 @@ public record DiscordAuthorizationRequest(
         if (operation == null || platforms == null || consequences == null) {
             throw new IllegalArgumentException("operation, platforms and consequences must be present");
         }
+        for (ModerationPlatform platform : platforms) {
+            if (platform == null) {
+                throw new IllegalArgumentException("platform must be present");
+            }
+        }
         for (DiscordConsequenceIntent consequence : consequences) {
             if (consequence == null) {
                 throw new IllegalArgumentException("consequence must be present");

@@ -28,6 +28,15 @@ class DiscordAuthorizationRequestTest {
     }
 
     @Test
+    void requestRejectsNullPlatformElementsAsInvalidInput() {
+        assertThrows(IllegalArgumentException.class, () -> new DiscordAuthorizationRequest(
+                DiscordModerationOperation.VIEW_HISTORY,
+                Collections.singleton(null),
+                List.of()
+        ));
+    }
+
+    @Test
     void requestRejectsDuplicatePlatformConsequences() {
         assertThrows(IllegalArgumentException.class, () -> new DiscordAuthorizationRequest(
                 DiscordModerationOperation.ISSUE_SANCTION,
