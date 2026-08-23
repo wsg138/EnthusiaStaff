@@ -1,26 +1,27 @@
 # Workspace state
 
-Last updated: 2026-08-14
+Last updated: 2026-08-23
 
-Live GitHub overrides stale records. Detailed package evidence remains in the registry, package record, canonical handoff, and PR verification ledgers.
+Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
 ## Current routing
 
 | Field | Value |
 | --- | --- |
-| Completed packages | `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X05`, `ES-R01`, `ES-R02`, `ES-V01` |
-| Active package | None. `ES-X03 — EnthusiaMarket destructive provider` is `BLOCKED` / `PARKED_BLOCKED`; all safe actionable repository work is complete and the remaining unblock requires materially improved owner-controlled runtime-host conditions. |
-| ES-X03 live PRs | Market PR #3 is open/mergeable at `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`. Staff PR #139 is open/mergeable at `5b003225b305db76b47db7d75cf5b6a2943934df`. Neither implementation PR merged. |
-| Scope reconciliation | Valid X03 remediation remains; unrelated historical Market refactor history remains preserved on `preserve/es-x03-post-candidate-556b4b4-20260814`. No force-push, rebase, squash, or destructive reset occurred. |
-| Market exact-head state | Fork Actions execution/permissions are fixed. Market head `addb0f53...` passed Wiki `31852806668` and build `31852806638`; the build log proves checkout of the actual PR head, Java 21, pinned LumaGuilds digest verification, current RoseChat compilation, Market tests/shadowJar/JaCoCo, Detekt, Semgrep, and Trivy. Final Market CodeRabbit status is green and zero valid inline threads remain. |
-| Staff hosted state | Staff head `5b003225...` passed Wiki `31852845661`, Coverage/full build `31852845645`, and Sentinel Restart Artifact `31852845696`. Paper/Velocity runtime artifacts and provider-leak checks passed; zero live Staff inline threads remain. |
-| Runtime blocker | Canonical Pi staging `31852844656` reached the verified exact Staff artifact and executed Paper, but the first server start did not reach the trusted readiness marker within the configured 240-second window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 exception or migration failure before timeout. Independent Sentinel restart job `174` for the same exact SHA also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT`. Because Paper executed, this is non-passing runtime evidence and is not eligible for the zero-execution infrastructure exception. |
-| Candidate synchronization | Current Market/aggregate synchronized blobs: `MarketRestrictionJournal.kt` `83758cff61c998b8d56907b706a8339bddc78721`; build workflow `563ed55bb6f4496f2392f7bd82656922b6338c0a`; Wiki workflow `424b57cad79bee95f07cbde4546baed2fdda6453`. Component metadata remains `SYNC_PENDING` with final canonical SHA-256 pending until paired merges. |
-| Privacy boundary | No private Pi/staging runner configuration, private runner labels, private bridge/dispatch implementation, secrets/topology/credentials, artifact-transfer mechanism, or Sentinel infrastructure was added to Market or any BadgersMC repository. |
-| Downstream routing | `ES-X04 — EnthusiaCommend reputation provider` remains `READY` for a separate worker because ES-X03 is parked. `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. This worker does not start either package. |
-| Production boundary | No production listing, balance, item, private player row, database, deployment, cutover, or authority state changed. Issue #43 remains deferred and LiteBans remains authoritative. |
-| Canonical handoff | `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md` |
+| Discord program latest completion | `ES-D02 — Discord persistence and migration schema` is `COMPLETE` through PR #148. Frozen product head: `9f0d9bb44ab6929bec3bf652e0c9b3467104b423`. |
+| Discord dependency state | `ES-D01` and `ES-D02` are `COMPLETE`. `ES-D03 — Authorization and cross-platform policy` is newly dependency-complete and `READY` for a fresh worker; it is not started in the D02 run. |
+| D02 migration state | Final live collision check found `main` still through V18; D02 owns forward migration `V19__discord_moderation_persistence.sql`. Exact-head clean-install/upgrade MariaDB/Testcontainers validation passed. |
+| Collision reconciliation | Immediately before terminal publication, D02 was seven commits ahead / zero behind unchanged `main` `1a8b70755fa48f780c228c47943b8afaef746f36`. The only other open Staff PR was independently parked ES-X03 PR #139. D02 changes no website or competition path. |
+| Independently parked package | `ES-X03 — EnthusiaMarket destructive provider` remains `BLOCKED` / `PARKED_BLOCKED` on its independent validation condition and was not modified by D02. |
+| Production boundary | No production Discord configuration, bot token, player/private production data, deployment, production migration, LiteBans authority change, or cutover was authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
+| Current handoff | `ai-agents/reports/package-handoffs/2026-08-23-es-d02-discord-persistence-complete.md` |
 
-## Unblock condition
+## D02 terminal evidence
 
-Restore sufficient cooling/runtime capacity on the owner-controlled validation host so Paper can start within the existing trusted readiness window. Obtain live evidence that the host condition materially changed, then rerun the exact frozen Staff runtime gates. Do not weaken the readiness timeout merely to pass validation. Only after both runtime gates pass may the worker recheck the frozen PRs, merge both normally, compute canonical post-merge parity, publish terminal component/package state, and clean safely contained temporary branches.
+Frozen product head `9f0d9bb44ab6929bec3bf652e0c9b3467104b423` passed Coverage/full Java 21 workflow `32661521865` / job `97248320623` with MariaDB/Testcontainers integration tests, runtime-JAR inspection, aggregate JaCoCo and successful Codacy coverage finalization. Coverage measured 50.25% lines, 40.76% branches and 52.67% instructions. Validation artifact `9498959764` has digest `sha256:c80a26841485a3a27dcf6f6f670767a48eb6f7dbe42d55c4858b2c335cbfc152`.
+
+Sentinel Restart Artifact workflow `32661521891` / job `97248320518` passed on the same product head; artifact `9498878851` has digest `sha256:6a0ab81859325b881f3f134677d0cdd95ac9505ea335bc973372732ba471c86b`. CodeRabbit was successful and live PR #148 review threads were zero before terminal publication.
+
+## Independent ES-X03 blocker
+
+ES-X03 remains parked on its own recorded blocker. D02 did not alter that package, its provider mirror, or its frozen validation evidence.

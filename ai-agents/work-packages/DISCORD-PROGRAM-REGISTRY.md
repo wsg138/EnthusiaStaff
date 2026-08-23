@@ -9,8 +9,8 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | ID | Package | Status | Priority | Depends on |
 | --- | --- | --- | ---: | --- |
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
-| `ES-D02` | Discord persistence and migration schema | `READY` | 131 | `ES-D01` |
-| `ES-D03` | Authorization and cross-platform policy | `PLANNED` | 132 | `ES-D01`, `ES-D02` |
+| `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
+| `ES-D03` | Authorization and cross-platform policy | `READY` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `PLANNED` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `PLANNED` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
@@ -23,6 +23,12 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D13` | Discord role-sync replacement | `PLANNED` | 142 | `ES-D04`, `ES-D05` |
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
+
+## Latest completion
+
+`ES-D02` completed on PR #148 from `package/es-d02-discord-persistence`. Its frozen product head is `9f0d9bb44ab6929bec3bf652e0c9b3467104b423`; exact-head Java 21/MariaDB/Testcontainers, runtime-JAR, Codacy, Sentinel and CodeRabbit gates passed with zero live review threads. V19 remained collision-free because live `main` still ended at V18 immediately before terminal publication. No website, competition, production Discord, deployment, LiteBans authority or issue #43 cutover path changed.
+
+`ES-D03` is now the lowest-priority dependency-complete Discord package and is `READY` for a fresh Discord-program worker after live reconciliation. It is not started by the D02 worker.
 
 ## Selection
 
