@@ -6,7 +6,7 @@
 
 `DiscordModerationAuthorizationService` is the single domain policy for staff actions initiated through Discord. Discord roles and command visibility are deliberately absent from its authorization inputs. A Discord role may hide/show commands and the service may return `DISCORD_ROLE_HIERARCHY` as an external enforcement precondition, but satisfying that precondition never grants permission.
 
-The caller must resolve the Discord invoker to an authoritative linked Enthusia `Actor` before calling this service; Discord role membership alone cannot construct authority. The service also does not accept command origin as authority. The final selected platform set is explicit. Origin may choose a UI default only; it cannot silently broaden a request to both platforms.
+The caller must resolve the Discord invoker to an authoritative linked Enthusia `Actor` before calling this service; Discord role membership alone cannot construct authority. The caller must also resolve target staff status authoritatively before authorization. `Optional.empty()` for target staff is valid only after identity resolution proves the target is not protected staff; it must not be used as a placeholder for an unresolved target. The service also does not accept command origin as authority. The final selected platform set is explicit. Origin may choose a UI default only; it cannot silently broaden a request to both platforms.
 
 ## Rank policy
 
