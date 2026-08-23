@@ -9,8 +9,8 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | ID | Package | Status | Priority | Depends on |
 | --- | --- | --- | ---: | --- |
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
-| `ES-D02` | Discord persistence and migration schema | `ACTIVE` | 131 | `ES-D01` |
-| `ES-D03` | Authorization and cross-platform policy | `PLANNED` | 132 | `ES-D01`, `ES-D02` |
+| `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
+| `ES-D03` | Authorization and cross-platform policy | `READY` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `PLANNED` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `PLANNED` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
@@ -24,9 +24,11 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
-## Active claim
+## Latest completion
 
-`ES-D02` is claimed by the Discord-program worker on branch `package/es-d02-discord-persistence`, starting from `main` `1a8b70755fa48f780c228c47943b8afaef746f36`. Live reconciliation found no existing D02 continuation and no unique website branch commits. The unrelated `ES-X03` PR remains parked and untouched. Flyway V18 is the live migration ceiling at claim time, so D02 owns V19 unless `main` advances before the migration is committed.
+`ES-D02` completed on PR #148 from `package/es-d02-discord-persistence`. Its frozen product head is `9f0d9bb44ab6929bec3bf652e0c9b3467104b423`; exact-head Java 21/MariaDB/Testcontainers, runtime-JAR, Codacy, Sentinel and CodeRabbit gates passed with zero live review threads. V19 remained collision-free because live `main` still ended at V18 immediately before terminal publication. No website, competition, production Discord, deployment, LiteBans authority or issue #43 cutover path changed.
+
+`ES-D03` is now the lowest-priority dependency-complete Discord package and is `READY` for a fresh Discord-program worker after live reconciliation. It is not started by the D02 worker.
 
 ## Selection
 

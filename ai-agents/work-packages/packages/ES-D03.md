@@ -1,6 +1,8 @@
 # ES-D03 — Authorization and cross-platform policy
 
-Status: `PLANNED`. Priority: 132. Depends on `ES-D01`, `ES-D02`. Internal package.
+Status: `READY`. Priority: 132. Depends on `ES-D01`, `ES-D02` (both `COMPLETE`). Internal package.
+
+D03 became dependency-complete when D02's validated terminal state was published with PR #148. It is eligible for a fresh Discord-program worker after live GitHub reconciliation; the D02 worker must not begin it.
 
 ## Objective
 Extend EnthusiaStaff domain authorization so Discord moderation is governed by authoritative capability/constraint policy rather than Discord roles or command visibility.
