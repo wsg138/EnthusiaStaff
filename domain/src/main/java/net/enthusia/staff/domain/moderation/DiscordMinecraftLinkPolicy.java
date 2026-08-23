@@ -9,6 +9,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Validates verified Discord-to-Minecraft account links.
+ *
+ * <p>Several Minecraft accounts linked to one Discord account are known linked alts for staff
+ * identity/investigation purposes. This contract deliberately does not map those links directly
+ * onto the legacy alt-confidence states, because those states can carry automatic sanction-
+ * inheritance semantics that the Discord-link design does not authorize.</p>
+ */
 public final class DiscordMinecraftLinkPolicy {
     private DiscordMinecraftLinkPolicy() {
     }
