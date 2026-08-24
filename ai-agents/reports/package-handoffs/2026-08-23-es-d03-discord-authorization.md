@@ -1,54 +1,60 @@
-# ES-D03 Discord authorization — review handoff
+# ES-D03 Discord authorization — complete handoff
 
-Status: `REVIEW`.
+Status: `COMPLETE`.
 
 ## Scope result
 ES-D03 establishes the authoritative domain authorization contract for staff moderation initiated through Discord. It adds explicit platform-scoped consequences, runtime-supplied Helper/Mod ceilings, permanent/custom gates, read/lifecycle/approval/overturn capabilities, self/equal-higher staff protection, external role/punishment-policy preconditions, and confirmation-time stale-state reauthorization.
 
-Developer has Mod-equivalent Discord authority without inheriting Minecraft punishment authority. Discord roles and command origin never grant domain authority. Minecraft mutations continue through the existing Minecraft `AuthorizationPolicy`, which is the independent permission source required by the product design.
+Developer has Mod-equivalent Discord authority without inheriting Minecraft punishment authority. Discord roles and command origin never grant domain authority. Minecraft mutations continue through the existing Minecraft `AuthorizationPolicy`, which supplies any independently granted Minecraft/domain permission required by the product design, and allowed mutations still require final punishment-policy revalidation.
 
-No Discord bot/API runtime, schema migration, website or competition work, production Discord configuration, private production data, deployment, LiteBans authority change, cutover, or issue #43 acceptance is part of this package.
+No Discord bot/API runtime, schema migration, website or competition work, production Discord configuration, private production data, deployment, LiteBans authority change, cutover, or issue #43 acceptance was performed.
 
 ## Revisions
 - Starting `main`: `3c340d6333d7e25b33b2f2af1e32a5cc15d5ee4b`.
 - Branch: `package/es-d03-discord-authorization`.
-- PR: #149, open and non-draft.
-- Frozen executable product head: `ca66a97949cd8b9733c9039084d6230b2c63fd07`.
-- Migration: none; live ceiling remains `V19__discord_moderation_persistence.sql`.
+- PR: #149.
+- Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`.
+- Earlier executable freeze used for parity proof: `ca66a97949cd8b9733c9039084d6230b2c63fd07`.
+- Migration: none; live ceiling remained `V19__discord_moderation_persistence.sql`.
+- Terminal state publication follows the frozen merge-ready head and changes only package/state/contract documentation.
 
-## Confirmed repairs
-Three valid inline findings from the first CodeRabbit review were repaired: over-broad completion wording, incomplete workspace routing fields, and null consequence-element validation ordering. A prior independent boundary review also fixed the analogous null selected-platform input case. All originally posted inline threads were resolved after those repairs.
+## Review result
+Four valid defects/state gaps were repaired across the package lifecycle: over-broad completion wording, incomplete workspace routing fields, null consequence-element validation ordering, and the analogous null selected-platform input case. All three posted inline CodeRabbit threads are resolved.
 
-## Rejected resumed-review finding
-A resumed full-diff review initially suspected that the public injectable `AuthorizationPolicy` could allow Developer to gain Minecraft authority and temporarily added an unconditional Developer deny plus a permissive-policy regression test.
+A resumed independent review then investigated whether the injectable Minecraft `AuthorizationPolicy` could improperly elevate Developer. The first hypothesis was wrong: the authoritative product contract explicitly allows a Developer to use Discord for a Minecraft action when the Developer independently has the required Minecraft/domain permission. The injected existing `AuthorizationPolicy` is the intended source of that independent authority. A temporary unconditional Developer deny and its regression test were therefore reverted because they would have violated the approved design.
 
-That finding was rejected after checking the authoritative product contract. The contract says Developer's Discord Mod-equivalent rank does not grant Minecraft punishment authority, but a Developer may act on Minecraft when the Developer independently has the required Minecraft/domain permission. The injected existing `AuthorizationPolicy` is exactly that independent authority source. An unconditional Developer deny would therefore violate the approved design by blocking a separately granted Minecraft permission.
+The rejected finding was not hidden. Exact comparison from `ca66a97949cd8b9733c9039084d6230b2c63fd07` to merge-ready head `5cd98a719e30eff64d1595f1e219ea70553c66c0` showed only five documentation/state files and zero executable, test, migration, workflow, build/runtime, provider-contract or dependency differences, proving the accepted executable tree was restored before fresh validation.
 
-The temporary code/test change is reverted. This history remains documented so later workers do not repeat the same mistaken hardening. The final accepted product tree must be compared against frozen head `ca66a97949cd8b9733c9039084d6230b2c63fd07` to prove no executable residue from the rejected change remains.
+The two remaining CodeRabbit body nitpicks were verified as non-defects under current type invariants: Helper mute flow cannot reach `within` with a non-temporary `SanctionLength`, and sharing Mod/Developer operation-set constants is maintainability-only. CodeRabbit status is success on the frozen merge-ready head; live inline threads are zero unresolved.
 
-Two earlier CodeRabbit body nitpicks remain non-defects under current invariants: `SanctionLength.Kind` has only `INSTANT`, `TEMPORARY`, and `PERMANENT`, while the consequence constructor/helper policy excludes invalid mute shapes before `within`; sharing the identical Mod/Developer operation set through one constant would be maintainability-only and not a correctness repair.
+## Exact-head evidence
+Frozen merge-ready head `5cd98a719e30eff64d1595f1e219ea70553c66c0`:
 
-## Frozen-head evidence
-Frozen product head `ca66a97949cd8b9733c9039084d6230b2c63fd07`:
+- Coverage workflow `32679597750`, job `97293850461`: PASS.
+- Workflow checked out exact SHA `5cd98a719e30eff64d1595f1e219ea70553c66c0` and used Temurin Java 21.0.12+8.
+- Gradle command: `clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`; `BUILD SUCCESSFUL` in 6m43s; 49 actionable tasks (40 executed, 9 up-to-date).
+- Aggregate JaCoCo: 50.59% line, 41.28% branch, 53.01% instruction.
+- Runtime-JAR inspection checked 24 provider API source types with zero leaks.
+- Paper runtime: 9,327,594 bytes; SHA-256 `cc44a405deee2d7aa7fc6ee7f3579b1debd5317c2dbe7cb789a9dc97dfbb9881`; 4,942 entries.
+- Velocity runtime: 8,068,526 bytes; SHA-256 `b7b1c27c2fccbb9db915acd782a4cbdedda2840d9af01c6d6a9a7d0917c699d5`; 4,253 entries.
+- Validation artifact `9503824839`, digest `sha256:5e1b9ece92ce858475e6090dad50b53bf21060961ce4bdbd845020ea568c986d`.
+- Codacy coverage upload and final notification: PASS on exact SHA.
+- Sentinel Restart Artifact workflow `32679597852`, job `97293814018`: PASS; artifact `9503739521`, digest `sha256:01910f60d519208e46008d9bd986e2b04f2b7922dc4f3b56c9d93dc5f21126b1`.
+- CodeRabbit exact-head status: success.
+- Live PR #149 inline review threads immediately before terminal publication: zero unresolved.
 
-- Coverage workflow `32673402553`, job `97277614870`: PASS.
-- Exact SHA checkout and Temurin Java 21.0.12+8.
-- `clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain`: `BUILD SUCCESSFUL`; 49 actionable tasks (40 executed, 9 up-to-date).
-- Aggregate JaCoCo: 50.58% line, 41.28% branch, 53.01% instruction.
-- Runtime-JAR provider leak inspection: 24 API source types checked, zero leaks.
-- Paper runtime SHA-256 `db550113d5db0b309c38faeb33bc8812d68f5bb645fb993dc0587d3ba4674c83`.
-- Velocity runtime SHA-256 `1265e04ba54485575879217569b517fb096a2e27789f8a4f4e612a8e7659959c`.
-- Validation artifact `9502084497`, digest `sha256:59fbfcb8aae83c301bdec3a6c0d98b1d616c678e6f9c3f9dc66421f718cb652a`.
-- Codacy coverage upload/final notification: PASS.
-- Sentinel Restart Artifact `32673402584`, job `97277584932`: PASS; artifact `9502002390`, digest `sha256:134545472c0edbe4fda685b8ca7b419ec28f12e002bccb97ad7db9685566451e`.
-- CodeRabbit exact-product-head status: success; live inline threads were zero unresolved.
+D03 has no Discord runtime or destructive side effect, so production/staging Discord execution is not an applicable acceptance gate.
 
-Reuse of this evidence is allowed only if the final candidate's exact diff from the frozen product head is package/state documentation only. Any executable, test, migration, workflow, build/runtime configuration or dependency delta requires fresh exact-head executable validation.
+## Final reconciliation
+Immediately before terminal publication:
 
-## Collision and safety state
-At package start `main` was `3c340d6333d7e25b33b2f2af1e32a5cc15d5ee4b`. PR #139 remains unrelated parked ES-X03 work. D03 touches no website, competition or migration implementation path. Fresh-check live `main`, branches/PRs, migration ceiling, all check states and review threads immediately before merge.
+- `main` remained `3c340d6333d7e25b33b2f2af1e32a5cc15d5ee4b`;
+- the merge-ready D03 head was ahead and zero behind;
+- PR #139 remained independently parked ES-X03 work;
+- the legacy website branch was zero commits ahead and 156 behind `main`; no competition branch existed; D03 changed no website/competition implementation path;
+- the live migration ceiling remained V19 and D03 added no migration;
+- issue #43 remained open and LiteBans remained authoritative;
+- no production secret, Discord role/configuration, data, deployment, punishment authority or cutover changed.
 
-No production Discord, private data, token, deployment, LiteBans authority or issue #43 cutover state changed.
-
-## Exact next action
-Restore the accepted product tree fully, prove the exact diff from frozen head `ca66a97949cd8b9733c9039084d6230b2c63fd07`, inspect current workflows/reviews/collisions, then publish terminal `COMPLETE` state only if every gate is satisfied. Merge PR #149 by normal merge commit, prove containment/no unique work, clean the temporary branch when safe, and mark D04/D05 `READY` without starting either package.
+## Routing after completion
+This handoff and the terminal registry/package/workspace records are included in PR #149 and become canonical through its normal merge. The worker then verifies feature-head containment/no unique work and safe branch cleanup. `ES-D04 — Account linking and DiscordSRV migration` and `ES-D05 — Staff bot runtime foundation` are newly dependency-complete and marked `READY`; D04 is the lower-priority-number next owner selection. This worker starts neither one.

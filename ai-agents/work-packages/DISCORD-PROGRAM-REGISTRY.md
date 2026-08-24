@@ -10,9 +10,9 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | --- | --- | --- | ---: | --- |
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
-| `ES-D03` | Authorization and cross-platform policy | `REVIEW` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `PLANNED` | 133 | `ES-D01`–`ES-D03` |
-| `ES-D05` | Staff bot runtime foundation | `PLANNED` | 134 | `ES-D01`–`ES-D03` |
+| `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
+| `ES-D04` | Account linking and DiscordSRV migration | `READY` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D05` | Staff bot runtime foundation | `READY` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
@@ -26,15 +26,17 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-`ES-D03 — Authorization and cross-platform policy` is the selected actionable continuation on `package/es-d03-discord-authorization`, PR #149. A resumed-review hypothesis about the injectable Minecraft authorization seam was rejected after verification against the approved product contract: Developer's Discord rank grants no Minecraft authority, while independently granted Minecraft/domain permission remains intentionally honored. The temporary unconditional Developer deny is reverted. Final exact-delta, review, collision and merge checks remain.
+None after ES-D03 terminal publication and normal merge. A future Discord worker must reconcile live GitHub and classify incomplete packages again before claiming work.
 
 ## Latest completion
 
-`ES-D02` remains the latest completed Discord package through PR #148 while D03 is in review.
+`ES-D03 — Authorization and cross-platform policy` completed through PR #149. Frozen validated merge-ready head `5cd98a719e30eff64d1595f1e219ea70553c66c0` passed exact-head Java 21 full build/tests, aggregate JaCoCo, runtime-JAR leak inspection, Codacy coverage upload/final notification, Sentinel artifact build and CodeRabbit status with zero unresolved live inline threads.
 
-Frozen D03 product head `ca66a97949cd8b9733c9039084d6230b2c63fd07` passed its recorded exact-head Java 21 build/tests, aggregate JaCoCo, runtime-JAR leak inspection, Codacy finalization, Sentinel artifact build and CodeRabbit status with zero unresolved inline threads. Those results may be reused only if the final merge candidate is proven by exact comparison to differ from that frozen head solely in state/documentation files.
+The final review confirmed the intended Developer boundary: Discord Developer rank itself grants no Minecraft punishment authority, while the existing Minecraft/domain `AuthorizationPolicy` may independently authorize a Developer as required by the approved product contract. A temporary unconditional Developer deny was rejected and fully reverted; exact comparison proved no accepted executable/test residue before the fresh full validation run.
 
-`ES-D04` and `ES-D05` remain `PLANNED` while D03 is incomplete. If D03 reaches `COMPLETE`, both become dependency-complete and may be marked `READY`; this D03 worker must not start either package.
+D03 added no migration, Discord runtime, website, competition, production configuration/data, deployment, LiteBans authority change, or issue #43 cutover.
+
+`ES-D04` and `ES-D05` are newly dependency-complete and `READY`. D04 has the lower priority number and is the next owner-priority item if no actionable continuation or live collision supersedes it. This D03 worker does not start either package.
 
 ## Selection
 

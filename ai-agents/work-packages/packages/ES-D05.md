@@ -1,6 +1,9 @@
 # ES-D05 — Staff bot runtime foundation
 
-Status: `PLANNED`. Priority: 134. Depends on `ES-D01`–`ES-D03`. Internal package.
+Status: `READY`. Priority: 134. Depends on `ES-D01`–`ES-D03` (all `COMPLETE`). Internal package.
+
+## Readiness
+ES-D03 completion satisfies this package's remaining internal dependency. A future worker must still perform fresh live GitHub collision reconciliation and a fresh implementation-time Discord library/security review before claiming runtime work.
 
 ## Objective
 Add the staff Discord bot as a third first-class Java 21 process isolated from Paper and Velocity, with no destructive moderation commands yet.

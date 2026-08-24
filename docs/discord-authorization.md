@@ -14,7 +14,7 @@ The caller must resolve the Discord invoker to an authoritative linked Enthusia 
 | --- | --- |
 | Helper | Investigation/read capabilities plus configured warnings and temporary mutes no longer than the injected helper ceiling. No custom duration, kick, ban, channel restriction, permanent action, overturn, or Minecraft/cross-platform mutation. |
 | Mod | Read capabilities; configured warning/mute/kick/ban/channel-restriction actions; custom temporary duration within the injected per-action ceiling; end/revoke; sanction-request approval; overturn request. No permanent Discord mute/ban/restriction, unrestricted custom consequence, or full/approval overturn. |
-| Developer | Exactly the Mod Discord policy, but Minecraft authorization is still evaluated through the existing `AuthorizationPolicy`. The existing Developer exception therefore cannot be used to create or mutate Minecraft punishments. |
+| Developer | Exactly the Mod Discord policy. Discord Developer rank itself grants no Minecraft punishment authority; Minecraft authorization is evaluated independently through the existing `AuthorizationPolicy`, so a Developer may mutate Minecraft only when that Minecraft/domain policy independently permits the required action. |
 | Admin | Full Discord operation set, including permanent Discord mute/ban/restriction and custom Discord consequences/durations. Minecraft mutations still pass the existing Minecraft authorization checks. |
 | Founder | Full Discord operation set and existing Founder Minecraft authority. |
 | SYSTEM | No interactive Discord staff authority. Automated systems must use their separately reviewed service paths. |
