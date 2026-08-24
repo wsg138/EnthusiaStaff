@@ -133,6 +133,11 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
             return;
         }
         tracked.add(playerId);
+        try {
+            reputation.markReconciliationPending(playerId);
+        } catch (RuntimeException exception) {
+            logRetryable("Could not install fail-closed reputation reconciliation fence for " + playerId, exception);
+        }
         submit(playerId);
     }
 
@@ -175,20 +180,26 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
                     .orElse(null);
             Optional<ReputationBlacklist> current = reputation.blacklist(playerId);
             if (authoritative != null) {
-                reconcileActive(playerId, authoritative, current);
+                if (reconcileActive(playerId, authoritative, current)) {
+                    reputation.clearReconciliationPending(playerId);
+                }
                 return;
             }
             if (current.isPresent() && current.orElseThrow().status() == ReputationBlacklist.Status.ACTIVE) {
-                removeStaleRestriction(playerId, current.orElseThrow());
+                if (removeStaleRestriction(playerId, current.orElseThrow())) {
+                    reputation.clearReconciliationPending(playerId);
+                    tracked.remove(playerId);
+                }
                 return;
             }
+            reputation.clearReconciliationPending(playerId);
             tracked.remove(playerId);
         } catch (RuntimeException exception) {
             logRetryable("Reputation restriction reconciliation failed for " + playerId, exception);
         }
     }
 
-    private void reconcileActive(
+    private boolean reconcileActive(
             UUID playerId,
             ActiveSanction authoritative,
             Optional<ReputationBlacklist> current
@@ -200,7 +211,7 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
             if (value.status() == ReputationBlacklist.Status.ACTIVE
                     && value.caseId().equals(caseId)
                     && value.expirationAt().equals(expiration)) {
-                return;
+                return true;
             }
         }
         long expectedRevision = current.map(ReputationBlacklist::revision).orElse(0L);
@@ -213,10 +224,10 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
                 caseId,
                 expectedRevision
         );
-        verifyResult(result, "apply", playerId);
+        return verifyResult(result, "apply", playerId);
     }
 
-    private void removeStaleRestriction(UUID playerId, ReputationBlacklist current) {
+    private boolean removeStaleRestriction(UUID playerId, ReputationBlacklist current) {
         UUID operationId = operationId("remove", playerId, current.caseId(), "none", current.revision());
         ReputationMutationResult result = reputation.reconcileRemove(
                 operationId,
@@ -224,22 +235,21 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
                 current.caseId(),
                 current.revision()
         );
-        verifyResult(result, "remove", playerId);
-        if (result.success()) {
-            tracked.remove(playerId);
-        }
+        return verifyResult(result, "remove", playerId);
     }
 
-    private void verifyResult(ReputationMutationResult result, String operation, UUID playerId) {
+    private boolean verifyResult(ReputationMutationResult result, String operation, UUID playerId) {
         if (!result.success()) {
             plugin.getLogger().warning("Reputation blacklist " + operation + " for " + playerId
                     + " will retry after provider response " + result.status() + ": " + result.detail());
-            return;
+            return false;
         }
         if (!result.before().equals(result.after())) {
             plugin.getLogger().severe("Reputation provider changed score/category state while performing blacklist "
                     + operation + " for " + playerId + "; provider state requires review");
+            return false;
         }
+        return true;
     }
 
     private static UUID operationId(String action, UUID playerId, String caseId, String expiration, long revision) {
