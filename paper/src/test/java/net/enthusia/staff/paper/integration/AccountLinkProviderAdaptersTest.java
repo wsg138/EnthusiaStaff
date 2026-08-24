@@ -56,6 +56,24 @@ class AccountLinkProviderAdaptersTest {
         assertEquals(MirrorResult.UNCHANGED, provider.clearMirror("100000000000000001"));
     }
 
+    @Test
+    void discordSrvAdapterVerifiesSilentProviderMutationFailures() {
+        UUID oldMain = UUID.randomUUID();
+        UUID nextMain = UUID.randomUUID();
+        String discordId = "100000000000000011";
+        FakeDiscordSrvPlugin plugin = new FakeDiscordSrvPlugin(Map.of(discordId, oldMain));
+        DiscordSrvLinkProviderAdapter provider = DiscordSrvLinkProviderAdapter.fromPlugin(plugin).orElseThrow();
+
+        plugin.manager.ignoreLinkMutations = true;
+        assertEquals(MirrorResult.UNAVAILABLE, provider.mirrorMain(discordId, nextMain));
+        assertEquals(oldMain, provider.snapshotLinks().get(discordId));
+
+        plugin.manager.ignoreLinkMutations = false;
+        plugin.manager.ignoreUnlinkMutations = true;
+        assertEquals(MirrorResult.UNAVAILABLE, provider.clearMirror(discordId));
+        assertEquals(oldMain, provider.snapshotLinks().get(discordId));
+    }
+
     public static final class FakePlayTimePlugin {
         private final FakePlaytimeService service;
 
@@ -106,6 +124,8 @@ class AccountLinkProviderAdaptersTest {
 
     public static final class FakeAccountLinkManager {
         private final Map<String, UUID> links = new LinkedHashMap<>();
+        boolean ignoreLinkMutations;
+        boolean ignoreUnlinkMutations;
 
         FakeAccountLinkManager(Map<String, UUID> initial) {
             links.putAll(initial);
@@ -116,11 +136,17 @@ class AccountLinkProviderAdaptersTest {
         }
 
         public void link(String discordId, UUID uuid) {
+            if (ignoreLinkMutations) {
+                return;
+            }
+            links.entrySet().removeIf(entry -> uuid.equals(entry.getValue()));
             links.put(discordId, uuid);
         }
 
         public void unlink(String discordId) {
-            links.remove(discordId);
+            if (!ignoreUnlinkMutations) {
+                links.remove(discordId);
+            }
         }
 
         String ownerOf(UUID uuid) {

@@ -85,19 +85,23 @@ public final class DiscordSrvLinkProviderAdapter implements DiscordSrvMigrationS
             if (minecraftPlayerId.equals(currentForDiscord)) {
                 return MirrorResult.UNCHANGED;
             }
-            String currentOwner = links.entrySet().stream()
-                    .filter(entry -> minecraftPlayerId.equals(entry.getValue()))
-                    .map(Map.Entry::getKey)
-                    .findFirst()
-                    .orElse(null);
+            String currentOwner = ownerOf(links, minecraftPlayerId);
             if (currentOwner != null && !currentOwner.equals(discordUserId)) {
                 return MirrorResult.CONFLICT;
             }
-            if (currentForDiscord != null) {
-                unlinkDiscord.invoke(manager, discordUserId);
-            }
+
+            // Current DiscordSRV AccountLinkManager#link owns its replacement/unlink semantics.
+            // Its void mutators may log provider-storage failures instead of throwing, so never
+            // claim success until a fresh public snapshot proves the requested mirror exists.
             link.invoke(manager, discordUserId, minecraftPlayerId);
-            return MirrorResult.UPDATED;
+            Map<String, UUID> after = snapshotLinks();
+            if (minecraftPlayerId.equals(after.get(discordUserId))) {
+                return MirrorResult.UPDATED;
+            }
+            String postOwner = ownerOf(after, minecraftPlayerId);
+            return postOwner != null && !postOwner.equals(discordUserId)
+                    ? MirrorResult.CONFLICT
+                    : MirrorResult.UNAVAILABLE;
         } catch (ReflectiveOperationException | RuntimeException failure) {
             return MirrorResult.UNAVAILABLE;
         }
@@ -110,9 +114,19 @@ public final class DiscordSrvLinkProviderAdapter implements DiscordSrvMigrationS
                 return MirrorResult.UNCHANGED;
             }
             unlinkDiscord.invoke(manager, discordUserId);
-            return MirrorResult.UPDATED;
+            return snapshotLinks().containsKey(discordUserId)
+                    ? MirrorResult.UNAVAILABLE
+                    : MirrorResult.UPDATED;
         } catch (ReflectiveOperationException | RuntimeException failure) {
             return MirrorResult.UNAVAILABLE;
         }
+    }
+
+    private static String ownerOf(Map<String, UUID> links, UUID minecraftPlayerId) {
+        return links.entrySet().stream()
+                .filter(entry -> minecraftPlayerId.equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
     }
 }
