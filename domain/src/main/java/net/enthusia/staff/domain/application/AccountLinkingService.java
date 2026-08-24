@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.domain.ports.AccountLinkingStore;
 import net.enthusia.staff.domain.ports.AccountLinkingStore.Direction;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
@@ -97,11 +98,13 @@ public final class AccountLinkingService {
         }
         VersionedLink link = current.orElseThrow();
         DiscordUserId discordUserId = link.link().discordUserId();
-        mainAccounts.prepareForUnlink(discordUserId, minecraftPlayerId);
+        Optional<MainMinecraftAccount> replacement =
+                mainAccounts.replacementForUnlink(discordUserId, minecraftPlayerId);
         identities.unlink(
                 discordUserId,
                 minecraftPlayerId,
                 link.revision(),
+                replacement,
                 "self-unlink:mc:" + link.linkId(),
                 clock.instant()
         );
@@ -125,11 +128,13 @@ public final class AccountLinkingService {
         if (!link.link().discordUserId().equals(discordUserId)) {
             throw new IllegalStateException("Minecraft account is not linked to this Discord identity");
         }
-        mainAccounts.prepareForUnlink(discordUserId, minecraftPlayerId);
+        Optional<MainMinecraftAccount> replacement =
+                mainAccounts.replacementForUnlink(discordUserId, minecraftPlayerId);
         identities.unlink(
                 discordUserId,
                 minecraftPlayerId,
                 link.revision(),
+                replacement,
                 "self-unlink:discord:" + link.linkId(),
                 clock.instant()
         );

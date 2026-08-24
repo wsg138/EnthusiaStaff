@@ -35,18 +35,53 @@ public interface DiscordModerationPersistenceStore {
             Instant linkedAt
     );
 
-    VersionedLink unlink(
+    default VersionedLink unlink(
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
             String operationKey,
             Instant unlinkedAt
+    ) {
+        return unlink(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                Optional.empty(),
+                operationKey,
+                unlinkedAt
+        );
+    }
+
+    /**
+     * Atomically closes the current link and, when the removed UUID is the shared subject's main
+     * while other linked UUIDs remain, persists the supplied replacement main in the same transaction.
+     */
+    VersionedLink unlink(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt
     );
 
-    /** Atomically closes any current link and establishes the new STAFF_RECOVERY owner. */
+    default VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            String operationKey,
+            Instant changedAt
+    ) {
+        return reassign(newDiscordUserId, minecraftPlayerId, Optional.empty(), operationKey, changedAt);
+    }
+
+    /**
+     * Atomically closes any current link, preserving a valid main on the previous shared subject,
+     * and establishes the new STAFF_RECOVERY owner.
+     */
     VersionedLink reassign(
             DiscordUserId newDiscordUserId,
             UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
             String operationKey,
             Instant changedAt
     );

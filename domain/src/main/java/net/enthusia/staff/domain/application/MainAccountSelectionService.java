@@ -91,11 +91,11 @@ public final class MainAccountSelectionService {
     }
 
     /**
-     * Ensures unlinking the current main cannot commit a linked multi-account subject without a main.
-     * If the provider cannot rank every remaining account, deterministic UUID order is used rather
-     * than treating missing playtime as zero.
+     * Plans the replacement required when unlinking the current main. The plan is intentionally
+     * non-mutating: persistence validates and applies it in the same transaction that closes the
+     * link, so a revision race cannot change the main while leaving the link intact.
      */
-    public Optional<MainMinecraftAccount> prepareForUnlink(
+    public Optional<MainMinecraftAccount> replacementForUnlink(
             DiscordUserId discordUserId,
             UUID removingPlayerId
     ) {
@@ -105,7 +105,7 @@ public final class MainAccountSelectionService {
         }
         MainMinecraftAccount current = versioned.subject().mainMinecraftAccount().orElse(null);
         if (current == null || !current.playerId().equals(removingPlayerId)) {
-            return Optional.ofNullable(current);
+            return Optional.empty();
         }
         Set<UUID> remaining = versioned.subject().minecraftAccountIds().stream()
                 .filter(playerId -> !playerId.equals(removingPlayerId))
@@ -113,12 +113,10 @@ public final class MainAccountSelectionService {
         if (remaining.isEmpty()) {
             return Optional.empty();
         }
-        UUID replacement = chooseReplacement(remaining);
-        MainMinecraftAccount automatic = new MainMinecraftAccount(
-                replacement, MainAccountSelectionSource.AUTOMATIC);
-        VersionedSubject changed = identities.setMainMinecraftAccount(
-                versioned.subject().subjectId(), automatic, versioned.revision(), clock.instant());
-        return changed.subject().mainMinecraftAccount();
+        return Optional.of(new MainMinecraftAccount(
+                chooseReplacement(remaining),
+                MainAccountSelectionSource.AUTOMATIC
+        ));
     }
 
     public MainMinecraftAccount setStaffOverride(

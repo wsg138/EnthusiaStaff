@@ -71,6 +71,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
             String operationKey,
             Instant unlinkedAt
     ) {
@@ -78,6 +79,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
                 discordUserId,
                 minecraftPlayerId,
                 expectedRevision,
+                replacementMain,
                 operationKey,
                 unlinkedAt
         );
@@ -97,10 +99,17 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
     public VersionedLink reassign(
             DiscordUserId newDiscordUserId,
             UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
             String operationKey,
             Instant changedAt
     ) {
-        return links.reassign(newDiscordUserId, minecraftPlayerId, operationKey, changedAt);
+        return links.reassign(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt
+        );
     }
 
     @Override

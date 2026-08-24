@@ -58,7 +58,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 "Unable to resolve Minecraft link-code initiator",
                 connection -> {
                     StoredCode stored = codeByHash(connection, codeHash, true);
-                    requireUsableDirection(connection, stored, Direction.MINECRAFT_TO_DISCORD, now, true);
+                    requireUsableDirection(connection, stored, Direction.MINECRAFT_TO_DISCORD, now);
                     return stored.minecraftInitiator().orElseThrow();
                 }
         );
@@ -105,19 +105,35 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
     @Override
     public List<VersionedLink> historyForMinecraft(UUID minecraftPlayerId) {
         require(minecraftPlayerId, "minecraftPlayerId");
-        return history(
-                "minecraft_player_id = ?",
-                statement -> statement.setBytes(1, UuidBytes.toBytes(minecraftPlayerId))
-        );
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read account-link history", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT link_id, subject_id, discord_user_id, minecraft_player_id, linked_at,
+                           unlinked_at, source, revision
+                    FROM discord_minecraft_links
+                    WHERE minecraft_player_id = ?
+                    ORDER BY linked_at DESC, link_id DESC
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(minecraftPlayerId));
+                return readHistory(statement);
+            }
+        });
     }
 
     @Override
     public List<VersionedLink> historyForDiscord(DiscordUserId discordUserId) {
         require(discordUserId, "discordUserId");
-        return history(
-                "discord_user_id = ?",
-                statement -> statement.setBigDecimal(1, discordId(discordUserId))
-        );
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read account-link history", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT link_id, subject_id, discord_user_id, minecraft_player_id, linked_at,
+                           unlinked_at, source, revision
+                    FROM discord_minecraft_links
+                    WHERE discord_user_id = ?
+                    ORDER BY linked_at DESC, link_id DESC
+                    """)) {
+                statement.setBigDecimal(1, discordId(discordUserId));
+                return readHistory(statement);
+            }
+        });
     }
 
     private VersionedLink complete(
@@ -134,7 +150,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         require(now, "now");
         return JdbcTransactionSupport.execute(dataSource, "Unable to complete account linking", connection -> {
             StoredCode stored = codeByHash(connection, codeHash, true);
-            requireUsableDirection(connection, stored, expectedDirection, now, false);
+            requireUsableDirection(connection, stored, expectedDirection, now);
 
             DiscordUserId discordUserId = expectedDirection == Direction.DISCORD_TO_MINECRAFT
                     ? stored.discordInitiator().orElseThrow()
@@ -232,8 +248,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             Connection connection,
             StoredCode stored,
             Direction expectedDirection,
-            Instant now,
-            boolean allowConsumed
+            Instant now
     ) throws SQLException {
         if (stored == null || stored.direction() != expectedDirection) {
             throw new SQLException("account-link code is invalid");
@@ -245,9 +260,6 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             throw new SQLException("account-link code expired");
         }
         if (stored.state().equals("CONSUMED")) {
-            if (!allowConsumed) {
-                return;
-            }
             return;
         }
         if (!stored.state().equals("ACTIVE")) {
@@ -303,19 +315,29 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             UUID minecraftPlayerId,
             Instant now
     ) throws SQLException {
-        String owner = direction == Direction.DISCORD_TO_MINECRAFT
-                ? "initiator_discord_user_id = ?"
-                : "initiator_minecraft_player_id = ?";
-        String sql = "UPDATE discord_link_codes SET state = 'SUPERSEDED', superseded_at = ?, "
-                + "revision = revision + 1 WHERE direction = ? AND " + owner + " AND state = 'ACTIVE'";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setTimestamp(1, Timestamp.from(now));
-            statement.setString(2, direction.name());
-            if (direction == Direction.DISCORD_TO_MINECRAFT) {
-                statement.setBigDecimal(3, discordId(discordUserId));
-            } else {
-                statement.setBytes(3, UuidBytes.toBytes(minecraftPlayerId));
+        if (direction == Direction.DISCORD_TO_MINECRAFT) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE discord_link_codes
+                    SET state = 'SUPERSEDED', superseded_at = ?, revision = revision + 1
+                    WHERE direction = 'DISCORD_TO_MINECRAFT'
+                      AND initiator_discord_user_id = ?
+                      AND state = 'ACTIVE'
+                    """)) {
+                statement.setTimestamp(1, Timestamp.from(now));
+                statement.setBigDecimal(2, discordId(discordUserId));
+                statement.executeUpdate();
             }
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_link_codes
+                SET state = 'SUPERSEDED', superseded_at = ?, revision = revision + 1
+                WHERE direction = 'MINECRAFT_TO_DISCORD'
+                  AND initiator_minecraft_player_id = ?
+                  AND state = 'ACTIVE'
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(minecraftPlayerId));
             statement.executeUpdate();
         }
     }
@@ -331,22 +353,14 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         }
     }
 
-    private List<VersionedLink> history(String predicate, SqlBinder binder) {
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read account-link history", connection -> {
-            String sql = "SELECT link_id, subject_id, discord_user_id, minecraft_player_id, linked_at, "
-                    + "unlinked_at, source, revision FROM discord_minecraft_links WHERE " + predicate
-                    + " ORDER BY linked_at DESC, link_id DESC";
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                binder.bind(statement);
-                try (ResultSet result = statement.executeQuery()) {
-                    List<VersionedLink> links = new ArrayList<>();
-                    while (result.next()) {
-                        links.add(readLink(result));
-                    }
-                    return List.copyOf(links);
-                }
+    private static List<VersionedLink> readHistory(PreparedStatement statement) throws SQLException {
+        try (ResultSet result = statement.executeQuery()) {
+            List<VersionedLink> links = new ArrayList<>();
+            while (result.next()) {
+                links.add(readLink(result));
             }
-        });
+            return List.copyOf(links);
+        }
     }
 
     private static StoredCode codeByHash(Connection connection, String hash, boolean lock) throws SQLException {
@@ -417,11 +431,6 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             throw new IllegalArgumentException(name + " must be present");
         }
         return value;
-    }
-
-    @FunctionalInterface
-    private interface SqlBinder {
-        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private record StoredCode(

@@ -7,12 +7,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLink;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 
@@ -47,6 +51,7 @@ final class JdbcDiscordLinkRepository {
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
             String operationKey,
             Instant unlinkedAt
     ) {
@@ -55,6 +60,7 @@ final class JdbcDiscordLinkRepository {
         if (expectedRevision < 0) {
             throw new IllegalArgumentException("expectedRevision must not be negative");
         }
+        requirePresent(replacementMain, "replacementMain");
         requireKey(operationKey, "operationKey");
         requirePresent(unlinkedAt, "unlinkedAt");
         return JdbcTransactionSupport.execute(
@@ -65,6 +71,7 @@ final class JdbcDiscordLinkRepository {
                         discordUserId,
                         minecraftPlayerId,
                         expectedRevision,
+                        replacementMain,
                         operationKey,
                         unlinkedAt
                 )
@@ -74,17 +81,26 @@ final class JdbcDiscordLinkRepository {
     VersionedLink reassign(
             DiscordUserId newDiscordUserId,
             UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
             String operationKey,
             Instant changedAt
     ) {
         requirePresent(newDiscordUserId, "newDiscordUserId");
         requirePresent(minecraftPlayerId, "minecraftPlayerId");
+        requirePresent(previousSubjectReplacementMain, "previousSubjectReplacementMain");
         requireBaseKey(operationKey, "operationKey");
         requirePresent(changedAt, "changedAt");
         return JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to reassign Discord/Minecraft identity",
-                connection -> reassign(connection, newDiscordUserId, minecraftPlayerId, operationKey, changedAt)
+                connection -> reassign(
+                        connection,
+                        newDiscordUserId,
+                        minecraftPlayerId,
+                        previousSubjectReplacementMain,
+                        operationKey,
+                        changedAt
+                )
         );
     }
 
@@ -166,6 +182,7 @@ final class JdbcDiscordLinkRepository {
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
             String operationKey,
             Instant unlinkedAt
     ) throws SQLException {
@@ -191,7 +208,13 @@ final class JdbcDiscordLinkRepository {
         }
 
         ModerationSubjectId sharedSubjectId = current.subjectId();
-        requireValidRemainingMain(connection, sharedSubjectId, minecraftPlayerId);
+        prepareRemainingMain(
+                connection,
+                sharedSubjectId,
+                minecraftPlayerId,
+                replacementMain,
+                unlinkedAt
+        );
 
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_minecraft_links
@@ -230,6 +253,7 @@ final class JdbcDiscordLinkRepository {
             Connection connection,
             DiscordUserId newDiscordUserId,
             UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
             String operationKey,
             Instant changedAt
     ) throws SQLException {
@@ -256,6 +280,7 @@ final class JdbcDiscordLinkRepository {
                     current.link().discordUserId(),
                     minecraftPlayerId,
                     current.revision(),
+                    previousSubjectReplacementMain,
                     unlinkOperationKey,
                     changedAt
             );
@@ -270,12 +295,14 @@ final class JdbcDiscordLinkRepository {
         );
     }
 
-    private static void requireValidRemainingMain(
+    private static void prepareRemainingMain(
             Connection connection,
             ModerationSubjectId subjectId,
-            UUID removingPlayerId
+            UUID removingPlayerId,
+            Optional<MainMinecraftAccount> replacementMain,
+            Instant selectedAt
     ) throws SQLException {
-        int remaining = 0;
+        Set<UUID> remainingPlayers = new HashSet<>();
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT player_id
                 FROM moderation_subject_minecraft_identities
@@ -287,16 +314,13 @@ final class JdbcDiscordLinkRepository {
                 while (result.next()) {
                     UUID playerId = UuidBytes.fromBytes(result.getBytes("player_id"));
                     if (!playerId.equals(removingPlayerId)) {
-                        remaining++;
+                        remainingPlayers.add(playerId);
                     }
                 }
             }
         }
-        if (remaining == 0) {
-            return;
-        }
 
-        UUID main = null;
+        UUID currentMain = null;
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT player_id
                 FROM moderation_subject_main_accounts
@@ -306,13 +330,70 @@ final class JdbcDiscordLinkRepository {
             statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
             try (ResultSet result = statement.executeQuery()) {
                 if (result.next()) {
-                    main = UuidBytes.fromBytes(result.getBytes("player_id"));
+                    currentMain = UuidBytes.fromBytes(result.getBytes("player_id"));
                 }
             }
         }
-        if (main == null || main.equals(removingPlayerId)) {
-            throw new SQLException(
-                    "unlink would leave linked Minecraft accounts without a valid replacement main account"
+
+        if (remainingPlayers.isEmpty()) {
+            if (replacementMain.isPresent()) {
+                throw new SQLException("unlink replacement became stale because no linked accounts remain");
+            }
+            return;
+        }
+        if (currentMain != null && remainingPlayers.contains(currentMain)) {
+            // A concurrent, valid main change won before this transaction acquired the row lock.
+            // Preserve it rather than overwriting it with a stale precomputed replacement plan.
+            return;
+        }
+
+        MainMinecraftAccount replacement = replacementMain.orElseThrow(() -> new SQLException(
+                "unlink would leave linked Minecraft accounts without a valid replacement main account"));
+        if (replacement.source() != MainAccountSelectionSource.AUTOMATIC) {
+            throw new SQLException("unlink replacement main must use automatic selection");
+        }
+        if (!remainingPlayers.contains(replacement.playerId())) {
+            throw new SQLException("unlink replacement main is not a remaining linked Minecraft account");
+        }
+        writeReplacementMain(connection, subjectId, replacement, selectedAt, currentMain != null);
+    }
+
+    private static void writeReplacementMain(
+            Connection connection,
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount replacement,
+            Instant selectedAt,
+            boolean rowExists
+    ) throws SQLException {
+        if (rowExists) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE moderation_subject_main_accounts
+                    SET player_id = ?, selection_source = ?, selected_at = ?, revision = revision + 1
+                    WHERE subject_id = ?
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(replacement.playerId()));
+                statement.setString(2, replacement.source().name());
+                statement.setTimestamp(3, Timestamp.from(selectedAt));
+                statement.setBytes(4, UuidBytes.toBytes(subjectId.value()));
+                JdbcTransactionSupport.requireSingleUpdate(
+                        statement.executeUpdate(),
+                        "replacement main account was not updated"
+                );
+            }
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO moderation_subject_main_accounts(
+                    subject_id, player_id, selection_source, selected_at, revision
+                ) VALUES (?, ?, ?, ?, 0)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
+            statement.setBytes(2, UuidBytes.toBytes(replacement.playerId()));
+            statement.setString(3, replacement.source().name());
+            statement.setTimestamp(4, Timestamp.from(selectedAt));
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "replacement main account was not inserted"
             );
         }
     }
@@ -528,24 +609,30 @@ final class JdbcDiscordLinkRepository {
 
     private static VersionedLink linkByOperation(Connection connection, String operationKey, boolean lock)
             throws SQLException {
-        return linkByKey(connection, "operation_key", operationKey, lock);
+        String sql = """
+                SELECT link_id, subject_id, discord_user_id, minecraft_player_id,
+                       linked_at, unlinked_at, source, revision
+                FROM discord_minecraft_links
+                WHERE operation_key = ?
+                """ + (lock ? " FOR UPDATE" : "");
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, operationKey);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? readLink(result, false) : null;
+            }
+        }
     }
 
     private static VersionedLink linkByUnlinkOperation(Connection connection, String operationKey, boolean lock)
-            throws SQLException {
-        return linkByKey(connection, "unlink_operation_key", operationKey, lock);
-    }
-
-    private static VersionedLink linkByKey(Connection connection, String column, String key, boolean lock)
             throws SQLException {
         String sql = """
                 SELECT link_id, subject_id, discord_user_id, minecraft_player_id,
                        linked_at, unlinked_at, source, revision
                 FROM discord_minecraft_links
-                WHERE %s = ?
-                """.formatted(column) + (lock ? " FOR UPDATE" : "");
+                WHERE unlink_operation_key = ?
+                """ + (lock ? " FOR UPDATE" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, key);
+            statement.setString(1, operationKey);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? readLink(result, false) : null;
             }

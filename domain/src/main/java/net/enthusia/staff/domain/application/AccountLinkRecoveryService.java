@@ -11,6 +11,7 @@ import net.enthusia.staff.domain.moderation.AccountLinkAudit;
 import net.enthusia.staff.domain.moderation.AccountLinkAuditAction;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.domain.ports.AccountLinkAuditStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
@@ -88,11 +89,13 @@ public final class AccountLinkRecoveryService {
             if (!current.link().discordUserId().equals(expectedDiscordUserId)) {
                 throw new IllegalStateException("current Discord owner does not match the recovery request");
             }
-            mainAccounts.prepareForUnlink(expectedDiscordUserId, minecraftPlayerId);
+            Optional<MainMinecraftAccount> replacement =
+                    mainAccounts.replacementForUnlink(expectedDiscordUserId, minecraftPlayerId);
             identities.unlink(
                     expectedDiscordUserId,
                     minecraftPlayerId,
                     current.revision(),
+                    replacement,
                     operationKey + ":unlink",
                     requestedAudit.createdAt());
             mainAccounts.evaluate(expectedDiscordUserId);
@@ -115,11 +118,16 @@ public final class AccountLinkRecoveryService {
         requireCompatibleAudit(requestedAudit);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         DiscordUserId oldDiscordUserId = existing.map(value -> value.link().discordUserId()).orElse(null);
-        if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
-            mainAccounts.prepareForUnlink(oldDiscordUserId, minecraftPlayerId);
-        }
+        Optional<MainMinecraftAccount> replacement = oldDiscordUserId != null
+                && !oldDiscordUserId.equals(newDiscordUserId)
+                ? mainAccounts.replacementForUnlink(oldDiscordUserId, minecraftPlayerId)
+                : Optional.empty();
         VersionedLink linked = identities.reassign(
-                newDiscordUserId, minecraftPlayerId, operationKey, requestedAudit.createdAt());
+                newDiscordUserId,
+                minecraftPlayerId,
+                replacement,
+                operationKey,
+                requestedAudit.createdAt());
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
             mainAccounts.evaluate(oldDiscordUserId);
         }
