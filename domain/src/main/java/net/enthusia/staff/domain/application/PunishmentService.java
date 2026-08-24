@@ -66,9 +66,9 @@ public final class PunishmentService {
     }
 
     /**
-     * Installs a post-commit observer. The observer is notification-only and must not throw because
-     * the punishment is already durable when it is invoked. Durable consumers must independently
-     * reconcile missed notifications.
+     * Installs a post-commit observer. The observer is notification-only and cannot change the
+     * already-durable punishment result. Durable consumers must independently reconcile missed
+     * notifications.
      */
     public void setCommittedObserver(Consumer<PunishmentPlan> observer) {
         committedObserver = Objects.requireNonNull(observer, "observer");
@@ -159,9 +159,17 @@ public final class PunishmentService {
         );
         PunishmentResult result = store.createPunishment(plan);
         if (result instanceof PunishmentResult.Accepted) {
-            committedObserver.accept(plan);
+            notifyCommitted(plan);
         }
         return result;
+    }
+
+    private void notifyCommitted(PunishmentPlan plan) {
+        try {
+            committedObserver.accept(plan);
+        } catch (RuntimeException ignored) {
+            // The punishment is already durable. Recovery consumers reconcile missed notifications.
+        }
     }
 
     public PunishmentEvaluation evaluate(CreatePunishmentRequest request, OperationalMode mode) {
