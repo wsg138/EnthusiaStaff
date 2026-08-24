@@ -92,7 +92,9 @@ class GitHubApi:
 
     def _perform_request(self, method: str, path: str, data: bytes | None, headers: Mapping[str, str]) -> tuple[int, bytes]:
         context = ssl.create_default_context()
-        connection = http.client.HTTPSConnection(API_HOST, timeout=30, context=context)
+        # Fixed api.github.com origin plus an explicit verifying SSLContext make the
+        # historical B309 HTTPSConnection warning inapplicable on the supported runtime.
+        connection = http.client.HTTPSConnection(API_HOST, timeout=30, context=context)  # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
         try:
             connection.request(method, self._request_path(path), body=data, headers=dict(headers))
             response = connection.getresponse()
@@ -630,4 +632,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except ControlError as exc:
         print(f"::error::{exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
