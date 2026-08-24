@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
 import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol
 
 SOURCE_REPOSITORY = "wsg138/EnthusiaStaff"
+STAGING_REPOSITORY = "wsg138/EnthusiaStaff-Staging"
+API_HOST = "api.github.com"
 PUBLIC_WORKFLOW = "pi-staging-check.yml"
 EXACT_COMMAND = "@enthusia-staging test"
 STATUS_CONTEXT = "Pi Staging"
@@ -24,14 +24,17 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
 CORRELATION_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
 REQUESTER_RE = re.compile(r"^[A-Za-z0-9_.:@\[\]-]{1,100}$")
-RUN_URL_RE = re.compile(r"/actions/runs/([1-9][0-9]*)(?:$|[/?#])")
+EVIDENCE_RE = re.compile(r"^[A-Za-z0-9._=;:+/-]{1,500}$")
+ACTIVE_RUN_STATES = frozenset({"queued", "in_progress", "waiting", "requested", "pending"})
 
 
 class ControlError(RuntimeError):
-    pass
+    """Reject unsafe or malformed staging control-plane state."""
 
 
 class Api(Protocol):
+    """Minimal GitHub API surface used by the control-plane logic."""
+
     def get(self, path: str) -> Any: ...
     def post(self, path: str, payload: Mapping[str, Any]) -> Any: ...
     def patch(self, path: str, payload: Mapping[str, Any]) -> Any: ...
@@ -39,6 +42,8 @@ class Api(Protocol):
 
 @dataclass(frozen=True)
 class PrBinding:
+    """Immutable same-repository pull-request source identity."""
+
     source_repository: str
     pr_number: int
     head_repository: str
@@ -48,6 +53,8 @@ class PrBinding:
 
 @dataclass(frozen=True)
 class Record:
+    """Durable public staging evidence for one exact pull-request head."""
+
     pr_number: int
     head_sha: str
     requester: str
@@ -63,30 +70,50 @@ class Record:
 
 
 class GitHubApi:
-    def __init__(self, api_url: str, repository: str, token: str) -> None:
+    """Fixed-origin GitHub REST client that never forwards credentials elsewhere."""
+
+    def __init__(self, repository: str, token: str) -> None:
+        if repository != SOURCE_REPOSITORY:
+            raise ControlError(f"unexpected repository for API client: {repository!r}")
         if not token:
             raise ControlError("GITHUB_TOKEN is required")
-        self.base = f"{api_url.rstrip('/')}/repos/{repository}"
+        self.base_path = f"/repos/{repository}"
         self.token = token
 
+    def _request_path(self, path: str) -> str:
+        if not path.startswith("/") or path.startswith("//") or "\r" in path or "\n" in path:
+            raise ControlError("GitHub API path must be a repository-relative absolute path")
+        return self.base_path + path
+
     def request(self, method: str, path: str, payload: Mapping[str, Any] | None = None) -> Any:
-        url = path if path.startswith("https://") else self.base + path
-        data = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
-        req = urllib.request.Request(url, data=data, method=method)
-        req.add_header("Accept", "application/vnd.github+json")
-        req.add_header("X-GitHub-Api-Version", "2022-11-28")
-        req.add_header("Authorization", f"Bearer {self.token}")
+        if method not in {"GET", "POST", "PATCH"}:
+            raise ControlError(f"unsupported GitHub API method: {method}")
+        data = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Authorization": f"Bearer {self.token}",
+        }
         if data is not None:
-            req.add_header("Content-Type", "application/json")
+            headers["Content-Type"] = "application/json"
+        connection = http.client.HTTPSConnection(API_HOST, timeout=30)
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                raw = response.read()
-                return None if not raw else json.loads(raw)
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", "replace")
-            raise ControlError(f"GitHub API {method} {path} failed: HTTP {exc.code}: {body[:500]}") from exc
-        except urllib.error.URLError as exc:
+            connection.request(method, self._request_path(path), body=data, headers=headers)
+            response = connection.getresponse()
+            raw = response.read()
+        except (OSError, http.client.HTTPException) as exc:
             raise ControlError(f"GitHub API {method} {path} failed: {exc}") from exc
+        finally:
+            connection.close()
+        if not 200 <= response.status < 300:
+            body = raw.decode("utf-8", "replace")
+            raise ControlError(f"GitHub API {method} {path} failed: HTTP {response.status}: {body[:500]}")
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ControlError(f"GitHub API {method} {path} returned invalid JSON") from exc
 
     def get(self, path: str) -> Any:
         return self.request("GET", path)
@@ -99,22 +126,33 @@ class GitHubApi:
 
 
 def normalize_command(body: str) -> str:
+    """Normalize only surrounding whitespace; command contents stay exact."""
     return body.strip()
 
 
 def is_exact_command(body: str) -> bool:
+    """Return whether a comment is exactly the supported staging command."""
     return normalize_command(body) == EXACT_COMMAND
 
 
 def validate_correlation(value: str) -> str:
+    """Validate a bounded observability-only correlation identifier."""
     if not CORRELATION_RE.fullmatch(value):
         raise ControlError("request correlation must be 1-80 characters from [A-Za-z0-9._:-]")
     return value
 
 
 def validate_requester(value: str) -> str:
+    """Validate a requester display identity before durable publication."""
     if not REQUESTER_RE.fullmatch(value):
         raise ControlError("requester identity is invalid")
+    return value
+
+
+def validate_evidence_identity(value: str) -> str:
+    """Validate sanitized evidence text before embedding it in a PR comment."""
+    if not EVIDENCE_RE.fullmatch(value):
+        raise ControlError("evidence identity is invalid")
     return value
 
 
@@ -130,57 +168,68 @@ def _positive_int(value: Any, label: str) -> int:
     return parsed
 
 
+def _mapping(value: Any, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ControlError(f"{label} is missing or invalid")
+    return value
+
+
 def command_event(payload: Mapping[str, Any], expected_repository: str = SOURCE_REPOSITORY) -> tuple[int, str, str] | None:
-    comment = payload.get("comment")
-    issue = payload.get("issue")
-    repository = payload.get("repository")
-    if not isinstance(comment, Mapping) or not isinstance(issue, Mapping) or not isinstance(repository, Mapping):
-        raise ControlError("malformed issue_comment event")
+    """Parse and authorize an exact issue_comment command event."""
+    comment = _mapping(payload.get("comment"), "comment metadata")
+    issue = _mapping(payload.get("issue"), "issue metadata")
+    repository = _mapping(payload.get("repository"), "repository metadata")
     body = comment.get("body")
     if not isinstance(body, str):
         raise ControlError("comment body is missing")
     if not is_exact_command(body):
         return None
-    repo_name = repository.get("full_name")
-    if repo_name != expected_repository:
-        raise ControlError(f"command received for unexpected repository: {repo_name!r}")
+    if repository.get("full_name") != expected_repository:
+        raise ControlError("command received for unexpected repository")
     if not issue.get("pull_request"):
         raise ControlError("Pi staging command is only valid on pull requests")
-    association = comment.get("author_association")
-    if association not in AUTHORIZED_ASSOCIATIONS:
-        raise ControlError(f"comment author association is not authorized: {association!r}")
-    user = comment.get("user")
-    if not isinstance(user, Mapping):
-        raise ControlError("comment user is missing")
+    if comment.get("author_association") not in AUTHORIZED_ASSOCIATIONS:
+        raise ControlError("comment author association is not authorized")
+    user = _mapping(comment.get("user"), "comment user")
     requester = validate_requester(str(user.get("login", "")))
     pr_number = _positive_int(issue.get("number"), "PR number")
     comment_id = _positive_int(comment.get("id"), "comment ID")
-    return pr_number, requester, validate_correlation(f"comment-{comment_id}")
+    correlation = validate_correlation(f"comment-{comment_id}")
+    return pr_number, requester, correlation
+
+
+def _validate_head_ref(value: Any) -> str:
+    if not isinstance(value, str) or not REF_RE.fullmatch(value):
+        raise ControlError("PR head ref is invalid")
+    if ".." in value or value.startswith("/") or value.endswith("/"):
+        raise ControlError("PR head ref is invalid")
+    return value
+
+
+def _validate_sha(value: Any, label: str = "PR head SHA") -> str:
+    if not isinstance(value, str) or not SHA_RE.fullmatch(value):
+        raise ControlError(f"{label} is not an exact 40-character lowercase SHA")
+    return value
 
 
 def binding_from_pr(pr: Mapping[str, Any], expected_repository: str = SOURCE_REPOSITORY) -> PrBinding:
-    state = pr.get("state")
-    if state != "open":
+    """Validate a live PR and return its immutable exact-head binding."""
+    if pr.get("state") != "open":
         raise ControlError("PR is not open")
     if pr.get("draft") is not False:
         raise ControlError("PR is draft or draft state is unavailable")
     number = _positive_int(pr.get("number"), "PR number")
-    head = pr.get("head")
-    if not isinstance(head, Mapping):
-        raise ControlError("PR head metadata is missing")
-    repo = head.get("repo")
-    if not isinstance(repo, Mapping) or repo.get("full_name") != expected_repository:
+    head = _mapping(pr.get("head"), "PR head metadata")
+    repo = _mapping(head.get("repo"), "PR head repository")
+    if repo.get("full_name") != expected_repository:
         raise ControlError("fork or invalid PR head repository is not eligible for Pi staging")
-    head_ref = head.get("ref")
-    if not isinstance(head_ref, str) or not REF_RE.fullmatch(head_ref) or ".." in head_ref or head_ref.startswith("/") or head_ref.endswith("/"):
-        raise ControlError("PR head ref is invalid")
-    head_sha = head.get("sha")
-    if not isinstance(head_sha, str) or not SHA_RE.fullmatch(head_sha):
-        raise ControlError("PR head SHA is not an exact 40-character lowercase SHA")
+    head_ref = _validate_head_ref(head.get("ref"))
+    head_sha = _validate_sha(head.get("sha"))
     return PrBinding(expected_repository, number, expected_repository, head_ref, head_sha)
 
 
 def require_same_binding(live_pr: Mapping[str, Any], expected: PrBinding) -> PrBinding:
+    """Fail closed if any exact PR source identity changed since capture."""
     actual = binding_from_pr(live_pr, expected.source_repository)
     if actual != expected:
         raise ControlError(
@@ -192,6 +241,7 @@ def require_same_binding(live_pr: Mapping[str, Any], expected: PrBinding) -> PrB
 
 
 def dispatch_payload(binding: PrBinding, correlation: str, requester: str) -> dict[str, Any]:
+    """Build the only allowed public Pi Staging workflow_dispatch payload."""
     validate_correlation(correlation)
     validate_requester(requester)
     return {
@@ -210,13 +260,16 @@ def dispatch_payload(binding: PrBinding, correlation: str, requester: str) -> di
 
 
 def expected_run_title(binding: PrBinding, correlation: str) -> str:
+    """Return deterministic public workflow display title for correlation."""
     validate_correlation(correlation)
     return f"Pi Staging PR #{binding.pr_number} / {binding.head_sha} / {correlation}"
 
 
 def marker(pr_number: int, sha: str) -> str:
-    if pr_number <= 0 or not SHA_RE.fullmatch(sha):
-        raise ControlError("invalid marker identity")
+    """Return the stable machine-readable PR/head comment marker."""
+    if pr_number <= 0:
+        raise ControlError("invalid marker PR number")
+    _validate_sha(sha, "marker SHA")
     return f"<!-- enthusia-pi-staging pr={pr_number} sha={sha} -->"
 
 
@@ -224,16 +277,55 @@ def _bounded_description(value: str) -> str:
     return value[:140]
 
 
-def status_payload(record: Record) -> dict[str, Any]:
+def _run_id_from_url(url: Any, repository: str = SOURCE_REPOSITORY) -> int | None:
+    if not isinstance(url, str):
+        return None
+    prefix = f"https://github.com/{repository}/actions/runs/"
+    if not url.startswith(prefix):
+        return None
+    suffix = url[len(prefix):]
+    if not suffix.isdigit() or suffix.startswith("0"):
+        return None
+    return int(suffix)
+
+
+def _require_run_url(url: Any, repository: str, expected_run_id: int | None = None) -> str:
+    run_id = _run_id_from_url(url, repository)
+    if run_id is None:
+        raise ControlError(f"workflow run URL is invalid for {repository}")
+    if expected_run_id is not None and run_id != expected_run_id:
+        raise ControlError("workflow run URL does not match its run ID")
+    return str(url)
+
+
+def _validate_record(record: Record) -> None:
+    if record.pr_number <= 0:
+        raise ControlError("record PR number is invalid")
+    _validate_sha(record.head_sha, "record SHA")
+    validate_requester(record.requester)
+    if record.public_run_id <= 0 or record.public_attempt <= 0:
+        raise ControlError("public run identity is invalid")
+    _require_run_url(record.public_run_url, SOURCE_REPOSITORY, record.public_run_id)
     if record.state not in {"queued", "in_progress", "terminal"}:
         raise ControlError(f"invalid record state: {record.state}")
-    if record.state == "terminal":
+    if (record.private_run_id is None) != (record.private_run_url is None):
+        raise ControlError("private run ID and URL must be published together")
+    if record.private_run_id is not None:
+        _require_run_url(record.private_run_url, STAGING_REPOSITORY, record.private_run_id)
+    if record.evidence_identity:
+        validate_evidence_identity(record.evidence_identity)
+
+
+def status_payload(record: Record) -> dict[str, Any]:
+    """Map canonical staging state to an exact-head GitHub commit status."""
+    _validate_record(record)
+    if record.state != "terminal":
+        state = "pending"
+        description = f"Canonical Pi staging {record.state} for PR #{record.pr_number}"
+    else:
         canonical_success = record.conclusion == "success" and record.cleanup == "success"
         state = "success" if canonical_success else ("error" if record.conclusion == "error" else "failure")
         description = "Canonical Pi staging passed" if state == "success" else f"Canonical Pi staging {record.conclusion or 'failed'}"
-    else:
-        state = "pending"
-        description = f"Canonical Pi staging {record.state} for PR #{record.pr_number}"
     return {
         "state": state,
         "target_url": record.public_run_url,
@@ -243,9 +335,8 @@ def status_payload(record: Record) -> dict[str, Any]:
 
 
 def render_record(record: Record) -> str:
-    if not SHA_RE.fullmatch(record.head_sha):
-        raise ControlError("record SHA is invalid")
-    state = record.state
+    """Render the stable, sanitized human/machine-readable PR record."""
+    _validate_record(record)
     lines = [
         marker(record.pr_number, record.head_sha),
         "### Canonical Pi Staging",
@@ -256,7 +347,7 @@ def render_record(record: Record) -> str:
         f"- Public run ID: `{record.public_run_id}`",
         f"- Public attempt: `{record.public_attempt}`",
         f"- Public run: {record.public_run_url}",
-        f"- State: `{state}`",
+        f"- State: `{record.state}`",
         f"- Private run ID: `{record.private_run_id}`" if record.private_run_id else "- Private run ID: `pending`",
         f"- Private run: {record.private_run_url}" if record.private_run_url else "- Private run: pending",
         f"- Canonical conclusion: `{record.conclusion}`" if record.conclusion else "- Canonical conclusion: `pending`",
@@ -282,137 +373,152 @@ def _iter_issue_comments(api: Api, pr_number: int) -> Iterable[Mapping[str, Any]
 
 
 def upsert_comment(api: Api, record: Record) -> int:
+    """Create or update the single stable record for an exact PR/head."""
     wanted = marker(record.pr_number, record.head_sha)
     body = render_record(record)
-    matches: list[int] = []
-    for item in _iter_issue_comments(api, record.pr_number):
-        text = item.get("body")
-        if isinstance(text, str) and wanted in text:
-            matches.append(_positive_int(item.get("id"), "comment ID"))
+    matches = [
+        _positive_int(item.get("id"), "comment ID")
+        for item in _iter_issue_comments(api, record.pr_number)
+        if isinstance(item.get("body"), str) and wanted in str(item.get("body"))
+    ]
     if len(matches) > 1:
         raise ControlError("multiple canonical Pi staging marker comments exist for the same PR/head")
     if matches:
         api.patch(f"/issues/comments/{matches[0]}", {"body": body})
         return matches[0]
     created = api.post(f"/issues/{record.pr_number}/comments", {"body": body})
-    if not isinstance(created, Mapping):
-        raise ControlError("created comment response is invalid")
-    return _positive_int(created.get("id"), "comment ID")
+    created_map = _mapping(created, "created comment response")
+    return _positive_int(created_map.get("id"), "comment ID")
 
 
 def publish_record(api: Api, record: Record) -> int:
+    """Publish exact-head status first, then upsert its durable PR record."""
     api.post(f"/statuses/{record.head_sha}", status_payload(record))
     return upsert_comment(api, record)
 
 
-def _run_id_from_url(url: Any) -> int | None:
-    if not isinstance(url, str):
+def _pending_run_from_status(api: Api, status: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    if status.get("context") != STATUS_CONTEXT or status.get("state") != "pending":
         return None
-    match = RUN_URL_RE.search(url)
-    return int(match.group(1)) if match else None
+    run_id = _run_id_from_url(status.get("target_url"))
+    if run_id is None:
+        return None
+    run = api.get(f"/actions/runs/{run_id}")
+    if isinstance(run, Mapping) and run.get("status") in ACTIVE_RUN_STATES:
+        return run
+    return None
 
 
 def find_pending_run(api: Api, sha: str) -> Mapping[str, Any] | None:
-    if not SHA_RE.fullmatch(sha):
-        raise ControlError("invalid SHA for pending-run lookup")
+    """Find an already-active public Pi run tied to the exact source SHA."""
+    _validate_sha(sha, "pending-run SHA")
     statuses = api.get(f"/commits/{sha}/statuses?per_page=100")
     if not isinstance(statuses, list):
         raise ControlError("commit statuses response is not a list")
     for status in statuses:
-        if not isinstance(status, Mapping):
-            continue
-        if status.get("context") != STATUS_CONTEXT or status.get("state") != "pending":
-            continue
-        run_id = _run_id_from_url(status.get("target_url"))
-        if run_id is None:
-            continue
-        run = api.get(f"/actions/runs/{run_id}")
-        if isinstance(run, Mapping) and run.get("status") in {"queued", "in_progress", "waiting", "requested", "pending"}:
+        if isinstance(status, Mapping):
+            run = _pending_run_from_status(api, status)
+            if run is not None:
+                return run
+    return None
+
+
+def _named_run(runs: Any, title: str) -> Mapping[str, Any] | None:
+    if not isinstance(runs, Mapping) or not isinstance(runs.get("workflow_runs"), list):
+        raise ControlError("workflow runs response is invalid")
+    for run in runs["workflow_runs"]:
+        if isinstance(run, Mapping) and run.get("display_title") == title:
             return run
     return None
 
 
 def locate_correlated_run(api: Api, title: str, attempts: int = 60, delay_seconds: float = 2.0) -> Mapping[str, Any]:
-    for attempt in range(attempts):
-        runs = api.get(f"/actions/workflows/{PUBLIC_WORKFLOW}/runs?event=workflow_dispatch&per_page=100")
-        if not isinstance(runs, Mapping) or not isinstance(runs.get("workflow_runs"), list):
-            raise ControlError("workflow runs response is invalid")
-        for run in runs["workflow_runs"]:
-            if isinstance(run, Mapping) and run.get("display_title") == title:
-                run_id = _positive_int(run.get("id"), "workflow run ID")
-                html_url = run.get("html_url")
-                if not isinstance(html_url, str) or not html_url.startswith("https://github.com/"):
-                    raise ControlError("correlated workflow run URL is invalid")
-                return run
-        if attempt + 1 < attempts:
+    """Locate the exact workflow_dispatch run by deterministic display title."""
+    if attempts <= 0 or delay_seconds < 0:
+        raise ControlError("invalid public run lookup bounds")
+    path = f"/actions/workflows/{PUBLIC_WORKFLOW}/runs?event=workflow_dispatch&per_page=100"
+    for index in range(attempts):
+        run = _named_run(api.get(path), title)
+        if run is not None:
+            run_id = _positive_int(run.get("id"), "workflow run ID")
+            _require_run_url(run.get("html_url"), SOURCE_REPOSITORY, run_id)
+            return run
+        if index + 1 < attempts:
             time.sleep(delay_seconds)
     raise ControlError(f"unable to locate correlated public Pi Staging run: {title}")
 
 
 def record_from_run(binding: PrBinding, requester: str, run: Mapping[str, Any], state: str = "queued") -> Record:
+    """Build a validated durable record from a discovered public workflow run."""
     run_id = _positive_int(run.get("id"), "workflow run ID")
     attempt = _positive_int(run.get("run_attempt", 1), "workflow run attempt")
-    url = run.get("html_url")
-    if not isinstance(url, str) or not url.startswith("https://github.com/"):
-        raise ControlError("workflow run URL is invalid")
-    return Record(binding.pr_number, binding.head_sha, requester, run_id, attempt, url, state)
+    url = _require_run_url(run.get("html_url"), SOURCE_REPOSITORY, run_id)
+    record = Record(binding.pr_number, binding.head_sha, requester, run_id, attempt, url, state)
+    _validate_record(record)
+    return record
+
+
+def _get_pr(api: Api, pr_number: int, label: str) -> Mapping[str, Any]:
+    return _mapping(api.get(f"/pulls/{pr_number}"), label)
 
 
 def handle_command(api: Api, payload: Mapping[str, Any]) -> str:
+    """Authorize, exact-bind, deduplicate, dispatch, correlate, and publish a command."""
     parsed = command_event(payload)
     if parsed is None:
         return "ignored"
     pr_number, requester, correlation = parsed
-    first = api.get(f"/pulls/{pr_number}")
-    if not isinstance(first, Mapping):
-        raise ControlError("PR response is invalid")
-    binding = binding_from_pr(first)
+    binding = binding_from_pr(_get_pr(api, pr_number, "PR response"))
     if binding.pr_number != pr_number:
         raise ControlError("PR number mismatch")
-
     pending = find_pending_run(api, binding.head_sha)
     if pending is not None:
         publish_record(api, record_from_run(binding, requester, pending, "in_progress"))
         return "deduplicated"
-
-    second = api.get(f"/pulls/{pr_number}")
-    if not isinstance(second, Mapping):
-        raise ControlError("PR revalidation response is invalid")
-    require_same_binding(second, binding)
+    require_same_binding(_get_pr(api, pr_number, "PR revalidation response"), binding)
     api.post(f"/actions/workflows/{PUBLIC_WORKFLOW}/dispatches", dispatch_payload(binding, correlation, requester))
     run = locate_correlated_run(api, expected_run_title(binding, correlation))
-    run_status = str(run.get("status", "queued"))
-    if run_status != "completed":
-        visible_state = "queued" if run_status in {"queued", "requested", "waiting", "pending"} else "in_progress"
-        publish_record(api, record_from_run(binding, requester, run, visible_state))
+    if run.get("status") != "completed":
+        queued_states = {"queued", "requested", "waiting", "pending"}
+        state = "queued" if run.get("status") in queued_states else "in_progress"
+        publish_record(api, record_from_run(binding, requester, run, state))
     return "dispatched"
 
 
 def parse_record_args(args: argparse.Namespace) -> Record:
+    """Parse and validate workflow-provided publication arguments."""
     pr_number = _positive_int(args.pr_number, "PR number")
-    if not SHA_RE.fullmatch(args.sha):
-        raise ControlError("record SHA is invalid")
+    head_sha = _validate_sha(args.sha, "record SHA")
     requester = validate_requester(args.requester)
     public_run_id = _positive_int(args.public_run_id, "public run ID")
     public_attempt = _positive_int(args.public_attempt, "public attempt")
-    private_id = None if not args.private_run_id else _positive_int(args.private_run_id, "private run ID")
-    return Record(
+    public_url = _require_run_url(args.public_run_url, SOURCE_REPOSITORY, public_run_id)
+    private_id = None
+    private_url = None
+    if args.private_run_id or args.private_run_url:
+        private_id = _positive_int(args.private_run_id, "private run ID")
+        private_url = _require_run_url(args.private_run_url, STAGING_REPOSITORY, private_id)
+    evidence = validate_evidence_identity(args.evidence_identity) if args.evidence_identity else None
+    record = Record(
         pr_number=pr_number,
-        head_sha=args.sha,
+        head_sha=head_sha,
         requester=requester,
         public_run_id=public_run_id,
         public_attempt=public_attempt,
-        public_run_url=args.public_run_url,
+        public_run_url=public_url,
         state=args.state,
         private_run_id=private_id,
-        private_run_url=args.private_run_url or None,
+        private_run_url=private_url,
         conclusion=args.conclusion or None,
         cleanup=args.cleanup or None,
-        evidence_identity=args.evidence_identity or None,
+        evidence_identity=evidence,
     )
+    _validate_record(record)
+    return record
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line interface used by trusted default-branch workflows."""
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="mode", required=True)
     sub.add_parser("command")
@@ -431,32 +537,47 @@ def main(argv: list[str] | None = None) -> int:
     publish.add_argument("--conclusion", default="")
     publish.add_argument("--cleanup", default="")
     publish.add_argument("--evidence-identity", default="")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _api_from_environment() -> GitHubApi:
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     if repository != SOURCE_REPOSITORY:
         raise ControlError(f"unexpected repository: {repository!r}")
-    api = GitHubApi(os.environ.get("GITHUB_API_URL", "https://api.github.com"), repository, os.environ.get("GITHUB_TOKEN", ""))
-    if args.mode == "command":
-        event_path = os.environ.get("GITHUB_EVENT_PATH", "")
-        if not event_path:
-            raise ControlError("GITHUB_EVENT_PATH is required")
+    return GitHubApi(repository, os.environ.get("GITHUB_TOKEN", ""))
+
+
+def _run_command_mode(api: Api) -> int:
+    event_path = os.environ.get("GITHUB_EVENT_PATH", "")
+    if not event_path:
+        raise ControlError("GITHUB_EVENT_PATH is required")
+    try:
         payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
-        result = handle_command(api, payload)
-        print(f"Pi staging command result: {result}")
-        return 0
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ControlError("unable to read a valid GitHub issue_comment event") from exc
+    if not isinstance(payload, Mapping):
+        raise ControlError("GitHub event payload is invalid")
+    result = handle_command(api, payload)
+    print(f"Pi staging command result: {result}")
+    return 0
+
+
+def _run_publish_mode(api: Api, args: argparse.Namespace) -> int:
     record = parse_record_args(args)
     if args.require_current_binding:
-        if not args.head_ref or not REF_RE.fullmatch(args.head_ref):
-            raise ControlError("--head-ref is required for current-binding validation")
-        expected = PrBinding(SOURCE_REPOSITORY, record.pr_number, SOURCE_REPOSITORY, args.head_ref, record.head_sha)
-        live = api.get(f"/pulls/{record.pr_number}")
-        if not isinstance(live, Mapping):
-            raise ControlError("PR response is invalid during publication")
-        require_same_binding(live, expected)
+        head_ref = _validate_head_ref(args.head_ref)
+        expected = PrBinding(SOURCE_REPOSITORY, record.pr_number, SOURCE_REPOSITORY, head_ref, record.head_sha)
+        require_same_binding(_get_pr(api, record.pr_number, "PR response during publication"), expected)
     comment_id = publish_record(api, record)
     print(f"Pi staging record comment ID: {comment_id}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run trusted staging command or publication mode."""
+    args = build_parser().parse_args(argv)
+    api = _api_from_environment()
+    return _run_command_mode(api) if args.mode == "command" else _run_publish_mode(api, args)
 
 
 if __name__ == "__main__":
