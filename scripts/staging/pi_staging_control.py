@@ -417,20 +417,42 @@ def publish_record(api: Api, record: Record) -> int:
     return upsert_comment(api, record)
 
 
-def _pending_run_from_status(api: Api, status: Mapping[str, Any]) -> Mapping[str, Any] | None:
+def _run_title_matches_source(run: Mapping[str, Any], pr_number: int, sha: str) -> bool:
+    """Bind a workflow_dispatch run to the exact source PR/head encoded in its run name."""
+    if pr_number <= 0:
+        raise ControlError("pending-run PR number is invalid")
+    _validate_sha(sha, "pending-run SHA")
+    title = run.get("display_title")
+    if not isinstance(title, str):
+        return False
+    prefix = f"Pi Staging PR #{pr_number} / {sha} / "
+    if not title.startswith(prefix):
+        return False
+    correlation = title[len(prefix):]
+    try:
+        validate_correlation(correlation)
+    except ControlError:
+        return False
+    return True
+
+
+def _pending_run_from_status(api: Api, status: Mapping[str, Any], pr_number: int, sha: str) -> Mapping[str, Any] | None:
+    """Return an active run only when its durable title matches the requested PR/head."""
     if status.get("context") != STATUS_CONTEXT or status.get("state") != "pending":
         return None
     run_id = _run_id_from_url(status.get("target_url"))
     if run_id is None:
         return None
     run = api.get(f"/actions/runs/{run_id}")
-    if isinstance(run, Mapping) and run.get("status") in ACTIVE_RUN_STATES:
-        return run
-    return None
+    if not isinstance(run, Mapping) or run.get("status") not in ACTIVE_RUN_STATES:
+        return None
+    return run if _run_title_matches_source(run, pr_number, sha) else None
 
 
-def find_pending_run(api: Api, sha: str) -> Mapping[str, Any] | None:
-    """Find an already-active public Pi run across bounded status pages."""
+def find_pending_run(api: Api, pr_number: int, sha: str) -> Mapping[str, Any] | None:
+    """Find an already-active exact-PR/head Pi run across bounded status pages."""
+    if pr_number <= 0:
+        raise ControlError("pending-run PR number is invalid")
     _validate_sha(sha, "pending-run SHA")
     for page in range(1, STATUS_PAGE_LIMIT + 1):
         statuses = api.get(f"/commits/{sha}/statuses?per_page=100&page={page}")
@@ -438,7 +460,7 @@ def find_pending_run(api: Api, sha: str) -> Mapping[str, Any] | None:
             raise ControlError("commit statuses response is not a list")
         for status in statuses:
             if isinstance(status, Mapping):
-                run = _pending_run_from_status(api, status)
+                run = _pending_run_from_status(api, status, pr_number, sha)
                 if run is not None:
                     return run
         if len(statuses) < 100:
@@ -494,7 +516,7 @@ def handle_command(api: Api, payload: Mapping[str, Any]) -> str:
     binding = binding_from_pr(_get_pr(api, pr_number, "PR response"))
     if binding.pr_number != pr_number:
         raise ControlError("PR number mismatch")
-    pending = find_pending_run(api, binding.head_sha)
+    pending = find_pending_run(api, binding.pr_number, binding.head_sha)
     if pending is not None:
         publish_record(api, record_from_run(binding, requester, pending, "in_progress"))
         return "deduplicated"
