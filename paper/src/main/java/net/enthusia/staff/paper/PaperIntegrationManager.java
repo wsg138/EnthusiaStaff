@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
@@ -28,6 +29,7 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.integration.ReputationRestrictionSynchronizer;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -55,6 +57,7 @@ final class PaperIntegrationManager {
     private RoseChatIntegration roseChat;
     private MarketIntegration market;
     private ReputationIntegration reputation;
+    private ReputationRestrictionSynchronizer reputationRestrictions;
 
     PaperIntegrationManager(Dependencies dependencies) {
         this.dependencies = dependencies;
@@ -93,6 +96,17 @@ final class PaperIntegrationManager {
         );
         recordProviderIssue(MARKET, market.availability(), market.issue());
         recordProviderIssue(REPUTATION, reputation.availability(), reputation.issue());
+        if (reputation.availability() == IntegrationAvailability.AVAILABLE) {
+            reputationRestrictions = new ReputationRestrictionSynchronizer(
+                    plugin(),
+                    clock(),
+                    reputation,
+                    dependencies.stores().punishmentService(),
+                    dependencies.stores().sanctionLookup(),
+                    workers()
+            );
+            reputationRestrictions.start();
+        }
     }
 
     void initializeAutomod() {
@@ -161,6 +175,10 @@ final class PaperIntegrationManager {
 
     void closeChatBridge() {
         resources.close("RoseChat bridge", roseChat);
+    }
+
+    void closeModerationProviders() {
+        resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
 
     void closeEconomyResources() {
@@ -297,6 +315,7 @@ final class PaperIntegrationManager {
 
     record Stores(
             Supplier<PunishmentService> punishmentService,
+            Supplier<SanctionLookup> sanctionLookup,
             Supplier<EconomyJournalStore> economyJournal,
             Supplier<InventoryJournalStore> inventoryJournal
     ) {
