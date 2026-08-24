@@ -11,7 +11,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `READY` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D04` | Account linking and DiscordSRV migration | `ACTIVE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `READY` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
@@ -26,7 +26,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-None after ES-D03 terminal publication and normal merge. A future Discord worker must reconcile live GitHub and classify incomplete packages again before claiming work.
+`ES-D04 — Account linking and DiscordSRV migration` is `ACTIVE` on `package/es-d04-account-linking`, claimed from exact `main` `783925e2b49ab4567bd3c3869e43fc03ff6d285f` after fresh collision and provider-contract reconciliation. No D04 implementation PR existed at claim. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-23-es-d04-account-linking.md`.
 
 ## Latest completion
 
@@ -35,8 +35,6 @@ None after ES-D03 terminal publication and normal merge. A future Discord worker
 The final review confirmed the intended Developer boundary: Discord Developer rank itself grants no Minecraft punishment authority, while the existing Minecraft/domain `AuthorizationPolicy` may independently authorize a Developer as required by the approved product contract. A temporary unconditional Developer deny was rejected and fully reverted; exact comparison proved no accepted executable/test residue before the fresh full validation run.
 
 D03 added no migration, Discord runtime, website, competition, production configuration/data, deployment, LiteBans authority change, or issue #43 cutover.
-
-`ES-D04` and `ES-D05` are newly dependency-complete and `READY`. D04 has the lower priority number and is the next owner-priority item if no actionable continuation or live collision supersedes it. This D03 worker does not start either package.
 
 ## Selection
 

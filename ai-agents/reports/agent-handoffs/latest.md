@@ -1,23 +1,19 @@
 # Latest package-worker handoff
 
-Current package: `ES-X03 — EnthusiaMarket destructive provider`.
+Current package: `ES-D04 — Account linking and DiscordSRV migration`.
 
-Status: `BLOCKED` / `PARKED_BLOCKED`.
+Status: `ACTIVE`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-23-es-d04-account-linking.md`.
 
-Frozen implementation PRs remain open and unmerged:
-- Market PR #3: `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`.
-- Staff PR #139: `5b003225b305db76b47db7d75cf5b6a2943934df`.
+Starting `main`: `783925e2b49ab4567bd3c3869e43fc03ff6d285f`.
+Branch: `package/es-d04-account-linking`.
+Implementation PR: not yet opened; open after the first coherent implementation checkpoint.
 
-Market exact-head repository CI is now restored and green: Wiki `31852806668`, build `31852806638`, Detekt, security, actual PR-head checkout, Java 21, pinned dependency verification, current RoseChat compilation, Market tests/shadowJar/JaCoCo, final CodeRabbit status, and zero valid inline threads all pass on `addb0f53...`.
+Fresh reconciliation found no existing Discord continuation, no competition branch, and no unique website work on `package/codacy-website-appeal-transitions` (0 ahead / 167 behind `main`). PR #139 remains independently parked ES-X03 work and must not be modified.
 
-Staff exact-head hosted validation is also green on `5b003225...`: Wiki `31852845661`, Coverage/full build `31852845645`, Sentinel Restart Artifact `31852845696`, runtime artifact/provider-leak inspection, and zero live inline threads.
+Current provider contracts are sufficient for D04 without private storage access: PlayTimePlugin exposes lifetime `activeMinutes` through `PlaytimeService#getLifetime(UUID)`, and DiscordSRV exposes public link read/link/unlink operations through `AccountLinkManager`.
 
-The hard blocker is required owner-controlled runtime readiness. Canonical Pi staging `31852844656` reached the exact verified Staff artifact and executed Paper but timed out before the first readiness marker within the configured 240-second window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 stack trace or migration failure before timeout. Independent Sentinel restart job `174` on the same SHA also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT`. Because Paper executed, neither failure qualifies for a zero-execution infrastructure exception and neither is called a pass.
+D04 must implement one-use five-minute two-direction linking, replacement invalidation, online-account verification, confirmed unlink and audited staff recovery, historical-link access, 25% active-playtime main-account hysteresis with staff override, idempotent DiscordSRV import, and temporary main-link mirroring. Production import/deployment/configuration/cutover is excluded.
 
-Resume only after live evidence shows the validation host's cooling/runtime capacity materially improved. Rerun the exact frozen Staff runtime gates, then—only if both pass—recheck both PRs, merge both normally, compute canonical post-merge parity with `tools/component-sync/component_sync.py`, publish terminal state, and clean safely contained temporary branches.
-
-No private staging implementation or credentials were added to Market/BadgersMC, no production authority/data changed, LiteBans remains authoritative, and representative destructive/load/process-kill acceptance remains ES-V03.
-
-`ES-X04` remains `READY` for a separate future worker under normal routing; it was not started here.
+Issue #43 remains open and LiteBans remains authoritative. `ES-D05` is separately `READY` but is not started by this worker.
