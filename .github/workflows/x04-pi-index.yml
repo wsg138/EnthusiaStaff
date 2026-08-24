@@ -22,7 +22,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-          target='99a562531112af3013d4a0f4ce98e3af71a0542e'
+          target='f8915be28bfe5a3ec2854a303ff6cb586f2a6fad'
           curl --fail --silent --show-error \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
