@@ -70,8 +70,8 @@ Frozen Staff head `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`:
 
 - Coverage/full-validation run `32763957896`, job `97549217101`: **PASS** on exact checkout. Temurin Java `21.0.12+8`; `clean build jacocoAggregateReport runtimeJars` passed including MariaDB/Testcontainers. Runtime inspection checked 27 provider API source types with 0 leaks. Paper SHA-256 `7dd515e21409abb8c8496701e22ced3bdf3e266af8bc5c5bb0e7c52302c1198a`; Velocity SHA-256 `e4c7e48b51a8681eaac5742de96a841462aaeabd74507dcf1c8e1b02faef7586`. JaCoCo: 50.50% line / 41.12% branch / 52.93% instruction. Validation artifact `9534065111`, digest `sha256:132df7318d872c0f6e9863bd71fa3f8c69ee72478de742ff1d4f792ebf4fbd2f`. Codacy coverage upload and final notification passed.
 - Sentinel exact-artifact run `32763957749`, job `97549055756`: PASS for exact checkout; Temurin Java `21.0.12+8`; Paper `shadowJar` PASS; artifact `9533760777`, digest `sha256:285503604af4a7d2bd0bde450acf594909490767fdfc433a66e74ae9fe2d6d16`.
-- Exact Sentinel restart request comment `5400262894` is bound to exact SHA `9d44bbc...` as durable job `231`. Latest verified state: `QUEUED` / `AUTHORIZED`. A queued request is not a pass; terminal success requires exactly `PAPER_RESTART_OK`.
-- Older `PAPER_RESTART_OK` results on PR #152 belong only to superseded heads and are not reused.
+- Exact Sentinel restart request comment `5400262894` was bound to exact SHA `9d44bbc...` as durable job `231` and reached terminal **PASS** / `PAPER_RESTART_OK`: Paper reached readiness and stopped cleanly twice against one disposable state.
+- Sentinel success is exact-head runtime evidence only and does not substitute for canonical Pi.
 
 ## 19. Canonical Pi state
 Canonical Pi is required and **not passed**. The existing automatic `pull_request_target` Pi path cannot be discovered/verified through the connected commit-workflow listing, and PR #152 does not yet contain a stable exact-head public/private Pi correlation usable as package evidence.
@@ -90,18 +90,16 @@ Exact unblock checklist:
 1. canonical trusted Pi control-plane observability/execution becomes available and a correlated exact-head public/private Pi run can be inspected;
 2. a directly inspectable exact-head standalone Commend Java 21 build/test/static result passes;
 3. all applicable Codacy/static findings are resolved or evidence-backed invalidated and a clean final exact-head result exists;
-4. Sentinel job `231` reaches terminal `PAPER_RESTART_OK` on exact Staff source if the restart gate remains applicable;
-5. live `main`, both provider trees, and review state are reconciled; any changed executable head reruns invalidated gates;
-6. both implementation PRs merge with normal merge commits only;
-7. post-merge standalone↔aggregate parity, component metadata, containment, and safe branch cleanup are verified before publishing `COMPLETE`.
+4. live `main`, both provider trees, and review state are reconciled; any changed executable head reruns invalidated gates;
+5. both implementation PRs merge with normal merge commits only;
+6. post-merge standalone↔aggregate parity, component metadata, containment, and safe branch cleanup are verified before publishing `COMPLETE`.
 
 ## 22. Known blockers
 - standalone observable validation is merge-ref-only rather than admissible exact-head evidence;
 - Staff Codacy reports 100 new static issues and is not up to standards;
-- exact frozen-head Sentinel runtime is currently queued, not passed;
 - canonical Pi exact-head public/private evidence is unavailable through the current trusted control plane while independent fix PR #156 remains unmerged.
 
-Staff exact-head Coverage/full validation is now passed and is no longer a blocker. Any remaining blocker above is sufficient to prevent merge; none is relabeled as passing.
+Staff exact-head Coverage/full validation, Sentinel artifact build, and Sentinel restart now pass and are no longer blockers. Any remaining blocker above is sufficient to prevent merge; none is relabeled as passing.
 
 ## 23. Final evidence
 Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md`.
