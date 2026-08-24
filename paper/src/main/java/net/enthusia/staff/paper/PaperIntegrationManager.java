@@ -177,6 +177,7 @@ final class PaperIntegrationManager {
 
     void closeChatBridge() {
         resources.close("RoseChat bridge", roseChat);
+        closeModerationProviders();
     }
 
     void closeModerationProviders() {
