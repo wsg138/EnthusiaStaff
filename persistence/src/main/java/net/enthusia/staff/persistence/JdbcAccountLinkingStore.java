@@ -59,7 +59,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 connection -> {
                     StoredCode stored = codeByHash(connection, codeHash, true);
                     if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
-                        return CodeLookup.expired();
+                        return CodeLookup.expiredResult();
                     }
                     return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
                 }
@@ -160,7 +160,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 connection -> {
                     StoredCode stored = codeByHash(connection, codeHash, true);
                     if (markExpiredIfNecessary(connection, stored, expectedDirection, now)) {
-                        return CompletionResult.expired();
+                        return CompletionResult.expiredResult();
                     }
 
                     DiscordUserId discordUserId = expectedDirection == Direction.DISCORD_TO_MINECRAFT
@@ -474,7 +474,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             return new CompletionResult(Optional.of(link), false);
         }
 
-        private static CompletionResult expired() {
+        private static CompletionResult expiredResult() {
             return new CompletionResult(Optional.empty(), true);
         }
     }
@@ -484,7 +484,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             return new CodeLookup(Optional.of(minecraftPlayerId), false);
         }
 
-        private static CodeLookup expired() {
+        private static CodeLookup expiredResult() {
             return new CodeLookup(Optional.empty(), true);
         }
     }
