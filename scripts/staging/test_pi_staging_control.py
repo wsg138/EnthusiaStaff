@@ -37,6 +37,16 @@ def status(context="Other", state="success", target_url="https://github.com/wsg1
     return {"context": context, "state": state, "target_url": target_url}
 
 
+def public_run(run_id: int, *, pr_number: int = 151, sha: str = SHA, correlation: str = "comment-5397000001", state: str = "in_progress"):
+    return {
+        "id": run_id,
+        "run_attempt": 1,
+        "html_url": f"https://github.com/wsg138/EnthusiaStaff/actions/runs/{run_id}",
+        "status": state,
+        "display_title": f"Pi Staging PR #{pr_number} / {sha} / {correlation}",
+    }
+
+
 def marker_comment(comment_id: int, user_id: int, body: str | None = None):
     return {"id": comment_id, "body": body or control.marker(151, SHA), "user": {"id": user_id}}
 
@@ -165,7 +175,7 @@ class PiStagingControlTests(unittest.TestCase):
         api = FakeApi()
         api.pull_sequence = [pr()]
         api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/444"}]
-        api.gets["/actions/runs/444"] = {"id": 444, "run_attempt": 1, "html_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/444", "status": "in_progress"}
+        api.gets["/actions/runs/444"] = public_run(444)
         self.assertEqual(control.handle_command(api, event()), "deduplicated")
         self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
 
@@ -258,9 +268,29 @@ class PiStagingControlTests(unittest.TestCase):
         api.pull_sequence = [pr()]
         api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [status() for _ in range(100)]
         api.gets[f"/commits/{SHA}/statuses?per_page=100&page=2"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/777"}]
-        api.gets["/actions/runs/777"] = {"id": 777, "run_attempt": 1, "html_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/777", "status": "in_progress"}
+        api.gets["/actions/runs/777"] = public_run(777)
         self.assertEqual(control.handle_command(api, event()), "deduplicated")
         self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
+
+    def test_34_pending_run_for_other_pr_is_not_reused(self):
+        api = FakeApi()
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/801"}]
+        api.gets["/actions/runs/801"] = public_run(801, pr_number=152)
+        self.assertIsNone(control.find_pending_run(api, 151, SHA))
+
+    def test_35_pending_run_for_other_source_sha_is_not_reused(self):
+        api = FakeApi()
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/802"}]
+        api.gets["/actions/runs/802"] = public_run(802, sha=OTHER_SHA)
+        self.assertIsNone(control.find_pending_run(api, 151, SHA))
+
+    def test_36_pending_run_with_malformed_title_is_not_reused(self):
+        api = FakeApi()
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/803"}]
+        run = public_run(803)
+        run["display_title"] = f"Pi Staging PR #151 / {SHA} / invalid correlation with spaces"
+        api.gets["/actions/runs/803"] = run
+        self.assertIsNone(control.find_pending_run(api, 151, SHA))
 
 
 if __name__ == "__main__":
