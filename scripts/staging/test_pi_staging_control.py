@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import secrets
 import unittest
 import sys
 from pathlib import Path
@@ -202,7 +203,7 @@ class PiStagingControlTests(unittest.TestCase):
         self.assertEqual(dispatches[0][1]["inputs"]["source_pr_head_sha"], SHA)
 
     def test_27_api_client_rejects_non_repository_paths(self):
-        client = control.GitHubApi(control.SOURCE_REPOSITORY, SHA)
+        client = control.GitHubApi(control.SOURCE_REPOSITORY, secrets.token_urlsafe(32))
         for path in ("https://evil.invalid/repos/x", "//evil.invalid/x", "relative"):
             with self.subTest(path=path), self.assertRaises(control.ControlError):
                 client._request_path(path)
