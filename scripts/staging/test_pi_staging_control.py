@@ -33,6 +33,14 @@ def event(body=control.EXACT_COMMAND, *, pull=True, association="OWNER", request
     }
 
 
+def status(context="Other", state="success", target_url="https://github.com/wsg138/EnthusiaStaff/actions/runs/1"):
+    return {"context": context, "state": state, "target_url": target_url}
+
+
+def marker_comment(comment_id: int, user_id: int, body: str | None = None):
+    return {"id": comment_id, "body": body or control.marker(151, SHA), "user": {"id": user_id}}
+
+
 class FakeApi:
     def __init__(self):
         self.gets: dict[str, Any] = {}
@@ -49,7 +57,7 @@ class FakeApi:
         if value is None:
             if path.startswith("/issues/151/comments"):
                 return []
-            if path.startswith("/commits/") and path.endswith("/statuses?per_page=100"):
+            if path.startswith("/commits/") and "/statuses?per_page=100&page=" in path:
                 return []
             raise AssertionError(f"unexpected GET {path}")
         return copy.deepcopy(value)
@@ -57,7 +65,7 @@ class FakeApi:
     def post(self, path: str, payload: Mapping[str, Any]):
         self.posts.append((path, copy.deepcopy(payload)))
         if path == "/issues/151/comments":
-            return {"id": 9001}
+            return {"id": 9001, "user": {"id": control.PUBLISHER_USER_ID}}
         return None
 
     def patch(self, path: str, payload: Mapping[str, Any]):
@@ -141,7 +149,7 @@ class PiStagingControlTests(unittest.TestCase):
 
     def test_18_stable_comment_update_not_spam(self):
         api = FakeApi()
-        api.gets["/issues/151/comments?per_page=100&page=1"] = [{"id": 77, "body": control.marker(151, SHA) + "\nold"}]
+        api.gets["/issues/151/comments?per_page=100&page=1"] = [marker_comment(77, control.PUBLISHER_USER_ID, control.marker(151, SHA) + "\nold")]
         record = control.Record(151, SHA, "wsg138", 2, 1, "https://github.com/wsg138/EnthusiaStaff/actions/runs/2", "in_progress")
         self.assertEqual(control.upsert_comment(api, record), 77)
         self.assertEqual(len(api.posts), 0)
@@ -156,7 +164,7 @@ class PiStagingControlTests(unittest.TestCase):
     def test_20_duplicate_pending_command_does_not_dispatch(self):
         api = FakeApi()
         api.pull_sequence = [pr()]
-        api.gets[f"/commits/{SHA}/statuses?per_page=100"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/444"}]
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/444"}]
         api.gets["/actions/runs/444"] = {"id": 444, "run_attempt": 1, "html_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/444", "status": "in_progress"}
         self.assertEqual(control.handle_command(api, event()), "deduplicated")
         self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
@@ -186,7 +194,7 @@ class PiStagingControlTests(unittest.TestCase):
     def test_25_head_move_between_fetches_prevents_dispatch(self):
         api = FakeApi()
         api.pull_sequence = [pr(), pr(sha=OTHER_SHA)]
-        api.gets[f"/commits/{SHA}/statuses?per_page=100"] = []
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = []
         with self.assertRaisesRegex(control.ControlError, "moved"):
             control.handle_command(api, event())
         self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
@@ -194,7 +202,7 @@ class PiStagingControlTests(unittest.TestCase):
     def test_26_exact_command_dispatches_and_correlates(self):
         api = FakeApi()
         api.pull_sequence = [pr(), pr()]
-        api.gets[f"/commits/{SHA}/statuses?per_page=100"] = []
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = []
         title = f"Pi Staging PR #151 / {SHA} / comment-5397000001"
         api.gets["/actions/workflows/pi-staging-check.yml/runs?event=workflow_dispatch&per_page=100"] = {"workflow_runs": [{"id": 555, "run_attempt": 1, "html_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/555", "display_title": title}]}
         self.assertEqual(control.handle_command(api, event()), "dispatched")
@@ -217,6 +225,42 @@ class PiStagingControlTests(unittest.TestCase):
         record = control.Record(151, SHA, "wsg138", 2, 1, "https://github.com/wsg138/EnthusiaStaff/actions/runs/2", "in_progress", private_run_id=456, private_run_url="https://github.com/wsg138/EnthusiaStaff-Staging/actions/runs/999")
         with self.assertRaisesRegex(control.ControlError, "does not match"):
             control.render_record(record)
+
+    def test_30_api_requests_include_user_agent(self):
+        client = control.GitHubApi(control.SOURCE_REPOSITORY, secrets.token_urlsafe(32))
+        captured: dict[str, Any] = {}
+
+        def perform(method: str, path: str, data: bytes | None, headers: Mapping[str, str]):
+            captured["headers"] = dict(headers)
+            return 200, b"{}"
+
+        client._perform_request = perform
+        client.get("/pulls/151")
+        self.assertEqual(captured["headers"]["User-Agent"], control.USER_AGENT)
+
+    def test_31_forged_marker_is_not_updated(self):
+        api = FakeApi()
+        api.gets["/issues/151/comments?per_page=100&page=1"] = [marker_comment(77, 999999)]
+        record = control.Record(151, SHA, "wsg138", 1, 1, "https://github.com/wsg138/EnthusiaStaff/actions/runs/1", "queued")
+        self.assertEqual(control.upsert_comment(api, record), 9001)
+        self.assertEqual(api.patches, [])
+        self.assertEqual(api.posts[0][0], "/issues/151/comments")
+
+    def test_32_duplicate_non_publisher_markers_are_ignored(self):
+        api = FakeApi()
+        api.gets["/issues/151/comments?per_page=100&page=1"] = [marker_comment(77, 999999), marker_comment(78, 999998)]
+        record = control.Record(151, SHA, "wsg138", 1, 1, "https://github.com/wsg138/EnthusiaStaff/actions/runs/1", "queued")
+        self.assertEqual(control.upsert_comment(api, record), 9001)
+        self.assertEqual(api.patches, [])
+
+    def test_33_page_two_pending_status_is_reused(self):
+        api = FakeApi()
+        api.pull_sequence = [pr()]
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=1"] = [status() for _ in range(100)]
+        api.gets[f"/commits/{SHA}/statuses?per_page=100&page=2"] = [{"context": "Pi Staging", "state": "pending", "target_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/777"}]
+        api.gets["/actions/runs/777"] = {"id": 777, "run_attempt": 1, "html_url": "https://github.com/wsg138/EnthusiaStaff/actions/runs/777", "status": "in_progress"}
+        self.assertEqual(control.handle_command(api, event()), "deduplicated")
+        self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
 
 
 if __name__ == "__main__":
