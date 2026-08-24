@@ -1,27 +1,47 @@
 name: X04 Pi run index
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - diagnostic/es-x04-pi-index-20260824
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 jobs:
   index:
     runs-on: ubuntu-latest
     steps:
-      - name: List recent Pi staging runs
+      - uses: actions/checkout@v6
+        with:
+          ref: diagnostic/es-x04-pi-index-20260824
+      - name: Record exact-head Pi staging run
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
+          target='8ddf446a575e83cd8c055fcf7f1cfb27b7237087'
           curl --fail --silent --show-error \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             --header "Authorization: Bearer $GH_TOKEN" \
-            'https://api.github.com/repos/wsg138/EnthusiaStaff/actions/workflows/pi-staging-check.yml/runs?event=pull_request_target&per_page=30' \
-            | jq -r '.workflow_runs[] | [.id,.run_number,.event,.status,(.conclusion // ""),.head_sha,.head_branch,.display_title,.created_at,.updated_at] | @tsv'
+            'https://api.github.com/repos/wsg138/EnthusiaStaff/actions/workflows/pi-staging-check.yml/runs?event=pull_request_target&per_page=50' \
+            -o runs.json
+          jq -r --arg sha "$target" '
+            [.workflow_runs[] | select(.head_sha == $sha and .head_branch == "package/es-x04-commend-provider")]
+            | sort_by(.created_at) | reverse | .[0]
+            | if . == null then "NOT_FOUND" else
+                [.id,.run_number,.event,.status,(.conclusion // ""),.head_sha,.head_branch,.created_at,.updated_at] | @tsv
+              end
+          ' runs.json > x04-pi-index.txt
+          cat x04-pi-index.txt
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add x04-pi-index.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'diagnostic: record exact X04 Pi run'
+          git push origin HEAD:diagnostic/es-x04-pi-index-20260824
