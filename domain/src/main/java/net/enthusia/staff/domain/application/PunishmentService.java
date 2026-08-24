@@ -1,10 +1,13 @@
 package net.enthusia.staff.domain.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -18,7 +21,10 @@ import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
+import net.enthusia.staff.domain.ports.SanctionLookup;
+import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class PunishmentService {
     private final Clock clock;
@@ -26,6 +32,7 @@ public final class PunishmentService {
     private final AuthorizationPolicy authorization;
     private final ReasonPolicyRepository policies;
     private final ModerationStore store;
+    private final SanctionLookup sanctionLookup;
     private final EscalationEngine escalation;
     private volatile Consumer<PunishmentPlan> committedObserver = ignored -> { };
 
@@ -37,11 +44,24 @@ public final class PunishmentService {
             ModerationStore store,
             EscalationEngine escalation
     ) {
+        this(clock, identifiers, authorization, policies, store, null, escalation);
+    }
+
+    public PunishmentService(
+            Clock clock,
+            SecureIdentifiers identifiers,
+            AuthorizationPolicy authorization,
+            ReasonPolicyRepository policies,
+            ModerationStore store,
+            SanctionLookup sanctionLookup,
+            EscalationEngine escalation
+    ) {
         this.clock = Objects.requireNonNull(clock);
         this.identifiers = Objects.requireNonNull(identifiers);
         this.authorization = Objects.requireNonNull(authorization);
         this.policies = Objects.requireNonNull(policies);
         this.store = Objects.requireNonNull(store);
+        this.sanctionLookup = sanctionLookup;
         this.escalation = Objects.requireNonNull(escalation);
     }
 
@@ -56,6 +76,17 @@ public final class PunishmentService {
 
     public void clearCommittedObserver() {
         committedObserver = ignored -> { };
+    }
+
+    public List<ActiveSanction> activeSanctions(UUID playerId, Set<SanctionType> types, Instant now) {
+        if (sanctionLookup == null) {
+            throw new IllegalStateException("Authoritative sanction lookup is not attached to this service");
+        }
+        return sanctionLookup.activeFor(
+                Objects.requireNonNull(playerId, "playerId"),
+                Set.copyOf(Objects.requireNonNull(types, "types")),
+                Objects.requireNonNull(now, "now")
+        );
     }
 
     public PunishmentResult create(CreatePunishmentRequest request, OperationalMode mode) {
@@ -293,11 +324,8 @@ public final class PunishmentService {
         return typeCounts(left).equals(typeCounts(right));
     }
 
-    private static Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> typeCounts(
-            List<SanctionSpec> sanctions
-    ) {
-        Map<net.enthusia.staff.domain.sanction.SanctionType, Integer> counts =
-                new EnumMap<>(net.enthusia.staff.domain.sanction.SanctionType.class);
+    private static Map<SanctionType, Integer> typeCounts(List<SanctionSpec> sanctions) {
+        Map<SanctionType, Integer> counts = new EnumMap<>(SanctionType.class);
         sanctions.forEach(spec -> counts.merge(spec.type(), 1, Integer::sum));
         return counts;
     }
