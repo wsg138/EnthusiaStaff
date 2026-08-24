@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: f8915be28bfe5a3ec2854a303ff6cb586f2a6fad
+          ref: c10ea7f41cd6204627422459ce5f42a062609bf9
       - name: Inspect current X04 branch issues
         shell: bash
         run: |
