@@ -1,0 +1,27 @@
+name: X04 Pi run index
+
+on:
+  push:
+    branches:
+      - diagnostic/es-x04-pi-index-20260824
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List recent Pi staging runs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            'https://api.github.com/repos/wsg138/EnthusiaStaff/actions/workflows/pi-staging-check.yml/runs?event=pull_request_target&per_page=30' \
+            | jq -r '.workflow_runs[] | [.id,.run_number,.event,.status,(.conclusion // ""),.head_sha,.head_branch,.display_title,.created_at,.updated_at] | @tsv'
