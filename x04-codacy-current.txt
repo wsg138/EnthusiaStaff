@@ -1,6 +1,4 @@
 TOTAL 100
 === component ===
-components/enthusia-commend/src/main/java/org/enthusia/rep/config/LegacyRegionConfigMigration.java:12 PMD_category_java_errorprone_AvoidDuplicateLiterals :: The String literal "world" appears 7 times in this file; the first occurrence is on line 12
-components/enthusia-commend/src/main/java/org/enthusia/rep/gui/RepGuiManager.java:631 PMD_category_java_errorprone_AvoidLiteralsInIfCondition :: Avoid using Literals in Conditional Statements
-components/enthusia-commend/src/main/java/org/enthusia/rep/integration/WarzoneDuelsHook.java:82 PMD_category_java_errorprone_NullAssignment :: Assigning an Object to null is a code smell.  Consider refactoring.
 === Staff X04 ===
+paper/build.gradle.kts:7 StringLiteralDuplication :: Multiple occurrences of the same string literal within a single file detected. Prefer extracting the string literal into a property or constant.
