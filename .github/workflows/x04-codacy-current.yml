@@ -1,0 +1,55 @@
+name: X04 Codacy current diagnostics
+
+on:
+  push:
+    branches:
+      - diagnostic/es-x04-pi-index-20260824
+
+permissions:
+  contents: write
+
+env:
+  CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+jobs:
+  codacy-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f8915be28bfe5a3ec2854a303ff6cb586f2a6fad
+      - name: Inspect current X04 branch issues
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${CODACY_PROJECT_TOKEN}"
+          npm install --global @codacy/codacy-cloud-cli
+          codacy issues gh wsg138 EnthusiaStaff \
+            --branch package/es-x04-commend-provider \
+            --output json > codacy-branch.json
+          jq -r '
+            "TOTAL " + ((.issues | length)|tostring),
+            "=== component ===",
+            ([.issues[] | select(.filePath | startswith("components/enthusia-commend/"))] | sort_by(.filePath, .lineNumber) | .[] | (.filePath + ":" + (.lineNumber|tostring) + " " + .patternInfo.id + " :: " + .message)),
+            "=== Staff X04 ===",
+            ([.issues[] | select(
+              (.filePath | startswith("integration-contracts/src/main/java/org/enthusia/rep/api/")) or
+              (.filePath == "domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java") or
+              (.filePath == "domain/src/test/java/net/enthusia/staff/domain/application/PunishmentServiceTest.java") or
+              (.filePath | startswith("paper/src/main/java/net/enthusia/staff/paper/integration/Reputation")) or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java") or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
+              (.filePath == "paper/build.gradle.kts") or
+              (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
+            )] | sort_by(.filePath, .lineNumber) | .[] | (.filePath + ":" + (.lineNumber|tostring) + " " + .patternInfo.id + " :: " + .message))
+          ' codacy-branch.json > x04-codacy-current.txt
+          cat x04-codacy-current.txt
+          git fetch origin diagnostic/es-x04-pi-index-20260824
+          git checkout -B diagnostic/es-x04-pi-index-20260824 origin/diagnostic/es-x04-pi-index-20260824
+          cp "$GITHUB_WORKSPACE/x04-codacy-current.txt" x04-codacy-current.txt
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add x04-codacy-current.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'diagnostic: record current X04 Codacy issues'
+          git push origin HEAD:diagnostic/es-x04-pi-index-20260824
