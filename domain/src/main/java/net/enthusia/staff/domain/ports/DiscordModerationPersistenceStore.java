@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.moderation.AccountLinkAudit;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLink;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -33,6 +34,16 @@ public interface DiscordModerationPersistenceStore {
             DiscordMinecraftLinkSource source,
             String operationKey,
             Instant linkedAt
+    );
+
+    /** Atomically links the identities and persists the supplied staff audit record. */
+    VersionedLink linkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt,
+            AccountLinkAudit audit
     );
 
     default VersionedLink unlink(
@@ -65,6 +76,17 @@ public interface DiscordModerationPersistenceStore {
             Instant unlinkedAt
     );
 
+    /** Atomically unlinks the identities and persists the supplied staff audit record. */
+    VersionedLink unlinkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt,
+            AccountLinkAudit audit
+    );
+
     default VersionedLink reassign(
             DiscordUserId newDiscordUserId,
             UUID minecraftPlayerId,
@@ -86,11 +108,33 @@ public interface DiscordModerationPersistenceStore {
             Instant changedAt
     );
 
+    /** Atomically reassigns the identity and persists the supplied staff audit record. */
+    VersionedLink reassignWithAudit(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt,
+            AccountLinkAudit audit
+    );
+
     VersionedSubject setMainMinecraftAccount(
             ModerationSubjectId subjectId,
             MainMinecraftAccount mainAccount,
             long expectedSubjectRevision,
             Instant selectedAt
+    );
+
+    /**
+     * Atomically updates the main account and appends the audit. Returns {@code false} only when
+     * the same audit operation is an idempotent replay, in which case no main-account mutation runs.
+     */
+    boolean setMainMinecraftAccountWithAudit(
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount mainAccount,
+            long expectedSubjectRevision,
+            Instant selectedAt,
+            AccountLinkAudit audit
     );
 
     StoredEnforcementTarget recordEnforcementTarget(

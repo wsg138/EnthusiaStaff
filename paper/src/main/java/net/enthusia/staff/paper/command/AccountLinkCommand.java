@@ -36,47 +36,48 @@ public final class AccountLinkCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Account linking must be completed by the Minecraft player in-game."));
             return true;
         }
+        UUID playerId = player.getUniqueId();
         if (CommandRoute.canonicalName(command).equals("unlink")) {
-            return unlink(player, arguments);
+            return unlink(player, playerId, arguments);
         }
         if (arguments.length == 0) {
-            submit(player, () -> issue(player.getUniqueId()), "Account-link request");
+            submit(player, () -> issue(player, playerId), "Account-link request");
             return true;
         }
         if (arguments.length == 1) {
             String code = arguments[0];
-            submit(player, () -> complete(player.getUniqueId(), code), "Account-link completion");
+            submit(player, () -> complete(player, playerId, code), "Account-link completion");
             return true;
         }
         player.sendMessage(Component.text("Usage: /link [code]"));
         return true;
     }
 
-    private boolean unlink(Player player, String[] arguments) {
+    private boolean unlink(Player player, UUID playerId, String[] arguments) {
         if (arguments.length != 1 || !arguments[0].equals("CONFIRM")) {
             player.sendMessage(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link."));
             return true;
         }
-        submit(player, () -> unlink(player.getUniqueId()), "Account unlink");
+        submit(player, () -> unlink(player, playerId), "Account unlink");
         return true;
     }
 
-    private void issue(UUID playerId) {
+    private void issue(Player player, UUID playerId) {
         PaperAccountLinkRuntime current = requireRuntime();
         var issued = current.issueFromMinecraft(playerId);
-        send(playerId, "Link code: " + issued.code() + " — enter it in Discord within five minutes.");
+        send(player, "Link code: " + issued.code() + " — enter it in Discord within five minutes.");
     }
 
-    private void complete(UUID playerId, String code) {
+    private void complete(Player player, UUID playerId, String code) {
         PaperAccountLinkRuntime current = requireRuntime();
         var result = current.completeFromMinecraft(code, playerId);
-        send(playerId, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
+        send(player, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
     }
 
-    private void unlink(UUID playerId) {
+    private void unlink(Player player, UUID playerId) {
         PaperAccountLinkRuntime current = requireRuntime();
         var result = current.unlinkFromMinecraft(playerId, true);
-        send(playerId, result.changed()
+        send(player, result.changed()
                 ? "Discord account unlinked." + mirrorSuffix(result.mirrorResult())
                 : "No current Discord link exists.");
     }
@@ -104,7 +105,7 @@ public final class AccountLinkCommand implements CommandExecutor {
                     operation.run();
                 } catch (RuntimeException exception) {
                     plugin.getLogger().log(Level.WARNING, name + " failed", exception);
-                    send(player.getUniqueId(), name + " failed; no unverified success is assumed.");
+                    send(player, name + " failed; no unverified success is assumed.");
                 }
             });
         } catch (RejectedExecutionException exception) {
@@ -112,11 +113,7 @@ public final class AccountLinkCommand implements CommandExecutor {
         }
     }
 
-    private void send(UUID playerId, String message) {
-        Player player = plugin.getServer().getPlayer(playerId);
-        if (player == null) {
-            return;
-        }
+    private void send(Player player, String message) {
         player.getScheduler().execute(
                 plugin,
                 () -> player.sendMessage(Component.text(message)),

@@ -67,23 +67,13 @@ public final class MainAccountSelectionService {
             return Optional.of(current);
         }
 
-        Map<UUID, Long> minutes = allMinutes(subject.minecraftAccountIds());
-        if (minutes.size() != subject.minecraftAccountIds().size()) {
-            // A partial provider view cannot safely rank the linked accounts. Preserve current.
-            return Optional.of(current);
-        }
-        long currentMinutes = minutes.get(current.playerId());
-        Map.Entry<UUID, Long> best = minutes.entrySet().stream()
-                .filter(entry -> !entry.getKey().equals(current.playerId()))
-                .max(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue)
-                        .thenComparing(entry -> entry.getKey().toString()))
-                .orElse(null);
-        if (best == null || !shouldSwitch(currentMinutes, best.getValue())) {
+        MainMinecraftAccount selected = preferredAutomatic(subject, current);
+        if (selected.playerId().equals(current.playerId())) {
             return Optional.of(current);
         }
         VersionedSubject changed = identities.setMainMinecraftAccount(
                 subject.subjectId(),
-                new MainMinecraftAccount(best.getKey(), MainAccountSelectionSource.AUTOMATIC),
+                selected,
                 versioned.revision(),
                 clock.instant()
         );
@@ -146,9 +136,13 @@ public final class MainAccountSelectionService {
         }
         MainMinecraftAccount main = new MainMinecraftAccount(
                 minecraftPlayerId, MainAccountSelectionSource.STAFF_OVERRIDE);
-        identities.setMainMinecraftAccount(
-                versioned.subject().subjectId(), main, versioned.revision(), now);
-        audits.append(requestedAudit);
+        boolean changed = identities.setMainMinecraftAccountWithAudit(
+                versioned.subject().subjectId(), main, versioned.revision(), now, requestedAudit);
+        if (!changed) {
+            AccountLinkAudit concurrentReplay = audits.findByOperationKey(operationKey)
+                    .orElseThrow(() -> new IllegalStateException("audited main-account replay disappeared"));
+            requireMatchingSetAudit(concurrentReplay, actor, discordUserId, minecraftPlayerId);
+        }
         return main;
     }
 
@@ -171,24 +165,33 @@ public final class MainAccountSelectionService {
                 .orElseThrow(() -> new IllegalStateException("Discord identity has no moderation subject"));
         MainMinecraftAccount current = versioned.subject().mainMinecraftAccount()
                 .orElseThrow(() -> new IllegalStateException("subject has no main Minecraft account"));
-        MainMinecraftAccount automatic;
-        if (current.source() == MainAccountSelectionSource.STAFF_OVERRIDE) {
-            MainMinecraftAccount unlocked = new MainMinecraftAccount(
-                    current.playerId(), MainAccountSelectionSource.AUTOMATIC);
-            identities.setMainMinecraftAccount(
-                    versioned.subject().subjectId(), unlocked, versioned.revision(), clock.instant());
-            automatic = evaluate(discordUserId).orElse(unlocked);
-        } else {
-            // This also repairs the audit on a retry where the prior clear committed before its
-            // separate audit append completed. Clearing an already-automatic main is an idempotent no-op.
-            automatic = current;
-        }
-        Instant auditedAt = clock.instant();
-        audits.append(new AccountLinkAudit(
+        MainMinecraftAccount automatic = current.source() == MainAccountSelectionSource.STAFF_OVERRIDE
+                ? preferredAutomatic(
+                        versioned.subject(),
+                        new MainMinecraftAccount(current.playerId(), MainAccountSelectionSource.AUTOMATIC)
+                )
+                : current;
+        Instant now = clock.instant();
+        AccountLinkAudit requestedAudit = new AccountLinkAudit(
                 operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
                 Optional.of(discordUserId), Optional.of(automatic.playerId()),
-                MAIN_OVERRIDE_CLEAR_DETAIL, auditedAt
-        ));
+                MAIN_OVERRIDE_CLEAR_DETAIL, now
+        );
+        if (current.source() == MainAccountSelectionSource.STAFF_OVERRIDE) {
+            boolean changed = identities.setMainMinecraftAccountWithAudit(
+                    versioned.subject().subjectId(), automatic, versioned.revision(), now, requestedAudit);
+            if (!changed) {
+                AccountLinkAudit concurrentReplay = audits.findByOperationKey(operationKey)
+                        .orElseThrow(() -> new IllegalStateException("audited main-account replay disappeared"));
+                requireMatchingClearAudit(concurrentReplay, actor, discordUserId);
+                UUID replayedPlayerId = concurrentReplay.minecraftPlayerId().orElseThrow();
+                return new MainMinecraftAccount(replayedPlayerId, MainAccountSelectionSource.AUTOMATIC);
+            }
+        } else {
+            // A clear against an already-automatic main is an idempotent no-op, so the audit itself
+            // is the only durable mutation and does not need a cross-table transaction.
+            audits.append(requestedAudit);
+        }
         return automatic;
     }
 
@@ -198,6 +201,24 @@ public final class MainAccountSelectionService {
         VersionedSubject changed = identities.setMainMinecraftAccount(
                 versioned.subject().subjectId(), main, versioned.revision(), clock.instant());
         return changed.subject().mainMinecraftAccount();
+    }
+
+    private MainMinecraftAccount preferredAutomatic(ModerationSubject subject, MainMinecraftAccount current) {
+        Map<UUID, Long> minutes = allMinutes(subject.minecraftAccountIds());
+        if (minutes.size() != subject.minecraftAccountIds().size()) {
+            // A partial provider view cannot safely rank the linked accounts. Preserve current.
+            return new MainMinecraftAccount(current.playerId(), MainAccountSelectionSource.AUTOMATIC);
+        }
+        long currentMinutes = minutes.get(current.playerId());
+        Map.Entry<UUID, Long> best = minutes.entrySet().stream()
+                .filter(entry -> !entry.getKey().equals(current.playerId()))
+                .max(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue)
+                        .thenComparing(entry -> entry.getKey().toString()))
+                .orElse(null);
+        if (best == null || !shouldSwitch(currentMinutes, best.getValue())) {
+            return new MainMinecraftAccount(current.playerId(), MainAccountSelectionSource.AUTOMATIC);
+        }
+        return new MainMinecraftAccount(best.getKey(), MainAccountSelectionSource.AUTOMATIC);
     }
 
     private UUID chooseReplacement(Set<UUID> candidates) {

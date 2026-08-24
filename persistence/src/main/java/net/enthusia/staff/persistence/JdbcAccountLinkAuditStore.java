@@ -1,6 +1,7 @@
 package net.enthusia.staff.persistence;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,45 +28,12 @@ public final class JdbcAccountLinkAuditStore implements AccountLinkAuditStore {
 
     @Override
     public boolean append(AccountLinkAudit audit) {
-        if (audit == null) {
-            throw new IllegalArgumentException("audit must be present");
-        }
-        return JdbcTransactionSupport.execute(dataSource, "Unable to append account-link audit", connection -> {
-            AccountLinkAudit existing = find(connection, audit.operationKey(), true);
-            if (existing != null) {
-                if (!same(existing, audit)) {
-                    throw new SQLException("account-link audit operation key was reused for a different event");
-                }
-                return false;
-            }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO discord_link_audit(
-                        audit_id, operation_key, actor_id, actor_name, actor_rank, action,
-                        discord_user_id, minecraft_player_id, detail, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """)) {
-                statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-                statement.setString(2, audit.operationKey());
-                statement.setBytes(3, UuidBytes.toBytes(audit.actor().id()));
-                statement.setString(4, audit.actor().displayName());
-                statement.setString(5, audit.actor().rank().name());
-                statement.setString(6, audit.action().name());
-                if (audit.discordUserId().isPresent()) {
-                    statement.setBigDecimal(7, new BigDecimal(audit.discordUserId().orElseThrow().value()));
-                } else {
-                    statement.setNull(7, java.sql.Types.DECIMAL);
-                }
-                if (audit.minecraftPlayerId().isPresent()) {
-                    statement.setBytes(8, UuidBytes.toBytes(audit.minecraftPlayerId().orElseThrow()));
-                } else {
-                    statement.setNull(8, java.sql.Types.BINARY);
-                }
-                statement.setString(9, audit.detail());
-                statement.setTimestamp(10, Timestamp.from(audit.createdAt()));
-                JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "account-link audit was not inserted");
-            }
-            return true;
-        });
+        requireAudit(audit);
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to append account-link audit",
+                connection -> append(connection, audit)
+        );
     }
 
     @Override
@@ -77,8 +45,48 @@ public final class JdbcAccountLinkAuditStore implements AccountLinkAuditStore {
                 Optional.ofNullable(find(connection, operationKey, false)));
     }
 
-    private static AccountLinkAudit find(java.sql.Connection connection, String operationKey, boolean lock)
-            throws SQLException {
+    static boolean append(Connection connection, AccountLinkAudit audit) throws SQLException {
+        if (connection == null) {
+            throw new IllegalArgumentException("connection must be present");
+        }
+        requireAudit(audit);
+        AccountLinkAudit existing = find(connection, audit.operationKey(), true);
+        if (existing != null) {
+            if (!same(existing, audit)) {
+                throw new SQLException("account-link audit operation key was reused for a different event");
+            }
+            return false;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO discord_link_audit(
+                    audit_id, operation_key, actor_id, actor_name, actor_rank, action,
+                    discord_user_id, minecraft_player_id, detail, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setString(2, audit.operationKey());
+            statement.setBytes(3, UuidBytes.toBytes(audit.actor().id()));
+            statement.setString(4, audit.actor().displayName());
+            statement.setString(5, audit.actor().rank().name());
+            statement.setString(6, audit.action().name());
+            if (audit.discordUserId().isPresent()) {
+                statement.setBigDecimal(7, new BigDecimal(audit.discordUserId().orElseThrow().value()));
+            } else {
+                statement.setNull(7, java.sql.Types.DECIMAL);
+            }
+            if (audit.minecraftPlayerId().isPresent()) {
+                statement.setBytes(8, UuidBytes.toBytes(audit.minecraftPlayerId().orElseThrow()));
+            } else {
+                statement.setNull(8, java.sql.Types.BINARY);
+            }
+            statement.setString(9, audit.detail());
+            statement.setTimestamp(10, Timestamp.from(audit.createdAt()));
+            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "account-link audit was not inserted");
+        }
+        return true;
+    }
+
+    static AccountLinkAudit find(Connection connection, String operationKey, boolean lock) throws SQLException {
         String sql = "SELECT operation_key, actor_id, actor_name, actor_rank, action, discord_user_id, "
                 + "minecraft_player_id, detail, created_at FROM discord_link_audit WHERE operation_key = ?"
                 + (lock ? " FOR UPDATE" : "");
@@ -108,12 +116,18 @@ public final class JdbcAccountLinkAuditStore implements AccountLinkAuditStore {
         }
     }
 
-    private static boolean same(AccountLinkAudit left, AccountLinkAudit right) {
+    static boolean same(AccountLinkAudit left, AccountLinkAudit right) {
         return left.operationKey().equals(right.operationKey())
                 && left.actor().equals(right.actor())
                 && left.action() == right.action()
                 && left.discordUserId().equals(right.discordUserId())
                 && left.minecraftPlayerId().equals(right.minecraftPlayerId())
                 && left.detail().equals(right.detail());
+    }
+
+    private static void requireAudit(AccountLinkAudit audit) {
+        if (audit == null) {
+            throw new IllegalArgumentException("audit must be present");
+        }
     }
 }

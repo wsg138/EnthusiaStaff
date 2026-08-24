@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.application.AccountLinkingService;
 import net.enthusia.staff.domain.application.AccountLinkingService.MinecraftOnlineVerifier;
@@ -42,7 +43,10 @@ record PaperStorageBindings(
         MariaDbRuntime runtime,
         ModerationStores moderation,
         AssetStores assets,
-        ApplicationServices services
+        ApplicationServices services,
+        Clock clock,
+        SecureRandom secureRandom,
+        AtomicReference<PaperAccountLinkRuntime> accountLinkRuntime
 ) {
     static PaperStorageBindings create(
             MariaDbRuntime runtime,
@@ -70,7 +74,8 @@ record PaperStorageBindings(
                 runtime.economyJournalStore()
         );
         Clock clock = Clock.systemUTC();
-        SecureIdentifiers identifiers = new SecureIdentifiers(new SecureRandom());
+        SecureRandom secureRandom = new SecureRandom();
+        SecureIdentifiers identifiers = new SecureIdentifiers(secureRandom);
         PunishmentDraftStore draftStore = runtime.punishmentDraftStore();
         PunishmentService punishment = new PunishmentService(
                 clock,
@@ -101,7 +106,15 @@ record PaperStorageBindings(
                 punishmentRequests,
                 new SanctionChangeService(authorization, runtime.sanctionMutationStore())
         );
-        return new PaperStorageBindings(runtime, moderation, assets, services);
+        return new PaperStorageBindings(
+                runtime,
+                moderation,
+                assets,
+                services,
+                clock,
+                secureRandom,
+                new AtomicReference<>()
+        );
     }
 
     PaperAccountLinkRuntime accountLinks(
@@ -110,25 +123,36 @@ record PaperStorageBindings(
             MinecraftOnlineVerifier online,
             Optional<? extends DiscordSrvLinkProvider> discordSrv
     ) {
-        Clock clock = Clock.systemUTC();
-        var identities = runtime.discordModerationPersistenceStore();
-        MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
-                clock,
-                identities,
-                playtime,
-                authorization,
-                runtime.accountLinkAuditStore()
-        );
-        AccountLinkingService linking = new AccountLinkingService(
-                clock,
-                new SecureRandom(),
-                identities,
-                runtime.accountLinkingStore(),
-                online,
-                mainAccounts
-        );
-        DiscordSrvMigrationService migration = new DiscordSrvMigrationService(clock, identities);
-        return new PaperAccountLinkRuntime(linking, identities, migration, discordSrv);
+        PaperAccountLinkRuntime cached = accountLinkRuntime.get();
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (accountLinkRuntime) {
+            cached = accountLinkRuntime.get();
+            if (cached != null) {
+                return cached;
+            }
+            var identities = runtime.discordModerationPersistenceStore();
+            MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
+                    clock,
+                    identities,
+                    playtime,
+                    authorization,
+                    runtime.accountLinkAuditStore()
+            );
+            AccountLinkingService linking = new AccountLinkingService(
+                    clock,
+                    secureRandom,
+                    identities,
+                    runtime.accountLinkingStore(),
+                    online,
+                    mainAccounts
+            );
+            DiscordSrvMigrationService migration = new DiscordSrvMigrationService(clock, identities);
+            cached = new PaperAccountLinkRuntime(linking, identities, migration, discordSrv);
+            accountLinkRuntime.set(cached);
+            return cached;
+        }
     }
 
     ModerationStore moderationStore() { return moderation.moderationStore(); }

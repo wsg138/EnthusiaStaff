@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.moderation.AccountLinkAudit;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLink;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -23,9 +24,11 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.Version
 /** Single transactional owner for Discord/Minecraft link, unlink and reassignment mutations. */
 final class JdbcDiscordLinkRepository {
     private final DataSource dataSource;
+    private final JdbcDeadlockRetry deadlockRetry;
 
     JdbcDiscordLinkRepository(DataSource dataSource) {
         this.dataSource = dataSource;
+        this.deadlockRetry = new JdbcDeadlockRetry();
     }
 
     VersionedLink link(
@@ -35,15 +38,37 @@ final class JdbcDiscordLinkRepository {
             String operationKey,
             Instant linkedAt
     ) {
-        requirePresent(discordUserId, "discordUserId");
-        requirePresent(minecraftPlayerId, "minecraftPlayerId");
-        requirePresent(source, "source");
-        requireKey(operationKey, "operationKey");
-        requirePresent(linkedAt, "linkedAt");
-        return JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to link Discord and Minecraft identities",
-                connection -> link(connection, discordUserId, minecraftPlayerId, source, operationKey, linkedAt)
+        validateLink(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+        return deadlockRetry.execute(
+                "Interrupted while retrying Discord/Minecraft link",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to link Discord and Minecraft identities",
+                        connection -> link(connection, discordUserId, minecraftPlayerId, source, operationKey, linkedAt)
+                )
+        );
+    }
+
+    VersionedLink linkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt,
+            AccountLinkAudit audit
+    ) {
+        validateLink(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+        requirePresent(audit, "audit");
+        return deadlockRetry.execute(
+                "Interrupted while retrying audited Discord/Minecraft link",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to link Discord and Minecraft identities with audit",
+                        connection -> {
+                            JdbcAccountLinkAuditStore.append(connection, audit);
+                            return link(connection, discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+                        }
+                )
         );
     }
 
@@ -55,25 +80,67 @@ final class JdbcDiscordLinkRepository {
             String operationKey,
             Instant unlinkedAt
     ) {
-        requirePresent(discordUserId, "discordUserId");
-        requirePresent(minecraftPlayerId, "minecraftPlayerId");
-        if (expectedRevision < 0) {
-            throw new IllegalArgumentException("expectedRevision must not be negative");
-        }
-        requirePresent(replacementMain, "replacementMain");
-        requireKey(operationKey, "operationKey");
-        requirePresent(unlinkedAt, "unlinkedAt");
-        return JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to unlink Discord and Minecraft identities",
-                connection -> unlink(
-                        connection,
-                        discordUserId,
-                        minecraftPlayerId,
-                        expectedRevision,
-                        replacementMain,
-                        operationKey,
-                        unlinkedAt
+        validateUnlink(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                replacementMain,
+                operationKey,
+                unlinkedAt
+        );
+        return deadlockRetry.execute(
+                "Interrupted while retrying Discord/Minecraft unlink",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to unlink Discord and Minecraft identities",
+                        connection -> unlink(
+                                connection,
+                                discordUserId,
+                                minecraftPlayerId,
+                                expectedRevision,
+                                replacementMain,
+                                operationKey,
+                                unlinkedAt
+                        )
+                )
+        );
+    }
+
+    VersionedLink unlinkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt,
+            AccountLinkAudit audit
+    ) {
+        validateUnlink(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                replacementMain,
+                operationKey,
+                unlinkedAt
+        );
+        requirePresent(audit, "audit");
+        return deadlockRetry.execute(
+                "Interrupted while retrying audited Discord/Minecraft unlink",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to unlink Discord and Minecraft identities with audit",
+                        connection -> {
+                            JdbcAccountLinkAuditStore.append(connection, audit);
+                            return unlink(
+                                    connection,
+                                    discordUserId,
+                                    minecraftPlayerId,
+                                    expectedRevision,
+                                    replacementMain,
+                                    operationKey,
+                                    unlinkedAt
+                            );
+                        }
                 )
         );
     }
@@ -85,21 +152,62 @@ final class JdbcDiscordLinkRepository {
             String operationKey,
             Instant changedAt
     ) {
-        requirePresent(newDiscordUserId, "newDiscordUserId");
-        requirePresent(minecraftPlayerId, "minecraftPlayerId");
-        requirePresent(previousSubjectReplacementMain, "previousSubjectReplacementMain");
-        requireBaseKey(operationKey, "operationKey");
-        requirePresent(changedAt, "changedAt");
-        return JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to reassign Discord/Minecraft identity",
-                connection -> reassign(
-                        connection,
-                        newDiscordUserId,
-                        minecraftPlayerId,
-                        previousSubjectReplacementMain,
-                        operationKey,
-                        changedAt
+        validateReassign(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt
+        );
+        return deadlockRetry.execute(
+                "Interrupted while retrying Discord/Minecraft reassignment",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to reassign Discord/Minecraft identity",
+                        connection -> reassign(
+                                connection,
+                                newDiscordUserId,
+                                minecraftPlayerId,
+                                previousSubjectReplacementMain,
+                                operationKey,
+                                changedAt
+                        )
+                )
+        );
+    }
+
+    VersionedLink reassignWithAudit(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt,
+            AccountLinkAudit audit
+    ) {
+        validateReassign(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt
+        );
+        requirePresent(audit, "audit");
+        return deadlockRetry.execute(
+                "Interrupted while retrying audited Discord/Minecraft reassignment",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to reassign Discord/Minecraft identity with audit",
+                        connection -> {
+                            JdbcAccountLinkAuditStore.append(connection, audit);
+                            return reassign(
+                                    connection,
+                                    newDiscordUserId,
+                                    minecraftPlayerId,
+                                    previousSubjectReplacementMain,
+                                    operationKey,
+                                    changedAt
+                            );
+                        }
                 )
         );
     }
@@ -807,6 +915,52 @@ final class JdbcDiscordLinkRepository {
 
     private static DiscordUserId discordUserId(BigDecimal value) {
         return new DiscordUserId(value.toBigIntegerExact().toString());
+    }
+
+    private static void validateLink(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt
+    ) {
+        requirePresent(discordUserId, "discordUserId");
+        requirePresent(minecraftPlayerId, "minecraftPlayerId");
+        requirePresent(source, "source");
+        requireKey(operationKey, "operationKey");
+        requirePresent(linkedAt, "linkedAt");
+    }
+
+    private static void validateUnlink(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt
+    ) {
+        requirePresent(discordUserId, "discordUserId");
+        requirePresent(minecraftPlayerId, "minecraftPlayerId");
+        if (expectedRevision < 0) {
+            throw new IllegalArgumentException("expectedRevision must not be negative");
+        }
+        requirePresent(replacementMain, "replacementMain");
+        requireKey(operationKey, "operationKey");
+        requirePresent(unlinkedAt, "unlinkedAt");
+    }
+
+    private static void validateReassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt
+    ) {
+        requirePresent(newDiscordUserId, "newDiscordUserId");
+        requirePresent(minecraftPlayerId, "minecraftPlayerId");
+        requirePresent(previousSubjectReplacementMain, "previousSubjectReplacementMain");
+        requireBaseKey(operationKey, "operationKey");
+        requirePresent(changedAt, "changedAt");
     }
 
     private static void requirePresent(Object value, String name) {

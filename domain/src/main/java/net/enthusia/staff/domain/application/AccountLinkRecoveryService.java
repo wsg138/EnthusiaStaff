@@ -61,13 +61,19 @@ public final class AccountLinkRecoveryService {
             if (!linked.link().discordUserId().equals(discordUserId)) {
                 throw new IllegalStateException("force-link will not silently overwrite a different owner; use reassignment");
             }
+            // No identity mutation is required, so the audit is the only durable change.
+            audits.append(requestedAudit);
         } else {
-            linked = identities.link(
-                    discordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    operationKey + ":link", requestedAudit.createdAt());
+            linked = identities.linkWithAudit(
+                    discordUserId,
+                    minecraftPlayerId,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    operationKey + ":link",
+                    requestedAudit.createdAt(),
+                    requestedAudit
+            );
         }
         mainAccounts.evaluate(discordUserId);
-        audits.append(requestedAudit);
         return linked;
     }
 
@@ -91,16 +97,20 @@ public final class AccountLinkRecoveryService {
             }
             Optional<MainMinecraftAccount> replacement =
                     mainAccounts.replacementForUnlink(expectedDiscordUserId, minecraftPlayerId);
-            identities.unlink(
+            identities.unlinkWithAudit(
                     expectedDiscordUserId,
                     minecraftPlayerId,
                     current.revision(),
                     replacement,
                     operationKey + ":unlink",
-                    requestedAudit.createdAt());
+                    requestedAudit.createdAt(),
+                    requestedAudit
+            );
             mainAccounts.evaluate(expectedDiscordUserId);
+        } else {
+            // A confirmed no-op is still auditable, but there is no identity mutation to combine with it.
+            audits.append(requestedAudit);
         }
-        audits.append(requestedAudit);
         return existing.isPresent();
     }
 
@@ -122,17 +132,18 @@ public final class AccountLinkRecoveryService {
                 && !oldDiscordUserId.equals(newDiscordUserId)
                 ? mainAccounts.replacementForUnlink(oldDiscordUserId, minecraftPlayerId)
                 : Optional.empty();
-        VersionedLink linked = identities.reassign(
+        VersionedLink linked = identities.reassignWithAudit(
                 newDiscordUserId,
                 minecraftPlayerId,
                 replacement,
                 operationKey,
-                requestedAudit.createdAt());
+                requestedAudit.createdAt(),
+                requestedAudit
+        );
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
             mainAccounts.evaluate(oldDiscordUserId);
         }
         mainAccounts.evaluate(newDiscordUserId);
-        audits.append(requestedAudit);
         return linked;
     }
 
