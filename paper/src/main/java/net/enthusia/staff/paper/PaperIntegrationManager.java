@@ -17,7 +17,6 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
-import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
@@ -102,7 +101,10 @@ final class PaperIntegrationManager {
                     clock(),
                     reputation,
                     dependencies.stores().punishmentService(),
-                    dependencies.stores().sanctionLookup(),
+                    () -> {
+                        PunishmentService service = dependencies.stores().punishmentService().get();
+                        return service == null ? null : service::activeSanctions;
+                    },
                     workers()
             );
             reputationRestrictions.start();
@@ -230,7 +232,7 @@ final class PaperIntegrationManager {
             return matcher;
         } catch (IllegalArgumentException exception) {
             issue(AUTOMOD, "Exact-variant configuration is invalid; enforcement is disabled");
-            plugin().getLogger().log(Level.SEVERE, "Automod configuration validation failed", exception);
+            plugin().getLogger().log(Level.SEVERE, "Automod integration configuration failed", exception);
             return null;
         }
     }
@@ -315,7 +317,6 @@ final class PaperIntegrationManager {
 
     record Stores(
             Supplier<PunishmentService> punishmentService,
-            Supplier<SanctionLookup> sanctionLookup,
             Supplier<EconomyJournalStore> economyJournal,
             Supplier<InventoryJournalStore> inventoryJournal
     ) {
