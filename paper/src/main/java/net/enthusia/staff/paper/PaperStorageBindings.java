@@ -3,9 +3,13 @@ package net.enthusia.staff.paper;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Optional;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.application.AccountLinkingService;
+import net.enthusia.staff.domain.application.AccountLinkingService.MinecraftOnlineVerifier;
+import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService;
+import net.enthusia.staff.domain.application.DiscordSrvMigrationService.DiscordSrvLinkProvider;
 import net.enthusia.staff.domain.application.MainAccountSelectionService;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
@@ -32,11 +36,7 @@ import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.paper.account.PaperAccountLinkRuntime;
-import net.enthusia.staff.paper.integration.DiscordSrvLinkProviderAdapter;
-import net.enthusia.staff.paper.integration.PlayTimeActivePlaytimeProvider;
 import net.enthusia.staff.persistence.MariaDbRuntime;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 
 record PaperStorageBindings(
         MariaDbRuntime runtime,
@@ -104,13 +104,18 @@ record PaperStorageBindings(
         return new PaperStorageBindings(runtime, moderation, assets, services);
     }
 
-    PaperAccountLinkRuntime accountLinks(JavaPlugin plugin, AuthorizationPolicy authorization) {
+    PaperAccountLinkRuntime accountLinks(
+            AuthorizationPolicy authorization,
+            ActivePlaytimeProvider playtime,
+            MinecraftOnlineVerifier online,
+            Optional<? extends DiscordSrvLinkProvider> discordSrv
+    ) {
         Clock clock = Clock.systemUTC();
         var identities = runtime.discordModerationPersistenceStore();
         MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
                 clock,
                 identities,
-                PlayTimeActivePlaytimeProvider.discover(plugin),
+                playtime,
                 authorization,
                 runtime.accountLinkAuditStore()
         );
@@ -119,19 +124,11 @@ record PaperStorageBindings(
                 new SecureRandom(),
                 identities,
                 runtime.accountLinkingStore(),
-                playerId -> {
-                    Player player = plugin.getServer().getPlayer(playerId);
-                    return player != null && player.isOnline();
-                },
+                online,
                 mainAccounts
         );
         DiscordSrvMigrationService migration = new DiscordSrvMigrationService(clock, identities);
-        return new PaperAccountLinkRuntime(
-                linking,
-                identities,
-                migration,
-                DiscordSrvLinkProviderAdapter.discover(plugin)
-        );
+        return new PaperAccountLinkRuntime(linking, identities, migration, discordSrv);
     }
 
     ModerationStore moderationStore() { return moderation.moderationStore(); }
