@@ -38,13 +38,6 @@ jobs:
           bash -n scripts/staging/build-enthusiastaff-bridge-artifact.sh
           bash -n scripts/staging/validate-enthusiastaff-source.sh
 
-      - name: Validate workflow YAML syntax
-        run: |
-          ruby -e 'require "yaml"; ARGV.each { |path| YAML.load_file(path) }' \
-            .github/workflows/pi-staging-check.yml \
-            .github/workflows/pi-staging-command.yml \
-            .github/workflows/pi-staging-control-validation.yml
-
       - name: Validate GitHub Actions semantics
         env:
           ACTIONLINT_VERSION: "1.7.12"
