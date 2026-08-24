@@ -10,7 +10,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -48,8 +47,8 @@ class DiscordPersistenceV19IntegrationTest {
     @BeforeAll
     static void migrateCleanDatabase() {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(CLEAN_DATABASE))) {
-            MariaDb.migrate(dataSource);
-            MariaDb.migrate(dataSource);
+            migrate(dataSource, "19");
+            migrate(dataSource, "19");
         }
     }
 
@@ -77,7 +76,7 @@ class DiscordPersistenceV19IntegrationTest {
                 BASE_TIME.plusSeconds(1)
         );
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(UPGRADE_DATABASE))) {
-            MariaDb.migrate(dataSource);
+            migrate(dataSource, "19");
         }
 
         assertEquals("19", currentFlywayVersion(UPGRADE_DATABASE));
