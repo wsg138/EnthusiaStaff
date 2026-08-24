@@ -11,6 +11,8 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import org.bukkit.plugin.ServicesManager;
 import org.enthusia.rep.api.ReputationBlacklist;
 import org.enthusia.rep.api.ReputationModerationApi;
+import org.enthusia.rep.api.ReputationMutationResult;
+import org.enthusia.rep.api.ReputationStateSnapshot;
 
 public final class ReputationIntegration {
     private final IntegrationAvailability availability;
@@ -18,7 +20,7 @@ public final class ReputationIntegration {
     private final AuthorizationPolicy authorization;
     private final ReputationModerationApi api;
 
-    private ReputationIntegration(
+    ReputationIntegration(
             IntegrationAvailability availability,
             String issue,
             AuthorizationPolicy authorization,
@@ -82,6 +84,11 @@ public final class ReputationIntegration {
         return api.getBlacklist(Objects.requireNonNull(playerId, "playerId"));
     }
 
+    public ReputationStateSnapshot snapshot(UUID playerId) {
+        requireAvailable();
+        return api.snapshot(Objects.requireNonNull(playerId, "playerId"));
+    }
+
     public ReputationBlacklist apply(
             Actor actor,
             UUID playerId,
@@ -90,20 +97,78 @@ public final class ReputationIntegration {
     ) {
         requireAvailable();
         requireMutationAuthority(actor);
-        Objects.requireNonNull(playerId, "playerId");
-        Objects.requireNonNull(expirationAt, "expirationAt");
-        Objects.requireNonNull(caseId, "caseId");
-        return expirationAt
-                .map(expiration -> api.blacklist(playerId, expiration, caseId))
-                .orElseGet(() -> api.blacklistPermanently(playerId, caseId));
+        UUID target = Objects.requireNonNull(playerId, "playerId");
+        Optional<Instant> expiration = Objects.requireNonNull(expirationAt, "expirationAt");
+        String linkedCase = Objects.requireNonNull(caseId, "caseId");
+        Optional<ReputationBlacklist> current = api.getBlacklist(target);
+        ReputationStateSnapshot before = api.snapshot(target);
+        ReputationMutationResult result = api.applyBlacklist(
+                UUID.randomUUID(),
+                target,
+                expiration,
+                linkedCase,
+                current.map(ReputationBlacklist::revision).orElse(0L),
+                before.checksum()
+        );
+        return successfulBlacklist(result, "apply");
     }
 
     public boolean remove(Actor actor, UUID playerId, String caseId) {
         requireAvailable();
         requireMutationAuthority(actor);
+        UUID target = Objects.requireNonNull(playerId, "playerId");
+        String linkedCase = Objects.requireNonNull(caseId, "caseId");
+        Optional<ReputationBlacklist> current = api.getBlacklist(target);
+        if (current.isEmpty() || current.orElseThrow().status() == ReputationBlacklist.Status.REMOVED) {
+            return false;
+        }
+        ReputationStateSnapshot before = api.snapshot(target);
+        ReputationMutationResult result = api.removeBlacklist(
+                UUID.randomUUID(),
+                target,
+                linkedCase,
+                current.orElseThrow().revision(),
+                before.checksum()
+        );
+        if (!result.success()) {
+            throw new IllegalStateException("Reputation blacklist removal failed: " + result.detail());
+        }
+        return true;
+    }
+
+    ReputationMutationResult reconcileApply(
+            UUID operationId,
+            UUID playerId,
+            Optional<Instant> expirationAt,
+            String caseId,
+            long expectedBlacklistRevision
+    ) {
+        requireAvailable();
+        ReputationStateSnapshot before = api.snapshot(Objects.requireNonNull(playerId, "playerId"));
+        return api.applyBlacklist(
+                Objects.requireNonNull(operationId, "operationId"),
+                playerId,
+                Objects.requireNonNull(expirationAt, "expirationAt"),
+                Objects.requireNonNull(caseId, "caseId"),
+                expectedBlacklistRevision,
+                before.checksum()
+        );
+    }
+
+    ReputationMutationResult reconcileRemove(
+            UUID operationId,
+            UUID playerId,
+            String caseId,
+            long expectedBlacklistRevision
+    ) {
+        requireAvailable();
+        ReputationStateSnapshot before = api.snapshot(Objects.requireNonNull(playerId, "playerId"));
         return api.removeBlacklist(
-                Objects.requireNonNull(playerId, "playerId"),
-                Objects.requireNonNull(caseId, "caseId")
+                Objects.requireNonNull(operationId, "operationId"),
+                playerId,
+                Objects.requireNonNull(caseId, "caseId"),
+                expectedBlacklistRevision,
+                before.checksum()
         );
     }
 
@@ -118,6 +183,13 @@ public final class ReputationIntegration {
     public int apiVersion() {
         requireAvailable();
         return api.apiVersion();
+    }
+
+    private ReputationBlacklist successfulBlacklist(ReputationMutationResult result, String operation) {
+        if (!result.success() || result.blacklist().isEmpty()) {
+            throw new IllegalStateException("Reputation blacklist " + operation + " failed: " + result.detail());
+        }
+        return result.blacklist().orElseThrow();
     }
 
     private void requireAvailable() {
