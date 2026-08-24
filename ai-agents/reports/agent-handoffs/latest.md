@@ -1,23 +1,32 @@
 # Latest package-worker handoff
 
-Current package: `ES-D04 — Account linking and DiscordSRV migration`.
+Current universal package: `ES-X04 — EnthusiaCommend reputation provider`.
 
 Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md`.
 
-Implementation is preserved and unmerged:
-- Branch: `package/es-d04-account-linking`.
-- PR: #151, open and non-draft.
-- Frozen product head: `b231022b065b5843d2dd73811dfbf51acba6314b`.
-- Reconciled canonical `main` before status publication: `f129226ac017c97fc4126629dd0f47bff729abd6`.
+Implementation is preserved and unmerged in both required repositories:
+- Commend branch: `package/es-x04-commend-provider`.
+- Commend PR: `wsg138/EnthusiaCommend#12`, open and non-draft.
+- Frozen Commend head: `30ac1afbb6b45e958c6972330c42a870d619d530`.
+- Staff branch: `package/es-x04-commend-provider`.
+- Staff PR: #152, open and non-draft.
+- Frozen Staff head: `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`.
+- Reconciled canonical Staff `main` before status publication: `cb19463f16e124564ccbc17034b4c18f5cd0281f`.
 
-D04 product scope is implemented at the frozen head. It includes one-use two-direction five-minute codes, durable history and replacement invalidation, online Minecraft proof, confirmed unlink, atomic audited staff recovery/main-account overrides, 25% active-playtime main selection through the public PlayTimePlugin service, explicit idempotent DiscordSRV public-API import, best-effort main mirroring, Paper `/link`/`/unlink`, and forward V20 persistence.
+X04's product scope is implemented and the shared standalone↔aggregate product Git objects are synchronized before merge under the aggregate-only metadata exclusion. This continuation additionally replaced duplicated committed-operation snapshot persistence with one canonical snapshot, retained legacy matching two-snapshot reads, rejects mismatched committed state, and added focused regression tests.
 
-Exact-head hosted validation is green: Coverage/full run `32738304907`, job `97466391922`, passed Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo and Codacy; artifact `9524397425`, digest `sha256:230de565c87f1939dd0f06f2bcb028a394d96e73e43237fb43b2f02adccbd6c8`. Sentinel artifact run `32738306003`, job `97466394689`, passed with artifact `9524138779`, digest `sha256:4f472f5a20c9d825ad7129bbf0bc4727740a4166f9d1c697c843df5b84020b67`. Sentinel durable job `225` ended `PAPER_RESTART_OK` on the same exact SHA.
+Review state is substantially clean: Staff #152 has zero live inline threads; all six Commend #12 correctness/data-integrity threads are resolved; CodeRabbit status is successful on the frozen Staff head. Static analysis is not clean: the current Staff Codacy summary reports 100 new issues (8 high, 92 medium), so no static PASS is claimed.
 
-The blocker is the separate required canonical Pi staging gate. The connected GitHub worker can fetch known workflow runs but cannot list the `pull_request_target` executions needed to discover PR #151's automatic Pi run, and no exact D04 public/private Pi run identifiers are recorded elsewhere. No Pi pass is claimed; Sentinel does not substitute for canonical MariaDB/Flyway staging.
+Standalone observable CI is non-passing for exact-head purposes. Commend run `32763949487`, job `97549027434`, successfully ran Java 21 Maven `clean verify`, 110 tests, PMD, and artifact `9533731303`, but its checkout is synthetic merge commit `cf6f64dcff0639a724b07ef9c6bebac78429c86d`, not exact frozen branch head `30ac1af...`. Merge-ref-only evidence is disallowed. Package-branch push CI is configured with read-only permissions, but the connected commit-workflow listing does not expose a directly inspectable exact-head push run.
 
-Resume only when the exact blocker changes: obtain or execute canonical public `Pi Staging` for source `b231022b065b5843d2dd73811dfbf51acba6314b`, verify the correlated private `wsg138/EnthusiaStaff-Staging` run on `Lincoln-PI-4` and every provenance/runtime/restart/cleanup assertion, then reconcile current `main`, resolve the two remaining tracking-only PR threads, run any newly applicable state/static checks, merge #151 normally, verify containment/cleanup, and publish D04 `COMPLETE`.
+Staff exact-head Coverage/full validation `32763957896`, job `97549217101`, passed on `9d44bbc...`: Temurin Java 21.0.12+8; full build/tests including MariaDB/Testcontainers; 27 provider API source types / 0 leaks; Paper SHA-256 `7dd515e21409abb8c8496701e22ced3bdf3e266af8bc5c5bb0e7c52302c1198a`; Velocity SHA-256 `e4c7e48b51a8681eaac5742de96a841462aaeabd74507dcf1c8e1b02faef7586`; JaCoCo 50.50% line / 41.12% branch / 52.93% instruction; artifact `9534065111`, digest `sha256:132df7318d872c0f6e9863bd71fa3f8c69ee72478de742ff1d4f792ebf4fbd2f`; Codacy coverage upload/final notification succeeded.
 
-`ES-D05 — Staff bot runtime foundation` remains independently `READY` while D04 is parked. This worker did not start it. Concurrent website, competition, ES-X03, ES-X04 and D05 work was not absorbed or overwritten. Issue #43 remains open and LiteBans remains authoritative.
+Staff exact-head Sentinel artifact workflow `32763957749`, job `97549055756`, passed and produced artifact `9533760777`, digest `sha256:285503604af4a7d2bd0bde450acf594909490767fdfc433a66e74ae9fe2d6d16`. Exact restart request comment `5400262894` was bound to the frozen SHA as durable job `231` and reached terminal `PAPER_RESTART_OK`: Paper reached readiness and stopped cleanly twice against one disposable state. Sentinel is therefore exact-head PASS, but does not substitute for canonical Pi.
+
+The independent required canonical Pi gate is unresolved. Current connector-visible commit workflow listing cannot correlate the automatic `pull_request_target` Pi run with a private `wsg138/EnthusiaStaff-Staging` execution, and PR #152 does not yet provide stable exact-head public/private evidence. Independent staging-control-plane fix PR #156 remains open/unmerged at `a1903feaf81cff9d8a151d197fc7efe2b1b855ae`; this X04 worker did not modify or merge it.
+
+Resume X04 only when exact-head standalone CI is directly inspectable and passing, applicable Codacy/static findings are resolved with a clean final result, and the trusted canonical Pi path can produce verifiable exact public/private staging evidence. Then reconcile live heads, rerun every invalidated gate, merge both implementation PRs normally, verify post-merge parity/metadata/containment, clean temporary branches safely, and publish `COMPLETE`.
+
+`ES-D04` remains independently parked on its own canonical-Pi evidence blocker, and D05/Discord work remains separate. Concurrent website work, staging-control-plane PR #156, and independently parked X01/X03 were not absorbed or overwritten. Issue #43 remains open and LiteBans remains authoritative. This worker does not start a second package.

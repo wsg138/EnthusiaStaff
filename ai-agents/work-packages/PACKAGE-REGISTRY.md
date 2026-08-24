@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-08-14
+Last updated: 2026-08-24
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -24,7 +24,11 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 `ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted.
 
-`ES-X03 — EnthusiaMarket destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Existing Market PR #3 is stabilized at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; existing Staff PR #139 is synchronized at `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. All live Market inline review threads are resolved after current-code verification. Broad post-candidate Market cleanup was removed from X03 with ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`. Aggregate provider bytes match the standalone scoped head under canonical exclusions, but the old normalized `8d27f4d9...` hash belongs only to obsolete candidate `6240869` and is not reused. The hard blocker is exact-head ordinary Market validation: `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in repository history and the connected worker cannot dispatch a workflow. Both implementation PRs remain open and unmerged. `ES-X04` remains `READY`; `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`.
+`ES-X03 — EnthusiaMarket destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Existing Market PR #3 is stabilized at scoped head `aa7cf6025bd8634c1106e6457cd49e7baa182f51`; existing Staff PR #139 is synchronized at `fb0afbec22b68bdfb9ba910737f8ff254d23c4ce`. All live Market inline review threads are resolved after current-code verification. Broad post-candidate Market cleanup was removed from X03 with ordinary forward history and preserved intact on `preserve/es-x03-post-candidate-556b4b4-20260814`. Aggregate provider bytes match the standalone scoped head under canonical exclusions. The hard blocker is exact-head ordinary Market validation: `wsg138/EnthusiaMarket` currently has zero GitHub Actions runs in repository history and the connected worker cannot dispatch a workflow. Both implementation PRs remain open and unmerged.
+
+`ES-X04 — EnthusiaCommend reputation provider` is `BLOCKED` / `PARKED_BLOCKED`. Existing Commend PR #12 is frozen at `30ac1afbb6b45e958c6972330c42a870d619d530`; Staff PR #152 is frozen at `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`. Product implementation and pre-merge shared-object synchronization are complete. Staff exact-head Coverage/full validation, Sentinel artifact build, and Sentinel restart job `231` all pass; however Staff Codacy remains `Not up to standards` with 100 new static issues, the directly observable standalone Commend validation is merge-ref-only rather than admissible exact-head evidence, and canonical Pi public/private exact-head evidence is not yet verifiable through the trusted control plane while independent fix PR #156 remains open. Both implementation PRs remain open and unmerged. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md`.
+
+`ES-X01 — RoseChat provider and communication integration` remains independently `BLOCKED` / `PARKED_BLOCKED`.
 
 ## Canonical package index
 
@@ -46,13 +50,27 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| `ES-X03` | EnthusiaMarket destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | Market PR #3 `aa7cf60...` and Staff PR #139 `fb0afbe...` remain open; scope/review/parity stabilized; exact-head ordinary Market GitHub Actions unavailable because repository Actions history is empty; resume the existing PRs after repository-owned CI becomes runnable |
-| `ES-X04` | EnthusiaCommend reputation provider | `READY` | `READY` | 125 | `ES-P08`, `ES-X02` | dependencies complete; next eligible package for a fresh worker after live reconciliation while ES-X03 is parked |
+| `ES-X03` | EnthusiaMarket destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | Market PR #3 `aa7cf60...` and Staff PR #139 `fb0afbe...` remain open; scope/review/parity stabilized; exact-head ordinary Market GitHub Actions unavailable because repository Actions history is empty; resume after repository-owned CI becomes runnable |
+| `ES-X04` | EnthusiaCommend reputation provider | `BLOCKED` | `PARKED_BLOCKED` | 125 | `ES-P08`, `ES-X02` | Commend PR #12 `30ac1af...` and Staff PR #152 `9d44bbc...` remain open/frozen; Staff exact-head full validation and Sentinel restart pass, but Codacy reports 100 new static issues, standalone observable CI is merge-ref-only, and canonical Pi exact-head correlation remains unavailable while PR #156 is unmerged |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01, ES-X03 and ES-X04 remain incomplete |
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | ES-X03 and ES-X04 remain incomplete; representative destructive/load acceptance lives here |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
+
+## ES-X04 parked record
+
+- X04 resumed as existing paired work rather than creating replacement branches or PRs. Frozen standalone head is `30ac1afbb6b45e958c6972330c42a870d619d530`; frozen Staff head is `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`.
+- The continuation repaired committed-operation journal duplication with one canonical snapshot, legacy matching two-snapshot read compatibility, fail-closed mismatch handling, focused regression tests, and synchronized standalone/aggregate product bytes. Pre-merge shared Git objects match under the aggregate-only `COMPONENT-METADATA.md` exclusion.
+- Review: Staff #152 has zero live inline threads. All six Commend #12 correctness/data-integrity threads are resolved. CodeRabbit status is successful on the frozen Staff head.
+- Standalone observable run `32763949487` / job `97549027434` passed Java 21 Maven `clean verify`, 110 tests, PMD, and artifact `9533731303`, but raw checkout proves synthetic merge ref `cf6f64dc...`, not exact standalone head. Merge-ref-only evidence is not a pass. The package-branch workflow is read-only and also triggers pushes, but an exact push run is not directly inspectable through the connected PR-run surface.
+- Staff exact-head Coverage/full validation run `32763957896` / job `97549217101` passed Java 21 full build/tests including MariaDB/Testcontainers. Runtime inspection checked 27 provider API source types with 0 leaks. Paper SHA-256 `7dd515e21409abb8c8496701e22ced3bdf3e266af8bc5c5bb0e7c52302c1198a`; Velocity SHA-256 `e4c7e48b51a8681eaac5742de96a841462aaeabd74507dcf1c8e1b02faef7586`; JaCoCo 50.50% line / 41.12% branch / 52.93% instruction; artifact `9534065111`, digest `sha256:132df7318d872c0f6e9863bd71fa3f8c69ee72478de742ff1d4f792ebf4fbd2f`; Codacy coverage upload/final notification passed.
+- Staff exact-head Sentinel artifact run `32763957749` / job `97549055756` passed and produced artifact `9533760777`, digest `sha256:285503604af4a7d2bd0bde450acf594909490767fdfc433a66e74ae9fe2d6d16`. Exact restart request comment `5400262894` was bound to the frozen head as job `231` and reached terminal `PAPER_RESTART_OK`; Paper reached readiness and stopped cleanly twice against one disposable state. Sentinel does not substitute for canonical Pi.
+- Staff Codacy static analysis remains `Not up to standards` with 100 new issues: 8 high and 92 medium. Coverage variation/diff coverage pass, but the static findings are neither dismissed nor called false; they require repair or evidence-backed invalidation followed by a clean exact-head static result.
+- Canonical Pi remains not verified. The current connector-visible commit workflow listing does not expose/correlate the automatic `pull_request_target` public run and private staging execution. Independent control-plane fix PR #156 remains open/unmerged at `a1903feaf81cff9d8a151d197fc7efe2b1b855ae`; this X04 worker did not modify or merge it.
+- Exact unblock: directly inspect/pass standalone exact-head validation; resolve Codacy to a clean exact-head result; make the trusted public Pi path observable/executable and verify correlated exact-head private `Lincoln-PI-4` runtime/provenance/restart/cleanup evidence; reconcile live heads; then merge both implementation PRs normally and verify post-merge parity, metadata, containment, and safe branch cleanup.
+- No production reputation/player data, deployment, website/Discord work, market/currency work, LiteBans authority, issue #43 acceptance, or cutover changed.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md`.
 
 ## ES-X03 parked record
 
@@ -133,4 +151,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-This ES-X03 worker stops after durable `BLOCKED` publication and does not activate another package. `ES-X03` is `PARKED_BLOCKED` on unavailable exact-head ordinary Market CI. Under the parked-package rule, `ES-X04 — EnthusiaCommend reputation provider` is the next eligible `READY` package for a separate fresh worker after live reconciliation. `ES-X01` remains independently parked blocked. No downstream package was started here.
+This X04 worker stops after durable `BLOCKED` publication and does not activate another package. `ES-X04` is `PARKED_BLOCKED` on the exact evidence conditions recorded above. `ES-X01` and `ES-X03` remain independently parked blocked. A future universal package worker must reconcile live GitHub and the registry again before selecting any unrelated `READY` work. No downstream package is started here.
