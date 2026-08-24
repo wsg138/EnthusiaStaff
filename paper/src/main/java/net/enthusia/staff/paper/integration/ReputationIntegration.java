@@ -138,6 +138,16 @@ public final class ReputationIntegration {
         return true;
     }
 
+    void markReconciliationPending(UUID playerId) {
+        requireAvailable();
+        api.markReconciliationPending(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    }
+
+    void clearReconciliationPending(UUID playerId) {
+        requireAvailable();
+        api.clearReconciliationPending(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    }
+
     ReputationMutationResult reconcileApply(
             UUID operationId,
             UUID playerId,
