@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 import re
+import ssl
 import sys
 import time
 from dataclasses import dataclass
@@ -85,6 +86,18 @@ class GitHubApi:
             raise ControlError("GitHub API path must be a repository-relative absolute path")
         return self.base_path + path
 
+    def _perform_request(self, method: str, path: str, data: bytes | None, headers: Mapping[str, str]) -> tuple[int, bytes]:
+        context = ssl.create_default_context()
+        connection = http.client.HTTPSConnection(API_HOST, timeout=30, context=context)
+        try:
+            connection.request(method, self._request_path(path), body=data, headers=dict(headers))
+            response = connection.getresponse()
+            return response.status, response.read()
+        except (OSError, http.client.HTTPException) as exc:
+            raise ControlError(f"GitHub API {method} {path} failed: {exc}") from exc
+        finally:
+            connection.close()
+
     def request(self, method: str, path: str, payload: Mapping[str, Any] | None = None) -> Any:
         if method not in {"GET", "POST", "PATCH"}:
             raise ControlError(f"unsupported GitHub API method: {method}")
@@ -96,18 +109,10 @@ class GitHubApi:
         }
         if data is not None:
             headers["Content-Type"] = "application/json"
-        connection = http.client.HTTPSConnection(API_HOST, timeout=30)
-        try:
-            connection.request(method, self._request_path(path), body=data, headers=headers)
-            response = connection.getresponse()
-            raw = response.read()
-        except (OSError, http.client.HTTPException) as exc:
-            raise ControlError(f"GitHub API {method} {path} failed: {exc}") from exc
-        finally:
-            connection.close()
-        if not 200 <= response.status < 300:
+        status, raw = self._perform_request(method, path, data, headers)
+        if not 200 <= status < 300:
             body = raw.decode("utf-8", "replace")
-            raise ControlError(f"GitHub API {method} {path} failed: HTTP {response.status}: {body[:500]}")
+            raise ControlError(f"GitHub API {method} {path} failed: HTTP {status}: {body[:500]}")
         if not raw:
             return None
         try:
