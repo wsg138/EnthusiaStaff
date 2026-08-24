@@ -48,7 +48,7 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
     private final ExecutorService workers;
     private final Set<UUID> tracked = ConcurrentHashMap.newKeySet();
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
-    private volatile PunishmentService observedService;
+    private volatile Optional<PunishmentService> observedService = Optional.empty();
     private volatile ScheduledTask task;
     private volatile boolean closed;
 
@@ -117,15 +117,12 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
         }
         try {
             PunishmentService current = punishmentService.get();
-            if (current == null || current == observedService) {
+            if (current == null || observedService.filter(service -> service == current).isPresent()) {
                 return;
             }
-            PunishmentService previous = observedService;
-            if (previous != null) {
-                previous.clearCommittedObserver();
-            }
+            observedService.ifPresent(PunishmentService::clearCommittedObserver);
             current.setCommittedObserver(this::onPunishmentCommitted);
-            observedService = current;
+            observedService = Optional.of(current);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.FINE, "Reputation post-commit observer is not ready yet", exception);
         }
@@ -263,11 +260,9 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
         if (currentTask != null) {
             currentTask.cancel();
         }
-        PunishmentService currentService = observedService;
-        observedService = null;
-        if (currentService != null) {
-            currentService.clearCommittedObserver();
-        }
+        Optional<PunishmentService> currentService = observedService;
+        observedService = Optional.empty();
+        currentService.ifPresent(PunishmentService::clearCommittedObserver);
         HandlerList.unregisterAll(this);
         tracked.clear();
         inFlight.clear();
