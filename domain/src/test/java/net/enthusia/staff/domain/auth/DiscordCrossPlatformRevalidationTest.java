@@ -88,31 +88,4 @@ class DiscordCrossPlatformRevalidationTest {
                 service().authorize(actor(StaffRank.HELPER), Optional.empty(), request).denial()
         );
     }
-
-    @Test
-    void developerMinecraftDenialIsFailClosedAcrossInjectedAuthorizationPolicies() {
-        AuthorizationPolicy permissiveMinecraftPolicy = (actor, action) -> true;
-        DiscordModerationAuthorizationService authorization = new DiscordModerationAuthorizationService(
-                permissiveMinecraftPolicy,
-                new DiscordAuthorizationLimits(
-                        Duration.ofHours(2),
-                        Duration.ofDays(7),
-                        Duration.ofDays(30),
-                        Duration.ofDays(7)
-                )
-        );
-
-        DiscordAuthorizationDecision decision = authorization.authorize(
-                actor(StaffRank.DEVELOPER),
-                Optional.empty(),
-                issue(minecraft(
-                        DiscordConsequenceType.WARNING,
-                        SanctionLength.instant(),
-                        false,
-                        false
-                ))
-        );
-
-        assertEquals(DiscordAuthorizationDenial.MINECRAFT_AUTHORIZATION_DENIED, decision.denial());
-    }
 }

@@ -28,9 +28,6 @@ final class DiscordMinecraftAuthorization {
         if (actor.rank() == StaffRank.HELPER) {
             return DiscordAuthorizationDecision.deny(DiscordAuthorizationDenial.HELPER_CROSS_PLATFORM_FORBIDDEN);
         }
-        if (actor.rank() == StaffRank.DEVELOPER) {
-            return DiscordAuthorizationDecision.deny(DiscordAuthorizationDenial.MINECRAFT_AUTHORIZATION_DENIED);
-        }
         ModerationAction required = REQUIRED_ACTION.get(request.operation());
         if (required == null || !authorization.permits(actor, required)) {
             return DiscordAuthorizationDecision.deny(DiscordAuthorizationDenial.MINECRAFT_AUTHORIZATION_DENIED);

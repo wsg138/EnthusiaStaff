@@ -26,13 +26,13 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-`ES-D03 — Authorization and cross-platform policy` is the selected actionable continuation on `package/es-d03-discord-authorization`, PR #149. Independent full-diff review found and repaired a fail-closed Developer/Minecraft authority gap at executable commit `6f0b3a8c264f8f7644a9bfafacb8b6cd29061950`; exact-head validation and final review are now required before completion.
+`ES-D03 — Authorization and cross-platform policy` is the selected actionable continuation on `package/es-d03-discord-authorization`, PR #149. A resumed-review hypothesis about the injectable Minecraft authorization seam was rejected after verification against the approved product contract: Developer's Discord rank grants no Minecraft authority, while independently granted Minecraft/domain permission remains intentionally honored. The temporary unconditional Developer deny is reverted. Final exact-delta, review, collision and merge checks remain.
 
 ## Latest completion
 
-`ES-D02` remains the latest completed Discord package through PR #148. Its V19 persistence work remains unchanged by D03.
+`ES-D02` remains the latest completed Discord package through PR #148 while D03 is in review.
 
-The earlier D03 candidate `ca66a97949cd8b9733c9039084d6230b2c63fd07` passed its recorded exact-head gates, but those results are historical only after the later executable repair. D03 is not complete until the repaired tree passes current exact-head acceptance, zero valid review findings remain, PR #149 merges normally, and post-merge containment/cleanup are verified.
+Frozen D03 product head `ca66a97949cd8b9733c9039084d6230b2c63fd07` passed its recorded exact-head Java 21 build/tests, aggregate JaCoCo, runtime-JAR leak inspection, Codacy finalization, Sentinel artifact build and CodeRabbit status with zero unresolved inline threads. Those results may be reused only if the final merge candidate is proven by exact comparison to differ from that frozen head solely in state/documentation files.
 
 `ES-D04` and `ES-D05` remain `PLANNED` while D03 is incomplete. If D03 reaches `COMPLETE`, both become dependency-complete and may be marked `READY`; this D03 worker must not start either package.
 
