@@ -155,6 +155,26 @@ class DiscordPersistenceV19IntegrationTest {
                     )
             );
 
+            assertThrows(
+                    ModerationPersistenceException.class,
+                    () -> store.unlink(
+                            discord,
+                            second,
+                            secondLink.revision(),
+                            "d02-unlink-main-unsafe-" + second,
+                            BASE_TIME.plusSeconds(42)
+                    )
+            );
+            assertEquals(discord, store.currentLink(second).orElseThrow().link().discordUserId());
+
+            var replacement = store.setMainMinecraftAccount(
+                    changed.subject().subjectId(),
+                    new MainMinecraftAccount(first, MainAccountSelectionSource.AUTOMATIC),
+                    changed.revision(),
+                    BASE_TIME.plusSeconds(43)
+            );
+            assertEquals(first, replacement.subject().mainMinecraftAccount().orElseThrow().playerId());
+
             var unlinked = store.unlink(
                     discord,
                     second,
