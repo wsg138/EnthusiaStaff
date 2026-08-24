@@ -7,24 +7,27 @@ on:
 permissions:
   contents: read
 
+env:
+  CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
 jobs:
   codacy-issues:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch public Codacy PR findings
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Inspect branch issues through scoped Codacy CLI
         shell: bash
         run: |
           set -Eeuo pipefail
-          url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/152/issues?limit=1000'
-          for attempt in $(seq 1 36); do
-            curl --fail --silent --show-error --location --header 'Accept: application/json' "$url" -o codacy.json
-            total="$(jq -r '.pagination.total // 0' codacy.json)"
-            if [[ "$total" =~ ^[0-9]+$ ]] && (( total > 0 )); then
-              jq '{pagination, count:(.data|length), issues:[.data[] | {id, status, filePath, lineNumber, message, patternInfo, toolInfo}]}' codacy.json
-              exit 0
-            fi
-            sleep 5
-          done
-          echo '::error::Codacy PR analysis did not expose findings before diagnostic timeout'
-          cat codacy.json
-          exit 1
+          test -n "${CODACY_PROJECT_TOKEN}"
+          npm install --global @codacy/codacy-cloud-cli
+          codacy issues gh wsg138 EnthusiaStaff \
+            --branch package/es-x04-commend-provider \
+            --output json > codacy-branch.json
+          echo '=== JSON shape ==='
+          jq 'if type == "array" then {type:"array",count:length,first:(.[0] // null)} else {type:(type),keys:(keys),sample:.} end' codacy-branch.json | head -c 12000
+          echo
+          echo '=== Commend component issue objects ==='
+          jq '[.. | objects | select(((.filePath? // .path? // "") | startswith("components/enthusia-commend/")))]' codacy-branch.json
