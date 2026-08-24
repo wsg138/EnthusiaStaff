@@ -46,7 +46,7 @@ This continuation also repaired avoidable durable-state duplication: committed m
 - A maintainability suggestion to expose a public helper solely to deduplicate private case-ID validation was not adopted because it would unnecessarily expand the provider API surface without fixing a correctness defect.
 
 ## Standalone validation evidence
-The current observable standalone PR workflow is run `32763949487`, job `97549027434`, and it completed successfully with Java 21, Maven `clean verify`, 110 tests with 0 failures/errors/skips, PMD success, and JAR artifact `9533731303` (ZIP digest `sha256:0455841ff353def42d339316a7484b2bec42ed1e3430484e01dcf594aac3fbd7`). The new moderation-store regression cases passed.
+The current observable standalone PR workflow is run `32763949487`, job `97549027434`, and it completed successfully with Java 21, Maven `clean verify`, 110 tests with 0 failures/errors/skips, PMD success, and JAR artifact `9533731303` (ZIP digest `sha256:0455841ff353def42d339316a7484b2bec42ed1e3430484e01dcf594aac3fbd7`). The moderation-store regression cases passed.
 
 This result is **not counted as exact-head PASS**. Its raw checkout log proves GitHub checked out synthetic merge commit `cf6f64dcff0639a724b07ef9c6bebac78429c86d` (`Merge 30ac1af... into ee9a63a...`) rather than standalone branch head `30ac1afbb6b45e958c6972330c42a870d619d530`. `VALIDATION-POLICY.md` explicitly rejects merge-ref-only evidence. The workflow now triggers package-branch pushes, but the connected commit-workflow listing is limited to pull-request-triggered runs, so this worker cannot directly retrieve and verify an exact-head push run from the available connector surface. No standalone exact-head pass is claimed.
 
@@ -75,9 +75,9 @@ Frozen aggregate head `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`:
 - Exact restart command source: PR comment `5400262894`, exact body `@enthusia-sentinel test restart`.
 - Durable Sentinel job: `231`.
 - Exact bound source: `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1`.
-- Latest verified state: `QUEUED` / `AUTHORIZED`; result `QUEUED`.
-- Therefore no Sentinel runtime PASS is claimed. Success requires terminal result exactly `PAPER_RESTART_OK`.
-- Older `PAPER_RESTART_OK` records on PR #152 belong to superseded heads and are retained only as historical evidence.
+- Terminal state: **passed** (`PASSED`).
+- Terminal result: exactly `PAPER_RESTART_OK` — Paper reached readiness and stopped cleanly twice against one disposable state.
+- This is exact-head Sentinel runtime PASS, but Sentinel is independent from and does not substitute for canonical Pi.
 
 ## Static analysis blocker
 Codacy's current PR #152 summary is **Not up to standards** on the frozen head and reports `100` new issues: `8` high and `92` medium (`ErrorProne`, `Complexity`, and `Performance`). Coverage metrics themselves pass: 24.23% diff coverage and -0.09% coverage variation against the configured -1.00% variation target.
@@ -98,7 +98,7 @@ PR #156 (`Fix canonical Pi staging PR command and exact-head status`) is live, s
 
 Therefore:
 - canonical Pi is **not** called passed;
-- Sentinel artifact build or older restart evidence is **not** substituted;
+- Sentinel PASS is **not** substituted for canonical Pi;
 - no owner-approved infrastructure exception is claimed;
 - neither implementation PR is merged.
 
@@ -107,17 +107,16 @@ Resume the existing X04 PRs only after the external/evidence conditions allow ev
 1. make canonical Pi safely discoverable/executable through the trusted public control plane and verify exact Staff source, correlated private `Lincoln-PI-4` execution, runtime/restart/provenance/cleanup assertions, sanitized evidence, and public transfer cleanup;
 2. obtain a directly inspectable standalone exact-head Java 21 build/test/static result for Commend rather than a synthetic merge-ref-only result;
 3. resolve or evidence-back invalidate every applicable Codacy/static finding and require a clean exact-head static result;
-4. require terminal exact-head Sentinel runtime `PAPER_RESTART_OK` if the restart gate remains applicable to the final product head;
-5. re-reconcile live `main`, both implementation heads, and all review threads; rerun any gate invalidated by any source/workflow/test change;
-6. merge Commend PR #12 and Staff PR #152 with normal merge commits only;
-7. verify resulting default-branch containment and post-merge standalone↔aggregate product parity, update component metadata, safely delete temporary branches, publish X04 `COMPLETE`, and stop.
+4. re-reconcile live `main`, both implementation heads, and all review threads; rerun any gate invalidated by any source/workflow/test change;
+5. merge Commend PR #12 and Staff PR #152 with normal merge commits only;
+6. verify resulting default-branch containment and post-merge standalone↔aggregate product parity, update component metadata, safely delete temporary branches, publish X04 `COMPLETE`, and stop.
 
 Missing, queued, superseded, merge-ref-only, stale, or different-SHA evidence remains non-passing.
 
 ## Production and deferred-acceptance boundary
 - No production reputation rows, player data, database contents, deployment, Discord/website work, market/currency work, LiteBans authority, issue #43 acceptance, or cutover was changed.
 - Representative private destructive/load acceptance remains assigned to `ES-V03` as defined by the original X04 contract; this worker did not promote that deferred acceptance into X04.
-- The blockers here are ordinary exact-head/static/runtime/canonical-Pi evidence required by X04 and current policy, not ES-V03's private destructive acceptance.
+- The blockers here are ordinary exact-head/static/canonical-Pi evidence required by X04 and current policy, not ES-V03's private destructive acceptance.
 
 ## Routing after parking
 - `ES-X04`: `BLOCKED` / `PARKED_BLOCKED`; preserve Commend PR #12 and Staff PR #152 for continuation.
