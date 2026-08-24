@@ -197,14 +197,14 @@ public interface DiscordModerationPersistenceStore {
             DiscordUserId discordUserId,
             String reasonCode,
             String state,
+            Instant lockedAt,
+            Optional<Instant> releasedAt,
             long revision,
-            boolean replayed,
-            Instant activatedAt,
-            Optional<Instant> releasedAt
+            boolean replayed
     ) {
         public SecurityLock {
             if (lockId == null || subjectId == null || discordUserId == null || blank(reasonCode)
-                    || blank(state) || revision < 0 || activatedAt == null || releasedAt == null) {
+                    || blank(state) || lockedAt == null || releasedAt == null || revision < 0) {
                 throw new IllegalArgumentException("security lock fields are invalid");
             }
         }
@@ -216,7 +216,7 @@ public interface DiscordModerationPersistenceStore {
             String resourceId,
             String desiredStateJson,
             Optional<String> observedStateJson,
-            String status,
+            String state,
             int attemptCount,
             Optional<Instant> nextAttemptAt,
             Optional<String> lastErrorCode,
@@ -224,9 +224,9 @@ public interface DiscordModerationPersistenceStore {
     ) {
         public ReconciliationState {
             if (blank(reconciliationKey) || blank(resourceType) || blank(resourceId)
-                    || blank(desiredStateJson) || observedStateJson == null || blank(status)
+                    || blank(desiredStateJson) || observedStateJson == null || blank(state)
                     || attemptCount < 0 || nextAttemptAt == null || lastErrorCode == null || revision < 0) {
-                throw new IllegalArgumentException("reconciliation state fields are invalid");
+                throw new IllegalArgumentException("reconciliation fields are invalid");
             }
         }
     }
@@ -239,11 +239,12 @@ public interface DiscordModerationPersistenceStore {
             String state,
             Optional<String> leaseOwner,
             Optional<Instant> leaseUntil,
+            int attemptCount,
             long revision
     ) {
         public MaintenanceWork {
             if (workId == null || blank(workType) || blank(resourceKey) || dueAt == null || blank(state)
-                    || leaseOwner == null || leaseUntil == null || revision < 0) {
+                    || leaseOwner == null || leaseUntil == null || attemptCount < 0 || revision < 0) {
                 throw new IllegalArgumentException("maintenance work fields are invalid");
             }
         }
