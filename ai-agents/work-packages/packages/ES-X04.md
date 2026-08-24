@@ -100,7 +100,7 @@ Product implementation, pre-merge provider synchronization, full Staff exact-hea
 ## 26. Known blockers
 - Standalone observable validation is merge-ref-only rather than admissible exact-head evidence.
 - Staff Codacy reports 100 new static issues and is not up to standards.
-- Canonical Pi exact-head public/private evidence is unavailable through the current trusted control plane while independent fix PR #156 remains open/unmerged at latest reconciliation head `e822df6ded598f74776858afab36a2768c7d7c95`.
+- Canonical Pi exact-head public/private evidence is unavailable through the current trusted control plane while independent fix PR #156 remains open/unmerged at latest reconciliation head `a1903feaf81cff9d8a151d197fc7efe2b1b855ae`.
 
 Staff exact-head Coverage/full validation, Sentinel artifact build, and Sentinel restart pass and are no longer blockers. Missing, stale, queued, superseded, merge-ref-only, or different-SHA evidence is not relabeled as passing.
 
