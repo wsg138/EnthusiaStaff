@@ -6,11 +6,7 @@ on:
       - created
 
 permissions:
-  actions: write
   contents: read
-  issues: write
-  pull-requests: read
-  statuses: write
 
 concurrency:
   group: pi-staging-command-${{ github.event.issue.number }}
@@ -19,9 +15,15 @@ concurrency:
 jobs:
   command:
     name: Authorize and dispatch canonical Pi staging
-    if: ${{ github.event.issue.pull_request != null }}
+    if: ${{ github.event.issue.pull_request != null && contains(github.event.comment.body, '@enthusia-staging') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+      pull-requests: read
+      statuses: write
     steps:
       - name: Check out trusted default-branch controls
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

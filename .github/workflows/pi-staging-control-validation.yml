@@ -45,5 +45,16 @@ jobs:
             .github/workflows/pi-staging-command.yml \
             .github/workflows/pi-staging-control-validation.yml
 
+      - name: Validate GitHub Actions semantics
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -Eeuo pipefail
+          go install "github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION}"
+          "$(go env GOPATH)/bin/actionlint" \
+            .github/workflows/pi-staging-check.yml \
+            .github/workflows/pi-staging-command.yml \
+            .github/workflows/pi-staging-control-validation.yml
+
       - name: Run staging control-plane tests
         run: python3 scripts/staging/test_pi_staging_control.py

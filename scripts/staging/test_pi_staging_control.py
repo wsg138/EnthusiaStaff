@@ -10,8 +10,9 @@ from typing import Any, Mapping
 
 MODULE_PATH = Path(__file__).with_name("pi_staging_control.py")
 spec = importlib.util.spec_from_file_location("pi_staging_control", MODULE_PATH)
+if spec is None or spec.loader is None:
+    raise RuntimeError("unable to load pi_staging_control module spec")
 control = importlib.util.module_from_spec(spec)
-assert spec and spec.loader
 sys.modules["pi_staging_control"] = control
 spec.loader.exec_module(control)
 
