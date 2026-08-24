@@ -53,15 +53,21 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
     public UUID minecraftInitiatorForCode(String codeHash, Instant now) {
         validateHash(codeHash);
         require(now, "now");
-        return JdbcTransactionSupport.execute(
+        CodeLookup lookup = JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to resolve Minecraft link-code initiator",
                 connection -> {
                     StoredCode stored = codeByHash(connection, codeHash, true);
-                    requireUsableDirection(connection, stored, Direction.MINECRAFT_TO_DISCORD, now);
-                    return stored.minecraftInitiator().orElseThrow();
+                    if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
+                        return CodeLookup.expired();
+                    }
+                    return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
                 }
         );
+        if (lookup.expired()) {
+            throw new ModerationPersistenceException("account-link code expired");
+        }
+        return lookup.minecraftPlayerId().orElseThrow();
     }
 
     @Override
@@ -148,55 +154,65 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         validateHash(codeHash);
         validateKey(operationKey);
         require(now, "now");
-        return JdbcTransactionSupport.execute(dataSource, "Unable to complete account linking", connection -> {
-            StoredCode stored = codeByHash(connection, codeHash, true);
-            requireUsableDirection(connection, stored, expectedDirection, now);
+        CompletionResult result = JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to complete account linking",
+                connection -> {
+                    StoredCode stored = codeByHash(connection, codeHash, true);
+                    if (markExpiredIfNecessary(connection, stored, expectedDirection, now)) {
+                        return CompletionResult.expired();
+                    }
 
-            DiscordUserId discordUserId = expectedDirection == Direction.DISCORD_TO_MINECRAFT
-                    ? stored.discordInitiator().orElseThrow()
-                    : completingDiscordUserId;
-            UUID minecraftPlayerId = expectedDirection == Direction.MINECRAFT_TO_DISCORD
-                    ? stored.minecraftInitiator().orElseThrow()
-                    : completingMinecraftPlayerId;
+                    DiscordUserId discordUserId = expectedDirection == Direction.DISCORD_TO_MINECRAFT
+                            ? stored.discordInitiator().orElseThrow()
+                            : completingDiscordUserId;
+                    UUID minecraftPlayerId = expectedDirection == Direction.MINECRAFT_TO_DISCORD
+                            ? stored.minecraftInitiator().orElseThrow()
+                            : completingMinecraftPlayerId;
 
-            if (stored.state().equals("CONSUMED")) {
-                if (!operationKey.equals(stored.consumedOperationKey())) {
-                    throw new SQLException("account-link code was already consumed by a different completion");
+                    if (stored.state().equals("CONSUMED")) {
+                        if (!operationKey.equals(stored.consumedOperationKey())) {
+                            throw new SQLException("account-link code was already consumed by a different completion");
+                        }
+                        return CompletionResult.linked(JdbcDiscordLinkRepository.link(
+                                connection,
+                                discordUserId,
+                                minecraftPlayerId,
+                                source,
+                                operationKey,
+                                now
+                        ));
+                    }
+
+                    VersionedLink linked = JdbcDiscordLinkRepository.link(
+                            connection,
+                            discordUserId,
+                            minecraftPlayerId,
+                            source,
+                            operationKey,
+                            now
+                    );
+                    try (PreparedStatement statement = connection.prepareStatement("""
+                            UPDATE discord_link_codes
+                            SET state = 'CONSUMED', consumed_operation_key = ?, consumed_at = ?,
+                                revision = revision + 1
+                            WHERE code_id = ? AND state = 'ACTIVE'
+                            """)) {
+                        statement.setString(1, operationKey);
+                        statement.setTimestamp(2, Timestamp.from(now));
+                        statement.setBytes(3, UuidBytes.toBytes(stored.codeId()));
+                        JdbcTransactionSupport.requireSingleUpdate(
+                                statement.executeUpdate(),
+                                "account-link code was not atomically consumed"
+                        );
+                    }
+                    return CompletionResult.linked(linked);
                 }
-                return JdbcDiscordLinkRepository.link(
-                        connection,
-                        discordUserId,
-                        minecraftPlayerId,
-                        source,
-                        operationKey,
-                        now
-                );
-            }
-
-            VersionedLink linked = JdbcDiscordLinkRepository.link(
-                    connection,
-                    discordUserId,
-                    minecraftPlayerId,
-                    source,
-                    operationKey,
-                    now
-            );
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE discord_link_codes
-                    SET state = 'CONSUMED', consumed_operation_key = ?, consumed_at = ?,
-                        revision = revision + 1
-                    WHERE code_id = ? AND state = 'ACTIVE'
-                    """)) {
-                statement.setString(1, operationKey);
-                statement.setTimestamp(2, Timestamp.from(now));
-                statement.setBytes(3, UuidBytes.toBytes(stored.codeId()));
-                JdbcTransactionSupport.requireSingleUpdate(
-                        statement.executeUpdate(),
-                        "account-link code was not atomically consumed"
-                );
-            }
-            return linked;
-        });
+        );
+        if (result.expired()) {
+            throw new ModerationPersistenceException("account-link code expired");
+        }
+        return result.link().orElseThrow();
     }
 
     private void issue(
@@ -244,7 +260,12 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         });
     }
 
-    private static void requireUsableDirection(
+    /**
+     * Validates code state while holding its row lock. If an ACTIVE code crossed its deadline,
+     * persist EXPIRED and let the caller return a sentinel so the transaction can commit before
+     * the public operation reports failure.
+     */
+    private static boolean markExpiredIfNecessary(
             Connection connection,
             StoredCode stored,
             Direction expectedDirection,
@@ -260,15 +281,16 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             throw new SQLException("account-link code expired");
         }
         if (stored.state().equals("CONSUMED")) {
-            return;
+            return false;
         }
         if (!stored.state().equals("ACTIVE")) {
             throw new SQLException("account-link code is unavailable");
         }
         if (!now.isBefore(stored.expiresAt())) {
             expire(connection, stored.codeId());
-            throw new SQLException("account-link code expired");
+            return true;
         }
+        return false;
     }
 
     private static void lockInitiator(
@@ -349,7 +371,10 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 WHERE code_id = ? AND state = 'ACTIVE'
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(codeId));
-            statement.executeUpdate();
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "account-link code expiration lost its row-state race"
+            );
         }
     }
 
@@ -442,5 +467,25 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             Instant expiresAt,
             String consumedOperationKey
     ) {
+    }
+
+    private record CompletionResult(Optional<VersionedLink> link, boolean expired) {
+        private static CompletionResult linked(VersionedLink link) {
+            return new CompletionResult(Optional.of(link), false);
+        }
+
+        private static CompletionResult expired() {
+            return new CompletionResult(Optional.empty(), true);
+        }
+    }
+
+    private record CodeLookup(Optional<UUID> minecraftPlayerId, boolean expired) {
+        private static CodeLookup available(UUID minecraftPlayerId) {
+            return new CodeLookup(Optional.of(minecraftPlayerId), false);
+        }
+
+        private static CodeLookup expired() {
+            return new CodeLookup(Optional.empty(), true);
+        }
     }
 }
