@@ -1,0 +1,49 @@
+name: Pi Staging Control Validation
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/pi-staging-check.yml
+      - .github/workflows/pi-staging-command.yml
+      - .github/workflows/pi-staging-control-validation.yml
+      - scripts/staging/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/pi-staging-check.yml
+      - .github/workflows/pi-staging-command.yml
+      - .github/workflows/pi-staging-control-validation.yml
+      - scripts/staging/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane:
+    name: Test trusted staging control plane
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate Python and shell syntax
+        run: |
+          python3 -m py_compile scripts/staging/pi_staging_control.py scripts/staging/test_pi_staging_control.py
+          bash -n scripts/staging/build-enthusiastaff-bridge-artifact.sh
+          bash -n scripts/staging/validate-enthusiastaff-source.sh
+
+      - name: Validate workflow YAML syntax
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.load_file(path) }' \
+            .github/workflows/pi-staging-check.yml \
+            .github/workflows/pi-staging-command.yml \
+            .github/workflows/pi-staging-control-validation.yml
+
+      - name: Run staging control-plane tests
+        run: python3 scripts/staging/test_pi_staging_control.py

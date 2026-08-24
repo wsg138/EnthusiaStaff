@@ -1,0 +1,35 @@
+name: Pi Staging Command
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: pi-staging-command-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  command:
+    name: Authorize and dispatch canonical Pi staging
+    if: ${{ github.event.issue.pull_request != null }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted default-branch controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Process exact staging command
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/staging/pi_staging_control.py command
