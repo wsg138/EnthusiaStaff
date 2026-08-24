@@ -4,7 +4,8 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-val integrationContractMainOutput = project(":integration-contracts")
+val integrationContractsProject = project(":integration-contracts")
+val integrationContractMainOutput = integrationContractsProject
     .extensions
     .getByType<SourceSetContainer>()
     .named("main")
@@ -15,11 +16,11 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":persistence"))
     implementation(project(":protocol"))
-    compileOnly(project(":integration-contracts"))
+    compileOnly(integrationContractsProject)
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
-    testImplementation(project(":integration-contracts"))
+    testImplementation(integrationContractsProject)
     testRuntimeOnly(files(integrationContractMainOutput))
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
