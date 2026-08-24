@@ -26,8 +26,25 @@ jobs:
           codacy issues gh wsg138 EnthusiaStaff \
             --branch package/es-x04-commend-provider \
             --output json > codacy-branch.json
-          echo '=== JSON shape ==='
-          jq 'if type == "array" then {type:"array",count:length,first:(.[0] // null)} else {type:(type),keys:(keys),sample:.} end' codacy-branch.json | head -c 12000
-          echo
-          echo '=== Commend component issue objects ==='
-          jq '[.. | objects | select(((.filePath? // .path? // "") | startswith("components/enthusia-commend/")))]' codacy-branch.json
+          jq '{
+            component_count: ([.issues[] | select(.filePath | startswith("components/enthusia-commend/"))] | length),
+            component_issues: [.issues[] | select(.filePath | startswith("components/enthusia-commend/")) | {patternInfo,message,filePath,lineNumber,lineText,resultDataId}],
+            staff_x04_count: ([.issues[] | select(
+              (.filePath | startswith("integration-contracts/src/main/java/org/enthusia/rep/api/")) or
+              (.filePath == "domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java") or
+              (.filePath == "domain/src/test/java/net/enthusia/staff/domain/application/PunishmentServiceTest.java") or
+              (.filePath | startswith("paper/src/main/java/net/enthusia/staff/paper/integration/Reputation")) or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java") or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
+              (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
+            )] | length),
+            staff_x04_issues: [.issues[] | select(
+              (.filePath | startswith("integration-contracts/src/main/java/org/enthusia/rep/api/")) or
+              (.filePath == "domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java") or
+              (.filePath == "domain/src/test/java/net/enthusia/staff/domain/application/PunishmentServiceTest.java") or
+              (.filePath | startswith("paper/src/main/java/net/enthusia/staff/paper/integration/Reputation")) or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java") or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
+              (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
+            ) | {patternInfo,message,filePath,lineNumber,lineText,resultDataId}]
+          }' codacy-branch.json
