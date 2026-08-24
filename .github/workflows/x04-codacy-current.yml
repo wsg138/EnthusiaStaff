@@ -42,11 +42,11 @@ jobs:
               (.filePath == "paper/build.gradle.kts") or
               (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
             )] | sort_by(.filePath, .lineNumber) | .[] | (.filePath + ":" + (.lineNumber|tostring) + " " + .patternInfo.id + " :: " + .message))
-          ' codacy-branch.json > x04-codacy-current.txt
-          cat x04-codacy-current.txt
+          ' codacy-branch.json > /tmp/x04-codacy-current.txt
+          cat /tmp/x04-codacy-current.txt
           git fetch origin diagnostic/es-x04-pi-index-20260824
           git checkout -B diagnostic/es-x04-pi-index-20260824 origin/diagnostic/es-x04-pi-index-20260824
-          cp "$GITHUB_WORKSPACE/x04-codacy-current.txt" x04-codacy-current.txt
+          cp /tmp/x04-codacy-current.txt x04-codacy-current.txt
           git config user.name 'P2wn'
           git config user.email 'racecarboy77@gmail.com'
           git add x04-codacy-current.txt
