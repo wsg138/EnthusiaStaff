@@ -1,0 +1,63 @@
+name: ES-X04 one-shot component mirror
+
+on:
+  push:
+    branches:
+      - package/es-x04-commend-provider
+    paths:
+      - .github/workflows/es-x04-component-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out X04 branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out exact standalone provider
+        uses: actions/checkout@v4
+        with:
+          repository: wsg138/EnthusiaCommend
+          ref: 4ea311fc9c81e244dff3b2ee6230f98039802628
+          path: .x04-commend-source
+          persist-credentials: false
+
+      - name: Mirror exact standalone bytes into aggregate
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata="components/enthusia-commend/COMPONENT-METADATA.md"
+          cp "$metadata" /tmp/COMPONENT-METADATA.md
+          find components/enthusia-commend -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          rsync -a --delete --exclude='.git/' .x04-commend-source/ components/enthusia-commend/
+          cp /tmp/COMPONENT-METADATA.md "$metadata"
+          rm -rf .x04-commend-source
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('components/enthusia-commend/COMPONENT-METADATA.md')
+          text = path.read_text()
+          text = text.replace('| Last synchronized external SHA | `UNSET` |',
+                              '| Last synchronized external SHA | `4ea311fc9c81e244dff3b2ee6230f98039802628` |')
+          text = text.replace('| Synchronization state | `NOT_IMPORTED` |',
+                              '| Synchronization state | `SYNC_PENDING` |')
+          text = text.replace('| Current blockers | Source has not been imported into the aggregate path. Import only through an assigned external package. |',
+                              '| Current blockers | Final exact-head validation, normal merges, and post-merge parity remain. |')
+          path.write_text(text)
+          PY
+
+      - name: Commit mirror and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/enthusia-commend
+          git rm .github/workflows/es-x04-component-sync.yml
+          git diff --cached --check
+          git commit -m "ES-X04: import exact EnthusiaCommend aggregate"
+          git push origin HEAD:package/es-x04-commend-provider
