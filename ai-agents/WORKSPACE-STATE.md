@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -8,28 +8,26 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Discord program active package | None after ES-D03 terminal publication and normal merge. Future workers must re-reconcile live GitHub before selecting work. |
+| Discord program active package | None. `ES-D04 — Account linking and DiscordSRV migration` is `BLOCKED` / `PARKED_BLOCKED` with implementation preserved on `package/es-d04-account-linking`, PR #151, frozen head `b231022b065b5843d2dd73811dfbf51acba6314b`. |
 | Discord latest completion | `ES-D03 — Authorization and cross-platform policy` is `COMPLETE` through PR #149 on normal merge. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`. |
-| D03 scope result | Authoritative Discord-origin domain authorization, explicit per-platform consequences, runtime-supplied limits, Developer Discord-only Mod-equivalent authority with independent Minecraft-policy checks, self/equal-higher protection, external role hierarchy preconditions and stale confirmation reauthorization. |
-| D03 fresh validation | Coverage `32679597750` / job `97293850461` PASS on exact frozen SHA; Temurin Java 21.0.12+8; full 49-task build; JaCoCo 50.59% line / 41.28% branch / 53.01% instruction; runtime provider leaks 0; validation artifact `9503824839`, digest `sha256:5e1b9ece92ce858475e6090dad50b53bf21060961ce4bdbd845020ea568c986d`. Sentinel `32679597852` / job `97293814018` PASS; artifact `9503739521`, digest `sha256:01910f60d519208e46008d9bd986e2b04f2b7922dc4f3b56c9d93dc5f21126b1`. CodeRabbit status success; zero unresolved live inline threads. |
-| D03 review result | Four valid findings were repaired across the package lifecycle. A resumed-review Developer/Minecraft hard-deny hypothesis was rejected after checking the authoritative product contract and was fully reverted; exact comparison proved no executable/test residue from that rejected change. |
-| Newly ready Discord work | `ES-D04 — Account linking and DiscordSRV migration` and `ES-D05 — Staff bot runtime foundation` are `READY`; neither is started by the D03 worker. |
-| Next Discord owner priority | `ES-D04` is the lowest-priority-number newly dependency-complete package, subject to fresh live reconciliation and actionable-continuation precedence. |
-| Migration state | Live `main` ends at `V19__discord_moderation_persistence.sql`; D03 adds no migration. |
-| Collision reconciliation | Immediately before terminal publication, `main` remained `3c340d6333d7e25b33b2f2af1e32a5cc15d5ee4b`; PR #139 remained independently parked ES-X03 work; the legacy website branch was 0 commits ahead and 156 behind `main`; no competition branch was found; D03 has no website/competition implementation path. |
-| D03 blockers | None. The terminal record is part of PR #149 and becomes canonical through its normal merge; post-merge containment and safe branch cleanup are then verified. |
-| Independently parked package | `ES-X03 — EnthusiaMarket destructive provider` remains `BLOCKED` / `PARKED_BLOCKED` on its independent runtime-validation condition and is not modified by D03. |
-| Production boundary | No production Discord configuration, bot token, player/private production data, deployment, production migration, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
-| Current handoff | `ai-agents/reports/package-handoffs/2026-08-23-es-d03-discord-authorization.md` |
+| D04 product state | Implementation/review scope is complete at the frozen head: durable two-direction five-minute account linking, V20 persistence/auditing, atomic recovery/main replacement, public PlayTime active-minute main selection, explicit DiscordSRV import and best-effort legacy mirroring, Paper `/link` and `/unlink`, concurrency/replay/restart coverage. |
+| D04 hosted validation | Coverage/full validation `32738304907` / job `97466391922` PASS on exact frozen SHA with Temurin Java 21.0.12+8, full build, MariaDB/Testcontainers, runtime JARs, 24 provider-contract source types / 0 leaks, JaCoCo 51.09% line / 41.59% branch / 53.44% instruction, artifact `9524397425` digest `sha256:230de565c87f1939dd0f06f2bcb028a394d96e73e43237fb43b2f02adccbd6c8`, and successful Codacy coverage/final notification. |
+| D04 Sentinel | Artifact run `32738306003` / job `97466394689` PASS on exact frozen SHA; artifact `9524138779`, digest `sha256:4f472f5a20c9d825ad7129bbf0bc4727740a4166f9d1c697c843df5b84020b67`. Sentinel request comment `5395469895`, durable job `225`, terminal `PAPER_RESTART_OK`. |
+| D04 blocker | Required canonical Pi staging is not verified. The connected GitHub workflow surface cannot list/discover the PR's automatic `pull_request_target` Pi run, and no exact D04 public/private Pi run IDs are recorded elsewhere. Sentinel is independent and is not substituted. Unblock by obtaining/executing canonical Pi for exact source `b231022b065b5843d2dd73811dfbf51acba6314b` and verifying the correlated private `Lincoln-PI-4` run plus every runtime/provenance/restart/cleanup assertion. |
+| D04 review state | All substantive code findings are repaired and CodeRabbit status is success on the frozen head. Two live inline threads remain tracking-only stale-record findings on the frozen implementation PR; canonical state is corrected by the status-publication record while the implementation head is intentionally not moved before exact-SHA Pi recovery. |
+| Ready Discord work | `ES-D05 — Staff bot runtime foundation` remains `READY`. A future Discord worker may select it while D04 stays `PARKED_BLOCKED`; this D04 worker did not start it. |
+| Migration state | Canonical `main` remains at V19 until D04 merges. Frozen D04 adds only forward `V20__discord_account_linking.sql`; no production migration was executed. |
+| Collision reconciliation | Canonical `main` used for status publication is `f129226ac017c97fc4126629dd0f47bff729abd6`. D04 PR #151 contains no website/competition implementation. Concurrent ES-X04 and D05 work remain independent and are not absorbed or overwritten. |
+| Independently parked package | `ES-X03 — EnthusiaMarket destructive provider` remains separately `BLOCKED` / `PARKED_BLOCKED` on its own runtime-validation condition and is not modified by D04. |
+| Production boundary | No production Discord configuration, bot token, player/private production data, deployment, production migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
+| Current handoff | `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md` |
 
-## D03 terminal record
+## D04 parked record
 
-The frozen merge-ready head `5cd98a719e30eff64d1595f1e219ea70553c66c0` passed every applicable repository-owned exact-head executable gate. The full diff was independently harsh-reviewed against the approved Discord product contract and current Minecraft authorization invariants.
+D04 was selected through the dedicated owner-authorized Discord lane and resumed as the existing actionable continuation in PR #151. The branch reconciled intervening `main` hardening through `f129226ac017c97fc4126629dd0f47bff729abd6` without absorbing unrelated work. The implementation is frozen at `b231022b065b5843d2dd73811dfbf51acba6314b` because the remaining blocker is exact-head canonical Pi evidence; changing the implementation head solely to update routing records would make that evidence target less stable.
 
-The resumed review temporarily explored an unconditional Developer Minecraft deny. The authoritative product contract explicitly permits a Developer to perform a Minecraft action when the existing Minecraft/domain policy independently grants that permission, so the proposed hard deny was rejected and fully reverted. Exact comparison from the earlier frozen executable head `ca66a97949cd8b9733c9039084d6230b2c63fd07` to `5cd98a719e30eff64d1595f1e219ea70553c66c0` showed only documentation/state files, proving the accepted executable/test tree was restored before the fresh full validation run.
-
-The terminal follow-up changes only package/state/contract documentation. Future Discord callers must resolve the invoker and target staff state authoritatively before authorization and satisfy all returned external preconditions immediately before side effects.
+The repository policy requires canonical Pi for this changed Paper runtime plus MariaDB/Flyway scope. Missing evidence is explicitly not called a pass. Resume D04 only when the exact blocker condition changes: the worker can identify/execute and inspect the canonical public-to-private Pi path for the frozen exact source.
 
 ## Independent ES-X03 blocker
 
-ES-X03 remains parked on its own recorded blocker. D03 does not alter that package, its provider mirror, or its frozen validation evidence.
+ES-X03 remains parked on its own recorded blocker. D04 does not alter that package, its provider mirror, or its frozen validation evidence.
