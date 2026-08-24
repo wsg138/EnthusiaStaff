@@ -43,6 +43,14 @@ public interface DiscordModerationPersistenceStore {
             Instant unlinkedAt
     );
 
+    /** Atomically closes any current link and establishes the new STAFF_RECOVERY owner. */
+    VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            String operationKey,
+            Instant changedAt
+    );
+
     VersionedSubject setMainMinecraftAccount(
             ModerationSubjectId subjectId,
             MainMinecraftAccount mainAccount,
@@ -189,14 +197,14 @@ public interface DiscordModerationPersistenceStore {
             DiscordUserId discordUserId,
             String reasonCode,
             String state,
-            Instant lockedAt,
-            Optional<Instant> releasedAt,
             long revision,
-            boolean replayed
+            boolean replayed,
+            Instant activatedAt,
+            Optional<Instant> releasedAt
     ) {
         public SecurityLock {
             if (lockId == null || subjectId == null || discordUserId == null || blank(reasonCode)
-                    || blank(state) || lockedAt == null || releasedAt == null || revision < 0) {
+                    || blank(state) || revision < 0 || activatedAt == null || releasedAt == null) {
                 throw new IllegalArgumentException("security lock fields are invalid");
             }
         }
@@ -208,7 +216,7 @@ public interface DiscordModerationPersistenceStore {
             String resourceId,
             String desiredStateJson,
             Optional<String> observedStateJson,
-            String state,
+            String status,
             int attemptCount,
             Optional<Instant> nextAttemptAt,
             Optional<String> lastErrorCode,
@@ -216,9 +224,9 @@ public interface DiscordModerationPersistenceStore {
     ) {
         public ReconciliationState {
             if (blank(reconciliationKey) || blank(resourceType) || blank(resourceId)
-                    || blank(desiredStateJson) || observedStateJson == null || blank(state)
+                    || blank(desiredStateJson) || observedStateJson == null || blank(status)
                     || attemptCount < 0 || nextAttemptAt == null || lastErrorCode == null || revision < 0) {
-                throw new IllegalArgumentException("reconciliation fields are invalid");
+                throw new IllegalArgumentException("reconciliation state fields are invalid");
             }
         }
     }
@@ -231,12 +239,11 @@ public interface DiscordModerationPersistenceStore {
             String state,
             Optional<String> leaseOwner,
             Optional<Instant> leaseUntil,
-            int attemptCount,
             long revision
     ) {
         public MaintenanceWork {
             if (workId == null || blank(workType) || blank(resourceKey) || dueAt == null || blank(state)
-                    || leaseOwner == null || leaseUntil == null || attemptCount < 0 || revision < 0) {
+                    || leaseOwner == null || leaseUntil == null || revision < 0) {
                 throw new IllegalArgumentException("maintenance work fields are invalid");
             }
         }

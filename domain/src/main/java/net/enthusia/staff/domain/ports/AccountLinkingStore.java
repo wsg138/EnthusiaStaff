@@ -2,7 +2,6 @@ package net.enthusia.staff.domain.ports;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
@@ -12,30 +11,6 @@ public interface AccountLinkingStore {
     enum Direction {
         DISCORD_TO_MINECRAFT,
         MINECRAFT_TO_DISCORD
-    }
-
-    record CodeClaim(
-            UUID codeId,
-            Direction direction,
-            Optional<DiscordUserId> discordInitiator,
-            Optional<UUID> minecraftInitiator,
-            Instant expiresAt,
-            String operationKey,
-            boolean consumed
-    ) {
-        public CodeClaim {
-            if (codeId == null || direction == null || discordInitiator == null
-                    || minecraftInitiator == null || expiresAt == null
-                    || operationKey == null || operationKey.isBlank()) {
-                throw new IllegalArgumentException("link-code claim fields must be present");
-            }
-            boolean discord = discordInitiator.isPresent();
-            boolean minecraft = minecraftInitiator.isPresent();
-            if (discord == minecraft
-                    || (direction == Direction.DISCORD_TO_MINECRAFT) != discord) {
-                throw new IllegalArgumentException("link-code initiator must match its direction");
-            }
-        }
     }
 
     void issueFromDiscord(
@@ -52,16 +27,24 @@ public interface AccountLinkingStore {
             Instant expiresAt
     );
 
-    CodeClaim claim(
+    /** Resolves only a currently usable Minecraft-origin code for online-control verification. */
+    UUID minecraftInitiatorForCode(String codeHash, Instant now);
+
+    /** Atomically validates/consumes a Discord-origin code and commits the authoritative link. */
+    VersionedLink completeFromMinecraft(
             String codeHash,
-            Direction expectedDirection,
+            UUID minecraftPlayerId,
             String operationKey,
             Instant now
     );
 
-    void consume(UUID codeId, String operationKey, Instant consumedAt);
-
-    void release(UUID codeId, String operationKey, Instant now);
+    /** Atomically validates/consumes a Minecraft-origin code and commits the authoritative link. */
+    VersionedLink completeFromDiscord(
+            String codeHash,
+            DiscordUserId discordUserId,
+            String operationKey,
+            Instant now
+    );
 
     List<VersionedLink> historyForMinecraft(UUID minecraftPlayerId);
 

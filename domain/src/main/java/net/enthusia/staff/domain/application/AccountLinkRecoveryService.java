@@ -20,17 +20,20 @@ public final class AccountLinkRecoveryService {
     private final AuthorizationPolicy authorization;
     private final DiscordModerationPersistenceStore identities;
     private final AccountLinkAuditStore audits;
+    private final MainAccountSelectionService mainAccounts;
 
     public AccountLinkRecoveryService(
             Clock clock,
             AuthorizationPolicy authorization,
             DiscordModerationPersistenceStore identities,
-            AccountLinkAuditStore audits
+            AccountLinkAuditStore audits,
+            MainAccountSelectionService mainAccounts
     ) {
         this.clock = require(clock, "clock");
         this.authorization = require(authorization, "authorization");
         this.identities = require(identities, "identities");
         this.audits = require(audits, "audits");
+        this.mainAccounts = require(mainAccounts, "mainAccounts");
     }
 
     public VersionedLink forceLink(
@@ -53,6 +56,7 @@ public final class AccountLinkRecoveryService {
                     discordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.STAFF_RECOVERY,
                     operationKey + ":link", clock.instant());
         }
+        mainAccounts.evaluate(discordUserId);
         audit(operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
                 discordUserId, minecraftPlayerId, "Staff force-linked a verified identity pair");
         return linked;
@@ -72,12 +76,14 @@ public final class AccountLinkRecoveryService {
             if (!current.link().discordUserId().equals(expectedDiscordUserId)) {
                 throw new IllegalStateException("current Discord owner does not match the recovery request");
             }
+            mainAccounts.prepareForUnlink(expectedDiscordUserId, minecraftPlayerId);
             identities.unlink(
                     expectedDiscordUserId,
                     minecraftPlayerId,
                     current.revision(),
                     operationKey + ":unlink",
                     clock.instant());
+            mainAccounts.evaluate(expectedDiscordUserId);
         }
         audit(operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
                 expectedDiscordUserId, minecraftPlayerId, "Staff force-unlinked an identity pair");
@@ -93,22 +99,18 @@ public final class AccountLinkRecoveryService {
         authorize(actor);
         validateOperationKey(operationKey);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
-        if (existing.isPresent() && !existing.orElseThrow().link().discordUserId().equals(newDiscordUserId)) {
-            VersionedLink current = existing.orElseThrow();
-            identities.unlink(
-                    current.link().discordUserId(),
-                    minecraftPlayerId,
-                    current.revision(),
-                    operationKey + ":unlink",
-                    clock.instant());
+        DiscordUserId oldDiscordUserId = existing.map(value -> value.link().discordUserId()).orElse(null);
+        if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
+            mainAccounts.prepareForUnlink(oldDiscordUserId, minecraftPlayerId);
         }
-        VersionedLink linked = identities.currentLink(minecraftPlayerId)
-                .filter(value -> value.link().discordUserId().equals(newDiscordUserId))
-                .orElseGet(() -> identities.link(
-                        newDiscordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                        operationKey + ":link", clock.instant()));
+        VersionedLink linked = identities.reassign(
+                newDiscordUserId, minecraftPlayerId, operationKey, clock.instant());
+        if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
+            mainAccounts.evaluate(oldDiscordUserId);
+        }
+        mainAccounts.evaluate(newDiscordUserId);
         audit(operationKey, actor, AccountLinkAuditAction.REASSIGN,
-                newDiscordUserId, minecraftPlayerId, "Staff reassigned the current Discord owner");
+                newDiscordUserId, minecraftPlayerId, "Staff atomically reassigned the current Discord owner");
         return linked;
     }
 

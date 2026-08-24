@@ -11,10 +11,8 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.AccountLinkingStore;
-import net.enthusia.staff.domain.ports.AccountLinkingStore.CodeClaim;
 import net.enthusia.staff.domain.ports.AccountLinkingStore.Direction;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
@@ -30,19 +28,22 @@ public final class AccountLinkingService {
     private final DiscordModerationPersistenceStore identities;
     private final AccountLinkingStore codes;
     private final MinecraftOnlineVerifier online;
+    private final MainAccountSelectionService mainAccounts;
 
     public AccountLinkingService(
             Clock clock,
             SecureRandom random,
             DiscordModerationPersistenceStore identities,
             AccountLinkingStore codes,
-            MinecraftOnlineVerifier online
+            MinecraftOnlineVerifier online,
+            MainAccountSelectionService mainAccounts
     ) {
         this.clock = require(clock, "clock");
         this.random = require(random, "random");
         this.identities = require(identities, "identities");
         this.codes = require(codes, "codes");
         this.online = require(online, "online");
+        this.mainAccounts = require(mainAccounts, "mainAccounts");
     }
 
     public IssuedCode issueFromDiscord(DiscordUserId discordUserId) {
@@ -69,18 +70,22 @@ public final class AccountLinkingService {
         requireOnline(minecraftPlayerId);
         String codeHash = hash(normalize(rawCode));
         String operationKey = operationKey("mc", codeHash, minecraftPlayerId.toString());
-        CodeClaim claim = codes.claim(codeHash, Direction.DISCORD_TO_MINECRAFT, operationKey, clock.instant());
-        DiscordUserId discordUserId = claim.discordInitiator().orElseThrow();
-        return finish(claim, discordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.DISCORD_CODE);
+        VersionedLink linked = codes.completeFromMinecraft(
+                codeHash, minecraftPlayerId, operationKey, clock.instant());
+        mainAccounts.evaluate(linked.link().discordUserId());
+        return linked;
     }
 
     public VersionedLink completeFromDiscord(String rawCode, DiscordUserId discordUserId) {
         require(discordUserId, "discordUserId");
         String codeHash = hash(normalize(rawCode));
+        UUID minecraftPlayerId = codes.minecraftInitiatorForCode(codeHash, clock.instant());
+        requireOnline(minecraftPlayerId);
         String operationKey = operationKey("discord", codeHash, discordUserId.value());
-        CodeClaim claim = codes.claim(codeHash, Direction.MINECRAFT_TO_DISCORD, operationKey, clock.instant());
-        UUID minecraftPlayerId = claim.minecraftInitiator().orElseThrow();
-        return finish(claim, discordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.MINECRAFT_CODE);
+        VersionedLink linked = codes.completeFromDiscord(
+                codeHash, discordUserId, operationKey, clock.instant());
+        mainAccounts.evaluate(discordUserId);
+        return linked;
     }
 
     public boolean unlinkFromMinecraft(UUID minecraftPlayerId, boolean confirmed) {
@@ -91,13 +96,16 @@ public final class AccountLinkingService {
             return false;
         }
         VersionedLink link = current.orElseThrow();
+        DiscordUserId discordUserId = link.link().discordUserId();
+        mainAccounts.prepareForUnlink(discordUserId, minecraftPlayerId);
         identities.unlink(
-                link.link().discordUserId(),
+                discordUserId,
                 minecraftPlayerId,
                 link.revision(),
                 "self-unlink:mc:" + link.linkId(),
                 clock.instant()
         );
+        mainAccounts.evaluate(discordUserId);
         return true;
     }
 
@@ -117,6 +125,7 @@ public final class AccountLinkingService {
         if (!link.link().discordUserId().equals(discordUserId)) {
             throw new IllegalStateException("Minecraft account is not linked to this Discord identity");
         }
+        mainAccounts.prepareForUnlink(discordUserId, minecraftPlayerId);
         identities.unlink(
                 discordUserId,
                 minecraftPlayerId,
@@ -124,64 +133,8 @@ public final class AccountLinkingService {
                 "self-unlink:discord:" + link.linkId(),
                 clock.instant()
         );
+        mainAccounts.evaluate(discordUserId);
         return true;
-    }
-
-    private VersionedLink finish(
-            CodeClaim claim,
-            DiscordUserId discordUserId,
-            UUID minecraftPlayerId,
-            DiscordMinecraftLinkSource source
-    ) {
-        if (claim.consumed()) {
-            return requireCurrentPair(discordUserId, minecraftPlayerId);
-        }
-
-        Optional<VersionedLink> current = identities.currentLink(minecraftPlayerId);
-        if (current.isPresent()) {
-            VersionedLink linked = current.orElseThrow();
-            if (!linked.link().discordUserId().equals(discordUserId)) {
-                codes.release(claim.codeId(), claim.operationKey(), clock.instant());
-                throw new IllegalStateException("Minecraft account already has a different Discord owner");
-            }
-            // The authoritative link may have committed immediately before a crash. A retry using
-            // the same deterministic claim is allowed to finish consumption even after code expiry.
-            codes.consume(claim.codeId(), claim.operationKey(), clock.instant());
-            return linked;
-        }
-
-        if (!clock.instant().isBefore(claim.expiresAt())) {
-            codes.release(claim.codeId(), claim.operationKey(), clock.instant());
-            throw new IllegalStateException("link code expired");
-        }
-
-        boolean linkCommitted = false;
-        try {
-            VersionedLink linked = identities.link(
-                    discordUserId,
-                    minecraftPlayerId,
-                    source,
-                    claim.operationKey(),
-                    clock.instant()
-            );
-            linkCommitted = true;
-            codes.consume(claim.codeId(), claim.operationKey(), clock.instant());
-            return linked;
-        } catch (RuntimeException failure) {
-            if (!linkCommitted) {
-                codes.release(claim.codeId(), claim.operationKey(), clock.instant());
-            }
-            throw failure;
-        }
-    }
-
-    private VersionedLink requireCurrentPair(DiscordUserId discordUserId, UUID minecraftPlayerId) {
-        VersionedLink current = identities.currentLink(minecraftPlayerId)
-                .orElseThrow(() -> new IllegalStateException("consumed link code has no current link"));
-        if (!current.link().discordUserId().equals(discordUserId)) {
-            throw new IllegalStateException("consumed link code no longer matches the current owner");
-        }
-        return current;
     }
 
     private String generateCode() {

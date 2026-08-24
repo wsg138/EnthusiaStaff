@@ -3,8 +3,11 @@ package net.enthusia.staff.domain.application;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -55,28 +58,61 @@ public final class MainAccountSelectionService {
             return establishMissingMain(versioned);
         }
         MainMinecraftAccount current = currentOptional.orElseThrow();
-        if (current.selectionSource() == MainAccountSelectionSource.STAFF_OVERRIDE) {
+        if (current.source() == MainAccountSelectionSource.STAFF_OVERRIDE) {
             return Optional.of(current);
         }
-        OptionalLong currentMinutes = safeMinutes(current.playerId());
-        if (currentMinutes.isEmpty()) {
+
+        Map<UUID, Long> minutes = allMinutes(subject.minecraftAccountIds());
+        if (minutes.size() != subject.minecraftAccountIds().size()) {
+            // A partial provider view cannot safely rank the linked accounts. Preserve current.
             return Optional.of(current);
         }
-        Candidate best = subject.minecraftAccountIds().stream()
-                .filter(playerId -> !playerId.equals(current.playerId()))
-                .map(playerId -> new Candidate(playerId, safeMinutes(playerId)))
-                .filter(candidate -> candidate.minutes().isPresent())
-                .max(Comparator.comparingLong(candidate -> candidate.minutes().orElseThrow()))
+        long currentMinutes = minutes.get(current.playerId());
+        Map.Entry<UUID, Long> best = minutes.entrySet().stream()
+                .filter(entry -> !entry.getKey().equals(current.playerId()))
+                .max(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue)
+                        .thenComparing(entry -> entry.getKey().toString()))
                 .orElse(null);
-        if (best == null || !shouldSwitch(currentMinutes.orElseThrow(), best.minutes().orElseThrow())) {
+        if (best == null || !shouldSwitch(currentMinutes, best.getValue())) {
             return Optional.of(current);
         }
         VersionedSubject changed = identities.setMainMinecraftAccount(
                 subject.subjectId(),
-                new MainMinecraftAccount(best.playerId(), MainAccountSelectionSource.AUTOMATIC),
+                new MainMinecraftAccount(best.getKey(), MainAccountSelectionSource.AUTOMATIC),
                 versioned.revision(),
                 clock.instant()
         );
+        return changed.subject().mainMinecraftAccount();
+    }
+
+    /**
+     * Ensures unlinking the current main cannot commit a linked multi-account subject without a main.
+     * If the provider cannot rank every remaining account, deterministic UUID order is used rather
+     * than treating missing playtime as zero.
+     */
+    public Optional<MainMinecraftAccount> prepareForUnlink(
+            DiscordUserId discordUserId,
+            UUID removingPlayerId
+    ) {
+        VersionedSubject versioned = identities.subjectForDiscord(discordUserId).orElse(null);
+        if (versioned == null || !versioned.subject().minecraftAccountIds().contains(removingPlayerId)) {
+            return Optional.empty();
+        }
+        MainMinecraftAccount current = versioned.subject().mainMinecraftAccount().orElse(null);
+        if (current == null || !current.playerId().equals(removingPlayerId)) {
+            return Optional.ofNullable(current);
+        }
+        Set<UUID> remaining = versioned.subject().minecraftAccountIds().stream()
+                .filter(playerId -> !playerId.equals(removingPlayerId))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (remaining.isEmpty()) {
+            return Optional.empty();
+        }
+        UUID replacement = chooseReplacement(remaining);
+        MainMinecraftAccount automatic = new MainMinecraftAccount(
+                replacement, MainAccountSelectionSource.AUTOMATIC);
+        VersionedSubject changed = identities.setMainMinecraftAccount(
+                versioned.subject().subjectId(), automatic, versioned.revision(), clock.instant());
         return changed.subject().mainMinecraftAccount();
     }
 
@@ -127,14 +163,35 @@ public final class MainAccountSelectionService {
     }
 
     private Optional<MainMinecraftAccount> establishMissingMain(VersionedSubject versioned) {
-        UUID selected = versioned.subject().minecraftAccountIds().stream()
-                .sorted()
-                .findFirst()
-                .orElseThrow();
+        UUID selected = chooseReplacement(versioned.subject().minecraftAccountIds());
         MainMinecraftAccount main = new MainMinecraftAccount(selected, MainAccountSelectionSource.AUTOMATIC);
         VersionedSubject changed = identities.setMainMinecraftAccount(
                 versioned.subject().subjectId(), main, versioned.revision(), clock.instant());
         return changed.subject().mainMinecraftAccount();
+    }
+
+    private UUID chooseReplacement(Set<UUID> candidates) {
+        Map<UUID, Long> minutes = allMinutes(candidates);
+        if (minutes.size() == candidates.size()) {
+            return minutes.entrySet().stream()
+                    .max(Comparator.<Map.Entry<UUID, Long>>comparingLong(Map.Entry::getValue)
+                            .thenComparing(entry -> entry.getKey().toString()))
+                    .orElseThrow()
+                    .getKey();
+        }
+        return candidates.stream().min(Comparator.comparing(UUID::toString)).orElseThrow();
+    }
+
+    private Map<UUID, Long> allMinutes(Set<UUID> playerIds) {
+        Map<UUID, Long> values = new LinkedHashMap<>();
+        for (UUID playerId : playerIds) {
+            OptionalLong value = safeMinutes(playerId);
+            if (value.isEmpty()) {
+                return values;
+            }
+            values.put(playerId, value.orElseThrow());
+        }
+        return values;
     }
 
     private OptionalLong safeMinutes(UUID playerId) {
@@ -168,8 +225,5 @@ public final class MainAccountSelectionService {
             throw new IllegalArgumentException(name + " must be present");
         }
         return value;
-    }
-
-    private record Candidate(UUID playerId, OptionalLong minutes) {
     }
 }

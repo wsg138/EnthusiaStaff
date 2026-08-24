@@ -4,11 +4,9 @@ CREATE TABLE discord_link_codes (
     direction ENUM('DISCORD_TO_MINECRAFT', 'MINECRAFT_TO_DISCORD') NOT NULL,
     initiator_discord_user_id DECIMAL(20, 0) NULL,
     initiator_minecraft_player_id BINARY(16) NULL,
-    state ENUM('ACTIVE', 'CLAIMED', 'CONSUMED', 'SUPERSEDED', 'EXPIRED') NOT NULL,
+    state ENUM('ACTIVE', 'CONSUMED', 'SUPERSEDED', 'EXPIRED') NOT NULL,
     created_at DATETIME(6) NOT NULL,
     expires_at DATETIME(6) NOT NULL,
-    claim_operation_key VARCHAR(128) NULL,
-    claim_until DATETIME(6) NULL,
     consumed_operation_key VARCHAR(128) NULL,
     consumed_at DATETIME(6) NULL,
     superseded_at DATETIME(6) NULL,
@@ -27,10 +25,6 @@ CREATE TABLE discord_link_codes (
             AND initiator_minecraft_player_id IS NOT NULL)
     ),
     CONSTRAINT chk_discord_link_codes_expiry CHECK (expires_at > created_at),
-    CONSTRAINT chk_discord_link_codes_claim CHECK (
-        (state = 'CLAIMED' AND claim_operation_key IS NOT NULL AND claim_until IS NOT NULL)
-        OR state <> 'CLAIMED'
-    ),
     CONSTRAINT chk_discord_link_codes_consumed CHECK (
         (state = 'CONSUMED' AND consumed_operation_key IS NOT NULL AND consumed_at IS NOT NULL)
         OR state <> 'CONSUMED'
