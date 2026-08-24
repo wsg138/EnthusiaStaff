@@ -1,0 +1,61 @@
+name: X04 final component sync
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: package/es-x04-commend-provider
+          fetch-depth: 0
+      - uses: actions/checkout@v6
+        with:
+          repository: wsg138/EnthusiaCommend
+          ref: 825a038fc050e66b1cdf66a820d208ecc32354e4
+          path: .x04-commend-source
+      - name: Synchronize exact standalone tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git -C .x04-commend-source rev-parse HEAD)" = '825a038fc050e66b1cdf66a820d208ecc32354e4'
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude 'COMPONENT-METADATA.md' \
+            .x04-commend-source/ components/enthusia-commend/
+          mkdir -p integration-contracts/src/main/java/org/enthusia/rep/api
+          cp .x04-commend-source/src/main/java/org/enthusia/rep/api/*.java \
+             integration-contracts/src/main/java/org/enthusia/rep/api/
+          grep -q 'closeModerationProviders();' paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('components/enthusia-commend/COMPONENT-METADATA.md')
+          text = path.read_text()
+          import re
+          text, count = re.subn(
+              r'\| Last synchronized external SHA \| `[^`]+` \|',
+              '| Last synchronized external SHA | `825a038fc050e66b1cdf66a820d208ecc32354e4` |',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('component metadata external SHA row not found')
+          path.write_text(text)
+          PY
+          rm -rf .x04-commend-source
+          if git diff --quiet; then
+            echo 'Aggregate already matches standalone candidate.'
+            exit 0
+          fi
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add components/enthusia-commend integration-contracts/src/main/java/org/enthusia/rep/api
+          git commit -m 'ES-X04: synchronize final Commend candidate'
+          git push origin HEAD:package/es-x04-commend-provider
