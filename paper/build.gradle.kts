@@ -1,6 +1,15 @@
+import org.gradle.api.tasks.SourceSetContainer
+
 plugins {
     id("com.gradleup.shadow")
 }
+
+val integrationContractMainOutput = project(":integration-contracts")
+    .extensions
+    .getByType<SourceSetContainer>()
+    .named("main")
+    .get()
+    .output
 
 dependencies {
     implementation(project(":domain"))
@@ -11,6 +20,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     testImplementation(project(":integration-contracts"))
+    testRuntimeOnly(files(integrationContractMainOutput))
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
 }
