@@ -80,6 +80,18 @@ class ReputationIntegrationTest {
     }
 
     @Test
+    void reconciliationFenceDelegatesToProvider() {
+        RecordingApi api = new RecordingApi();
+        ReputationIntegration integration = available(api, true);
+
+        integration.markReconciliationPending(PLAYER);
+        integration.clearReconciliationPending(PLAYER);
+
+        assertEquals(1, api.pendingMarks);
+        assertEquals(1, api.pendingClears);
+    }
+
+    @Test
     void reconciliationPreservesProviderStaleStateResult() {
         RecordingApi api = new RecordingApi();
         api.nextStatus = ReputationMutationResult.Status.STALE_BLACKLIST;
@@ -114,6 +126,8 @@ class ReputationIntegrationTest {
         private String requestedCase;
         private int applyCalls;
         private int removeCalls;
+        private int pendingMarks;
+        private int pendingClears;
 
         @Override
         public int apiVersion() {
@@ -143,6 +157,16 @@ class ReputationIntegrationTest {
         @Override
         public boolean canGiveReputation(UUID playerId) {
             return !isReputationBlacklisted(playerId);
+        }
+
+        @Override
+        public void markReconciliationPending(UUID playerId) {
+            pendingMarks++;
+        }
+
+        @Override
+        public void clearReconciliationPending(UUID playerId) {
+            pendingClears++;
         }
 
         @Override
