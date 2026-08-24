@@ -94,7 +94,7 @@ X04 changes the Paper runtime and a moderation-provider integration, so safe can
 
 The repository's existing public Pi workflow uses `pull_request_target`, while the connected commit-workflow listing available to this worker does not expose the automatic Pi execution needed to identify its public run and correlated private `wsg138/EnthusiaStaff-Staging` run. PR #152 does not yet provide a stable exact-head public/private correlation record that satisfies the package evidence requirements.
 
-PR #156 (`Fix canonical Pi staging PR command and exact-head status`) is live, separate work intended to close that control-plane observability/execution gap. At latest reconciliation it remained open, unmerged, non-draft, and mergeable at head `e822df6ded598f74776858afab36a2768c7d7c95`. This X04 worker did not modify or merge another worker's PR.
+PR #156 (`Fix canonical Pi staging PR command and exact-head status`) is live, separate work intended to close that control-plane observability/execution gap. At latest reconciliation it remained open, unmerged, non-draft, and mergeable at head `a1903feaf81cff9d8a151d197fc7efe2b1b855ae`. This X04 worker did not modify or merge another worker's PR.
 
 Therefore:
 - canonical Pi is **not** called passed;
