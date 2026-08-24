@@ -129,6 +129,12 @@ public final class MainAccountSelectionService {
     ) {
         requireAuthorized(actor);
         validateAuditOperationKey(operationKey);
+        Instant now = clock.instant();
+        AccountLinkAudit requestedAudit = new AccountLinkAudit(
+                operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_SET,
+                Optional.of(discordUserId), Optional.of(minecraftPlayerId),
+                MAIN_OVERRIDE_SET_DETAIL, now
+        );
         AccountLinkAudit replay = audits.findByOperationKey(operationKey).orElse(null);
         if (replay != null) {
             requireMatchingSetAudit(replay, actor, discordUserId, minecraftPlayerId);
@@ -142,14 +148,9 @@ public final class MainAccountSelectionService {
         }
         MainMinecraftAccount main = new MainMinecraftAccount(
                 minecraftPlayerId, MainAccountSelectionSource.STAFF_OVERRIDE);
-        Instant now = clock.instant();
         identities.setMainMinecraftAccount(
                 versioned.subject().subjectId(), main, versioned.revision(), now);
-        audits.append(new AccountLinkAudit(
-                operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_SET,
-                Optional.of(discordUserId), Optional.of(minecraftPlayerId),
-                MAIN_OVERRIDE_SET_DETAIL, now
-        ));
+        audits.append(requestedAudit);
         return main;
     }
 
@@ -172,20 +173,25 @@ public final class MainAccountSelectionService {
                 .orElseThrow(() -> new IllegalStateException("Discord identity has no moderation subject"));
         MainMinecraftAccount current = versioned.subject().mainMinecraftAccount()
                 .orElseThrow(() -> new IllegalStateException("subject has no main Minecraft account"));
-        if (current.source() != MainAccountSelectionSource.STAFF_OVERRIDE) {
-            throw new IllegalStateException("main Minecraft account is not staff-overridden");
+        MainMinecraftAccount automatic;
+        if (current.source() == MainAccountSelectionSource.STAFF_OVERRIDE) {
+            MainMinecraftAccount unlocked = new MainMinecraftAccount(
+                    current.playerId(), MainAccountSelectionSource.AUTOMATIC);
+            identities.setMainMinecraftAccount(
+                    versioned.subject().subjectId(), unlocked, versioned.revision(), clock.instant());
+            automatic = evaluate(discordUserId).orElse(unlocked);
+        } else {
+            // This also repairs the audit on a retry where the prior clear committed before its
+            // separate audit append completed. Clearing an already-automatic main is an idempotent no-op.
+            automatic = current;
         }
-        MainMinecraftAccount automatic = new MainMinecraftAccount(
-                current.playerId(), MainAccountSelectionSource.AUTOMATIC);
-        Instant now = clock.instant();
-        identities.setMainMinecraftAccount(
-                versioned.subject().subjectId(), automatic, versioned.revision(), now);
+        Instant auditedAt = clock.instant();
         audits.append(new AccountLinkAudit(
                 operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
-                Optional.of(discordUserId), Optional.of(current.playerId()),
-                MAIN_OVERRIDE_CLEAR_DETAIL, now
+                Optional.of(discordUserId), Optional.of(automatic.playerId()),
+                MAIN_OVERRIDE_CLEAR_DETAIL, auditedAt
         ));
-        return evaluate(discordUserId).orElse(automatic);
+        return automatic;
     }
 
     private Optional<MainMinecraftAccount> establishMissingMain(VersionedSubject versioned) {
@@ -274,6 +280,9 @@ public final class MainAccountSelectionService {
     private void requireAuthorized(Actor actor) {
         if (!authorization.permits(actor, ModerationAction.MANAGE_ACCOUNT_LINKS)) {
             throw new SecurityException("actor is not authorized to manage account links");
+        }
+        if (actor.displayName().length() > 64) {
+            throw new IllegalArgumentException("actor display name exceeds account-link audit storage limit");
         }
     }
 

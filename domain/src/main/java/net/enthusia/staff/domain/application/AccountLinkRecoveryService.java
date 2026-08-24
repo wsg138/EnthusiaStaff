@@ -1,6 +1,7 @@
 package net.enthusia.staff.domain.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
@@ -48,9 +49,10 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
-        requireCompatibleAudit(
+        AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
-                discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL);
+                discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL, clock.instant());
+        requireCompatibleAudit(requestedAudit);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         VersionedLink linked;
         if (existing.isPresent()) {
@@ -61,11 +63,10 @@ public final class AccountLinkRecoveryService {
         } else {
             linked = identities.link(
                     discordUserId, minecraftPlayerId, DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    operationKey + ":link", clock.instant());
+                    operationKey + ":link", requestedAudit.createdAt());
         }
         mainAccounts.evaluate(discordUserId);
-        audit(operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
-                discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL);
+        audits.append(requestedAudit);
         return linked;
     }
 
@@ -77,9 +78,10 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
-        requireCompatibleAudit(
+        AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
-                expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL);
+                expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL, clock.instant());
+        requireCompatibleAudit(requestedAudit);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         if (existing.isPresent()) {
             VersionedLink current = existing.orElseThrow();
@@ -92,11 +94,10 @@ public final class AccountLinkRecoveryService {
                     minecraftPlayerId,
                     current.revision(),
                     operationKey + ":unlink",
-                    clock.instant());
+                    requestedAudit.createdAt());
             mainAccounts.evaluate(expectedDiscordUserId);
         }
-        audit(operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
-                expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL);
+        audits.append(requestedAudit);
         return existing.isPresent();
     }
 
@@ -108,39 +109,32 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
-        requireCompatibleAudit(
+        AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.REASSIGN,
-                newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL);
+                newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL, clock.instant());
+        requireCompatibleAudit(requestedAudit);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         DiscordUserId oldDiscordUserId = existing.map(value -> value.link().discordUserId()).orElse(null);
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
             mainAccounts.prepareForUnlink(oldDiscordUserId, minecraftPlayerId);
         }
         VersionedLink linked = identities.reassign(
-                newDiscordUserId, minecraftPlayerId, operationKey, clock.instant());
+                newDiscordUserId, minecraftPlayerId, operationKey, requestedAudit.createdAt());
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
             mainAccounts.evaluate(oldDiscordUserId);
         }
         mainAccounts.evaluate(newDiscordUserId);
-        audit(operationKey, actor, AccountLinkAuditAction.REASSIGN,
-                newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL);
+        audits.append(requestedAudit);
         return linked;
     }
 
-    private void requireCompatibleAudit(
-            String operationKey,
-            Actor actor,
-            AccountLinkAuditAction action,
-            DiscordUserId discordUserId,
-            UUID minecraftPlayerId,
-            String detail
-    ) {
-        audits.findByOperationKey(operationKey).ifPresent(existing -> {
-            boolean sameRequest = existing.actor().equals(actor)
-                    && existing.action() == action
-                    && existing.discordUserId().equals(Optional.of(discordUserId))
-                    && existing.minecraftPlayerId().equals(Optional.of(minecraftPlayerId))
-                    && existing.detail().equals(detail);
+    private void requireCompatibleAudit(AccountLinkAudit requested) {
+        audits.findByOperationKey(requested.operationKey()).ifPresent(existing -> {
+            boolean sameRequest = existing.actor().equals(requested.actor())
+                    && existing.action() == requested.action()
+                    && existing.discordUserId().equals(requested.discordUserId())
+                    && existing.minecraftPlayerId().equals(requested.minecraftPlayerId())
+                    && existing.detail().equals(requested.detail());
             if (!sameRequest) {
                 throw new IllegalStateException(
                         "account-link recovery operation key was already used for a different audited request");
@@ -148,22 +142,26 @@ public final class AccountLinkRecoveryService {
         });
     }
 
-    private void audit(
+    private static AccountLinkAudit auditRecord(
             String operationKey,
             Actor actor,
             AccountLinkAuditAction action,
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
-            String detail
+            String detail,
+            Instant createdAt
     ) {
-        audits.append(new AccountLinkAudit(
+        return new AccountLinkAudit(
                 operationKey, actor, action, Optional.of(discordUserId), Optional.of(minecraftPlayerId),
-                detail, clock.instant()));
+                detail, createdAt);
     }
 
     private void authorize(Actor actor) {
         if (!authorization.permits(actor, ModerationAction.MANAGE_ACCOUNT_LINKS)) {
             throw new SecurityException("actor is not authorized to manage account links");
+        }
+        if (actor.displayName().length() > 64) {
+            throw new IllegalArgumentException("actor display name exceeds account-link audit storage limit");
         }
     }
 

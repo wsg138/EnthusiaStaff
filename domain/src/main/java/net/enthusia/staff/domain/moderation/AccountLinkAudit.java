@@ -16,7 +16,7 @@ public record AccountLinkAudit(
 ) {
     public AccountLinkAudit {
         if (operationKey == null || operationKey.isBlank() || operationKey.length() > 128
-                || actor == null || action == null || discordUserId == null
+                || actor == null || actor.displayName().length() > 64 || action == null || discordUserId == null
                 || minecraftPlayerId == null || detail == null || detail.isBlank()
                 || detail.length() > 512 || createdAt == null) {
             throw new IllegalArgumentException("account-link audit fields are invalid");
