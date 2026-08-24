@@ -20,6 +20,10 @@ API_HOST = "api.github.com"
 PUBLIC_WORKFLOW = "pi-staging-check.yml"
 EXACT_COMMAND = "@enthusia-staging test"
 STATUS_CONTEXT = "Pi Staging"
+USER_AGENT = "EnthusiaStaff-Pi-Staging-Control/1.0"
+# GitHub's immutable system-account ID for comments created by GITHUB_TOKEN.
+PUBLISHER_USER_ID = 41898282
+STATUS_PAGE_LIMIT = 10
 AUTHORIZED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
@@ -106,6 +110,7 @@ class GitHubApi:
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "Authorization": f"Bearer {self.token}",
+            "User-Agent": USER_AGENT,
         }
         if data is not None:
             headers["Content-Type"] = "application/json"
@@ -377,6 +382,16 @@ def _iter_issue_comments(api: Api, pr_number: int) -> Iterable[Mapping[str, Any]
     raise ControlError("refusing to scan more than 1000 PR comments for staging marker")
 
 
+def _is_publisher_marker(item: Mapping[str, Any], wanted: str) -> bool:
+    """Accept a canonical marker only when it was authored by github-actions[bot]."""
+    body = item.get("body")
+    user = item.get("user")
+    if not isinstance(body, str) or wanted not in body or not isinstance(user, Mapping):
+        return False
+    user_id = user.get("id")
+    return isinstance(user_id, int) and not isinstance(user_id, bool) and user_id == PUBLISHER_USER_ID
+
+
 def upsert_comment(api: Api, record: Record) -> int:
     """Create or update the single stable record for an exact PR/head."""
     wanted = marker(record.pr_number, record.head_sha)
@@ -384,7 +399,7 @@ def upsert_comment(api: Api, record: Record) -> int:
     matches = [
         _positive_int(item.get("id"), "comment ID")
         for item in _iter_issue_comments(api, record.pr_number)
-        if isinstance(item.get("body"), str) and wanted in str(item.get("body"))
+        if _is_publisher_marker(item, wanted)
     ]
     if len(matches) > 1:
         raise ControlError("multiple canonical Pi staging marker comments exist for the same PR/head")
@@ -415,17 +430,20 @@ def _pending_run_from_status(api: Api, status: Mapping[str, Any]) -> Mapping[str
 
 
 def find_pending_run(api: Api, sha: str) -> Mapping[str, Any] | None:
-    """Find an already-active public Pi run tied to the exact source SHA."""
+    """Find an already-active public Pi run across bounded status pages."""
     _validate_sha(sha, "pending-run SHA")
-    statuses = api.get(f"/commits/{sha}/statuses?per_page=100")
-    if not isinstance(statuses, list):
-        raise ControlError("commit statuses response is not a list")
-    for status in statuses:
-        if isinstance(status, Mapping):
-            run = _pending_run_from_status(api, status)
-            if run is not None:
-                return run
-    return None
+    for page in range(1, STATUS_PAGE_LIMIT + 1):
+        statuses = api.get(f"/commits/{sha}/statuses?per_page=100&page={page}")
+        if not isinstance(statuses, list):
+            raise ControlError("commit statuses response is not a list")
+        for status in statuses:
+            if isinstance(status, Mapping):
+                run = _pending_run_from_status(api, status)
+                if run is not None:
+                    return run
+        if len(statuses) < 100:
+            return None
+    raise ControlError(f"refusing to scan more than {STATUS_PAGE_LIMIT * 100} commit statuses for staging deduplication")
 
 
 def _named_run(runs: Any, title: str) -> Mapping[str, Any] | None:
