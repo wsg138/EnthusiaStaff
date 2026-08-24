@@ -15,6 +15,6 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/152/issues?status=new&limit=1000'
+          url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/152/issues?limit=1000'
           curl --fail --silent --show-error --location --header 'Accept: application/json' "$url" -o codacy.json
-          jq '{pagination, count:(.data|length), issues:[.data[] | {id, filePath, lineNumber, message, patternInfo, toolInfo}]}' codacy.json
+          jq '{pagination, count:(.data|length), issues:[.data[] | {id, status, filePath, lineNumber, message, patternInfo, toolInfo}]}' codacy.json
