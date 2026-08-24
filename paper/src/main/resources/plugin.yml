@@ -129,6 +129,13 @@ commands:
   case:
     description: View case detail or perform case-linked recovery actions
     usage: /case [view] <case-id> | /case restoreitems <case-id> | /case recoveritems <case-id>
+  link:
+    description: Link this online Minecraft account to Discord with a one-use code
+    usage: /link [code]
+    aliases: [discordlink]
+  unlink:
+    description: Remove this Minecraft account's current Discord link after confirmation
+    usage: /unlink CONFIRM
 permissions:
   enthusiastaff.status:
     default: false

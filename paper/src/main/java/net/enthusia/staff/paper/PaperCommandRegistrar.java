@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
+import net.enthusia.staff.paper.command.AccountLinkCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.CaseRecoveryCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
@@ -104,6 +105,7 @@ final class PaperCommandRegistrar {
 
     void register() {
         configureEstaff();
+        registerAccountLinkCommands();
         registerPunishmentCommands();
         registerSanctionChangeCommands();
         registerReportCommands();
@@ -129,6 +131,16 @@ final class PaperCommandRegistrar {
                 moderationSettings::current,
                 workers()
         ));
+    }
+
+    private void registerAccountLinkCommands() {
+        AccountLinkCommand command = new AccountLinkCommand(
+                plugin(),
+                storage(bindings -> bindings.accountLinks(plugin(), authorization())),
+                workers()
+        );
+        bind("link", command);
+        bind("unlink", command);
     }
 
     private void registerPunishmentCommands() {

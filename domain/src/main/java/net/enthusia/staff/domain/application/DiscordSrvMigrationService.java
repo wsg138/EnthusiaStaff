@@ -69,23 +69,32 @@ public final class DiscordSrvMigrationService {
         return new ImportReport(imported, unchanged, List.copyOf(conflicts));
     }
 
-    public MirrorResult mirrorCurrentMain(DiscordUserId discordUserId, DiscordSrvLinkProvider provider) {
+    /** Mirrors the authoritative current main to legacy DiscordSRV, clearing its link when no main remains. */
+    public MirrorResult syncCurrentMain(DiscordUserId discordUserId, DiscordSrvLinkProvider provider) {
         require(discordUserId, "discordUserId");
         require(provider, "provider");
         UUID main = identities.subjectForDiscord(discordUserId)
                 .flatMap(value -> value.subject().mainMinecraftAccount())
                 .map(value -> value.playerId())
                 .orElse(null);
-        if (main == null) {
-            return MirrorResult.NO_MAIN;
-        }
-        return provider.mirrorMain(discordUserId.value(), main);
+        return main == null
+                ? provider.clearMirror(discordUserId.value())
+                : provider.mirrorMain(discordUserId.value(), main);
+    }
+
+    /** Backward-compatible name retained for callers that only expect a main-account mirror. */
+    public MirrorResult mirrorCurrentMain(DiscordUserId discordUserId, DiscordSrvLinkProvider provider) {
+        return syncCurrentMain(discordUserId, provider);
     }
 
     public interface DiscordSrvLinkProvider {
         Map<String, UUID> snapshotLinks();
 
         MirrorResult mirrorMain(String discordUserId, UUID minecraftPlayerId);
+
+        default MirrorResult clearMirror(String discordUserId) {
+            return MirrorResult.UNAVAILABLE;
+        }
     }
 
     public enum MirrorResult {
