@@ -16,8 +16,8 @@ class MainAccountSelectionServiceTest {
     @Test
     void arithmeticDoesNotOverflowAtLargeValues() {
         assertTrue(MainAccountSelectionService.shouldSwitch(
-                Long.MAX_VALUE / 5L,
-                Long.MAX_VALUE / 4L
+                4_000_000_000_000_000_000L,
+                5_000_000_000_000_000_000L
         ));
         assertFalse(MainAccountSelectionService.shouldSwitch(Long.MAX_VALUE - 1L, Long.MAX_VALUE));
     }

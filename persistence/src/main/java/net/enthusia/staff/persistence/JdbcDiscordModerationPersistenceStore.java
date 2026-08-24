@@ -74,7 +74,7 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             String operationKey,
             Instant unlinkedAt
     ) {
-        VersionedLink stored = identities.unlink(
+        VersionedLink stored = links.unlink(
                 discordUserId,
                 minecraftPlayerId,
                 expectedRevision,
@@ -91,6 +91,16 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             );
         }
         return stored;
+    }
+
+    @Override
+    public VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            String operationKey,
+            Instant changedAt
+    ) {
+        return links.reassign(newDiscordUserId, minecraftPlayerId, operationKey, changedAt);
     }
 
     @Override
