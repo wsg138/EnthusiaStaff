@@ -1,23 +1,23 @@
 # Latest package-worker handoff
 
-Current package: `ES-X03 — EnthusiaMarket destructive provider`.
+Current package: `ES-D04 — Account linking and DiscordSRV migration`.
 
 Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
 
-Frozen implementation PRs remain open and unmerged:
-- Market PR #3: `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`.
-- Staff PR #139: `5b003225b305db76b47db7d75cf5b6a2943934df`.
+Implementation is preserved and unmerged:
+- Branch: `package/es-d04-account-linking`.
+- PR: #151, open and non-draft.
+- Frozen product head: `b231022b065b5843d2dd73811dfbf51acba6314b`.
+- Reconciled canonical `main` before status publication: `f129226ac017c97fc4126629dd0f47bff729abd6`.
 
-Market exact-head repository CI is now restored and green: Wiki `31852806668`, build `31852806638`, Detekt, security, actual PR-head checkout, Java 21, pinned dependency verification, current RoseChat compilation, Market tests/shadowJar/JaCoCo, final CodeRabbit status, and zero valid inline threads all pass on `addb0f53...`.
+D04 product scope is implemented at the frozen head. It includes one-use two-direction five-minute codes, durable history and replacement invalidation, online Minecraft proof, confirmed unlink, atomic audited staff recovery/main-account overrides, 25% active-playtime main selection through the public PlayTimePlugin service, explicit idempotent DiscordSRV public-API import, best-effort main mirroring, Paper `/link`/`/unlink`, and forward V20 persistence.
 
-Staff exact-head hosted validation is also green on `5b003225...`: Wiki `31852845661`, Coverage/full build `31852845645`, Sentinel Restart Artifact `31852845696`, runtime artifact/provider-leak inspection, and zero live inline threads.
+Exact-head hosted validation is green: Coverage/full run `32738304907`, job `97466391922`, passed Java 21 full build/tests, MariaDB/Testcontainers, runtime-JAR/provider-leak inspection, aggregate JaCoCo and Codacy; artifact `9524397425`, digest `sha256:230de565c87f1939dd0f06f2bcb028a394d96e73e43237fb43b2f02adccbd6c8`. Sentinel artifact run `32738306003`, job `97466394689`, passed with artifact `9524138779`, digest `sha256:4f472f5a20c9d825ad7129bbf0bc4727740a4166f9d1c697c843df5b84020b67`. Sentinel durable job `225` ended `PAPER_RESTART_OK` on the same exact SHA.
 
-The hard blocker is required owner-controlled runtime readiness. Canonical Pi staging `31852844656` reached the exact verified Staff artifact and executed Paper but timed out before the first readiness marker within the configured 240-second window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 stack trace or migration failure before timeout. Independent Sentinel restart job `174` on the same SHA also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT`. Because Paper executed, neither failure qualifies for a zero-execution infrastructure exception and neither is called a pass.
+The blocker is the separate required canonical Pi staging gate. The connected GitHub worker can fetch known workflow runs but cannot list the `pull_request_target` executions needed to discover PR #151's automatic Pi run, and no exact D04 public/private Pi run identifiers are recorded elsewhere. No Pi pass is claimed; Sentinel does not substitute for canonical MariaDB/Flyway staging.
 
-Resume only after live evidence shows the validation host's cooling/runtime capacity materially improved. Rerun the exact frozen Staff runtime gates, then—only if both pass—recheck both PRs, merge both normally, compute canonical post-merge parity with `tools/component-sync/component_sync.py`, publish terminal state, and clean safely contained temporary branches.
+Resume only when the exact blocker changes: obtain or execute canonical public `Pi Staging` for source `b231022b065b5843d2dd73811dfbf51acba6314b`, verify the correlated private `wsg138/EnthusiaStaff-Staging` run on `Lincoln-PI-4` and every provenance/runtime/restart/cleanup assertion, then reconcile current `main`, resolve the two remaining tracking-only PR threads, run any newly applicable state/static checks, merge #151 normally, verify containment/cleanup, and publish D04 `COMPLETE`.
 
-No private staging implementation or credentials were added to Market/BadgersMC, no production authority/data changed, LiteBans remains authoritative, and representative destructive/load/process-kill acceptance remains ES-V03.
-
-`ES-X04` remains `READY` for a separate future worker under normal routing; it was not started here.
+`ES-D05 — Staff bot runtime foundation` remains independently `READY` while D04 is parked. This worker did not start it. Concurrent website, competition, ES-X03, ES-X04 and D05 work was not absorbed or overwritten. Issue #43 remains open and LiteBans remains authoritative.
