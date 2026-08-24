@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -26,6 +27,7 @@ public final class PunishmentService {
     private final ReasonPolicyRepository policies;
     private final ModerationStore store;
     private final EscalationEngine escalation;
+    private volatile Consumer<PunishmentPlan> committedObserver = ignored -> { };
 
     public PunishmentService(
             Clock clock,
@@ -41,6 +43,19 @@ public final class PunishmentService {
         this.policies = Objects.requireNonNull(policies);
         this.store = Objects.requireNonNull(store);
         this.escalation = Objects.requireNonNull(escalation);
+    }
+
+    /**
+     * Installs a post-commit observer. The observer is notification-only and must not throw because
+     * the punishment is already durable when it is invoked. Durable consumers must independently
+     * reconcile missed notifications.
+     */
+    public void setCommittedObserver(Consumer<PunishmentPlan> observer) {
+        committedObserver = Objects.requireNonNull(observer, "observer");
+    }
+
+    public void clearCommittedObserver() {
+        committedObserver = ignored -> { };
     }
 
     public PunishmentResult create(CreatePunishmentRequest request, OperationalMode mode) {
@@ -111,7 +126,11 @@ public final class PunishmentService {
                 assessment.escalation(),
                 assessment.sanctions()
         );
-        return store.createPunishment(plan);
+        PunishmentResult result = store.createPunishment(plan);
+        if (result instanceof PunishmentResult.Accepted) {
+            committedObserver.accept(plan);
+        }
+        return result;
     }
 
     public PunishmentEvaluation evaluate(CreatePunishmentRequest request, OperationalMode mode) {
