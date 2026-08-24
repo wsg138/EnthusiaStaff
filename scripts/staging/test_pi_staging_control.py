@@ -201,6 +201,22 @@ class PiStagingControlTests(unittest.TestCase):
         self.assertEqual(len(dispatches), 1)
         self.assertEqual(dispatches[0][1]["inputs"]["source_pr_head_sha"], SHA)
 
+    def test_27_api_client_rejects_non_repository_paths(self):
+        client = control.GitHubApi(control.SOURCE_REPOSITORY, "test-token")
+        for path in ("https://evil.invalid/repos/x", "//evil.invalid/x", "relative"):
+            with self.subTest(path=path), self.assertRaises(control.ControlError):
+                client._request_path(path)
+
+    def test_28_public_run_url_is_repository_scoped(self):
+        self.assertEqual(control._run_id_from_url("https://github.com/wsg138/EnthusiaStaff/actions/runs/123"), 123)
+        self.assertIsNone(control._run_id_from_url("https://github.com/evil/repo/actions/runs/123"))
+        self.assertIsNone(control._run_id_from_url("https://github.com/wsg138/EnthusiaStaff/actions/runs/123?x=1"))
+
+    def test_29_private_run_url_must_match_private_run_id(self):
+        record = control.Record(151, SHA, "wsg138", 2, 1, "https://github.com/wsg138/EnthusiaStaff/actions/runs/2", "in_progress", private_run_id=456, private_run_url="https://github.com/wsg138/EnthusiaStaff-Staging/actions/runs/999")
+        with self.assertRaisesRegex(control.ControlError, "does not match"):
+            control.render_record(record)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
