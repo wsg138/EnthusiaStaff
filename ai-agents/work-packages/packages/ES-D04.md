@@ -11,23 +11,30 @@ Two-direction one-use five-minute link codes; replacement invalidation; verified
 ## Required safety
 One Minecraft UUID cannot have two current Discord owners. Races/replays/restarts fail closed. Never read PlayTimePlugin SQLite directly; if provider active-playtime data is unavailable preserve the existing automatic main instead of guessing zero. Never commit legacy production link data.
 
+The D04 full-diff review must reconcile D02's persistence refactor so link/unlink/reassignment have one clear transactional owner. The current store routes `link(...)` through `JdbcDiscordLinkRepository` but `unlink(...)` through `JdbcDiscordIdentityRepository`, and that identity repository still retains an older package-private `link(...)` implementation. Consolidate this deliberately and remove the dead duplicate rather than leaving two implementations/owners that can drift.
+
+Unlink must preserve a valid main-account state for the remaining current linked Minecraft accounts. If the unlinked account was the current main and other linked Minecraft accounts remain, the service must immediately choose/persist the correct replacement under the approved automatic/staff-override rules; it must not leave a linked multi-account Discord subject indefinitely without a main. If no Minecraft account remains linked, an absent main is valid.
+
+Validation must explicitly cover unlinking a Minecraft account and later linking that same UUID to a different Discord account: the old link remains historical, the new Discord becomes the only current owner, current subject resolution is correct, and no prior historical record is silently destroyed. It must also cover unlinking the current main with other linked accounts remaining and verify deterministic replacement-main behavior.
+
 ## Exclusions
 No bot moderation panel, punishment enforcement, role-sync replacement, AutoMod or production import execution.
 
 ## Validation
-Concurrency/replay/expiry/import-idempotency/restart tests, provider-present/missing tests, MariaDB integration, full repository gates and review.
+Concurrency/replay/expiry/import-idempotency/restart tests, provider-present/missing tests, MariaDB integration, explicit unlink→different-Discord relink coverage, current-main unlink replacement coverage, full repository gates and review.
 
 ## Active worker state
 - Claimed: 2026-08-23 by the owner-authorized Discord sequential worker.
 - Starting `main`: `783925e2b49ab4567bd3c3869e43fc03ff6d285f`.
 - Branch: `package/es-d04-account-linking`.
-- Implementation PR: not yet opened; open a draft after the first coherent implementation checkpoint.
-- Migration ceiling at claim: `V19__discord_moderation_persistence.sql`.
+- Implementation PR: #151 (draft while implementation remains active).
+- Migration ceiling at claim: `V19__discord_moderation_persistence.sql`; D04 adds forward `V20__discord_account_linking.sql`.
+- Intervening main hardening through `f129226ac017c97fc4126629dd0f47bff729abd6` was reconciled by normal merge and is authoritative for this worker.
 - DiscordSRV contract: current public `AccountLinkManager` exposes authoritative link reads plus `link`/`unlink`; do not access its private storage.
 - PlayTimePlugin contract: current public `PlaytimeService#getLifetime(UUID)` returns `PlaytimeSnapshot.activeMinutes`; no SQLite read is needed.
-- Collision reconciliation: no Discord implementation PR/branch exists; PR #139 is independently parked ES-X03; `package/codacy-website-appeal-transitions` is 0 commits ahead and 167 behind `main`; no competition branch was found.
+- Collision reconciliation: no Discord implementation PR/branch existed at claim. PR #139 is independently parked ES-X03. The legacy website branch had no unique commits, and no competition branch was found.
 - Issue #43 remains open; LiteBans remains authoritative; no production Discord data/configuration/deployment/cutover is authorized.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-23-es-d04-account-linking.md`.
 
 ## Remaining work
-Implement the complete package, add targeted and MariaDB integration coverage, harsh-review the final diff, resolve valid review/static/CI findings, obtain every applicable exact-head gate, merge normally, verify containment/cleanup, and publish terminal state. Do not begin ES-D05 in this worker.
+Complete runtime/provider wiring and the newly hardened persistence/unlink requirements, add targeted/provider/concurrency/MariaDB coverage, harsh-review the final diff, resolve valid review/static/CI findings, obtain every applicable exact-head gate, merge normally, verify containment/cleanup, and publish terminal state. Do not begin ES-D05 in this worker.
