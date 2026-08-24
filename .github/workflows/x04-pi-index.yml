@@ -1,9 +1,9 @@
 name: X04 Pi run index
 
 on:
-  push:
+  pull_request:
     branches:
-      - diagnostic/es-x04-pi-index-20260824
+      - main
 
 permissions:
   actions: read
