@@ -7,7 +7,7 @@
 | Standalone default branch | `main` |
 | Aggregate path | `components/enthusia-commend/` |
 | Verified standalone head at setup | `2083061b8aeaa7fb3adaf89746f91a45e3a03e59` |
-| Last synchronized external SHA | `4ea311fc9c81e244dff3b2ee6230f98039802628` |
+| Last synchronized external SHA | `3bd6ce518a9fcbdee3ea6846e581bff140612eec` |
 | Last synchronized aggregate-main SHA | `UNSET` |
 | Synchronization state | `SYNC_PENDING` |
 | Content-hash method | `tools/component-sync/component_sync.py`; SHA-256 over sorted POSIX paths and raw bytes; `COMPONENT-METADATA.md` excluded as aggregate-only orchestration metadata |
