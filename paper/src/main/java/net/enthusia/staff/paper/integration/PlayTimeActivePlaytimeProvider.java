@@ -5,13 +5,14 @@ import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
-import java.util.logging.Level;
 import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Optional adapter over PlayTimePlugin's public PlaytimeService#getLifetime contract. */
+/** Optional adapter over EnthusiaPlaytime's public PlaytimeService#getLifetime contract. */
 public final class PlayTimeActivePlaytimeProvider implements ActivePlaytimeProvider {
+    static final String PROVIDER_PLUGIN_NAME = "EnthusiaPlaytime";
+
     private final Object service;
     private final Method getLifetime;
 
@@ -21,10 +22,10 @@ public final class PlayTimeActivePlaytimeProvider implements ActivePlaytimeProvi
     }
 
     public static ActivePlaytimeProvider discover(JavaPlugin owner) {
-        Plugin provider = owner.getServer().getPluginManager().getPlugin("PlayTimePlugin");
+        Plugin provider = owner.getServer().getPluginManager().getPlugin(PROVIDER_PLUGIN_NAME);
         ActivePlaytimeProvider resolved = fromPlugin(provider);
         if (provider != null && resolved instanceof MissingProvider) {
-            owner.getLogger().warning("PlayTimePlugin is present but its public PlaytimeService API is unavailable; automatic main-account selection will preserve the current main.");
+            owner.getLogger().warning("EnthusiaPlaytime is present but its public PlaytimeService API is unavailable; automatic main-account selection will preserve the current main.");
         }
         return resolved;
     }

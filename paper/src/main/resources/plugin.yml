@@ -20,7 +20,7 @@ softdepend:
   - EnthusiaMarket
   - EnthusiaCommend
   - EnthusiaTeleport
-  - PlayTimePlugin
+  - EnthusiaPlaytime
   - InventoryRollbackPlus
   - EnthusiaServerAutoClicker
 commands:

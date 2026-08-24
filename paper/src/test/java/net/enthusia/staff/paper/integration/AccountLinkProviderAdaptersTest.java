@@ -13,6 +13,11 @@ import org.junit.jupiter.api.Test;
 
 class AccountLinkProviderAdaptersTest {
     @Test
+    void discoveryUsesActualEnthusiaPlaytimePluginName() {
+        assertEquals("EnthusiaPlaytime", PlayTimeActivePlaytimeProvider.PROVIDER_PLUGIN_NAME);
+    }
+
+    @Test
     void missingPlayTimeProviderPreservesUnknownPlaytime() {
         ActivePlaytimeProvider provider = PlayTimeActivePlaytimeProvider.fromPlugin(null);
         assertTrue(provider.lifetimeActiveMinutes(UUID.randomUUID()).isEmpty());
