@@ -22,13 +22,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.enthusia.staff.domain.application.AccountLinkRecoveryService;
 import net.enthusia.staff.domain.application.AccountLinkingService;
 import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService;
 import net.enthusia.staff.domain.application.MainAccountSelectionService;
+import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.moderation.AccountLinkAuditAction;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
 import net.enthusia.staff.persistence.JdbcAccountLinkAuditStore;
 import net.enthusia.staff.persistence.JdbcAccountLinkingStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
@@ -243,6 +248,109 @@ class DiscordAccountLinkingV20IntegrationTest {
             assertEquals(second, identities.subjectForDiscord(discord).orElseThrow()
                     .subject().mainMinecraftAccount().orElseThrow().playerId());
             assertFalse(identities.currentLink(first).isPresent());
+        }
+    }
+
+    @Test
+    void playtimeProviderMissingPreservesMainAndThresholdSwitchesOnlyAtTwentyFivePercent() throws Exception {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        Instant now = BASE_TIME.plusSeconds(1_750);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, first, "PlaytimeFirst", now);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, second, "PlaytimeSecond", now);
+        DiscordUserId discord = new DiscordUserId("18446744073709550051");
+        Clock clock = Clock.fixed(now.plusSeconds(10), ZoneOffset.UTC);
+
+        try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
+            JdbcAccountLinkAuditStore audits = new JdbcAccountLinkAuditStore(dataSource);
+            identities.link(discord, first, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-playtime-first-" + first, now.plusSeconds(1));
+            identities.link(discord, second, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-playtime-second-" + second, now.plusSeconds(2));
+
+            MainAccountSelectionService missingProvider = new MainAccountSelectionService(
+                    clock, identities, ignored -> OptionalLong.empty(), new DefaultAuthorizationPolicy(), audits);
+            assertEquals(first, missingProvider.evaluate(discord).orElseThrow().playerId());
+
+            MainAccountSelectionService belowThreshold = new MainAccountSelectionService(
+                    clock,
+                    identities,
+                    playerId -> OptionalLong.of(playerId.equals(first) ? 100L : 124L),
+                    new DefaultAuthorizationPolicy(),
+                    audits
+            );
+            assertEquals(first, belowThreshold.evaluate(discord).orElseThrow().playerId());
+
+            MainAccountSelectionService atThreshold = new MainAccountSelectionService(
+                    clock,
+                    identities,
+                    playerId -> OptionalLong.of(playerId.equals(first) ? 100L : 125L),
+                    new DefaultAuthorizationPolicy(),
+                    audits
+            );
+            var changed = atThreshold.evaluate(discord).orElseThrow();
+            assertEquals(second, changed.playerId());
+            assertEquals(MainAccountSelectionSource.AUTOMATIC, changed.source());
+        }
+    }
+
+    @Test
+    void staffAuditKeysFailClosedBeforeMutationAndOverrideReplayIsIdempotent() throws Exception {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        Instant now = BASE_TIME.plusSeconds(1_900);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, first, "AuditFirst", now);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, second, "AuditSecond", now);
+        DiscordUserId discord = new DiscordUserId("18446744073709550061");
+        DiscordUserId otherDiscord = new DiscordUserId("18446744073709550062");
+        Actor admin = new Actor(UUID.randomUUID(), "D04Admin", StaffRank.ADMIN);
+        Clock clock = Clock.fixed(now.plusSeconds(10), ZoneOffset.UTC);
+
+        try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
+            JdbcAccountLinkAuditStore audits = new JdbcAccountLinkAuditStore(dataSource);
+            identities.link(discord, first, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-audit-first-" + first, now.plusSeconds(1));
+            identities.link(discord, second, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-audit-second-" + second, now.plusSeconds(2));
+            MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
+                    clock, identities, ignored -> OptionalLong.empty(), new DefaultAuthorizationPolicy(), audits);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> mainAccounts.setStaffOverride(admin, discord, second, ""));
+            assertEquals(first, identities.subjectForDiscord(discord).orElseThrow()
+                    .subject().mainMinecraftAccount().orElseThrow().playerId());
+
+            String setKey = "d04-main-override-set";
+            var override = mainAccounts.setStaffOverride(admin, discord, second, setKey);
+            assertEquals(second, override.playerId());
+            assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, override.source());
+            assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_SET,
+                    audits.findByOperationKey(setKey).orElseThrow().action());
+            long setRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
+            assertEquals(override, mainAccounts.setStaffOverride(admin, discord, second, setKey));
+            assertEquals(setRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
+
+            String clearKey = "d04-main-override-clear";
+            var automatic = mainAccounts.clearStaffOverride(admin, discord, clearKey);
+            assertEquals(second, automatic.playerId());
+            assertEquals(MainAccountSelectionSource.AUTOMATIC, automatic.source());
+            assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
+                    audits.findByOperationKey(clearKey).orElseThrow().action());
+            long clearRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
+            assertEquals(automatic, mainAccounts.clearStaffOverride(admin, discord, clearKey));
+            assertEquals(clearRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
+
+            AccountLinkRecoveryService recovery = new AccountLinkRecoveryService(
+                    clock, new DefaultAuthorizationPolicy(), identities, audits, mainAccounts);
+            String recoveryKey = "d04-recovery-audit-key";
+            recovery.forceLink(admin, discord, first, recoveryKey);
+            assertEquals(AccountLinkAuditAction.FORCE_LINK,
+                    audits.findByOperationKey(recoveryKey).orElseThrow().action());
+            assertThrows(IllegalStateException.class,
+                    () -> recovery.reassign(admin, otherDiscord, first, recoveryKey));
+            assertEquals(discord, identities.currentLink(first).orElseThrow().link().discordUserId());
         }
     }
 

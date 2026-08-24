@@ -2,6 +2,7 @@ package net.enthusia.staff.domain.application;
 
 import java.math.BigInteger;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,6 +25,10 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.Version
 
 /** Chooses a linked main account from lifetime active playtime with 25% hysteresis. */
 public final class MainAccountSelectionService {
+    private static final String MAIN_OVERRIDE_SET_DETAIL = "Staff set the authoritative main Minecraft account";
+    private static final String MAIN_OVERRIDE_CLEAR_DETAIL =
+            "Staff removed the main-account override; automatic selection may resume";
+
     private final Clock clock;
     private final DiscordModerationPersistenceStore identities;
     private final ActivePlaytimeProvider playtime;
@@ -123,6 +128,13 @@ public final class MainAccountSelectionService {
             String operationKey
     ) {
         requireAuthorized(actor);
+        validateAuditOperationKey(operationKey);
+        AccountLinkAudit replay = audits.findByOperationKey(operationKey).orElse(null);
+        if (replay != null) {
+            requireMatchingSetAudit(replay, actor, discordUserId, minecraftPlayerId);
+            return new MainMinecraftAccount(minecraftPlayerId, MainAccountSelectionSource.STAFF_OVERRIDE);
+        }
+
         VersionedSubject versioned = identities.subjectForDiscord(discordUserId)
                 .orElseThrow(() -> new IllegalStateException("Discord identity has no moderation subject"));
         if (!versioned.subject().minecraftAccountIds().contains(minecraftPlayerId)) {
@@ -130,12 +142,13 @@ public final class MainAccountSelectionService {
         }
         MainMinecraftAccount main = new MainMinecraftAccount(
                 minecraftPlayerId, MainAccountSelectionSource.STAFF_OVERRIDE);
+        Instant now = clock.instant();
         identities.setMainMinecraftAccount(
-                versioned.subject().subjectId(), main, versioned.revision(), clock.instant());
+                versioned.subject().subjectId(), main, versioned.revision(), now);
         audits.append(new AccountLinkAudit(
                 operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_SET,
                 Optional.of(discordUserId), Optional.of(minecraftPlayerId),
-                "Staff set the authoritative main Minecraft account", clock.instant()
+                MAIN_OVERRIDE_SET_DETAIL, now
         ));
         return main;
     }
@@ -146,18 +159,31 @@ public final class MainAccountSelectionService {
             String operationKey
     ) {
         requireAuthorized(actor);
+        validateAuditOperationKey(operationKey);
+        AccountLinkAudit replay = audits.findByOperationKey(operationKey).orElse(null);
+        if (replay != null) {
+            requireMatchingClearAudit(replay, actor, discordUserId);
+            UUID replayedPlayerId = replay.minecraftPlayerId()
+                    .orElseThrow(() -> new IllegalStateException("clear-override audit is missing its Minecraft account"));
+            return new MainMinecraftAccount(replayedPlayerId, MainAccountSelectionSource.AUTOMATIC);
+        }
+
         VersionedSubject versioned = identities.subjectForDiscord(discordUserId)
                 .orElseThrow(() -> new IllegalStateException("Discord identity has no moderation subject"));
         MainMinecraftAccount current = versioned.subject().mainMinecraftAccount()
                 .orElseThrow(() -> new IllegalStateException("subject has no main Minecraft account"));
+        if (current.source() != MainAccountSelectionSource.STAFF_OVERRIDE) {
+            throw new IllegalStateException("main Minecraft account is not staff-overridden");
+        }
         MainMinecraftAccount automatic = new MainMinecraftAccount(
                 current.playerId(), MainAccountSelectionSource.AUTOMATIC);
+        Instant now = clock.instant();
         identities.setMainMinecraftAccount(
-                versioned.subject().subjectId(), automatic, versioned.revision(), clock.instant());
+                versioned.subject().subjectId(), automatic, versioned.revision(), now);
         audits.append(new AccountLinkAudit(
                 operationKey, actor, AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
                 Optional.of(discordUserId), Optional.of(current.playerId()),
-                "Staff removed the main-account override; automatic selection may resume", clock.instant()
+                MAIN_OVERRIDE_CLEAR_DETAIL, now
         ));
         return evaluate(discordUserId).orElse(automatic);
     }
@@ -214,9 +240,46 @@ public final class MainAccountSelectionService {
                 .compareTo(BigInteger.valueOf(currentMinutes).multiply(BigInteger.valueOf(5L))) >= 0;
     }
 
+    private static void requireMatchingSetAudit(
+            AccountLinkAudit audit,
+            Actor actor,
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId
+    ) {
+        boolean matches = audit.actor().equals(actor)
+                && audit.action() == AccountLinkAuditAction.MAIN_OVERRIDE_SET
+                && audit.discordUserId().equals(Optional.of(discordUserId))
+                && audit.minecraftPlayerId().equals(Optional.of(minecraftPlayerId))
+                && audit.detail().equals(MAIN_OVERRIDE_SET_DETAIL);
+        if (!matches) {
+            throw new IllegalStateException("main-account operation key was already used for a different audited request");
+        }
+    }
+
+    private static void requireMatchingClearAudit(
+            AccountLinkAudit audit,
+            Actor actor,
+            DiscordUserId discordUserId
+    ) {
+        boolean matches = audit.actor().equals(actor)
+                && audit.action() == AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR
+                && audit.discordUserId().equals(Optional.of(discordUserId))
+                && audit.minecraftPlayerId().isPresent()
+                && audit.detail().equals(MAIN_OVERRIDE_CLEAR_DETAIL);
+        if (!matches) {
+            throw new IllegalStateException("main-account operation key was already used for a different audited request");
+        }
+    }
+
     private void requireAuthorized(Actor actor) {
         if (!authorization.permits(actor, ModerationAction.MANAGE_ACCOUNT_LINKS)) {
             throw new SecurityException("actor is not authorized to manage account links");
+        }
+    }
+
+    private static void validateAuditOperationKey(String operationKey) {
+        if (operationKey == null || operationKey.isBlank() || operationKey.length() > 128) {
+            throw new IllegalArgumentException("operationKey must be nonblank and at most 128 characters");
         }
     }
 

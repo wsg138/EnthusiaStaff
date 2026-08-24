@@ -16,6 +16,10 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.Version
 
 /** Permission-gated, retryable staff recovery for identity-link mistakes. */
 public final class AccountLinkRecoveryService {
+    private static final String FORCE_LINK_DETAIL = "Staff force-linked a verified identity pair";
+    private static final String FORCE_UNLINK_DETAIL = "Staff force-unlinked an identity pair";
+    private static final String REASSIGN_DETAIL = "Staff atomically reassigned the current Discord owner";
+
     private final Clock clock;
     private final AuthorizationPolicy authorization;
     private final DiscordModerationPersistenceStore identities;
@@ -44,6 +48,9 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
+        requireCompatibleAudit(
+                operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
+                discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         VersionedLink linked;
         if (existing.isPresent()) {
@@ -58,7 +65,7 @@ public final class AccountLinkRecoveryService {
         }
         mainAccounts.evaluate(discordUserId);
         audit(operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
-                discordUserId, minecraftPlayerId, "Staff force-linked a verified identity pair");
+                discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL);
         return linked;
     }
 
@@ -70,6 +77,9 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
+        requireCompatibleAudit(
+                operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
+                expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         if (existing.isPresent()) {
             VersionedLink current = existing.orElseThrow();
@@ -86,7 +96,7 @@ public final class AccountLinkRecoveryService {
             mainAccounts.evaluate(expectedDiscordUserId);
         }
         audit(operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
-                expectedDiscordUserId, minecraftPlayerId, "Staff force-unlinked an identity pair");
+                expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL);
         return existing.isPresent();
     }
 
@@ -98,6 +108,9 @@ public final class AccountLinkRecoveryService {
     ) {
         authorize(actor);
         validateOperationKey(operationKey);
+        requireCompatibleAudit(
+                operationKey, actor, AccountLinkAuditAction.REASSIGN,
+                newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL);
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         DiscordUserId oldDiscordUserId = existing.map(value -> value.link().discordUserId()).orElse(null);
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
@@ -110,8 +123,29 @@ public final class AccountLinkRecoveryService {
         }
         mainAccounts.evaluate(newDiscordUserId);
         audit(operationKey, actor, AccountLinkAuditAction.REASSIGN,
-                newDiscordUserId, minecraftPlayerId, "Staff atomically reassigned the current Discord owner");
+                newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL);
         return linked;
+    }
+
+    private void requireCompatibleAudit(
+            String operationKey,
+            Actor actor,
+            AccountLinkAuditAction action,
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            String detail
+    ) {
+        audits.findByOperationKey(operationKey).ifPresent(existing -> {
+            boolean sameRequest = existing.actor().equals(actor)
+                    && existing.action() == action
+                    && existing.discordUserId().equals(Optional.of(discordUserId))
+                    && existing.minecraftPlayerId().equals(Optional.of(minecraftPlayerId))
+                    && existing.detail().equals(detail);
+            if (!sameRequest) {
+                throw new IllegalStateException(
+                        "account-link recovery operation key was already used for a different audited request");
+            }
+        });
     }
 
     private void audit(
