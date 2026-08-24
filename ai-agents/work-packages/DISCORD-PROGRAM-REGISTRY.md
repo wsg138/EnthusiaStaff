@@ -10,9 +10,9 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | --- | --- | --- | ---: | --- |
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
-| `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `READY` | 133 | `ES-D01`–`ES-D03` |
-| `ES-D05` | Staff bot runtime foundation | `READY` | 134 | `ES-D01`–`ES-D03` |
+| `ES-D03` | Authorization and cross-platform policy | `REVIEW` | 132 | `ES-D01`, `ES-D02` |
+| `ES-D04` | Account linking and DiscordSRV migration | `PLANNED` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D05` | Staff bot runtime foundation | `PLANNED` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
@@ -26,13 +26,15 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-None after ES-D03 terminal publication. A future Discord worker must reconcile live GitHub and classify incomplete packages again before claiming work.
+`ES-D03 — Authorization and cross-platform policy` is the selected actionable continuation on `package/es-d03-discord-authorization`, PR #149. Independent full-diff review found and repaired a fail-closed Developer/Minecraft authority gap at executable commit `6f0b3a8c264f8f7644a9bfafacb8b6cd29061950`; exact-head validation and final review are now required before completion.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` completed through PR #149. Frozen executable product head `ca66a97949cd8b9733c9039084d6230b2c63fd07` passed exact-head Java 21 full build/tests, aggregate JaCoCo, runtime-JAR leak inspection, Codacy upload/final notification, Sentinel artifact build, and CodeRabbit status. Live inline review threads were zero unresolved after valid findings were repaired. D03 added no migration, Discord runtime, website, competition, production configuration/data, deployment, LiteBans authority change, or issue #43 cutover.
+`ES-D02` remains the latest completed Discord package through PR #148. Its V19 persistence work remains unchanged by D03.
 
-`ES-D04` and `ES-D05` are newly dependency-complete and `READY`. D04 has the lower priority number and is the next owner-priority item if no actionable continuation or live collision supersedes it. This D03 worker does not start either package.
+The earlier D03 candidate `ca66a97949cd8b9733c9039084d6230b2c63fd07` passed its recorded exact-head gates, but those results are historical only after the later executable repair. D03 is not complete until the repaired tree passes current exact-head acceptance, zero valid review findings remain, PR #149 merges normally, and post-merge containment/cleanup are verified.
+
+`ES-D04` and `ES-D05` remain `PLANNED` while D03 is incomplete. If D03 reaches `COMPLETE`, both become dependency-complete and may be marked `READY`; this D03 worker must not start either package.
 
 ## Selection
 

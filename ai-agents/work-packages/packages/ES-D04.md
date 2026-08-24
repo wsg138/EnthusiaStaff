@@ -1,9 +1,6 @@
 # ES-D04 — Account linking and DiscordSRV migration
 
-Status: `READY`. Priority: 133. Depends on `ES-D01`–`ES-D03` (all `COMPLETE`). Internal package; inspect external provider contracts before changes.
-
-## Readiness
-ES-D03 completion satisfies this package's remaining internal dependency. A future worker must still perform fresh live GitHub collision reconciliation and inspect the current DiscordSRV and PlayTimePlugin provider contracts before claiming implementation work.
+Status: `PLANNED`. Priority: 133. Depends on `ES-D01`–`ES-D03`. Internal package; inspect external provider contracts before changes.
 
 ## Objective
 Make EnthusiaStaff the durable Discord↔Minecraft link authority while importing legacy DiscordSRV relationships without forcing relink.
