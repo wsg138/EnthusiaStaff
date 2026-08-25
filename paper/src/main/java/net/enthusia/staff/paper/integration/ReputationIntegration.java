@@ -16,6 +16,7 @@ import org.enthusia.rep.api.ReputationStateSnapshot;
 
 public final class ReputationIntegration {
     private static final String PLAYER_ID_ARGUMENT = "playerId";
+    private static final String CASE_ID_ARGUMENT = "caseId";
 
     private final IntegrationAvailability availability;
     private final String issue;
@@ -101,7 +102,7 @@ public final class ReputationIntegration {
         requireMutationAuthority(actor);
         UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
         Optional<Instant> expiration = Objects.requireNonNull(expirationAt, "expirationAt");
-        String linkedCase = Objects.requireNonNull(caseId, "caseId");
+        String linkedCase = Objects.requireNonNull(caseId, CASE_ID_ARGUMENT);
         Optional<ReputationBlacklist> current = api.getBlacklist(target);
         ReputationStateSnapshot before = api.snapshot(target);
         ReputationMutationResult result = api.applyBlacklist(
@@ -119,7 +120,7 @@ public final class ReputationIntegration {
         requireAvailable();
         requireMutationAuthority(actor);
         UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
-        String linkedCase = Objects.requireNonNull(caseId, "caseId");
+        String linkedCase = Objects.requireNonNull(caseId, CASE_ID_ARGUMENT);
         Optional<ReputationBlacklist> current = api.getBlacklist(target);
         if (current.isEmpty() || current.orElseThrow().status() == ReputationBlacklist.Status.REMOVED) {
             return false;
@@ -162,7 +163,7 @@ public final class ReputationIntegration {
                 Objects.requireNonNull(operationId, "operationId"),
                 target,
                 Objects.requireNonNull(expirationAt, "expirationAt"),
-                Objects.requireNonNull(caseId, "caseId"),
+                Objects.requireNonNull(caseId, CASE_ID_ARGUMENT),
                 expectedBlacklistRevision,
                 before.checksum()
         );
@@ -180,7 +181,7 @@ public final class ReputationIntegration {
         return api.removeBlacklist(
                 Objects.requireNonNull(operationId, "operationId"),
                 target,
-                Objects.requireNonNull(caseId, "caseId"),
+                Objects.requireNonNull(caseId, CASE_ID_ARGUMENT),
                 expectedBlacklistRevision,
                 before.checksum()
         );
