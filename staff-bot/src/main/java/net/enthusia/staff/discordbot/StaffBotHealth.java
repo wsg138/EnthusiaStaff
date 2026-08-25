@@ -3,7 +3,6 @@ package net.enthusia.staff.discordbot;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Privacy-safe process health state; no user, message, punishment, or credential data is stored here. */
@@ -20,7 +19,6 @@ public final class StaffBotHealth {
 
     private final StaffBotEnvironment environment;
     private final AtomicReference<Snapshot> snapshot;
-    private final AtomicLong rejectedWork = new AtomicLong();
     private final AtomicBoolean failedEver = new AtomicBoolean();
 
     public StaffBotHealth(StaffBotEnvironment environment) {
@@ -34,22 +32,20 @@ public final class StaffBotHealth {
         if (phase == Phase.FAILED) {
             failedEver.set(true);
         }
-        snapshot.set(new Snapshot(phase, reason, Instant.now(), rejectedWork.get()));
+        Instant changedAt = Instant.now();
+        snapshot.updateAndGet(current -> new Snapshot(phase, reason, changedAt, current.rejectedWork()));
     }
 
     public void recordRejectedWork() {
-        long rejected = rejectedWork.incrementAndGet();
-        snapshot.updateAndGet(current ->
-                new Snapshot(current.phase(), current.reason(), current.changedAt(), rejected));
+        snapshot.updateAndGet(current -> new Snapshot(
+                current.phase(),
+                current.reason(),
+                current.changedAt(),
+                Math.incrementExact(current.rejectedWork())));
     }
 
     public Snapshot snapshot() {
-        Snapshot current = snapshot.get();
-        long rejected = rejectedWork.get();
-        if (current.rejectedWork() == rejected) {
-            return current;
-        }
-        return new Snapshot(current.phase(), current.reason(), current.changedAt(), rejected);
+        return snapshot.get();
     }
 
     public StaffBotEnvironment environment() {
@@ -77,6 +73,14 @@ public final class StaffBotHealth {
             if (rejectedWork < 0) {
                 throw new IllegalArgumentException("rejected work count cannot be negative");
             }
+        }
+
+        public boolean ready() {
+            return phase == Phase.READY;
+        }
+
+        public boolean live() {
+            return phase != Phase.FAILED && phase != Phase.STOPPED;
         }
     }
 }

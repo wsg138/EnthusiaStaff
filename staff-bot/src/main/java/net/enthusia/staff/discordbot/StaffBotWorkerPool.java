@@ -30,7 +30,7 @@ public final class StaffBotWorkerPool implements AutoCloseable {
                 0L,
                 TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(queueCapacity),
-                Thread.ofPlatform().name("staff-bot-worker-", 0).factory(),
+                Thread.ofPlatform().daemon(true).name("staff-bot-worker-", 0).factory(),
                 new ThreadPoolExecutor.AbortPolicy());
     }
 

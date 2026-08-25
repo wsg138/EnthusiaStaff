@@ -51,11 +51,11 @@ final class StaffBotHealthServer implements HealthEndpoint {
             }
 
             StaffBotHealth.Snapshot snapshot = health.snapshot();
-            boolean acceptable = readiness ? health.isReady() : health.isLive();
+            boolean acceptable = readiness ? snapshot.ready() : snapshot.live();
             int status = acceptable ? 200 : 503;
             String body = "{\"environment\":\"" + json(health.environment().label())
                     + "\",\"status\":\"" + snapshot.phase().name()
-                    + "\",\"ready\":" + health.isReady()
+                    + "\",\"ready\":" + snapshot.ready()
                     + ",\"reason\":\"" + json(snapshot.reason())
                     + "\",\"rejectedWork\":" + snapshot.rejectedWork()
                     + "}\n";
