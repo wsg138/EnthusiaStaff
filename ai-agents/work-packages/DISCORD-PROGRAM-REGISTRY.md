@@ -12,7 +12,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `BLOCKED` / `PARKED_BLOCKED` | 133 | `ES-D01`–`ES-D03` |
-| `ES-D05` | Staff bot runtime foundation | `READY` | 134 | `ES-D01`–`ES-D03` |
+| `ES-D05` | Staff bot runtime foundation | `BLOCKED` / `PARKED_BLOCKED` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
@@ -26,23 +26,39 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-None. `ES-D04 — Account linking and DiscordSRV migration` is parked blocked with its implementation preserved on `package/es-d04-account-linking`, PR #151, frozen head `b231022b065b5843d2dd73811dfbf51acba6314b`.
+None. `ES-D04` and `ES-D05` are independently `BLOCKED` / `PARKED_BLOCKED`; a future Discord worker must reconcile live GitHub and resume an actionable continuation only when its recorded blocker can actually be resolved.
 
-## ES-D04 parked blocker
+## ES-D05 parked blocker
 
-D04 implementation and targeted review are complete at the frozen head. Exact-head Coverage/full Java 21 build/Testcontainers/runtime-JAR/provider-leak/Codacy evidence passed in run `32738304907`, job `97466391922`, with validation artifact `9524397425` (`sha256:230de565c87f1939dd0f06f2bcb028a394d96e73e43237fb43b2f02adccbd6c8`). Sentinel artifact run `32738306003`, job `97466394689`, passed and produced artifact `9524138779` (`sha256:4f472f5a20c9d825ad7129bbf0bc4727740a4166f9d1c697c843df5b84020b67`). Sentinel durable job `225` ended exactly `PAPER_RESTART_OK` on the same frozen SHA.
+`ES-D05 — Staff bot runtime foundation` is preserved on `package/es-d05-staff-bot-runtime`, implementation PR #160. Frozen validated product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`.
 
-Canonical Pi staging is nevertheless a separate required gate because D04 changes Paper runtime and MariaDB/Flyway persistence. The connected GitHub worker cannot discover the PR's automatic `pull_request_target` Pi run with the available workflow-listing surface, and no exact D04 public/private Pi run IDs are durably recorded elsewhere. No Pi pass is claimed and Sentinel does not substitute for it.
+The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. The final product head passed exact-head full Java 21 validation, staff-bot configuration-cache validation, Codacy with zero new issues, CodeRabbit after valid findings were corrected, Sentinel artifact validation, and the canonical Paper/Pi staging path. The generic CodeRabbit docstring-coverage warning is not a functional/security/lifecycle package gate.
 
-Unblock by obtaining or executing the canonical public `Pi Staging` path for exact source `b231022b065b5843d2dd73811dfbf51acba6314b`, verifying its correlated private `wsg138/EnthusiaStaff-Staging` execution on `Lincoln-PI-4` plus every required provenance/runtime/restart/cleanup assertion, then resolving remaining tracking-only review state and merging PR #151 normally. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
+D05 is not complete because its own acceptance contract requires a **real staging Discord connection smoke** using the staging bot token, proving exact staging application `1541279616881397772`, exact Enthusia guild `1410303324745371709`, required test channel `1541286004298752091` with view/send permission, reconnect/readiness behavior, and clean disconnect/shutdown. No authorized secret-bearing execution path accessible to the connected worker contains `ENTHUSIA_STAFF_BOT_TOKEN`; the current public/private Pi control path is Paper-only. The token must not be requested in chat, committed, logged, or placed on a command line, and the validation gate must not be weakened.
+
+Exact unblock: securely provision the staging token to an authorized trusted runtime/secret manager, run the already-implemented `--smoke-test` against exact frozen product source/artifact `5f24ba1818c81e0a30a516fa70c8597586184b00`, publish only sanitized provenance/readiness/shutdown evidence, then resume PR #160, reconcile live state, merge normally if the reviewed executable head is still exact and all applicable gates remain satisfied, verify containment/cleanup, and publish `COMPLETE`. Do not start D06 in the same worker.
+
+## ES-D04 parked lineage / independent live work
+
+D04 remains outside D05 ownership. Its implementation PR #151 remains open, and its independent private staging-control dependency PR `wsg138/EnthusiaStaff-Staging#109` remains open at D05 terminal reconciliation. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
+
+Canonical prior handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`.
+`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d159f1e219ea70553c66c0`.
 
-## Ready work while D04 is parked
+## D05 frozen evidence summary
 
-`ES-D05 — Staff bot runtime foundation` remains dependency-complete and `READY`. A future Discord worker may select it while D04's exact blocker is unchanged. This D04 worker did not start D05. `ES-D06` and `ES-D13` remain dependency-blocked until both D04 and D05 complete.
+- Frozen product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
+- Coverage/full validation run `32874248685`, job `97888464396`: success; aggregate JaCoCo 50.76% lines / 41.41% branches / 53.21% instructions; validation artifact `9573547679`, digest `sha256:c6f2df467085d811593c7100feb5a4c698a46e14432e92d401662dff9d43455c`.
+- Staff Bot Configuration Cache run `32874248800`, job `97888275507`: success with two configuration-cache executions and problems treated as failures.
+- Sentinel Restart Artifact run `32874248693`: success for the frozen head.
+- Codacy: zero new issues, 63.04% diff coverage, +0.17% coverage variation.
+- CodeRabbit status: success after valid findings were fixed; no unresolved functional/security/lifecycle finding remains.
+- Canonical Pi public run `32879118794` and correlated private run `32880103099`, job `97907230239`: success on trusted `Lincoln-PI-4`; this is Paper/Pi evidence only and is not relabeled as the missing Discord smoke.
+
+`ES-D06` and `ES-D13` remain dependency-blocked until both D04 and D05 complete. D07+ remain sequenced behind their stated dependencies.
 
 ## Selection
 
