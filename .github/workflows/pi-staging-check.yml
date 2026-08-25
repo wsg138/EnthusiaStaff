@@ -1,5 +1,5 @@
 name: Pi Staging
-run-name: Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || 'main' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}
+run-name: "Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || 'main' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}"
 
 on:
   workflow_dispatch:

@@ -292,6 +292,11 @@ class PiStagingControlTests(unittest.TestCase):
         api.gets["/actions/runs/803"] = run
         self.assertIsNone(control.find_pending_run(api, 151, SHA))
 
+    def test_37_public_workflow_run_name_preserves_exact_correlation(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/pi-staging-check.yml").read_text(encoding="utf-8")
+        expected = 'run-name: "Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || \'main\' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}"'
+        self.assertIn(expected, workflow)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
