@@ -9,6 +9,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLTransactionRollbackException;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -117,7 +118,7 @@ class DiscordAccountLinkIssuanceDeadlockRetryV20IntegrationTest {
         }
 
         @Override
-        public Logger getParentLogger() {
+        public Logger getParentLogger() throws SQLFeatureNotSupportedException {
             return delegate.getParentLogger();
         }
 
