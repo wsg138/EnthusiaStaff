@@ -11,6 +11,11 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 
+plugins {
+    application
+    id("com.gradleup.shadow")
+}
+
 abstract class VerifyStaffBotRuntime : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -113,11 +118,6 @@ abstract class VerifyStaffBotRuntime : DefaultTask() {
             },
             Charsets.UTF_8)
     }
-}
-
-plugins {
-    application
-    id("com.gradleup.shadow")
 }
 
 dependencies {
