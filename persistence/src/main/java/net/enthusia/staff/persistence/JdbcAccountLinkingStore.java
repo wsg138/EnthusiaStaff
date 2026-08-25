@@ -234,35 +234,41 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         if (!expiresAt.isAfter(createdAt)) {
             throw new IllegalArgumentException("link-code expiration must follow creation");
         }
-        JdbcTransactionSupport.execute(dataSource, "Unable to issue account-link code", connection -> {
-            lockInitiator(connection, direction, discordUserId, minecraftPlayerId);
-            supersedePrior(connection, direction, discordUserId, minecraftPlayerId, createdAt);
-            UUID codeId = UUID.randomUUID();
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO discord_link_codes(
-                        code_id, code_hash, direction, initiator_discord_user_id,
-                        initiator_minecraft_player_id, state, created_at, expires_at, revision
-                    ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
-                    """)) {
-                statement.setBytes(1, UuidBytes.toBytes(codeId));
-                statement.setString(2, codeHash);
-                statement.setString(3, direction.name());
-                if (discordUserId == null) {
-                    statement.setNull(4, java.sql.Types.DECIMAL);
-                } else {
-                    statement.setBigDecimal(4, discordId(discordUserId));
-                }
-                if (minecraftPlayerId == null) {
-                    statement.setNull(5, java.sql.Types.BINARY);
-                } else {
-                    statement.setBytes(5, UuidBytes.toBytes(minecraftPlayerId));
-                }
-                statement.setTimestamp(6, Timestamp.from(createdAt));
-                statement.setTimestamp(7, Timestamp.from(expiresAt));
-                JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "account-link code was not inserted");
-            }
-            return null;
-        });
+        deadlockRetry.execute(
+                "Interrupted while retrying account-link code issuance",
+                () -> JdbcTransactionSupport.execute(dataSource, "Unable to issue account-link code", connection -> {
+                    lockInitiator(connection, direction, discordUserId, minecraftPlayerId);
+                    supersedePrior(connection, direction, discordUserId, minecraftPlayerId, createdAt);
+                    UUID codeId = UUID.randomUUID();
+                    try (PreparedStatement statement = connection.prepareStatement("""
+                            INSERT INTO discord_link_codes(
+                                code_id, code_hash, direction, initiator_discord_user_id,
+                                initiator_minecraft_player_id, state, created_at, expires_at, revision
+                            ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
+                            """)) {
+                        statement.setBytes(1, UuidBytes.toBytes(codeId));
+                        statement.setString(2, codeHash);
+                        statement.setString(3, direction.name());
+                        if (discordUserId == null) {
+                            statement.setNull(4, java.sql.Types.DECIMAL);
+                        } else {
+                            statement.setBigDecimal(4, discordId(discordUserId));
+                        }
+                        if (minecraftPlayerId == null) {
+                            statement.setNull(5, java.sql.Types.BINARY);
+                        } else {
+                            statement.setBytes(5, UuidBytes.toBytes(minecraftPlayerId));
+                        }
+                        statement.setTimestamp(6, Timestamp.from(createdAt));
+                        statement.setTimestamp(7, Timestamp.from(expiresAt));
+                        JdbcTransactionSupport.requireSingleUpdate(
+                                statement.executeUpdate(),
+                                "account-link code was not inserted"
+                        );
+                    }
+                    return null;
+                })
+        );
     }
 
     /**
