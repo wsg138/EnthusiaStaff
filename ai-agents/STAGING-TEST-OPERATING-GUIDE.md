@@ -10,68 +10,51 @@ For staging decisions, use this authority order:
 4. this guide;
 5. older handoffs and reports.
 
-The **Current known staging state** section is advisory and time-sensitive. Reconcile live Actions before relying on it. The procedural distinction between Sentinel and canonical Pi staging is durable.
+Live GitHub overrides stale reports. Never combine evidence from different source SHAs into one exact-head pass.
 
 ## The two systems are separate
 
-### Sentinel overview
+### Sentinel
 
-Sentinel is a separate, on-demand PR testing system. Its production controller runs on `Lincoln-PI-4`, polls GitHub outbound through the Enthusia Sentinel GitHub App, validates an exact PR head and manifest/artifact contract, and runs only the requested approved profile in a disposable sandbox.
+Sentinel is the separate on-demand PR testing system. Its production controller runs on `Lincoln-PI-4`, polls GitHub outbound through the Enthusia Sentinel GitHub App, validates an exact PR head plus manifest/artifact contract, and runs only the requested approved profile in a disposable sandbox.
 
-A Sentinel pass proves only the profile Sentinel actually executed. In particular, `PAPER_RESTART_OK` proves Sentinel's disposable two-cycle Paper restart behavior. It does **not** automatically prove EnthusiaStaff's canonical MariaDB/Flyway Pi-staging contract.
+A Sentinel pass proves only the profile Sentinel actually executed. In particular, `PAPER_RESTART_OK` proves Sentinel's disposable two-cycle Paper restart behavior. It does **not** prove the independent canonical MariaDB/Flyway Pi-staging contract.
 
-### Canonical Pi staging overview
+### Canonical Pi staging
 
 Canonical Pi staging is the EnthusiaStaff public-to-private validation bridge:
 
 - public workflow: `wsg138/EnthusiaStaff` → `.github/workflows/pi-staging-check.yml` (`Pi Staging`);
 - private execution workflow: `wsg138/EnthusiaStaff-Staging` → `.github/workflows/plugin-live-test.yml`.
 
-**Do not dispatch `plugin-live-test.yml` directly as a normal package test.** The public `Pi Staging` workflow owns source selection, exact-SHA authorization, hosted build/test, artifact generation, checksum/provenance, bounded transient transfer, private dispatch, correlation, and cleanup.
+**Do not dispatch `plugin-live-test.yml` directly as a normal package test.** The public workflow owns source selection, exact-SHA authorization, hosted build/test, runtime provenance, bounded transient transfer, private dispatch, public/private correlation, and public transfer cleanup.
 
-A pass in Sentinel does not imply a canonical Pi staging pass, and a canonical Pi staging pass does not imply that every Sentinel profile has passed. Apply whichever independent gates the selected package and validation policy require.
+The private workflow independently verifies the bridge, asserts the trusted `Lincoln-PI-4` identity, runs the guarded disposable MariaDB/Paper test, and durably stores only sanitized evidence.
+
+A pass in one system does not substitute for a required pass in the other.
 
 ---
 
-# A. Enthusia Sentinel manual restart testing
-
-## Current GitHub App onboarding assumptions
-
-The current production Sentinel GitHub integration is outbound-only and GitHub-App-authenticated:
-
-- App name: `Enthusia Sentinel`;
-- private/owner-only App;
-- webhooks disabled;
-- OAuth/user authorization disabled;
-- device flow disabled;
-- installed only for `wsg138/EnthusiaStaff` for this operating path;
-- repository permissions are Actions read, Checks read/write, Contents read, Issues read/write, Pull requests read/write, and Metadata read/implicit;
-- the controller uses short-lived installation credentials created from Pi-local protected App material; workers must never copy App private material into Git, Actions secrets, chat, artifacts, logs, or Paper runtime;
-- ordinary production Sentinel operation does not depend on a long-lived PAT or a public webhook listener.
-
-Live Sentinel policy and implementation in `wsg138/EnthusiaStaff-Staging` override this summary if they change.
+# A. Enthusia Sentinel manual testing
 
 ## Admission requirements
 
-Before attempting a same-repository Sentinel test, verify all of the following on the **exact PR head**:
+Before attempting a normal same-repository Sentinel test, verify on the **exact PR head**:
 
-- the PR is in `wsg138/EnthusiaStaff`;
-- the PR is open;
-- the PR is non-draft;
-- the PR head repository is the same repository, not a fork, for the ordinary `status`, `test ...`, and `cancel` path;
-- the current head is the exact immutable 40-character SHA being tested;
+- repository is `wsg138/EnthusiaStaff`;
+- PR is open and non-draft;
+- ordinary `status`, `test ...`, and `cancel` requests use a same-repository head, not a fork;
+- the immutable 40-character SHA being tested is the current PR head;
 - `.enthusia-test.yml` exists at that exact SHA and validates against current Sentinel policy;
 - the manifest declares the requested profile and artifact identity;
-- a successful workflow run for that exact SHA produced the named artifact required by the manifest;
+- a successful workflow run for that exact SHA produced the named executable artifact;
 - the requester is authorized by current private Sentinel policy.
 
-Do not assume that a newly created branch inherits Sentinel readiness merely because another branch or `main` is onboarded. The branch's exact SHA must actually contain the required `.enthusia-test.yml` manifest and the artifact-producing contract, and the exact-SHA artifact must already exist successfully before the command can pass admission.
-
-At the time this guide was introduced, PR #97 was the live same-repository restart-onboarding example, with `.enthusia-test.yml` and an exact-head `enthusiastaff-sentinel-paper` artifact workflow. Workers must still re-check the current branch and current `main` rather than relying on that historical example.
+Do not assume a new branch inherits Sentinel readiness. Its exact SHA must contain the manifest and must already have the required exact-SHA artifact.
 
 ## Exact commands
 
-Current live Sentinel source and its dedicated profile documentation recognize these eleven exact pull-request command bodies:
+Current Sentinel recognizes these exact pull-request command bodies:
 
 ```text
 @enthusia-sentinel status
@@ -87,11 +70,9 @@ Current live Sentinel source and its dedicated profile documentation recognize t
 @enthusia-sentinel approve-test startup
 ```
 
-Do not add arguments, prefixes, suffixes, explanations, surrounding whitespace, or multiple lines to a command body. Ordinary comments are ignored. Do not invent additional Sentinel commands. Reconcile the live parser and profile documentation before relying on this list if Sentinel has changed since this guide was last updated.
+Do not add arguments, explanations, suffixes, or multiple lines. Reconcile the live parser before relying on this list if Sentinel changes.
 
-### CLI usage
-
-Use `gh pr comment` with the exact command as the complete body. For restart:
+Example restart command:
 
 ```bash
 gh pr comment <PR_NUMBER> \
@@ -99,189 +80,150 @@ gh pr comment <PR_NUMBER> \
   --body '@enthusia-sentinel test restart'
 ```
 
-Status:
+## Sentinel result rules
 
-```bash
-gh pr comment <PR_NUMBER> \
-  --repo wsg138/EnthusiaStaff \
-  --body '@enthusia-sentinel status'
-```
+A queued, rejected, stale, moved-head, unauthorized, missing-manifest, missing-artifact, wrong-artifact, cancelled, interrupted, timed-out, or otherwise non-terminal-success request is **not** a pass.
 
-Cancel:
-
-```bash
-gh pr comment <PR_NUMBER> \
-  --repo wsg138/EnthusiaStaff \
-  --body '@enthusia-sentinel cancel'
-```
-
-The `--body` value must remain exactly the documented command. Do not append a note such as a SHA, reason, package ID, or worker name.
-
-## Command meanings
-
-- `status` — reads durable Sentinel state for the current same-repository PR and exact head. It does not enqueue or execute plugin code.
-- `test startup` — validates the exact same-repository PR head, `.enthusia-test.yml`, policy, and exact-SHA successful artifact, then runs the approved one-cycle startup profile.
-- `test restart` — runs exactly two sequential rootless Paper cycles in one disposable state. Cycle 1 must stop and be fully reaped before cycle 2 starts; cycle 2 must observe state created by cycle 1. Success is exactly `PAPER_RESTART_OK`.
-- `test restart-config` — performs the two-cycle restart profile with declared exact-artifact config fixtures and bounded post-restart scalar assertions. Success is `PAPER_RESTART_CONFIG_OK`.
-- `test reload-config` — starts one disposable Paper process, applies only declared atomic config edits, sends exactly one declared reload command, requires declared markers and post-reload assertions, then cleanly stops/reaps. Success is `PAPER_RELOAD_CONFIG_OK`.
-- `test database` — runs the current bounded Sentinel database profile against exactly one declared SQLite fixture using fixed internal read-only checks over two stopped/reaped Paper cycles. It does not accept MariaDB URLs, credentials, manifest SQL, or arbitrary clients. Success is `PAPER_DATABASE_OK`.
-- `test dependencies` — resolves only private locked-registry dependency coordinates, stages the target plus declared dependencies, requires enablement evidence in one rootless Paper cycle, then cleans up. Success is `PAPER_DEPENDENCIES_OK`.
-- `test java-client` — runs the target with one credential-free synthetic offline Java client in the same disposable isolated environment and executes the bounded declared client-command sequence. Success is `JAVA_CLIENT_OK`.
-- `test java-interaction` — runs exactly two fixed credential-free offline Java clients against one isolated loopback-only Paper server, preserving the admitted interleaved command order and proof-bound request/result chain. The live profile uses direct `JAVA_INTERACTION_*` terminal codes for setup, protocol, response, timeout, cancellation, exit, and cleanup outcomes; cleanup failure overrides success.
-- `cancel` — requests cancellation of active jobs linked to the current same-repository PR and exact head while preserving durable cancellation and cleanup rules. It refuses unsafe shared-scope cancellation.
-- `approve-test startup` — the only current fork admission path. It requires an authorized approver, a real fork of the trusted base repository, explicit private-policy permission, exact fork/PR/SHA/manifest/artifact binding, and execution-time revalidation. It admits only the `startup` profile. Ordinary `status` and `cancel` remain same-repository-only for this phase.
-
-## Sentinel restart success and failure
-
-A queued, rejected, stale, moved-head, unauthorized, missing-manifest, missing-artifact, wrong-artifact, cancelled, interrupted, or otherwise non-terminal-success request is **not** a pass.
-
-For `test restart`, do not claim restart success unless the durable Sentinel result is exactly:
+For restart, do not claim success unless the durable result is exactly:
 
 ```text
 PAPER_RESTART_OK
 ```
 
-`PAPER_RESTART_OK` means Sentinel proved the disposable two-cycle Paper restart profile it owns. It does not prove canonical EnthusiaStaff MariaDB/Flyway staging.
+Record the exact PR/head, command/comment identity, exact successful artifact-producing run, Sentinel job identity, terminal result, and applicable cleanup/reap evidence. Do not commit raw private reports or credentials merely to prove a result.
 
-## Sentinel evidence to record
-
-For a Sentinel run used as package evidence, record enough live evidence to reconstruct exactly what was authorized and executed:
-
-- repository and PR number;
-- exact PR head SHA;
-- PR state/non-draft/same-repository admission facts;
-- exact command body and source comment identity;
-- `.enthusia-test.yml` presence and requested profile at the exact head;
-- exact successful artifact-producing workflow run and job;
-- artifact name and exact source binding; checksum/digest when exposed by the current artifact contract;
-- Sentinel durable queue/job identity;
-- terminal Sentinel result code;
-- for restart, cycle 1 readiness, clean stop/exit, complete reap, cycle 2 readiness, persistence/state observation, clean stop/exit, complete reap, and no process overlap;
-- cancellation/timeout state if applicable;
-- final sandbox/lease/download/process cleanup or residue result;
-- GitHub result check/comment identity when available.
-
-Do not commit raw private Sentinel reports or credentials merely to prove the result. Record sanitized identifiers and bounded outcome evidence.
+Sentinel executable inputs continue to use their exact-SHA GitHub Actions artifact contract. The private GitHub Release evidence mechanism described below is **not** an alternative executable-input path for Sentinel.
 
 ---
 
-# B. EnthusiaStaff Canonical Pi Staging
+# B. EnthusiaStaff canonical Pi staging
 
-## Canonical workflow ownership
+## Canonical ownership
 
 The public workflow is the only normal package entry point:
 
 ```text
-wsg138/EnthusiaStaff
-.github/workflows/pi-staging-check.yml
+wsg138/EnthusiaStaff/.github/workflows/pi-staging-check.yml
 ```
 
-The private workflow is an implementation detail of the bridge:
+The private implementation workflow is:
 
 ```text
-wsg138/EnthusiaStaff-Staging
-.github/workflows/plugin-live-test.yml
+wsg138/EnthusiaStaff-Staging/.github/workflows/plugin-live-test.yml
 ```
 
-**Do not dispatch `plugin-live-test.yml` directly as a normal package test.** A direct private dispatch bypasses the public workflow's source-selection and transfer lifecycle and therefore is not canonical package evidence unless a separate owner-directed infrastructure diagnostic explicitly says otherwise.
+The public workflow owns:
 
-The public `Pi Staging` workflow owns:
+- source selection and exact-SHA authorization;
+- hosted Java 21 build/test;
+- runtime artifact/checksum/provenance generation;
+- bounded transient public prerelease transfer;
+- private dispatch and exact run correlation;
+- terminal public result publication;
+- deletion of the transient public transfer.
 
-- source selection;
-- exact SHA authorization;
-- public hosted Java 21 build/test;
-- runtime artifact generation;
-- runtime checksum and manifest/provenance;
-- bounded transient transfer;
-- private dispatch;
-- exact public/private correlation;
-- final public transfer cleanup.
+The private workflow owns:
 
-The private workflow independently re-verifies provenance before Paper is allowed to boot, asserts the trusted `Lincoln-PI-4` runner identity, runs the guarded disposable database/Paper test, and uploads sanitized evidence.
+- exact bridge/provenance re-verification before Paper boots;
+- trusted `Lincoln-PI-4` runner assertion;
+- guarded disposable staging-database reset;
+- Paper cycle 1 startup/readiness, plugin enablement, MariaDB/Flyway checks, clean stop and reap;
+- Paper cycle 2 restart/readiness, persistence assertions, clean stop and reap;
+- final guarded cleanup;
+- sanitized private evidence publication.
 
-## Automatic triggers
+## Private evidence storage
 
-Current public workflow triggers are:
+Canonical Pi **sanitized evidence output is stored as a private GitHub prerelease asset in `wsg138/EnthusiaStaff-Staging` on every private run**. It no longer uses GitHub Actions artifact storage.
 
-- `pull_request_target` for `opened`, `synchronize`, `reopened`, and `ready_for_review`;
-- `push` to `main`;
-- manual `workflow_dispatch`.
+The deterministic identity is:
 
-For a normal same-repository PR, prefer the automatic `pull_request_target` run. The workflow receives the exact PR head metadata from the event, authorizes that same-repository head, builds it publicly, and only after a successful hosted build may bridge it to private Pi staging.
+```text
+release tag: pi-evidence-<PRIVATE_RUN_ID>-<PRIVATE_RUN_ATTEMPT>
+asset name: enthusiastaff-pi-evidence-<EXACT_SOURCE_SHA>-<PRIVATE_RUN_ID>-<PRIVATE_RUN_ATTEMPT>.zip
+```
 
-Fork PRs stay outside the private staging credential/Pi path and receive only the public fork-boundary behavior plus ordinary public checks.
+The trusted private workflow:
 
-Do not launch a duplicate manual run while the automatic run for the same exact head is still executing.
+1. produces the sanitized evidence directory;
+2. accepts only bounded top-level regular files and rejects symlinks;
+3. creates a bounded ZIP;
+4. computes SHA-256;
+5. creates the private prerelease and uploads the ZIP through GitHub's release API;
+6. validates the returned release/asset IDs and hash identity;
+7. fails closed if durable evidence publication does not succeed.
 
-## Failure phases: classify only what actually executed
+The release is evidence **output only**, never an executable input. Credentials, database contents, unsanitized logs, and other raw private runtime material are prohibited.
+
+A successful Paper runtime step with failed evidence publication is **not** a canonical Pi pass.
+
+The separate public runtime-transfer prerelease remains transient and is deleted by the public workflow after the private run. Do not confuse that transfer release with the durable private evidence release.
+
+## Automatic and manual triggers
+
+Current public workflow triggers include same-repository PR events, `push` to `main`, and manual `workflow_dispatch`. For a normal same-repository PR, prefer its automatic canonical run or the exact authorized staging command rather than manually dispatching the private workflow.
+
+The exact PR command accepted by the public control plane is:
+
+```text
+@enthusia-staging test
+```
+
+Use it as the complete comment body. The command handler re-reads the live PR and dispatches the public workflow with the exact current head binding.
+
+Do not launch duplicate runs for the same exact head while a canonical run is already active.
+
+## Failure classification
+
+Classify only what actually executed.
 
 ### 1. Public build/test failure
 
-If the **public hosted build** fails:
+If the public hosted build fails, the Pi was **not tested**. Fix the hosted source/build/test failure first. Do not claim a private runtime result exists.
 
-- **STOP.**
-- The Pi was **not tested**.
-- Do not debug the Pi based on that failure.
-- Do not claim a private runtime artifact exists.
-- Do not claim a correlated private Paper run exists.
-- Fix the hosted product/build/test failure first.
+### 2. Bridge/provenance failure
 
-The public workflow cannot bridge an artifact that was never successfully built and uploaded.
-
-### 2. Bridge failure
-
-The public artifact exists, but checksum/provenance, bounded transfer, private dispatch, correlation, or public-side transfer cleanup failed.
-
-Debug the bridge phase that actually failed. Do not manually bypass provenance, reuse an expired transfer, substitute an older artifact, or dispatch the private workflow ad hoc to manufacture a pass.
+If the public build succeeded but transfer, checksum/provenance, private dispatch, or public/private correlation failed, debug that bridge phase. Do not reuse an older artifact or bypass exact provenance.
 
 ### 3. Private prerequisite rejection
 
-The exact artifact reached the private workflow, but a runner identity, provenance, database-safety, guarded pre-reset, or other prerequisite rejected it before Paper runtime execution.
+If the exact package reached the private workflow but runner identity, provenance, database safety, or another guard rejected it before Paper execution, record that exact prerequisite failure. Do not weaken the guard or substitute a production database.
 
-Inspect the exact sanitized guard failure. Do not weaken the guard, change to a production database, broaden credentials, or allow Paper to boot before the prerequisite succeeds.
+### 4. Paper/runtime failure
 
-### 4. Paper runtime failure
+If Paper actually executed and startup, plugin enablement, MariaDB/Flyway, shutdown/reap, restart/persistence, or the second cycle failed, that is real runtime evidence. Debug the phase that failed.
 
-The exact verified artifact passed private prerequisites and actually reached Paper execution, then Paper startup, plugin enablement, MariaDB/Flyway behavior, shutdown/reap, restart/persistence, or the second cycle failed.
+### 5. Private evidence-publication failure
 
-This is real runtime evidence. Classify and debug the runtime phase that executed; do not relabel it as infrastructure-unavailable merely because the result is inconvenient.
+If the runtime succeeds but the sanitized private GitHub Release cannot be created/uploaded/validated, canonical Pi is still **failed**. Do not substitute an Actions artifact or claim runtime success as a canonical pass.
 
-### 5. Cleanup failure
+### 6. Cleanup failure
 
-Required cleanup is part of acceptance. Treat canonical staging as failed if required guarded database cleanup, process reap, sandbox cleanup, or transient public transfer cleanup fails, even when earlier functional assertions succeeded.
+Required cleanup is part of acceptance. Guarded database cleanup, process reap, sandbox cleanup, and transient public-transfer cleanup must satisfy the current harness. A cleanup failure is not a pass.
 
-## Canonical evidence requirements
+## Canonical pass evidence
 
-Never write “Pi staging passed” merely because the public workflow reached the private-dispatch stage. A canonical pass requires correlated private execution and every applicable runtime and cleanup assertion.
+Never write “Pi staging passed” merely because public dispatch or Paper startup occurred. Record at minimum:
 
-Record, at minimum:
-
-- exact source SHA;
-- source PR number where applicable;
-- public `Pi Staging` run ID and attempt;
-- public hosted build job ID and conclusion;
-- public runtime artifact identity and checksum/digest/provenance manifest;
-- correlated private `plugin-live-test.yml` run ID;
-- private job ID;
-- trusted `Lincoln-PI-4` runner identity;
+- exact source SHA and PR number where applicable;
+- public `Pi Staging` run ID/attempt and hosted build conclusion;
+- public runtime artifact/provenance identity and digest;
+- correlated private `plugin-live-test.yml` run ID/attempt and job ID;
+- trusted `Lincoln-PI-4` identity;
 - guarded pre-reset result;
-- Paper cycle 1 startup/readiness result;
-- EnthusiaStaff plugin enablement result;
-- MariaDB/Flyway result where applicable;
-- cycle 1 clean shutdown and complete process reap;
-- Paper cycle 2 startup/readiness result;
-- persistence/restart assertion result;
-- cycle 2 clean shutdown and complete process reap;
-- final guarded cleanup result;
-- confirmation that no staging process/database/sandbox/transfer residue survived where the current harness asserts it;
-- sanitized private evidence artifact ID and digest when available;
-- public transient-transfer cleanup result.
+- cycle 1 readiness/plugin/storage/Flyway result and clean stop/reap;
+- cycle 2 readiness/persistence result and clean stop/reap;
+- final guarded database/process/sandbox cleanup result;
+- private evidence release ID/tag;
+- private evidence asset ID/name/SHA-256;
+- public transient-transfer cleanup result;
+- terminal canonical public conclusion.
 
-Do not put credentials, database contents, private logs, raw private evidence, or production routes into GitHub documentation.
+Do not put private evidence contents, credentials, database contents, or raw private logs into public documentation. Record only sanitized identities and bounded outcome facts.
 
-## Useful `gh` inspection commands
+## Useful inspection commands
 
-List recent public Pi Staging runs:
+List recent public canonical runs:
 
 ```bash
 gh run list \
@@ -290,35 +232,19 @@ gh run list \
   --limit 20
 ```
 
-Narrow to automatic PR-triggered runs:
-
-```bash
-gh run list \
-  --repo wsg138/EnthusiaStaff \
-  --workflow pi-staging-check.yml \
-  --event pull_request_target \
-  --limit 30
-```
-
-View one public run and its jobs:
+View one public run:
 
 ```bash
 gh run view <PUBLIC_RUN_ID> --repo wsg138/EnthusiaStaff
 ```
 
-View public logs:
-
-```bash
-gh run view <PUBLIC_RUN_ID> --repo wsg138/EnthusiaStaff --log
-```
-
-For a successful bridge dispatch, the private run title is deterministically:
+The correlated private run title is deterministic:
 
 ```text
 EnthusiaStaff bridge <PUBLIC_RUN_ID>-<PUBLIC_RUN_ATTEMPT> / <SOURCE_SHA>
 ```
 
-Find the correlated private run:
+Find it:
 
 ```bash
 gh run list \
@@ -330,48 +256,31 @@ gh run list \
   --jq '.[] | select(.displayTitle == "EnthusiaStaff bridge <PUBLIC_RUN_ID>-<PUBLIC_RUN_ATTEMPT> / <SOURCE_SHA>")'
 ```
 
-View private runtime logs:
+Inspect the private run and resolve its attempt:
 
 ```bash
-gh run view <PRIVATE_RUN_ID> \
-  --repo wsg138/EnthusiaStaff-Staging \
-  --log
+gh run view <PRIVATE_RUN_ID> --repo wsg138/EnthusiaStaff-Staging
+PRIVATE_RUN_ATTEMPT="$(gh api \
+  repos/wsg138/EnthusiaStaff-Staging/actions/runs/<PRIVATE_RUN_ID> \
+  --jq '.run_attempt')"
 ```
 
-Download the sanitized private evidence artifact:
+Download the canonical private sanitized evidence release:
 
 ```bash
-gh run download <PRIVATE_RUN_ID> \
+EVIDENCE_TAG="pi-evidence-<PRIVATE_RUN_ID>-${PRIVATE_RUN_ATTEMPT}"
+
+gh release download "$EVIDENCE_TAG" \
   --repo wsg138/EnthusiaStaff-Staging \
-  --pattern 'enthusiastaff-pi-evidence-*' \
+  --pattern 'enthusiastaff-pi-evidence-*.zip' \
   --dir ./pi-staging-evidence
 ```
 
-Treat downloaded evidence as private operational material. Do not commit or paste raw evidence into public GitHub or chat; extract only sanitized outcome facts that policy permits.
+Treat downloaded evidence as private operational material. Do not commit or paste raw evidence into public GitHub or chat.
 
-## Manual reruns
+## Exact same-repository PR manual procedure
 
-Prefer the automatic same-repository PR run. Manually rerun only after a material product or infrastructure change justifies new evidence. Do not launch a duplicate manual run while an automatic run for the same exact head is still executing.
-
-### Exact current-`main` manual run
-
-Resolve `main` once, then dispatch that exact SHA through the public workflow:
-
-```bash
-MAIN_SHA="$(gh api repos/wsg138/EnthusiaStaff/commits/main --jq '.sha')"
-
-gh workflow run pi-staging-check.yml \
-  --repo wsg138/EnthusiaStaff \
-  --ref main \
-  -f source_sha="$MAIN_SHA" \
-  -f run_pi_test=true
-```
-
-Do not replace `MAIN_SHA` with a different commit after collecting it. If `main` moves and the newer source must be tested, collect a fresh identity and create a separate new run.
-
-### Exact same-repository PR provenance procedure
-
-Collect all PR provenance from one live PR response before dispatching:
+When a manual public workflow dispatch is genuinely required, collect all PR provenance from one live PR response and keep it bound together:
 
 ```bash
 PR_NUMBER=<PR_NUMBER>
@@ -400,22 +309,10 @@ gh workflow run pi-staging-check.yml \
   -f run_pi_test=true
 ```
 
-Use **all** exact PR provenance values. Never collect PR identity, then substitute another SHA, branch, repository, or PR number. A moved PR head requires a fresh provenance collection and a separate new run.
+A moved PR head requires a fresh provenance collection and a separate run.
 
-## Current known staging state
+## Current storage migration note
 
-**Time-sensitive: reconcile current GitHub Actions before relying on this section. Live GitHub overrides it.**
+Historical canonical Pi runs may legitimately contain Actions-artifact evidence. Preserve those historical identities as recorded; do not rewrite past evidence.
 
-Verified against live repository state while this guide was introduced on 2026-08-09:
-
-- Sentinel itself is operational for the delivered manual restart path. The merged Sentinel acceptance record in `wsg138/EnthusiaStaff-Staging` records a real same-repository PR #97 restart at exact head `74e85da69900e8e5e820bf4645984f814d3ff334` ending in `PAPER_RESTART_OK`, followed by clean process/sandbox/lease cleanup.
-- The previous canonical Pi staging MariaDB prerequisite was repaired on the guarded staging boundary. MariaDB is active for the dedicated loopback-only staging environment; no production database access is implied by that repair.
-- Current `wsg138/EnthusiaStaff:main` at the time of verification is `3ce303ce3097be647091e142e801da9a5fd9a8fc`.
-- The latest canonical public `Pi Staging` run for that exact source is run `31298080632`. Its public job `93206301028` (`Build trusted EnthusiaStaff Paper runtime`) failed in `Validate source, build, and package Paper runtime`.
-- The runtime artifact upload was skipped and the bridge job `93206929848` was skipped. Therefore the Pi was **not tested** by that run and no private runtime result exists for it.
-- Current live staging records identify two `ReportStoreIntegrationTest` failures in that public build:
-  - `ReportStoreIntegrationTest.stateLifecycleEnforcesAssignmentRevisionAndQueues()` — expected lifecycle/queue membership was missing (`true` expected, `false` observed);
-  - `ReportStoreIntegrationTest.duplicateSubmissionMergesEvidenceAndReplaysWithoutExtraRows()` — expected duplicate-report evidence rows were missing (`2` expected, `0` observed).
-- Those symptoms are evidence, not a proven root cause. Plausible investigation areas include `ReportStore` product behavior, queue/state-transition semantics, evidence merge/replay, transaction/persistence behavior, or stale test expectations. Do not claim any one of those as the cause without new evidence.
-
-The owner-supplied staging snapshot is therefore consistent with the live current run: the canonical blocker is presently **earlier than the Pi**, in the public hosted build/tests. Future workers must re-check current Actions and replace this classification if live evidence changes.
+The current private workflow contract uses private GitHub Release assets for new canonical Pi evidence. The X04 exact-head run `32797271342` / private run `32797866588` is important historical non-passing evidence: its runner/provenance/Paper runtime passed, but its old `actions/upload-artifact` evidence step hit the GitHub Actions artifact-storage quota, so the canonical result correctly remained `failure`. A newer run is required to prove the Release-based path on an exact package head.
