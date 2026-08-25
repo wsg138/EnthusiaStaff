@@ -126,7 +126,11 @@ public final class MainAccountSelectionService {
         AccountLinkAudit replay = audits.findByOperationKey(operationKey).orElse(null);
         if (replay != null) {
             requireMatchingSetAudit(replay, actor, discordUserId, minecraftPlayerId);
-            return new MainMinecraftAccount(minecraftPlayerId, MainAccountSelectionSource.STAFF_OVERRIDE);
+            return requireCurrentMain(
+                    discordUserId,
+                    MainAccountSelectionSource.STAFF_OVERRIDE,
+                    Optional.of(minecraftPlayerId)
+            );
         }
 
         VersionedSubject versioned = identities.subjectForDiscord(discordUserId)
@@ -143,7 +147,11 @@ public final class MainAccountSelectionService {
                     .orElseThrow(() -> new IllegalStateException("audited main-account replay disappeared"));
             requireMatchingSetAudit(concurrentReplay, actor, discordUserId, minecraftPlayerId);
         }
-        return main;
+        return requireCurrentMain(
+                discordUserId,
+                MainAccountSelectionSource.STAFF_OVERRIDE,
+                Optional.of(minecraftPlayerId)
+        );
     }
 
     public MainMinecraftAccount clearStaffOverride(
@@ -156,9 +164,11 @@ public final class MainAccountSelectionService {
         AccountLinkAudit replay = audits.findByOperationKey(operationKey).orElse(null);
         if (replay != null) {
             requireMatchingClearAudit(replay, actor, discordUserId);
-            UUID replayedPlayerId = replay.minecraftPlayerId()
-                    .orElseThrow(() -> new IllegalStateException("clear-override audit is missing its Minecraft account"));
-            return new MainMinecraftAccount(replayedPlayerId, MainAccountSelectionSource.AUTOMATIC);
+            return requireCurrentMain(
+                    discordUserId,
+                    MainAccountSelectionSource.AUTOMATIC,
+                    Optional.empty()
+            );
         }
 
         VersionedSubject versioned = identities.subjectForDiscord(discordUserId)
@@ -184,15 +194,33 @@ public final class MainAccountSelectionService {
                 AccountLinkAudit concurrentReplay = audits.findByOperationKey(operationKey)
                         .orElseThrow(() -> new IllegalStateException("audited main-account replay disappeared"));
                 requireMatchingClearAudit(concurrentReplay, actor, discordUserId);
-                UUID replayedPlayerId = concurrentReplay.minecraftPlayerId().orElseThrow();
-                return new MainMinecraftAccount(replayedPlayerId, MainAccountSelectionSource.AUTOMATIC);
             }
         } else {
             // A clear against an already-automatic main is an idempotent no-op, so the audit itself
             // is the only durable mutation and does not need a cross-table transaction.
             audits.append(requestedAudit);
         }
-        return automatic;
+        return requireCurrentMain(
+                discordUserId,
+                MainAccountSelectionSource.AUTOMATIC,
+                Optional.empty()
+        );
+    }
+
+    private MainMinecraftAccount requireCurrentMain(
+            DiscordUserId discordUserId,
+            MainAccountSelectionSource expectedSource,
+            Optional<UUID> expectedPlayerId
+    ) {
+        VersionedSubject versioned = identities.subjectForDiscord(discordUserId)
+                .orElseThrow(() -> new IllegalStateException("audited main-account replay lost its Discord subject"));
+        MainMinecraftAccount current = versioned.subject().mainMinecraftAccount()
+                .orElseThrow(() -> new IllegalStateException("audited main-account replay lost its current main"));
+        if (current.source() != expectedSource
+                || (expectedPlayerId.isPresent() && !current.playerId().equals(expectedPlayerId.orElseThrow()))) {
+            throw new IllegalStateException("audited main-account replay no longer matches authoritative state");
+        }
+        return current;
     }
 
     private Optional<MainMinecraftAccount> establishMissingMain(VersionedSubject versioned) {

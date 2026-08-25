@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
 import net.enthusia.staff.persistence.JdbcAccountLinkAuditStore;
 import net.enthusia.staff.persistence.JdbcAccountLinkingStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
@@ -201,6 +202,78 @@ class DiscordAccountConsumedCodeReplayV20IntegrationTest {
             assertThrows(IllegalStateException.class,
                     () -> recovery.reassign(admin, secondDiscord, noOpReassignPlayer, noOpReassignKey));
             assertTrue(identities.currentLink(noOpReassignPlayer).isEmpty());
+        }
+    }
+
+    @Test
+    void auditedMainOverrideReplaysVerifyCurrentAuthoritativeState() throws Exception {
+        UUID firstPlayer = UUID.randomUUID();
+        UUID secondPlayer = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, firstPlayer, "ReplayMainOne", NOW.plusSeconds(40));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, secondPlayer, "ReplayMainTwo", NOW.plusSeconds(40));
+        DiscordUserId discordUserId = new DiscordUserId("18446744073709550131");
+        Actor admin = new Actor(UUID.randomUUID(), "MainReplayAdmin", StaffRank.ADMIN);
+        Clock clock = Clock.fixed(NOW.plusSeconds(50), ZoneOffset.UTC);
+
+        try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
+            JdbcAccountLinkAuditStore audits = new JdbcAccountLinkAuditStore(dataSource);
+            identities.link(
+                    discordUserId,
+                    firstPlayer,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-main-replay-first",
+                    NOW.plusSeconds(41)
+            );
+            identities.link(
+                    discordUserId,
+                    secondPlayer,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-main-replay-second",
+                    NOW.plusSeconds(42)
+            );
+            MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
+                    clock,
+                    identities,
+                    ignored -> OptionalLong.empty(),
+                    new DefaultAuthorizationPolicy(),
+                    audits
+            );
+
+            String setKey = "d04-main-replay-set";
+            var override = mainAccounts.setStaffOverride(admin, discordUserId, secondPlayer, setKey);
+            assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, override.source());
+            assertEquals(override, mainAccounts.setStaffOverride(admin, discordUserId, secondPlayer, setKey));
+
+            String clearKey = "d04-main-replay-clear";
+            var automatic = mainAccounts.clearStaffOverride(admin, discordUserId, clearKey);
+            assertEquals(MainAccountSelectionSource.AUTOMATIC, automatic.source());
+            assertEquals(automatic, mainAccounts.clearStaffOverride(admin, discordUserId, clearKey));
+            assertThrows(IllegalStateException.class,
+                    () -> mainAccounts.setStaffOverride(admin, discordUserId, secondPlayer, setKey));
+            assertEquals(MainAccountSelectionSource.AUTOMATIC,
+                    identities.subjectForDiscord(discordUserId).orElseThrow()
+                            .subject().mainMinecraftAccount().orElseThrow().source());
+
+            mainAccounts.setStaffOverride(admin, discordUserId, firstPlayer, "d04-main-replay-set-later");
+            assertThrows(IllegalStateException.class,
+                    () -> mainAccounts.clearStaffOverride(admin, discordUserId, clearKey));
+            var currentOverride = identities.subjectForDiscord(discordUserId).orElseThrow()
+                    .subject().mainMinecraftAccount().orElseThrow();
+            assertEquals(firstPlayer, currentOverride.playerId());
+            assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, currentOverride.source());
+
+            mainAccounts.clearStaffOverride(admin, discordUserId, "d04-main-replay-fresh-clear");
+            String noOpClearKey = "d04-main-replay-noop-clear";
+            var noOpClear = mainAccounts.clearStaffOverride(admin, discordUserId, noOpClearKey);
+            assertEquals(MainAccountSelectionSource.AUTOMATIC, noOpClear.source());
+            mainAccounts.setStaffOverride(admin, discordUserId, secondPlayer, "d04-main-replay-after-noop");
+            assertThrows(IllegalStateException.class,
+                    () -> mainAccounts.clearStaffOverride(admin, discordUserId, noOpClearKey));
+            var finalMain = identities.subjectForDiscord(discordUserId).orElseThrow()
+                    .subject().mainMinecraftAccount().orElseThrow();
+            assertEquals(secondPlayer, finalMain.playerId());
+            assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, finalMain.source());
         }
     }
 
