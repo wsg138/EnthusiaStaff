@@ -73,6 +73,7 @@ public final class AccountLinkRecoveryService {
                     requestedAudit
             );
         }
+        requireCurrentLink(linked, discordUserId);
         mainAccounts.evaluate(discordUserId);
         return linked;
     }
@@ -106,10 +107,13 @@ public final class AccountLinkRecoveryService {
                     requestedAudit.createdAt(),
                     requestedAudit
             );
-            mainAccounts.evaluate(expectedDiscordUserId);
         } else {
             // A confirmed no-op is still auditable, but there is no identity mutation to combine with it.
             audits.append(requestedAudit);
+        }
+        requireNoCurrentLink(minecraftPlayerId);
+        if (existing.isPresent()) {
+            mainAccounts.evaluate(expectedDiscordUserId);
         }
         return existing.isPresent();
     }
@@ -140,11 +144,28 @@ public final class AccountLinkRecoveryService {
                 requestedAudit.createdAt(),
                 requestedAudit
         );
+        requireCurrentLink(linked, newDiscordUserId);
         if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
             mainAccounts.evaluate(oldDiscordUserId);
         }
         mainAccounts.evaluate(newDiscordUserId);
         return linked;
+    }
+
+    private void requireCurrentLink(VersionedLink expected, DiscordUserId expectedDiscordUserId) {
+        VersionedLink current = identities.currentLink(expected.link().minecraftPlayerId()).orElseThrow(() ->
+                new IllegalStateException("audited account-link replay no longer resolves to a current link"));
+        if (!current.linkId().equals(expected.linkId())
+                || !current.link().discordUserId().equals(expectedDiscordUserId)
+                || current.link().unlinkedAt().isPresent()) {
+            throw new IllegalStateException("audited account-link replay no longer matches current authoritative state");
+        }
+    }
+
+    private void requireNoCurrentLink(UUID minecraftPlayerId) {
+        if (identities.currentLink(minecraftPlayerId).isPresent()) {
+            throw new IllegalStateException("audited account-unlink replay no longer matches current authoritative state");
+        }
     }
 
     private void requireCompatibleAudit(AccountLinkAudit requested) {
