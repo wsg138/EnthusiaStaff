@@ -8,7 +8,13 @@ Status: ES-D05 implementation contract. This document covers the isolated staff-
 
 The runtime uses JDA 6.5.0 without the optional voice/audio-native stack. JDA owns Discord REST rate-limit scheduling and Gateway reconnect behavior. EnthusiaStaff adds fail-closed identity/guild checks, bounded application work, lifecycle health, and replay protection around it.
 
-The executable shaded artifact is `staff-bot/build/libs/EnthusiaStaff-StaffBot-<version>.jar`. Repository `check` verifies the jar is readable, has the correct `Main-Class`, includes both the Enthusia entry point and JDA, excludes the unused Opus/Tink audio classes, and records size/SHA-256 evidence under `build/reports/runtime-jars/` for hosted validation.
+The executable shaded artifact is `staff-bot/build/libs/EnthusiaStaff-StaffBot-<version>.jar`. Repository `check` verifies the jar is readable, has the correct `Main-Class`, includes both the Enthusia entry point and JDA, excludes the unused Opus/Tink audio classes, verifies the patched Jackson versions, and records size/SHA-256 evidence under `build/reports/runtime-jars/` for hosted validation.
+
+## Dependency security note
+
+The implementation-time dependency review found that JDA 6.5.0 publishes `jackson-core:2.22.0` and `jackson-databind:2.22.0`. `jackson-databind:2.22.0` is in the affected range for CVE-2026-59889; upstream fixes that issue in 2.22.1. The staff-bot runtime therefore pins both Jackson core components to 2.22.1, and `verifyStaffBotRuntime` fails the build if resolution drifts away from 2.22.1.
+
+JDA's earlier GHSA-93fv-4pm9-xp28 SSRF issue was fixed in 6.1.3; selected JDA 6.5.0 is beyond that fixed release. No voice path is used, so JDA's supported `opus-java` and `tink` exclusions remove those unnecessary native/crypto dependencies from the runtime.
 
 ## Fixed public identities
 
@@ -50,7 +56,7 @@ Optional variables:
 
 D05 enables only `GUILD_MEMBERS` as an explicit privileged Gateway intent. It does not request Message Content because no D05 feature reads messages. Member chunking/cache are disabled at this foundation layer.
 
-Later interaction work is submitted to a fixed-size executor with a bounded queue. Saturation rejects new work instead of growing memory without bound and increments a privacy-safe health counter. Gateway lifecycle callbacks are not routed through that application queue, so command workload saturation cannot prevent reconnect/identity fencing.
+Later interaction work is submitted to a fixed-size executor with a bounded queue. Saturation rejects new work instead of growing memory without bound and increments a privacy-safe health counter. Gateway lifecycle callbacks are not routed through that application queue, so command workload saturation cannot prevent reconnect/identity fencing. Worker threads receive a five-second graceful shutdown window and are daemon threads so a task that ignores interruption cannot indefinitely pin the standalone JVM during forced termination.
 
 The in-process interaction replay guard is also bounded and fails closed at capacity. It is intended for read-only interaction replay protection. Destructive future packages must additionally use durable database/domain idempotency and must not treat the in-memory guard as a transaction boundary.
 
@@ -63,7 +69,7 @@ The HTTP listener is loopback-only.
 - `HEAD` is supported; other methods receive `405`.
 - responses are `Cache-Control: no-store` and contain only environment, lifecycle phase, readiness, a fixed reason category, and rejected-work count.
 
-A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns.
+A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. Terminal failure cannot be changed back to `READY` by a late session callback.
 
 ## Shutdown and non-destructive smoke validation
 

@@ -12,7 +12,12 @@ dependencies {
         exclude(module = "opus-java")
         exclude(module = "tink")
     }
-    runtimeOnly("org.slf4j:slf4j-jdk14:2.0.17")
+
+    // JDA 6.5.0 publishes Jackson 2.22.0. CVE-2026-59889 is fixed in 2.22.1.
+    // Keep both Jackson core components aligned on the patched release.
+    runtimeOnly("com.fasterxml.jackson.core:jackson-core:2.22.1")
+    runtimeOnly("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    runtimeOnly("org.slf4j:slf4j-jdk14:2.0.18")
 }
 
 application {
@@ -40,6 +45,28 @@ val verifyStaffBotRuntime by tasks.registering {
     doLast {
         val runtimeJar = tasks.shadowJar.get().archiveFile.get().asFile
         check(runtimeJar.isFile) { "Missing staff-bot runtime jar: $runtimeJar" }
+
+        fun resolvedVersion(group: String, name: String): String {
+            val matches = configurations.runtimeClasspath.get()
+                .resolvedConfiguration
+                .resolvedArtifacts
+                .filter { artifact ->
+                    artifact.moduleVersion.id.group == group && artifact.name == name
+                }
+            check(matches.size == 1) {
+                "Expected exactly one resolved $group:$name artifact but found ${matches.size}"
+            }
+            return matches.single().moduleVersion.id.version
+        }
+
+        val jacksonCoreVersion = resolvedVersion("com.fasterxml.jackson.core", "jackson-core")
+        val jacksonDatabindVersion = resolvedVersion("com.fasterxml.jackson.core", "jackson-databind")
+        check(jacksonCoreVersion == "2.22.1") {
+            "staff-bot must resolve patched jackson-core 2.22.1, found $jacksonCoreVersion"
+        }
+        check(jacksonDatabindVersion == "2.22.1") {
+            "staff-bot must resolve patched jackson-databind 2.22.1, found $jacksonDatabindVersion"
+        }
 
         var entryCount = 0
         ZipFile(runtimeJar).use { archive ->
@@ -97,6 +124,8 @@ val verifyStaffBotRuntime by tasks.registering {
                 appendLine("entries: $entryCount")
                 appendLine("main-class: net.enthusia.staff.discordbot.StaffBotApplication")
                 appendLine("jda-runtime: present")
+                appendLine("jackson-core: $jacksonCoreVersion")
+                appendLine("jackson-databind: $jacksonDatabindVersion")
                 appendLine("opus-native-classes: 0")
                 appendLine("tink-audio-crypto-classes: 0")
             },
