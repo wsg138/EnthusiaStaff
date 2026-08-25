@@ -89,7 +89,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: write
     env:
       SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
@@ -203,7 +203,7 @@ jobs:
             echo '::error::request_correlation is not a bounded safe observability identifier'
             exit 1
           }
-          [[ ${#requester} -le 100 && "$requester" =~ ^[A-Za-z0-9_.:@\[\]-]+$ ]] || {
+          [[ ${#requester} -le 100 && "$requester" =~ ^[][A-Za-z0-9_.:@-]+$ ]] || {
             echo '::error::request_requester is not a bounded safe display identity'
             exit 1
           }
@@ -272,6 +272,7 @@ jobs:
       actions: read
       contents: write
       issues: write
+      pull-requests: write
       statuses: write
     outputs:
       private_run_id: ${{ steps.locate.outputs.run_id }}
@@ -552,6 +553,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: write
       statuses: write
     env:
       SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
