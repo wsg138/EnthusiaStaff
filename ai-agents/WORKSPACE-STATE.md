@@ -18,30 +18,39 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X04 Sentinel | Exact-head artifact run `32763957749` / job `97549055756` PASS; artifact `9533760777`, digest `sha256:285503604af4a7d2bd0bde450acf594909490767fdfc433a66e74ae9fe2d6d16`. Exact restart request comment `5400262894` was bound to `9d44bbc...` as durable job `231` and reached terminal `PAPER_RESTART_OK`; Paper reached readiness and stopped cleanly twice against one disposable state. Sentinel does not substitute for canonical Pi. |
 | X04 canonical Pi blocker | Required canonical Pi is not verified. Existing automatic `pull_request_target` runs cannot be correlated through the connected commit-workflow listing, and PR #152 does not yet provide stable exact-head public/private run evidence. Independent control-plane fix PR #156 remains open/unmerged at `a1903feaf81cff9d8a151d197fc7efe2b1b855ae`; this worker did not modify or merge it. |
 | X04 exact unblock | Obtain directly inspectable exact-head standalone CI; resolve/static-clean Codacy; make the trusted canonical Pi path discoverable/executable and verify exact public/private Pi evidence; reconcile live heads; then merge both implementation PRs normally and verify post-merge parity/metadata/cleanup. |
-| Discord program active package | None in canonical `main` state. `ES-D04 — Account linking and DiscordSRV migration` remains `BLOCKED` / `PARKED_BLOCKED` with implementation preserved on `package/es-d04-account-linking`, PR #151, frozen head `b231022b065b5843d2dd73811dfbf51acba6314b`. |
-| Discord latest completion | `ES-D03 — Authorization and cross-platform policy` is `COMPLETE` through PR #149 on normal merge. Frozen validated merge-ready head: `5cd98a719e30eff64d159f1e219ea70553c66c0`. |
-| D04 product state | Implementation/review scope is complete at the frozen head: durable two-direction five-minute account linking, V20 persistence/auditing, atomic recovery/main replacement, public PlayTime active-minute main selection, explicit DiscordSRV import and best-effort legacy mirroring, Paper `/link` and `/unlink`, concurrency/replay/restart coverage. |
-| D04 hosted validation | Coverage/full validation `32738304907` / job `97466391922` PASS on exact frozen SHA with Java 21, MariaDB/Testcontainers, runtime JARs, provider-contract inspection, JaCoCo and Codacy coverage; Sentinel durable job `225` ended `PAPER_RESTART_OK`. |
-| D04 blocker | Required canonical Pi staging is not verified; D04 remains independently parked on its exact frozen source. |
-| Ready Discord work | `ES-D05 — Staff bot runtime foundation` remains independently available through its dedicated Discord-program registry/lane; concurrent Discord work was not modified by X04. |
-| Migration state | Canonical `main` remains at V19 until D04 merges. X04 adds no production migration execution. |
-| Collision reconciliation | Blocker-publication branch starts exactly from canonical `main` `cb19463f16e124564ccbc17034b4c18f5cd0281f`. X04 did not absorb D04, D05, website, or staging-control-plane PR #156 work. |
-| Independently parked packages | `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED` on their own recorded conditions and were not modified by X04. |
-| Production boundary | No production Discord configuration, reputation/player rows, bot token, private production data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
-| Current handoff | `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md` |
+| Discord program active package | `ES-D05 — Staff bot runtime foundation` is `ACTIVE` on `package/es-d05-staff-bot-runtime`, claimed from exact `main` `168145d76efb13ed15f21f8a31ece3e96f7b7c7b`. Its canonical handoff is `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`. |
+| Discord latest completion | `ES-D03 — Authorization and cross-platform policy` is `COMPLETE` through PR #149 on normal merge. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`. |
+| D04 live isolation | D04 PR #151 was actively receiving separate-worker commits during D05 selection; observed head `7eab5572b476419b125c6262c72b434f44ef1ef1`. D05 does not touch, synchronize, or replace that branch. Its older parked-state text below is historical until the D04 worker publishes newer canonical state. |
+| D04 product state | Prior canonical record: durable two-direction five-minute account linking, V20 persistence/auditing, atomic recovery/main replacement, public PlayTime active-minute main selection, explicit DiscordSRV import and best-effort legacy mirroring, Paper `/link` and `/unlink`, concurrency/replay/restart coverage. Live PR #151 overrides stale frozen-head details. |
+| D04 hosted validation | Prior canonical evidence: Coverage/full validation `32738304907` / job `97466391922` and Sentinel durable job `225` were successful for an older frozen SHA. Newer D04 commits require their own exact-head evaluation by the D04 worker. |
+| D04 blocker | Prior canonical blocker was required canonical Pi staging. A separate D04 worker is actively reconciling the changed condition and newer product head; D05 makes no D04 status claim. |
+| D05 runtime contract | PR #153 merged normally before D05 claim, recording production app `1541279426233376818`, staging app `1541279616881397772`, guild `1410303324745371709`, and staging test channel `1541286004298752091`; tokens remain secret. |
+| D05 implementation state | Fresh review selected official JDA `6.5.0`; D05 will be a separate Java 21 process with exact app/guild fencing, bounded application work, local health/readiness, graceful shutdown, interaction replay protection, and no destructive commands or production deployment. |
+| Migration state | Canonical `main` is at V19. D05 adds no migration and does not consume D04's unmerged V20. |
+| D05 collision reconciliation | No existing D05, website, or competition branch was found at claim. Branch starts exactly from canonical `main` `168145d76efb13ed15f21f8a31ece3e96f7b7c7b`; D04 and universal X04/X03 work remain isolated. |
+| Independently parked packages | `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED`; X04 remains separately parked. D05 does not modify them. |
+| Production boundary | No production Discord configuration, bot token, private production data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
+| Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-24-es-x04-commend-provider-blocked.md` |
+| Discord current handoff | `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md` |
 
 ## X04 parked record
 
-X04 was selected because its existing paired PRs made it the highest-priority universal `ACTIONABLE_CONTINUATION`. The implementation is frozen at Commend `30ac1afbb6b45e958c6972330c42a870d619d530` and Staff `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1` while required evidence remains incomplete. The worker repaired one bounded persistence concern, mirrored the change exactly, added focused regression coverage, preserved read-only CI permissions, completed exact-head Staff full validation, and obtained exact-head Sentinel restart success.
+X04 was selected because its existing paired PRs made it the highest-priority universal `ACTIONABLE_CONTINUATION`. The implementation is frozen at Commend `30ac1afbb6b45e958c6972330c42a870d619d530` and Staff `9d44bbcac4d3cb9a489e9c9f755e80ae7ace28b1` while required evidence remains incomplete. The worker repaired one bounded persistence concern, mirrored the change exactly, added focused regression tests, preserved read-only CI permissions, completed exact-head Staff full validation, and obtained exact-head Sentinel restart success.
 
 The package is not merged because validation policy requires all applicable exact reviewed-head evidence. The observable Commend build remains merge-ref-only; Staff Codacy reports unresolved new static issues; and canonical Pi cannot yet be correlated through the current trusted public control plane. Missing or merge-ref-only evidence is explicitly not called a pass.
 
 Resume the existing X04 PRs only when those exact conditions can be resolved and proven. Do not replace the implementation branches or bypass the independent staging-control-plane review.
 
-## D04 parked record
+## D05 active record
 
-D04 remains independently parked at frozen head `b231022b065b5843d2dd73811dfbf51acba6314b` on its own exact-head canonical Pi evidence condition. X04 did not change D04 product or routing state.
+D05 was selected through the dedicated Discord-program lane after D04 was found to be concurrently active on its existing branch. The owner-authored D05 identity contract in PR #153 was validated and merged normally first so implementation starts from one canonical contract. D05 owns only the new staff-bot runtime/build/tests/docs and directly necessary package-state files; it does not absorb D04, website, competition, or global provider work.
+
+Starting Staff `main` is `168145d76efb13ed15f21f8a31ece3e96f7b7c7b`; implementation branch is `package/es-d05-staff-bot-runtime`. Main remains at Flyway V19 and D05 adds no migration. JDA 6.5.0 is the selected maintained Discord library; audio dependencies are intentionally excluded. Production Discord configuration, credentials, deployment, and moderation authority remain out of scope.
+
+## D04 independent record
+
+D04 is actively owned by another worker in PR #151. The previous parked handoff remains historical input only; live GitHub and the D04 worker's eventual publication supersede it. D05 must not edit or rebase D04 merely because staging-control work on `main` changed.
 
 ## Independent ES-X03 blocker
 
-ES-X03 remains parked on its own recorded blocker. X04 does not alter that package, its provider mirror, or its frozen validation evidence.
+ES-X03 remains parked on its own recorded blocker. D05 does not alter that package, its provider mirror, or its frozen validation evidence.
