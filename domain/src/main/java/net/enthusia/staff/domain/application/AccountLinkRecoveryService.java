@@ -53,7 +53,10 @@ public final class AccountLinkRecoveryService {
         AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.FORCE_LINK,
                 discordUserId, minecraftPlayerId, FORCE_LINK_DETAIL, clock.instant());
-        requireCompatibleAudit(requestedAudit);
+        if (isAuditReplay(requestedAudit)) {
+            return requireDesiredCurrentLink(minecraftPlayerId, discordUserId);
+        }
+
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         VersionedLink linked;
         if (existing.isPresent()) {
@@ -74,7 +77,9 @@ public final class AccountLinkRecoveryService {
             );
         }
         requireCurrentLink(linked, discordUserId);
-        mainAccounts.evaluate(discordUserId);
+        if (!linked.replayed()) {
+            mainAccounts.evaluate(discordUserId);
+        }
         return linked;
     }
 
@@ -89,33 +94,39 @@ public final class AccountLinkRecoveryService {
         AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.FORCE_UNLINK,
                 expectedDiscordUserId, minecraftPlayerId, FORCE_UNLINK_DETAIL, clock.instant());
-        requireCompatibleAudit(requestedAudit);
+        if (isAuditReplay(requestedAudit)) {
+            requireNoCurrentLink(minecraftPlayerId);
+            return false;
+        }
+
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
-        if (existing.isPresent()) {
-            VersionedLink current = existing.orElseThrow();
-            if (!current.link().discordUserId().equals(expectedDiscordUserId)) {
-                throw new IllegalStateException("current Discord owner does not match the recovery request");
-            }
-            Optional<MainMinecraftAccount> replacement =
-                    mainAccounts.replacementForUnlink(expectedDiscordUserId, minecraftPlayerId);
-            identities.unlinkWithAudit(
-                    expectedDiscordUserId,
-                    minecraftPlayerId,
-                    current.revision(),
-                    replacement,
-                    operationKey + ":unlink",
-                    requestedAudit.createdAt(),
-                    requestedAudit
-            );
-        } else {
+        if (existing.isEmpty()) {
             // A confirmed no-op is still auditable, but there is no identity mutation to combine with it.
             audits.append(requestedAudit);
+            requireNoCurrentLink(minecraftPlayerId);
+            return false;
         }
+
+        VersionedLink current = existing.orElseThrow();
+        if (!current.link().discordUserId().equals(expectedDiscordUserId)) {
+            throw new IllegalStateException("current Discord owner does not match the recovery request");
+        }
+        Optional<MainMinecraftAccount> replacement =
+                mainAccounts.replacementForUnlink(expectedDiscordUserId, minecraftPlayerId);
+        VersionedLink unlinked = identities.unlinkWithAudit(
+                expectedDiscordUserId,
+                minecraftPlayerId,
+                current.revision(),
+                replacement,
+                operationKey + ":unlink",
+                requestedAudit.createdAt(),
+                requestedAudit
+        );
         requireNoCurrentLink(minecraftPlayerId);
-        if (existing.isPresent()) {
+        if (!unlinked.replayed()) {
             mainAccounts.evaluate(expectedDiscordUserId);
         }
-        return existing.isPresent();
+        return !unlinked.replayed();
     }
 
     public VersionedLink reassign(
@@ -129,7 +140,10 @@ public final class AccountLinkRecoveryService {
         AccountLinkAudit requestedAudit = auditRecord(
                 operationKey, actor, AccountLinkAuditAction.REASSIGN,
                 newDiscordUserId, minecraftPlayerId, REASSIGN_DETAIL, clock.instant());
-        requireCompatibleAudit(requestedAudit);
+        if (isAuditReplay(requestedAudit)) {
+            return requireDesiredCurrentLink(minecraftPlayerId, newDiscordUserId);
+        }
+
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         DiscordUserId oldDiscordUserId = existing.map(value -> value.link().discordUserId()).orElse(null);
         Optional<MainMinecraftAccount> replacement = oldDiscordUserId != null
@@ -145,20 +159,28 @@ public final class AccountLinkRecoveryService {
                 requestedAudit
         );
         requireCurrentLink(linked, newDiscordUserId);
-        if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
-            mainAccounts.evaluate(oldDiscordUserId);
+        if (!linked.replayed()) {
+            if (oldDiscordUserId != null && !oldDiscordUserId.equals(newDiscordUserId)) {
+                mainAccounts.evaluate(oldDiscordUserId);
+            }
+            mainAccounts.evaluate(newDiscordUserId);
         }
-        mainAccounts.evaluate(newDiscordUserId);
         return linked;
     }
 
-    private void requireCurrentLink(VersionedLink expected, DiscordUserId expectedDiscordUserId) {
-        VersionedLink current = identities.currentLink(expected.link().minecraftPlayerId()).orElseThrow(() ->
+    private VersionedLink requireDesiredCurrentLink(UUID minecraftPlayerId, DiscordUserId expectedDiscordUserId) {
+        VersionedLink current = identities.currentLink(minecraftPlayerId).orElseThrow(() ->
                 new IllegalStateException("audited account-link replay no longer resolves to a current link"));
-        if (!current.linkId().equals(expected.linkId())
-                || !current.link().discordUserId().equals(expectedDiscordUserId)
-                || current.link().unlinkedAt().isPresent()) {
+        if (!current.link().discordUserId().equals(expectedDiscordUserId)) {
             throw new IllegalStateException("audited account-link replay no longer matches current authoritative state");
+        }
+        return current;
+    }
+
+    private void requireCurrentLink(VersionedLink expected, DiscordUserId expectedDiscordUserId) {
+        VersionedLink current = requireDesiredCurrentLink(expected.link().minecraftPlayerId(), expectedDiscordUserId);
+        if (!current.linkId().equals(expected.linkId())) {
+            throw new IllegalStateException("audited account-link result was superseded before it could be verified");
         }
     }
 
@@ -168,18 +190,21 @@ public final class AccountLinkRecoveryService {
         }
     }
 
-    private void requireCompatibleAudit(AccountLinkAudit requested) {
-        audits.findByOperationKey(requested.operationKey()).ifPresent(existing -> {
-            boolean sameRequest = existing.actor().equals(requested.actor())
-                    && existing.action() == requested.action()
-                    && existing.discordUserId().equals(requested.discordUserId())
-                    && existing.minecraftPlayerId().equals(requested.minecraftPlayerId())
-                    && existing.detail().equals(requested.detail());
-            if (!sameRequest) {
-                throw new IllegalStateException(
-                        "account-link recovery operation key was already used for a different audited request");
-            }
-        });
+    private boolean isAuditReplay(AccountLinkAudit requested) {
+        AccountLinkAudit existing = audits.findByOperationKey(requested.operationKey()).orElse(null);
+        if (existing == null) {
+            return false;
+        }
+        boolean sameRequest = existing.actor().equals(requested.actor())
+                && existing.action() == requested.action()
+                && existing.discordUserId().equals(requested.discordUserId())
+                && existing.minecraftPlayerId().equals(requested.minecraftPlayerId())
+                && existing.detail().equals(requested.detail());
+        if (!sameRequest) {
+            throw new IllegalStateException(
+                    "account-link recovery operation key was already used for a different audited request");
+        }
+        return true;
     }
 
     private static AccountLinkAudit auditRecord(

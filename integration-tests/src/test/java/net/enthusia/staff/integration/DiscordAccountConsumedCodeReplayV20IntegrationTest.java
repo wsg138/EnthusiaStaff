@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -84,9 +85,15 @@ class DiscordAccountConsumedCodeReplayV20IntegrationTest {
         UUID forceLinkPlayer = UUID.randomUUID();
         UUID forceUnlinkPlayer = UUID.randomUUID();
         UUID reassignPlayer = UUID.randomUUID();
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, forceLinkPlayer, "ReplayForceLink", NOW.plusSeconds(20));
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, forceUnlinkPlayer, "ReplayForceUnlink", NOW.plusSeconds(20));
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, reassignPlayer, "ReplayReassign", NOW.plusSeconds(20));
+        UUID noOpLinkPlayer = UUID.randomUUID();
+        UUID noOpUnlinkPlayer = UUID.randomUUID();
+        UUID noOpReassignPlayer = UUID.randomUUID();
+        for (UUID playerId : java.util.List.of(
+                forceLinkPlayer, forceUnlinkPlayer, reassignPlayer,
+                noOpLinkPlayer, noOpUnlinkPlayer, noOpReassignPlayer)) {
+            MariaDbIntegrationSupport.insertPlayer(DATABASE, playerId, "Replay" + playerId.toString().substring(0, 8),
+                    NOW.plusSeconds(20));
+        }
         DiscordUserId firstDiscord = new DiscordUserId("18446744073709550121");
         DiscordUserId secondDiscord = new DiscordUserId("18446744073709550122");
         Actor admin = new Actor(UUID.randomUUID(), "ReplayAdmin", StaffRank.ADMIN);
@@ -140,6 +147,60 @@ class DiscordAccountConsumedCodeReplayV20IntegrationTest {
             assertThrows(IllegalStateException.class,
                     () -> recovery.reassign(admin, secondDiscord, reassignPlayer, staleReassignKey));
             assertTrue(identities.currentLink(reassignPlayer).isEmpty());
+
+            var noOpLink = identities.link(
+                    firstDiscord,
+                    noOpLinkPlayer,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-noop-force-link-seed",
+                    NOW.plusSeconds(31)
+            );
+            String noOpLinkKey = "d04-noop-force-link";
+            recovery.forceLink(admin, firstDiscord, noOpLinkPlayer, noOpLinkKey);
+            identities.unlink(
+                    firstDiscord,
+                    noOpLinkPlayer,
+                    noOpLink.revision(),
+                    "d04-noop-force-link-later-unlink",
+                    NOW.plusSeconds(32)
+            );
+            assertThrows(IllegalStateException.class,
+                    () -> recovery.forceLink(admin, firstDiscord, noOpLinkPlayer, noOpLinkKey));
+            assertTrue(identities.currentLink(noOpLinkPlayer).isEmpty());
+
+            String noOpUnlinkKey = "d04-noop-force-unlink";
+            assertFalse(recovery.forceUnlink(admin, firstDiscord, noOpUnlinkPlayer, noOpUnlinkKey));
+            identities.link(
+                    firstDiscord,
+                    noOpUnlinkPlayer,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-noop-force-unlink-later-link",
+                    NOW.plusSeconds(31)
+            );
+            assertThrows(IllegalStateException.class,
+                    () -> recovery.forceUnlink(admin, firstDiscord, noOpUnlinkPlayer, noOpUnlinkKey));
+            assertEquals(firstDiscord,
+                    identities.currentLink(noOpUnlinkPlayer).orElseThrow().link().discordUserId());
+
+            var noOpReassign = identities.link(
+                    secondDiscord,
+                    noOpReassignPlayer,
+                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                    "d04-noop-reassign-seed",
+                    NOW.plusSeconds(31)
+            );
+            String noOpReassignKey = "d04-noop-reassign";
+            recovery.reassign(admin, secondDiscord, noOpReassignPlayer, noOpReassignKey);
+            identities.unlink(
+                    secondDiscord,
+                    noOpReassignPlayer,
+                    noOpReassign.revision(),
+                    "d04-noop-reassign-later-unlink",
+                    NOW.plusSeconds(32)
+            );
+            assertThrows(IllegalStateException.class,
+                    () -> recovery.reassign(admin, secondDiscord, noOpReassignPlayer, noOpReassignKey));
+            assertTrue(identities.currentLink(noOpReassignPlayer).isEmpty());
         }
     }
 
