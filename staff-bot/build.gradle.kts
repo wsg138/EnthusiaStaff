@@ -1,3 +1,4 @@
+import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 
@@ -54,7 +55,8 @@ val verifyStaffBotRuntime by tasks.registering {
             var hasJda = false
             val entries = archive.entries()
             while (entries.hasMoreElements()) {
-                val name = entries.nextElement().name
+                val entry = entries.nextElement()
+                val name = entry.name
                 entryCount++
                 if (name == "net/enthusia/staff/discordbot/StaffBotApplication.class") {
                     hasApplication = true
@@ -68,8 +70,12 @@ val verifyStaffBotRuntime by tasks.registering {
                 check(!name.startsWith("com/google/crypto/tink/")) {
                     "Audio crypto classes leaked into the no-audio staff-bot runtime: $name"
                 }
+                if (!entry.isDirectory) {
+                    archive.getInputStream(entry).use { input ->
+                        input.transferTo(OutputStream.nullOutputStream())
+                    }
+                }
             }
-            check(archive.testzip() == null) { "Staff-bot runtime jar contains a corrupt ZIP entry" }
             check(hasApplication) { "Staff-bot runtime jar is missing its application entry point" }
             check(hasJda) { "Staff-bot runtime jar is missing JDA runtime classes" }
         }
