@@ -28,6 +28,7 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.integration.ReputationRestrictionSynchronizer;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -55,6 +56,7 @@ final class PaperIntegrationManager {
     private RoseChatIntegration roseChat;
     private MarketIntegration market;
     private ReputationIntegration reputation;
+    private ReputationRestrictionSynchronizer reputationRestrictions;
 
     PaperIntegrationManager(Dependencies dependencies) {
         this.dependencies = dependencies;
@@ -93,6 +95,20 @@ final class PaperIntegrationManager {
         );
         recordProviderIssue(MARKET, market.availability(), market.issue());
         recordProviderIssue(REPUTATION, reputation.availability(), reputation.issue());
+        if (reputation.availability() == IntegrationAvailability.AVAILABLE) {
+            reputationRestrictions = new ReputationRestrictionSynchronizer(
+                    plugin(),
+                    clock(),
+                    reputation,
+                    dependencies.stores().punishmentService(),
+                    () -> {
+                        PunishmentService service = dependencies.stores().punishmentService().get();
+                        return service == null ? null : service::activeSanctions;
+                    },
+                    workers()
+            );
+            reputationRestrictions.start();
+        }
     }
 
     void initializeAutomod() {
@@ -161,6 +177,11 @@ final class PaperIntegrationManager {
 
     void closeChatBridge() {
         resources.close("RoseChat bridge", roseChat);
+        closeModerationProviders();
+    }
+
+    void closeModerationProviders() {
+        resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
 
     void closeEconomyResources() {
@@ -212,7 +233,7 @@ final class PaperIntegrationManager {
             return matcher;
         } catch (IllegalArgumentException exception) {
             issue(AUTOMOD, "Exact-variant configuration is invalid; enforcement is disabled");
-            plugin().getLogger().log(Level.SEVERE, "Automod configuration validation failed", exception);
+            plugin().getLogger().log(Level.SEVERE, "Automod integration configuration failed", exception);
             return null;
         }
     }

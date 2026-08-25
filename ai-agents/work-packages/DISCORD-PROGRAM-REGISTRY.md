@@ -11,7 +11,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `ACTIVE` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D04` | Account linking and DiscordSRV migration | `BLOCKED` / `PARKED_BLOCKED` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `READY` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
@@ -26,15 +26,23 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-`ES-D04 — Account linking and DiscordSRV migration` is `ACTIVE` on `package/es-d04-account-linking`, claimed from exact `main` `783925e2b49ab4567bd3c3869e43fc03ff6d285f` after fresh collision and provider-contract reconciliation. No D04 implementation PR existed at claim. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-23-es-d04-account-linking.md`.
+None. `ES-D04 — Account linking and DiscordSRV migration` is parked blocked with its implementation preserved on `package/es-d04-account-linking`, PR #151, frozen head `b231022b065b5843d2dd73811dfbf51acba6314b`.
+
+## ES-D04 parked blocker
+
+D04 implementation and targeted review are complete at the frozen head. Exact-head Coverage/full Java 21 build/Testcontainers/runtime-JAR/provider-leak/Codacy evidence passed in run `32738304907`, job `97466391922`, with validation artifact `9524397425` (`sha256:230de565c87f1939dd0f06f2bcb028a394d96e73e43237fb43b2f02adccbd6c8`). Sentinel artifact run `32738306003`, job `97466394689`, passed and produced artifact `9524138779` (`sha256:4f472f5a20c9d825ad7129bbf0bc4727740a4166f9d1c697c843df5b84020b67`). Sentinel durable job `225` ended exactly `PAPER_RESTART_OK` on the same frozen SHA.
+
+Canonical Pi staging is nevertheless a separate required gate because D04 changes Paper runtime and MariaDB/Flyway persistence. The connected GitHub worker cannot discover the PR's automatic `pull_request_target` Pi run with the available workflow-listing surface, and no exact D04 public/private Pi run IDs are durably recorded elsewhere. No Pi pass is claimed and Sentinel does not substitute for it.
+
+Unblock by obtaining or executing the canonical public `Pi Staging` path for exact source `b231022b065b5843d2dd73811dfbf51acba6314b`, verifying its correlated private `wsg138/EnthusiaStaff-Staging` execution on `Lincoln-PI-4` plus every required provenance/runtime/restart/cleanup assertion, then resolving remaining tracking-only review state and merging PR #151 normally. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` completed through PR #149. Frozen validated merge-ready head `5cd98a719e30eff64d1595f1e219ea70553c66c0` passed exact-head Java 21 full build/tests, aggregate JaCoCo, runtime-JAR leak inspection, Codacy coverage upload/final notification, Sentinel artifact build and CodeRabbit status with zero unresolved live inline threads.
+`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`.
 
-The final review confirmed the intended Developer boundary: Discord Developer rank itself grants no Minecraft punishment authority, while the existing Minecraft/domain `AuthorizationPolicy` may independently authorize a Developer as required by the approved product contract. A temporary unconditional Developer deny was rejected and fully reverted; exact comparison proved no accepted executable/test residue before the fresh full validation run.
+## Ready work while D04 is parked
 
-D03 added no migration, Discord runtime, website, competition, production configuration/data, deployment, LiteBans authority change, or issue #43 cutover.
+`ES-D05 — Staff bot runtime foundation` remains dependency-complete and `READY`. A future Discord worker may select it while D04's exact blocker is unchanged. This D04 worker did not start D05. `ES-D06` and `ES-D13` remain dependency-blocked until both D04 and D05 complete.
 
 ## Selection
 

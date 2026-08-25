@@ -1,4 +1,5 @@
 name: Pi Staging
+run-name: "Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || 'main' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}"
 
 on:
   workflow_dispatch:
@@ -33,6 +34,16 @@ on:
         required: true
         default: true
         type: boolean
+      request_correlation:
+        description: Optional bounded observability correlation (not authorization)
+        required: false
+        default: ""
+        type: string
+      request_requester:
+        description: Optional requester identity for durable PR observability
+        required: false
+        default: ""
+        type: string
   pull_request_target:
     types:
       - opened
@@ -47,7 +58,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pi-staging-${{ github.event.pull_request.number || github.ref }}
+  group: pi-staging-${{ inputs.source_pr_number || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -65,6 +76,49 @@ jobs:
     steps:
       - name: Keep fork PRs outside private staging
         run: echo 'Fork pull requests use the ordinary public build/test/static-analysis checks and never receive private Pi execution or staging credentials.'
+
+  publish-start:
+    name: Publish exact-head Pi staging start
+    if: >-
+      ${{
+        (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_pi_test && inputs.source_pr_number != '')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+    env:
+      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
+      SOURCE_PR_HEAD_REF: ${{ inputs.source_pr_head_ref || github.event.pull_request.head.ref || '' }}
+      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || '' }}
+      REQUESTER: ${{ inputs.request_requester || github.actor }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Check out trusted public staging controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: staging-controls
+          persist-credentials: false
+
+      - name: Validate exact current PR binding and publish pending status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 staging-controls/scripts/staging/pi_staging_control.py publish \
+            --pr-number "$SOURCE_PR_NUMBER" \
+            --sha "$SOURCE_PR_HEAD_SHA" \
+            --head-ref "$SOURCE_PR_HEAD_REF" \
+            --require-current-binding \
+            --requester "$REQUESTER" \
+            --public-run-id "$GITHUB_RUN_ID" \
+            --public-attempt "$GITHUB_RUN_ATTEMPT" \
+            --public-run-url "$PUBLIC_RUN_URL" \
+            --state in_progress
 
   build-paper-runtime:
     name: Build trusted EnthusiaStaff Paper runtime
@@ -88,6 +142,8 @@ jobs:
       source_pr_head_repository: ${{ steps.select.outputs.source_pr_head_repository }}
       source_pr_head_ref: ${{ steps.select.outputs.source_pr_head_ref }}
       source_pr_head_sha: ${{ steps.select.outputs.source_pr_head_sha }}
+      request_correlation: ${{ steps.select.outputs.request_correlation }}
+      request_requester: ${{ steps.select.outputs.request_requester }}
 
     steps:
       - name: Check out trusted public staging controls
@@ -106,12 +162,15 @@ jobs:
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           EVENT_PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
           EVENT_PR_REF: ${{ github.event.pull_request.head.ref || '' }}
+          EVENT_REQUESTER: ${{ github.actor }}
           INPUT_SOURCE_SHA: ${{ inputs.source_sha || '' }}
           INPUT_PR_NUMBER: ${{ inputs.source_pr_number || '' }}
           INPUT_PR_REPOSITORY: ${{ inputs.source_pr_head_repository || '' }}
           INPUT_PR_REF: ${{ inputs.source_pr_head_ref || '' }}
           INPUT_PR_SHA: ${{ inputs.source_pr_head_sha || '' }}
           INPUT_RUN_PI: ${{ inputs.run_pi_test || false }}
+          INPUT_CORRELATION: ${{ inputs.request_correlation || '' }}
+          INPUT_REQUESTER: ${{ inputs.request_requester || '' }}
         run: |
           set -Eeuo pipefail
           source_sha="$EVENT_SOURCE_SHA"
@@ -120,6 +179,8 @@ jobs:
           pr_ref="$EVENT_PR_REF"
           pr_sha="$EVENT_SOURCE_SHA"
           run_pi_test=true
+          correlation="event-$EVENT_NAME"
+          requester="$EVENT_REQUESTER"
 
           if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
             [[ -z "$INPUT_SOURCE_SHA" ]] || source_sha="$INPUT_SOURCE_SHA"
@@ -128,6 +189,8 @@ jobs:
             pr_ref="$INPUT_PR_REF"
             pr_sha="$INPUT_PR_SHA"
             run_pi_test="$INPUT_RUN_PI"
+            [[ -z "$INPUT_CORRELATION" ]] || correlation="$INPUT_CORRELATION"
+            [[ -z "$INPUT_REQUESTER" ]] || requester="$INPUT_REQUESTER"
           fi
 
           if [[ -z "$pr_number" ]]; then
@@ -136,6 +199,15 @@ jobs:
             pr_sha=''
           fi
 
+          [[ ${#correlation} -le 80 && "$correlation" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+            echo '::error::request_correlation is not a bounded safe observability identifier'
+            exit 1
+          }
+          [[ ${#requester} -le 100 && "$requester" =~ ^[][A-Za-z0-9_.:@-]+$ ]] || {
+            echo '::error::request_requester is not a bounded safe display identity'
+            exit 1
+          }
+
           {
             printf 'source_sha=%s\n' "$source_sha"
             printf 'source_pr_number=%s\n' "$pr_number"
@@ -143,6 +215,8 @@ jobs:
             printf 'source_pr_head_ref=%s\n' "$pr_ref"
             printf 'source_pr_head_sha=%s\n' "$pr_sha"
             printf 'run_pi_test=%s\n' "$run_pi_test"
+            printf 'request_correlation=%s\n' "$correlation"
+            printf 'request_requester=%s\n' "$requester"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check out current EnthusiaStaff main history
@@ -197,6 +271,14 @@ jobs:
     permissions:
       actions: read
       contents: write
+      issues: write
+      pull-requests: write
+      statuses: write
+    outputs:
+      private_run_id: ${{ steps.locate.outputs.run_id }}
+      private_run_url: ${{ steps.locate.outputs.run_url }}
+      private_conclusion: ${{ steps.verdict.outputs.conclusion }}
+      cleanup_outcome: ${{ steps.cleanup.outcome }}
     env:
       STAGING_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
       SOURCE_SHA: ${{ needs.build-paper-runtime.outputs.resolved_source_sha }}
@@ -206,9 +288,18 @@ jobs:
       SOURCE_PR_HEAD_REPOSITORY: ${{ needs.build-paper-runtime.outputs.source_pr_head_repository }}
       SOURCE_PR_HEAD_REF: ${{ needs.build-paper-runtime.outputs.source_pr_head_ref }}
       SOURCE_PR_HEAD_SHA: ${{ needs.build-paper-runtime.outputs.source_pr_head_sha }}
+      REQUESTER: ${{ needs.build-paper-runtime.outputs.request_requester }}
       TRANSFER_TAG: es-r01-staging-${{ github.run_id }}-${{ github.run_attempt }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
+      - name: Check out trusted public staging controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: staging-controls
+          persist-credentials: false
+
       - name: Require cross-repository staging token
         shell: bash
         run: |
@@ -328,7 +419,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           run_id=''
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             response="$(curl --fail --silent --show-error \
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
@@ -342,6 +433,27 @@ jobs:
           printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
           printf 'run_url=https://github.com/%s/actions/runs/%s\n' "$STAGING_REPOSITORY" "$run_id" >> "$GITHUB_OUTPUT"
 
+      - name: Publish correlated private staging run
+        if: ${{ needs.build-paper-runtime.outputs.source_pr_number != '' }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PRIVATE_RUN_ID: ${{ steps.locate.outputs.run_id }}
+          PRIVATE_RUN_URL: ${{ steps.locate.outputs.run_url }}
+          EVIDENCE_IDENTITY: artifact=${{ needs.build-paper-runtime.outputs.artifact_name }};runtime_sha256=${{ needs.build-paper-runtime.outputs.runtime_sha256 }}
+        run: |
+          python3 staging-controls/scripts/staging/pi_staging_control.py publish \
+            --pr-number "$SOURCE_PR_NUMBER" \
+            --sha "$SOURCE_PR_HEAD_SHA" \
+            --requester "$REQUESTER" \
+            --public-run-id "$GITHUB_RUN_ID" \
+            --public-attempt "$GITHUB_RUN_ATTEMPT" \
+            --public-run-url "$PUBLIC_RUN_URL" \
+            --state in_progress \
+            --private-run-id "$PRIVATE_RUN_ID" \
+            --private-run-url "$PRIVATE_RUN_URL" \
+            --evidence-identity "$EVIDENCE_IDENTITY"
+
       - name: Wait for private staging verdict
         id: verdict
         shell: bash
@@ -351,7 +463,7 @@ jobs:
           set -Eeuo pipefail
           status=''
           conclusion=''
-          for attempt in $(seq 1 180); do
+          for _ in $(seq 1 180); do
             response="$(curl --fail --silent --show-error \
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
@@ -428,3 +540,64 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           [[ "$STAGING_CONCLUSION" == success ]] || { echo '::error::Private staging did not succeed'; exit 1; }
           [[ "$CLEANUP_OUTCOME" == success ]] || { echo '::error::Transient public transfer cleanup did not succeed'; exit 1; }
+
+  publish-terminal:
+    name: Publish exact-head Pi staging terminal result
+    needs:
+      - publish-start
+      - build-paper-runtime
+      - bridge-staging
+    if: ${{ always() && needs.publish-start.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+    env:
+      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
+      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || '' }}
+      REQUESTER: ${{ inputs.request_requester || github.actor }}
+      PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      PRIVATE_RUN_ID: ${{ needs.bridge-staging.outputs.private_run_id }}
+      PRIVATE_RUN_URL: ${{ needs.bridge-staging.outputs.private_run_url }}
+      PRIVATE_CONCLUSION: ${{ needs.bridge-staging.outputs.private_conclusion }}
+      CLEANUP_OUTCOME: ${{ needs.bridge-staging.outputs.cleanup_outcome }}
+      BUILD_RESULT: ${{ needs.build-paper-runtime.result }}
+      BRIDGE_RESULT: ${{ needs.bridge-staging.result }}
+      EVIDENCE_IDENTITY: artifact=${{ needs.build-paper-runtime.outputs.artifact_name }};runtime_sha256=${{ needs.build-paper-runtime.outputs.runtime_sha256 }}
+    steps:
+      - name: Check out trusted public staging controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: staging-controls
+          persist-credentials: false
+
+      - name: Publish canonical exact-head result
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          conclusion=failure
+          if [[ "$BUILD_RESULT" == success && "$BRIDGE_RESULT" == success ]]; then
+            conclusion=success
+          fi
+
+          args=(
+            --pr-number "$SOURCE_PR_NUMBER"
+            --sha "$SOURCE_PR_HEAD_SHA"
+            --requester "$REQUESTER"
+            --public-run-id "$GITHUB_RUN_ID"
+            --public-attempt "$GITHUB_RUN_ATTEMPT"
+            --public-run-url "$PUBLIC_RUN_URL"
+            --state terminal
+            --conclusion "$conclusion"
+          )
+          [[ -z "$PRIVATE_RUN_ID" ]] || args+=(--private-run-id "$PRIVATE_RUN_ID")
+          [[ -z "$PRIVATE_RUN_URL" ]] || args+=(--private-run-url "$PRIVATE_RUN_URL")
+          [[ -z "$CLEANUP_OUTCOME" ]] || args+=(--cleanup "$CLEANUP_OUTCOME")
+          [[ "$EVIDENCE_IDENTITY" == 'artifact=;runtime_sha256=' ]] || args+=(--evidence-identity "$EVIDENCE_IDENTITY")
+
+          python3 staging-controls/scripts/staging/pi_staging_control.py publish "${args[@]}"

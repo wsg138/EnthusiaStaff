@@ -11,14 +11,19 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import org.bukkit.plugin.ServicesManager;
 import org.enthusia.rep.api.ReputationBlacklist;
 import org.enthusia.rep.api.ReputationModerationApi;
+import org.enthusia.rep.api.ReputationMutationResult;
+import org.enthusia.rep.api.ReputationStateSnapshot;
 
 public final class ReputationIntegration {
+    private static final String PLAYER_ID_ARGUMENT = "playerId";
+    private static final String CASE_ID_ARGUMENT = "caseId";
+
     private final IntegrationAvailability availability;
     private final String issue;
     private final AuthorizationPolicy authorization;
     private final ReputationModerationApi api;
 
-    private ReputationIntegration(
+    ReputationIntegration(
             IntegrationAvailability availability,
             String issue,
             AuthorizationPolicy authorization,
@@ -79,7 +84,12 @@ public final class ReputationIntegration {
 
     public Optional<ReputationBlacklist> blacklist(UUID playerId) {
         requireAvailable();
-        return api.getBlacklist(Objects.requireNonNull(playerId, "playerId"));
+        return api.getBlacklist(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    }
+
+    public ReputationStateSnapshot snapshot(UUID playerId) {
+        requireAvailable();
+        return api.snapshot(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
     }
 
     public ReputationBlacklist apply(
@@ -90,20 +100,90 @@ public final class ReputationIntegration {
     ) {
         requireAvailable();
         requireMutationAuthority(actor);
-        Objects.requireNonNull(playerId, "playerId");
-        Objects.requireNonNull(expirationAt, "expirationAt");
-        Objects.requireNonNull(caseId, "caseId");
-        return expirationAt
-                .map(expiration -> api.blacklist(playerId, expiration, caseId))
-                .orElseGet(() -> api.blacklistPermanently(playerId, caseId));
+        UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        Optional<Instant> expiration = Objects.requireNonNull(expirationAt, "expirationAt");
+        String linkedCase = Objects.requireNonNull(caseId, CASE_ID_ARGUMENT);
+        Optional<ReputationBlacklist> current = api.getBlacklist(target);
+        ReputationStateSnapshot before = api.snapshot(target);
+        ReputationMutationResult result = api.applyBlacklist(
+                UUID.randomUUID(),
+                target,
+                expiration,
+                linkedCase,
+                current.map(ReputationBlacklist::revision).orElse(0L),
+                before.checksum()
+        );
+        return successfulBlacklist(result, "apply");
     }
 
     public boolean remove(Actor actor, UUID playerId, String caseId) {
         requireAvailable();
         requireMutationAuthority(actor);
+        UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        String linkedCase = Objects.requireNonNull(caseId, CASE_ID_ARGUMENT);
+        Optional<ReputationBlacklist> current = api.getBlacklist(target);
+        if (current.isEmpty() || current.orElseThrow().status() == ReputationBlacklist.Status.REMOVED) {
+            return false;
+        }
+        ReputationStateSnapshot before = api.snapshot(target);
+        ReputationMutationResult result = api.removeBlacklist(
+                UUID.randomUUID(),
+                target,
+                linkedCase,
+                current.orElseThrow().revision(),
+                before.checksum()
+        );
+        if (!result.success()) {
+            throw new IllegalStateException("Reputation blacklist removal failed: " + result.detail());
+        }
+        return true;
+    }
+
+    void markReconciliationPending(UUID playerId) {
+        requireAvailable();
+        api.markReconciliationPending(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    }
+
+    void clearReconciliationPending(UUID playerId) {
+        requireAvailable();
+        api.clearReconciliationPending(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
+    }
+
+    ReputationMutationResult reconcileApply(
+            UUID operationId,
+            UUID playerId,
+            Optional<Instant> expirationAt,
+            String caseId,
+            long expectedBlacklistRevision
+    ) {
+        requireAvailable();
+        UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        ReputationStateSnapshot before = api.snapshot(target);
+        return api.applyBlacklist(
+                Objects.requireNonNull(operationId, "operationId"),
+                target,
+                Objects.requireNonNull(expirationAt, "expirationAt"),
+                Objects.requireNonNull(caseId, CASE_ID_ARGUMENT),
+                expectedBlacklistRevision,
+                before.checksum()
+        );
+    }
+
+    ReputationMutationResult reconcileRemove(
+            UUID operationId,
+            UUID playerId,
+            String caseId,
+            long expectedBlacklistRevision
+    ) {
+        requireAvailable();
+        UUID target = Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT);
+        ReputationStateSnapshot before = api.snapshot(target);
         return api.removeBlacklist(
-                Objects.requireNonNull(playerId, "playerId"),
-                Objects.requireNonNull(caseId, "caseId")
+                Objects.requireNonNull(operationId, "operationId"),
+                target,
+                Objects.requireNonNull(caseId, CASE_ID_ARGUMENT),
+                expectedBlacklistRevision,
+                before.checksum()
         );
     }
 
@@ -118,6 +198,13 @@ public final class ReputationIntegration {
     public int apiVersion() {
         requireAvailable();
         return api.apiVersion();
+    }
+
+    private ReputationBlacklist successfulBlacklist(ReputationMutationResult result, String operation) {
+        if (!result.success() || result.blacklist().isEmpty()) {
+            throw new IllegalStateException("Reputation blacklist " + operation + " failed: " + result.detail());
+        }
+        return result.blacklist().orElseThrow();
     }
 
     private void requireAvailable() {

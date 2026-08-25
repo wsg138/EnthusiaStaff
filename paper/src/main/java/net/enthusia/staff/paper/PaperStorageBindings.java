@@ -83,6 +83,7 @@ record PaperStorageBindings(
                 authorization,
                 reasonPolicies,
                 moderation.moderationStore(),
+                moderation.sanctionLookup(),
                 new EscalationEngine()
         );
         PunishmentRequestService punishmentRequests = new PunishmentRequestService(
