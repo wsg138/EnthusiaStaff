@@ -42,7 +42,7 @@ public final class StaffBotApplication {
 
             if (smokeTest) {
                 boolean ready = runtime.awaitReady(SMOKE_READY_TIMEOUT);
-                if (!ready || runtime.health().failedEver()) {
+                if (!ready || !runtime.health().isReady() || runtime.health().failedEver()) {
                     return 3;
                 }
                 LOGGER.log(

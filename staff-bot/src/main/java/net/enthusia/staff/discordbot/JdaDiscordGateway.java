@@ -72,9 +72,30 @@ final class JdaDiscordGateway implements DiscordGateway {
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
+    static final class CallbackFence {
+        private long generation;
+
+        synchronized long beginResolution() {
+            return ++generation;
+        }
+
+        synchronized void invalidate() {
+            generation++;
+        }
+
+        synchronized boolean runIfCurrent(long expectedGeneration, Runnable callback) {
+            if (generation != expectedGeneration) {
+                return false;
+            }
+            callback.run();
+            return true;
+        }
+    }
+
     private static final class SessionListener extends ListenerAdapter {
         private final StaffBotEnvironment environment;
         private final DiscordGatewayObserver observer;
+        private final CallbackFence identityCallbacks = new CallbackFence();
 
         private SessionListener(StaffBotEnvironment environment, DiscordGatewayObserver observer) {
             this.environment = environment;
@@ -98,11 +119,13 @@ final class JdaDiscordGateway implements DiscordGateway {
 
         @Override
         public void onSessionDisconnect(SessionDisconnectEvent event) {
+            identityCallbacks.invalidate();
             observer.onDisconnected();
         }
 
         @Override
         public void onShutdown(ShutdownEvent event) {
+            identityCallbacks.invalidate();
             observer.onShutdown();
         }
 
@@ -114,9 +137,14 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
 
         private void resolveIdentity(JDA api) {
+            long generation = identityCallbacks.beginResolution();
             api.retrieveApplicationInfo().queue(
-                    applicationInfo -> observer.onIdentityResolved(snapshot(api, applicationInfo)),
-                    failure -> observer.onFatal("application_info_request_failed"));
+                    applicationInfo -> identityCallbacks.runIfCurrent(
+                            generation,
+                            () -> observer.onIdentityResolved(snapshot(api, applicationInfo))),
+                    failure -> identityCallbacks.runIfCurrent(
+                            generation,
+                            () -> observer.onFatal("application_info_request_failed")));
         }
 
         private DiscordRuntimeIdentity snapshot(JDA api, ApplicationInfo applicationInfo) {

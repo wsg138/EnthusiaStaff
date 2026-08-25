@@ -120,23 +120,38 @@ public final class StaffBotRuntime implements AutoCloseable {
         health.transition(StaffBotHealth.Phase.STOPPING, "process_stopping");
         readiness.complete(false);
 
+        String shutdownFailure = null;
         if (started.get()) {
             gateway.shutdown();
             try {
                 if (!gateway.awaitShutdown(configuration.shutdownTimeout())) {
                     gateway.shutdownNow();
-                    gateway.awaitShutdown(Duration.ofSeconds(2));
+                    if (!gateway.awaitShutdown(Duration.ofSeconds(2))) {
+                        shutdownFailure = "gateway_shutdown_timeout";
+                    }
                 }
             } catch (InterruptedException exception) {
                 gateway.shutdownNow();
                 Thread.currentThread().interrupt();
+                shutdownFailure = "gateway_shutdown_interrupted";
             }
         }
 
         healthEndpoint.close();
         workerPool.close();
-        health.transition(StaffBotHealth.Phase.STOPPED, "process_stopped");
         terminated.countDown();
+
+        if (shutdownFailure != null) {
+            health.transition(StaffBotHealth.Phase.FAILED, shutdownFailure);
+            LOGGER.log(
+                    System.Logger.Level.ERROR,
+                    "staff_bot_failed environment={0} reason={1}",
+                    configuration.environment().label(),
+                    shutdownFailure);
+            throw new IllegalStateException("staff bot gateway did not terminate cleanly");
+        }
+
+        health.transition(StaffBotHealth.Phase.STOPPED, "process_stopped");
         LOGGER.log(
                 System.Logger.Level.INFO,
                 "staff_bot_stopped environment={0}",

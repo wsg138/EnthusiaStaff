@@ -69,13 +69,13 @@ The HTTP listener is loopback-only.
 - `HEAD` is supported; other methods receive `405`.
 - responses are `Cache-Control: no-store` and contain only environment, lifecycle phase, readiness, a fixed reason category, and rejected-work count.
 
-A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. Terminal failure cannot be changed back to `READY` by a late session callback.
+A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. Asynchronous application-info callbacks are generation-fenced so a response from a disconnected or superseded session cannot restore readiness or fatally poison a newer session. Terminal failure cannot be changed back to `READY` by a late session callback.
 
 ## Shutdown and non-destructive smoke validation
 
-Normal shutdown requests JDA's graceful shutdown and waits up to 15 seconds, then escalates to immediate shutdown if required. Health and bounded worker resources are then closed. The runtime also installs an idempotent JVM shutdown hook.
+Normal shutdown requests JDA's graceful shutdown and waits up to 15 seconds, then escalates to immediate shutdown if required. A forced shutdown that still does not terminate is a terminal runtime failure rather than a clean stop. Health and bounded worker resources are closed in either case. The runtime also installs an idempotent JVM shutdown hook.
 
-The executable accepts `--smoke-test`. In this mode it connects, waits up to 45 seconds for the full identity/guild/test-channel readiness fence, exits nonzero on failure, and then closes the Gateway normally. It sends no messages and changes no Discord configuration. An authorized staging system can therefore inject the staging token and run:
+The executable accepts `--smoke-test`. In this mode it connects, waits up to 45 seconds for the full identity/guild/test-channel readiness fence, verifies readiness is still current, exits nonzero on failure, and then closes the Gateway normally. It sends no messages and changes no Discord configuration. An authorized staging system can therefore inject the staging token and run:
 
 ```text
 java -jar EnthusiaStaff-StaffBot-<version>.jar --smoke-test

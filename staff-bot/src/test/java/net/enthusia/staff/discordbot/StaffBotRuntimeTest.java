@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class StaffBotRuntimeTest {
     @Test
     void exactIdentityTransitionsRuntimeToReadyAndReconnects() throws Exception {
-        Fixture fixture = new Fixture(true);
+        Fixture fixture = new Fixture(true, true);
         try (StaffBotRuntime runtime = fixture.runtime()) {
             runtime.start();
             assertEquals(StaffBotHealth.Phase.CONNECTING, runtime.health().snapshot().phase());
@@ -32,7 +33,7 @@ class StaffBotRuntimeTest {
 
     @Test
     void identityMismatchFailsClosedAndCannotReturnToReady() throws Exception {
-        Fixture fixture = new Fixture(true);
+        Fixture fixture = new Fixture(true, true);
         try (StaffBotRuntime runtime = fixture.runtime()) {
             runtime.start();
             fixture.gateway.emitIdentity(new DiscordRuntimeIdentity(
@@ -55,7 +56,7 @@ class StaffBotRuntimeTest {
 
     @Test
     void gracefulShutdownEscalatesAfterTimeout() throws Exception {
-        Fixture fixture = new Fixture(false);
+        Fixture fixture = new Fixture(false, true);
         StaffBotRuntime runtime = fixture.runtime();
         runtime.start();
         fixture.gateway.emitIdentity(validStagingIdentity());
@@ -66,6 +67,23 @@ class StaffBotRuntimeTest {
         assertTrue(fixture.gateway.shutdownNowRequested);
         assertTrue(fixture.endpoint.closed);
         assertEquals(StaffBotHealth.Phase.STOPPED, runtime.health().snapshot().phase());
+    }
+
+    @Test
+    void forcedShutdownTimeoutFailsClosed() throws Exception {
+        Fixture fixture = new Fixture(false, false);
+        StaffBotRuntime runtime = fixture.runtime();
+        runtime.start();
+        fixture.gateway.emitIdentity(validStagingIdentity());
+
+        assertThrows(IllegalStateException.class, runtime::close);
+
+        assertTrue(fixture.gateway.shutdownRequested);
+        assertTrue(fixture.gateway.shutdownNowRequested);
+        assertTrue(fixture.endpoint.closed);
+        assertTrue(runtime.health().failedEver());
+        assertEquals(StaffBotHealth.Phase.FAILED, runtime.health().snapshot().phase());
+        assertEquals("gateway_shutdown_timeout", runtime.health().snapshot().reason());
     }
 
     private static DiscordRuntimeIdentity validStagingIdentity() {
@@ -82,8 +100,8 @@ class StaffBotRuntimeTest {
         private final FakeHealthEndpoint endpoint = new FakeHealthEndpoint();
         private final FakeGateway gateway;
 
-        private Fixture(boolean gracefulShutdown) {
-            gateway = new FakeGateway(gracefulShutdown);
+        private Fixture(boolean gracefulShutdown, boolean forcedShutdown) {
+            gateway = new FakeGateway(gracefulShutdown, forcedShutdown);
         }
 
         private StaffBotRuntime runtime() {
@@ -122,12 +140,14 @@ class StaffBotRuntimeTest {
 
     private static final class FakeGateway implements DiscordGateway {
         private final boolean gracefulShutdown;
+        private final boolean forcedShutdown;
         private DiscordGatewayObserver observer;
         private boolean shutdownRequested;
         private boolean shutdownNowRequested;
 
-        private FakeGateway(boolean gracefulShutdown) {
+        private FakeGateway(boolean gracefulShutdown, boolean forcedShutdown) {
             this.gracefulShutdown = gracefulShutdown;
+            this.forcedShutdown = forcedShutdown;
         }
 
         @Override
@@ -147,7 +167,7 @@ class StaffBotRuntimeTest {
 
         @Override
         public boolean awaitShutdown(Duration timeout) {
-            return gracefulShutdown || shutdownNowRequested;
+            return shutdownNowRequested ? forcedShutdown : gracefulShutdown;
         }
 
         private void emitIdentity(DiscordRuntimeIdentity identity) {
