@@ -17,7 +17,6 @@ import net.dv8tion.jda.api.events.session.SessionRecreateEvent;
 import net.dv8tion.jda.api.events.session.SessionResumeEvent;
 import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 
@@ -38,7 +37,7 @@ final class JdaDiscordGateway implements DiscordGateway {
             throw new IllegalStateException("Discord gateway already started");
         }
         SessionListener listener = new SessionListener(configuration.environment(), observer);
-        jda = JDABuilder.createLight(configuration.discordToken(), GatewayIntent.GUILD_MEMBERS)
+        jda = JDABuilder.createLight(configuration.discordToken(), Set.of())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
                 .setAutoReconnect(true)

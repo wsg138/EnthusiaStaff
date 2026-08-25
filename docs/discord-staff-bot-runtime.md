@@ -54,7 +54,7 @@ Optional variables:
 
 ## Intents and workload bounds
 
-D05 enables only `GUILD_MEMBERS` as an explicit privileged Gateway intent. It does not request Message Content because no D05 feature reads messages. Member chunking/cache are disabled at this foundation layer.
+D05 requests no privileged Gateway intents. It does not request `GUILD_MEMBERS`, `GUILD_PRESENCES`, or Message Content because no D05 feature consumes those privileged event streams. Member chunking/cache are disabled at this foundation layer. A later package must justify and validate any privileged intent before enabling it.
 
 Later interaction work is submitted to a fixed-size executor with a bounded queue. Saturation rejects new work instead of growing memory without bound and increments a privacy-safe health counter. Gateway lifecycle callbacks are not routed through that application queue, so command workload saturation cannot prevent reconnect/identity fencing. Worker threads receive a five-second graceful shutdown window and are daemon threads so a task that ignores interruption cannot indefinitely pin the standalone JVM during forced termination.
 
@@ -67,7 +67,7 @@ The HTTP listener is loopback-only.
 - `GET /health` returns `200` while the process is live and `503` after fatal failure/stoppage.
 - `GET /ready` returns `200` only after the exact Discord application/guild/staging-channel identity fence passes; otherwise `503`.
 - `HEAD` is supported; other methods receive `405`.
-- responses are `Cache-Control: no-store` and contain only environment, lifecycle phase, readiness, a fixed reason category, and rejected-work count.
+- responses are `Cache-Control: no-store` and contain only environment, lifecycle phase, readiness, a fixed reason category, and rejected-work count. JSON control characters are escaped before output.
 
 A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. Asynchronous application-info callbacks are generation-fenced so a response from a disconnected or superseded session cannot restore readiness or fatally poison a newer session. Terminal failure cannot be changed back to `READY` by a late session callback.
 
