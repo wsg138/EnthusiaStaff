@@ -1,0 +1,40 @@
+name: X04 exact mirror parity
+
+on:
+  push:
+    branches:
+      - diagnostics/es-x04-static-final
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out standalone candidate
+        uses: actions/checkout@v6
+        with:
+          repository: wsg138/EnthusiaCommend
+          ref: 88023fe6ead160195badb56cf830939dc0e75ffa
+          path: standalone
+          persist-credentials: false
+      - name: Check out aggregate candidate
+        uses: actions/checkout@v6
+        with:
+          repository: wsg138/EnthusiaStaff
+          ref: 02c1629d462329586c94579f87f80a42451729f8
+          path: aggregate
+          persist-credentials: false
+      - name: Require exact product parity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          diff -qr --exclude=.git --exclude=COMPONENT-METADATA.md standalone aggregate/components/enthusia-commend
+          standalone_files="$(find standalone -type f -not -path '*/.git/*' | wc -l)"
+          aggregate_files="$(find aggregate/components/enthusia-commend -type f ! -name COMPONENT-METADATA.md | wc -l)"
+          test "$standalone_files" -eq "$aggregate_files"
+          printf 'PARITY_OK standalone=%s aggregate=%s standalone_sha=%s staff_sha=%s\n' \
+            "$standalone_files" "$aggregate_files" \
+            '88023fe6ead160195badb56cf830939dc0e75ffa' \
+            '02c1629d462329586c94579f87f80a42451729f8'
