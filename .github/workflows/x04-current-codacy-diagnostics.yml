@@ -60,4 +60,20 @@ jobs:
               (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
               (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
             )] | "staff_x04=" + (length|tostring)' codacy-branch.json
-          echo 'post-ingestion-final-static-query'
+      - name: Checkout exact Commend source
+        uses: actions/checkout@v6
+        with:
+          repository: wsg138/EnthusiaCommend
+          ref: 325c304512187f274463c31f1649efe0ae56ab7d
+          path: commend
+          fetch-depth: 0
+      - name: Export remediation workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: es-x04-static-workspace
+          path: |
+            codacy-branch.json
+            commend
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
