@@ -30,7 +30,13 @@ Any mismatch fails closed before the disposable Paper harness receives database 
 
 The hosted build first uploads the verified runtime package as a normal same-run Actions artifact with a two-day retention. The privileged bridge job downloads that artifact, rechecks the checksum, and publishes the three files in a bounded ZIP as a temporary GitHub prerelease asset in the already-public EnthusiaStaff repository. The release tag is `es-r01-staging-<run-id>-<attempt>` and the asset name includes the source SHA prefix plus the same run identity.
 
-The public workflow deletes the transient release and tag after the correlated private run finishes. Cleanup is part of the public verdict: a staging run is not reported as successful if private validation fails, times out, cannot be correlated, or if transient transfer cleanup fails. Private sanitized Pi evidence remains a normal staging Actions artifact for 30 days; it must not contain credentials, database contents, or other private runtime material.
+The public workflow deletes that **transient runtime-transfer** release and tag after the correlated private run finishes. Cleanup is part of the public verdict: a staging run is not reported as successful if private validation fails, times out, cannot be correlated, or if transient transfer cleanup fails.
+
+The private sanitized Pi evidence has a different lifecycle. After the trusted `Lincoln-PI-4` harness has produced its sanitized evidence directory, the private workflow always packages that directory into a bounded ZIP, computes SHA-256, and publishes it as a **private GitHub prerelease asset in `wsg138/EnthusiaStaff-Staging`**. The evidence release tag is `pi-evidence-<private-run-id>-<attempt>` and the asset name is `enthusiastaff-pi-evidence-<exact-source-sha>-<private-run-id>-<attempt>.zip`. This is the canonical Pi evidence store; the private evidence path does not depend on GitHub Actions artifact storage or its quota.
+
+A canonical private run fails closed if the evidence release cannot be created or its asset cannot be uploaded and validated. The evidence release is durable output and is not deleted by the public transient-transfer cleanup. It must contain only already-sanitized evidence; credentials, database contents, unsanitized logs, and other private runtime material remain prohibited.
+
+These evidence release assets are never executable inputs. Sentinel and the public hosted build keep their own exact-SHA Actions-artifact contracts where those artifacts are used as executable/build inputs.
 
 ## Failure handling
 
@@ -40,15 +46,16 @@ A failed, skipped, cancelled, missing, expired, mismatched, or unallocated valid
 2. If the public hosted build failed, repair the source/build or staging-control issue and rerun the exact current head. Do not reuse an older artifact.
 3. If private provenance verification failed, compare the requested source SHA, public workflow SHA/run/attempt, release/asset identity, release `published_at`, asset `created_at`, transport digest, and live PR head. Do not bypass the failed check.
 4. If the Pi boot/restart harness failed after provenance verification, use only its sanitized evidence and repair the underlying staging/runtime problem.
-5. If the transfer cleanup step failed, delete the identified transient ES-R01 prerelease/tag through the normal GitHub repository controls, then rerun. Never treat a successful Pi run with failed cleanup as package acceptance.
-6. If `ENTHUSIASTAFF_STAGING_TOKEN` or the `Lincoln-PI-4` runner is unavailable, record that exact operational prerequisite as the blocker instead of introducing a new credential or alternate runner ad hoc.
+5. If private evidence-release publication fails, classify the run as failed evidence retention even if the Paper runtime succeeded. Do not substitute an Actions artifact or claim the run passed without durable evidence.
+6. If the public transfer cleanup step failed, delete the identified transient ES-R01 prerelease/tag through the normal GitHub repository controls, then rerun. Never treat a successful Pi run with failed cleanup as package acceptance.
+7. If `ENTHUSIASTAFF_STAGING_TOKEN` or the `Lincoln-PI-4` runner is unavailable, record that exact operational prerequisite as the blocker instead of introducing a new credential or alternate runner ad hoc.
 
 Each rerun must stage the exact current package head. A later successful run does not retroactively validate a different SHA.
 
 ## Package resumption
 
-ES-R01 repairs shared validation infrastructure only. It does not complete ES-P02 or ES-P05 on their behalf. After ES-R01 is merged and a current-`main` bridge proof succeeds, the canonical package registry should mark ES-R01 terminal and the next sequential worker must reconcile ES-P02 and ES-P05 under the current priority and continuation rules. Each dependent package must produce its own exact-head evidence through the repaired bridge before merge.
+ES-R01 repairs shared validation infrastructure only. It does not complete dependent packages on their behalf. Each dependent package must produce its own exact-head evidence through the current repaired bridge before merge.
 
 ## Scope boundaries
 
-The bridge changes no product Java behavior, production data, deployment route, LiteBans authority, or Flyway migration. V18 remains the immutable migration ceiling for this package. Issue #43 remains outside ES-R01.
+The bridge changes no product Java behavior, production data, deployment route, LiteBans authority, or Flyway migration. Issue #43 remains outside the staging infrastructure boundary.
