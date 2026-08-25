@@ -6,20 +6,20 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
-final class JdbcDeadlockRetry {
+final class JdbcTransactionRetry {
     private static final int DEFAULT_MAXIMUM_ATTEMPTS = 3;
     private static final long RETRY_BASE_MILLIS = 25L;
 
     private final int maximumAttempts;
     private final IntConsumer retryPause;
 
-    JdbcDeadlockRetry() {
-        this(DEFAULT_MAXIMUM_ATTEMPTS, JdbcDeadlockRetry::pauseBeforeRetry);
+    JdbcTransactionRetry() {
+        this(DEFAULT_MAXIMUM_ATTEMPTS, JdbcTransactionRetry::pauseBeforeRetry);
     }
 
-    JdbcDeadlockRetry(int maximumAttempts, IntConsumer retryPause) {
+    JdbcTransactionRetry(int maximumAttempts, IntConsumer retryPause) {
         if (maximumAttempts < 1) {
-            throw new IllegalArgumentException("maximum deadlock attempts must be positive");
+            throw new IllegalArgumentException("maximum transaction retry attempts must be positive");
         }
         this.maximumAttempts = maximumAttempts;
         this.retryPause = Objects.requireNonNull(retryPause, "retryPause");
@@ -34,7 +34,8 @@ final class JdbcDeadlockRetry {
                 return operation.get();
             } catch (ModerationPersistenceException exception) {
                 latest = exception;
-                if (!JdbcSqlErrors.isDeadlock(exception) || attempt == maximumAttempts) {
+                if (!JdbcSqlErrors.isRetryableTransactionConflict(exception)
+                        || attempt == maximumAttempts) {
                     throw exception;
                 }
                 retryPause.accept(attempt);
@@ -44,7 +45,7 @@ final class JdbcDeadlockRetry {
             }
         }
         throw latest == null
-                ? new IllegalStateException("deadlock retry loop completed without an outcome")
+                ? new IllegalStateException("transaction retry loop completed without an outcome")
                 : latest;
     }
 
