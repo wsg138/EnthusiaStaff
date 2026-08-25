@@ -11,7 +11,7 @@ Date: 2026-08-25.
 - `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED` on unresolved supported RoseChat repository/contract.
 - `ES-X03` remains independently `BLOCKED` / `PARKED_BLOCKED`; live Staff PR #139 and Market PR #3 remain open and were not modified.
 - `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain dependency-blocked/deferred after X04 completion.
-- D04, D05, website, competition, and other concurrent work were preserved and not absorbed.
+- D04, D05, website, and other concurrent work were preserved and not absorbed.
 
 ## Implementation and merge record
 - Standalone exact reviewed head: `325c304512187f274463c31f1649efe0ae56ab7d`.
