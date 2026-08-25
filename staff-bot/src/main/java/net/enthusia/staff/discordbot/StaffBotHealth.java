@@ -39,8 +39,8 @@ public final class StaffBotHealth {
 
     public void recordRejectedWork() {
         long rejected = rejectedWork.incrementAndGet();
-        Snapshot current = snapshot.get();
-        snapshot.set(new Snapshot(current.phase(), current.reason(), current.changedAt(), rejected));
+        snapshot.updateAndGet(current ->
+                new Snapshot(current.phase(), current.reason(), current.changedAt(), rejected));
     }
 
     public Snapshot snapshot() {
