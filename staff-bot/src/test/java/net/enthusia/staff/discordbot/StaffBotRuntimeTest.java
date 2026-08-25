@@ -31,7 +31,7 @@ class StaffBotRuntimeTest {
     }
 
     @Test
-    void identityMismatchFailsClosedAndForcesGatewayDown() throws Exception {
+    void identityMismatchFailsClosedAndCannotReturnToReady() throws Exception {
         Fixture fixture = new Fixture(true);
         try (StaffBotRuntime runtime = fixture.runtime()) {
             runtime.start();
@@ -46,6 +46,10 @@ class StaffBotRuntimeTest {
             assertTrue(runtime.health().failedEver());
             assertEquals(StaffBotHealth.Phase.FAILED, runtime.health().snapshot().phase());
             assertTrue(fixture.gateway.shutdownNowRequested);
+
+            fixture.gateway.emitIdentity(validStagingIdentity());
+            assertEquals(StaffBotHealth.Phase.FAILED, runtime.health().snapshot().phase());
+            assertFalse(runtime.health().isReady());
         }
     }
 
@@ -103,12 +107,11 @@ class StaffBotRuntimeTest {
     }
 
     private static final class FakeHealthEndpoint implements HealthEndpoint {
-        private boolean started;
         private boolean closed;
 
         @Override
         public void start() {
-            started = true;
+            // No-op test endpoint.
         }
 
         @Override

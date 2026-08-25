@@ -158,7 +158,7 @@ public final class StaffBotRuntime implements AutoCloseable {
     private final class RuntimeGatewayObserver implements DiscordGatewayObserver {
         @Override
         public void onIdentityResolved(DiscordRuntimeIdentity identity) {
-            if (closed.get()) {
+            if (closed.get() || health.failedEver()) {
                 return;
             }
             DiscordRuntimeIdentityValidator.ValidationResult result =
@@ -189,7 +189,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         @Override
         public void onFatal(String reason) {
-            if (!closed.get()) {
+            if (!closed.get() && !health.failedEver()) {
                 failClosed(reason);
             }
         }
