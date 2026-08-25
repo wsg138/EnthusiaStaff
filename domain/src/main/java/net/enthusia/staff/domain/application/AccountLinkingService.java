@@ -71,8 +71,8 @@ public final class AccountLinkingService {
         requireOnline(minecraftPlayerId);
         String codeHash = hash(normalize(rawCode));
         String operationKey = operationKey("mc", codeHash, minecraftPlayerId.toString());
-        VersionedLink linked = codes.completeFromMinecraft(
-                codeHash, minecraftPlayerId, operationKey, clock.instant());
+        VersionedLink linked = requireCurrentCompletion(codes.completeFromMinecraft(
+                codeHash, minecraftPlayerId, operationKey, clock.instant()));
         mainAccounts.evaluate(linked.link().discordUserId());
         return linked;
     }
@@ -83,8 +83,8 @@ public final class AccountLinkingService {
         UUID minecraftPlayerId = codes.minecraftInitiatorForCode(codeHash, clock.instant());
         requireOnline(minecraftPlayerId);
         String operationKey = operationKey("discord", codeHash, discordUserId.value());
-        VersionedLink linked = codes.completeFromDiscord(
-                codeHash, discordUserId, operationKey, clock.instant());
+        VersionedLink linked = requireCurrentCompletion(codes.completeFromDiscord(
+                codeHash, discordUserId, operationKey, clock.instant()));
         mainAccounts.evaluate(discordUserId);
         return linked;
     }
@@ -140,6 +140,13 @@ public final class AccountLinkingService {
         );
         mainAccounts.evaluate(discordUserId);
         return true;
+    }
+
+    private static VersionedLink requireCurrentCompletion(VersionedLink linked) {
+        if (linked.link().unlinkedAt().isPresent()) {
+            throw new IllegalStateException("account-link code was already consumed and its link is no longer current");
+        }
+        return linked;
     }
 
     private String generateCode() {
