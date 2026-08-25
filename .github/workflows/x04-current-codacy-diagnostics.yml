@@ -1,0 +1,62 @@
+name: X04 current Codacy diagnostics
+
+on:
+  push:
+    branches:
+      - diagnostics/es-x04-static-final
+
+permissions:
+  contents: read
+
+env:
+  CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
+jobs:
+  codacy-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Inspect current X04 branch issues through scoped Codacy CLI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${CODACY_PROJECT_TOKEN}"
+          npm install --global @codacy/codacy-cloud-cli
+          codacy issues gh wsg138 EnthusiaStaff \
+            --branch package/es-x04-commend-provider \
+            --output json > codacy-branch.json
+          echo '=== Commend component ==='
+          jq -r '
+            [.issues[] | select(.filePath | startswith("components/enthusia-commend/"))]
+            | sort_by(.filePath, .lineNumber)
+            | group_by(.filePath)
+            | .[]
+            | "FILE " + .[0].filePath + " (" + (length|tostring) + ")",
+              (.[] | "  L" + (.lineNumber|tostring) + " " + .patternInfo.id + " :: " + .message)
+          ' codacy-branch.json
+          echo '=== X04 Staff integration ==='
+          jq -r '
+            [.issues[] | select(
+              (.filePath | startswith("integration-contracts/src/main/java/org/enthusia/rep/api/")) or
+              (.filePath == "domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java") or
+              (.filePath == "domain/src/test/java/net/enthusia/staff/domain/application/PunishmentServiceTest.java") or
+              (.filePath | startswith("paper/src/main/java/net/enthusia/staff/paper/integration/Reputation")) or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java") or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
+              (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
+            )]
+            | sort_by(.filePath, .lineNumber)
+            | .[]
+            | "L" + (.lineNumber|tostring) + " " + .filePath + " " + .patternInfo.id + " :: " + .message
+          ' codacy-branch.json
+          echo '=== Scoped counts ==='
+          jq -r '[.issues[] | select(.filePath | startswith("components/enthusia-commend/"))] | "component=" + (length|tostring)' codacy-branch.json
+          jq -r '[.issues[] | select(
+              (.filePath | startswith("integration-contracts/src/main/java/org/enthusia/rep/api/")) or
+              (.filePath == "domain/src/main/java/net/enthusia/staff/domain/application/PunishmentService.java") or
+              (.filePath == "domain/src/test/java/net/enthusia/staff/domain/application/PunishmentServiceTest.java") or
+              (.filePath | startswith("paper/src/main/java/net/enthusia/staff/paper/integration/Reputation")) or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java") or
+              (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
+              (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
+            )] | "staff_x04=" + (length|tostring)' codacy-branch.json
