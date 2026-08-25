@@ -60,4 +60,4 @@ jobs:
               (.filePath == "paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java") or
               (.filePath | startswith("paper/src/test/java/net/enthusia/staff/paper/integration/Reputation"))
             )] | "staff_x04=" + (length|tostring)' codacy-branch.json
-          echo 'diagnostic-query-complete'
+          echo 'diagnostic-query-after-case-id-fix-complete'
