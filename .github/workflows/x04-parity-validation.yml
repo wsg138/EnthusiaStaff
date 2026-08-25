@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: wsg138/EnthusiaStaff
-          ref: 02c1629d462329586c94579f87f80a42451729f8
+          ref: d51c621687607e6e2af9b51414391edf429cd097
           path: aggregate
           persist-credentials: false
       - name: Require exact product parity
@@ -37,4 +37,4 @@ jobs:
           printf 'PARITY_OK standalone=%s aggregate=%s standalone_sha=%s staff_sha=%s\n' \
             "$standalone_files" "$aggregate_files" \
             '88023fe6ead160195badb56cf830939dc0e75ffa' \
-            '02c1629d462329586c94579f87f80a42451729f8'
+            'd51c621687607e6e2af9b51414391edf429cd097'
