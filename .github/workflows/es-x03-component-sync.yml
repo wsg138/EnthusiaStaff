@@ -1,0 +1,51 @@
+name: ES-X03 temporary component sync
+
+on:
+  push:
+    branches:
+      - package/es-x03-market-provider
+
+permissions:
+  contents: write
+
+jobs:
+  sync-market:
+    if: contains(github.event.head_commit.message, '[es-x03-sync-run]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out aggregate package branch
+        uses: actions/checkout@v4
+        with:
+          ref: package/es-x03-market-provider
+          fetch-depth: 0
+
+      - name: Import exact merged Market tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA='7dd0a89d3689785f0b70c770e1b7c8efa1d11929'
+          SOURCE_TREE='9f518020ad5ee9a8f3c8925832fd0ec3482ded19'
+          SOURCE_DIR="$RUNNER_TEMP/EnthusiaMarket"
+          META="$RUNNER_TEMP/COMPONENT-METADATA.md"
+
+          cp components/enthusia-market/COMPONENT-METADATA.md "$META"
+          git clone https://github.com/wsg138/EnthusiaMarket.git "$SOURCE_DIR"
+          git -C "$SOURCE_DIR" checkout --detach "$SOURCE_SHA"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git -C "$SOURCE_DIR" rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+
+          rm -rf components/enthusia-market
+          mkdir -p components/enthusia-market
+          rsync -a --delete --exclude='.git/' "$SOURCE_DIR/" components/enthusia-market/
+          cp "$META" components/enthusia-market/COMPONENT-METADATA.md
+
+          git add -A components/enthusia-market
+          if git diff --cached --quiet; then
+            echo 'Mirror already matches the exact standalone tree.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m '[ES-X03] Sync Market mirror to merged standalone [es-x03-sync-skip]'
+          git push origin HEAD:package/es-x03-market-provider
