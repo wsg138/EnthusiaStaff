@@ -179,11 +179,13 @@ class PiStagingControlTests(unittest.TestCase):
         self.assertEqual(control.handle_command(api, event()), "deduplicated")
         self.assertFalse(any(path.endswith("/dispatches") for path, _ in api.posts))
 
-    def test_21_automatic_pull_request_target_path_still_present(self):
+    def test_21_private_staging_is_explicit_only(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/pi-staging-check.yml").read_text(encoding="utf-8")
-        self.assertIn("pull_request_target:", workflow)
-        self.assertIn("ready_for_review", workflow)
-        self.assertIn("github.event.pull_request.head.repo.full_name", workflow)
+        trigger_block = workflow.split("permissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", trigger_block)
+        self.assertNotIn("pull_request_target:", trigger_block)
+        self.assertNotIn("\n  push:\n", trigger_block)
+        self.assertIn("Revalidate exact candidate and supersede stale staging", workflow)
 
     def test_22_public_private_provenance_behavior_unchanged(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/pi-staging-check.yml").read_text(encoding="utf-8")
@@ -294,7 +296,7 @@ class PiStagingControlTests(unittest.TestCase):
 
     def test_37_public_workflow_run_name_preserves_exact_correlation(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/pi-staging-check.yml").read_text(encoding="utf-8")
-        expected = 'run-name: "Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || \'main\' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}"'
+        expected = 'run-name: "Pi Staging PR #${{ inputs.source_pr_number || \'main\' }} / ${{ inputs.source_pr_head_sha || inputs.source_sha || github.sha }} / ${{ inputs.request_correlation || \'manual\' }}"'
         self.assertIn(expected, workflow)
 
 
