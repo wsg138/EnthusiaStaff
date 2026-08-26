@@ -21,7 +21,7 @@ ACTIVE_STATES = frozenset({"queued", "in_progress", "waiting", "requested", "pen
 SAFE_PRE_PAPER_STATES = frozenset({"queued", "waiting", "requested", "pending"})
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 PUBLIC_TITLE_RE = re.compile(r"^Pi Staging PR #(\d+) / ([0-9a-f]{40}) / ([A-Za-z0-9._:-]{1,80})$")
-PRIVATE_TITLE_RE = re.compile(r"^EnthusiaStaff bridge [1-9][0-9]*-[1-9][0-9]* / ([0-9a-f]{40})$")
+PRIVATE_TITLE_RE = re.compile(r"^EnthusiaStaff bridge ([1-9][0-9]*-[1-9][0-9]*) / ([0-9a-f]{40})$")
 MARKER_RE = re.compile(r"<!-- enthusia-pi-staging pr=(\d+) sha=([0-9a-f]{40}) -->")
 PRIVATE_ID_RE = re.compile(r"^- Private run ID: `([1-9][0-9]*)`$", re.MULTILINE)
 PAPER_STEP = "Run guarded disposable Paper boot and restart test"
@@ -72,7 +72,7 @@ class RepoApi:
         return self._request("GET", path)
 
     def post(self, path: str, payload: Mapping[str, Any] | None = None) -> Any:
-        return self._request("POST", path, payload or {})
+        return self._request("POST", path, payload)
 
 
 def positive_int(value: Any, label: str) -> int:
@@ -114,12 +114,48 @@ def iter_workflow_runs(api: RepoApi):
     raise SupersedeError("refusing to inspect more than 500 public staging runs")
 
 
+def public_binding(run: Mapping[str, Any]) -> tuple[int, str] | None:
+    parsed = parse_public_title(run.get("display_title"))
+    if parsed is not None:
+        return parsed
+    # Legacy automatic pull_request_target runs may expose the PR title instead
+    # of the configured run-name. Bind those only through GitHub's immutable PR
+    # metadata so they can be drained after the scheduling migration.
+    if run.get("event") != "pull_request_target":
+        return None
+    pull_requests = run.get("pull_requests")
+    if not isinstance(pull_requests, list) or len(pull_requests) != 1:
+        return None
+    pr = pull_requests[0]
+    head = pr.get("head") if isinstance(pr, Mapping) else None
+    if not isinstance(head, Mapping):
+        return None
+    try:
+        number = positive_int(pr.get("number"), "legacy public PR number")
+        sha = exact_sha(head.get("sha"), "legacy public PR SHA")
+    except SupersedeError:
+        return None
+    return number, sha
+
+
+def stale_public_correlations(api: RepoApi, pr_number: int, keep_sha: str | None) -> list[tuple[str, str]]:
+    correlations: list[tuple[str, str]] = []
+    for run in iter_workflow_runs(api):
+        parsed = public_binding(run)
+        if parsed is None or parsed[0] != pr_number or (keep_sha is not None and parsed[1] == keep_sha):
+            continue
+        run_id = positive_int(run.get("id"), "public run ID")
+        attempt = positive_int(run.get("run_attempt", 1), "public run attempt")
+        correlations.append((parsed[1], f"{run_id}-{attempt}"))
+    return correlations
+
+
 def public_state(api: RepoApi, pr_number: int, current_sha: str) -> tuple[bool, list[int]]:
     exact_sha(current_sha, "current PR SHA")
     exact_active = False
     cancelled: list[int] = []
     for run in iter_workflow_runs(api):
-        parsed = parse_public_title(run.get("display_title"))
+        parsed = public_binding(run)
         if parsed is None or parsed[0] != pr_number or run.get("status") not in ACTIVE_STATES:
             continue
         run_id = positive_int(run.get("id"), "public run ID")
@@ -164,7 +200,7 @@ def private_cancel_is_safe(staging_api: RepoApi, run: Mapping[str, Any], expecte
         raise SupersedeError("refusing to cancel an unexpected private workflow")
     title = run.get("display_title")
     match = PRIVATE_TITLE_RE.fullmatch(title) if isinstance(title, str) else None
-    if match is None or match.group(1) != expected_sha:
+    if match is None or match.group(2) != expected_sha:
         raise SupersedeError("private workflow title is not bound to the stale source SHA")
     if run.get("status") in SAFE_PRE_PAPER_STATES:
         return True
@@ -185,11 +221,47 @@ def private_cancel_is_safe(staging_api: RepoApi, run: Mapping[str, Any], expecte
     return True
 
 
-def cancel_stale_private(source_api: RepoApi, staging_api: RepoApi, pr_number: int, keep_sha: str | None) -> tuple[list[int], list[int]]:
+def iter_private_workflow_runs(api: RepoApi):
+    for page in range(1, 6):
+        payload = api.get(f"/actions/workflows/plugin-live-test.yml/runs?event=workflow_dispatch&per_page=100&page={page}")
+        runs = payload.get("workflow_runs") if isinstance(payload, Mapping) else None
+        if not isinstance(runs, list):
+            raise SupersedeError("private workflow-runs response is invalid")
+        for run in runs:
+            if isinstance(run, Mapping):
+                yield run
+        if len(runs) < 100:
+            return
+    raise SupersedeError("refusing to inspect more than 500 private staging runs")
+
+
+def private_runs_from_correlations(staging_api: RepoApi, correlations: list[tuple[str, str]]) -> list[tuple[str, int]]:
+    wanted = set(correlations)
+    if not wanted:
+        return []
+    found: list[tuple[str, int]] = []
+    for run in iter_private_workflow_runs(staging_api):
+        title = run.get("display_title")
+        match = PRIVATE_TITLE_RE.fullmatch(title) if isinstance(title, str) else None
+        if match is None or (match.group(2), match.group(1)) not in wanted:
+            continue
+        found.append((match.group(2), positive_int(run.get("id"), "private run ID")))
+    return found
+
+
+def cancel_stale_private(
+    source_api: RepoApi,
+    staging_api: RepoApi,
+    pr_number: int,
+    keep_sha: str | None,
+    correlations: list[tuple[str, str]] | None = None,
+) -> tuple[list[int], list[int]]:
     cancelled: list[int] = []
     preserved_unsafe: list[int] = []
     seen: set[int] = set()
-    for sha, run_id in private_records(source_api, pr_number, keep_sha):
+    records = private_records(source_api, pr_number, keep_sha)
+    records.extend(private_runs_from_correlations(staging_api, correlations or []))
+    for sha, run_id in records:
         if run_id in seen:
             continue
         seen.add(run_id)
@@ -268,8 +340,9 @@ def mode_candidate(source_api: RepoApi, staging_api: RepoApi, pr_number: int, re
     current_sha, _ = live_binding(source_api, pr_number)
     if current_sha != requested_sha:
         raise SupersedeError(f"PR head moved before private staging dispatch: requested {requested_sha}, current {current_sha}")
+    correlations = stale_public_correlations(source_api, pr_number, current_sha)
     _, cancelled_public = public_state(source_api, pr_number, current_sha)
-    cancelled_private, unsafe = cancel_stale_private(source_api, staging_api, pr_number, current_sha)
+    cancelled_private, unsafe = cancel_stale_private(source_api, staging_api, pr_number, current_sha, correlations)
     emit("cancelled_public", ",".join(map(str, cancelled_public)) or "none")
     emit("cancelled_private", ",".join(map(str, cancelled_private)) or "none")
     emit("preserved_unsafe_private", ",".join(map(str, unsafe)) or "none")
@@ -289,9 +362,10 @@ def mode_advance(source_api: RepoApi, staging_api: RepoApi) -> int:
         keep_sha, _ = live_binding(source_api, pr_number)
     else:
         raise SupersedeError(f"unsupported supersession action: {action!r}")
+    correlations = stale_public_correlations(source_api, pr_number, keep_sha)
     current_for_public = keep_sha or ("0" * 40)
     _, cancelled_public = public_state(source_api, pr_number, current_for_public)
-    cancelled_private, unsafe = cancel_stale_private(source_api, staging_api, pr_number, keep_sha)
+    cancelled_private, unsafe = cancel_stale_private(source_api, staging_api, pr_number, keep_sha, correlations)
     emit("cancelled_public", ",".join(map(str, cancelled_public)) or "none")
     emit("cancelled_private", ",".join(map(str, cancelled_private)) or "none")
     emit("preserved_unsafe_private", ",".join(map(str, unsafe)) or "none")
