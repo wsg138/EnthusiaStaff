@@ -10,7 +10,7 @@ Selected by the owner-authorized Discord-program worker on 2026-08-24 and carrie
 - Implementation branch: `package/es-d05-staff-bot-runtime`.
 - Implementation PR: #160.
 - Frozen validated product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
-- `ES-D04` remains separate and was not modified; its independent private staging-control dependency PR `wsg138/EnthusiaStaff-Staging#109` remains open at terminal reconciliation.
+- `ES-D04` remains separate and was not modified. Its staging-control prerequisites `wsg138/EnthusiaStaff-Staging#108` and `#109` have since merged, and live D04 work is continuing independently on Staff PR #151.
 - Canonical `main` Flyway boundary is V19. D05 adds no migration.
 - Fresh library review selected official JDA `6.5.0`, with audio dependencies excluded because D05 has no voice scope. JDA owns Discord REST rate-limit handling and incremental Gateway reconnect/backoff; D05 adds bounded application work and fail-closed runtime identity/guild checks around it.
 - Production Discord changes, production deployment, production data access, LiteBans cutover, and issue #43 acceptance remain unauthorized.
@@ -74,7 +74,7 @@ Frozen product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
 
 D05 acceptance explicitly requires a non-destructive real staging Discord connection using the staging application, followed by the exact application-ID, single-guild, test-channel visibility/send-permission readiness fence and clean disconnect/shutdown behavior. The implementation already provides `--smoke-test` for this and sends no messages or configuration changes.
 
-After checking the public repository, the connected private staging-control repository, current workflows, and available authorized execution surfaces, there is no secret-bearing path accessible to this worker that contains `ENTHUSIA_STAFF_BOT_TOKEN` or can run the staff-bot smoke without exposing/requesting that credential. The existing canonical Pi workflow carries database secrets for the Paper test only and contains no staff-bot token/smoke step. Creating a pull-request workflow that consumes a Discord bot token would weaken the trust boundary, and modifying the independent staging-control lane would collide with separate open control-plane work rather than resolve the missing credential.
+Fresh reconciliation after staging-control PRs #108/#109 merged still finds no authorized secret-bearing execution path available to this worker. Code search finds no `ENTHUSIA_STAFF_BOT_TOKEN` or staff-bot smoke path in the current private staging-control repository and no public EnthusiaStaff workflow executes `--smoke-test`. Repository secret values are deliberately not inspected or exposed. Creating a new secret-bearing workflow would require a separately trusted provisioning path and would not prove that an authorized staging token is available to this worker.
 
 This is therefore a genuine external blocker, not a CI wait and not grounds to weaken the acceptance gate. PR #160 and its validated implementation must remain preserved and unmerged.
 

@@ -11,7 +11,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `BLOCKED` / `PARKED_BLOCKED` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D04` | Account linking and DiscordSRV migration | `ACTIVE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `BLOCKED` / `PARKED_BLOCKED` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
@@ -26,7 +26,9 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active package
 
-None. `ES-D04` and `ES-D05` are independently `BLOCKED` / `PARKED_BLOCKED`; a future Discord worker must reconcile live GitHub and resume an actionable continuation only when its recorded blocker can actually be resolved.
+`ES-D04` has an independent live continuation on Staff PR #151 owned by another worker. Its staging-control prerequisites `wsg138/EnthusiaStaff-Staging#108` and `#109` are merged. This D05 continuation does not edit or take over D04.
+
+`ES-D05` is independently `BLOCKED` / `PARKED_BLOCKED` after completing all safe implementation/review/connected-validation work available to this worker.
 
 ## ES-D05 parked blocker
 
@@ -34,19 +36,19 @@ None. `ES-D04` and `ES-D05` are independently `BLOCKED` / `PARKED_BLOCKED`; a fu
 
 The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. The final product head passed exact-head full Java 21 validation, staff-bot configuration-cache validation, Codacy with zero new issues, CodeRabbit after valid findings were corrected, Sentinel artifact validation, and the canonical Paper/Pi staging path. The generic CodeRabbit docstring-coverage warning is not a functional/security/lifecycle package gate.
 
-D05 is not complete because its own acceptance contract requires a **real staging Discord connection smoke** using the staging bot token, proving exact staging application `1541279616881397772`, exact Enthusia guild `1410303324745371709`, required test channel `1541286004298752091` with view/send permission, reconnect/readiness behavior, and clean disconnect/shutdown. No authorized secret-bearing execution path accessible to the connected worker contains `ENTHUSIA_STAFF_BOT_TOKEN`; the current public/private Pi control path is Paper-only. The token must not be requested in chat, committed, logged, or placed on a command line, and the validation gate must not be weakened.
+D05 is not complete because its own acceptance contract requires a **real staging Discord connection smoke** using the staging bot token, proving exact staging application `1541279616881397772`, exact Enthusia guild `1410303324745371709`, required test channel `1541286004298752091` with view/send permission, reconnect/readiness behavior, and clean disconnect/shutdown. Fresh code search after the staging-control repairs merged finds no `ENTHUSIA_STAFF_BOT_TOKEN` or staff-bot smoke execution path in `wsg138/EnthusiaStaff-Staging`, and no public EnthusiaStaff workflow executes `--smoke-test`. The token must not be requested in chat, committed, logged, or placed on a command line, and the validation gate must not be weakened.
 
 Exact unblock: securely provision the staging token to an authorized trusted runtime/secret manager, run the already-implemented `--smoke-test` against exact frozen product source/artifact `5f24ba1818c81e0a30a516fa70c8597586184b00`, publish only sanitized provenance/readiness/shutdown evidence, then resume PR #160, reconcile live state, merge normally if the reviewed executable head is still exact and all applicable gates remain satisfied, verify containment/cleanup, and publish `COMPLETE`. Do not start D06 in the same worker.
 
-## ES-D04 parked lineage / independent live work
+## ES-D04 independent live continuation
 
-D04 remains outside D05 ownership. Its implementation PR #151 remains open, and its independent private staging-control dependency PR `wsg138/EnthusiaStaff-Staging#109` remains open at D05 terminal reconciliation. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
+D04 remains outside D05 ownership. Its implementation PR #151 is active, and staging-control PRs #108/#109 are merged. Live GitHub controls its current head/check/review state. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
 
 Canonical prior handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d159f1e219ea70553c66c0`.
+`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`.
 
 ## D05 frozen evidence summary
 
