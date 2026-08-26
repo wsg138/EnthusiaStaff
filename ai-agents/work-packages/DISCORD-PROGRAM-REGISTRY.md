@@ -24,46 +24,71 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
-## Active package
+## Active and parked packages
 
-`ES-D04` has an independent live continuation on Staff PR #151 owned by another worker. Its staging-control prerequisites `wsg138/EnthusiaStaff-Staging#108` and `#109` are merged. This D05 continuation does not edit or take over D04.
+`ES-D04` has an independent live continuation on Staff PR #151 owned by another worker. D05 did not edit, synchronize, merge, renumber, or replace D04.
 
-`ES-D05` is independently `BLOCKED` / `PARKED_BLOCKED` after completing all safe implementation/review/connected-validation work available to this worker.
+`ES-D05` is independently `BLOCKED` / `PARKED_BLOCKED`. Its previous staging-Discord acceptance blocker is cleared, but fresh mandatory post-reconciliation ordinary hosted validation cannot currently execute because the repository GitHub Actions scheduler is stalled.
 
-## ES-D05 parked blocker
+## ES-D05 current record
 
-`ES-D05 — Staff bot runtime foundation` is preserved on `package/es-d05-staff-bot-runtime`, implementation PR #160. Frozen validated product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`.
+Implementation branch: `package/es-d05-staff-bot-runtime`. Implementation PR: #160. Current package-record head: `6451ede1d6caeeeee19ac16eac86fbbe5570bff5`. Frozen reviewed D05 product source: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
 
-The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. The final product head passed exact-head full Java 21 validation, staff-bot configuration-cache validation, Codacy with zero new issues, CodeRabbit after valid findings were corrected, Sentinel artifact validation, and the canonical Paper/Pi staging path. The generic CodeRabbit docstring-coverage warning is not a functional/security/lifecycle package gate.
+Canonical current handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-hosted-validation-blocked.md`.
+Acceptance checkpoint: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-discord-acceptance.md` on the preserved implementation branch.
+Historical staging-blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`.
 
-D05 is not complete because its own acceptance contract requires a **real staging Discord connection smoke** using the staging bot token, proving exact staging application `1541279616881397772`, exact Enthusia guild `1410303324745371709`, required test channel `1541286004298752091` with view/send permission, reconnect/readiness behavior, and clean disconnect/shutdown. Fresh code search after the staging-control repairs merged finds no `ENTHUSIA_STAFF_BOT_TOKEN` or staff-bot smoke execution path in `wsg138/EnthusiaStaff-Staging`, and no public EnthusiaStaff workflow executes `--smoke-test`. The token must not be requested in chat, committed, logged, or placed on a command line, and the validation gate must not be weakened.
+The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. JDA 6.5.0 requests no privileged Gateway intents in D05. Tokens remain secret and are never committed, logged, requested in chat, exposed in artifacts, or placed on command lines.
 
-Exact unblock: securely provision the staging token to an authorized trusted runtime/secret manager, run the already-implemented `--smoke-test` against exact frozen product source/artifact `5f24ba1818c81e0a30a516fa70c8597586184b00`, publish only sanitized provenance/readiness/shutdown evidence, then resume PR #160, reconcile live state, merge normally if the reviewed executable head is still exact and all applicable gates remain satisfied, verify containment/cleanup, and publish `COMPLETE`. Do not start D06 in the same worker.
+### Required live Discord acceptance — PASS
+
+Trusted staging workflow `wsg138/EnthusiaStaff-Staging` run `32926306691`, latest attempt 3 / job `98071453002`, completed successfully on trusted self-hosted runner `Lincoln-PI-4` (Linux/ARM64). Trusted staging-control head `03b3fce61bffe552d7905a4e4aa18e3015ea4e00` pins exact D05 product SHA `5f24ba1818c81e0a30a516fa70c8597586184b00`, requires Java 21, builds/verifies the runtime before secret scope, and executes the non-destructive `--smoke-test`.
+
+Sanitized outcome: staging application `1541279616881397772` PASS; Enthusia guild `1410303324745371709` PASS; required test channel `1541286004298752091` PASS for view/send; readiness PASS; smoke exit 0; graceful close/shutdown PASS. The workflow sends no moderation action or test message and performs no Discord configuration change or production-data access. No bot-token value was inspected or exposed.
+
+### Frozen product evidence
+
+For exact frozen product `5f24ba1818c81e0a30a516fa70c8597586184b00`:
+
+- Coverage/full Java 21 validation `32874248685` / job `97888464396`: success; aggregate JaCoCo 50.76% lines / 41.41% branches / 53.21% instructions; artifact `9573547679`, digest `sha256:c6f2df467085d811593c7100feb5a4c698a46e14432e92d401662dff9d43455c`.
+- Staff Bot Configuration Cache `32874248800` / job `97888275507`: success twice with configuration-cache problems treated as failures.
+- Sentinel Restart Artifact `32874248693`: success.
+- Codacy: zero new issues, 63.04% diff coverage, +0.17% coverage variation.
+- CodeRabbit: success after valid findings were fixed; all live inline threads resolved.
+- Canonical Pi public `32879118794` and correlated private `32880103099` / job `97907230239`: success for the frozen Paper/Pi gate.
+
+These results remain attributed only to the revisions that executed them; they are not substituted for the fresh executable validation required after current-main reconciliation.
+
+### Current-main reconciliation
+
+PR #160 first incorporated later canonical executable state through ordinary two-parent merge `9c99e78f520cd59e7e59506c37573ac9ad028d63`. Later `main` advances were documentation/orchestration/component-metadata only and were reconciled normally through `5dee27e700a5fdd0a78121a5fd16c863dac5e0dc`. Current package-record head `6451ede1d6caeeeee19ac16eac86fbbe5570bff5` differs after that executable synchronization only by D05 state/handoff tracking; empty trigger commit `6b12c9ba781cd85075df649d89a3a01e7245d6b7` had exactly zero changed files from its parent.
+
+Canonical `main` at blocker publication start is `592778acc3c77f834359732e16ff12b7b1e881d4`, migration boundary V19. D05 adds no migration and does not consume D04's unmerged V20.
+
+### Current hard blocker — GitHub Actions scheduling
+
+Fresh executable validation after the executable reconciliation is mandatory. The repository Actions scheduler is currently not executing queued work: a repository-wide query returned 0 in-progress runs and 14 queued runs, including `main` workflow-dispatch run `32984827059` queued since 15:21 UTC. D05 Coverage runs `32984359237` and `32984371731` remain queued without jobs; configuration-cache run `32984361382` remained queued after retry; Sentinel run `32984723125` has no completed executable result; Pi runs including `32984459623` and `32984806337` remain queued/non-passing.
+
+A bounded validation-only PR #167 used the identical implementation candidate with a fresh PR concurrency key. External GitHub integrations received the event (including an exact-head Codacy analysis), but GitHub Actions created no exact-head workflow run. PR #167 was closed without merge.
+
+This is infrastructure-unavailable evidence, not a D05 product failure. It still blocks merge: `VALIDATION-POLICY.md` says queued or missing checks are not passing evidence and expressly forbids using the owner-approved infrastructure exception to excuse a missing ordinary GitHub-hosted build that the repository normally executes.
+
+### Exact unblock
+
+Resume D05 only after GitHub Actions scheduling materially changes and ordinary hosted jobs begin allocating again, or another already-authorized exact-head hosted execution path becomes executable. Do not repeatedly rerun the same queued jobs merely to change timestamps.
+
+Then reconcile live `main`/PR #160, run fresh applicable full Java 21/Coverage, staff-bot configuration-cache, Sentinel, static/review, and canonical Pi gates on the exact executable tree, merge #160 normally only if every required gate is terminal and green, verify containment/cleanup, publish `COMPLETE`, and stop. Do not start D06 in the same worker.
 
 ## ES-D04 independent live continuation
 
-D04 remains outside D05 ownership. Its implementation PR #151 is active, and staging-control PRs #108/#109 are merged. Live GitHub controls its current head/check/review state. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
-
-Canonical prior handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
+D04 remains outside D05 ownership. Its implementation PR #151 is active. Live GitHub controls its current head/check/review state.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package through PR #149. Frozen validated merge-ready head: `5cd98a719e30eff64d1595f1e219ea70553c66c0`.
-
-## D05 frozen evidence summary
-
-- Frozen product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
-- Coverage/full validation run `32874248685`, job `97888464396`: success; aggregate JaCoCo 50.76% lines / 41.41% branches / 53.21% instructions; validation artifact `9573547679`, digest `sha256:c6f2df467085d811593c7100feb5a4c698a46e14432e92d401662dff9d43455c`.
-- Staff Bot Configuration Cache run `32874248800`, job `97888275507`: success with two configuration-cache executions and problems treated as failures.
-- Sentinel Restart Artifact run `32874248693`: success for the frozen head.
-- Codacy: zero new issues, 63.04% diff coverage, +0.17% coverage variation.
-- CodeRabbit status: success after valid findings were fixed; no unresolved functional/security/lifecycle finding remains.
-- Canonical Pi public run `32879118794` and correlated private run `32880103099`, job `97907230239`: success on trusted `Lincoln-PI-4`; this is Paper/Pi evidence only and is not relabeled as the missing Discord smoke.
+`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package until D05 actually merges and terminal publication completes.
 
 `ES-D06` and `ES-D13` remain dependency-blocked until both D04 and D05 complete. D07+ remain sequenced behind their stated dependencies.
 
 ## Selection
 
-Classify every incomplete `ES-Dxx` as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`. Select the highest-priority actionable continuation; otherwise select the lowest-priority dependency-complete ready package. Skip blocked packages. A live overlapping website/competition/other worker may make only the overlapping package temporarily `PARKED_BLOCKED`; it does not authorize conflicting edits and does not prevent another independent Discord package from being selected when dependencies permit.
-
-Each worker completes exactly one package and stops only at `COMPLETE` or a genuine externally blocked terminal state after publishing durable state. The worker must not stop merely because it produced a plan, opened a draft PR, reached a first checkpoint, or is waiting on ordinary CI that it can inspect in the same session.
+Classify every incomplete `ES-Dxx` as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`. Select the highest-priority actionable continuation; otherwise select the lowest-priority dependency-complete ready package. Skip blocked packages. Each worker completes exactly one package and stops only at `COMPLETE` or a genuine externally blocked terminal state after publishing durable state.
