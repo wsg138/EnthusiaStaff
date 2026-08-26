@@ -1,5 +1,5 @@
 name: Pi Staging
-run-name: "Pi Staging PR #${{ inputs.source_pr_number || github.event.pull_request.number || 'main' }} / ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || github.sha }} / ${{ inputs.request_correlation || github.event_name }}"
+run-name: "Pi Staging PR #${{ inputs.source_pr_number || 'main' }} / ${{ inputs.source_pr_head_sha || inputs.source_sha || github.sha }} / ${{ inputs.request_correlation || 'manual' }}"
 
 on:
   workflow_dispatch:
@@ -44,21 +44,12 @@ on:
         required: false
         default: ""
         type: string
-  pull_request_target:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: pi-staging-${{ inputs.source_pr_number || github.event.pull_request.number || github.ref }}
+  group: pi-staging-${{ inputs.source_pr_number || inputs.source_sha || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -68,22 +59,9 @@ env:
   REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
-  fork-boundary:
-    name: Explain fork staging boundary
-    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Keep fork PRs outside private staging
-        run: echo 'Fork pull requests use the ordinary public build/test/static-analysis checks and never receive private Pi execution or staging credentials.'
-
   publish-start:
     name: Publish exact-head Pi staging start
-    if: >-
-      ${{
-        (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository) ||
-        (github.event_name == 'workflow_dispatch' && inputs.run_pi_test && inputs.source_pr_number != '')
-      }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pi_test && inputs.source_pr_number != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -92,9 +70,9 @@ jobs:
       pull-requests: write
       statuses: write
     env:
-      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
-      SOURCE_PR_HEAD_REF: ${{ inputs.source_pr_head_ref || github.event.pull_request.head.ref || '' }}
-      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || '' }}
+      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || '' }}
+      SOURCE_PR_HEAD_REF: ${{ inputs.source_pr_head_ref || '' }}
+      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || '' }}
       REQUESTER: ${{ inputs.request_requester || github.actor }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -122,7 +100,6 @@ jobs:
 
   build-paper-runtime:
     name: Build trusted EnthusiaStaff Paper runtime
-    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -158,10 +135,10 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          EVENT_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          EVENT_PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
-          EVENT_PR_REF: ${{ github.event.pull_request.head.ref || '' }}
+          EVENT_SOURCE_SHA: ${{ github.sha }}
+          EVENT_PR_NUMBER: ''
+          EVENT_PR_REPOSITORY: ''
+          EVENT_PR_REF: ''
           EVENT_REQUESTER: ${{ github.actor }}
           INPUT_SOURCE_SHA: ${{ inputs.source_sha || '' }}
           INPUT_PR_NUMBER: ${{ inputs.source_pr_number || '' }}
@@ -269,7 +246,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
-      actions: read
+      actions: write
       contents: write
       issues: write
       pull-requests: write
@@ -314,6 +291,15 @@ jobs:
         with:
           name: ${{ needs.build-paper-runtime.outputs.artifact_name }}
           path: runtime-package
+
+      - name: Revalidate exact candidate and supersede stale staging
+        if: ${{ needs.build-paper-runtime.outputs.source_pr_number != '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 staging-controls/scripts/staging/supersede_pi_staging.py candidate \
+            --pr-number "$SOURCE_PR_NUMBER" \
+            --sha "$SOURCE_PR_HEAD_SHA"
 
       - name: Publish bounded transient GitHub release asset
         id: transfer
@@ -556,8 +542,8 @@ jobs:
       pull-requests: write
       statuses: write
     env:
-      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || github.event.pull_request.number || '' }}
-      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || github.event.pull_request.head.sha || '' }}
+      SOURCE_PR_NUMBER: ${{ inputs.source_pr_number || '' }}
+      SOURCE_PR_HEAD_SHA: ${{ inputs.source_pr_head_sha || '' }}
       REQUESTER: ${{ inputs.request_requester || github.actor }}
       PUBLIC_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
       PRIVATE_RUN_ID: ${{ needs.bridge-staging.outputs.private_run_id }}
