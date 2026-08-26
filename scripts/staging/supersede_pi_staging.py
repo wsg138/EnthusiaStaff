@@ -122,7 +122,7 @@ def iter_workflow_runs(api: RepoApi):
                 yield run
         if len(runs) < 100:
             return
-    raise SupersedeError("refusing to inspect more than 500 public staging runs")
+    print("::warning::Reached 500-run public staging history scan cap; continuing with the recent bounded window")
 
 
 def public_binding(run: Mapping[str, Any]) -> tuple[int, str] | None:
@@ -183,7 +183,7 @@ def private_records(source_api: RepoApi, pr_number: int, keep_sha: str | None) -
     for page in range(1, 11):
         payload = source_api.get(f"/issues/{pr_number}/comments?per_page=100&page={page}")
         if not isinstance(payload, list):
-            raise SupersedeError("PR comments response is not a list")
+            raise SupersedeError("PR comments response is invalid")
         for item in payload:
             if not isinstance(item, Mapping):
                 continue
@@ -243,7 +243,7 @@ def iter_private_workflow_runs(api: RepoApi):
                 yield run
         if len(runs) < 100:
             return
-    raise SupersedeError("refusing to inspect more than 500 private staging runs")
+    print("::warning::Reached 500-run private staging history scan cap; continuing with the recent bounded window")
 
 
 def private_runs_from_correlations(staging_api: RepoApi, correlations: list[tuple[str, str]]) -> list[tuple[str, int]]:
