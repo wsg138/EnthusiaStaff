@@ -1,18 +1,12 @@
 # Cheat Tester
 
-The Cheat Tester is an evidence-only staff tool for short, bounded anti-cheat probes. It does **not** issue punishments, change LiteBans authority, or make an automatic cheating decision.
+Cheat Tester is a merged, evidence-only staff tool for short bounded anti-cheat probes. It does **not** issue punishments, change moderation authority, or automatically decide that a player is cheating.
 
-## Access and controls
+For overall staff-tool status and source navigation, use [[Staff Tools, Investigations, and Player-State Safety]]. For review rules, use [[Code Review Guide]].
 
-Cheat Tester is available to authenticated advanced staff sessions (Mod, Developer, Admin, and Founder) with `enthusiastaff.cheattester`.
+## Quick controls
 
-The staff-mode blaze rod uses these controls:
-
-- **Right-click:** cycle the selected tester.
-- **Left-click a player:** run the selected tester against that player. The damage event is cancelled.
-- **Shift-right-click:** show the current tester configuration and status shortcut.
-
-The text fallback is the supported Bedrock-safe control surface:
+Cheat Tester is limited to authorized advanced staff sessions and the relevant permission nodes.
 
 ```text
 /cheattester config
@@ -27,102 +21,121 @@ The text fallback is the supported Bedrock-safe control surface:
 /cheattester base status
 ```
 
-`enthusiastaff.cheattester.cancel-any` allows an authorized staff member to cancel another staff member's active tester. The target must be online on the current backend when a new test starts, and staff cannot target themselves.
+The staff-mode blaze rod provides a Java interaction surface: right-click cycles the tester, left-clicking a target runs it, and shift-right-click shows configuration/status. The command forms are the supported text/Bedrock fallback.
 
-Fake-base controls additionally require active staff mode plus `enthusiastaff.cheattester.fake-base`. By default, only the staff member who created a fake base can extend, clear, or teleport to it. `enthusiastaff.cheattester.fake-base.manage-any` allows Admin/Founder-level cross-controller management.
+A new test requires the target to be online on the current backend and cannot target the controlling staff member. Cross-controller cancellation or fake-base management requires the additional configured authority.
 
-## Release tester types
+## Tester types
 
 ### Totem refill
 
-Uses a totem already present in the target's normal inventory; the tester does not create one. The target's offhand is temporarily cleared and the evidence records whether a totem appears there during the short probe. Exact pre-test inventory state is restored afterward.
+Uses a totem already present in the target's normal inventory; the tester does not create one. The offhand is temporarily cleared and the probe observes whether a totem appears there. The exact owned pre-test state is restored afterward.
 
 ### Auto-armor
 
-Requires one equipped armor piece and one empty normal inventory slot. One existing equipped piece is temporarily moved into that empty slot and the evidence records whether the corresponding armor slot becomes equipped again. Exact pre-test inventory state is restored afterward.
+Temporarily moves one existing equipped armor piece into a valid empty normal slot and observes whether the armor slot is equipped again. It does not create replacement armor and must restore the exact owned pre-test state.
 
 ### Velocity / anti-knockback
 
-Applies a bounded configured velocity while the target is temporarily protected from damage. Evidence records resulting displacement. Original position, velocity, fall distance, invulnerability state, and inventory are restored.
+Applies bounded configured velocity while temporarily protecting the target from damage, records displacement evidence, and restores owned movement/invulnerability state.
 
 ### No-fall
 
-Applies a short bounded vertical movement probe while the target is protected from damage. The runtime samples fall-distance behavior and records the maximum observed value and suspicious downward-airborne resets. Original movement and inventory state are restored.
+Runs a short bounded vertical movement probe, samples fall-distance behavior and records suspicious reset observations. It must restore the owned movement/inventory state after the probe.
 
 ### Fake entity
 
-Creates a nonpersistent, client-side synthetic entity through the optional ProtocolLib adapter. It is shown only to the target and controlling staff member, never broadcast to ordinary players. Evidence records interaction count, attack count, first-interaction latency, and the minimum observed aim angle toward the synthetic entity.
+Uses the optional ProtocolLib adapter to show a nonpersistent synthetic entity only to the target and controlling staff member. Evidence may include interaction/attack counts, first-interaction latency and bounded aim-angle observations.
 
-### Fake base
+ProtocolLib is optional for the rest of EnthusiaStaff. If the adapter is missing, incompatible or unhealthy, **fake-entity testing fails closed** while unrelated tester types may remain available.
 
-Fake bases are a separate bounded visual probe implemented without changing the Minecraft world. The runtime sends a fixed 7x7 virtual deepslate/blackstone/tinted-glass structure through Paper's client-side multi-block-change API. It never places, breaks, replaces, or rolls back a real block.
+## Fake bases
 
-Before showing the structure, the runtime requires all of the following:
+Fake bases are bounded client-side visual probes. They do not place, break or replace real world blocks.
 
-- the target is online on the current backend;
-- the target's current chunk is already loaded; the feature never loads or generates a chunk;
-- the entire template fits inside that one chunk and inside the world's build height;
-- every virtual template cell currently corresponds to real air;
-- the 5x5 interior floor is solid and is not an explicitly hazardous block such as magma, campfire, cactus, or powder snow;
-- no other fake-base operation already owns that target;
-- the global limit of 8 active fake bases and per-controller limit of 2 are not exceeded;
-- durable audit storage is available before rendering begins.
+Before rendering, the runtime requires safe conditions such as:
 
-Only the target and staff viewers whose **Teleport** action succeeds see the virtual structure. Every other player is not a viewer.
+- target online on the current backend;
+- current chunk already loaded; no chunk generation/loading for the feature;
+- template inside one chunk and valid build height;
+- virtual cells correspond to real air;
+- safe supporting floor/interior assumptions;
+- no conflicting fake-base operation for the target;
+- bounded global/per-controller concurrency;
+- durable audit availability before rendering.
 
-A fake base expires after five minutes. At roughly four minutes, the controlling staff member receives a warning with clickable **Extend**, **Clear**, and **Teleport** controls. **Extend** starts a new five-minute expiry window. The structure is also cleared when the target moves more than 48 blocks away, changes world/backend, disconnects, the controlling staff member disconnects or leaves staff mode, or the plugin's fake-base lifecycle closes.
+Only the target and authorized staff viewers that successfully join the view see the virtual structure. Other players do not.
 
-## Fake-base cleanup and recovery
+Fake bases have a bounded lifetime and are cleared on expiry, excessive target movement, world/backend changes, disconnects, controller staff-mode exit/disconnect, or lifecycle shutdown. Extension starts a new bounded lifetime rather than making the probe permanent.
 
-Fake-base world safety does not depend on a rollback log because there is no world mutation to roll back. Cleanup reads the current authoritative real block data for every overlaid cell and sends those real block states back to each still-connected viewer. Cleanup is idempotent, so duplicate cancellation paths cannot delete or replace real blocks.
+### Why fake-base cleanup cannot damage the world
 
-If rendering fails after a viewer is registered, the operation is closed and an authoritative restore is attempted immediately. If a viewer or scheduler retires before a restore can be sent, disconnect/session teardown is the safety boundary: virtual client block changes cannot persist in the server world and disappear when that client session ends. A hard server/process interruption therefore cannot leave fake blocks in a saved world. Normal plugin-disable/reload lifecycle handling also attempts explicit viewer cleanup before operation state is discarded; scheduler retirement is logged rather than falsely reported as a successful restore.
+The server world is never changed. Cleanup reads authoritative real block data and sends those states back to still-connected viewers. Duplicate cleanup is therefore idempotent with respect to world state.
 
-The fake-base operation itself is intentionally in memory. Persisting a fake-block operation across a process restart would be misleading because the client session that received those virtual blocks no longer exists. Durable evidence instead records coordinate-free operation lifecycle events in the existing `audit_events` ledger. No new Flyway migration is required; V18 remains the current migration boundary.
+If a viewer/session disappears before a restore packet can be sent, the virtual client blocks cannot persist in saved world data and disappear with that client session. Normal disable/reload still attempts explicit cleanup and logs scheduler/session retirement rather than claiming a restore it did not send.
 
-Fake-base audit records include the operation correlation ID, staff/target UUIDs, server ID, lifecycle action, outcome, reason code, and timestamp. They deliberately do **not** store the fake-base coordinates or unrelated player data.
+The fake-base operation is intentionally in memory. Persisting a virtual-block session across process restart would imply continuity that does not exist after the client session is gone. Coordinate-free lifecycle events are instead written to the existing audit ledger.
 
-## Safety and recovery for state-changing testers
+## Durable tester recovery
 
-Tester state is journaled in MariaDB migration V18 **before** a temporary mutation is applied. There may be only one globally active tester row for a target UUID across backends. Active tester rows also participate in the inventory lock contract, so an offline inventory edit cannot race a pending tester recovery after a disconnect or restart.
+State-changing testers journal recovery state using:
 
-For state-changing testers, the runtime stores a bounded exact snapshot of the target state it may need to restore. Normal completion, staff cancellation, timeout, disconnect/reconnect, death/respawn, reload interruption, and runtime restart all converge on the same durable recovery row. The row is not marked terminal until restoration or cleanup has been verified. If restoration cannot be verified, the row stays active and blocks a new tester for that target.
+```text
+V18__cheat_tester_session_journal.sql
+```
 
-During a state-changing probe, common player actions that could consume or move test assets are cancelled, including drops, pickups, item consumption, hand swaps, placement, and inventory opening. The probes are intentionally short and targets are temporarily invulnerable.
+The repository's **overall** current Flyway history is through **V19**. V18 is still the migration that owns Cheat Tester session-journal state; it is not the current global migration ceiling.
 
-## ProtocolLib and fake-entity failure behavior
+The durable row is written before temporary mutation. Only one globally active tester may own the same target, and active tester state participates in the inventory-lock/recovery contract so offline inventory work cannot race an unresolved tester restore.
 
-ProtocolLib is optional for the rest of EnthusiaStaff. The fake-entity implementation is isolated behind a focused adapter and uses no direct NMS dependency. If ProtocolLib is missing, cannot initialize, or becomes unhealthy, fake-entity testing fails closed. Other tester types and fake-base rendering do not depend on ProtocolLib.
+Normal completion, staff cancellation, timeout, disconnect/reconnect, death/respawn, reload interruption and runtime restart converge on the same recovery model. A row is not terminal until restoration/cleanup is verified. If restoration cannot be proved, the active recovery state blocks a new tester for that target.
 
-A fake-entity journal row is not falsely completed when packet cleanup cannot be verified. Recovery waits for a healthy packet adapter, removes the journaled synthetic entity identifier for the current client session when applicable, and then completes the row.
+During a state-changing probe, common actions that could consume or move test assets are cancelled, including relevant drops, pickups, item use, swaps and inventory access. Probes are intentionally short and bounded.
 
 ## Configuration
 
-`staff-tools.cheat-tester` is restart-only configuration. `/estaff reload` rejects a candidate that changes it without a restart.
+`staff-tools.cheat-tester` is restart-owned configuration. `/estaff reload` must reject a candidate that attempts to change it as though a live runtime resource were rebuilt.
 
-```yaml
-staff-tools:
-  cheat-tester:
-    timeout-millis: 4000
-    probe-ticks: 60
-    maximum-active-global: 8
-    maximum-active-per-staff: 2
-    fake-entity-distance: 3.0
-    velocity:
-      horizontal: 0.75
-      vertical: 0.30
-    no-fall:
-      vertical: 0.70
-```
+Representative configuration includes bounded timeout/sampling/concurrency, fake-entity distance and velocity/no-fall parameters. Runtime validation rejects unsafe or nonsensical ranges.
 
-Runtime validation enforces safe bounds: timeout 1–15 seconds, global concurrency 1–32, per-staff concurrency no greater than the global limit, fake-entity distance 1–8 blocks, configured velocity components no greater than 2.0, and probe sampling 10–300 ticks.
+Fake-base limits are fixed release safety limits rather than an invitation to create arbitrarily large or long-lived visual structures.
 
-Fake-base limits are fixed release safety limits rather than reloadable configuration: 7x7 approved template, one already-loaded chunk, 8 active globally, 2 per controlling staff member, 48-block distance, five-minute lifetime, and one-minute expiry warning.
+## Evidence interpretation
 
-## Evidence interpretation and privacy
+A tester observation is investigation evidence, not a verdict. Staff must consider latency, player input, client platform, server conditions, other evidence and known false-positive modes.
 
-A positive-looking tester observation is only evidence for staff review. Staff must consider latency, player input, Bedrock/Java behavior, server conditions, and other case evidence. The tester never creates a sanction or punishment request automatically.
+Do not punish automatically because one tester looks suspicious. Use the ordinary case/evidence/punishment workflow after human review.
 
-The durable tester row contains tester/session identifiers, server/staff/target UUIDs, bounded configuration/evidence, and the recovery snapshot required to restore temporary state. It does not add raw network addresses, chat contents, private messages, or unrelated player evidence. Fake-base lifecycle evidence is separately coordinate-free as described above.
+## Privacy
 
-Representative distributed Java/Bedrock acceptance remains part of `ES-V02`; ordinary package validation must not claim that private acceptance passed when that environment is unavailable.
+The durable tester state contains only the bounded identifiers/configuration/evidence and recovery snapshot needed for the operation. It must not become a place to store raw network addresses, unrelated chat/private messages, credentials or unrelated player evidence.
+
+Fake-base audit events deliberately avoid storing base coordinates. Do not add coordinates to staff chat, Discord or public output merely because a virtual probe was used.
+
+## Developer source map
+
+Start with:
+
+- `paper/src/main/java/net/enthusia/staff/paper/cheattester/`
+- `paper/src/main/java/net/enthusia/staff/paper/command/CheatTesterCommand.java`
+- `domain/src/main/java/net/enthusia/staff/domain/cheattester/`
+- `persistence/src/main/java/net/enthusia/staff/persistence/JdbcCheatTesterSessionStore.java`
+- `persistence/src/main/resources/db/migration/V18__cheat_tester_session_journal.sql`
+- focused Paper/domain/persistence tests for tester state and fake-base behavior
+
+Reviewers should follow the mutation from durable intent to scheduler-owned side effect to verification/terminal state. Also inspect ProtocolLib present/missing/failure behavior, cleanup idempotency, stale callbacks, player disconnect/reconnect, plugin disable and Bedrock/text fallback.
+
+## Validation boundary
+
+Automated unit/MariaDB tests can prove deterministic policy, schema and recovery transitions they actually exercise. They do not by themselves prove real Paper/Folia ownership, ProtocolLib compatibility, Java/Bedrock presentation, multi-backend disconnect behavior, or private staging acceptance.
+
+Representative distributed Java/Bedrock/runtime acceptance remains a separate evidence layer. See [[Build and Testing]].
+
+## Go deeper
+
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — staff-mode hotbar and procedure.
+- [[Staff Tools, Investigations, and Player-State Safety]] — status and source ownership.
+- [[Inventory and Confiscation Safety]] — overlapping player-state recovery concerns.
+- [[Recovery and Troubleshooting]] — what to do if cleanup/restoration is uncertain.
+- [[Code Review Guide]] — scheduler, persistence, privacy and validation review.
+- [[Build and Testing]] — evidence classes and staging boundaries.
