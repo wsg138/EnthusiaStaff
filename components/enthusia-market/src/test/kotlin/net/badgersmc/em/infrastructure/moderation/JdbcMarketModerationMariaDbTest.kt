@@ -48,7 +48,7 @@ class JdbcMarketModerationMariaDbTest {
         })
         createUpgradeBaseline()
         val applied = MigrationRunner(dataSource, "migrations", javaClass.classLoader).runAll()
-        assertEquals(listOf(25), applied.map { it.version })
+        assertEquals(listOf(28), applied.map { it.version })
         createStallAndShop()
     }
 
@@ -309,7 +309,7 @@ class JdbcMarketModerationMariaDbTest {
         connection.prepareStatement(
             "INSERT INTO schema_migration(version, name, applied_at) VALUES (?, ?, ?)",
         ).use { statement ->
-            (1..24).forEach { version ->
+            (1..27).forEach { version ->
                 statement.setInt(1, version)
                 statement.setString(2, "baseline_$version")
                 statement.setLong(3, now.toEpochMilli())
