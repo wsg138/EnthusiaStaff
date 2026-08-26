@@ -5,6 +5,7 @@
 | Component ID | `COMP-ROSECHAT` |
 | Standalone repository | `wsg138/Enthusia-RoseChat` |
 | Standalone default branch | `master` |
+| Aggregate path | `components/enthusia-rosechat/` |
 | Verified standalone head at setup | `8fcca5420b0f54207d6efa332327b9fd18edb8d8` |
 | Last synchronized external SHA | `UNSET` |
 | Last synchronized aggregate-main SHA | `UNSET` |
