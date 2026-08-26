@@ -15,7 +15,7 @@ The durable release path remains:
 5. complete private LiteBans migration/shadow evidence and owner cutover acceptance;
 6. perform the final release/no-fix audit on one pinned candidate.
 
-The Discord expansion is no longer specification-only: merged `main` now includes moderation-subject/scope contracts, V19 persistence foundations and central Discord-origin authorization policy. The finished account-linking runtime, interactive staff bot, Discord enforcement/reconciliation, AutoMod, role sync, public bot and final Discord migration/cutover remain separate product work. See [[Discord Moderation Platform]].
+The Discord expansion is no longer specification-only: merged `main` now includes moderation-subject/scope contracts, V19 persistence foundations and central Discord-origin authorization policy. The account-linking runtime, interactive staff bot, Discord enforcement/reconciliation, AutoMod, role sync, public bot and final Discord migration/cutover remain separate product work. See [[Discord Moderation Platform]].
 
 Use [[Implementation Status]] for the readable merged-main picture. Use the [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate review/runtime evidence for requirement-level proof.
 
