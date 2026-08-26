@@ -4,7 +4,7 @@
 `ES-X03`; External/multi-repository; primary `COMP-STAFF`; other `COMP-MARKET`; priority 120; conditional parallelism only without shared destructive-state overlap.
 
 ## 2. Status
-`BLOCKED` / `PARKED_BLOCKED`. Implementation, standalone exact-head CI, hosted Staff validation, and review are stabilized on the existing paired PRs. The remaining blocker is owner-controlled runtime readiness: both required exact-head Staff runtime gates timed out starting Paper on a thermally/resource-constrained host. Registry remains the canonical status index.
+`BLOCKED` / `PARKED_BLOCKED` after a live `ACTIONABLE_CONTINUATION` on 2026-08-26. The old thermal/runtime blocker materially changed and the standalone Market half has now merged, but the Staff half cannot be safely reconciled or merged while independent Discord package `ES-D04` owns the next Staff migration number and overlapping shared Staff files. Registry remains the canonical routing index.
 
 ## 3. Objective
 Implement durable market restriction, reservation, confiscation, rollback, and exact restoration across EnthusiaStaff and EnthusiaMarket.
@@ -19,67 +19,64 @@ Production listings; whole-market rollback; currency/reputation work; unverified
 `ES-P08` and `ES-X02` are `COMPLETE`.
 
 ## 7. Repository and privacy boundaries
-Use only existing Market PR #3 and Staff PR #139 on `package/es-x03-market-provider`. Market may use only ordinary public repository CI. No private Pi/staging runner config, labels, private bridge/dispatch implementation, staging secrets/topology/credentials, private artifact-transfer mechanism, or Sentinel infrastructure may enter Market or BadgersMC repositories. Preserve `preserve/es-x03-post-candidate-556b4b4-20260814` while it contains unique unrelated work.
+Use the existing Staff PR #139 on `package/es-x03-market-provider`. Standalone Market PR #3 is already merged and must not be replaced or rewritten. Market may use only ordinary public repository CI. No private Pi/staging runner config, labels, private bridge/dispatch implementation, staging secrets/topology/credentials, private artifact-transfer mechanism, or Sentinel infrastructure may enter Market or BadgersMC repositories. Preserve `preserve/es-x03-post-candidate-556b4b4-20260814` while it contains unique unrelated work.
 
-## 8. Frozen implementation heads
-- Market `main`: `bc24f1010642d6042307bc13a32fb33cc94e8883`.
-- Market PR #3: `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`.
-- Staff `main`: `0d82b0840ae837d4d923a2407b6e8a4190e4e448`.
-- Staff PR #139: `5b003225b305db76b47db7d75cf5b6a2943934df`.
-- Neither implementation PR merged.
+## 8. Current live heads and PR state
+- EnthusiaMarket `main`: `7dd0a89d3689785f0b70c770e1b7c8efa1d11929`, normal merge commit for PR #3.
+- EnthusiaMarket merged product head: `01a1ac70721e5d5c5f0ba73757ec01908cce53ea`.
+- EnthusiaStaff `main` at the blocker publication start: `d8cdedf4adcd16e46073bdfbe6d6f8aa309a6d29`.
+- EnthusiaStaff PR #139 current package-record head: `702b13438fd95da235b4a87218901be04999aaea` on `package/es-x03-market-provider`.
+- Independent Discord PR #151 (`ES-D04`) is open and mergeable at `3df254d69fec59a80df91565297ae9283637b639` and owns `persistence/src/main/resources/db/migration/V20__discord_account_linking.sql` plus overlapping shared Staff files.
 
-The branch history retains valid X03 remediation while broad unrelated Market cleanup remains preserved separately. No force-push, rebase, squash, or destructive reset was used.
+No force-push, rebase, squash, or destructive reset is authorized or used.
 
-## 9. Final implementation/review fixes
-- Stale blacklist restoration remains operation/revision fenced and replay-safe.
-- Bounded MariaDB concurrency waits remain in place.
-- `restoreBlacklist` was decomposed without suppressing Detekt after exact-head `ThrowsCount` feedback.
-- Market CI now consumes BadgersMC LumaGuilds `v2.1.24`, verifies asset SHA-256 `54ad645587f2ce895738eff3ee05123eb19e5687d80fa6d657aa3092031004c2`, compiles current RoseChat, bounds the download, and validates Market normally.
-- Market build/detekt/security/Wiki workflows explicitly check out the PR head instead of GitHub's synthetic merge ref.
-- Zero valid unresolved Market or Staff inline review threads remain. Market final CodeRabbit status is green. Staff's >500-file aggregate diff cannot receive a full CodeRabbit review and no approval is claimed for one that did not execute.
+## 9. 2026-08-26 continuation and repair
+Live GitHub proved the old owner-controlled host condition had materially changed: later trusted Pi/Sentinel work succeeded on the same validation path, and Market PR #3 resumed and merged normally. ES-X03 therefore became an `ACTIONABLE_CONTINUATION`.
 
-## 10. Current synchronization evidence
-Standalone and aggregate use identical blobs for the final touched Market files:
-- `MarketRestrictionJournal.kt`: `83758cff61c998b8d56907b706a8339bddc78721`.
-- `.github/workflows/build.yml`: `563ed55bb6f4496f2392f7bd82656922b6338c0a`.
-- `.github/workflows/wiki-checks.yml`: `424b57cad79bee95f07cbde4546baed2fdda6453`.
+The resumed Staff branch had a real exact-head hosted build defect at `22ea8395caa421dc9161c84acd58b5b16ca05fc8`: `CheatTesterJournalIntegrationTest` still asserted migration ceiling 19 after X03 had moved its branch-local Staff migration to V20. Public Pi run `32922736904` failed before private Pi execution with `expected: <19> but was: <20>`; that failure remains non-passing history.
 
-`COMPONENT-METADATA.md` records Market `addb0f53...`, `SYNC_PENDING`, and `PENDING_FINAL_CANONICAL_HASH`. The old normalized hash `8d27f4d9...` belongs only to obsolete candidate `6240869` and is not current evidence. Final canonical comparator execution remains a post-merge requirement.
+The isolated test assertion was corrected without changing product behavior, producing Staff head `702b13438fd95da235b4a87218901be04999aaea`.
 
-## 11. Exact-head Market validation
-Market `addb0f53d4aeac3549ab9b3ee8af3a6950db201f`:
-- Wiki Checks `31852806668`: `success`.
-- build `31852806638`: `success`.
-- build job `94931681707`: actual PR-head checkout proven; Java 21; pinned dependency digest verified; current RoseChat `shadowJar` passed; Market `test shadowJar jacocoTestReport` passed.
-- detekt `94932532843`: `success`.
-- security `94932532864`: `success`.
+## 10. Review and hosted exact-head evidence
+At `702b13438fd95da235b4a87218901be04999aaea`:
+- Staff PR #139 has zero live inline review threads.
+- CodeRabbit status is successful, but its repository policy explicitly skips automatic full review; no automated full-review approval is claimed.
+- Canonical public Pi run `32924559285` exact-head source validation and trusted hosted build job `98044698537` succeeded, including Java 21, clean full build/tests, aggregate coverage generation, runtime-JAR packaging, and exact artifact publication.
+- The regular `pull_request` Coverage and Sentinel artifact workflows do not currently execute because PR #139 is merge-conflicted with current `main`; queued, absent, merge-ref-only, or different-revision checks are not called passing.
 
-Historical startup failures, pre-fix Detekt failure, upstream dependency failures, and merge-ref-only runs remain non-passing/superseded history.
+## 11. Canonical Pi / staging state
+Canonical public Pi run `32924559285` completed successfully for exact Staff source `702b13438fd95da235b4a87218901be04999aaea`. Hosted build job `98044698537` produced exact artifact `enthusiastaff-paper-702b13438fd9-32924559285-1` with runtime SHA-256 `6086f728fdd673346588f2be40c3ec3c6bd80aecbec32602f028eb20c303c604`.
 
-## 12. Exact-head Staff hosted validation
-Staff `5b003225b305db76b47db7d75cf5b6a2943934df`:
-- Validate Wiki `31852845661`: `success`.
-- Coverage/full build `31852845645`: `success`; Java 21.0.12; 49-task build; aggregate JaCoCo lines 49.45%, branches 39.99%, instructions 51.96%; Paper and Velocity runtime creation and provider-leak inspection passed.
-- Sentinel Restart Artifact `31852845696`: `success`.
-- zero live inline review threads.
+Correlated private staging run `32925074087` / job `98046237374` then completed successfully on trusted runner `Lincoln-PI-4` (runner ID 2). Exact public-artifact retrieval/provenance verification, guarded disposable Paper boot/restart, durable sanitized evidence publication, and required private cleanup steps all completed successfully. The public bridge job `98046178541` also completed successfully, including verdict collection, transient public-transfer removal, and final result publication; terminal public result job `98048749238` succeeded. This is valid exact-head canonical Pi evidence for the current package-record head, but it does not remove the independent D04 serialization blocker or substitute for the post-reconciliation final exact-head gates that will be required after X03 changes again.
 
-## 13. Required runtime blocker
-Canonical Pi staging `31852844656` reached the verified exact Staff artifact and executed Paper. The first server start did not reach the trusted readiness marker within the repository-configured 240-second readiness window. Sanitized evidence showed severe thermal/resource pressure and no ES-X03 stack trace or migration failure before the timeout. No storage-ready cycle completed.
+## 12. Current synchronization evidence
+The aggregate Market mirror was synchronized from the standalone merged product lineage before the current Staff-only test assertion repair. Final canonical standalone↔aggregate parity remains a required post-Staff-merge step; no terminal `IN_SYNC` claim is made yet.
 
-The independent Sentinel restart for the same exact Staff SHA, job `174`, also ended `RESTART_CYCLE_1_PAPER_START_TIMEOUT` after passing its thermal prerequisite. This corroborates the current host-readiness problem.
+## 13. Migration impact and serialization blocker
+Existing migrations remain immutable. Canonical Staff `main` is at V19. X03 currently carries branch-local `V20__market_compliance_journal.sql`, while independent `ES-D04` PR #151 also legitimately carries `V20__discord_account_linking.sql` and edits shared Staff integration/persistence files including `PaperCommandRegistrar`, `PaperStorageBindings`, `plugin.yml`, and `MariaDbRuntime`.
 
-Because a runner was allocated and Paper executed, the owner-approved zero-execution infrastructure exception does not apply. These failures are not passes and are not waived. Extending the trusted readiness timeout solely to make the package pass is prohibited.
+PR #139 is also substantially behind current `main` and merge-conflicted. Resolving that divergence now would require choosing between overlapping live D04 work and X03's stale branch versions. ES-X03 must not steal D04's migration number, rewrite D04, or synthesize an unsafe conflict resolution merely to make checks run.
 
-## 14. Migration impact
-Market V001–V024 remain immutable; ES-X03 owns V025 only. Staff V1–V18 remain immutable; ES-X03 owns V19 only. No Flyway repair or historical migration rewrite occurred.
+## 14. Exact unblock condition
+`BLOCKED` / `PARKED_BLOCKED`. Do not create a replacement X03 product branch and do not begin another ES-X03 implementation.
+
+Resume after the independent D04 migration/shared-file work has serialized onto Staff `main` (or otherwise reached a durable state that removes the V20/shared-file ambiguity). Then:
+1. reconcile fresh `main` into `package/es-x03-market-provider` using an ordinary merge commit;
+2. renumber X03's Staff migration to the next free forward-only version without rewriting any merged migration;
+3. resolve shared-file conflicts preserving both packages' legitimate behavior;
+4. freeze the resulting exact Staff head;
+5. run all applicable exact-head hosted/static/review checks plus independent Sentinel and canonical Pi staging, treating queued/missing/failed evidence honestly;
+6. merge Staff PR #139 only after every required gate is terminal and green;
+7. prove post-merge standalone↔aggregate Market parity, publish terminal component/package state, and clean only safely contained branches.
 
 ## 15. Completion definition
-Both paired PRs must merge normally only after every required gate is green. After both merges, run `tools/component-sync/component_sync.py`, require exact aggregate/standalone parity, record the canonical SHA-256 and resulting default heads, update component/package state to terminal, and clean only safely contained temporary branches. Representative destructive/load/process-kill acceptance remains `ES-V03`.
+Standalone Market PR #3 is complete and normally merged, but ES-X03 as a package is not complete until Staff PR #139 is safely reconciled, fully exact-head validated, normally merged, contained, and post-merge provider parity is exact. Representative destructive/load/process-kill acceptance remains `ES-V03`.
 
-## 16. Resume / unblock condition
-`BLOCKED` / `PARKED_BLOCKED`. Do not create replacement product PRs and do not start another ES-X03 branch.
+## 16. Historical runtime blocker disposition
+The August 14 thermal/readiness failures remain valid non-passing historical evidence, but they are no longer the current routing blocker because live host conditions demonstrably changed enough for X03 to resume. They must not be rewritten as passes.
 
-Resume only after live evidence shows the owner-controlled validation host's cooling/runtime capacity materially improved. Rerun the exact frozen Staff runtime gates at the unchanged head. If either still fails, diagnose the new runtime evidence; do not relabel it. If both pass, recheck both PR heads/default heads/mergeability/review state and proceed through the paired normal-merge/parity/finalization sequence.
+Historical handoff: `ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`.
+Current handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-x03-discord-serialization-blocked.md`.
 
 ## 17. Production boundary
-No production listing, balance, item, private player row, database, deployment, cutover, or authority state changed. LiteBans remains authoritative and issue #43 remains deferred.
+No production listing, balance, item, private player row, database, deployment, migration/import execution, cutover, Discord configuration, or authority state changed. LiteBans remains authoritative and issue #43 remains deferred.

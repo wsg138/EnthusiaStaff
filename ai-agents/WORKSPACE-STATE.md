@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -8,7 +8,15 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Universal package active state | None. `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED`. |
+| Universal package active state | None after this worker stops. `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED`. |
+| X03 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The old thermal/runtime unblock condition materially changed, Market merged, and a real Staff hosted-build defect was repaired. The current blocker is safe serialization with independent Discord package `ES-D04`. |
+| X03 standalone | `wsg138/EnthusiaMarket` PR #3 merged normally as `7dd0a89d3689785f0b70c770e1b7c8efa1d11929`; merged product head `01a1ac70721e5d5c5f0ba73757ec01908cce53ea`. |
+| X03 aggregate | Staff PR #139 remains open on `package/es-x03-market-provider`; current package-record head `702b13438fd95da235b4a87218901be04999aaea`. The branch is substantially behind and merge-conflicted with current `main`. |
+| X03 hosted validation | Exact-head canonical public Pi build run `32924559285` / job `98044698537` PASS on `702b134...`: Java 21 exact-source validation, clean full build/tests, aggregate coverage generation, runtime-JAR packaging, exact artifact upload. Earlier run `32922736904` failed before Pi because a migration-ceiling test still expected 19 after X03 moved branch-local migration to V20; that isolated test assertion is fixed and the failure remains non-passing history. |
+| X03 Pi staging | Canonical public run `32924559285` and correlated private run `32925074087` / job `98046237374` PASS for exact source `702b134...` and artifact `enthusiastaff-paper-702b13438fd9-32924559285-1` (`sha256:6086f728fdd673346588f2be40c3ec3c6bd80aecbec32602f028eb20c303c604`) on trusted `Lincoln-PI-4`. Exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, private cleanup, public verdict collection, transient-transfer removal, and terminal exact-head result publication succeeded. This evidence must be rerun after the later D04 serialization/reconciliation changes X03's Staff head. |
+| X03 review/Sentinel | Staff PR #139 has zero live inline review threads. CodeRabbit status is successful but automatic full review is skipped by repository policy. Normal PR-triggered Coverage/Sentinel artifact workflows are absent on current head because PR #139 is merge-conflicted; missing checks are not passing evidence. |
+| X03 blocker | Canonical Staff `main` is at V19. X03 carries branch-local `V20__market_compliance_journal.sql`; independent D04 PR #151 carries `V20__discord_account_linking.sql` and overlaps shared Staff integration/persistence files. Do not steal D04's migration number or synthesize a conflict resolution that overwrites concurrent Discord work. |
+| X03 exact unblock | After D04's migration/shared-file work serializes onto `main` or otherwise durably removes the V20/shared-file ambiguity, merge fresh `main` into the existing X03 branch normally, renumber X03 to the next free forward-only migration, preserve both packages during conflict resolution, freeze a new exact head, rerun all applicable hosted/static/review/Sentinel/Pi gates, merge #139 normally only if green, then prove post-merge Market parity and finalize. |
 | X04 standalone | `wsg138/EnthusiaCommend` PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1` after exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d`. Its fully contained package branch remains safe to delete when an authorized branch-deletion path is available. |
 | X04 aggregate | Staff PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14` after exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789`; the temporary Staff package branch is deleted. |
 | X04 product state | Transactional/versioned reputation moderation and the Staff sanction projection are implemented and merged. Post-merge standalone↔aggregate shared Git objects are identical; aggregate-only `COMPONENT-METADATA.md` is the one allowed extra file and records `IN_SYNC`. |
@@ -27,11 +35,19 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | D05 canonical Pi | Public Pi run `32879118794` and correlated private run `32880103099` / job `97907230239` PASS for the exact frozen source on trusted `Lincoln-PI-4`. This is canonical Paper/Pi evidence only and is not treated as the missing Discord connection smoke. |
 | D05 blocker | Final acceptance requires a real non-destructive staging Discord connect/disconnect smoke using the staging bot token and proving exact app/guild/test-channel readiness. Fresh search of the current public and private staging-control repositories finds no `ENTHUSIA_STAFF_BOT_TOKEN` or staff-bot smoke execution path. The current public/private Pi path is Paper-only. The token must not be requested in chat, committed, logged, or placed on a command line. PR #160 remains open and unmerged. |
 | D05 exact unblock | Securely provision the staging token to an authorized trusted runtime/secret manager, run the existing `--smoke-test` against exact frozen product source/artifact `5f24ba1818c81e0a30a516fa70c8597586184b00`, record only sanitized exact-provenance app/guild/channel/readiness/disconnect/shutdown evidence, then resume #160, reconcile live state, merge normally if all gates remain satisfied, verify containment/cleanup, and publish `COMPLETE`. |
-| Migration state | Canonical `main` remains at V19 until D04 merges. D05 adds no migration. |
-| Independently parked packages | `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED` on their own recorded conditions and were not modified by D05. |
+| Migration state | Canonical `main` remains at V19 until D04 merges. D05 adds no migration. X03 also currently carries a branch-local V20 migration and must serialize behind D04 before it is renumbered to the next free forward-only version. |
+| Independently parked packages | `ES-X01` and `ES-X03` remain independently `BLOCKED` / `PARKED_BLOCKED`; X03 is now parked on D04 migration/shared-file serialization rather than the historical thermal condition. |
 | Production boundary | No production Discord configuration, reputation/player rows, bot token, private production data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
-| Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md` |
+| Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-26-es-x03-discord-serialization-blocked.md` |
 | Discord current handoff | `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md` |
+
+## X03 current parked record
+
+The 2026-08-26 universal worker resumed X03 because the prior host condition demonstrably changed. Market PR #3 had resumed and merged, and later trusted Pi/Sentinel work showed the validation host was no longer frozen in the exact August 14 condition.
+
+The Staff branch then exposed a concrete hosted build failure: a migration ceiling assertion still expected V19 after X03 had moved its branch-local migration to V20. The test-only assertion was corrected, producing `702b13438fd95da235b4a87218901be04999aaea`. Exact public canonical build/source/artifact validation now passes at that head, and correlated private Pi run `32925074087` / job `98046237374` subsequently completed successfully on trusted `Lincoln-PI-4` with exact artifact verification, guarded Paper boot/restart, durable sanitized evidence, cleanup, and successful public verdict/transfer cleanup.
+
+The package cannot safely proceed to reconciliation/merge because independent D04 owns its own legitimate V20 migration and overlapping Staff files. X03 is therefore parked until D04 serializes. The current Pi pass is exact-head evidence for `702b134...`; it is not substituted for the fresh post-reconciliation gates required once the Staff head changes.
 
 ## X04 completed record
 
@@ -51,4 +67,4 @@ D04 remains independent live work in Staff PR #151. Its staging-control prerequi
 
 ## Independent ES-X03 blocker
 
-ES-X03 remains parked on its own recorded blocker. D05 does not alter that package, its provider mirror, or its frozen validation evidence.
+ES-X03 is parked on the D04 V20/shared-file serialization boundary described above. This universal worker does not edit, rebase, synchronize, merge, close, replace, or renumber D04/D05 work.
