@@ -35,13 +35,14 @@ At exact Staff head `702b13438fd95da235b4a87218901be04999aaea`:
 
 - PR #139 has zero live inline review threads.
 - CodeRabbit commit status is successful, but repository policy skips automatic full review; no automated full-review approval is claimed.
-- Canonical public Pi run `32924559285` accepted the exact PR/head binding.
+- Canonical public Pi run `32924559285` accepted the exact PR/head binding and completed successfully.
 - Trusted hosted build job `98044698537` passed Java 21 source validation, clean full build/tests, aggregate coverage generation, runtime-JAR packaging, and exact artifact upload.
 - Exact artifact identity: `enthusiastaff-paper-702b13438fd9-32924559285-1`.
 - Runtime SHA-256: `6086f728fdd673346588f2be40c3ec3c6bd80aecbec32602f028eb20c303c604`.
-- Correlated private staging run: `wsg138/EnthusiaStaff-Staging` run `32925074087`; job `98046237374`.
-- At publication start the private job remains queued behind legitimate concurrent staging work on trusted `Lincoln-PI-4`. This evidence is `PENDING`, not PASS.
-- The regular PR-triggered Coverage and Sentinel artifact workflows are absent on this head because PR #139 is currently merge-conflicted with `main`; missing/queued/different-revision checks are not treated as passing evidence.
+- Correlated private staging run `32925074087` / job `98046237374` completed successfully on trusted `Lincoln-PI-4` (runner ID 2).
+- Private exact-artifact retrieval/provenance verification, guarded disposable Paper boot/restart, sanitized evidence publication, durable-evidence requirement, and cleanup steps all completed successfully.
+- Public bridge job `98046178541` completed successfully, including correlated verdict collection, transient public-transfer removal, and final staging result publication; terminal exact-head result job `98048749238` also succeeded.
+- The regular PR-triggered Coverage and Sentinel artifact workflows are absent on this head because PR #139 is currently merge-conflicted with `main`; missing/different-revision checks are not treated as passing evidence. The successful canonical Pi evidence applies to the current package-record head only and must be rerun after the required D04 serialization/reconciliation changes the Staff head.
 
 ## Current blocker
 
