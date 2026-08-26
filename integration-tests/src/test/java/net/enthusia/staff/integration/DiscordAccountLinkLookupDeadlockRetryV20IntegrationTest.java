@@ -13,8 +13,10 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.persistence.JdbcAccountLinkingStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
+import net.enthusia.staff.persistence.JdbcPlayerDirectory;
 import net.enthusia.staff.persistence.MariaDb;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,13 @@ class DiscordAccountLinkLookupDeadlockRetryV20IntegrationTest {
         String codeHash = "b".repeat(64);
 
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            new JdbcPlayerDirectory(dataSource).recordSeenVerified(
+                    minecraftPlayerId,
+                    "LookupRetryPlayer",
+                    PlayerPlatform.JAVA,
+                    "integration-test",
+                    NOW
+            );
             new JdbcDiscordModerationPersistenceStore(dataSource).ensureMinecraftSubject(minecraftPlayerId, NOW);
             new JdbcAccountLinkingStore(dataSource)
                     .issueFromMinecraft(minecraftPlayerId, codeHash, NOW, NOW.plusSeconds(300));
