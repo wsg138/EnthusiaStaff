@@ -10,10 +10,13 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class StaffBotConfigurationTest {
+    private static final String STAGING = "staging";
+    private static final String DUMMY_TOKEN = "token";
+
     @Test
     void stagingUsesFixedIdentityAndRedactsToken() {
         Map<String, String> values = new HashMap<>();
-        values.put(StaffBotConfiguration.ENVIRONMENT_KEY, "staging");
+        values.put(StaffBotConfiguration.ENVIRONMENT_KEY, STAGING);
         values.put(StaffBotConfiguration.TOKEN_KEY, "secret-token-value");
         values.put(StaffBotConfiguration.HEALTH_PORT_KEY, "0");
 
@@ -31,7 +34,7 @@ class StaffBotConfigurationTest {
     void productionRejectsEphemeralHealthPort() {
         Map<String, String> values = new HashMap<>();
         values.put(StaffBotConfiguration.ENVIRONMENT_KEY, "production");
-        values.put(StaffBotConfiguration.TOKEN_KEY, "token");
+        values.put(StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN);
         values.put(StaffBotConfiguration.HEALTH_PORT_KEY, "0");
 
         assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(values));
@@ -42,13 +45,13 @@ class StaffBotConfigurationTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromEnvironment(Map.of(
-                        StaffBotConfiguration.ENVIRONMENT_KEY, "staging")));
+                        StaffBotConfiguration.ENVIRONMENT_KEY, STAGING)));
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromEnvironment(Map.of(
-                        StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
-                        StaffBotConfiguration.TOKEN_KEY, "token",
+                        StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                        StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
                         StaffBotConfiguration.HEALTH_HOST_KEY, "0.0.0.0")));
     }
 
@@ -57,14 +60,14 @@ class StaffBotConfigurationTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromEnvironment(Map.of(
-                        StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
-                        StaffBotConfiguration.TOKEN_KEY, "token",
+                        StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                        StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
                         StaffBotConfiguration.WORKER_THREADS_KEY, "0")));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromEnvironment(Map.of(
-                        StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
-                        StaffBotConfiguration.TOKEN_KEY, "token",
+                        StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                        StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
                         StaffBotConfiguration.INTERACTION_TTL_SECONDS_KEY, "86401")));
     }
 }

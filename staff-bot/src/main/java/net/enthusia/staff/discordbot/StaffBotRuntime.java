@@ -70,7 +70,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         healthEndpoint.start();
         health.transition(StaffBotHealth.Phase.CONNECTING, "gateway_connecting");
-        LOGGER.log(
+        log(
                 System.Logger.Level.INFO,
                 "staff_bot_start environment={0}",
                 configuration.environment().label());
@@ -143,7 +143,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         if (shutdownFailure != null) {
             health.transition(StaffBotHealth.Phase.FAILED, shutdownFailure);
-            LOGGER.log(
+            log(
                     System.Logger.Level.ERROR,
                     "staff_bot_failed environment={0} reason={1}",
                     configuration.environment().label(),
@@ -152,7 +152,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
 
         health.transition(StaffBotHealth.Phase.STOPPED, "process_stopped");
-        LOGGER.log(
+        log(
                 System.Logger.Level.INFO,
                 "staff_bot_stopped environment={0}",
                 configuration.environment().label());
@@ -163,11 +163,17 @@ public final class StaffBotRuntime implements AutoCloseable {
         readiness.complete(false);
         gateway.shutdownNow();
         terminated.countDown();
-        LOGGER.log(
+        log(
                 System.Logger.Level.ERROR,
                 "staff_bot_failed environment={0} reason={1}",
                 configuration.environment().label(),
                 reason);
+    }
+
+    private static void log(System.Logger.Level level, String message, Object... parameters) {
+        if (LOGGER.isLoggable(level)) {
+            LOGGER.log(level, message, parameters);
+        }
     }
 
     private final class RuntimeGatewayObserver implements DiscordGatewayObserver {
@@ -184,7 +190,7 @@ public final class StaffBotRuntime implements AutoCloseable {
             }
             health.transition(StaffBotHealth.Phase.READY, result.reason());
             readiness.complete(true);
-            LOGGER.log(
+            log(
                     System.Logger.Level.INFO,
                     "staff_bot_ready environment={0}",
                     configuration.environment().label());
@@ -196,7 +202,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                 return;
             }
             health.transition(StaffBotHealth.Phase.DISCONNECTED, "gateway_disconnected_reconnecting");
-            LOGGER.log(
+            log(
                     System.Logger.Level.WARNING,
                     "staff_bot_gateway_disconnected environment={0}",
                     configuration.environment().label());

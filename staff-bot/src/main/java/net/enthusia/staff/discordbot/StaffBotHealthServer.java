@@ -5,12 +5,23 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Loopback-only liveness/readiness surface with deliberately non-sensitive payloads. */
 final class StaffBotHealthServer implements HealthEndpoint {
+    private static final Map<Character, String> JSON_ESCAPES = Map.of(
+            '\\', "\\\\",
+            '"', "\\\"",
+            '\b', "\\b",
+            '\f', "\\f",
+            '\n', "\\n",
+            '\r', "\\r",
+            '\t', "\\t");
+    private static final char LAST_JSON_CONTROL = '\u001f';
+
     private final StaffBotHealth health;
     private final HttpServer server;
     private final ExecutorService executor;
@@ -74,26 +85,27 @@ final class StaffBotHealthServer implements HealthEndpoint {
     private static String json(String value) {
         StringBuilder escaped = new StringBuilder(value.length() + 16);
         for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            switch (character) {
-                case '\\' -> escaped.append("\\\\");
-                case '"' -> escaped.append("\\\"");
-                case '\b' -> escaped.append("\\b");
-                case '\f' -> escaped.append("\\f");
-                case '\n' -> escaped.append("\\n");
-                case '\r' -> escaped.append("\\r");
-                case '\t' -> escaped.append("\\t");
-                default -> {
-                    if (character <= 0x1f) {
-                        escaped.append("\\u00")
-                                .append(Character.forDigit((character >>> 4) & 0xf, 16))
-                                .append(Character.forDigit(character & 0xf, 16));
-                    } else {
-                        escaped.append(character);
-                    }
-                }
-            }
+            appendJsonCharacter(escaped, value.charAt(index));
         }
         return escaped.toString();
+    }
+
+    private static void appendJsonCharacter(StringBuilder escaped, char character) {
+        String replacement = JSON_ESCAPES.get(character);
+        if (replacement != null) {
+            escaped.append(replacement);
+            return;
+        }
+        if (character <= LAST_JSON_CONTROL) {
+            appendControlCharacter(escaped, character);
+            return;
+        }
+        escaped.append(character);
+    }
+
+    private static void appendControlCharacter(StringBuilder escaped, char character) {
+        escaped.append("\\u00")
+                .append(Character.forDigit((character >>> 4) & 0xf, 16))
+                .append(Character.forDigit(character & 0xf, 16));
     }
 }

@@ -84,7 +84,8 @@ public final class StaffBotConfiguration {
         return new StaffBotConfiguration(
                 environment,
                 token,
-                new InetSocketAddress(healthHost, healthPort),
+                // healthHost is strictly constrained to the fixed loopback allowlist above.
+                new InetSocketAddress(healthHost, healthPort), // nosemgrep: java_ssrf_rule-SSRF
                 workerThreads,
                 queueCapacity,
                 interactionCapacity,

@@ -18,12 +18,15 @@ public final class InteractionReplayGuard {
         SATURATED
     }
 
+    private static final int MIN_CAPACITY = 1;
+
     private final int capacity;
     private final Duration ttl;
     private final Map<Long, Instant> expirations = new HashMap<>();
+    private final Object lock = new Object();
 
     public InteractionReplayGuard(int capacity, Duration ttl) {
-        if (capacity < 1) {
+        if (capacity < MIN_CAPACITY) {
             throw new IllegalArgumentException("capacity must be positive");
         }
         this.capacity = capacity;
@@ -33,35 +36,41 @@ public final class InteractionReplayGuard {
         }
     }
 
-    public synchronized ClaimResult claim(long interactionId) {
+    public ClaimResult claim(long interactionId) {
         return claim(interactionId, Instant.now());
     }
 
-    synchronized ClaimResult claim(long interactionId, Instant now) {
-        if (interactionId <= 0) {
-            throw new IllegalArgumentException("interaction id must be positive");
+    ClaimResult claim(long interactionId, Instant now) {
+        synchronized (lock) {
+            if (interactionId <= 0) {
+                throw new IllegalArgumentException("interaction id must be positive");
+            }
+            Objects.requireNonNull(now, "now");
+            prune(now);
+            if (expirations.containsKey(interactionId)) {
+                return ClaimResult.DUPLICATE;
+            }
+            if (expirations.size() >= capacity) {
+                return ClaimResult.SATURATED;
+            }
+            expirations.put(interactionId, now.plus(ttl));
+            return ClaimResult.CLAIMED;
         }
-        Objects.requireNonNull(now, "now");
-        prune(now);
-        if (expirations.containsKey(interactionId)) {
-            return ClaimResult.DUPLICATE;
-        }
-        if (expirations.size() >= capacity) {
-            return ClaimResult.SATURATED;
-        }
-        expirations.put(interactionId, now.plus(ttl));
-        return ClaimResult.CLAIMED;
     }
 
     /** Releases a pre-commit claim so a safely failed read-only attempt can be retried. */
-    public synchronized boolean release(long interactionId) {
-        return expirations.remove(interactionId) != null;
+    public boolean release(long interactionId) {
+        synchronized (lock) {
+            return expirations.remove(interactionId) != null;
+        }
     }
 
-    synchronized int size(Instant now) {
-        Objects.requireNonNull(now, "now");
-        prune(now);
-        return expirations.size();
+    int size(Instant now) {
+        synchronized (lock) {
+            Objects.requireNonNull(now, "now");
+            prune(now);
+            return expirations.size();
+        }
     }
 
     private void prune(Instant now) {
