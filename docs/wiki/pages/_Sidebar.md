@@ -9,9 +9,9 @@
 - [[Staff Handbook]]
 - [[Helper Guide]]
 - [[Punishment System]]
-- [[Discord Moderation Platform]]
 - [[Reports and Evidence]]
 - [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
+- [[Cheat Tester]]
 - [[Inventory and Confiscation Safety]]
 - [[Alt Investigations]]
 - [[Incident Playbooks]]
@@ -23,6 +23,7 @@
 - [[Roles and Permissions|Rank-Authority]]
 - [[Configuration]]
 - [[Integrations]]
+- [[Discord Delivery]]
 - [[Discord Moderation Platform]]
 
 ## Operations
