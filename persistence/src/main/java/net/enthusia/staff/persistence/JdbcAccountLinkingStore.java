@@ -55,16 +55,19 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
     public UUID minecraftInitiatorForCode(String codeHash, Instant now) {
         validateHash(codeHash);
         require(now, "now");
-        CodeLookup lookup = JdbcTransactionSupport.execute(
-                dataSource,
-                "Unable to resolve Minecraft link-code initiator",
-                connection -> {
-                    StoredCode stored = codeByHash(connection, codeHash, true);
-                    if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
-                        return CodeLookup.expiredResult();
-                    }
-                    return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
-                }
+        CodeLookup lookup = deadlockRetry.execute(
+                "Interrupted while retrying account-link code lookup",
+                () -> JdbcTransactionSupport.execute(
+                        dataSource,
+                        "Unable to resolve Minecraft link-code initiator",
+                        connection -> {
+                            StoredCode stored = codeByHash(connection, codeHash, true);
+                            if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
+                                return CodeLookup.expiredResult();
+                            }
+                            return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
+                        }
+                )
         );
         if (lookup.expired()) {
             throw new ModerationPersistenceException("account-link code expired");
