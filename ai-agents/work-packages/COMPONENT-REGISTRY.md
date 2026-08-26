@@ -1,6 +1,6 @@
 # Component registry
 
-Last verified: 2026-08-05 through the connected `wsg138` GitHub account.
+Last verified: 2026-08-25 through the connected `wsg138` GitHub account for `COMP-COMMEND`; other component setup records retain their prior verification state.
 
 | Component ID | Component | Aggregate location | Standalone repository | Default branch | Verified setup head | Sync state | Purpose/notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -9,7 +9,7 @@ Last verified: 2026-08-05 through the connected `wsg138` GitHub account.
 | `COMP-ROSECHAT` | Enthusia-RoseChat | `components/enthusia-rosechat/` | `UNRESOLVED` | `UNRESOLVED` | `UNRESOLVED` | `BLOCKED_UNRESOLVED_REPOSITORY` | Supported communication provider, staff chat, private-message evidence, and presence integration. |
 | `COMP-CURRENCY` | EnthusiaCurrency | `components/enthusia-currency/` | `wsg138/EnthusiaCurrency` | `main` | `9696501a01cc11f6e5220c5297a6f34b64204e61` | `NOT_IMPORTED` | Transactional currency removal and restoration provider. |
 | `COMP-MARKET` | EnthusiaMarket | `components/enthusia-market/` | `wsg138/EnthusiaMarket` | `main` | `bc24f1010642d6042307bc13a32fb33cc94e8883` | `NOT_IMPORTED` | Market restriction, reservation, confiscation, rollback, and restoration provider. |
-| `COMP-COMMEND` | EnthusiaCommend | `components/enthusia-commend/` | `wsg138/EnthusiaCommend` | `main` | `2083061b8aeaa7fb3adaf89746f91a45e3a03e59` | `NOT_IMPORTED` | Exact reputation mutation and restoration provider. |
+| `COMP-COMMEND` | EnthusiaCommend | `components/enthusia-commend/` | `wsg138/EnthusiaCommend` | `main` | `2083061b8aeaa7fb3adaf89746f91a45e3a03e59` | `IN_SYNC` | Exact reputation mutation/restoration provider; ES-X04 merged normally in both repositories and post-merge shared product Git objects are identical under the aggregate-only metadata exclusion. |
 
 ## Rules
 

@@ -12,7 +12,7 @@ Package: `ES-D05 — Staff bot runtime foundation`
 - Implementation PR: #160.
 - Frozen validated product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
 - D01–D03: `COMPLETE`.
-- D04 remains separate and unmodified by this worker; Staff PR #151 and private staging-control PR `wsg138/EnthusiaStaff-Staging#109` remain independent work.
+- D04 remains separate and unmodified by this worker. Its staging-control prerequisites `wsg138/EnthusiaStaff-Staging#108` and `#109` are merged, and live D04 work is continuing independently on Staff PR #151.
 - D05 owner identity contract PR #153 merged normally as `168145d76efb13ed15f21f8a31ece3e96f7b7c7b` before package claim.
 - Canonical migration boundary on `main`: V19. D05 adds no migration.
 - Issue #43 remains open; no production cutover authority exists.
@@ -109,13 +109,13 @@ The D05 package contract requires a real non-destructive staging Discord connect
 - disconnect removes readiness, a valid resumed/recreated session can revalidate, and shutdown completes cleanly;
 - no message, punishment, configuration mutation, production action, or production data access occurs.
 
-The implementation already exposes `--smoke-test` for this exact non-destructive check. However, exhaustive connected-state inspection found no authorized secret-bearing runtime path available to this worker:
+The implementation already exposes `--smoke-test` for this exact non-destructive check. Fresh connected-state inspection after staging-control PRs #108/#109 merged still found no authorized secret-bearing runtime path available to this worker:
 
-- neither the public repository nor the connected private staging-control repository contains staff-bot smoke wiring or a discoverable token-injection path;
-- the current trusted public/private Pi workflow is Paper-only and injects database credentials, not `ENTHUSIA_STAFF_BOT_TOKEN`;
+- code search finds no `ENTHUSIA_STAFF_BOT_TOKEN` or staff-bot smoke wiring in the current private staging-control repository;
+- no public EnthusiaStaff workflow executes `--smoke-test`;
+- the current trusted public/private Pi workflow is Paper-only and does not provide a staff-bot token path;
 - repository secret values are deliberately not inspected/exposed;
-- adding a pull-request workflow that consumes a Discord bot token would weaken the trust boundary;
-- modifying the independent staging-control lane solely to invent a credential path would collide with separate open staging-control work and still would not conjure an authorized token.
+- creating a new secret-bearing workflow would require a separately trusted provisioning path and would not prove an authorized staging token is available to this worker.
 
 Therefore the missing real staging Discord smoke is an external acceptance blocker. It is not an ordinary CI wait and must not be bypassed. PR #160 remains open and unmerged with the validated implementation preserved.
 
@@ -127,7 +127,7 @@ Publish only sanitized evidence containing exact source/artifact provenance and 
 
 ## Systems not disturbed
 
-- No D04 implementation or staging-control change was made.
+- No D04 implementation or staging-control change was made; D04 live continuation remains independent.
 - No D06 or second Discord package was started.
 - No website, competition, X03, X04, webhook-delivery, or provider work was modified.
 - No V1–V19 migration was edited; D05 adds no migration.
