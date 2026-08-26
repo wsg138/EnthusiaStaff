@@ -40,7 +40,8 @@ jobs:
             scripts/staging/pi_staging_control.py \
             scripts/staging/test_pi_staging_control.py \
             scripts/staging/supersede_pi_staging.py \
-            scripts/staging/test_supersede_pi_staging.py
+            scripts/staging/test_supersede_pi_staging.py \
+            scripts/staging/test_pi_staging_command_permissions.py
           bash -n scripts/staging/build-enthusiastaff-bridge-artifact.sh
           bash -n scripts/staging/validate-enthusiastaff-source.sh
 
@@ -66,3 +67,4 @@ jobs:
         run: |
           python3 scripts/staging/test_pi_staging_control.py
           python3 scripts/staging/test_supersede_pi_staging.py
+          python3 scripts/staging/test_pi_staging_command_permissions.py
