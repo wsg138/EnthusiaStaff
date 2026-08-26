@@ -1,29 +1,29 @@
 # Latest package-worker handoff
 
-Current universal package: `ES-X03 — EnthusiaMarket destructive provider`.
+Current universal package: `ES-X01 — RoseChat provider and communication integration`.
 
 Status: `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`.
 
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-x03-discord-serialization-blocked.md`.
+Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-x01-license-redistribution-blocked.md`.
 
 Current record:
-- Standalone Market PR #3 merged normally as `7dd0a89d3689785f0b70c770e1b7c8efa1d11929`; merged product head `01a1ac70721e5d5c5f0ba73757ec01908cce53ea`.
-- Staff PR #139 remains open on `package/es-x03-market-provider` at package-record head `702b13438fd95da235b4a87218901be04999aaea`.
-- The old thermal/readiness condition materially changed, so X03 correctly resumed rather than being blindly rerun as parked work.
-- Public canonical run `32922736904` exposed a real hosted build failure: a migration-ceiling integration assertion still expected V19 after X03's branch-local migration moved to V20. The Pi was not tested on that failed run.
-- The isolated stale assertion was corrected with no product behavior change. Exact public canonical run `32924559285` / hosted build job `98044698537` passes exact-source Java 21 full build/tests, aggregate coverage generation, runtime-JAR packaging, and exact artifact publication at `702b134...`.
-- Correlated private run `32925074087` / job `98046237374` completed successfully for exact artifact `enthusiastaff-paper-702b13438fd9-32924559285-1`, runtime SHA-256 `6086f728fdd673346588f2be40c3ec3c6bd80aecbec32602f028eb20c303c604`, on trusted `Lincoln-PI-4` (runner ID 2). Exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, cleanup, public verdict collection, transient-transfer removal, and terminal exact-head result publication succeeded.
-- Staff PR #139 has zero live inline review threads. Regular PR-triggered Coverage/Sentinel artifact workflows are absent because the PR is merge-conflicted with current `main`; missing validation is not relabeled as passing. The canonical Pi result is evidence for `702b134...` only and must be rerun after required D04 serialization/reconciliation changes the Staff head.
+- The old repository-resolution blocker materially changed. Live GitHub verifies supported public `wsg138/Enthusia-RoseChat`, default branch `master`, at reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`.
+- GitHub identifies the repository as a fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`; no provider-specific `AGENTS.md` is present in the verified source tree.
+- Existing Staff source already contains the proposed `dev.rosewood.rosechat.api.staff` integration contract, while the verified provider source does not yet implement that staff API.
+- The provider's checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge but expressly excludes publication and (re)distribution rights.
+- `wsg138/EnthusiaStaff` is public. Canonical external-component policy requires publishing a full aggregate component copy and proving parity against the standalone repository, excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`.
+- No durable repository evidence currently authorizes that second public publication of the provider source. The existence of a GitHub fork is not treated as sufficient redistribution authorization.
+- No RoseChat or Staff implementation branch/PR was created and no provider source was imported. No product code, migrations, runtime configuration, PM data, Discord implementation, website implementation, deployment, or production authority changed.
 
 Current blocker:
-- Canonical Staff `main` is at V19.
-- X03 carries branch-local `V20__market_compliance_journal.sql`.
-- Independent Discord package ES-D04 PR #151 carries legitimate branch-local `V20__discord_account_linking.sql` and overlaps shared Staff integration/persistence files.
-- X03 must not steal D04's migration number, overwrite concurrent Discord work, or synthesize an unsafe 206-commit-behind conflict resolution solely to make checks execute.
+`LICENSE_REDISTRIBUTION`: X01 cannot satisfy its required public aggregate-copy/parity model under the verified checked-in provider license without a durable grant permitting publication/(re)distribution of the source in `wsg138/EnthusiaStaff`.
 
 Exact unblock:
-After D04's migration/shared-file work serializes onto Staff `main` or otherwise durably removes the V20/shared-file ambiguity, merge fresh `main` into the existing X03 branch using an ordinary merge commit, renumber X03 to the next free forward-only migration, preserve both packages in shared-file conflict resolution, freeze/review/revalidate the new exact head including independent Sentinel and canonical Pi, normally merge Staff PR #139 only when every required gate is terminal and green, then prove post-merge standalone↔aggregate Market parity and publish terminal state.
+Obtain durable, verifiable license terms or authorization permitting the required public aggregate copy, or explicitly authorize a canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads, create the normal two same-ID implementation PRs, implement and validate the actual provider/Staff behavior, merge normally, and prove synchronization under the authorized model.
 
-`ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED`. Therefore `ES-V02` and `ES-V03` remain dependency-blocked; `ES-A01` and `ES-QA01` remain deferred/downstream. Issue #43 remains open and LiteBans remains authoritative.
+Validation truth:
+There is no X01 product implementation head in this continuation, so product build/provider tests/runtime Sentinel/canonical Pi/distributed staging are not run and are not claimed as product passes. The documentation/orchestration state-publication PR is validated only under its actually applicable exact-head repository gates; any queued/skipped/missing runtime result remains explicitly non-passing/non-applicable evidence.
 
-Concurrent D04/D05 Discord work and website work were not absorbed, overwritten, rebased, cancelled, or preempted. This worker publishes the true X03 blocker and stops without beginning another universal package.
+`ES-X03` remains independently `BLOCKED` / `PARKED_BLOCKED` on D04 migration/shared-file serialization. Therefore `ES-V02` and `ES-V03` remain dependency-blocked; `ES-A01` and `ES-QA01` remain deferred/downstream. Issue #43 remains open and LiteBans remains authoritative.
+
+Concurrent D04/D05 Discord work and website work were not absorbed, overwritten, rebased, cancelled, or preempted. This worker publishes the true X01 blocker and stops without beginning another universal package.
