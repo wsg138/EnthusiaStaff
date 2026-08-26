@@ -78,6 +78,22 @@ class Tests(unittest.TestCase):
         with self.assertRaises(mod.SupersedeError):
             api.post('/actions/runs/123/cancel')
 
+    def test_public_history_cap_is_bounded_not_fatal(self):
+        api = FakeApi()
+        for page in range(1, 6):
+            api.gets[f'/actions/workflows/pi-staging-check.yml/runs?per_page=100&page={page}'] = {
+                'workflow_runs': [pub(page * 1000 + index, OLD, 'completed') for index in range(100)]
+            }
+        self.assertEqual(len(list(mod.iter_workflow_runs(api))), 500)
+
+    def test_private_history_cap_is_bounded_not_fatal(self):
+        api = FakeApi()
+        for page in range(1, 6):
+            api.gets[f'/actions/workflows/plugin-live-test.yml/runs?event=workflow_dispatch&per_page=100&page={page}'] = {
+                'workflow_runs': [priv(page * 1000 + index, OLD, 'completed') for index in range(100)]
+            }
+        self.assertEqual(len(list(mod.iter_private_workflow_runs(api))), 500)
+
     def test_private_queued_cancel_safe(self):
         api = FakeApi()
         self.assertTrue(mod.private_cancel_is_safe(api, priv(7, OLD), OLD))
