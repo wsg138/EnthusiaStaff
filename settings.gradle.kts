@@ -23,5 +23,6 @@ include(
     "protocol",
     "paper",
     "velocity",
+    "staff-bot",
     "integration-tests",
 )

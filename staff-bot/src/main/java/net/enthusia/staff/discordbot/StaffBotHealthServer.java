@@ -1,0 +1,111 @@
+package net.enthusia.staff.discordbot;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/** Loopback-only liveness/readiness surface with deliberately non-sensitive payloads. */
+final class StaffBotHealthServer implements HealthEndpoint {
+    private static final Map<Character, String> JSON_ESCAPES = Map.of(
+            '\\', "\\\\",
+            '"', "\\\"",
+            '\b', "\\b",
+            '\f', "\\f",
+            '\n', "\\n",
+            '\r', "\\r",
+            '\t', "\\t");
+    private static final char LAST_JSON_CONTROL = '\u001f';
+
+    private final StaffBotHealth health;
+    private final HttpServer server;
+    private final ExecutorService executor;
+
+    StaffBotHealthServer(InetSocketAddress address, StaffBotHealth health) throws IOException {
+        this.health = Objects.requireNonNull(health, "health");
+        Objects.requireNonNull(address, "address");
+        this.server = HttpServer.create(address, 0);
+        this.executor = Executors.newSingleThreadExecutor(
+                Thread.ofPlatform().daemon(true).name("staff-bot-health-", 0).factory());
+        server.setExecutor(executor);
+        server.createContext("/health", exchange -> respond(exchange, false));
+        server.createContext("/ready", exchange -> respond(exchange, true));
+    }
+
+    @Override
+    public void start() {
+        server.start();
+    }
+
+    InetSocketAddress boundAddress() {
+        return server.getAddress();
+    }
+
+    @Override
+    public void close() {
+        server.stop(0);
+        executor.shutdownNow();
+    }
+
+    private void respond(HttpExchange exchange, boolean readiness) throws IOException {
+        try (exchange) {
+            String method = exchange.getRequestMethod();
+            if (!"GET".equals(method) && !"HEAD".equals(method)) {
+                exchange.getResponseHeaders().set("Allow", "GET, HEAD");
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            StaffBotHealth.Snapshot snapshot = health.snapshot();
+            boolean acceptable = readiness ? snapshot.ready() : snapshot.live();
+            int status = acceptable ? 200 : 503;
+            String body = "{\"environment\":\"" + json(health.environment().label())
+                    + "\",\"status\":\"" + snapshot.phase().name()
+                    + "\",\"ready\":" + snapshot.ready()
+                    + ",\"reason\":\"" + json(snapshot.reason())
+                    + "\",\"rejectedWork\":" + snapshot.rejectedWork()
+                    + "}\n";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+            if ("HEAD".equals(method)) {
+                exchange.sendResponseHeaders(status, -1);
+            } else {
+                exchange.sendResponseHeaders(status, bytes.length);
+                exchange.getResponseBody().write(bytes);
+            }
+        }
+    }
+
+    private static String json(String value) {
+        StringBuilder escaped = new StringBuilder(value.length() + 16);
+        for (int index = 0; index < value.length(); index++) {
+            appendJsonCharacter(escaped, value.charAt(index));
+        }
+        return escaped.toString();
+    }
+
+    private static void appendJsonCharacter(StringBuilder escaped, char character) {
+        String replacement = JSON_ESCAPES.get(character);
+        if (replacement != null) {
+            escaped.append(replacement);
+            return;
+        }
+        if (character <= LAST_JSON_CONTROL) {
+            appendControlCharacter(escaped, character);
+            return;
+        }
+        escaped.append(character);
+    }
+
+    private static void appendControlCharacter(StringBuilder escaped, char character) {
+        escaped.append("\\u00")
+                .append(Character.forDigit((character >>> 4) & 0xf, 16))
+                .append(Character.forDigit(character & 0xf, 16));
+    }
+}

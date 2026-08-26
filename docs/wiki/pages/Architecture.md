@@ -13,10 +13,12 @@ EnthusiaStaff is a distributed moderation platform, not a single Bukkit command 
 
 ## Deployable shape
 
-Exactly two Minecraft runtime artifacts are intended:
+Current merged `main` builds exactly two Minecraft runtime artifacts:
 
 1. `EnthusiaStaff-Paper-<version>.jar`
 2. `EnthusiaStaff-Velocity-<version>.jar`
+
+The planned interactive Discord staff bot is a separate runtime/application boundary and is **not** part of the current merged runtime modules.
 
 Internal modules:
 
@@ -26,7 +28,7 @@ Internal modules:
 | `domain` | business policy, authorization, application services, state machines and ports |
 | `integration-contracts` | stable compile-time contracts for supported Enthusia-owned providers |
 | `persistence` | MariaDB bootstrap, Flyway, JDBC stores, transactions, leases, journals, inboxes/outboxes, recovery |
-| `protocol` | authenticated Paper-Velocity transport, replay protection and acknowledgements |
+| `protocol` | authenticated Paper–Velocity transport, replay protection and acknowledgements |
 | `paper` | commands, GUIs/listeners and server-local/player-state adapters |
 | `velocity` | proxy enforcement, network identity, network workers, migration and restricted website bridge |
 | `integration-tests` | MariaDB/cross-module/concurrency/recovery validation; never deployed |
@@ -51,19 +53,19 @@ Paper / Velocity / website adapters
 
 The practical rule is: **domain policy decides; platform adapters translate/apply runtime effects; persistence implements durable ports.** `integration-contracts` is the explicit compile-time boundary used by supported Enthusia-owned provider adapters; it does not become a second home for business policy.
 
-A command, GUI, event listener, website route or provider adapter should not gain its own copy of punishment ladders, rank hierarchy, transaction policy or recovery decisions.
+A command, GUI, event listener, website route, future Discord runtime or provider adapter should not gain its own copy of punishment ladders, rank hierarchy, transaction policy or recovery decisions.
 
 ## Bounded contexts
 
-The principal domains are:
+Principal domains include:
 
-- identity and player directory;
+- identity, moderation subjects and player directory;
 - cases, punishments, sanctions and escalation;
 - reports and appeals;
 - alts and protected network identity;
 - inventory, economy, market and reputation moderation;
-- staff sessions, staff tools, vanish and freeze;
-- Discord delivery;
+- staff sessions, staff tools, Cheat Tester, vanish and freeze;
+- Discord webhook delivery and the separate Discord moderation identity/persistence/authorization foundation;
 - migration/shadow/cutover;
 - verification, audit and configuration;
 - external integrations.
@@ -77,6 +79,7 @@ Paper owns server-local state and Bukkit/Paper interactions:
 - staff commands and GUIs;
 - player/entity mutations;
 - staff-mode state application/restoration;
+- Cheat Tester/fake-base server-local effects;
 - vanish visibility application;
 - freeze restrictions;
 - inventory/Ender state;
@@ -105,7 +108,7 @@ Velocity owns network-facing state and coordination such as:
 - network-wide player/server presence;
 - protected network-identity observations;
 - persistent backend transport server;
-- network/Discord delivery workers;
+- network/Discord webhook delivery workers;
 - migration/shadow/cutover coordination;
 - the restricted website bridge.
 
@@ -119,9 +122,11 @@ Important paths:
 
 Velocity event threads must not block on JDBC, HTTP, filesystem or socket I/O. Startup/reload/shutdown changes must be reviewed as lifecycle publication/rollback problems, not only as individual methods.
 
+The future interactive Discord staff bot is not a responsibility of the current Velocity artifact merely because legacy webhook delivery exists there.
+
 ## MariaDB authority and persistence
 
-MariaDB is the durable authority for moderation/recovery state such as cases, sanctions, identity, reports/evidence, staff sessions, player-state journals, network/Discord delivery, migration state, configuration versions, audit, leases and quarantine.
+MariaDB is the durable authority for moderation/recovery state such as cases, sanctions, identity, reports/evidence, staff sessions, player-state journals, network/Discord delivery, Discord moderation foundations, migration state, configuration versions, audit, leases and quarantine.
 
 Primary entry points:
 
@@ -130,7 +135,7 @@ Primary entry points:
 - [persistence package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 - [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
 
-Current merged `main` contains migrations through V17. Flyway history is forward-only; future changes add a new migration.
+Current merged `main` contains migrations through **`V19__discord_moderation_persistence.sql`**. V18 owns the Cheat Tester session journal; V19 owns the current Discord moderation persistence foundation. Flyway history is forward-only and applied migrations are immutable; future schema changes add a new migration after reconciling the live migration ceiling.
 
 ## Authoritative write pattern
 
@@ -151,18 +156,11 @@ Success should not be reported merely because bytes were sent or an external cal
 
 ## Distributed delivery
 
-Paper-Velocity transport is at-least-once. Correctness comes from:
-
-- authenticated/versioned messages;
-- replay protection;
-- durable outbox/inbox state;
-- idempotent consumers;
-- meaningful acknowledgements;
-- bounded queues/backoff;
-- reconnect/recovery;
-- stale-worker fencing.
+Paper–Velocity transport is at-least-once. Correctness comes from authenticated/versioned messages, replay protection, durable outbox/inbox state, idempotent consumers, meaningful acknowledgements, bounded queues/backoff, reconnect/recovery and stale-worker fencing.
 
 Do not describe the transport as exactly-once. Deep dive: [[Protocol and Network Traffic]].
+
+Legacy Discord webhook delivery is a separate at-least-once external boundary with its own renderer/privacy/retry policy. See [[Discord Delivery]].
 
 ## Safe failure principles
 
@@ -170,38 +168,24 @@ Do not describe the transport as exactly-once. Deep dive: [[Protocol and Network
 - An exact sanction change cannot mutate unrelated sanctions.
 - Stale revisions cannot overwrite newer state.
 - Inventory/economy/confiscation ambiguity preserves recovery evidence or enters quarantine.
+- Cheat Tester does not become terminal until owned cleanup/restoration is verified.
 - Migration mismatch blocks authority transition.
 - Missing optional integrations disable only dependent behavior when safe.
-- MariaDB/proxy/provider loss must block the actions whose correctness cannot be proved.
+- MariaDB/proxy/provider loss blocks actions whose correctness cannot be proved.
 - Restart/reconnect work must not let stale callbacks mutate new player sessions.
+- Discord identity/schema/authorization foundations must not be mistaken for a live bot or external side effect.
 
 ## Restricted website boundary
 
 The Velocity website bridge is a restricted authenticated boundary for trusted site integration. It must not become a casually exposed public moderation API.
 
-Relevant paths:
-
-- `velocity/.../WebsiteApiRuntime.java`
-- `velocity/.../WebsiteApiServer.java`
-- `velocity/.../WebsiteApiRequestDecoder.java`
-- `velocity/.../WebsiteApiRouter.java`
-- `velocity/.../WebsiteAppealEndpoint.java`
-- `velocity/.../WebsiteAppealWorkflowEndpoint.java`
+Relevant paths include `WebsiteApiRuntime`, `WebsiteApiServer`, `WebsiteApiRequestDecoder`, `WebsiteApiRouter`, `WebsiteAppealEndpoint` and `WebsiteAppealWorkflowEndpoint` under the Velocity module.
 
 Only sanitized projections may cross that boundary. See [[Privacy and Data Handling]] and [[Integrations, Migration, and Release Readiness]].
 
 ## Stable service boundaries
 
-Important internal/public service contracts include areas such as:
-
-- `StaffVisibilityService`
-- `PunishmentQueryService`
-- `SanctionQueryService`
-- `StaffSessionService`
-- `StaffModeQueryService`
-- `InventoryLockService`
-- `AltRelationshipService`
-- `PlayerDirectoryService`
+Important internal/public service contracts include `StaffVisibilityService`, `PunishmentQueryService`, `SanctionQueryService`, `StaffSessionService`, `StaffModeQueryService`, `InventoryLockService`, `AltRelationshipService` and `PlayerDirectoryService`.
 
 Other plugins should depend on supported service/contracts rather than mutable EnthusiaStaff implementation internals.
 
@@ -211,4 +195,5 @@ Other plugins should depend on supported service/contracts rather than mutable E
 - Reviewing a change? [[Code Review Guide]]
 - Debugging a failure? [[Recovery and Troubleshooting]]
 - Validating a claim? [[Build and Testing]]
+- Discord-specific foundations/runtime distinction? [[Discord Moderation Platform]]
 - Looking at a feature family? [[Core Platform and Infrastructure]], [[Moderation, Punishments, and Reports]], [[Staff Tools, Investigations, and Player-State Safety]], or [[Integrations, Migration, and Release Readiness]].

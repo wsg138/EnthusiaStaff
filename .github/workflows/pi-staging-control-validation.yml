@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/pi-staging-check.yml
       - .github/workflows/pi-staging-command.yml
+      - .github/workflows/pi-staging-supersede.yml
       - .github/workflows/pi-staging-control-validation.yml
       - scripts/staging/**
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - .github/workflows/pi-staging-check.yml
       - .github/workflows/pi-staging-command.yml
+      - .github/workflows/pi-staging-supersede.yml
       - .github/workflows/pi-staging-control-validation.yml
       - scripts/staging/**
   workflow_dispatch:
@@ -34,7 +36,12 @@ jobs:
 
       - name: Validate Python and shell syntax
         run: |
-          python3 -m py_compile scripts/staging/pi_staging_control.py scripts/staging/test_pi_staging_control.py
+          python3 -m py_compile \
+            scripts/staging/pi_staging_control.py \
+            scripts/staging/test_pi_staging_control.py \
+            scripts/staging/supersede_pi_staging.py \
+            scripts/staging/test_supersede_pi_staging.py \
+            scripts/staging/test_pi_staging_command_permissions.py
           bash -n scripts/staging/build-enthusiastaff-bridge-artifact.sh
           bash -n scripts/staging/validate-enthusiastaff-source.sh
 
@@ -53,7 +60,11 @@ jobs:
           "$RUNNER_TEMP/actionlint" \
             .github/workflows/pi-staging-check.yml \
             .github/workflows/pi-staging-command.yml \
+            .github/workflows/pi-staging-supersede.yml \
             .github/workflows/pi-staging-control-validation.yml
 
       - name: Run staging control-plane tests
-        run: python3 scripts/staging/test_pi_staging_control.py
+        run: |
+          python3 scripts/staging/test_pi_staging_control.py
+          python3 scripts/staging/test_supersede_pi_staging.py
+          python3 scripts/staging/test_pi_staging_command_permissions.py

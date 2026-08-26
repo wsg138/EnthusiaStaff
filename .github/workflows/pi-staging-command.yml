@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: pi-staging-command-${{ github.event.issue.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   command:
@@ -22,7 +22,7 @@ jobs:
       actions: write
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
       statuses: write
     steps:
       - name: Check out trusted default-branch controls
@@ -31,7 +31,18 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - name: Supersede obsolete public staging requests
+        id: supersede
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/staging/supersede_pi_staging.py request
+
       - name: Process exact staging command
+        if: ${{ steps.supersede.outputs.eligible == 'true' && steps.supersede.outputs.current_active != 'true' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/staging/pi_staging_control.py command
+
+      - name: Reuse current exact-head staging request
+        if: ${{ steps.supersede.outputs.current_active == 'true' }}
+        run: echo 'An active Pi staging request already exists for the current exact PR head; no duplicate was dispatched.'
