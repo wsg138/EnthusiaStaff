@@ -119,20 +119,19 @@ def public_binding(run: Mapping[str, Any]) -> tuple[int, str] | None:
     if parsed is not None:
         return parsed
     # Legacy automatic pull_request_target runs may expose the PR title instead
-    # of the configured run-name. Bind those only through GitHub's immutable PR
-    # metadata so they can be drained after the scheduling migration.
+    # of the configured run-name. Bind the PR number through the attached PR
+    # metadata, then use the run identity for the historical source SHA.
     if run.get("event") != "pull_request_target":
         return None
     pull_requests = run.get("pull_requests")
     if not isinstance(pull_requests, list) or len(pull_requests) != 1:
         return None
     pr = pull_requests[0]
-    head = pr.get("head") if isinstance(pr, Mapping) else None
-    if not isinstance(head, Mapping):
-        return None
     try:
-        number = positive_int(pr.get("number"), "legacy public PR number")
-        sha = exact_sha(head.get("sha"), "legacy public PR SHA")
+        number = positive_int(pr.get("number") if isinstance(pr, Mapping) else None, "legacy public PR number")
+        # Use the workflow run identity, not pull_requests[].head.sha: GitHub can
+        # surface the PR's newer live head in that nested object for an old run.
+        sha = exact_sha(run.get("head_sha"), "legacy public run SHA")
     except SupersedeError:
         return None
     return number, sha
