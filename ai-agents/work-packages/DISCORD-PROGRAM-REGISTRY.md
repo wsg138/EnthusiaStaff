@@ -12,7 +12,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `ACTIVE` | 133 | `ES-D01`–`ES-D03` |
-| `ES-D05` | Staff bot runtime foundation | `MERGE_PENDING` | 134 | `ES-D01`–`ES-D03` |
+| `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
@@ -24,51 +24,54 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
-## Active and merge-pending packages
+## Active package
 
-`ES-D04` has an independent live continuation on Staff PR #151. D05 does not edit, merge, rebase, or take over D04.
+`ES-D04` has an independent live continuation on Staff PR #151. ES-D05 did not edit, merge, rebase, close, replace, or take over D04.
 
-`ES-D05` resumed as an `ACTIONABLE_CONTINUATION` after its external staging-acceptance blocker materially changed. The required real Discord smoke is now successful. PR #160 is reconciled with current `main` and is awaiting fresh exact-head gates required by the aggregate executable-state change before normal merge.
+D06 and D13 depend on both D04 and D05. D05 is now complete, but D04 remains active, so neither package is dependency-complete yet. No D06 work is activated or begun by this publication.
 
-## ES-D05 current record
+## ES-D05 completed record
 
-Implementation branch: `package/es-d05-staff-bot-runtime`. Implementation PR: #160. Frozen reviewed D05 product head: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
+ES-D05 completed through Staff PR #160.
 
-Canonical current acceptance handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-discord-acceptance.md`.
+- Final executable/review head: `936155cc356075aff10fd966de19e3d4bd8ca5f0`.
+- Normal merge commit: `7bc8739bdc3f77db23c8b649f8c227f008162e47`.
+- Pre-merge canonical `main`: `977216dc42a169a966c518545cc08cbc55617ebc`.
+- Merge parents are exact pre-merge `main` and exact validated D05 head.
+- Post-merge compare from `936155...` to `7bc873...` contains one merge commit and zero changed files, proving feature-head containment and no unmerged product delta.
+- Temporary implementation branch `package/es-d05-staff-bot-runtime` is deleted.
+- D05 adds no migration; canonical `main` remains at V19 until D04 merges its independent migration work.
+
+Canonical completion handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-discord-acceptance.md`.
 Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`.
 
-The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. JDA 6.5.0 uses no privileged Gateway intents in D05. Tokens remain secret and are never committed, logged, requested in chat, exposed in artifacts, or placed on command lines.
+The merged runtime is an isolated Java 21 staff-bot process with JDA 6.5.0, no privileged Gateway intents, exact staging/production application identity fencing, Enthusia-only guild locking, staging test-channel fencing, bounded work and replay primitives, loopback health/readiness, reconnect/backoff, privacy-safe lifecycle logging, deterministic shutdown, shaded executable verification, and non-destructive `--smoke-test`. Existing webhook delivery remains separate. No destructive moderation command, punishment enforcement, AutoMod, public bot, production deployment/configuration, LiteBans authority change, or issue #43 acceptance is included.
 
-### Required live Discord acceptance — PASS
+### Owner-authorized live Discord acceptance — PASS
 
-Trusted staging workflow `wsg138/EnthusiaStaff-Staging` run `32926306691`, latest attempt 3 / job `98071453002`, completed successfully on trusted self-hosted runner `Lincoln-PI-4` (Linux/ARM64). The exact trusted staging-control head is `03b3fce61bffe552d7905a4e4aa18e3015ea4e00`. It pins the D05 source to exact SHA `5f24ba1818c81e0a30a516fa70c8597586184b00`, requires Java 21, builds/verifies the runtime before secret scope, and executes the non-destructive `--smoke-test`.
+Original trusted staging run `32926306691`, latest attempt 3 / job `98071453002`, successfully executed exact frozen D05 source `5f24ba1818c81e0a30a516fa70c8597586184b00`. Sanitized evidence proves staging application `1541279616881397772` PASS, Enthusia guild `1410303324745371709` PASS, required test channel `1541286004298752091` PASS for view/send, readiness PASS, smoke exit 0, and graceful close/shutdown PASS.
 
-Sanitized outcome: staging application `1541279616881397772` PASS; Enthusia guild `1410303324745371709` PASS; required test channel `1541286004298752091` PASS for view/send; readiness PASS; smoke exit 0; graceful close/shutdown PASS. The workflow sends no moderation action or test message and performs no Discord configuration change or production-data access. No bot-token value was inspected or exposed.
+Later executable review/static repairs required fresh acceptance on the final executable head. Trusted staging control merge `c544d6e3e800ee83fa0a7bb60f894e847c23ca3c` pinned exact Staff source `936155cc356075aff10fd966de19e3d4bd8ca5f0`; run `33006830844` / job `98302641683` completed `SUCCESS` across trusted-runner assertion, exact-source fetch, Java 21 requirement, exact runtime build/integrity verification, the non-destructive live Discord smoke, sanitized PASS publication, process exit 0, and graceful shutdown. Staging PR #116 then restored the smoke workflow to manual-only without changing its exact source pin or safety fences.
 
-### Frozen product evidence
+Neither acceptance sent a moderation action or test message, changed Discord configuration, or accessed production moderation data. Discord credential values were not requested, inspected, exposed, logged, committed, or copied into tracking text.
 
-- Coverage/full validation `32874248685` / job `97888464396`: success; aggregate JaCoCo 50.76% lines / 41.41% branches / 53.21% instructions; artifact `9573547679`, digest `sha256:c6f2df467085d811593c7100feb5a4c698a46e14432e92d401662dff9d43455c`.
-- Staff Bot Configuration Cache `32874248800` / job `97888275507`: success twice with configuration-cache problems treated as failures.
-- Sentinel Restart Artifact `32874248693`: success.
-- Codacy: zero new issues, 63.04% diff coverage, +0.17% coverage variation.
-- CodeRabbit: success after valid findings were fixed; all currently visible inline threads resolved.
-- Canonical Pi public `32879118794` and correlated private `32880103099` / job `97907230239`: success for the Paper/Pi gate.
+### Exact final-head validation — PASS
 
-### Current-main reconciliation
+For exact executable/review head `936155cc356075aff10fd966de19e3d4bd8ca5f0`:
 
-Canonical Staff `main` `37a2073b535cf32f89b2fc075699dca4e3420408` was merged normally into #160 through two-parent merge commit `9c99e78f520cd59e7e59506c37573ac9ad028d63`. The exact diff against that main head is D05-only: staff-bot source/tests/build integration, its configuration-cache workflow, and runtime documentation. D04's V20 migration/shared files, X03, website/Wiki, and provider work remain independent.
-
-Because current `main` gained unrelated executable changes after the frozen D05 validation, fresh applicable exact-head hosted gates are required before merge. The successful live Discord acceptance remains attributed only to the exact frozen D05 product source it actually executed.
-
-## ES-D04 independent live continuation
-
-D04 remains outside D05 ownership. Its implementation PR #151 is active. Live GitHub controls its current head/check/review state. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
+- Coverage/full Java 21 run `33006430216` / job `98301256132`: `SUCCESS`; validation artifact `9620975030`, digest `sha256:0645ffb1fe1bc0163df8f8ace0903417d7b2fde910c6eca606af006ddac2c8d9`.
+- Staff Bot Configuration Cache `33006430238` / job `98301258008`: `SUCCESS`, including cache reuse.
+- Sentinel Restart Artifact `33006430207` / job `98301255587`: `SUCCESS`.
+- Codacy Static Code Analysis: `SUCCESS`, zero annotations; diff coverage 62.74%; coverage variation +0.18%.
+- CodeRabbit status: `SUCCESS`; all visible inline review threads resolved.
+- Canonical Pi public run `33007222310`: terminal `SUCCESS`, including exact-PR/source binding, trusted build, private self-hosted staging verdict, transfer cleanup, and canonical terminal result publication.
+- Exact-final-head live Discord smoke `33006830844` / job `98302641683`: `SUCCESS`.
 
 ## Latest completion
 
-`ES-D03 — Authorization and cross-platform policy` remains the latest completed Discord package until #160 actually merges and D05 terminal publication completes.
+`ES-D05 — Staff bot runtime foundation` is the latest completed Discord package.
 
-`ES-D06` and `ES-D13` remain dependency-blocked until both D04 and D05 complete. D07+ remain sequenced behind their stated dependencies.
+D04 remains independent active work. D06 and D13 remain dependency-blocked by D04; D07+ remain sequenced behind their stated dependencies.
 
 ## Selection
 
