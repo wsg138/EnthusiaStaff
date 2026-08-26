@@ -11,10 +11,12 @@ Implementation branch: `package/es-d05-staff-bot-runtime`
 
 - Original claim base: `168145d76efb13ed15f21f8a31ece3e96f7b7c7b`.
 - Frozen reviewed D05 product source: `5f24ba1818c81e0a30a516fa70c8597586184b00`.
-- Canonical Staff `main` at reconciliation: `37a2073b535cf32f89b2fc075699dca4e3420408`.
-- Ordinary two-parent current-main reconciliation merge: `9c99e78f520cd59e7e59506c37573ac9ad028d63`.
+- First executable current-main reconciliation: canonical `main` `37a2073b535cf32f89b2fc075699dca4e3420408`, ordinary two-parent merge `9c99e78f520cd59e7e59506c37573ac9ad028d63`.
+- Latest canonical `main` before final gate freeze: `bea28469385945dae818824064ca9bc2c15f56fd`, whose advance from `37a207...` is Wiki documentation only.
+- Latest ordinary two-parent documentation-only reconciliation merge: `a0d37e82957ca1318907f538084eb7e85bc7de95`.
+- The exact delta from executable synchronization head `9c99e78...` through `a0d37e8...` contains only D05 orchestration/handoff state plus `docs/wiki/pages/**`; no executable, build, workflow, dependency, migration, test, or runtime input changed.
 - Current-main migration boundary: V19; D05 adds no migration and does not consume D04's V20.
-- D04 remains independent on PR #151. X03, website/Wiki, provider, production Discord, LiteBans, and issue #43 authority are unchanged.
+- D04 remains independent on PR #151. X03, provider, production Discord, LiteBans, and issue #43 authority are unchanged.
 
 ## Successful live Discord acceptance
 
@@ -55,15 +57,15 @@ For exact frozen product `5f24ba1818c81e0a30a516fa70c8597586184b00`:
 
 The real Discord smoke is separate acceptance evidence and is attributed only to the exact product source it executed.
 
-## Current-main reconciliation
+## Current-main reconciliation and validation rule
 
-Current `main` advanced after the D05 freeze with legitimate unrelated executable work. PR #160 was therefore reconciled using normal merge history rather than rebase/force/squash. The exact diff of reconciliation head `9c99e78f520cd59e7e59506c37573ac9ad028d63` against reconciled `main` is D05-only: staff-bot source/tests/build integration, staff-bot configuration-cache workflow, and runtime documentation. No D04 migration/shared-file work or X03/provider/Wiki work was absorbed.
+Current `main` advanced after the D05 freeze with legitimate unrelated executable work. PR #160 was first reconciled using normal merge history rather than rebase/force/squash. The exact diff of executable reconciliation head `9c99e78f520cd59e7e59506c37573ac9ad028d63` against then-current `main` is D05-only: staff-bot source/tests/build integration, staff-bot configuration-cache workflow, and runtime documentation. No D04 migration/shared-file work or X03/provider work was absorbed.
 
-Because aggregate executable repository state changed through the main merge, fresh applicable exact-head hosted gates are required before #160 can merge. State-only tracking commits after `9c99e78...` do not alter executable inputs and may use the explicit state-only follow-up exception only if their exact delta remains orchestration/documentation-only and their applicable checks/review are clean.
+A later concurrent Wiki-only merge advanced canonical `main` to `bea28469385945dae818824064ca9bc2c15f56fd`. That change was reconciled normally through `a0d37e82957ca1318907f538084eb7e85bc7de95`. Comparison from `9c99e78...` through `a0d37e8...` proves the later delta is state/documentation only, so executable evidence on an exact descendant with the same executable tree may be reused under the explicit state-only follow-up exception in `VALIDATION-POLICY.md`. Stale runs bound to superseded PR heads remain non-passing evidence.
 
 ## Exact next action
 
-1. Obtain fresh terminal exact-head hosted validation for the reconciled D05 branch, including the full Java 21 repository gate, staff-bot configuration-cache gate, Sentinel/runtime artifact gate, configured static/review checks, and canonical Pi where current policy/configuration requires it.
+1. Obtain fresh terminal hosted validation for the synchronized D05 executable tree, including the full Java 21 repository gate, staff-bot configuration-cache gate, Sentinel/runtime artifact gate, configured static/review checks, and canonical Pi where current policy/configuration requires it.
 2. Reconcile live `main` again immediately before merge and ensure no new collision exists.
 3. Merge PR #160 normally only with every required gate green and no valid unresolved review thread.
 4. Verify merge containment and absence of unrelated D04/X03/production changes.
