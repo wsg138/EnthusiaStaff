@@ -41,7 +41,7 @@ The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded wor
 
 ### Required live Discord acceptance — PASS
 
-Trusted staging workflow `wsg138/EnthusiaStaff-Staging` run `32926306691`, latest attempt 3 / job `98071453002`, completed successfully on trusted self-hosted runner `Lincoln-PI-4` (Linux/ARM64). The workflow revision `03b3fce61bffe552d7905a4e4aa18e3015ea4e4aa18e3015ea4e00` is not the canonical identifier; the exact trusted staging-control head is `03b3fce61bffe552d7905a4e4aa18e3015ea4e00`. It pins the D05 source to exact SHA `5f24ba1818c81e0a30a516fa70c8597586184b00`, requires Java 21, builds/verifies the runtime before secret scope, and executes the non-destructive `--smoke-test`.
+Trusted staging workflow `wsg138/EnthusiaStaff-Staging` run `32926306691`, latest attempt 3 / job `98071453002`, completed successfully on trusted self-hosted runner `Lincoln-PI-4` (Linux/ARM64). The exact trusted staging-control head is `03b3fce61bffe552d7905a4e4aa18e3015ea4e00`. It pins the D05 source to exact SHA `5f24ba1818c81e0a30a516fa70c8597586184b00`, requires Java 21, builds/verifies the runtime before secret scope, and executes the non-destructive `--smoke-test`.
 
 Sanitized outcome: staging application `1541279616881397772` PASS; Enthusia guild `1410303324745371709` PASS; required test channel `1541286004298752091` PASS for view/send; readiness PASS; smoke exit 0; graceful close/shutdown PASS. The workflow sends no moderation action or test message and performs no Discord configuration change or production-data access. No bot-token value was inspected or exposed.
 
