@@ -69,6 +69,26 @@ class Tests(unittest.TestCase):
         with self.assertRaises(mod.SupersedeError):
             mod.private_cancel_is_safe(api, priv(7, SHA), OLD)
 
+    def test_legacy_pull_request_target_binding_is_drained(self):
+        run = {
+            'id': 9,
+            'run_attempt': 1,
+            'status': 'queued',
+            'event': 'pull_request_target',
+            'display_title': '[ES-D05] Staff bot runtime foundation',
+            'pull_requests': [{'number': 160, 'head': {'sha': OLD}}],
+        }
+        self.assertEqual(mod.public_binding(run), (160, OLD))
+
+    def test_private_run_discovered_from_public_correlation_without_comment(self):
+        api = FakeApi()
+        api.gets['/actions/workflows/plugin-live-test.yml/runs?event=workflow_dispatch&per_page=100&page=1'] = {
+            'workflow_runs': [priv(17, OLD)]
+        }
+        # Canonical private titles encode the originating public run/attempt.
+        api.gets['/actions/workflows/plugin-live-test.yml/runs?event=workflow_dispatch&per_page=100&page=1']['workflow_runs'][0]['display_title'] = f'EnthusiaStaff bridge 99-1 / {OLD}'
+        self.assertEqual(mod.private_runs_from_correlations(api, [(OLD, '99-1')]), [(OLD, 17)])
+
     def test_record_parser_ignores_current_head(self):
         api = FakeApi()
         body_old = f'<!-- enthusia-pi-staging pr=160 sha={OLD} -->\n- Private run ID: `7`'
