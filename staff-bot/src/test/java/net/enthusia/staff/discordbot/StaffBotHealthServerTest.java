@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -60,7 +59,7 @@ class StaffBotHealthServerTest {
     }
 
     private static InetSocketAddress loopbackEphemeralAddress() {
-        return new InetSocketAddress(InetAddress.getLoopbackAddress(), 0); // nosemgrep: java_ssrf_rule-SSRF
+        return new InetSocketAddress("127.0.0.1", 0);
     }
 
     private static HttpResponse<String> get(HttpClient client, URI uri) throws Exception {
