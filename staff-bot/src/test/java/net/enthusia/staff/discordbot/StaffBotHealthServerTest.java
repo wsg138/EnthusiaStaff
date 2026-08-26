@@ -59,6 +59,7 @@ class StaffBotHealthServerTest {
     }
 
     private static InetSocketAddress loopbackEphemeralAddress() {
+        // nosemgrep -- Test-only literal loopback listener; no untrusted destination or outbound request exists.
         return new InetSocketAddress("127.0.0.1", 0);
     }
 

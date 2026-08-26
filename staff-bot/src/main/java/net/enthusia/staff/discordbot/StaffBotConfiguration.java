@@ -140,8 +140,14 @@ public final class StaffBotConfiguration {
 
     private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
         return switch (healthHost) {
-            case "127.0.0.1", "localhost" -> new InetSocketAddress("127.0.0.1", healthPort);
-            case "::1" -> new InetSocketAddress("::1", healthPort);
+            case "127.0.0.1", "localhost" -> {
+                // nosemgrep -- Literal IPv4 loopback bind; validated allowlist input cannot reach this sink.
+                yield new InetSocketAddress("127.0.0.1", healthPort);
+            }
+            case "::1" -> {
+                // nosemgrep -- Literal IPv6 loopback bind; validated allowlist input cannot reach this sink.
+                yield new InetSocketAddress("::1", healthPort);
+            }
             default -> throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
         };
     }
