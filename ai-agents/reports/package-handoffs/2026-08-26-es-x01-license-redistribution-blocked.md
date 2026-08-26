@@ -57,15 +57,19 @@ After unblock, reconcile live heads again, create the normal same-ID implementat
 
 ## Validation applicability
 
-There is no product implementation head for this continuation. Therefore RoseChat/Staff product build, provider contract tests, runtime Sentinel, canonical Pi, and distributed staging are `NOT_RUN` and are not claimed as passing X01 product evidence. Running them against unchanged product code would not prove the missing implementation or resolve the license boundary.
+There is no X01 provider/product implementation head for this continuation. X01-specific provider behavior tests and distributed-runtime acceptance are therefore not applicable to this state-only continuation and are not claimed as product passes.
 
-The durable Staff state-publication PR is documentation/orchestration only. It must still receive the repository's actually applicable exact-head documentation/static/review/build checks. Any automatically triggered Pi/private run is recorded truthfully; a queued/skipped/missing/runtime-non-applicable result is never relabeled as a product or staging pass.
+PR #165 nevertheless triggers EnthusiaStaff's repository automation against the unchanged Staff product tree. Those automatic Coverage/build, Sentinel artifact, and Pi source-build/staging-control results are recorded truthfully as state-publication validation evidence only; they do not prove the missing RoseChat provider implementation and do not resolve the license boundary. A failed, skipped, queued, superseded, or runtime-non-applicable result is never relabeled as passing X01 product evidence.
+
+The first Sentinel artifact attempt on initial state head `738f46e78bd3ca0dae6bddb2fcafc5c9efce5c75` failed before compilation because the Gradle wrapper download was reset by the network (`java.net.SocketException: Connection reset`). That failed attempt remains non-passing history; an unchanged-SHA retry was requested rather than changing source to address an infrastructure download failure.
 
 ## State-publication evidence
 
 State branch: `state/es-x01-license-blocker-20260826`.
 
-State-publication PR and final exact-head validation evidence: pending at initial handoff creation; this section will be finalized on the same state branch before normal merge.
+State-publication PR: EnthusiaStaff #165, `[ES-X01] Publish RoseChat license redistribution blocker`.
+
+The final merge-candidate SHA and terminal exact-head check/review results are recorded in PR #165 metadata/body after the state branch is frozen. This handoff intentionally does not require embedding its own final commit SHA inside the commit that contains it; PR metadata is the durable exact-head validation ledger. Initial/superseded workflow results remain historical evidence and are not reused for a later head.
 
 ## Production boundary
 
