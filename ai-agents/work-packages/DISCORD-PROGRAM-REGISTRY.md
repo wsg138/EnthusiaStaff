@@ -26,7 +26,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active and parked packages
 
-`ES-D04` has an independent live continuation on Staff PR #151 owned by another worker. D05 did not edit, synchronize, merge, renumber, or replace D04.
+`ES-D04` has an independent live continuation on Staff PR #151 owned by another worker. Its staging-control prerequisites `wsg138/EnthusiaStaff-Staging#108` and `#109` are merged. D05 did not edit, synchronize, merge, renumber, or replace D04.
 
 `ES-D05` is independently `BLOCKED` / `PARKED_BLOCKED`. Its previous staging-Discord acceptance blocker is cleared, but fresh mandatory post-reconciliation ordinary hosted validation cannot currently execute because the repository GitHub Actions scheduler is stalled.
 
@@ -81,7 +81,9 @@ Then reconcile live `main`/PR #160, run fresh applicable full Java 21/Coverage, 
 
 ## ES-D04 independent live continuation
 
-D04 remains outside D05 ownership. Its implementation PR #151 is active. Live GitHub controls its current head/check/review state.
+D04 remains outside D05 ownership. Its implementation PR #151 is active, and staging-control PRs #108/#109 are merged. Live GitHub controls its current head/check/review state. D05 did not modify, synchronize, merge, or replace D04 or its staging-control work.
+
+Canonical prior handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
 
 ## Latest completion
 
@@ -91,4 +93,6 @@ D04 remains outside D05 ownership. Its implementation PR #151 is active. Live Gi
 
 ## Selection
 
-Classify every incomplete `ES-Dxx` as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`. Select the highest-priority actionable continuation; otherwise select the lowest-priority dependency-complete ready package. Skip blocked packages. Each worker completes exactly one package and stops only at `COMPLETE` or a genuine externally blocked terminal state after publishing durable state.
+Classify every incomplete `ES-Dxx` as `ACTIONABLE_CONTINUATION`, `PARKED_BLOCKED`, or `READY`. Select the highest-priority actionable continuation; otherwise select the lowest-priority dependency-complete ready package. Skip blocked packages. A live overlapping website/competition/other worker may make only the overlapping package temporarily `PARKED_BLOCKED`; it does not authorize conflicting edits and does not prevent another independent Discord package from being selected when dependencies permit.
+
+Each worker completes exactly one package and stops only at `COMPLETE` or a genuine externally blocked terminal state after publishing durable state. The worker must not stop merely because it produced a plan, opened a draft PR, reached a first checkpoint, or is waiting on ordinary CI that it can inspect in the same session.
