@@ -50,6 +50,34 @@ class Tests(unittest.TestCase):
         self.assertEqual(cancelled, [1])
         self.assertEqual(api.posts[0][0], '/actions/runs/1/cancel')
 
+    def test_public_state_does_not_report_deferred_shell_as_cancelled(self):
+        api = FakeApi()
+        api.gets['/actions/workflows/pi-staging-check.yml/runs?per_page=100&page=1'] = {'workflow_runs': [pub(1, OLD)]}
+        api.post = lambda path, payload=None: False
+        exact, cancelled = mod.public_state(api, 160, SHA)
+        self.assertFalse(exact)
+        self.assertEqual(cancelled, [])
+
+    def test_exact_not_queued_409_is_deferred(self):
+        api = object.__new__(mod.RepoApi)
+        api.repository = mod.SOURCE_REPOSITORY
+        def request(method, path, payload=None):
+            raise mod.SupersedeError(
+                f'GitHub API POST {path} failed: HTTP 409: '
+                '{"message":"Cannot cancel a workflow run that has not been queued yet."}'
+            )
+        api._request = request
+        self.assertIs(api.post('/actions/runs/123/cancel'), False)
+
+    def test_other_cancel_error_still_fails_closed(self):
+        api = object.__new__(mod.RepoApi)
+        api.repository = mod.SOURCE_REPOSITORY
+        def request(method, path, payload=None):
+            raise mod.SupersedeError(f'GitHub API POST {path} failed: HTTP 409: {{"message":"other conflict"}}')
+        api._request = request
+        with self.assertRaises(mod.SupersedeError):
+            api.post('/actions/runs/123/cancel')
+
     def test_private_queued_cancel_safe(self):
         api = FakeApi()
         self.assertTrue(mod.private_cancel_is_safe(api, priv(7, OLD), OLD))
