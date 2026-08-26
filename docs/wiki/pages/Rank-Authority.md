@@ -1,124 +1,86 @@
 # Roles and Permissions
 
-This page explains the intended authority model behind the rank aggregates.
-Ordinary staff should use [[Staff Handbook]],
-[[Staff Quick Start|Moderator-Quick-Start]] and their focused procedure pages.
+This page explains the authority model behind EnthusiaStaff rank aggregates. Staff procedure belongs in [[Staff Handbook]] and the focused feature guides; exact command nodes belong in [[Commands and Permissions]].
 
-Permission nodes control command discovery and early denial. Important writes are
-also reauthorized inside central services, so accidentally granting one node must
-not silently turn a role into a higher moderation rank.
+Permission nodes control discovery and early denial. Important writes are reauthorized inside central services, so granting one node must not silently turn a role into a higher moderation rank.
 
-> **Planned Discord exception:** [[Discord Moderation Platform]] defines a deliberate platform-specific authority model that is not implemented yet. Developer remains non-punitive for Minecraft, but is planned to have the same **Discord-only** temporary moderation authority as Mod. This exception must be explicit in domain authorization rather than inferred from Discord roles.
+> **Discord distinction:** the Discord-specific authorization **domain policy is merged**, including the deliberate Developer Discord-only exception. The interactive Discord staff-bot/runtime that would call that policy is not yet available on merged `main`. See [[Discord Moderation Platform]].
 
-## Quick navigation
+## Quick authority map
 
-- Exact permission nodes and command registration: [[Commands and Permissions]]
-- Punishment/request behavior and source files: [[Moderation, Punishments, and Reports]]
-- Planned Discord authority: [[Discord Moderation Platform]]
-- Staff-tool restrictions and source files: [[Staff Tools, Investigations, and Player-State Safety]]
-- Helper staff guide: [[Helper Guide]]
-- Authoritative policy source:
-  [`plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml)
-  plus central authorization tests/services
+| Role | Minecraft moderation | Discord-specific domain policy | Approval / recovery |
+| --- | --- | --- | --- |
+| Helper | Configured temporary outcomes; permanent results become requests | Warning and configured short temporary mute only | No approval; restricted investigation tools |
+| Mod | Configured ordinary outcomes, including configured permanent steps | Configured temporary Discord outcomes and custom temporary duration within policy | May review eligible requests; configured asset tools |
+| Developer | Technical/request-preparation role; no automatic direct Minecraft punishment authority | Same temporary Discord moderation authority as Mod | No ordinary punishment approval; technical/investigation tools |
+| Admin | Advanced configured/custom moderation authority | Includes permanent Discord ban/mute/channel restriction in the approved policy | Review/overturn and advanced tools as configured |
+| Founder | Broadest configured/custom authority | Broadest configured Discord authority | Owner recovery, exceptional approval and cutover authority |
 
-## Rank overview
+The table describes merged policy semantics, not a claim that every Discord surface or provider is operational. Live authority also depends on current LuckPerms configuration, current staff identity/rank, operational mode, feature/provider health and the runtime path invoking the domain service.
 
-| Role | Normal purpose | Direct punishment authority | Approval authority | Asset/staff-tool authority |
-| --- | --- | --- | --- | --- |
-| Helper | Trial moderation and ordinary investigations | Current Minecraft: configured temporary outcomes; permanent outcomes become requests. Planned Discord: warnings and configured short temporary mutes only. | None | Restricted staff mode, freeze, vanish, reports, read-only inventory/Ender and inspection |
-| Mod | Full ordinary moderation | Current Minecraft: configured outcomes, including configured permanent steps. Planned Discord: configured temporary/custom-temporary Discord outcomes; permanent Discord ban/mute/restriction requires Admin+. | May review eligible Helper/Developer requests where current policy allows | Inventory editing and configured confiscation; no owner recovery |
-| Developer | Technical work and diagnostics | Minecraft: request preparation only; no direct mutation. Planned Discord: same temporary Discord moderation authority as Mod, but no Minecraft authority is gained through Discord. | None unless a separately approved future policy says otherwise | Technical diagnostics and selected investigation tools; still no Minecraft punishment mutation |
-| Admin | Advanced moderation, configuration and review | Configured outcomes plus authorized custom durations/raising; planned Discord permanent ban/mute/channel restriction | May review requests and overturns as configured | Advanced tools and selected provider restrictions |
-| Founder | Owner-level policy, recovery and release authority | Broadest configured/custom authority | Final approval and exceptional recovery | Owner recovery, confiscated-item restoration, migration/cutover authority |
+## Core rule: reauthorize the mutation
 
-The table distinguishes current Minecraft policy from the planned Discord-specific
-extension. The deployed version, LuckPerms groups, Discord staff-link state and
-central service tests determine actual live authority.
+A command permission, GUI button, website route or Discord role is never final authority for a destructive moderation action.
+
+Reviewers should expect the mutation path to resolve/recheck:
+
+- current actor identity and explicit Enthusia rank;
+- target identity and protected/higher-rank state;
+- exact requested operation/consequence;
+- platform and enforcement scope;
+- duration/custom limits;
+- issuing/current rank where relevant;
+- operational/authority mode;
+- external preconditions immediately before an external side effect;
+- stale confirmation/revision state.
+
+If those facts cannot be established, the action should fail closed rather than infer authority from presentation metadata.
 
 ## Helper
 
-Helpers handle ordinary moderation and basic investigations.
+Helpers focus on ordinary moderation and investigation. Current Minecraft policy permits configured temporary results while a result containing a permanent sanction becomes an approval request.
 
-Current aggregate permissions include status/verification, punishment/read access,
-configured punishment workflow, reports, alerts, freeze, staff mode, vanish,
-staff chat, inventory view and inspection.
+The merged Discord authorization policy is intentionally narrower for Helper: warnings and configured short temporary mutes. Discord kicks, bans, permanent mutes/restrictions, broad custom actions and cross-platform effects require higher/independent authority.
 
-Important current policy limits:
-
-- configured temporary Minecraft punishments may apply directly;
-- a configured Minecraft result containing a permanent sanction becomes an approval request;
-- Helper cannot approve requests or overturns;
-- Helper staff mode must block inventory mutation and advanced recovery tools;
-- severe, complex or uncertain cases should be escalated even when a command is visible.
-
-For the planned Discord bot, Helper is intentionally narrower: warnings and
-configured short temporary mutes only. Planned Discord kicks, bans, permanent
-mutes, channel restrictions, cross-platform punishment and overturn authority are
-Mod+ or higher according to the Discord policy.
+Helpers cannot approve their own escalation path and should hand off severe or uncertain cases even when a surface is visible.
 
 See [[Helper Guide]].
 
 ## Mod
 
-Mods inherit the Helper toolset and add request review, network-ban permission,
-selected sanction changes, inventory editing and configured confiscation.
+Mods inherit the Helper toolset and add ordinary request review, network-ban permission, selected sanction changes, inventory editing and configured confiscation capabilities.
 
-Current Minecraft policy allows Mods to:
+For Minecraft, the central policy may authorize configured punishment steps and supported corrections according to hierarchy and action rules.
 
-- apply configured punishment steps;
-- approve/deny eligible Helper or Developer requests;
-- lower or end/revoke sanctions where policy allows;
-- request a full overturn;
-- use configured investigation and asset workflows.
-
-For the planned Discord bot, Mod may use configured temporary punishments and
-custom temporary durations within policy. Permanent Discord ban, permanent mute
-and permanent channel restriction require Admin+.
-
-Mods should not create arbitrary sanction combinations or bypass case-linked
-asset workflows.
+For Discord, the merged policy allows configured temporary moderation and custom temporary durations within runtime-supplied limits. Permanent Discord ban, permanent mute and permanent channel restriction require Admin/Founder-level authority.
 
 ## Developer
 
-Developer is a technical role, not a moderation promotion between Mod and Admin.
+Developer is a technical role, not a promotion step between Mod and Admin.
 
-For Minecraft and current EnthusiaStaff punishment surfaces, Developers may
-receive diagnostics, reload, inspection, staff mode, vanish, client and inventory
-tools for legitimate development/testing. They may prepare a punishment request
-for review. Central policy must deny direct Minecraft punishment mutation,
-approval, sanction changes, visibility changes and overturn actions even if an
-external permission, website route or GUI accidentally exposes the surface.
+For Minecraft moderation, Developer does not gain direct punishment authority merely because a technical or investigation permission exposes a surface. Existing Minecraft/domain policy remains independently authoritative; Developer may prepare request-oriented work where the existing policy allows it.
 
-The planned Discord bot deliberately adds one exception: a linked Developer gets
-the same **Discord-only** temporary moderation authority as Mod. That does not
-allow the Developer to use a Discord command to punish Minecraft unless the actor
-independently satisfies the required Minecraft/domain authorization. Permanent
-Discord ban/mute/channel restriction still requires Admin+.
+For Discord, the merged `DiscordModerationAuthorizationService` deliberately treats Developer as Mod-equivalent for **Discord-only temporary moderation**. This does not turn the Developer rank into a Minecraft Mod rank and must not be implemented by altering the global rank hierarchy.
 
-## Admin
+Cross-platform actions are especially important: each requested consequence/scope must satisfy its own platform policy. A Discord-origin action cannot use the Discord Developer exception to bypass Minecraft authority.
 
-Admins inherit Mod authority and add advanced diagnostics/configuration,
-authorized custom durations, raising/lowering, full overturn/approval and selected
-Market/Reputation restrictions.
+## Admin and Founder
 
-The planned Discord policy also makes Admin the minimum normal rank for permanent
-Discord ban, permanent mute and permanent channel restriction.
+Admin adds advanced diagnostics/configuration, authorized custom duration/raising/lowering/overturn behavior and selected provider restrictions. In the approved Discord policy, Admin is the minimum normal rank for permanent Discord ban, permanent mute and permanent channel restriction.
 
-Admin authority should still use the same audited application services rather
-than direct storage edits.
+Founder has the broadest configured policy plus owner recovery and authority-transition responsibilities. Founder access remains audited; owner authority is not a reason to bypass durable intent, verification, recovery or history.
 
-## Founder
+## Console and SYSTEM
 
-Founder has the broadest configured policy and recovery authority, including:
+Console/`SYSTEM` semantics must be explicit. Do not treat console as an unlimited ordinary staff member simply because it bypasses Bukkit command visibility.
 
-- custom punishment combinations;
-- confiscated-item restoration;
-- owner/recovery controls;
-- migration, shadow and cutover authorization;
-- emergency freeze and rollback decisions.
+Review every command/service that accepts console or an internal system actor for:
 
-Founder access remains audited. Owner authority is not a reason to bypass durable
-intent, verification, recovery or case history.
+- which operations are allowed;
+- whether hierarchy bypass exists and what it excludes;
+- whether system-issued sanctions may be modified;
+- what actor identity is written to audit/history;
+- whether website/Discord/internal jobs accidentally inherit console-level power.
 
 ## Aggregate inheritance
 
@@ -132,34 +94,51 @@ enthusiastaff.rank.admin
 enthusiastaff.rank.founder
 ```
 
-Inheritance:
+Normal inheritance is:
 
 - Mod inherits Helper.
 - Admin inherits Mod.
 - Founder inherits Admin.
 - Developer remains a separate technical aggregate.
 
-Application policy may be stricter than the permission tree. The planned Discord
-Developer exception must be modeled as a platform-specific domain capability,
-not by changing Developer into a Mod-equivalent Minecraft rank.
+Application policy may be stricter than the permission tree. The Discord Developer exception is modeled as a platform-specific authorization capability rather than by changing Developer into a Mod-equivalent global rank.
+
+## Discord authorization source map
+
+Merged `main` includes:
+
+- `domain/src/main/java/net/enthusia/staff/domain/auth/DiscordModerationAuthorizationService.java`
+- `DiscordAuthorizationRequest`, `DiscordAuthorizationSnapshot`, `DiscordAuthorizationDecision`
+- `DiscordAuthorizationLimits`
+- `DiscordOperationPolicy`, `DiscordConsequencePolicy`, `DiscordPreconditionPolicy`
+- `DiscordMinecraftAuthorization`
+- focused authorization/target-protection/operation-matrix/cross-platform tests
+- [`docs/discord-authorization.md`](../../../docs/discord-authorization.md)
+
+These prove the domain policy exists. They do not prove a Discord bot, command, role synchronization or live Discord side effect exists.
 
 ## Review checklist
 
-Before changing a rank or permission:
+Before changing rank or authorization behavior:
 
-1. Update platform command/role discovery deliberately.
-2. Check central authorization policy, not only command permission checks.
-3. Test command, GUI, API, website, Discord and integration entry points.
-4. Test accidental extra permissions, staff-link requirements and rank inheritance.
-5. Verify offline targets, retries, partial cross-platform failure and multi-server behavior.
-6. Update [[Commands and Permissions]], [[Discord Moderation Platform]], the relevant feature hub and the requirements matrix.
+1. Identify the platform and exact consequence being authorized.
+2. Compare presentation permissions/roles with central service policy.
+3. Test self-target, equal/higher-rank, protected/system targets and accidental extra permissions.
+4. Test stale actor/target snapshots and reauthorization immediately before mutation.
+5. Test cross-platform requests as separate consequences, not a shared shortcut.
+6. Check console/SYSTEM behavior explicitly.
+7. Verify provider/Discord hierarchy preconditions are checked at the side-effect boundary.
+8. Check fail-closed behavior when staff identity/rank/provider state cannot be resolved.
+9. Keep authorization tests separate from claims of live runtime/staging acceptance.
 
-## Related pages
+Use [[Code Review Guide]] for the full cross-cutting checklist.
 
-- [[Commands and Permissions]]
-- [[Discord Moderation Platform]]
-- [[Helper Guide]]
-- [[Punishment System]]
-- [[Moderation, Punishments, and Reports]]
-- [[Staff Tools, Investigations, and Player-State Safety]]
-- [[Developer Code Guide]]
+## Go deeper
+
+- [[Commands and Permissions]] — registered commands/nodes.
+- [[Discord Moderation Platform]] — merged Discord foundations versus future runtime.
+- [[Punishment System]] — staff punishment procedure.
+- [[Moderation, Punishments, and Reports]] — punishment/request implementation status.
+- [[Staff Tools, Investigations, and Player-State Safety]] — staff-tool/player-state boundaries.
+- [[Developer Code Guide]] — exact source navigation.
+- [[Code Review Guide]] — authority review discipline.
