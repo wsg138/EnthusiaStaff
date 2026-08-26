@@ -25,6 +25,7 @@ PRIVATE_TITLE_RE = re.compile(r"^EnthusiaStaff bridge ([1-9][0-9]*-[1-9][0-9]*) 
 MARKER_RE = re.compile(r"<!-- enthusia-pi-staging pr=(\d+) sha=([0-9a-f]{40}) -->")
 PRIVATE_ID_RE = re.compile(r"^- Private run ID: `([1-9][0-9]*)`$", re.MULTILINE)
 PAPER_STEP = "Run guarded disposable Paper boot and restart test"
+DEFERRED_CANCEL_MESSAGE = "Cannot cancel a workflow run that has not been queued yet."
 
 
 class SupersedeError(RuntimeError):
@@ -72,7 +73,17 @@ class RepoApi:
         return self._request("GET", path)
 
     def post(self, path: str, payload: Mapping[str, Any] | None = None) -> Any:
-        return self._request("POST", path, payload)
+        try:
+            return self._request("POST", path, payload)
+        except SupersedeError as exc:
+            message = str(exc)
+            if path.startswith("/actions/runs/") and path.endswith("/cancel") and "HTTP 409:" in message and DEFERRED_CANCEL_MESSAGE in message:
+                print(
+                    f"::warning::Deferred cancellation for {self.repository}{path}: "
+                    "GitHub has not materialized a cancellable job yet"
+                )
+                return False
+            raise
 
 
 def positive_int(value: Any, label: str) -> int:
@@ -161,7 +172,8 @@ def public_state(api: RepoApi, pr_number: int, current_sha: str) -> tuple[bool, 
         if parsed[1] == current_sha:
             exact_active = True
             continue
-        api.post(f"/actions/runs/{run_id}/cancel")
+        if api.post(f"/actions/runs/{run_id}/cancel") is False:
+            continue
         cancelled.append(run_id)
     return exact_active, cancelled
 
@@ -171,7 +183,7 @@ def private_records(source_api: RepoApi, pr_number: int, keep_sha: str | None) -
     for page in range(1, 11):
         payload = source_api.get(f"/issues/{pr_number}/comments?per_page=100&page={page}")
         if not isinstance(payload, list):
-            raise SupersedeError("PR comments response is invalid")
+            raise SupersedeError("PR comments response is not a list")
         for item in payload:
             if not isinstance(item, Mapping):
                 continue
@@ -268,7 +280,8 @@ def cancel_stale_private(
         if not isinstance(run, Mapping) or run.get("status") not in ACTIVE_STATES:
             continue
         if private_cancel_is_safe(staging_api, run, sha):
-            staging_api.post(f"/actions/runs/{run_id}/cancel")
+            if staging_api.post(f"/actions/runs/{run_id}/cancel") is False:
+                continue
             cancelled.append(run_id)
         else:
             preserved_unsafe.append(run_id)
