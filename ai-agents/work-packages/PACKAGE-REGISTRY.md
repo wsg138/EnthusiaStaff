@@ -9,7 +9,7 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 - Classify every incomplete package before selection and work exactly one package per worker.
 - Existing `ACTIONABLE_CONTINUATION` work takes priority over newly `READY` work.
 - Use normal merge commits only; never relabel missing, skipped, cancelled, superseded, queued, timed-out, wrong-revision, resource-gated, merge-ref-only, or failed validation as passing evidence.
-- Do not weaken staging, provenance, migration, review, static-analysis, privacy, or production-authority boundaries.
+- Do not weaken staging, provenance, migration, review, static-analysis, privacy, licensing, or production-authority boundaries.
 - Issue #43 remains open/deferred and LiteBans remains authoritative until separately approved.
 - A parked package does not block selection of an unrelated dependency-complete `READY` package.
 - Required package gates come from the authoritative package contract at selection, current validation policy, actually applicable configured checks, and explicit owner direction. A worker cannot create a new blocker merely by adding an optional/diagnostic gate to later tracking text.
@@ -28,7 +28,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`. Commend exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d` passed Java 21 Maven `clean verify`, 110 tests, PMD, Codacy, and resolved-review gates, then PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1`. Staff exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789` passed full Java 21/MariaDB/Testcontainers validation, Codacy zero-issue static analysis, Sentinel restart, and canonical Pi public/private staging, then PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14`. Both merge commits exactly contain their package heads. Post-merge standalone↔aggregate shared product Git objects are identical with only aggregate `COMPONENT-METADATA.md` extra; component metadata is `IN_SYNC`. Staff's temporary branch is gone. The residual standalone package branch is fully contained and safe to delete, but the connected mutation surface exposes no branch-delete action. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md`.
 
-`ES-X01 — RoseChat provider and communication integration` remains independently `BLOCKED` / `PARKED_BLOCKED`.
+`ES-X01 — RoseChat provider and communication integration` remains independently `BLOCKED` / `PARKED_BLOCKED` after its historical repository-resolution blocker changed. Supported `wsg138/Enthusia-RoseChat` is now verified at `master` head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`, but the checked-in provider license expressly excludes publication/(re)distribution rights required to place the standalone source tree in public `components/enthusia-rosechat/` and prove canonical parity. No implementation branch/PR or source import was created.
 
 ## Canonical package index
 
@@ -48,7 +48,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-P08` | Item confiscation and restoration | `COMPLETE` | — | 70 | `ES-P07` | frozen executable head `27b20bb56e540161f695e624916f91620261457d`; final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; PR #128 merged normally; contained; branch cleaned |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
-| `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | supported integration repository/default branch/source/AGENTS contract unresolved |
+| `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | provider repo resolved to `wsg138/Enthusia-RoseChat:master` at `8fcca542...`; verified license/public-aggregate redistribution boundary blocks canonical import/parity; no implementation branches/PRs created; exact unblock is durable redistribution authorization/license change or explicitly authorized mirror-policy redesign |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
 | `ES-X03` | EnthusiaMarket destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | Market PR #3 merged normally as `7dd0a89...`; Staff PR #139 is preserved at package-record head `702b134...`; canonical public Pi `32924559285` plus private `32925074087` / job `98046237374` pass for that exact head; current blocker is D04 V20/shared-file serialization; resume after D04 serializes, then merge fresh `main`, renumber X03 to the next free migration, revalidate the new exact final head including Sentinel/Pi, merge normally, and prove Market parity |
 | `ES-X04` | EnthusiaCommend reputation provider | `COMPLETE` | — | 125 | `ES-P08`, `ES-X02` | Commend PR #12 and Staff PR #152 merged normally after exact-head build/static/review/Sentinel/Pi gates; containment and post-merge provider parity exact; component `IN_SYNC` |
@@ -57,6 +57,19 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 | `ES-V03` | Destructive, latency, and load acceptance | `DEFERRED` | `PARKED_BLOCKED` | 260 | `ES-P08`, `ES-X02`, `ES-X03`, `ES-X04` | ES-X03 remains incomplete; representative destructive/load acceptance lives here |
 | `ES-A01` | LiteBans cutover acceptance | `DEFERRED` | `PARKED_BLOCKED` | 300 | `ES-V01`, `ES-V02`, `ES-V03` | ES-V02/ES-V03 plus owner authorization and issue #43 required |
 | `ES-QA01` | Final repository and workflow audit | `PLANNED` | `PARKED_BLOCKED` | 400 | `ES-A01` | dependency blocked |
+
+## ES-X01 current parked record
+
+- Live reconciliation on 2026-08-26 proved the historical repository blocker had materially changed, so X01 correctly resumed as an `ACTIONABLE_CONTINUATION` rather than remaining blindly parked.
+- Verified standalone: public `wsg138/Enthusia-RoseChat`, default branch `master`, head `8fcca5420b0f54207d6efa332327b9fd18edb8d8` at reconciliation. GitHub reports fork chain `wsg138/Enthusia-RoseChat` → `BadgersMC/Enthusia-RoseChat` → source `Rosewood-Development/RoseChat`.
+- No provider-specific `AGENTS.md` is present in the verified source tree. Existing Staff source already contains the proposed `dev.rosewood.rosechat.api.staff` integration contract, while the verified provider source does not yet implement that staff API.
+- The verified checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge but expressly excludes publication and (re)distribution rights. `wsg138/EnthusiaStaff` is public.
+- Canonical `BRANCH-AND-MIRROR-POLICY.md` requires an external package to update the designated aggregate component copy and, after both normal merges, compare the aggregate directory with the standalone repository excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`. That requires a second public publication of the provider source tree.
+- No checked-in license exception, redistribution authorization, or other durable repository evidence was found that permits that public second copy. The existence of a GitHub fork is not treated as permission to republish outside the fork network.
+- Therefore no RoseChat source was imported and no X01 implementation branch/PR was created in either repository. No product code, migration, runtime configuration, PM data, Discord work, website work, deployment, or production authority changed.
+- Exact unblock: durable verifiable authorization/license terms permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads, create the normal two same-ID implementation PRs, perform complete behavior/test/static/review/Sentinel/Pi validation as applicable, merge normally, prove the authorized post-merge synchronization model, and publish `COMPLETE`.
+- Product build/runtime/Pi evidence is intentionally `NOT_RUN` / not claimed because no product implementation head exists. Only the documentation/orchestration state-publication head is subject to documentation-only exact-head repository gates.
+- Canonical current handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-x01-license-redistribution-blocked.md`.
 
 ## ES-X04 terminal record
 
@@ -153,4 +166,4 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ## Next sequential action
 
-This X03 worker stops with ES-X03 truthfully `BLOCKED` / `PARKED_BLOCKED` after publishing the changed blocker. Do not activate another universal package in this run. `ES-X01` remains independently parked, so `ES-V02` and `ES-V03` remain dependency-blocked; `ES-A01` and `ES-QA01` remain downstream/deferred. A future universal package worker must reconcile live GitHub and this registry again; X03 becomes actionable when D04's V20/shared-file work has durably serialized and the existing X03 branch can be safely reconciled and renumbered.
+This X01 worker stops with ES-X01 truthfully `BLOCKED` / `PARKED_BLOCKED` after publishing the changed blocker. Do not activate another universal package in this run. X03 remains independently parked on D04 serialization, so `ES-V02` and `ES-V03` remain dependency-blocked; `ES-A01` and `ES-QA01` remain downstream/deferred. A future universal package worker must reconcile live GitHub and this registry again; X01 becomes actionable only when the verified redistribution/aggregate-publication blocker is durably removed, while X03 becomes actionable when D04's V20/shared-file work has durably serialized.
