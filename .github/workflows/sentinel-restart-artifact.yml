@@ -3,9 +3,18 @@ name: Sentinel Restart Artifact
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "docs/**"
+      - "ai-agents/**"
+      - "reports/**"
+      - "**/*.md"
 
 permissions:
   contents: read
+
+concurrency:
+  group: sentinel-restart-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   build-paper-artifact:

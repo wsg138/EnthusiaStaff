@@ -84,7 +84,7 @@ public final class StaffBotConfiguration {
         return new StaffBotConfiguration(
                 environment,
                 token,
-                new InetSocketAddress(healthHost, healthPort),
+                loopbackSocketAddress(healthHost, healthPort),
                 workerThreads,
                 queueCapacity,
                 interactionCapacity,
@@ -136,6 +136,14 @@ public final class StaffBotConfiguration {
                 + ", interactionCapacity=" + interactionCapacity
                 + ", interactionTtl=" + interactionTtl
                 + ", discordToken=<redacted>]";
+    }
+
+    private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
+        return switch (healthHost) {
+            case "127.0.0.1", "localhost" -> new InetSocketAddress("127.0.0.1", healthPort);
+            case "::1" -> new InetSocketAddress("::1", healthPort);
+            default -> throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
+        };
     }
 
     private static String required(Map<String, String> values, String key) {

@@ -12,15 +12,16 @@ import java.util.concurrent.TimeUnit;
  */
 public final class StaffBotWorkerPool implements AutoCloseable {
     private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(5);
+    private static final int MIN_POSITIVE_COUNT = 1;
 
     private final ThreadPoolExecutor executor;
     private final StaffBotHealth health;
 
     public StaffBotWorkerPool(int threads, int queueCapacity, StaffBotHealth health) {
-        if (threads < 1) {
+        if (threads < MIN_POSITIVE_COUNT) {
             throw new IllegalArgumentException("threads must be positive");
         }
-        if (queueCapacity < 1) {
+        if (queueCapacity < MIN_POSITIVE_COUNT) {
             throw new IllegalArgumentException("queue capacity must be positive");
         }
         this.health = Objects.requireNonNull(health, "health");

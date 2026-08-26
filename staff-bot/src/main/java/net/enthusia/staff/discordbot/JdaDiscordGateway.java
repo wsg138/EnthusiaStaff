@@ -25,6 +25,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private static final System.Logger LOGGER = System.getLogger(JdaDiscordGateway.class.getName());
 
     private final StaffBotConfiguration configuration;
+    private final Object lifecycleLock = new Object();
     private JDA jda;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
@@ -32,62 +33,75 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     @Override
-    public synchronized void start(DiscordGatewayObserver observer) {
-        if (jda != null) {
-            throw new IllegalStateException("Discord gateway already started");
-        }
-        SessionListener listener = new SessionListener(configuration.environment(), observer);
-        jda = JDABuilder.createLight(configuration.discordToken(), Set.of())
-                .setMemberCachePolicy(MemberCachePolicy.NONE)
-                .setChunkingFilter(ChunkingFilter.NONE)
-                .setAutoReconnect(true)
-                .setMaxReconnectDelay(configuration.maxReconnectDelaySeconds())
-                .setEnableShutdownHook(false)
-                .setEventPassthrough(false)
-                .addEventListeners(listener)
-                .build();
-    }
-
-    @Override
-    public synchronized void shutdown() {
-        if (jda != null) {
-            jda.shutdown();
+    public void start(DiscordGatewayObserver observer) {
+        synchronized (lifecycleLock) {
+            if (jda != null) {
+                throw new IllegalStateException("Discord gateway already started");
+            }
+            SessionListener listener = new SessionListener(configuration.environment(), observer);
+            jda = JDABuilder.createLight(configuration.discordToken(), Set.of())
+                    .setMemberCachePolicy(MemberCachePolicy.NONE)
+                    .setChunkingFilter(ChunkingFilter.NONE)
+                    .setAutoReconnect(true)
+                    .setMaxReconnectDelay(configuration.maxReconnectDelaySeconds())
+                    .setEnableShutdownHook(false)
+                    .setEventPassthrough(false)
+                    .addEventListeners(listener)
+                    .build();
         }
     }
 
     @Override
-    public synchronized void shutdownNow() {
-        if (jda != null) {
-            jda.shutdownNow();
+    public void shutdown() {
+        synchronized (lifecycleLock) {
+            if (jda != null) {
+                jda.shutdown();
+            }
+        }
+    }
+
+    @Override
+    public void shutdownNow() {
+        synchronized (lifecycleLock) {
+            if (jda != null) {
+                jda.shutdownNow();
+            }
         }
     }
 
     @Override
     public boolean awaitShutdown(Duration timeout) throws InterruptedException {
         JDA current;
-        synchronized (this) {
+        synchronized (lifecycleLock) {
             current = jda;
         }
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     static final class CallbackFence {
+        private final Object lock = new Object();
         private long generation;
 
-        synchronized long beginResolution() {
-            return ++generation;
-        }
-
-        synchronized void invalidate() {
-            generation++;
-        }
-
-        synchronized boolean runIfCurrent(long expectedGeneration, Runnable callback) {
-            if (generation != expectedGeneration) {
-                return false;
+        long beginResolution() {
+            synchronized (lock) {
+                return ++generation;
             }
-            callback.run();
-            return true;
+        }
+
+        void invalidate() {
+            synchronized (lock) {
+                generation++;
+            }
+        }
+
+        boolean runIfCurrent(long expectedGeneration, Runnable callback) {
+            synchronized (lock) {
+                if (generation != expectedGeneration) {
+                    return false;
+                }
+                callback.run();
+                return true;
+            }
         }
     }
 
@@ -132,7 +146,9 @@ final class JdaDiscordGateway implements DiscordGateway {
         public void onException(ExceptionEvent event) {
             Throwable cause = event.getCause();
             String type = cause == null ? "unknown" : cause.getClass().getSimpleName();
-            LOGGER.log(System.Logger.Level.WARNING, "discord_gateway_exception type={0}", type);
+            if (LOGGER.isLoggable(System.Logger.Level.WARNING)) {
+                LOGGER.log(System.Logger.Level.WARNING, "discord_gateway_exception type={0}", type);
+            }
         }
 
         private void resolveIdentity(JDA api) {

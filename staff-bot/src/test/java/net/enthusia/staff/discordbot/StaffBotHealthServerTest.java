@@ -4,20 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 class StaffBotHealthServerTest {
     @Test
     void distinguishesLivenessFromReadinessWithoutSensitivePayloads() throws Exception {
         StaffBotHealth health = new StaffBotHealth(StaffBotEnvironment.STAGING);
-        try (StaffBotHealthServer server = new StaffBotHealthServer(
-                new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), health)) {
+        try (StaffBotHealthServer server = new StaffBotHealthServer(loopbackEphemeralAddress(), health)) {
             server.start();
             HttpClient client = HttpClient.newHttpClient();
             URI base = URI.create("http://" + host(server.boundAddress()) + ":" + server.boundAddress().getPort());
@@ -27,7 +26,7 @@ class StaffBotHealthServerTest {
             assertEquals(200, live.statusCode());
             assertEquals(503, notReady.statusCode());
             assertTrue(live.body().contains("\"environment\":\"staging\""));
-            assertFalse(live.body().toLowerCase().contains("token"));
+            assertFalse(live.body().toLowerCase(Locale.ROOT).contains("token"));
 
             health.transition(StaffBotHealth.Phase.READY, DiscordRuntimeIdentityValidator.READY);
             HttpResponse<String> ready = get(client, base.resolve("/ready"));
@@ -43,8 +42,7 @@ class StaffBotHealthServerTest {
                 StaffBotHealth.Phase.CONNECTING,
                 "tab\tbackspace\bformfeed\fnewline\nreturn\rcontrol\u0001slash\\quote\"");
 
-        try (StaffBotHealthServer server = new StaffBotHealthServer(
-                new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), health)) {
+        try (StaffBotHealthServer server = new StaffBotHealthServer(loopbackEphemeralAddress(), health)) {
             server.start();
             HttpClient client = HttpClient.newHttpClient();
             URI base = URI.create("http://" + host(server.boundAddress()) + ":" + server.boundAddress().getPort());
@@ -58,6 +56,10 @@ class StaffBotHealthServerTest {
                             + "slash\\\\quote\\\"\",\"rejectedWork\":0}\n",
                     response.body());
         }
+    }
+
+    private static InetSocketAddress loopbackEphemeralAddress() {
+        return new InetSocketAddress("127.0.0.1", 0);
     }
 
     private static HttpResponse<String> get(HttpClient client, URI uri) throws Exception {
