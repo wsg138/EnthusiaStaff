@@ -76,7 +76,8 @@ class Tests(unittest.TestCase):
             'status': 'queued',
             'event': 'pull_request_target',
             'display_title': '[ES-D05] Staff bot runtime foundation',
-            'pull_requests': [{'number': 160, 'head': {'sha': OLD}}],
+            'head_sha': OLD,
+            'pull_requests': [{'number': 160, 'head': {'sha': SHA}}],
         }
         self.assertEqual(mod.public_binding(run), (160, OLD))
 
