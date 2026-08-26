@@ -30,7 +30,7 @@ public final class StaffBotApplication {
         try {
             smokeTest = parseSmokeTest(args);
         } catch (IllegalArgumentException exception) {
-            log(System.Logger.Level.ERROR, "staff_bot_invalid_arguments");
+            logIfEnabled(System.Logger.Level.ERROR, "staff_bot_invalid_arguments");
             return CONFIGURATION_ERROR;
         }
         return runConfigured(smokeTest);
@@ -41,7 +41,7 @@ public final class StaffBotApplication {
         try {
             configuration = StaffBotConfiguration.fromSystemEnvironment();
         } catch (IllegalArgumentException exception) {
-            log(System.Logger.Level.ERROR, "staff_bot_configuration_invalid");
+            logIfEnabled(System.Logger.Level.ERROR, "staff_bot_configuration_invalid");
             return CONFIGURATION_ERROR;
         }
         return runRuntime(configuration, smokeTest);
@@ -60,11 +60,11 @@ public final class StaffBotApplication {
             runtime.awaitTermination();
             return runtime.health().failedEver() ? RUNTIME_ERROR : SUCCESS;
         } catch (IOException | RuntimeException exception) {
-            log(System.Logger.Level.ERROR, "staff_bot_startup_failed");
+            logIfEnabled(System.Logger.Level.ERROR, "staff_bot_startup_failed");
             return RUNTIME_ERROR;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            log(System.Logger.Level.WARNING, "staff_bot_interrupted");
+            logIfEnabled(System.Logger.Level.WARNING, "staff_bot_interrupted");
             return INTERRUPTED;
         }
     }
@@ -75,7 +75,7 @@ public final class StaffBotApplication {
         if (!ready || !runtime.health().isReady() || runtime.health().failedEver()) {
             return RUNTIME_ERROR;
         }
-        log(
+        logIfEnabled(
                 System.Logger.Level.INFO,
                 "staff_bot_smoke_ready environment={0}",
                 configuration.environment().label());
@@ -92,7 +92,7 @@ public final class StaffBotApplication {
         throw new IllegalArgumentException("unsupported staff bot arguments");
     }
 
-    private static void log(System.Logger.Level level, String message, Object... parameters) {
+    private static void logIfEnabled(System.Logger.Level level, String message, Object... parameters) {
         if (LOGGER.isLoggable(level)) {
             LOGGER.log(level, message, parameters);
         }

@@ -19,7 +19,10 @@ public final class StaffBotConfiguration {
     public static final String INTERACTION_CAPACITY_KEY = "ENTHUSIA_STAFF_BOT_INTERACTION_CAPACITY";
     public static final String INTERACTION_TTL_SECONDS_KEY = "ENTHUSIA_STAFF_BOT_INTERACTION_TTL_SECONDS";
 
-    private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "localhost", "::1");
+    private static final String IPV4_LOOPBACK_HOST = "127.0.0.1";
+    private static final String LOCALHOST = "localhost";
+    private static final String IPV6_LOOPBACK_HOST = "::1";
+    private static final Set<String> LOOPBACK_HOSTS = Set.of(IPV4_LOOPBACK_HOST, LOCALHOST, IPV6_LOOPBACK_HOST);
     private static final int DEFAULT_HEALTH_PORT = 8765;
     private static final int DEFAULT_WORKER_THREADS = 4;
     private static final int DEFAULT_WORKER_QUEUE_CAPACITY = 256;
@@ -67,7 +70,7 @@ public final class StaffBotConfiguration {
         Objects.requireNonNull(values, "values");
         StaffBotEnvironment environment = StaffBotEnvironment.parse(required(values, ENVIRONMENT_KEY));
         String token = requireSecret(values.get(TOKEN_KEY));
-        String healthHost = values.getOrDefault(HEALTH_HOST_KEY, "127.0.0.1").trim();
+        String healthHost = values.getOrDefault(HEALTH_HOST_KEY, IPV4_LOOPBACK_HOST).trim();
         if (!LOOPBACK_HOSTS.contains(healthHost)) {
             throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
         }
@@ -140,13 +143,13 @@ public final class StaffBotConfiguration {
 
     private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
         return switch (healthHost) {
-            case "127.0.0.1", "localhost" -> {
+            case IPV4_LOOPBACK_HOST, LOCALHOST -> {
                 // nosemgrep -- Literal IPv4 loopback bind; validated allowlist input cannot reach this sink.
-                yield new InetSocketAddress("127.0.0.1", healthPort);
+                yield new InetSocketAddress(IPV4_LOOPBACK_HOST, healthPort);
             }
-            case "::1" -> {
+            case IPV6_LOOPBACK_HOST -> {
                 // nosemgrep -- Literal IPv6 loopback bind; validated allowlist input cannot reach this sink.
-                yield new InetSocketAddress("::1", healthPort);
+                yield new InetSocketAddress(IPV6_LOOPBACK_HOST, healthPort);
             }
             default -> throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
         };
