@@ -14,7 +14,7 @@ Start here when you need to change, review, debug, or validate EnthusiaStaff. Th
 | Trace one request end to end | [[Developer Code Guide]] | focused deep dive and tests |
 | Review Paper/Folia player-state code | [[Code Review Guide]] | [[Staff Tools, Investigations, and Player-State Safety]], [[Cheat Tester]], [[Vanish Internals]] |
 | Understand Paper/Velocity transport | [[Protocol and Network Traffic]] | protocol/persistence source and network tests |
-| Understand Discord foundations versus future runtime | [[Discord Moderation Platform]] | [[Developer Code Guide]], [[Roles and Permissions|Rank-Authority]], `docs/discord-authorization.md` |
+| Understand Discord foundations versus future runtime | [[Discord Moderation Platform]] | [[Developer Code Guide]], [[Rank Authority]], `docs/discord-authorization.md` |
 | Review current webhook delivery/privacy | [[Discord Delivery]] | [[Protocol and Network Traffic]], [[Code Review Guide]] |
 | Review vanish/session scheduling deeply | [[Vanish Internals]] | Paper visibility/staff source and runtime staging |
 | Build or prove a change | [[Build and Testing]] | exact workflow evidence for the reviewed SHA |
