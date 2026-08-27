@@ -6,9 +6,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.casefile.CaseReview;
@@ -100,7 +100,7 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
     }
 
     public List<ActiveSanction> activeSanctions(UUID targetId, Instant now) {
-        return sanctions.activeFor(targetId, Set.allOf(SanctionType.class), now);
+        return sanctions.activeFor(targetId, EnumSet.allOf(SanctionType.class), now);
     }
 
     public List<StaffNote> recentNotes(UUID targetId, int limit) {
