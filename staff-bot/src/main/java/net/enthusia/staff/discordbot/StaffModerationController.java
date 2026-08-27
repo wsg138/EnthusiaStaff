@@ -80,6 +80,12 @@ final class StaffModerationController {
 
     Response moderateMinecraft(long invokerId, String invokerName, String input) {
         return guarded(() -> {
+            requireInvoker(
+                    invokerId,
+                    invokerName,
+                    DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
+                    ModerationPlatform.MINECRAFT
+            );
             StaffModerationReadService.MinecraftResolution resolution = reads.resolveMinecraft(input);
             if (resolution instanceof StaffModerationReadService.MinecraftResolution.Missing) {
                 return Response.text("No Minecraft player matched that UUID or current/historical username.", List.of());
@@ -301,14 +307,18 @@ final class StaffModerationController {
     }
 
     private Response caseView(long invokerId, String invokerName, CaseId caseId) {
+        Actor actor = requireInvoker(
+                invokerId,
+                invokerName,
+                DiscordModerationOperation.VIEW_HISTORY,
+                ModerationPlatform.MINECRAFT
+        );
         CaseReview review = reads.caseReview(caseId).orElse(null);
         if (review == null) {
             return Response.text("No case exists with that ID.", List.of());
         }
         StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
-        Actor actor = authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
-        Optional<Actor> targetStaff = actors.targetStaff(target);
-        require(actor, targetStaff, DiscordModerationOperation.VIEW_HISTORY, target);
+        require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
         String content = "**Case `" + caseId + "`**\n"
                 + "State: " + review.state() + "\n"
                 + "Issued: " + TIME.format(review.issuedAt()) + "\n"
@@ -325,6 +335,17 @@ final class StaffModerationController {
     ) {
         Actor actor = actors.invoker(discord(invokerId), invokerName);
         require(actor, actors.targetStaff(target), operation, target);
+        return actor;
+    }
+
+    private Actor requireInvoker(
+            long invokerId,
+            String invokerName,
+            DiscordModerationOperation operation,
+            ModerationPlatform platform
+    ) {
+        Actor actor = actors.invoker(discord(invokerId), invokerName);
+        authorization.require(actor, Optional.empty(), operation, platform);
         return actor;
     }
 
