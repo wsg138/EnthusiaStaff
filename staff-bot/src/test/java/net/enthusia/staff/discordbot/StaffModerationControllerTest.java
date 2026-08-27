@@ -64,6 +64,42 @@ class StaffModerationControllerTest {
     }
 
     @Test
+    void roleOnlyDiscordUserCannotProbeAmbiguousMinecraftIdentities() {
+        FakeReadData data = linkedData();
+        data.resolution = new PlayerResolution.Ambiguous(List.of(
+                identity(TARGET_PLAYER, "PrivateBedrockAlt", PlayerPlatform.BEDROCK),
+                identity(UUID.fromString("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"), "PrivateBedrockAlt", PlayerPlatform.JAVA)
+        ));
+        StaffModerationController controller = controller(data, ignored -> Optional.empty());
+
+        StaffModerationController.Response response = controller.moderateMinecraft(
+                INVOKER_DISCORD_ID,
+                "role-only-user",
+                "PrivateBedrockAlt"
+        );
+
+        assertTrue(response.content().contains("not linked to a current Enthusia staff identity"));
+        assertFalse(response.content().contains("Multiple Minecraft identities"));
+        assertEquals(0, data.resolutionReads.get(), "target resolution must not occur before current staff authorization");
+    }
+
+    @Test
+    void roleOnlyDiscordUserCannotProbeCaseExistence() {
+        FakeReadData data = linkedData();
+        StaffModerationController controller = controller(data, ignored -> Optional.empty());
+
+        StaffModerationController.Response response = controller.caseView(
+                INVOKER_DISCORD_ID,
+                "role-only-user",
+                "0123456789ABCDEF"
+        );
+
+        assertTrue(response.content().contains("not linked to a current Enthusia staff identity"));
+        assertFalse(response.content().contains("No case exists"));
+        assertEquals(0, data.caseReads.get(), "case existence must not be queried before current staff authorization");
+    }
+
+    @Test
     void authorizedLinkedHelperCanReadBedrockProfileAndGetsSignedPrivateControls() {
         FakeReadData data = linkedData();
         StaffModerationController controller = controller(
@@ -79,6 +115,7 @@ class StaffModerationControllerTest {
 
         assertTrue(response.content().contains("PrivateBedrockAlt"));
         assertTrue(response.content().contains("BEDROCK"));
+        assertFalse(response.content().contains("<@"), "read-only profiles must not mention/ping the target");
         assertEquals(5, response.buttons().size());
         assertTrue(response.buttons().stream().allMatch(button -> button.customId().length() <= 100));
         assertTrue(data.playerReads.get() > 0);
@@ -103,8 +140,8 @@ class StaffModerationControllerTest {
     private static FakeReadData linkedData() {
         DiscordUserId invokerDiscord = new DiscordUserId(Long.toString(INVOKER_DISCORD_ID));
         DiscordUserId targetDiscord = new DiscordUserId(Long.toString(TARGET_DISCORD_ID));
-        VersionedSubject invoker = subject(invokerDiscord, INVOKER_PLAYER, PlayerPlatform.JAVA, "InvokerJava");
-        VersionedSubject target = subject(targetDiscord, TARGET_PLAYER, PlayerPlatform.BEDROCK, "PrivateBedrockAlt");
+        VersionedSubject invoker = subject(invokerDiscord, INVOKER_PLAYER);
+        VersionedSubject target = subject(targetDiscord, TARGET_PLAYER);
 
         FakeReadData data = new FakeReadData();
         data.discordSubjects.put(invokerDiscord, invoker);
@@ -116,12 +153,7 @@ class StaffModerationControllerTest {
         return data;
     }
 
-    private static VersionedSubject subject(
-            DiscordUserId discord,
-            UUID playerId,
-            PlayerPlatform platform,
-            String username
-    ) {
+    private static VersionedSubject subject(DiscordUserId discord, UUID playerId) {
         return new VersionedSubject(new ModerationSubject(
                 new ModerationSubjectId(UUID.randomUUID()),
                 Set.of(new DiscordIdentityRef(discord), new MinecraftIdentityRef(playerId)),
@@ -138,6 +170,9 @@ class StaffModerationControllerTest {
         private final Map<UUID, VersionedSubject> minecraftSubjects = new HashMap<>();
         private final Map<UUID, PlayerIdentity> players = new HashMap<>();
         private final AtomicInteger playerReads = new AtomicInteger();
+        private final AtomicInteger resolutionReads = new AtomicInteger();
+        private final AtomicInteger caseReads = new AtomicInteger();
+        private PlayerResolution resolution = new PlayerResolution.Missing();
 
         @Override
         public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
@@ -151,7 +186,8 @@ class StaffModerationControllerTest {
 
         @Override
         public PlayerResolution resolvePlayer(String uuidOrUsername) {
-            return new PlayerResolution.Missing();
+            resolutionReads.incrementAndGet();
+            return resolution;
         }
 
         @Override
@@ -182,6 +218,7 @@ class StaffModerationControllerTest {
 
         @Override
         public Optional<CaseReview> caseReview(CaseId caseId) {
+            caseReads.incrementAndGet();
             return Optional.empty();
         }
 
