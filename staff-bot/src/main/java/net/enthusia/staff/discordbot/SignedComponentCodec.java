@@ -7,7 +7,6 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
 import javax.crypto.Mac;
@@ -24,6 +23,8 @@ final class SignedComponentCodec {
     enum Action {
         PROFILE("p"),
         HISTORY("h"),
+        HISTORY_DISCORD("i"),
+        HISTORY_MINECRAFT("j"),
         LINKED("l"),
         NOTES("n"),
         CASES("c"),
