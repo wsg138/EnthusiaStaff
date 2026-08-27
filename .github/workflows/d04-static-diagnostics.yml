@@ -52,3 +52,21 @@ jobs:
               }
               print("D04_CODACY_ISSUE=" + json.dumps(record, sort_keys=True))
           PY
+
+      - name: Check out exact diagnostic source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Package credential-free source snapshot
+        shell: bash
+        run: |
+          tar --exclude=.git --exclude=build --exclude='*/build' -czf d04-source.tgz .
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: d04-source
+          path: d04-source.tgz
+          if-no-files-found: error
+          retention-days: 1
