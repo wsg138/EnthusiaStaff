@@ -33,6 +33,7 @@ class DiscordStaffReadRuntimeIntegrationTest {
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_d06_reads")
             .withUsername("enthusia")
+            // nosemgrep -- Testcontainers-only disposable database password; never used outside this JUnit container.
             .withPassword("enthusia");
 
     @BeforeAll
@@ -69,7 +70,7 @@ class DiscordStaffReadRuntimeIntegrationTest {
                 Clock.fixed(NOW.plusSeconds(2), ZoneOffset.UTC)
         )) {
             assertTrue(reads.subjectForDiscord(discord).isPresent());
-            assertEquals(1, reads.linkHistoryForDiscord(discord).size());
+            assertEquals(1L, reads.linkHistoryCountForDiscord(discord));
             assertEquals(PlayerPlatform.BEDROCK, reads.player(playerId).orElseThrow().platform());
 
             PlayerResolution.Resolved resolved = assertInstanceOf(

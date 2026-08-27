@@ -17,7 +17,6 @@ import net.enthusia.staff.domain.moderation.ModerationSubject;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.player.PlayerResolution;
-import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
@@ -38,7 +37,7 @@ final class StaffModerationReadService {
 
         Optional<PlayerIdentity> player(UUID playerId);
 
-        List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId);
+        long linkHistoryCountForDiscord(DiscordUserId userId);
 
         ModerationHistoryPage historyPage(
                 UUID targetId,
@@ -79,8 +78,9 @@ final class StaffModerationReadService {
         }
 
         record Ambiguous(List<PlayerIdentity> matches, boolean truncated) implements MinecraftResolution {
-            public Ambiguous {
-                matches = List.copyOf(matches);
+            public Ambiguous(List<PlayerIdentity> matches, boolean truncated) {
+                this.matches = List.copyOf(matches);
+                this.truncated = truncated;
             }
         }
 
@@ -98,14 +98,24 @@ final class StaffModerationReadService {
             List<ModerationHistoryEntry> recentHistory,
             List<StaffNote> recentNotes,
             List<CaseReview> recentCases,
-            int historicalLinkCount
+            long historicalLinkCount
     ) {
-        Snapshot {
-            linkedMinecraft = List.copyOf(linkedMinecraft);
-            activeMinecraftSanctions = List.copyOf(activeMinecraftSanctions);
-            recentHistory = List.copyOf(recentHistory);
-            recentNotes = List.copyOf(recentNotes);
-            recentCases = List.copyOf(recentCases);
+        Snapshot(
+                Target target,
+                List<LinkedMinecraft> linkedMinecraft,
+                List<ActiveSanction> activeMinecraftSanctions,
+                List<ModerationHistoryEntry> recentHistory,
+                List<StaffNote> recentNotes,
+                List<CaseReview> recentCases,
+                long historicalLinkCount
+        ) {
+            this.target = target;
+            this.linkedMinecraft = List.copyOf(linkedMinecraft);
+            this.activeMinecraftSanctions = List.copyOf(activeMinecraftSanctions);
+            this.recentHistory = List.copyOf(recentHistory);
+            this.recentNotes = List.copyOf(recentNotes);
+            this.recentCases = List.copyOf(recentCases);
+            this.historicalLinkCount = historicalLinkCount;
         }
     }
 
@@ -178,52 +188,79 @@ final class StaffModerationReadService {
     Snapshot snapshot(Target target) {
         Target checkedTarget = checked(target);
         if (checkedTarget.subject().isEmpty()) {
-            return new Snapshot(checkedTarget, List.of(), List.of(), List.of(), List.of(), List.of(), 0);
+            return emptySnapshot(checkedTarget);
         }
         ModerationSubject subject = checkedTarget.subject().orElseThrow().subject();
         Set<UUID> accountIds = subject.minecraftAccountIds();
-        List<LinkedMinecraft> linked = accountIds.stream()
+        Instant now = clock.instant();
+        return new Snapshot(
+                checkedTarget,
+                linkedAccounts(subject, accountIds),
+                activeSanctions(accountIds, now),
+                recentHistory(accountIds),
+                recentNotes(accountIds),
+                recentCases(accountIds),
+                historicalLinkCount(checkedTarget)
+        );
+    }
+
+    private static Snapshot emptySnapshot(Target target) {
+        return new Snapshot(target, List.of(), List.of(), List.of(), List.of(), List.of(), 0L);
+    }
+
+    private List<LinkedMinecraft> linkedAccounts(ModerationSubject subject, Set<UUID> accountIds) {
+        return accountIds.stream()
                 .map(id -> linkedAccount(subject, id))
-                .sorted(Comparator.comparing(value -> value.username().orElse(value.playerId().toString()),
-                        String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(
+                        value -> value.username().orElse(value.playerId().toString()),
+                        String.CASE_INSENSITIVE_ORDER
+                ))
                 .toList();
-        List<ActiveSanction> sanctions = accountIds.stream()
-                .flatMap(id -> data.activeSanctions(id, clock.instant()).stream())
+    }
+
+    private List<ActiveSanction> activeSanctions(Set<UUID> accountIds, Instant now) {
+        return accountIds.stream()
+                .flatMap(id -> data.activeSanctions(id, now).stream())
                 .sorted(Comparator.comparing(ActiveSanction::issuedAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
-        List<ModerationHistoryEntry> history = accountIds.stream()
+    }
+
+    private List<ModerationHistoryEntry> recentHistory(Set<UUID> accountIds) {
+        return accountIds.stream()
                 .flatMap(id -> history(id).stream())
                 .sorted(Comparator.comparing(ModerationHistoryEntry::occurredAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
-        List<StaffNote> notes = accountIds.stream()
+    }
+
+    private List<StaffNote> recentNotes(Set<UUID> accountIds) {
+        return accountIds.stream()
                 .flatMap(id -> data.recentNotes(id, PER_ACCOUNT_LIMIT).stream())
                 .sorted(Comparator.comparing(StaffNote::createdAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
-        List<CaseReview> cases = accountIds.stream()
+    }
+
+    private List<CaseReview> recentCases(Set<UUID> accountIds) {
+        return accountIds.stream()
                 .flatMap(id -> data.recentCases(id, PER_ACCOUNT_LIMIT).stream())
                 .sorted(Comparator.comparing(CaseReview::issuedAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
-        int historicalLinks = checkedTarget.discordId()
-                .map(id -> data.linkHistoryForDiscord(id).size())
-                .orElse(0);
-        return new Snapshot(checkedTarget, linked, sanctions, history, notes, cases, historicalLinks);
+    }
+
+    private long historicalLinkCount(Target target) {
+        return target.discordId().map(data::linkHistoryCountForDiscord).orElse(0L);
     }
 
     private List<ModerationHistoryEntry> history(UUID playerId) {
-        try {
-            return data.historyPage(
-                    playerId,
-                    1,
-                    PER_ACCOUNT_LIMIT,
-                    HistoryQueryOptions.publicStaffView(true, true)
-            ).entries();
-        } catch (IllegalArgumentException exception) {
-            return List.of();
-        }
+        return data.historyPage(
+                playerId,
+                1,
+                PER_ACCOUNT_LIMIT,
+                HistoryQueryOptions.publicStaffView(true, true)
+        ).entries();
     }
 
     private LinkedMinecraft linkedAccount(ModerationSubject subject, UUID playerId) {
@@ -289,8 +326,8 @@ final class StaffModerationReadService {
         }
 
         @Override
-        public List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId) {
-            return runtime.linkHistoryForDiscord(userId);
+        public long linkHistoryCountForDiscord(DiscordUserId userId) {
+            return runtime.linkHistoryCountForDiscord(userId);
         }
 
         @Override

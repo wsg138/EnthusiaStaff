@@ -17,7 +17,6 @@ import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerResolution;
-import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
@@ -33,7 +32,6 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 public final class DiscordStaffReadRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
     private final JdbcDiscordModerationPersistenceStore identities;
-    private final JdbcAccountLinkingStore links;
     private final JdbcPlayerDirectory players;
     private final JdbcModerationHistoryStore history;
     private final JdbcCaseReviewStore cases;
@@ -46,7 +44,6 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.identities = new JdbcDiscordModerationPersistenceStore(dataSource);
-        this.links = new JdbcAccountLinkingStore(dataSource);
         this.players = new JdbcPlayerDirectory(dataSource);
         this.cases = new JdbcCaseReviewStore(dataSource, clock, json);
         this.history = new JdbcModerationHistoryStore(dataSource, cases);
@@ -78,8 +75,8 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return players.find(playerId.toString());
     }
 
-    public List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId) {
-        return links.historyForDiscord(userId);
+    public long linkHistoryCountForDiscord(DiscordUserId userId) {
+        return JdbcAccountLinkHistoryCountReader.countForDiscord(dataSource, userId);
     }
 
     public ModerationHistoryPage historyPage(

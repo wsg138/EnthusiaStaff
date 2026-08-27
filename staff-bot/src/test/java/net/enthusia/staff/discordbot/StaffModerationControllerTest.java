@@ -31,7 +31,6 @@ import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.player.PlayerResolution;
-import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
@@ -134,6 +133,7 @@ class StaffModerationControllerTest {
         SignedComponentCodec components = new SignedComponentCodec(
                 CLOCK,
                 Duration.ofMinutes(5),
+                // nosemgrep -- Deterministic test-only HMAC input; no production secret or credential is present.
                 "controller-test-component-secret-0123456789",
                 new SecureRandom(),
                 new InteractionReplayGuard(64, Duration.ofMinutes(10))
@@ -203,8 +203,8 @@ class StaffModerationControllerTest {
         }
 
         @Override
-        public List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId) {
-            return List.of();
+        public long linkHistoryCountForDiscord(DiscordUserId userId) {
+            return 0L;
         }
 
         @Override
