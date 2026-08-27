@@ -12,6 +12,10 @@ import net.enthusia.staff.domain.application.DiscordSrvMigrationService.MirrorRe
 import org.junit.jupiter.api.Test;
 
 class AccountLinkProviderAdaptersTest {
+    private static final String PRIMARY_DISCORD_ID = "discord-test-primary";
+    private static final String FOREIGN_DISCORD_ID = "discord-test-foreign";
+    private static final String MUTATION_DISCORD_ID = "discord-test-mutation";
+
     @Test
     void discoveryUsesActualEnthusiaPlaytimePluginName() {
         assertEquals("EnthusiaPlaytime", PlayTimeActivePlaytimeProvider.PROVIDER_PLUGIN_NAME);
@@ -42,36 +46,35 @@ class AccountLinkProviderAdaptersTest {
         UUID nextMain = UUID.randomUUID();
         UUID foreign = UUID.randomUUID();
         FakeDiscordSrvPlugin plugin = new FakeDiscordSrvPlugin(Map.of(
-                "100000000000000001", oldMain,
-                "100000000000000002", foreign
+                PRIMARY_DISCORD_ID, oldMain,
+                FOREIGN_DISCORD_ID, foreign
         ));
         DiscordSrvLinkProviderAdapter provider = DiscordSrvLinkProviderAdapter.fromPlugin(plugin).orElseThrow();
 
-        assertEquals(MirrorResult.UPDATED, provider.mirrorMain("100000000000000001", nextMain));
-        assertEquals(nextMain, provider.snapshotLinks().get("100000000000000001"));
-        assertEquals(MirrorResult.CONFLICT, provider.mirrorMain("100000000000000001", foreign));
-        assertEquals("100000000000000002", plugin.manager.ownerOf(foreign));
-        assertEquals(MirrorResult.UPDATED, provider.clearMirror("100000000000000001"));
-        assertTrue(provider.snapshotLinks().get("100000000000000001") == null);
-        assertEquals(MirrorResult.UNCHANGED, provider.clearMirror("100000000000000001"));
+        assertEquals(MirrorResult.UPDATED, provider.mirrorMain(PRIMARY_DISCORD_ID, nextMain));
+        assertEquals(nextMain, provider.snapshotLinks().get(PRIMARY_DISCORD_ID));
+        assertEquals(MirrorResult.CONFLICT, provider.mirrorMain(PRIMARY_DISCORD_ID, foreign));
+        assertEquals(FOREIGN_DISCORD_ID, plugin.manager.ownerOf(foreign));
+        assertEquals(MirrorResult.UPDATED, provider.clearMirror(PRIMARY_DISCORD_ID));
+        assertTrue(provider.snapshotLinks().get(PRIMARY_DISCORD_ID) == null);
+        assertEquals(MirrorResult.UNCHANGED, provider.clearMirror(PRIMARY_DISCORD_ID));
     }
 
     @Test
     void discordSrvAdapterVerifiesSilentProviderMutationFailures() {
         UUID oldMain = UUID.randomUUID();
         UUID nextMain = UUID.randomUUID();
-        String discordId = "100000000000000011";
-        FakeDiscordSrvPlugin plugin = new FakeDiscordSrvPlugin(Map.of(discordId, oldMain));
+        FakeDiscordSrvPlugin plugin = new FakeDiscordSrvPlugin(Map.of(MUTATION_DISCORD_ID, oldMain));
         DiscordSrvLinkProviderAdapter provider = DiscordSrvLinkProviderAdapter.fromPlugin(plugin).orElseThrow();
 
         plugin.manager.ignoreLinkMutations = true;
-        assertEquals(MirrorResult.UNAVAILABLE, provider.mirrorMain(discordId, nextMain));
-        assertEquals(oldMain, provider.snapshotLinks().get(discordId));
+        assertEquals(MirrorResult.UNAVAILABLE, provider.mirrorMain(MUTATION_DISCORD_ID, nextMain));
+        assertEquals(oldMain, provider.snapshotLinks().get(MUTATION_DISCORD_ID));
 
         plugin.manager.ignoreLinkMutations = false;
         plugin.manager.ignoreUnlinkMutations = true;
-        assertEquals(MirrorResult.UNAVAILABLE, provider.clearMirror(discordId));
-        assertEquals(oldMain, provider.snapshotLinks().get(discordId));
+        assertEquals(MirrorResult.UNAVAILABLE, provider.clearMirror(MUTATION_DISCORD_ID));
+        assertEquals(oldMain, provider.snapshotLinks().get(MUTATION_DISCORD_ID));
     }
 
     public static final class FakePlayTimePlugin {

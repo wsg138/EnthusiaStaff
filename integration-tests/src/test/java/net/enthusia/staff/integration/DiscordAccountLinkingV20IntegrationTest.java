@@ -70,33 +70,46 @@ class DiscordAccountLinkingV20IntegrationTest {
         DiscordUserId discord = new DiscordUserId("18446744073709550001");
         MutableClock clock = new MutableClock(BASE_TIME);
 
-        String firstCode;
-        String secondCode;
-        UUID linkedId;
+        LinkReplayFixture fixture = createAndConsumeReplacementCodes(player, discord, clock);
+        verifyRestartUnlinkAndExpiry(player, discord, clock, fixture);
+        assertRawCodesNotPersisted(fixture.firstCode(), fixture.secondCode());
+    }
+
+    private static LinkReplayFixture createAndConsumeReplacementCodes(
+            UUID player,
+            DiscordUserId discord,
+            MutableClock clock
+    ) throws Exception {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             JdbcAccountLinkingStore codes = new JdbcAccountLinkingStore(dataSource);
             AccountLinkingService service = linkingService(clock, dataSource, identities, codes, ignored -> OptionalLong.empty());
-
-            firstCode = service.issueFromDiscord(discord).code();
-            secondCode = service.issueFromDiscord(discord).code();
+            String firstCode = service.issueFromDiscord(discord).code();
+            String secondCode = service.issueFromDiscord(discord).code();
             assertNotEquals(firstCode, secondCode);
             assertThrows(ModerationPersistenceException.class,
                     () -> service.completeFromMinecraft(firstCode, player));
 
             var linked = service.completeFromMinecraft(secondCode, player);
-            linkedId = linked.linkId();
             assertEquals(discord, linked.link().discordUserId());
             assertEquals(DiscordMinecraftLinkSource.DISCORD_CODE, linked.link().source());
-            assertEquals(linkedId, service.completeFromMinecraft(secondCode, player).linkId());
+            assertEquals(linked.linkId(), service.completeFromMinecraft(secondCode, player).linkId());
+            return new LinkReplayFixture(firstCode, secondCode, linked.linkId());
         }
+    }
 
+    private static void verifyRestartUnlinkAndExpiry(
+            UUID player,
+            DiscordUserId discord,
+            MutableClock clock,
+            LinkReplayFixture fixture
+    ) throws Exception {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             JdbcAccountLinkingStore codes = new JdbcAccountLinkingStore(dataSource);
             AccountLinkingService restarted = linkingService(clock, dataSource, identities, codes, ignored -> OptionalLong.empty());
 
-            assertEquals(linkedId, restarted.completeFromMinecraft(secondCode, player).linkId());
+            assertEquals(fixture.linkedId(), restarted.completeFromMinecraft(fixture.secondCode(), player).linkId());
             assertTrue(restarted.unlinkFromMinecraft(player, true));
             assertFalse(identities.currentLink(player).isPresent());
             assertEquals(1, codes.historyForMinecraft(player).size());
@@ -107,7 +120,9 @@ class DiscordAccountLinkingV20IntegrationTest {
             assertThrows(ModerationPersistenceException.class,
                     () -> restarted.completeFromMinecraft(expired, player));
         }
+    }
 
+    private static void assertRawCodesNotPersisted(String firstCode, String secondCode) throws Exception {
         try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT COUNT(*) AS rows_with_raw
@@ -317,41 +332,65 @@ class DiscordAccountLinkingV20IntegrationTest {
             MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
                     clock, identities, ignored -> OptionalLong.empty(), new DefaultAuthorizationPolicy(), audits);
 
-            assertThrows(IllegalArgumentException.class,
-                    () -> mainAccounts.setStaffOverride(admin, discord, second, ""));
-            assertEquals(first, identities.subjectForDiscord(discord).orElseThrow()
-                    .subject().mainMinecraftAccount().orElseThrow().playerId());
-
-            String setKey = "d04-main-override-set";
-            var override = mainAccounts.setStaffOverride(admin, discord, second, setKey);
-            assertEquals(second, override.playerId());
-            assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, override.source());
-            assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_SET,
-                    audits.findByOperationKey(setKey).orElseThrow().action());
-            long setRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
-            assertEquals(override, mainAccounts.setStaffOverride(admin, discord, second, setKey));
-            assertEquals(setRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
-
-            String clearKey = "d04-main-override-clear";
-            var automatic = mainAccounts.clearStaffOverride(admin, discord, clearKey);
-            assertEquals(second, automatic.playerId());
-            assertEquals(MainAccountSelectionSource.AUTOMATIC, automatic.source());
-            assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
-                    audits.findByOperationKey(clearKey).orElseThrow().action());
-            long clearRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
-            assertEquals(automatic, mainAccounts.clearStaffOverride(admin, discord, clearKey));
-            assertEquals(clearRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
-
-            AccountLinkRecoveryService recovery = new AccountLinkRecoveryService(
-                    clock, new DefaultAuthorizationPolicy(), identities, audits, mainAccounts);
-            String recoveryKey = "d04-recovery-audit-key";
-            recovery.forceLink(admin, discord, first, recoveryKey);
-            assertEquals(AccountLinkAuditAction.FORCE_LINK,
-                    audits.findByOperationKey(recoveryKey).orElseThrow().action());
-            assertThrows(IllegalStateException.class,
-                    () -> recovery.reassign(admin, otherDiscord, first, recoveryKey));
-            assertEquals(discord, identities.currentLink(first).orElseThrow().link().discordUserId());
+            verifyMainOverrideReplay(first, second, discord, admin, identities, audits, mainAccounts);
+            verifyRecoveryAuditKeyReuse(first, discord, otherDiscord, admin, clock, identities, audits, mainAccounts);
         }
+    }
+
+    private static void verifyMainOverrideReplay(
+            UUID first,
+            UUID second,
+            DiscordUserId discord,
+            Actor admin,
+            JdbcDiscordModerationPersistenceStore identities,
+            JdbcAccountLinkAuditStore audits,
+            MainAccountSelectionService mainAccounts
+    ) {
+        assertThrows(IllegalArgumentException.class,
+                () -> mainAccounts.setStaffOverride(admin, discord, second, ""));
+        assertEquals(first, identities.subjectForDiscord(discord).orElseThrow()
+                .subject().mainMinecraftAccount().orElseThrow().playerId());
+
+        String setKey = "d04-main-override-set";
+        var override = mainAccounts.setStaffOverride(admin, discord, second, setKey);
+        assertEquals(second, override.playerId());
+        assertEquals(MainAccountSelectionSource.STAFF_OVERRIDE, override.source());
+        assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_SET,
+                audits.findByOperationKey(setKey).orElseThrow().action());
+        long setRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
+        assertEquals(override, mainAccounts.setStaffOverride(admin, discord, second, setKey));
+        assertEquals(setRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
+
+        String clearKey = "d04-main-override-clear";
+        var automatic = mainAccounts.clearStaffOverride(admin, discord, clearKey);
+        assertEquals(second, automatic.playerId());
+        assertEquals(MainAccountSelectionSource.AUTOMATIC, automatic.source());
+        assertEquals(AccountLinkAuditAction.MAIN_OVERRIDE_CLEAR,
+                audits.findByOperationKey(clearKey).orElseThrow().action());
+        long clearRevision = identities.subjectForDiscord(discord).orElseThrow().revision();
+        assertEquals(automatic, mainAccounts.clearStaffOverride(admin, discord, clearKey));
+        assertEquals(clearRevision, identities.subjectForDiscord(discord).orElseThrow().revision());
+    }
+
+    private static void verifyRecoveryAuditKeyReuse(
+            UUID first,
+            DiscordUserId discord,
+            DiscordUserId otherDiscord,
+            Actor admin,
+            Clock clock,
+            JdbcDiscordModerationPersistenceStore identities,
+            JdbcAccountLinkAuditStore audits,
+            MainAccountSelectionService mainAccounts
+    ) {
+        AccountLinkRecoveryService recovery = new AccountLinkRecoveryService(
+                clock, new DefaultAuthorizationPolicy(), identities, audits, mainAccounts);
+        String recoveryKey = "d04-recovery-audit-key";
+        recovery.forceLink(admin, discord, first, recoveryKey);
+        assertEquals(AccountLinkAuditAction.FORCE_LINK,
+                audits.findByOperationKey(recoveryKey).orElseThrow().action());
+        assertThrows(IllegalStateException.class,
+                () -> recovery.reassign(admin, otherDiscord, first, recoveryKey));
+        assertEquals(discord, identities.currentLink(first).orElseThrow().link().discordUserId());
     }
 
     @Test
@@ -373,7 +412,7 @@ class DiscordAccountLinkingV20IntegrationTest {
                     "d04-authoritative-conflict", BASE_TIME.plusSeconds(2_002));
             DiscordSrvMigrationService service = new DiscordSrvMigrationService(
                     Clock.fixed(BASE_TIME.plusSeconds(2_003), ZoneOffset.UTC), identities);
-            TestDiscordSrvProvider provider = new TestDiscordSrvProvider(Map.of(
+            FakeDiscordSrvProvider provider = new FakeDiscordSrvProvider(Map.of(
                     importedDiscord.value(), importedPlayer,
                     legacyConflictDiscord.value(), conflictPlayer));
 
@@ -429,17 +468,17 @@ class DiscordAccountLinkingV20IntegrationTest {
             service.completeFromMinecraft(code, playerId);
             successes.incrementAndGet();
         } catch (RuntimeException expectedRaceLoss) {
-            // Exactly one competitor must lose because the code row is consumed in the link transaction.
+            assertTrue(expectedRaceLoss instanceof ModerationPersistenceException);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(interrupted);
         }
     }
 
-    private static final class TestDiscordSrvProvider implements DiscordSrvMigrationService.DiscordSrvLinkProvider {
+    private static final class FakeDiscordSrvProvider implements DiscordSrvMigrationService.DiscordSrvLinkProvider {
         private final Map<String, UUID> links;
 
-        private TestDiscordSrvProvider(Map<String, UUID> links) {
+        private FakeDiscordSrvProvider(Map<String, UUID> links) {
             this.links = links;
         }
 
@@ -452,6 +491,9 @@ class DiscordAccountLinkingV20IntegrationTest {
         public DiscordSrvMigrationService.MirrorResult mirrorMain(String discordUserId, UUID minecraftPlayerId) {
             return DiscordSrvMigrationService.MirrorResult.UNCHANGED;
         }
+    }
+
+    private record LinkReplayFixture(String firstCode, String secondCode, UUID linkedId) {
     }
 
     private static final class MutableClock extends Clock {

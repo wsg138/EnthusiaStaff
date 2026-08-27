@@ -27,46 +27,48 @@ public final class DiscordSrvMigrationService {
         List<Map.Entry<String, UUID>> entries = new ArrayList<>(provider.snapshotLinks().entrySet());
         entries.sort(Comparator.comparing(Map.Entry<String, UUID>::getKey)
                 .thenComparing(entry -> entry.getValue().toString()));
-        int imported = 0;
-        int unchanged = 0;
-        List<ImportConflict> conflicts = new ArrayList<>();
+        ImportAccumulator result = new ImportAccumulator();
         for (Map.Entry<String, UUID> entry : entries) {
-            DiscordUserId discordUserId;
-            try {
-                discordUserId = new DiscordUserId(entry.getKey());
-            } catch (RuntimeException invalid) {
-                conflicts.add(new ImportConflict(entry.getKey(), entry.getValue(), "invalid Discord user id"));
-                continue;
-            }
-            UUID minecraftPlayerId = entry.getValue();
-            Optional<VersionedLink> current = identities.currentLink(minecraftPlayerId);
-            if (current.isPresent()) {
-                if (current.orElseThrow().link().discordUserId().equals(discordUserId)) {
-                    unchanged++;
-                } else {
-                    conflicts.add(new ImportConflict(
-                            discordUserId.value(), minecraftPlayerId,
-                            "Minecraft UUID already has a different current Discord owner"));
-                }
-                continue;
-            }
-            String operationKey = "discordsrv-import:" + discordUserId.value() + ":" + minecraftPlayerId;
-            try {
-                identities.link(
-                        discordUserId,
-                        minecraftPlayerId,
-                        DiscordMinecraftLinkSource.MIGRATED_DISCORDSRV,
-                        operationKey,
-                        clock.instant()
-                );
-                imported++;
-            } catch (RuntimeException failure) {
-                conflicts.add(new ImportConflict(
-                        discordUserId.value(), minecraftPlayerId,
-                        "provider pair could not be imported without overwriting authoritative state"));
-            }
+            importEntry(entry, result);
         }
-        return new ImportReport(imported, unchanged, List.copyOf(conflicts));
+        return result.report();
+    }
+
+    private void importEntry(Map.Entry<String, UUID> entry, ImportAccumulator result) {
+        DiscordUserId discordUserId;
+        try {
+            discordUserId = new DiscordUserId(entry.getKey());
+        } catch (RuntimeException invalid) {
+            result.conflict(entry.getKey(), entry.getValue(), "invalid Discord user id");
+            return;
+        }
+        UUID minecraftPlayerId = entry.getValue();
+        Optional<VersionedLink> current = identities.currentLink(minecraftPlayerId);
+        if (current.isPresent()) {
+            if (current.orElseThrow().link().discordUserId().equals(discordUserId)) {
+                result.unchanged();
+            } else {
+                result.conflict(
+                        discordUserId.value(), minecraftPlayerId,
+                        "Minecraft UUID already has a different current Discord owner");
+            }
+            return;
+        }
+        String operationKey = "discordsrv-import:" + discordUserId.value() + ":" + minecraftPlayerId;
+        try {
+            identities.link(
+                    discordUserId,
+                    minecraftPlayerId,
+                    DiscordMinecraftLinkSource.MIGRATED_DISCORDSRV,
+                    operationKey,
+                    clock.instant()
+            );
+            result.imported();
+        } catch (RuntimeException failure) {
+            result.conflict(
+                    discordUserId.value(), minecraftPlayerId,
+                    "provider pair could not be imported without overwriting authoritative state");
+        }
     }
 
     /** Mirrors the authoritative current main to legacy DiscordSRV, clearing its link when no main remains. */
@@ -111,6 +113,28 @@ public final class DiscordSrvMigrationService {
     public record ImportReport(int imported, int unchanged, List<ImportConflict> conflicts) {
         public ImportReport {
             conflicts = conflicts == null ? List.of() : List.copyOf(conflicts);
+        }
+    }
+
+    private static final class ImportAccumulator {
+        private int imported;
+        private int unchanged;
+        private final List<ImportConflict> conflicts = new ArrayList<>();
+
+        private void imported() {
+            imported++;
+        }
+
+        private void unchanged() {
+            unchanged++;
+        }
+
+        private void conflict(String discordUserId, UUID minecraftPlayerId, String reason) {
+            conflicts.add(new ImportConflict(discordUserId, minecraftPlayerId, reason));
+        }
+
+        private ImportReport report() {
+            return new ImportReport(imported, unchanged, conflicts);
         }
     }
 

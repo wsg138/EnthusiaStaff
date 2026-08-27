@@ -28,6 +28,8 @@ public final class MainAccountSelectionService {
     private static final String MAIN_OVERRIDE_SET_DETAIL = "Staff set the authoritative main Minecraft account";
     private static final String MAIN_OVERRIDE_CLEAR_DETAIL =
             "Staff removed the main-account override; automatic selection may resume";
+    private static final int MAX_AUDIT_ACTOR_NAME_LENGTH = 64;
+    private static final int MAX_AUDIT_OPERATION_KEY_LENGTH = 128;
 
     private final Clock clock;
     private final DiscordModerationPersistenceStore identities;
@@ -80,11 +82,6 @@ public final class MainAccountSelectionService {
         return changed.subject().mainMinecraftAccount();
     }
 
-    /**
-     * Plans the replacement required when unlinking the current main. The plan is intentionally
-     * non-mutating: persistence validates and applies it in the same transaction that closes the
-     * link, so a revision race cannot change the main while leaving the link intact.
-     */
     public Optional<MainMinecraftAccount> replacementForUnlink(
             DiscordUserId discordUserId,
             UUID removingPlayerId
@@ -196,8 +193,6 @@ public final class MainAccountSelectionService {
                 requireMatchingClearAudit(concurrentReplay, actor, discordUserId);
             }
         } else {
-            // A clear against an already-automatic main is an idempotent no-op, so the audit itself
-            // is the only durable mutation and does not need a cross-table transaction.
             audits.append(requestedAudit);
         }
         return requireCurrentMain(
@@ -234,7 +229,6 @@ public final class MainAccountSelectionService {
     private MainMinecraftAccount preferredAutomatic(ModerationSubject subject, MainMinecraftAccount current) {
         Map<UUID, Long> minutes = allMinutes(subject.minecraftAccountIds());
         if (minutes.size() != subject.minecraftAccountIds().size()) {
-            // A partial provider view cannot safely rank the linked accounts. Preserve current.
             return new MainMinecraftAccount(current.playerId(), MainAccountSelectionSource.AUTOMATIC);
         }
         long currentMinutes = minutes.get(current.playerId());
@@ -328,13 +322,14 @@ public final class MainAccountSelectionService {
         if (!authorization.permits(actor, ModerationAction.MANAGE_ACCOUNT_LINKS)) {
             throw new SecurityException("actor is not authorized to manage account links");
         }
-        if (actor.displayName().length() > 64) {
+        if (actor.displayName().length() > MAX_AUDIT_ACTOR_NAME_LENGTH) {
             throw new IllegalArgumentException("actor display name exceeds account-link audit storage limit");
         }
     }
 
     private static void validateAuditOperationKey(String operationKey) {
-        if (operationKey == null || operationKey.isBlank() || operationKey.length() > 128) {
+        if (operationKey == null || operationKey.isBlank()
+                || operationKey.length() > MAX_AUDIT_OPERATION_KEY_LENGTH) {
             throw new IllegalArgumentException("operationKey must be nonblank and at most 128 characters");
         }
     }

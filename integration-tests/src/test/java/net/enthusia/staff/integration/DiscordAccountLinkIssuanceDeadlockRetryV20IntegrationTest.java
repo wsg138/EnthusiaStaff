@@ -28,6 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class DiscordAccountLinkIssuanceDeadlockRetryV20IntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-25T02:45:00Z");
+    private static final int FIRST_CONNECTION_ATTEMPT = 1;
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -86,7 +87,7 @@ class DiscordAccountLinkIssuanceDeadlockRetryV20IntegrationTest {
 
         @Override
         public Connection getConnection() throws SQLException {
-            if (connectionAttempts.incrementAndGet() == 1) {
+            if (connectionAttempts.incrementAndGet() == FIRST_CONNECTION_ATTEMPT) {
                 throw new SQLTransactionRollbackException("deadlock victim fixture", "40001", 1213);
             }
             return delegate.getConnection();

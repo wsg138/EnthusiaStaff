@@ -16,6 +16,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 /** Public Minecraft-side account link and confirmed self-unlink commands. */
 public final class AccountLinkCommand implements CommandExecutor {
+    private static final int NO_ARGUMENTS = 0;
+    private static final int ONE_ARGUMENT = 1;
+
     private final JavaPlugin plugin;
     private final Supplier<PaperAccountLinkRuntime> runtime;
     private final ExecutorService workers;
@@ -40,11 +43,11 @@ public final class AccountLinkCommand implements CommandExecutor {
         if (CommandRoute.canonicalName(command).equals("unlink")) {
             return unlink(player, playerId, arguments);
         }
-        if (arguments.length == 0) {
+        if (arguments.length == NO_ARGUMENTS) {
             submit(player, () -> issue(player, playerId), "Account-link request");
             return true;
         }
-        if (arguments.length == 1) {
+        if (arguments.length == ONE_ARGUMENT) {
             String code = arguments[0];
             submit(player, () -> complete(player, playerId, code), "Account-link completion");
             return true;
@@ -54,7 +57,7 @@ public final class AccountLinkCommand implements CommandExecutor {
     }
 
     private boolean unlink(Player player, UUID playerId, String[] arguments) {
-        if (arguments.length != 1 || !arguments[0].equals("CONFIRM")) {
+        if (arguments.length != ONE_ARGUMENT || !arguments[0].equals("CONFIRM")) {
             player.sendMessage(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link."));
             return true;
         }

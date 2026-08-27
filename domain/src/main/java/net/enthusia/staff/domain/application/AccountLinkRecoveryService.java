@@ -21,6 +21,8 @@ public final class AccountLinkRecoveryService {
     private static final String FORCE_LINK_DETAIL = "Staff force-linked a verified identity pair";
     private static final String FORCE_UNLINK_DETAIL = "Staff force-unlinked an identity pair";
     private static final String REASSIGN_DETAIL = "Staff atomically reassigned the current Discord owner";
+    private static final int MAX_AUDIT_ACTOR_NAME_LENGTH = 64;
+    private static final int MAX_RECOVERY_OPERATION_KEY_LENGTH = 116;
 
     private final Clock clock;
     private final AuthorizationPolicy authorization;
@@ -64,7 +66,6 @@ public final class AccountLinkRecoveryService {
             if (!linked.link().discordUserId().equals(discordUserId)) {
                 throw new IllegalStateException("force-link will not silently overwrite a different owner; use reassignment");
             }
-            // No identity mutation is required, so the audit is the only durable change.
             audits.append(requestedAudit);
         } else {
             linked = identities.linkWithAudit(
@@ -101,7 +102,6 @@ public final class AccountLinkRecoveryService {
 
         Optional<VersionedLink> existing = identities.currentLink(minecraftPlayerId);
         if (existing.isEmpty()) {
-            // A confirmed no-op is still auditable, but there is no identity mutation to combine with it.
             audits.append(requestedAudit);
             requireNoCurrentLink(minecraftPlayerId);
             return false;
@@ -225,13 +225,14 @@ public final class AccountLinkRecoveryService {
         if (!authorization.permits(actor, ModerationAction.MANAGE_ACCOUNT_LINKS)) {
             throw new SecurityException("actor is not authorized to manage account links");
         }
-        if (actor.displayName().length() > 64) {
+        if (actor.displayName().length() > MAX_AUDIT_ACTOR_NAME_LENGTH) {
             throw new IllegalArgumentException("actor display name exceeds account-link audit storage limit");
         }
     }
 
     private static void validateOperationKey(String operationKey) {
-        if (operationKey == null || operationKey.isBlank() || operationKey.length() > 116) {
+        if (operationKey == null || operationKey.isBlank()
+                || operationKey.length() > MAX_RECOVERY_OPERATION_KEY_LENGTH) {
             throw new IllegalArgumentException("operationKey must be nonblank and at most 116 characters");
         }
     }

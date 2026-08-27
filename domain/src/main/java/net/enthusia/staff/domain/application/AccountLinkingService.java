@@ -23,6 +23,8 @@ public final class AccountLinkingService {
     private static final Duration CODE_TTL = Duration.ofMinutes(5);
     private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int CODE_LENGTH = 10;
+    private static final int MAX_CODE_INPUT_LENGTH = 32;
+    private static final int OPERATION_HASH_PREFIX_LENGTH = 32;
 
     private final Clock clock;
     private final SecureRandom random;
@@ -172,14 +174,14 @@ public final class AccountLinkingService {
             throw new IllegalArgumentException("link code must be present");
         }
         String normalized = rawCode.trim().toUpperCase(Locale.ROOT);
-        if (normalized.length() > 32) {
+        if (normalized.length() > MAX_CODE_INPUT_LENGTH) {
             throw new IllegalArgumentException("link code is too long");
         }
         return normalized;
     }
 
     private static String operationKey(String side, String codeHash, String completingIdentity) {
-        return "d04-code:" + side + ":" + codeHash.substring(0, 32) + ":" + completingIdentity;
+        return "d04-code:" + side + ":" + codeHash.substring(0, OPERATION_HASH_PREFIX_LENGTH) + ":" + completingIdentity;
     }
 
     private void requireOnline(UUID minecraftPlayerId) {
