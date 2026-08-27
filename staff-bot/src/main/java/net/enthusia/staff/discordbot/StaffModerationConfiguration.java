@@ -1,0 +1,158 @@
+package net.enthusia.staff.discordbot;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import net.enthusia.staff.persistence.DatabaseConfig;
+
+/** Optional environment-only configuration for D06 read-only moderation interactions. */
+final class StaffModerationConfiguration {
+    static final String JDBC_URL_KEY = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL";
+    static final String DB_USERNAME_KEY = "ENTHUSIA_STAFF_BOT_DB_USERNAME";
+    static final String DB_PASSWORD_KEY = "ENTHUSIA_STAFF_BOT_DB_PASSWORD";
+    static final String AUTHORITY_URL_KEY = "ENTHUSIA_STAFF_BOT_AUTHORITY_URL";
+    static final String AUTHORITY_SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
+    static final String COMPONENT_SECRET_KEY = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET";
+    static final String DB_POOL_SIZE_KEY = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE";
+    static final String DB_TIMEOUT_MILLIS_KEY = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS";
+
+    private static final int DEFAULT_POOL_SIZE = 4;
+    private static final int DEFAULT_TIMEOUT_MILLIS = 3_000;
+    private static final int MIN_CRYPTO_SECRET_LENGTH = 32;
+    private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "localhost", "::1", "[::1]");
+    private static final List<String> REQUIRED = List.of(
+            JDBC_URL_KEY,
+            DB_USERNAME_KEY,
+            DB_PASSWORD_KEY,
+            AUTHORITY_URL_KEY,
+            AUTHORITY_SECRET_KEY,
+            COMPONENT_SECRET_KEY
+    );
+
+    private final DatabaseConfig database;
+    private final URI authorityUri;
+    private final String authoritySecret;
+    private final String componentSecret;
+
+    private StaffModerationConfiguration(
+            DatabaseConfig database,
+            URI authorityUri,
+            String authoritySecret,
+            String componentSecret
+    ) {
+        this.database = Objects.requireNonNull(database, "database");
+        this.authorityUri = Objects.requireNonNull(authorityUri, "authorityUri");
+        this.authoritySecret = cryptoSecret(authoritySecret, AUTHORITY_SECRET_KEY);
+        this.componentSecret = cryptoSecret(componentSecret, COMPONENT_SECRET_KEY);
+    }
+
+    static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
+        return fromEnvironment(System.getenv());
+    }
+
+    static Optional<StaffModerationConfiguration> fromEnvironment(Map<String, String> values) {
+        Objects.requireNonNull(values, "values");
+        long configured = REQUIRED.stream().filter(key -> present(values.get(key))).count();
+        if (configured == 0) {
+            return Optional.empty();
+        }
+        if (configured != REQUIRED.size()) {
+            throw new IllegalArgumentException("read-only staff moderation configuration is incomplete");
+        }
+        int poolSize = integer(values, DB_POOL_SIZE_KEY, DEFAULT_POOL_SIZE, 2, 16);
+        int timeout = integer(values, DB_TIMEOUT_MILLIS_KEY, DEFAULT_TIMEOUT_MILLIS, 250, 60_000);
+        DatabaseConfig database = new DatabaseConfig(
+                values.get(JDBC_URL_KEY).trim(),
+                values.get(DB_USERNAME_KEY).trim(),
+                required(values.get(DB_PASSWORD_KEY), DB_PASSWORD_KEY),
+                poolSize,
+                timeout
+        );
+        return Optional.of(new StaffModerationConfiguration(
+                database,
+                authorityUri(values.get(AUTHORITY_URL_KEY)),
+                values.get(AUTHORITY_SECRET_KEY),
+                values.get(COMPONENT_SECRET_KEY)
+        ));
+    }
+
+    DatabaseConfig database() {
+        return database;
+    }
+
+    URI authorityUri() {
+        return authorityUri;
+    }
+
+    String authoritySecret() {
+        return authoritySecret;
+    }
+
+    String componentSecret() {
+        return componentSecret;
+    }
+
+    @Override
+    public String toString() {
+        return "StaffModerationConfiguration[authorityUri=" + authorityUri
+                + ", database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]";
+    }
+
+    private static URI authorityUri(String raw) {
+        try {
+            URI uri = new URI(raw.trim());
+            boolean valid = "http".equalsIgnoreCase(uri.getScheme())
+                    && LOOPBACK_HOSTS.contains(uri.getHost())
+                    && uri.getPort() > 0
+                    && "/v1/staff-rank".equals(uri.getPath())
+                    && uri.getUserInfo() == null
+                    && uri.getQuery() == null
+                    && uri.getFragment() == null;
+            if (!valid) {
+                throw new IllegalArgumentException("staff authority endpoint must be an explicit loopback HTTP URL");
+            }
+            return uri;
+        } catch (URISyntaxException exception) {
+            throw new IllegalArgumentException("staff authority endpoint URL is invalid", exception);
+        }
+    }
+
+    private static int integer(Map<String, String> values, String key, int fallback, int min, int max) {
+        String raw = values.get(key);
+        if (!present(raw)) {
+            return fallback;
+        }
+        try {
+            int parsed = Integer.parseInt(raw.trim());
+            if (parsed < min || parsed > max) {
+                throw new IllegalArgumentException(key + " is outside its safe range");
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(key + " must be an integer", exception);
+        }
+    }
+
+    private static String cryptoSecret(String value, String key) {
+        String secret = required(value, key);
+        if (secret.length() < MIN_CRYPTO_SECRET_LENGTH) {
+            throw new IllegalArgumentException(key + " must contain at least 32 characters");
+        }
+        return secret;
+    }
+
+    private static String required(String value, String key) {
+        if (!present(value)) {
+            throw new IllegalArgumentException(key + " is required");
+        }
+        return value;
+    }
+
+    private static boolean present(String value) {
+        return value != null && !value.isBlank();
+    }
+}

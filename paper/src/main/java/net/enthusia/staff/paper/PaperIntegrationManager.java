@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.paper.auth.DiscordStaffAuthorityEndpoint;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
@@ -57,6 +58,7 @@ final class PaperIntegrationManager {
     private MarketIntegration market;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
+    private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
         this.dependencies = dependencies;
@@ -109,6 +111,8 @@ final class PaperIntegrationManager {
             );
             reputationRestrictions.start();
         }
+        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin())
+                .ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
     void initializeAutomod() {
@@ -181,6 +185,7 @@ final class PaperIntegrationManager {
     }
 
     void closeModerationProviders() {
+        resources.close("Discord staff authority endpoint", discordStaffAuthority);
         resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
 
