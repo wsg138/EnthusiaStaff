@@ -11,24 +11,52 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D01` | Discord domain and identity contract | `COMPLETE` | 130 | owner activation |
 | `ES-D02` | Discord persistence and migration schema | `COMPLETE` | 131 | `ES-D01` |
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
-| `ES-D04` | Account linking and DiscordSRV migration | `ACTIVE` | 133 | `ES-D01`–`ES-D03` |
+| `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
-| `ES-D06` | Read-only staff moderation UX | `PLANNED` | 135 | `ES-D04`, `ES-D05` |
+| `ES-D06` | Read-only staff moderation UX | `READY` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
 | `ES-D10` | AutoMod shadow engine | `PLANNED` | 139 | `ES-D05`, `ES-D09` |
 | `ES-D11` | AutoMod enforcement and security locks | `PLANNED` | 140 | accepted `ES-D10` shadow evidence |
 | `ES-D12` | Staff website Discord expansion | `PLANNED` | 141 | `ES-D02`, `ES-D07`, `ES-D09` |
-| `ES-D13` | Discord role-sync replacement | `PLANNED` | 142 | `ES-D04`, `ES-D05` |
+| `ES-D13` | Discord role-sync replacement | `READY` | 142 | `ES-D04`, `ES-D05` |
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
 ## Active packages
 
-`ES-D04` has an independent live continuation on Staff PR #151. D05 did not edit, merge, rebase, take over, or absorb D04.
+No Discord implementation package remains active after D04 terminal publication. D04 and D05 are complete. D06 and D13 are dependency-complete `READY`; a future Discord worker selects D06 first by priority unless live GitHub exposes a higher-priority actionable continuation. This D04 worker does not start either package.
 
-No D05 implementation work remains. D06 and D13 remain dependency-blocked by D04 even though their D05 dependency is now satisfied.
+## ES-D04 terminal record
+
+Status: `COMPLETE`.
+
+Implementation PR #151 merged normally as `4e7621b7a42e812cc7bf806a029f37a753cdd9f3`. Final reviewed/validated product head was `da0371681f5a44c72a614c8d6637b85d9080291d`. The temporary implementation branch `package/es-d04-account-linking` is absent after merge.
+
+Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d04-complete.md`.
+Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
+
+D04 delivers authoritative account linking/unlinking, durable link-code replay/expiry semantics, historical ownership, audited staff recovery and main overrides, active-playtime main selection, DiscordSRV public-API import/mirroring, transactional mutation/audit/main replacement, and forward-only V20 persistence. Production import/deployment/configuration and LiteBans authority remain outside D04.
+
+### Final exact-head gates — PASS
+
+For exact final head `da0371681f5a44c72a614c8d6637b85d9080291d`:
+
+- Coverage/full Java 21/MariaDB/Testcontainers `33029697612` / job `98379158884`: success.
+- Codacy Static Code Analysis `98379478044`: success, zero annotations and six prior findings solved.
+- Codacy Diff Coverage `98380515790`: success, 73.86% diff coverage with no repository gate defined.
+- Sentinel Restart Artifact `33029697604` / job `98379112319`: success; artifact `9629765037`, digest `sha256:57ece0dbccc120c69f6a846d80aa5bf60aab04472f1439af5abe799c19074b99`.
+- Durable Sentinel job `292`: terminal `PAPER_RESTART_OK`.
+- Canonical public Pi `33029762105`: success through exact-head build, private dispatch, verdict collection, transfer cleanup, and terminal publication.
+- Correlated private staging `33030278019` / job `98380970512`: success on trusted `Lincoln-PI-4`; exact bridge verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup passed.
+- All visible PR #151 inline review threads were resolved before merge.
+
+### Merge and containment
+
+PR #151 merged normally, never squash/rebase/force/auto-merge. Merge commit `4e7621b7a42e812cc7bf806a029f37a753cdd9f3` has parents pre-merge `main` `36af6fc85052cbc38bb9840899b415fc53503af3` and exact feature head `da0371681f5a44c72a614c8d6637b85d9080291d`.
+
+The merge and feature trees are identical at `63c2a0924d38ac9ce8e0a208f0eb79a671af37fc`. Post-merge compare is one commit ahead and zero behind, so the validated product is exactly contained. `V20__discord_account_linking.sql` is canonical on `main`, and the D04 branch is absent.
 
 ## ES-D05 terminal record
 
@@ -65,15 +93,11 @@ PR #160 merged normally, never squash/rebase/force/auto-merge. Merge commit `7bc
 
 Post-merge compare is one commit ahead, zero behind, with zero file differences. The temporary D05 branch is gone, so no unique implementation work remains. D05 adds no migration and did not absorb D04/X03/provider/website/competition work.
 
-## ES-D04 independent live continuation
-
-D04 remains outside D05 ownership. Its implementation PR #151 is active. Live GitHub controls its current head/check/review state.
-
 ## Latest completion
 
-`ES-D05 — Staff bot runtime foundation` is the latest completed Discord package.
+`ES-D04 — Account linking and DiscordSRV migration` is the latest completed Discord package.
 
-`ES-D06` and `ES-D13` remain dependency-blocked until D04 completes. D07+ remain sequenced behind their stated dependencies. This D05 worker stops without beginning D06.
+D06 and D13 are now dependency-complete `READY`. D07+ remain sequenced behind their stated dependencies. This D04 worker stops without beginning another Discord package.
 
 ## Selection
 
