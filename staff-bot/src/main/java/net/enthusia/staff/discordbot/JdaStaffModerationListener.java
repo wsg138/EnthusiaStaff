@@ -18,6 +18,7 @@ import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionE
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
+import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
@@ -29,6 +30,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final System.Logger LOGGER = System.getLogger(JdaStaffModerationListener.class.getName());
     private static final long NO_GUILD = 0L;
     private static final int REQUIRED_SELECTION = 1;
+    private static final int EXPECTED_COMMAND_COUNT = 8;
     private static final String USER_OPTION = "user";
     private static final String PLAYER_OPTION = "player";
     private static final String CASE_ID_OPTION = "id";
@@ -76,9 +78,17 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             return;
         }
         guild.updateCommands().addCommands(commands()).queue(
-                ignored -> enabled.set(true),
-                failure -> commandRegistrationFailed(failure)
+                this::commandsRegistered,
+                this::commandRegistrationFailed
         );
+    }
+
+    private void commandsRegistered(List<Command> registered) {
+        boolean complete = registered.size() == EXPECTED_COMMAND_COUNT;
+        enabled.set(complete);
+        if (!complete) {
+            log("discord_read_commands_registration_incomplete", null);
+        }
     }
 
     private void commandRegistrationFailed(Throwable failure) {

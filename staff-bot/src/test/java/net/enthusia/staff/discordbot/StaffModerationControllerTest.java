@@ -40,6 +40,7 @@ class StaffModerationControllerTest {
     private static final Instant NOW = Instant.parse("2026-08-27T12:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final String COMPONENT_SECRET = Character.toString('k').repeat(48);
+    private static final String TARGET_USERNAME = "PrivateBedrockAlt";
     private static final long INVOKER_DISCORD_ID = 123456789012345678L;
     private static final long TARGET_DISCORD_ID = 223456789012345678L;
     private static final DiscordUserId INVOKER_DISCORD = new DiscordUserId(Long.toString(INVOKER_DISCORD_ID));
@@ -59,7 +60,7 @@ class StaffModerationControllerTest {
         );
 
         assertTrue(response.content().contains("not linked to a current Enthusia staff identity"));
-        assertFalse(response.content().contains("PrivateBedrockAlt"));
+        assertFalse(response.content().contains(TARGET_USERNAME));
         assertTrue(response.buttons().isEmpty());
         assertTrue(response.choices().isEmpty());
         assertEquals(0, data.targetDiscordReads.get(), "target links must not be queried before current staff authorization");
@@ -70,15 +71,15 @@ class StaffModerationControllerTest {
     void roleOnlyDiscordUserCannotProbeAmbiguousMinecraftIdentities() {
         FakeReadData data = linkedData();
         data.resolution = new PlayerResolution.Ambiguous(List.of(
-                identity(TARGET_PLAYER, "PrivateBedrockAlt", PlayerPlatform.BEDROCK),
-                identity(UUID.fromString("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"), "PrivateBedrockAlt", PlayerPlatform.JAVA)
+                identity(TARGET_PLAYER, TARGET_USERNAME, PlayerPlatform.BEDROCK),
+                identity(UUID.fromString("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"), TARGET_USERNAME, PlayerPlatform.JAVA)
         ));
         StaffModerationController controller = controller(data, ignored -> Optional.empty());
 
         StaffModerationController.Response response = controller.moderateMinecraft(
                 INVOKER_DISCORD_ID,
                 "role-only-user",
-                "PrivateBedrockAlt"
+                TARGET_USERNAME
         );
 
         assertTrue(response.content().contains("not linked to a current Enthusia staff identity"));
@@ -116,7 +117,7 @@ class StaffModerationControllerTest {
                 TARGET_DISCORD_ID
         );
 
-        assertTrue(response.content().contains("PrivateBedrockAlt"));
+        assertTrue(response.content().contains(TARGET_USERNAME));
         assertTrue(response.content().contains("BEDROCK"));
         assertFalse(response.content().contains("<@"), "read-only profiles must not mention/ping the target");
         assertEquals(5, response.buttons().size());
@@ -151,7 +152,7 @@ class StaffModerationControllerTest {
         data.minecraftSubjects.put(INVOKER_PLAYER, invoker);
         data.minecraftSubjects.put(TARGET_PLAYER, target);
         data.players.put(INVOKER_PLAYER, identity(INVOKER_PLAYER, "InvokerJava", PlayerPlatform.JAVA));
-        data.players.put(TARGET_PLAYER, identity(TARGET_PLAYER, "PrivateBedrockAlt", PlayerPlatform.BEDROCK));
+        data.players.put(TARGET_PLAYER, identity(TARGET_PLAYER, TARGET_USERNAME, PlayerPlatform.BEDROCK));
         return data;
     }
 

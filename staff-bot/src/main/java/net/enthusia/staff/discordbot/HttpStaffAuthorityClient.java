@@ -39,12 +39,8 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
             throw new IllegalArgumentException("playerId must be present");
         }
         String encodedPlayer = URLEncoder.encode(playerId.toString(), StandardCharsets.UTF_8);
-        String requestText = new StringBuilder(endpoint.toASCIIString())
-                .append("?player=")
-                .append(encodedPlayer)
-                .toString();
         // nosemgrep -- endpoint is startup-validated as an explicit loopback-only URI; the only dynamic value is a UUID.
-        URI requestUri = URI.create(requestText);
+        URI requestUri = endpoint.resolve("?player=" + encodedPlayer);
         // nosemgrep -- Cleartext HTTP is confined to the authenticated loopback bridge and never leaves the host.
         HttpRequest request = HttpRequest.newBuilder(requestUri)
                 .timeout(REQUEST_TIMEOUT)
