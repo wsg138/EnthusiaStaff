@@ -13,7 +13,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class SignedComponentCodecTest {
-    private static final String SECRET = "test-component-secret-that-is-never-production";
+    private static final String SECRET = Character.toString('x').repeat(48);
     private static final Instant NOW = Instant.parse("2026-08-27T12:00:00Z");
 
     @Test

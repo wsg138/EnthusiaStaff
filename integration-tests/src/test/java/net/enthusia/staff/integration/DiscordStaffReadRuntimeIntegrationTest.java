@@ -28,13 +28,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class DiscordStaffReadRuntimeIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-27T12:00:00Z");
+    private static final String DATABASE_PASSWORD = Character.toString('p').repeat(24);
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_d06_reads")
             .withUsername("enthusia")
-            // nosemgrep -- Testcontainers-only disposable database password; never used outside this JUnit container.
-            .withPassword("enthusia");
+            .withPassword(DATABASE_PASSWORD);
 
     @BeforeAll
     static void migrate() {

@@ -29,6 +29,7 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
         }
         this.endpoint = endpoint;
         this.authorizationHeader = "Bearer " + secret;
+        // nosemgrep -- The client is only used with StaffModerationConfiguration's explicit loopback URI allowlist.
         this.client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     }
 

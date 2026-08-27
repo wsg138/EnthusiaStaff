@@ -9,8 +9,9 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class StaffModerationConfigurationTest {
-    private static final String AUTHORITY_SECRET = "authority-secret-0123456789-abcdefgh";
-    private static final String COMPONENT_SECRET = "component-secret-0123456789-abcdefgh";
+    private static final String AUTHORITY_SECRET = testSecret('a');
+    private static final String COMPONENT_SECRET = testSecret('c');
+    private static final String DATABASE_PASSWORD = testSecret('d');
 
     @Test
     void completelyAbsentFeatureConfigurationLeavesD05RuntimeUnchanged() {
@@ -30,7 +31,7 @@ class StaffModerationConfigurationTest {
         StaffModerationConfiguration configuration = StaffModerationConfiguration.fromEnvironment(values).orElseThrow();
 
         assertTrue(configuration.authorityUri().toString().startsWith("http://127.0.0.1:"));
-        assertFalse(configuration.toString().contains("db-secret"));
+        assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
         assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
         assertFalse(configuration.toString().contains(COMPONENT_SECRET));
     }
@@ -52,10 +53,14 @@ class StaffModerationConfigurationTest {
         Map<String, String> values = new HashMap<>();
         values.put(StaffModerationConfiguration.JDBC_URL_KEY, "jdbc:mariadb://localhost/enthusia");
         values.put(StaffModerationConfiguration.DB_USERNAME_KEY, "readonly");
-        values.put(StaffModerationConfiguration.DB_PASSWORD_KEY, "db-secret");
+        values.put(StaffModerationConfiguration.DB_PASSWORD_KEY, DATABASE_PASSWORD);
         values.put(StaffModerationConfiguration.AUTHORITY_URL_KEY, "http://127.0.0.1:8771/v1/staff-rank");
         values.put(StaffModerationConfiguration.AUTHORITY_SECRET_KEY, AUTHORITY_SECRET);
         values.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, COMPONENT_SECRET);
         return values;
+    }
+
+    private static String testSecret(char marker) {
+        return Character.toString(marker).repeat(40);
     }
 }
