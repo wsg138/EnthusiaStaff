@@ -19,6 +19,9 @@ final class SignedComponentCodec {
     private static final String PREFIX = "d6";
     private static final int SIGNATURE_BYTES = 12;
     private static final int MAX_CUSTOM_ID_LENGTH = 100;
+    private static final int COMPONENT_PART_COUNT = 8;
+    private static final int UUID_HEX_LENGTH = 32;
+    private static final int UUID_TEXT_LENGTH = 36;
 
     enum Action {
         PROFILE("p"),
@@ -113,12 +116,10 @@ final class SignedComponentCodec {
         }
 
         UUID minecraftId() {
-            if (type != TargetType.MINECRAFT || value.length() != 32) {
+            if (type != TargetType.MINECRAFT || value.length() != UUID_HEX_LENGTH) {
                 throw new IllegalStateException("target is not Minecraft");
             }
-            String formatted = value.substring(0, 8) + "-" + value.substring(8, 12) + "-"
-                    + value.substring(12, 16) + "-" + value.substring(16, 20) + "-" + value.substring(20);
-            return UUID.fromString(formatted);
+            return UUID.fromString(uuidText(value));
         }
 
         CaseId caseId() {
@@ -126,6 +127,20 @@ final class SignedComponentCodec {
                 throw new IllegalStateException("target is not a case");
             }
             return new CaseId(value);
+        }
+
+        private static String uuidText(String compact) {
+            return new StringBuilder(UUID_TEXT_LENGTH)
+                    .append(compact, 0, 8)
+                    .append('-')
+                    .append(compact, 8, 12)
+                    .append('-')
+                    .append(compact, 12, 16)
+                    .append('-')
+                    .append(compact, 16, 20)
+                    .append('-')
+                    .append(compact, 20, compact.length())
+                    .toString();
         }
     }
 
@@ -204,35 +219,56 @@ final class SignedComponentCodec {
 
     Decoded decodeAndClaim(String customId, long actorDiscordId) {
         try {
-            String[] parts = customId == null ? new String[0] : customId.split(":", -1);
-            if (parts.length != 8 || !PREFIX.equals(parts[0])) {
-                throw denial(Denial.INVALID);
-            }
-            String payload = String.join(":", parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]);
-            if (!constantTimeEquals(signature(payload), parts[7])) {
-                throw denial(Denial.INVALID);
-            }
-            long encodedActor = Long.parseLong(parts[4], 36);
-            if (encodedActor != actorDiscordId) {
-                throw denial(Denial.WRONG_ACTOR);
-            }
-            long expires = Long.parseLong(parts[5], 36);
-            if (clock.instant().getEpochSecond() >= expires) {
-                throw denial(Denial.STALE);
-            }
-            long nonce = Long.parseLong(parts[6], 36);
-            InteractionReplayGuard.ClaimResult claim = replay.claim(nonce);
-            if (claim == InteractionReplayGuard.ClaimResult.DUPLICATE) {
-                throw denial(Denial.REPLAYED);
-            }
-            if (claim == InteractionReplayGuard.ClaimResult.SATURATED) {
-                throw denial(Denial.SATURATED);
-            }
+            String[] parts = componentParts(customId);
+            verifySignature(parts);
+            verifyActor(parts, actorDiscordId);
+            verifyExpiry(parts);
+            claimNonce(parts);
             return new Decoded(Action.parse(parts[1]), decodeTarget(TargetType.parse(parts[2]), parts[3]));
         } catch (InvalidComponentException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             throw denial(Denial.INVALID);
+        }
+    }
+
+    private static String[] componentParts(String customId) {
+        String[] parts = customId == null ? new String[0] : customId.split(":", -1);
+        if (parts.length != COMPONENT_PART_COUNT || !PREFIX.equals(parts[0])) {
+            throw denial(Denial.INVALID);
+        }
+        return parts;
+    }
+
+    private void verifySignature(String[] parts) {
+        String payload = String.join(":", parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]);
+        if (!constantTimeEquals(signature(payload), parts[7])) {
+            throw denial(Denial.INVALID);
+        }
+    }
+
+    private static void verifyActor(String[] parts, long actorDiscordId) {
+        long encodedActor = Long.parseLong(parts[4], 36);
+        if (encodedActor != actorDiscordId) {
+            throw denial(Denial.WRONG_ACTOR);
+        }
+    }
+
+    private void verifyExpiry(String[] parts) {
+        long expires = Long.parseLong(parts[5], 36);
+        if (clock.instant().getEpochSecond() >= expires) {
+            throw denial(Denial.STALE);
+        }
+    }
+
+    private void claimNonce(String[] parts) {
+        long nonce = Long.parseLong(parts[6], 36);
+        InteractionReplayGuard.ClaimResult claim = replay.claim(nonce);
+        if (claim == InteractionReplayGuard.ClaimResult.DUPLICATE) {
+            throw denial(Denial.REPLAYED);
+        }
+        if (claim == InteractionReplayGuard.ClaimResult.SATURATED) {
+            throw denial(Denial.SATURATED);
         }
     }
 

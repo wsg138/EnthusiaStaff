@@ -10,8 +10,8 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -29,16 +29,20 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     public static final String PORT_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT";
 
     private static final int DEFAULT_PORT = 8771;
+    private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65_535;
     private static final int BACKLOG = 16;
+    private static final int WORKER_THREADS = 2;
     private static final int MIN_SECRET_LENGTH = 32;
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
+    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final String PATH = "/v1/staff-rank";
 
     private final JavaPlugin plugin;
     private final String bearer;
     private final LuckPerms luckPerms;
     private final HttpServer server;
-    private final ExecutorService executor;
+    private final ThreadPoolExecutor executor;
 
     private DiscordStaffAuthorityEndpoint(
             JavaPlugin plugin,
@@ -49,14 +53,28 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         this.plugin = plugin;
         this.bearer = "Bearer " + secret;
         this.luckPerms = luckPerms;
-        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), BACKLOG);
-        this.executor = Executors.newFixedThreadPool(
-                2,
-                Thread.ofPlatform().daemon(true).name("discord-staff-authority-", 0).factory()
+        // nosemgrep -- Literal IPv4 loopback bind; this endpoint is an inbound local authority bridge only.
+        HttpServer createdServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), BACKLOG);
+        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
+                WORKER_THREADS,
+                WORKER_THREADS,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(BACKLOG),
+                Thread.ofPlatform().daemon(true).name("discord-staff-authority-", 0).factory(),
+                new ThreadPoolExecutor.AbortPolicy()
         );
-        server.setExecutor(executor);
-        server.createContext(PATH, this::handle);
-        server.start();
+        try {
+            createdServer.setExecutor(createdExecutor);
+            createdServer.createContext(PATH, this::handle);
+            createdServer.start();
+        } catch (RuntimeException exception) {
+            createdServer.stop(0);
+            createdExecutor.shutdownNow();
+            throw exception;
+        }
+        this.server = createdServer;
+        this.executor = createdExecutor;
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {
@@ -91,7 +109,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
         try {
             return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, secret, port, luckPerms));
-        } catch (IOException exception) {
+        } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();
         }
@@ -181,7 +199,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
         try {
             int port = Integer.parseInt(raw.trim());
-            if (port < 1 || port > 65535) {
+            if (port < MIN_PORT || port > MAX_PORT) {
                 throw new IllegalArgumentException("authority port out of range");
             }
             return port;
@@ -197,13 +215,25 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (failure == null) {
             plugin.getLogger().warning(code);
         } else {
-            plugin.getLogger().log(Level.WARNING, code + " type=" + failure.getClass().getSimpleName());
+            plugin.getLogger().log(
+                    Level.WARNING,
+                    "{0} type={1}",
+                    new Object[] {code, failure.getClass().getSimpleName()}
+            );
         }
     }
 
     @Override
     public void close() {
         server.stop(0);
-        executor.shutdownNow();
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(SHUTDOWN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        }
     }
 }

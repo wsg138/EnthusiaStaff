@@ -12,6 +12,9 @@ import net.enthusia.staff.domain.ports.StaffNoteStore;
 
 /** Read-only JDBC view over the existing staff_notes table. */
 public final class JdbcStaffNoteStore implements StaffNoteStore {
+    private static final int MIN_LIMIT = 1;
+    private static final int MAX_LIMIT = 100;
+
     private final DataSource dataSource;
 
     public JdbcStaffNoteStore(DataSource dataSource) {
@@ -23,7 +26,7 @@ public final class JdbcStaffNoteStore implements StaffNoteStore {
 
     @Override
     public List<StaffNote> recent(UUID targetId, int limit) {
-        if (targetId == null || limit < 1 || limit > 100) {
+        if (targetId == null || limit < MIN_LIMIT || limit > MAX_LIMIT) {
             throw new IllegalArgumentException("target and a limit from 1 to 100 are required");
         }
         String sql = """
