@@ -1,20 +1,23 @@
 package net.enthusia.staff.discordbot;
 
 import java.time.Clock;
-import java.util.ArrayList;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
+import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubject;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.player.PlayerResolution;
+import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
@@ -25,6 +28,33 @@ final class StaffModerationReadService {
     private static final int MAX_LINKED_ACCOUNTS = 32;
     private static final int PER_ACCOUNT_LIMIT = 8;
     private static final int PANEL_LIMIT = 8;
+
+    interface ReadData {
+        Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId);
+
+        Optional<VersionedSubject> subjectForMinecraft(UUID playerId);
+
+        PlayerResolution resolvePlayer(String uuidOrUsername);
+
+        Optional<PlayerIdentity> player(UUID playerId);
+
+        List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId);
+
+        ModerationHistoryPage historyPage(
+                UUID targetId,
+                int page,
+                int pageSize,
+                HistoryQueryOptions options
+        );
+
+        List<CaseReview> recentCases(UUID targetId, int limit);
+
+        Optional<CaseReview> caseReview(CaseId caseId);
+
+        List<ActiveSanction> activeSanctions(UUID targetId, Instant now);
+
+        List<StaffNote> recentNotes(UUID targetId, int limit);
+    }
 
     enum TargetKind {
         DISCORD,
@@ -87,10 +117,14 @@ final class StaffModerationReadService {
         }
     }
 
-    private final DiscordStaffReadRuntime data;
+    private final ReadData data;
     private final Clock clock;
 
     StaffModerationReadService(DiscordStaffReadRuntime data, Clock clock) {
+        this(new RuntimeReadData(data), clock);
+    }
+
+    StaffModerationReadService(ReadData data, Clock clock) {
         if (data == null || clock == null) {
             throw new IllegalArgumentException("read service dependencies must be present");
         }
@@ -137,7 +171,7 @@ final class StaffModerationReadService {
         ));
     }
 
-    Optional<CaseReview> caseReview(net.enthusia.staff.common.CaseId caseId) {
+    Optional<CaseReview> caseReview(CaseId caseId) {
         return data.caseReview(caseId);
     }
 
@@ -222,5 +256,71 @@ final class StaffModerationReadService {
             }
         });
         return target;
+    }
+
+    private static final class RuntimeReadData implements ReadData {
+        private final DiscordStaffReadRuntime runtime;
+
+        private RuntimeReadData(DiscordStaffReadRuntime runtime) {
+            if (runtime == null) {
+                throw new IllegalArgumentException("read runtime must be present");
+            }
+            this.runtime = runtime;
+        }
+
+        @Override
+        public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
+            return runtime.subjectForDiscord(userId);
+        }
+
+        @Override
+        public Optional<VersionedSubject> subjectForMinecraft(UUID playerId) {
+            return runtime.subjectForMinecraft(playerId);
+        }
+
+        @Override
+        public PlayerResolution resolvePlayer(String uuidOrUsername) {
+            return runtime.resolvePlayer(uuidOrUsername);
+        }
+
+        @Override
+        public Optional<PlayerIdentity> player(UUID playerId) {
+            return runtime.player(playerId);
+        }
+
+        @Override
+        public List<VersionedLink> linkHistoryForDiscord(DiscordUserId userId) {
+            return runtime.linkHistoryForDiscord(userId);
+        }
+
+        @Override
+        public ModerationHistoryPage historyPage(
+                UUID targetId,
+                int page,
+                int pageSize,
+                HistoryQueryOptions options
+        ) {
+            return runtime.historyPage(targetId, page, pageSize, options);
+        }
+
+        @Override
+        public List<CaseReview> recentCases(UUID targetId, int limit) {
+            return runtime.recentCases(targetId, limit);
+        }
+
+        @Override
+        public Optional<CaseReview> caseReview(CaseId caseId) {
+            return runtime.caseReview(caseId);
+        }
+
+        @Override
+        public List<ActiveSanction> activeSanctions(UUID targetId, Instant now) {
+            return runtime.activeSanctions(targetId, now);
+        }
+
+        @Override
+        public List<StaffNote> recentNotes(UUID targetId, int limit) {
+            return runtime.recentNotes(targetId, limit);
+        }
     }
 }
