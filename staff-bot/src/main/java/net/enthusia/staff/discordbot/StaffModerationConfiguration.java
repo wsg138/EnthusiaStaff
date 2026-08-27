@@ -21,8 +21,15 @@ final class StaffModerationConfiguration {
     static final String DB_TIMEOUT_MILLIS_KEY = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS";
 
     private static final int DEFAULT_POOL_SIZE = 4;
+    private static final int MIN_POOL_SIZE = 2;
+    private static final int MAX_POOL_SIZE = 16;
     private static final int DEFAULT_TIMEOUT_MILLIS = 3_000;
+    private static final int MIN_TIMEOUT_MILLIS = 250;
+    private static final int MAX_TIMEOUT_MILLIS = 60_000;
     private static final int MIN_CRYPTO_SECRET_LENGTH = 32;
+    private static final int MIN_PORT = 1;
+    private static final String HTTP_SCHEME = "http";
+    private static final String AUTHORITY_PATH = "/v1/staff-rank";
     private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "localhost", "::1", "[::1]");
     private static final List<String> REQUIRED = List.of(
             JDBC_URL_KEY,
@@ -63,8 +70,14 @@ final class StaffModerationConfiguration {
         if (configured != REQUIRED.size()) {
             throw new IllegalArgumentException("read-only staff moderation configuration is incomplete");
         }
-        int poolSize = integer(values, DB_POOL_SIZE_KEY, DEFAULT_POOL_SIZE, 2, 16);
-        int timeout = integer(values, DB_TIMEOUT_MILLIS_KEY, DEFAULT_TIMEOUT_MILLIS, 250, 60_000);
+        int poolSize = integer(values, DB_POOL_SIZE_KEY, DEFAULT_POOL_SIZE, MIN_POOL_SIZE, MAX_POOL_SIZE);
+        int timeout = integer(
+                values,
+                DB_TIMEOUT_MILLIS_KEY,
+                DEFAULT_TIMEOUT_MILLIS,
+                MIN_TIMEOUT_MILLIS,
+                MAX_TIMEOUT_MILLIS
+        );
         DatabaseConfig database = new DatabaseConfig(
                 values.get(JDBC_URL_KEY).trim(),
                 values.get(DB_USERNAME_KEY).trim(),
@@ -98,27 +111,37 @@ final class StaffModerationConfiguration {
 
     @Override
     public String toString() {
-        return "StaffModerationConfiguration[authorityUri=" + authorityUri
-                + ", database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]";
+        return "StaffModerationConfiguration[authorityUri=%s, database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
+                .formatted(authorityUri);
     }
 
     private static URI authorityUri(String raw) {
+        URI uri = parseUri(raw);
+        if (!validAuthorityNetwork(uri) || !validAuthorityResource(uri)) {
+            throw new IllegalArgumentException("staff authority endpoint must be an explicit loopback HTTP URL");
+        }
+        return uri;
+    }
+
+    private static URI parseUri(String raw) {
         try {
-            URI uri = new URI(raw.trim());
-            boolean valid = "http".equalsIgnoreCase(uri.getScheme())
-                    && LOOPBACK_HOSTS.contains(uri.getHost())
-                    && uri.getPort() > 0
-                    && "/v1/staff-rank".equals(uri.getPath())
-                    && uri.getUserInfo() == null
-                    && uri.getQuery() == null
-                    && uri.getFragment() == null;
-            if (!valid) {
-                throw new IllegalArgumentException("staff authority endpoint must be an explicit loopback HTTP URL");
-            }
-            return uri;
+            return new URI(raw.trim());
         } catch (URISyntaxException exception) {
             throw new IllegalArgumentException("staff authority endpoint URL is invalid", exception);
         }
+    }
+
+    private static boolean validAuthorityNetwork(URI uri) {
+        return HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
+                && LOOPBACK_HOSTS.contains(uri.getHost())
+                && uri.getPort() >= MIN_PORT;
+    }
+
+    private static boolean validAuthorityResource(URI uri) {
+        return AUTHORITY_PATH.equals(uri.getPath())
+                && uri.getUserInfo() == null
+                && uri.getQuery() == null
+                && uri.getFragment() == null;
     }
 
     private static int integer(Map<String, String> values, String key, int fallback, int min, int max) {

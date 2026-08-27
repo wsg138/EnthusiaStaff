@@ -27,6 +27,24 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 /** JDA adapter for the D06 read-only command/context/component surface. */
 final class JdaStaffModerationListener extends ListenerAdapter {
     private static final System.Logger LOGGER = System.getLogger(JdaStaffModerationListener.class.getName());
+    private static final long NO_GUILD = 0L;
+    private static final int REQUIRED_SELECTION = 1;
+    private static final String USER_OPTION = "user";
+    private static final String PLAYER_OPTION = "player";
+    private static final String CASE_ID_OPTION = "id";
+    private static final String MODERATE = "moderate";
+    private static final String MODERATE_MINECRAFT = "moderate-minecraft";
+    private static final String LINKED = "linked";
+    private static final String HISTORY = "history";
+    private static final String NOTES = "notes";
+    private static final String CASE = "case";
+    private static final String MODERATE_USER = "Moderate User";
+    private static final String MODERATE_MESSAGE = "Moderate Message";
+
+    @FunctionalInterface
+    private interface DiscordTargetRead {
+        StaffModerationController.Response apply(long actorId, String actorName, long targetId);
+    }
 
     private final long guildId;
     private final StaffBotWorkerPool workers;
@@ -59,11 +77,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         guild.updateCommands().addCommands(commands()).queue(
                 ignored -> enabled.set(true),
-                failure -> {
-                    enabled.set(false);
-                    log("discord_read_commands_registration_failed", failure);
-                }
+                failure -> commandRegistrationFailed(failure)
         );
+    }
+
+    private void commandRegistrationFailed(Throwable failure) {
+        enabled.set(false);
+        log("discord_read_commands_registration_failed", failure);
     }
 
     void disable() {
@@ -72,45 +92,46 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!accepted(event.getGuild() == null ? 0L : event.getGuild().getIdLong())) {
+        if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
         }
-        long actor = event.getUser().getIdLong();
+        long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
         switch (event.getName()) {
-            case "moderate" -> {
-                User target = event.getOption("user").getAsUser();
-                dispatch(event, () -> controller.moderateDiscord(actor, actorName, target.getIdLong()));
-            }
-            case "moderate-minecraft" -> {
-                String target = event.getOption("player").getAsString();
-                dispatch(event, () -> controller.moderateMinecraft(actor, actorName, target));
-            }
-            case "linked" -> {
-                User target = event.getOption("user").getAsUser();
-                dispatch(event, () -> controller.linkedDiscord(actor, actorName, target.getIdLong()));
-            }
-            case "history" -> {
-                User target = event.getOption("user").getAsUser();
-                dispatch(event, () -> controller.historyDiscord(actor, actorName, target.getIdLong()));
-            }
-            case "notes" -> {
-                User target = event.getOption("user").getAsUser();
-                dispatch(event, () -> controller.notesDiscord(actor, actorName, target.getIdLong()));
-            }
-            case "case" -> {
-                String caseId = event.getOption("id").getAsString();
-                dispatch(event, () -> controller.caseView(actor, actorName, caseId));
-            }
+            case MODERATE -> dispatchDiscordTarget(event, actorId, actorName, controller::moderateDiscord);
+            case LINKED -> dispatchDiscordTarget(event, actorId, actorName, controller::linkedDiscord);
+            case HISTORY -> dispatchDiscordTarget(event, actorId, actorName, controller::historyDiscord);
+            case NOTES -> dispatchDiscordTarget(event, actorId, actorName, controller::notesDiscord);
+            case MODERATE_MINECRAFT -> dispatchMinecraft(event, actorId, actorName);
+            case CASE -> dispatchCase(event, actorId, actorName);
             default -> unavailable(event);
         }
     }
 
+    private void dispatchDiscordTarget(
+            SlashCommandInteractionEvent event,
+            long actorId,
+            String actorName,
+            DiscordTargetRead read
+    ) {
+        User target = event.getOption(USER_OPTION).getAsUser();
+        dispatch(event, () -> read.apply(actorId, actorName, target.getIdLong()));
+    }
+
+    private void dispatchMinecraft(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        String target = event.getOption(PLAYER_OPTION).getAsString();
+        dispatch(event, () -> controller.moderateMinecraft(actorId, actorName, target));
+    }
+
+    private void dispatchCase(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        String caseId = event.getOption(CASE_ID_OPTION).getAsString();
+        dispatch(event, () -> controller.caseView(actorId, actorName, caseId));
+    }
+
     @Override
     public void onUserContextInteraction(UserContextInteractionEvent event) {
-        long eventGuildId = event.getGuild() == null ? 0L : event.getGuild().getIdLong();
-        if (!"Moderate User".equals(event.getName()) || !accepted(eventGuildId)) {
+        if (!MODERATE_USER.equals(event.getName()) || !accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
         }
@@ -124,8 +145,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onMessageContextInteraction(MessageContextInteractionEvent event) {
-        long eventGuildId = event.getGuild() == null ? 0L : event.getGuild().getIdLong();
-        if (!"Moderate Message".equals(event.getName()) || !accepted(eventGuildId)) {
+        if (!MODERATE_MESSAGE.equals(event.getName()) || !accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
         }
@@ -139,7 +159,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
-        if (!accepted(event.getGuild() == null ? 0L : event.getGuild().getIdLong())) {
+        if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
         }
@@ -154,7 +174,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        if (!accepted(event.getGuild() == null ? 0L : event.getGuild().getIdLong())) {
+        if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
         }
@@ -177,19 +197,26 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     .queue();
             return;
         }
-        event.deferReply(true).queue(hook -> {
-            boolean scheduled = workers.tryExecute(() -> {
-                try {
-                    send(hook, work.get());
-                } catch (RuntimeException exception) {
-                    log("discord_read_interaction_failed", exception);
-                    hook.sendMessage("The read-only moderation view is temporarily unavailable.").queue();
-                }
-            });
-            if (!scheduled) {
-                hook.sendMessage("The moderation read queue is busy. Try again shortly.").queue();
-            }
-        }, failure -> interactions.release(interactionId));
+        event.deferReply(true).queue(
+                hook -> scheduleRead(hook, work),
+                failure -> interactions.release(interactionId)
+        );
+    }
+
+    private void scheduleRead(InteractionHook hook, Supplier<StaffModerationController.Response> work) {
+        boolean scheduled = workers.tryExecute(() -> executeRead(hook, work));
+        if (!scheduled) {
+            hook.sendMessage("The moderation read queue is busy. Try again shortly.").queue();
+        }
+    }
+
+    private static void executeRead(InteractionHook hook, Supplier<StaffModerationController.Response> work) {
+        try {
+            send(hook, work.get());
+        } catch (RuntimeException exception) {
+            log("discord_read_interaction_failed", exception);
+            hook.sendMessage("The read-only moderation view is temporarily unavailable.").queue();
+        }
     }
 
     private static void send(InteractionHook hook, StaffModerationController.Response response) {
@@ -203,7 +230,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         if (!response.choices().isEmpty()) {
             StringSelectMenu.Builder builder = StringSelectMenu.create(response.selectCustomId().orElseThrow())
                     .setPlaceholder("Choose the exact Minecraft identity")
-                    .setRequiredRange(1, 1);
+                    .setRequiredRange(REQUIRED_SELECTION, REQUIRED_SELECTION);
             response.choices().forEach(choice -> builder.addOption(choice.label(), choice.value()));
             action = action.addComponents(ActionRow.of(builder.build()));
         }
@@ -212,6 +239,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     private boolean accepted(long eventGuildId) {
         return enabled.get() && eventGuildId == guildId;
+    }
+
+    private static long guildId(Guild guild) {
+        return guild == null ? NO_GUILD : guild.getIdLong();
     }
 
     private static void unavailable(IReplyCallback event) {
@@ -225,27 +256,39 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     static List<CommandData> commands() {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         return List.of(
-                Commands.slash("moderate", "Open a read-only moderation profile for a Discord user")
-                        .addOptions(new OptionData(OptionType.USER, "user", "Discord user", true))
-                        .setDefaultPermissions(discovery),
-                Commands.user("Moderate User").setDefaultPermissions(discovery),
-                Commands.message("Moderate Message").setDefaultPermissions(discovery),
-                Commands.slash("moderate-minecraft", "Open a read-only moderation profile for a Minecraft identity")
-                        .addOptions(new OptionData(OptionType.STRING, "player", "Username or UUID", true))
-                        .setDefaultPermissions(discovery),
-                Commands.slash("linked", "View private linked-account information")
-                        .addOptions(new OptionData(OptionType.USER, "user", "Discord user", true))
-                        .setDefaultPermissions(discovery),
-                Commands.slash("history", "View recent moderation history")
-                        .addOptions(new OptionData(OptionType.USER, "user", "Discord user", true))
-                        .setDefaultPermissions(discovery),
-                Commands.slash("notes", "View recent private staff notes")
-                        .addOptions(new OptionData(OptionType.USER, "user", "Discord user", true))
-                        .setDefaultPermissions(discovery),
-                Commands.slash("case", "View a moderation case by exact ID")
-                        .addOptions(new OptionData(OptionType.STRING, "id", "16-character case ID", true))
-                        .setDefaultPermissions(discovery)
+                userSlash(MODERATE, "Open a read-only moderation profile for a Discord user", discovery),
+                Commands.user(MODERATE_USER).setDefaultPermissions(discovery),
+                Commands.message(MODERATE_MESSAGE).setDefaultPermissions(discovery),
+                stringSlash(
+                        MODERATE_MINECRAFT,
+                        "Open a read-only moderation profile for a Minecraft identity",
+                        PLAYER_OPTION,
+                        "Username or UUID",
+                        discovery
+                ),
+                userSlash(LINKED, "View private linked-account information", discovery),
+                userSlash(HISTORY, "View recent moderation history", discovery),
+                userSlash(NOTES, "View recent private staff notes", discovery),
+                stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery)
         );
+    }
+
+    private static CommandData userSlash(String name, String description, DefaultMemberPermissions discovery) {
+        return Commands.slash(name, description)
+                .addOptions(new OptionData(OptionType.USER, USER_OPTION, "Discord user", true))
+                .setDefaultPermissions(discovery);
+    }
+
+    private static CommandData stringSlash(
+            String name,
+            String description,
+            String optionName,
+            String optionDescription,
+            DefaultMemberPermissions discovery
+    ) {
+        return Commands.slash(name, description)
+                .addOptions(new OptionData(OptionType.STRING, optionName, optionDescription, true))
+                .setDefaultPermissions(discovery);
     }
 
     private static void log(String code, Throwable failure) {

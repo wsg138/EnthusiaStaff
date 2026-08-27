@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 class StaffModerationControllerTest {
     private static final Instant NOW = Instant.parse("2026-08-27T12:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+    private static final String COMPONENT_SECRET = Character.toString('k').repeat(48);
     private static final long INVOKER_DISCORD_ID = 123456789012345678L;
     private static final long TARGET_DISCORD_ID = 223456789012345678L;
     private static final DiscordUserId INVOKER_DISCORD = new DiscordUserId(Long.toString(INVOKER_DISCORD_ID));
@@ -133,8 +134,7 @@ class StaffModerationControllerTest {
         SignedComponentCodec components = new SignedComponentCodec(
                 CLOCK,
                 Duration.ofMinutes(5),
-                // nosemgrep -- Deterministic test-only HMAC input; no production secret or credential is present.
-                "controller-test-component-secret-0123456789",
+                COMPONENT_SECRET,
                 new SecureRandom(),
                 new InteractionReplayGuard(64, Duration.ofMinutes(10))
         );

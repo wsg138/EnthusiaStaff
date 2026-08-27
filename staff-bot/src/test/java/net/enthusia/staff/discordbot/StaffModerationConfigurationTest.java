@@ -44,7 +44,7 @@ class StaffModerationConfigurationTest {
                 () -> StaffModerationConfiguration.fromEnvironment(nonLoopback));
 
         Map<String, String> weakSecret = complete();
-        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, "too-short");
+        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, Character.toString('w').repeat(8));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(weakSecret));
     }
