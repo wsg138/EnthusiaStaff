@@ -3,7 +3,15 @@ package net.enthusia.staff.paper;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.common.SecureIdentifiers;
+import net.enthusia.staff.domain.application.AccountLinkingService;
+import net.enthusia.staff.domain.application.AccountLinkingService.MinecraftOnlineVerifier;
+import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
+import net.enthusia.staff.domain.application.DiscordSrvMigrationService;
+import net.enthusia.staff.domain.application.DiscordSrvMigrationService.DiscordSrvLinkProvider;
+import net.enthusia.staff.domain.application.MainAccountSelectionService;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.PunishmentService;
@@ -28,13 +36,17 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
+import net.enthusia.staff.paper.account.PaperAccountLinkRuntime;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 
 record PaperStorageBindings(
         MariaDbRuntime runtime,
         ModerationStores moderation,
         AssetStores assets,
-        ApplicationServices services
+        ApplicationServices services,
+        Clock clock,
+        SecureRandom secureRandom,
+        AtomicReference<PaperAccountLinkRuntime> accountLinkRuntime
 ) {
     static PaperStorageBindings create(
             MariaDbRuntime runtime,
@@ -62,7 +74,8 @@ record PaperStorageBindings(
                 runtime.economyJournalStore()
         );
         Clock clock = Clock.systemUTC();
-        SecureIdentifiers identifiers = new SecureIdentifiers(new SecureRandom());
+        SecureRandom secureRandom = new SecureRandom();
+        SecureIdentifiers identifiers = new SecureIdentifiers(secureRandom);
         PunishmentDraftStore draftStore = runtime.punishmentDraftStore();
         PunishmentService punishment = new PunishmentService(
                 clock,
@@ -94,88 +107,75 @@ record PaperStorageBindings(
                 punishmentRequests,
                 new SanctionChangeService(authorization, runtime.sanctionMutationStore())
         );
-        return new PaperStorageBindings(runtime, moderation, assets, services);
+        return new PaperStorageBindings(
+                runtime,
+                moderation,
+                assets,
+                services,
+                clock,
+                secureRandom,
+                new AtomicReference<>()
+        );
     }
 
-    ModerationStore moderationStore() {
-        return moderation.moderationStore();
+    PaperAccountLinkRuntime accountLinks(
+            AuthorizationPolicy authorization,
+            ActivePlaytimeProvider playtime,
+            MinecraftOnlineVerifier online,
+            Optional<? extends DiscordSrvLinkProvider> discordSrv
+    ) {
+        PaperAccountLinkRuntime cached = accountLinkRuntime.get();
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (accountLinkRuntime) {
+            cached = accountLinkRuntime.get();
+            if (cached != null) {
+                return cached;
+            }
+            var identities = runtime.discordModerationPersistenceStore();
+            MainAccountSelectionService mainAccounts = new MainAccountSelectionService(
+                    clock,
+                    identities,
+                    playtime,
+                    authorization,
+                    runtime.accountLinkAuditStore()
+            );
+            AccountLinkingService linking = new AccountLinkingService(
+                    clock,
+                    secureRandom,
+                    identities,
+                    runtime.accountLinkingStore(),
+                    online,
+                    mainAccounts
+            );
+            DiscordSrvMigrationService migration = new DiscordSrvMigrationService(clock, identities);
+            cached = new PaperAccountLinkRuntime(linking, identities, migration, discordSrv);
+            accountLinkRuntime.set(cached);
+            return cached;
+        }
     }
 
-    PlayerDirectory playerDirectory() {
-        return moderation.playerDirectory();
-    }
-
-    SanctionLookup sanctionLookup() {
-        return moderation.sanctionLookup();
-    }
-
-    CaseLookup caseLookup() {
-        return moderation.caseLookup();
-    }
-
-    CaseReviewStore caseReviewStore() {
-        return moderation.caseReviewStore();
-    }
-
-    ModerationHistoryStore moderationHistoryStore() {
-        return moderation.moderationHistoryStore();
-    }
-
-    ReportStore reportStore() {
-        return moderation.reportStore();
-    }
-
-    ClientEvidenceStore clientEvidenceStore() {
-        return moderation.clientEvidenceStore();
-    }
-
-    PunishmentRequestAlertStore punishmentRequestAlertStore() {
-        return moderation.punishmentRequestAlertStore();
-    }
-
-    PunishmentRequestStore punishmentRequestStore() {
-        return moderation.punishmentRequestStore();
-    }
-
-    FreezeStore freezeStore() {
-        return assets.freezeStore();
-    }
-
-    StaffSessionStore staffSessionStore() {
-        return assets.staffSessionStore();
-    }
-
-    VanishStore vanishStore() {
-        return assets.vanishStore();
-    }
-
-    InventoryJournalStore inventoryJournalStore() {
-        return assets.inventoryJournalStore();
-    }
-
-    InventoryRecoveryStore inventoryRecoveryStore() {
-        return assets.inventoryRecoveryStore();
-    }
-
-    EconomyJournalStore economyJournalStore() {
-        return assets.economyJournalStore();
-    }
-
-    PunishmentService punishmentService() {
-        return services.punishmentService();
-    }
-
-    PunishmentDraftWorkflow punishmentDraftWorkflow() {
-        return services.punishmentDraftWorkflow();
-    }
-
-    PunishmentRequestService punishmentRequestService() {
-        return services.punishmentRequestService();
-    }
-
-    SanctionChangeService sanctionChangeService() {
-        return services.sanctionChangeService();
-    }
+    ModerationStore moderationStore() { return moderation.moderationStore(); }
+    PlayerDirectory playerDirectory() { return moderation.playerDirectory(); }
+    SanctionLookup sanctionLookup() { return moderation.sanctionLookup(); }
+    CaseLookup caseLookup() { return moderation.caseLookup(); }
+    CaseReviewStore caseReviewStore() { return moderation.caseReviewStore(); }
+    ModerationHistoryStore moderationHistoryStore() { return moderation.moderationHistoryStore(); }
+    ReportStore reportStore() { return moderation.reportStore(); }
+    ClientEvidenceStore clientEvidenceStore() { return moderation.clientEvidenceStore(); }
+    PunishmentRequestAlertStore punishmentRequestAlertStore() { return moderation.punishmentRequestAlertStore(); }
+    PunishmentRequestStore punishmentRequestStore() { return moderation.punishmentRequestStore(); }
+    FreezeStore freezeStore() { return assets.freezeStore(); }
+    StaffSessionStore staffSessionStore() { return assets.staffSessionStore(); }
+    VanishStore vanishStore() { return assets.vanishStore(); }
+    InventoryJournalStore inventoryJournalStore() { return assets.inventoryJournalStore(); }
+    InventoryRecoveryStore inventoryRecoveryStore() { return assets.inventoryRecoveryStore(); }
+    EconomyJournalStore economyJournalStore() { return assets.economyJournalStore(); }
+    PunishmentService punishmentService() { return services.punishmentService(); }
+    PunishmentDraftWorkflow punishmentDraftWorkflow() { return services.punishmentDraftWorkflow(); }
+    PunishmentRequestService punishmentRequestService() { return services.punishmentRequestService(); }
+    SanctionChangeService sanctionChangeService() { return services.sanctionChangeService(); }
 
     record ModerationStores(
             ModerationStore moderationStore,

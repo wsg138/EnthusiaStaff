@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.moderation.AccountLinkAudit;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.EnforcementTarget;
@@ -67,30 +68,95 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
     }
 
     @Override
+    public VersionedLink linkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt,
+            AccountLinkAudit audit
+    ) {
+        return links.linkWithAudit(discordUserId, minecraftPlayerId, source, operationKey, linkedAt, audit);
+    }
+
+    @Override
     public VersionedLink unlink(
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
             String operationKey,
             Instant unlinkedAt
     ) {
-        VersionedLink stored = identities.unlink(
+        VersionedLink stored = links.unlink(
                 discordUserId,
                 minecraftPlayerId,
                 expectedRevision,
+                replacementMain,
                 operationKey,
                 unlinkedAt
         );
-        if (stored.replayed()) {
-            replayGuard.verifyUnlinkReplay(
-                    stored,
-                    discordUserId,
-                    minecraftPlayerId,
-                    expectedRevision,
-                    operationKey
-            );
-        }
+        verifyUnlinkReplay(stored, discordUserId, minecraftPlayerId, expectedRevision, operationKey);
         return stored;
+    }
+
+    @Override
+    public VersionedLink unlinkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt,
+            AccountLinkAudit audit
+    ) {
+        VersionedLink stored = links.unlinkWithAudit(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                replacementMain,
+                operationKey,
+                unlinkedAt,
+                audit
+        );
+        verifyUnlinkReplay(stored, discordUserId, minecraftPlayerId, expectedRevision, operationKey);
+        return stored;
+    }
+
+    @Override
+    public VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt
+    ) {
+        return links.reassign(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt
+        );
+    }
+
+    @Override
+    public VersionedLink reassignWithAudit(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt,
+            AccountLinkAudit audit
+    ) {
+        return links.reassignWithAudit(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt,
+                audit
+        );
     }
 
     @Override
@@ -105,6 +171,23 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
                 mainAccount,
                 expectedSubjectRevision,
                 selectedAt
+        );
+    }
+
+    @Override
+    public boolean setMainMinecraftAccountWithAudit(
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount mainAccount,
+            long expectedSubjectRevision,
+            Instant selectedAt,
+            AccountLinkAudit audit
+    ) {
+        return mainAccounts.setMainMinecraftAccountWithAudit(
+                subjectId,
+                mainAccount,
+                expectedSubjectRevision,
+                selectedAt,
+                audit
         );
     }
 
@@ -219,5 +302,23 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
             Instant now
     ) {
         return operations.completeMaintenance(workId, expectedRevision, leaseOwner, now);
+    }
+
+    private void verifyUnlinkReplay(
+            VersionedLink stored,
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            String operationKey
+    ) {
+        if (stored.replayed()) {
+            replayGuard.verifyUnlinkReplay(
+                    stored,
+                    discordUserId,
+                    minecraftPlayerId,
+                    expectedRevision,
+                    operationKey
+            );
+        }
     }
 }

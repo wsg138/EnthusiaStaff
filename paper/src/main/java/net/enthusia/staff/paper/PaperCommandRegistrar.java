@@ -8,6 +8,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.application.SanctionChangeService;
@@ -16,7 +17,9 @@ import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.account.PaperOnlinePlayerVerifier;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
+import net.enthusia.staff.paper.command.AccountLinkCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
 import net.enthusia.staff.paper.command.CaseRecoveryCommand;
 import net.enthusia.staff.paper.command.ClientCommand;
@@ -41,7 +44,9 @@ import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.integration.DiscordSrvLinkProviderAdapter;
 import net.enthusia.staff.paper.integration.MarketIntegration;
+import net.enthusia.staff.paper.integration.PlayTimeActivePlaytimeProvider;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
@@ -104,6 +109,7 @@ final class PaperCommandRegistrar {
 
     void register() {
         configureEstaff();
+        registerAccountLinkCommands();
         registerPunishmentCommands();
         registerSanctionChangeCommands();
         registerReportCommands();
@@ -129,6 +135,23 @@ final class PaperCommandRegistrar {
                 moderationSettings::current,
                 workers()
         ));
+    }
+
+    private void registerAccountLinkCommands() {
+        // All Bukkit/provider discovery happens during command registration on the server thread.
+        // The command itself runs persistence work on the bounded executor and receives only
+        // thread-safe/provider-neutral adapters from this point forward.
+        ActivePlaytimeProvider playtime = PlayTimeActivePlaytimeProvider.discover(plugin());
+        Optional<DiscordSrvLinkProviderAdapter> discordSrv = DiscordSrvLinkProviderAdapter.discover(plugin());
+        PaperOnlinePlayerVerifier online = PaperOnlinePlayerVerifier.register(plugin());
+        AuthorizationPolicy linkAuthorization = authorization();
+        AccountLinkCommand command = new AccountLinkCommand(
+                plugin(),
+                storage(bindings -> bindings.accountLinks(linkAuthorization, playtime, online, discordSrv)),
+                workers()
+        );
+        bind("link", command);
+        bind("unlink", command);
     }
 
     private void registerPunishmentCommands() {

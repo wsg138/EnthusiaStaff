@@ -10,7 +10,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -48,8 +47,8 @@ class DiscordPersistenceV19IntegrationTest {
     @BeforeAll
     static void migrateCleanDatabase() {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(CLEAN_DATABASE))) {
-            MariaDb.migrate(dataSource);
-            MariaDb.migrate(dataSource);
+            migrate(dataSource, "19");
+            migrate(dataSource, "19");
         }
     }
 
@@ -77,7 +76,7 @@ class DiscordPersistenceV19IntegrationTest {
                 BASE_TIME.plusSeconds(1)
         );
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(UPGRADE_DATABASE))) {
-            MariaDb.migrate(dataSource);
+            migrate(dataSource, "19");
         }
 
         assertEquals("19", currentFlywayVersion(UPGRADE_DATABASE));
@@ -155,6 +154,26 @@ class DiscordPersistenceV19IntegrationTest {
                             BASE_TIME.plusSeconds(41)
                     )
             );
+
+            assertThrows(
+                    ModerationPersistenceException.class,
+                    () -> store.unlink(
+                            discord,
+                            second,
+                            secondLink.revision(),
+                            "d02-unlink-main-unsafe-" + second,
+                            BASE_TIME.plusSeconds(42)
+                    )
+            );
+            assertEquals(discord, store.currentLink(second).orElseThrow().link().discordUserId());
+
+            var replacement = store.setMainMinecraftAccount(
+                    changed.subject().subjectId(),
+                    new MainMinecraftAccount(first, MainAccountSelectionSource.AUTOMATIC),
+                    changed.revision(),
+                    BASE_TIME.plusSeconds(43)
+            );
+            assertEquals(first, replacement.subject().mainMinecraftAccount().orElseThrow().playerId());
 
             var unlinked = store.unlink(
                     discord,

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.moderation.AccountLinkAudit;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLink;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -35,12 +36,86 @@ public interface DiscordModerationPersistenceStore {
             Instant linkedAt
     );
 
-    VersionedLink unlink(
+    /** Atomically links the identities and persists the supplied staff audit record. */
+    VersionedLink linkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt,
+            AccountLinkAudit audit
+    );
+
+    default VersionedLink unlink(
             DiscordUserId discordUserId,
             UUID minecraftPlayerId,
             long expectedRevision,
             String operationKey,
             Instant unlinkedAt
+    ) {
+        return unlink(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                Optional.empty(),
+                operationKey,
+                unlinkedAt
+        );
+    }
+
+    /**
+     * Atomically closes the current link and, when the removed UUID is the shared subject's main
+     * while other linked UUIDs remain, persists the supplied replacement main in the same transaction.
+     */
+    VersionedLink unlink(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt
+    );
+
+    /** Atomically unlinks the identities and persists the supplied staff audit record. */
+    VersionedLink unlinkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt,
+            AccountLinkAudit audit
+    );
+
+    default VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            String operationKey,
+            Instant changedAt
+    ) {
+        return reassign(newDiscordUserId, minecraftPlayerId, Optional.empty(), operationKey, changedAt);
+    }
+
+    /**
+     * Atomically closes any current link, preserving a valid main on the previous shared subject,
+     * and establishes the new STAFF_RECOVERY owner.
+     */
+    VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt
+    );
+
+    /** Atomically reassigns the identity and persists the supplied staff audit record. */
+    VersionedLink reassignWithAudit(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt,
+            AccountLinkAudit audit
     );
 
     VersionedSubject setMainMinecraftAccount(
@@ -48,6 +123,18 @@ public interface DiscordModerationPersistenceStore {
             MainMinecraftAccount mainAccount,
             long expectedSubjectRevision,
             Instant selectedAt
+    );
+
+    /**
+     * Atomically updates the main account and appends the audit. Returns {@code false} only when
+     * the same audit operation is an idempotent replay, in which case no main-account mutation runs.
+     */
+    boolean setMainMinecraftAccountWithAudit(
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount mainAccount,
+            long expectedSubjectRevision,
+            Instant selectedAt,
+            AccountLinkAudit audit
     );
 
     StoredEnforcementTarget recordEnforcementTarget(
