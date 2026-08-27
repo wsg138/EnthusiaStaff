@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.CaseId;
@@ -22,6 +23,19 @@ final class StaffModerationController {
     private static final int ITEM_TEXT = 180;
     private static final int AMBIGUOUS_LABEL_LIMIT = 90;
     private static final int CASE_REASON_LIMIT = 300;
+    private static final String GENERIC_UNAVAILABLE = "The read-only moderation view is temporarily unavailable.";
+    private static final Map<Class<?>, String> DENIAL_MESSAGES = Map.of(
+            LinkedStaffActorResolver.MissingStaffLinkException.class,
+            "This Discord account is not linked to a current Enthusia staff identity.",
+            StaffReadAuthorization.DeniedException.class,
+            "You are not authorized to view this moderation data.",
+            SignedComponentCodec.InvalidComponentException.class,
+            "That moderation control is expired, already used, or invalid. Open a fresh panel.",
+            StaffAuthorityClient.UnavailableException.class,
+            "Current staff authority could not be verified. Try again after the authority service recovers.",
+            StaffModerationReadService.TooManyLinksException.class,
+            "This identity has too many linked accounts for the bounded Discord view. Use Minecraft staff tools."
+    );
 
     record Button(String label, String customId) {
     }
@@ -52,6 +66,16 @@ final class StaffModerationController {
         }
     }
 
+    @FunctionalInterface
+    private interface TargetRenderer {
+        Response render(
+                long invokerId,
+                String invokerName,
+                StaffModerationReadService.Target target,
+                SignedComponentCodec.TargetRef targetRef
+        );
+    }
+
     private final StaffModerationReadService reads;
     private final LinkedStaffActorResolver actors;
     private final StaffReadAuthorization authorization;
@@ -73,20 +97,13 @@ final class StaffModerationController {
     }
 
     Response moderateDiscord(long invokerId, String invokerName, long targetId) {
-        return guarded(() -> {
-            requireInvoker(
-                    invokerId,
-                    invokerName,
-                    DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
-                    ModerationPlatform.DISCORD
-            );
-            return profile(
-                    invokerId,
-                    invokerName,
-                    reads.discordTarget(discord(targetId)),
-                    SignedComponentCodec.TargetRef.discord(targetId)
-            );
-        });
+        return guarded(() -> discordView(
+                invokerId,
+                invokerName,
+                targetId,
+                DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
+                this::profile
+        ));
     }
 
     Response moderateMinecraft(long invokerId, String invokerName, String input) {
@@ -102,54 +119,33 @@ final class StaffModerationController {
     }
 
     Response linkedDiscord(long invokerId, String invokerName, long targetId) {
-        return guarded(() -> {
-            requireInvoker(
-                    invokerId,
-                    invokerName,
-                    DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
-                    ModerationPlatform.DISCORD
-            );
-            return linked(
-                    invokerId,
-                    invokerName,
-                    reads.discordTarget(discord(targetId)),
-                    SignedComponentCodec.TargetRef.discord(targetId)
-            );
-        });
+        return guarded(() -> discordView(
+                invokerId,
+                invokerName,
+                targetId,
+                DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
+                this::linked
+        ));
     }
 
     Response historyDiscord(long invokerId, String invokerName, long targetId) {
-        return guarded(() -> {
-            requireInvoker(
-                    invokerId,
-                    invokerName,
-                    DiscordModerationOperation.VIEW_HISTORY,
-                    ModerationPlatform.DISCORD
-            );
-            return historyAll(
-                    invokerId,
-                    invokerName,
-                    reads.discordTarget(discord(targetId)),
-                    SignedComponentCodec.TargetRef.discord(targetId)
-            );
-        });
+        return guarded(() -> discordView(
+                invokerId,
+                invokerName,
+                targetId,
+                DiscordModerationOperation.VIEW_HISTORY,
+                this::historyAll
+        ));
     }
 
     Response notesDiscord(long invokerId, String invokerName, long targetId) {
-        return guarded(() -> {
-            requireInvoker(
-                    invokerId,
-                    invokerName,
-                    DiscordModerationOperation.VIEW_NOTES,
-                    ModerationPlatform.DISCORD
-            );
-            return notes(
-                    invokerId,
-                    invokerName,
-                    reads.discordTarget(discord(targetId)),
-                    SignedComponentCodec.TargetRef.discord(targetId)
-            );
-        });
+        return guarded(() -> discordView(
+                invokerId,
+                invokerName,
+                targetId,
+                DiscordModerationOperation.VIEW_NOTES,
+                this::notes
+        ));
     }
 
     Response caseView(long invokerId, String invokerName, String rawCaseId) {
@@ -162,19 +158,53 @@ final class StaffModerationController {
             String customId,
             Optional<String> selectedValue
     ) {
-        return guarded(() -> {
-            SignedComponentCodec.Decoded decoded = components.decodeAndClaim(customId, invokerId);
-            if (decoded.action() == SignedComponentCodec.Action.SELECT_MINECRAFT) {
-                String selected = selectedValue.orElseThrow(() -> new IllegalArgumentException("selection is required"));
-                return moderateMinecraft(invokerId, invokerName, selected);
-            }
-            if (decoded.action() == SignedComponentCodec.Action.CASE) {
-                return caseView(invokerId, invokerName, decoded.target().caseId());
-            }
-            preauthorizeComponent(invokerId, invokerName, decoded);
-            StaffModerationReadService.Target target = target(decoded.target());
-            return renderComponent(invokerId, invokerName, decoded, target);
-        });
+        return guarded(() -> componentRead(invokerId, invokerName, customId, selectedValue));
+    }
+
+    private Response discordView(
+            long invokerId,
+            String invokerName,
+            long targetId,
+            DiscordModerationOperation operation,
+            TargetRenderer renderer
+    ) {
+        requireInvoker(invokerId, invokerName, operation, ModerationPlatform.DISCORD);
+        StaffModerationReadService.Target target = reads.discordTarget(discord(targetId));
+        return renderer.render(
+                invokerId,
+                invokerName,
+                target,
+                SignedComponentCodec.TargetRef.discord(targetId)
+        );
+    }
+
+    private Response componentRead(
+            long invokerId,
+            String invokerName,
+            String customId,
+            Optional<String> selectedValue
+    ) {
+        SignedComponentCodec.Decoded decoded = components.decodeAndClaim(customId, invokerId);
+        if (decoded.action() == SignedComponentCodec.Action.SELECT_MINECRAFT) {
+            return selectedMinecraft(invokerId, invokerName, selectedValue);
+        }
+        if (decoded.action() == SignedComponentCodec.Action.CASE) {
+            return caseView(invokerId, invokerName, decoded.target().caseId());
+        }
+        preauthorizeComponent(invokerId, invokerName, decoded);
+        StaffModerationReadService.Target target = target(decoded.target());
+        return renderComponent(invokerId, invokerName, decoded, target);
+    }
+
+    private Response selectedMinecraft(long invokerId, String invokerName, Optional<String> selectedValue) {
+        requireInvoker(
+                invokerId,
+                invokerName,
+                DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
+                ModerationPlatform.MINECRAFT
+        );
+        String selected = selectedValue.orElseThrow(() -> new IllegalArgumentException("selection is required"));
+        return resolvedMinecraft(invokerId, invokerName, reads.resolveMinecraft(selected));
     }
 
     private Response resolvedMinecraft(
@@ -186,26 +216,7 @@ final class StaffModerationController {
             return Response.text("No Minecraft player matched that UUID or current/historical username.", List.of());
         }
         if (resolution instanceof StaffModerationReadService.MinecraftResolution.Ambiguous ambiguous) {
-            List<Choice> choices = ambiguous.matches().stream()
-                    .map(identity -> new Choice(
-                            shorten(
-                                    identity.currentUsername().orElse(identity.playerId().toString()),
-                                    AMBIGUOUS_LABEL_LIMIT
-                            ),
-                            identity.playerId().toString()
-                    ))
-                    .toList();
-            String selector = components.encode(
-                    SignedComponentCodec.Action.SELECT_MINECRAFT,
-                    SignedComponentCodec.TargetRef.none(),
-                    invokerId
-            );
-            String suffix = ambiguous.truncated() ? " More matches exist; narrow the username." : "";
-            return Response.selector(
-                    "Multiple Minecraft identities matched. Choose one; no guess was made.".concat(suffix),
-                    choices,
-                    selector
-            );
+            return ambiguitySelector(invokerId, ambiguous);
         }
         StaffModerationReadService.Target target =
                 ((StaffModerationReadService.MinecraftResolution.Resolved) resolution).target();
@@ -214,6 +225,32 @@ final class StaffModerationController {
                 invokerName,
                 target,
                 SignedComponentCodec.TargetRef.minecraft(target.minecraftId().orElseThrow())
+        );
+    }
+
+    private Response ambiguitySelector(
+            long invokerId,
+            StaffModerationReadService.MinecraftResolution.Ambiguous ambiguous
+    ) {
+        List<Choice> choices = ambiguous.matches().stream()
+                .map(identity -> new Choice(
+                        shorten(
+                                identity.currentUsername().orElse(identity.playerId().toString()),
+                                AMBIGUOUS_LABEL_LIMIT
+                        ),
+                        identity.playerId().toString()
+                ))
+                .toList();
+        String selector = components.encode(
+                SignedComponentCodec.Action.SELECT_MINECRAFT,
+                SignedComponentCodec.TargetRef.none(),
+                invokerId
+        );
+        String suffix = ambiguous.truncated() ? " More matches exist; narrow the username." : "";
+        return Response.selector(
+                "Multiple Minecraft identities matched. Choose one; no guess was made.".concat(suffix),
+                choices,
+                selector
         );
     }
 
@@ -240,18 +277,29 @@ final class StaffModerationController {
             String invokerName,
             SignedComponentCodec.Decoded decoded
     ) {
-        DiscordModerationOperation operation = switch (decoded.action()) {
+        requireInvoker(
+                invokerId,
+                invokerName,
+                componentOperation(decoded.action()),
+                componentPlatform(decoded.target().type())
+        );
+    }
+
+    private static DiscordModerationOperation componentOperation(SignedComponentCodec.Action action) {
+        return switch (action) {
             case PROFILE, LINKED -> DiscordModerationOperation.VIEW_LINKED_ACCOUNTS;
             case NOTES -> DiscordModerationOperation.VIEW_NOTES;
             case HISTORY, HISTORY_DISCORD, HISTORY_MINECRAFT, CASES -> DiscordModerationOperation.VIEW_HISTORY;
             case SELECT_MINECRAFT, CASE -> throw new IllegalArgumentException("component action must be handled first");
         };
-        ModerationPlatform platform = switch (decoded.target().type()) {
+    }
+
+    private static ModerationPlatform componentPlatform(SignedComponentCodec.TargetType type) {
+        return switch (type) {
             case DISCORD -> ModerationPlatform.DISCORD;
             case MINECRAFT -> ModerationPlatform.MINECRAFT;
             case CASE, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
         };
-        requireInvoker(invokerId, invokerName, operation, platform);
     }
 
     private Response profile(
@@ -265,7 +313,7 @@ final class StaffModerationController {
         require(actor, targetStaff, DiscordModerationOperation.VIEW_HISTORY, target);
         require(actor, targetStaff, DiscordModerationOperation.VIEW_NOTES, target);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**Moderation profile**\n");
+        StringBuilder content = panel("**Moderation profile**\n");
         appendIdentity(content, snapshot);
         content.append("Active Discord sanctions: not available before Discord enforcement (D07)\n")
                 .append("Active Minecraft sanctions: ").append(snapshot.activeMinecraftSanctions().size()).append('\n')
@@ -283,19 +331,26 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_LINKED_ACCOUNTS);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**Linked accounts**\n");
-        if (snapshot.linkedMinecraft().isEmpty()) {
-            content.append("No current Minecraft accounts are linked. This is a Discord-only or unlinked target.\n");
-        } else {
-            for (StaffModerationReadService.LinkedMinecraft linked : snapshot.linkedMinecraft()) {
-                content.append(linked.main() ? "• **Main:** " : "• ")
-                        .append(escape(linked.username().orElse(linked.playerId().toString())))
-                        .append(" — ").append(linked.platform())
-                        .append(" (`").append(linked.playerId()).append("`)\n");
-            }
-        }
+        StringBuilder content = panel("**Linked accounts**\n");
+        appendLinkedAccounts(content, snapshot);
         content.append("Historical link records: ").append(snapshot.historicalLinkCount());
         return Response.text(limit(content), navigation(invokerId, targetRef));
+    }
+
+    private static void appendLinkedAccounts(
+            StringBuilder content,
+            StaffModerationReadService.Snapshot snapshot
+    ) {
+        if (snapshot.linkedMinecraft().isEmpty()) {
+            content.append("No current Minecraft accounts are linked. This is a Discord-only or unlinked target.\n");
+            return;
+        }
+        for (StaffModerationReadService.LinkedMinecraft linked : snapshot.linkedMinecraft()) {
+            content.append(linked.main() ? "• **Main:** " : "• ")
+                    .append(escape(linked.username().orElse(linked.playerId().toString())))
+                    .append(" — ").append(linked.platform())
+                    .append(" (`").append(linked.playerId()).append("`)\n");
+        }
     }
 
     private Response historyAll(
@@ -306,7 +361,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**History — All**\n");
+        StringBuilder content = panel("**History — All**\n");
         appendMinecraftHistory(content, snapshot);
         content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\n")
                 .append("Cases: ").append(snapshot.recentCases().size())
@@ -321,9 +376,11 @@ final class StaffModerationController {
             SignedComponentCodec.TargetRef targetRef
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
-        String content = "**History — Discord**\n"
-                + "No Discord punishment history exists before D07. D06 does not create or invent Discord sanctions.";
-        return Response.text(content, historyNavigation(invokerId, targetRef));
+        return Response.text(
+                "**History — Discord**\nNo Discord punishment history exists before D07. "
+                        + "D06 does not create or invent Discord sanctions.",
+                historyNavigation(invokerId, targetRef)
+        );
     }
 
     private Response historyMinecraft(
@@ -334,7 +391,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**History — Minecraft**\n");
+        StringBuilder content = panel("**History — Minecraft**\n");
         appendMinecraftHistory(content, snapshot);
         return Response.text(limit(content), historyNavigation(invokerId, targetRef));
     }
@@ -347,16 +404,20 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**Recent staff notes**\n");
+        StringBuilder content = panel("**Recent staff notes**\n");
+        appendNotes(content, snapshot);
+        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+    }
+
+    private static void appendNotes(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
         if (snapshot.recentNotes().isEmpty()) {
             content.append("No staff notes are available for the current linked Minecraft identities.");
-        } else {
-            for (StaffNote note : snapshot.recentNotes()) {
-                content.append("• ").append(TIME.format(note.createdAt())).append(" — ")
-                        .append(shorten(escape(note.noteText()), ITEM_TEXT)).append('\n');
-            }
+            return;
         }
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+        for (StaffNote note : snapshot.recentNotes()) {
+            content.append("• ").append(TIME.format(note.createdAt())).append(" — ")
+                    .append(shorten(escape(note.noteText()), ITEM_TEXT)).append('\n');
+        }
     }
 
     private Response cases(
@@ -367,17 +428,21 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder("**Recent cases**\n");
+        StringBuilder content = panel("**Recent cases**\n");
+        appendCases(content, snapshot);
+        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+    }
+
+    private static void appendCases(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
         if (snapshot.recentCases().isEmpty()) {
             content.append("No cases are available for the current linked Minecraft identities.");
-        } else {
-            for (CaseReview review : snapshot.recentCases()) {
-                content.append("• `").append(review.caseId()).append("` — ")
-                        .append(review.state()).append(" — ")
-                        .append(shorten(escape(review.publicReason()), ITEM_TEXT)).append('\n');
-            }
+            return;
         }
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+        for (CaseReview review : snapshot.recentCases()) {
+            content.append("• `").append(review.caseId()).append("` — ")
+                    .append(review.state()).append(" — ")
+                    .append(shorten(escape(review.publicReason()), ITEM_TEXT)).append('\n');
+        }
     }
 
     private Response caseView(long invokerId, String invokerName, CaseId caseId) {
@@ -393,8 +458,7 @@ final class StaffModerationController {
         }
         StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
         require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
-        StringBuilder content = new StringBuilder("**Case `")
-                .append(caseId).append("`**\n")
+        StringBuilder content = panel("**Case `").append(caseId).append("`**\n")
                 .append("State: ").append(review.state()).append('\n')
                 .append("Issued: ").append(TIME.format(review.issuedAt())).append('\n')
                 .append("Reason: ").append(shorten(escape(review.publicReason()), CASE_REASON_LIMIT)).append('\n')
@@ -430,14 +494,13 @@ final class StaffModerationController {
             DiscordModerationOperation operation,
             StaffModerationReadService.Target target
     ) {
-        authorization.require(
-                actor,
-                targetStaff,
-                operation,
-                target.kind() == StaffModerationReadService.TargetKind.DISCORD
-                        ? ModerationPlatform.DISCORD
-                        : ModerationPlatform.MINECRAFT
-        );
+        authorization.require(actor, targetStaff, operation, platform(target));
+    }
+
+    private static ModerationPlatform platform(StaffModerationReadService.Target target) {
+        return target.kind() == StaffModerationReadService.TargetKind.DISCORD
+                ? ModerationPlatform.DISCORD
+                : ModerationPlatform.MINECRAFT;
     }
 
     private StaffModerationReadService.Target target(SignedComponentCodec.TargetRef targetRef) {
@@ -512,24 +575,9 @@ final class StaffModerationController {
     private Response guarded(Supplier<Response> action) {
         try {
             return action.get();
-        } catch (LinkedStaffActorResolver.MissingStaffLinkException exception) {
-            return Response.text("This Discord account is not linked to a current Enthusia staff identity.", List.of());
-        } catch (StaffReadAuthorization.DeniedException exception) {
-            return Response.text("You are not authorized to view this moderation data.", List.of());
-        } catch (SignedComponentCodec.InvalidComponentException exception) {
-            return Response.text("That moderation control is expired, already used, or invalid. Open a fresh panel.", List.of());
-        } catch (StaffAuthorityClient.UnavailableException exception) {
-            return Response.text(
-                    "Current staff authority could not be verified. Try again after the authority service recovers.",
-                    List.of()
-            );
-        } catch (StaffModerationReadService.TooManyLinksException exception) {
-            return Response.text(
-                    "This identity has too many linked accounts for the bounded Discord view. Use Minecraft staff tools.",
-                    List.of()
-            );
         } catch (RuntimeException exception) {
-            return Response.text("The read-only moderation view is temporarily unavailable.", List.of());
+            String message = DENIAL_MESSAGES.getOrDefault(exception.getClass(), GENERIC_UNAVAILABLE);
+            return Response.text(message, List.of());
         }
     }
 
@@ -538,6 +586,10 @@ final class StaffModerationController {
             throw new IllegalArgumentException("Discord id must be positive");
         }
         return new DiscordUserId(Long.toString(id));
+    }
+
+    private static StringBuilder panel(String title) {
+        return new StringBuilder(MAX_CONTENT).append(title);
     }
 
     private static String limit(StringBuilder content) {
