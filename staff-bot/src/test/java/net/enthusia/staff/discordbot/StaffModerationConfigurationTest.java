@@ -37,13 +37,15 @@ class StaffModerationConfigurationTest {
 
     @Test
     void rejectsNonLoopbackAuthorityEndpointAndWeakCryptoSecret() {
-        Map<String, String> values = complete();
-        values.put(StaffModerationConfiguration.AUTHORITY_URL_KEY, "http://10.0.0.2:8771/v1/staff-rank");
-        assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromEnvironment(values));
+        Map<String, String> nonLoopback = complete();
+        nonLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_KEY, "http://10.0.0.2:8771/v1/staff-rank");
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromEnvironment(nonLoopback));
 
-        values = complete();
-        values.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, "too-short");
-        assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromEnvironment(values));
+        Map<String, String> weakSecret = complete();
+        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, "too-short");
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromEnvironment(weakSecret));
     }
 
     private static Map<String, String> complete() {
