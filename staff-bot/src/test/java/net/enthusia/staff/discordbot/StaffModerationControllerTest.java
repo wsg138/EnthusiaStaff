@@ -42,6 +42,8 @@ class StaffModerationControllerTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final long INVOKER_DISCORD_ID = 123456789012345678L;
     private static final long TARGET_DISCORD_ID = 223456789012345678L;
+    private static final DiscordUserId INVOKER_DISCORD = new DiscordUserId(Long.toString(INVOKER_DISCORD_ID));
+    private static final DiscordUserId TARGET_DISCORD = new DiscordUserId(Long.toString(TARGET_DISCORD_ID));
     private static final UUID INVOKER_PLAYER = UUID.fromString("11111111-2222-3333-4444-555555555555");
     private static final UUID TARGET_PLAYER = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 
@@ -60,6 +62,7 @@ class StaffModerationControllerTest {
         assertFalse(response.content().contains("PrivateBedrockAlt"));
         assertTrue(response.buttons().isEmpty());
         assertTrue(response.choices().isEmpty());
+        assertEquals(0, data.targetDiscordReads.get(), "target links must not be queried before current staff authorization");
         assertEquals(0, data.playerReads.get(), "private target data must not be expanded before authorization");
     }
 
@@ -118,6 +121,7 @@ class StaffModerationControllerTest {
         assertFalse(response.content().contains("<@"), "read-only profiles must not mention/ping the target");
         assertEquals(5, response.buttons().size());
         assertTrue(response.buttons().stream().allMatch(button -> button.customId().length() <= 100));
+        assertTrue(data.targetDiscordReads.get() > 0);
         assertTrue(data.playerReads.get() > 0);
     }
 
@@ -138,14 +142,12 @@ class StaffModerationControllerTest {
     }
 
     private static FakeReadData linkedData() {
-        DiscordUserId invokerDiscord = new DiscordUserId(Long.toString(INVOKER_DISCORD_ID));
-        DiscordUserId targetDiscord = new DiscordUserId(Long.toString(TARGET_DISCORD_ID));
-        VersionedSubject invoker = subject(invokerDiscord, INVOKER_PLAYER);
-        VersionedSubject target = subject(targetDiscord, TARGET_PLAYER);
+        VersionedSubject invoker = subject(INVOKER_DISCORD, INVOKER_PLAYER);
+        VersionedSubject target = subject(TARGET_DISCORD, TARGET_PLAYER);
 
         FakeReadData data = new FakeReadData();
-        data.discordSubjects.put(invokerDiscord, invoker);
-        data.discordSubjects.put(targetDiscord, target);
+        data.discordSubjects.put(INVOKER_DISCORD, invoker);
+        data.discordSubjects.put(TARGET_DISCORD, target);
         data.minecraftSubjects.put(INVOKER_PLAYER, invoker);
         data.minecraftSubjects.put(TARGET_PLAYER, target);
         data.players.put(INVOKER_PLAYER, identity(INVOKER_PLAYER, "InvokerJava", PlayerPlatform.JAVA));
@@ -169,6 +171,7 @@ class StaffModerationControllerTest {
         private final Map<DiscordUserId, VersionedSubject> discordSubjects = new HashMap<>();
         private final Map<UUID, VersionedSubject> minecraftSubjects = new HashMap<>();
         private final Map<UUID, PlayerIdentity> players = new HashMap<>();
+        private final AtomicInteger targetDiscordReads = new AtomicInteger();
         private final AtomicInteger playerReads = new AtomicInteger();
         private final AtomicInteger resolutionReads = new AtomicInteger();
         private final AtomicInteger caseReads = new AtomicInteger();
@@ -176,6 +179,9 @@ class StaffModerationControllerTest {
 
         @Override
         public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
+            if (TARGET_DISCORD.equals(userId)) {
+                targetDiscordReads.incrementAndGet();
+            }
             return Optional.ofNullable(discordSubjects.get(userId));
         }
 
