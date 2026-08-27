@@ -60,19 +60,22 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 () -> JdbcTransactionSupport.execute(
                         dataSource,
                         "Unable to resolve Minecraft link-code initiator",
-                        connection -> {
-                            StoredCode stored = codeByHash(connection, codeHash, true);
-                            if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
-                                return CodeLookup.expiredResult();
-                            }
-                            return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
-                        }
+                        connection -> lookupMinecraftInitiator(connection, codeHash, now)
                 )
         );
         if (lookup.expired()) {
             throw new ModerationPersistenceException("account-link code expired");
         }
         return lookup.minecraftPlayerId().orElseThrow();
+    }
+
+    private static CodeLookup lookupMinecraftInitiator(Connection connection, String codeHash, Instant now)
+            throws SQLException {
+        StoredCode stored = codeByHash(connection, codeHash, true);
+        if (markExpiredIfNecessary(connection, stored, Direction.MINECRAFT_TO_DISCORD, now)) {
+            return CodeLookup.expiredResult();
+        }
+        return CodeLookup.available(stored.minecraftInitiator().orElseThrow());
     }
 
     @Override
@@ -83,7 +86,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             Instant now
     ) {
         require(minecraftPlayerId, "minecraftPlayerId");
-        return complete(
+        return complete(new CompletionRequest(
                 codeHash,
                 Direction.DISCORD_TO_MINECRAFT,
                 null,
@@ -91,7 +94,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 DiscordMinecraftLinkSource.DISCORD_CODE,
                 operationKey,
                 now
-        );
+        ));
     }
 
     @Override
@@ -102,7 +105,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             Instant now
     ) {
         require(discordUserId, "discordUserId");
-        return complete(
+        return complete(new CompletionRequest(
                 codeHash,
                 Direction.MINECRAFT_TO_DISCORD,
                 discordUserId,
@@ -110,7 +113,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 DiscordMinecraftLinkSource.MINECRAFT_CODE,
                 operationKey,
                 now
-        );
+        ));
     }
 
     @Override
@@ -147,80 +150,96 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         });
     }
 
-    private VersionedLink complete(
-            String codeHash,
-            Direction expectedDirection,
-            DiscordUserId completingDiscordUserId,
-            UUID completingMinecraftPlayerId,
-            DiscordMinecraftLinkSource source,
-            String operationKey,
-            Instant now
-    ) {
-        validateHash(codeHash);
-        validateKey(operationKey);
-        require(now, "now");
+    private VersionedLink complete(CompletionRequest request) {
+        validateHash(request.codeHash());
+        validateKey(request.operationKey());
+        require(request.now(), "now");
         CompletionResult result = deadlockRetry.execute(
                 "Interrupted while retrying account-link code completion",
                 () -> JdbcTransactionSupport.execute(
                         dataSource,
                         "Unable to complete account linking",
-                        connection -> {
-                            StoredCode stored = codeByHash(connection, codeHash, true);
-                            if (markExpiredIfNecessary(connection, stored, expectedDirection, now)) {
-                                return CompletionResult.expiredResult();
-                            }
-
-                            DiscordUserId discordUserId = expectedDirection == Direction.DISCORD_TO_MINECRAFT
-                                    ? stored.discordInitiator().orElseThrow()
-                                    : completingDiscordUserId;
-                            UUID minecraftPlayerId = expectedDirection == Direction.MINECRAFT_TO_DISCORD
-                                    ? stored.minecraftInitiator().orElseThrow()
-                                    : completingMinecraftPlayerId;
-
-                            if (stored.state().equals("CONSUMED")) {
-                                if (!operationKey.equals(stored.consumedOperationKey())) {
-                                    throw new SQLException("account-link code was already consumed by a different completion");
-                                }
-                                return CompletionResult.linked(JdbcDiscordLinkRepository.link(
-                                        connection,
-                                        discordUserId,
-                                        minecraftPlayerId,
-                                        source,
-                                        operationKey,
-                                        now
-                                ));
-                            }
-
-                            VersionedLink linked = JdbcDiscordLinkRepository.link(
-                                    connection,
-                                    discordUserId,
-                                    minecraftPlayerId,
-                                    source,
-                                    operationKey,
-                                    now
-                            );
-                            try (PreparedStatement statement = connection.prepareStatement("""
-                                    UPDATE discord_link_codes
-                                    SET state = 'CONSUMED', consumed_operation_key = ?, consumed_at = ?,
-                                        revision = revision + 1
-                                    WHERE code_id = ? AND state = 'ACTIVE'
-                                    """)) {
-                                statement.setString(1, operationKey);
-                                statement.setTimestamp(2, Timestamp.from(now));
-                                statement.setBytes(3, UuidBytes.toBytes(stored.codeId()));
-                                JdbcTransactionSupport.requireSingleUpdate(
-                                        statement.executeUpdate(),
-                                        "account-link code was not atomically consumed"
-                                );
-                            }
-                            return CompletionResult.linked(linked);
-                        }
+                        connection -> completeLocked(connection, request)
                 )
         );
         if (result.expired()) {
             throw new ModerationPersistenceException("account-link code expired");
         }
         return result.link().orElseThrow();
+    }
+
+    private static CompletionResult completeLocked(Connection connection, CompletionRequest request)
+            throws SQLException {
+        StoredCode stored = codeByHash(connection, request.codeHash(), true);
+        if (markExpiredIfNecessary(connection, stored, request.expectedDirection(), request.now())) {
+            return CompletionResult.expiredResult();
+        }
+        CompletionParties parties = resolveCompletionParties(stored, request);
+        if (stored.state().equals("CONSUMED")) {
+            return replayConsumedCompletion(connection, stored, parties, request);
+        }
+        VersionedLink linked = linkCompletion(connection, parties, request);
+        consumeCode(connection, stored.codeId(), request.operationKey(), request.now());
+        return CompletionResult.linked(linked);
+    }
+
+    private static CompletionParties resolveCompletionParties(StoredCode stored, CompletionRequest request) {
+        DiscordUserId discordUserId = request.expectedDirection() == Direction.DISCORD_TO_MINECRAFT
+                ? stored.discordInitiator().orElseThrow()
+                : request.completingDiscordUserId();
+        UUID minecraftPlayerId = request.expectedDirection() == Direction.MINECRAFT_TO_DISCORD
+                ? stored.minecraftInitiator().orElseThrow()
+                : request.completingMinecraftPlayerId();
+        return new CompletionParties(discordUserId, minecraftPlayerId);
+    }
+
+    private static CompletionResult replayConsumedCompletion(
+            Connection connection,
+            StoredCode stored,
+            CompletionParties parties,
+            CompletionRequest request
+    ) throws SQLException {
+        if (!request.operationKey().equals(stored.consumedOperationKey())) {
+            throw new SQLException("account-link code was already consumed by a different completion");
+        }
+        return CompletionResult.linked(linkCompletion(connection, parties, request));
+    }
+
+    private static VersionedLink linkCompletion(
+            Connection connection,
+            CompletionParties parties,
+            CompletionRequest request
+    ) throws SQLException {
+        return JdbcDiscordLinkRepository.link(
+                connection,
+                parties.discordUserId(),
+                parties.minecraftPlayerId(),
+                request.source(),
+                request.operationKey(),
+                request.now()
+        );
+    }
+
+    private static void consumeCode(
+            Connection connection,
+            UUID codeId,
+            String operationKey,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_link_codes
+                SET state = 'CONSUMED', consumed_operation_key = ?, consumed_at = ?,
+                    revision = revision + 1
+                WHERE code_id = ? AND state = 'ACTIVE'
+                """)) {
+            statement.setString(1, operationKey);
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setBytes(3, UuidBytes.toBytes(codeId));
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "account-link code was not atomically consumed"
+            );
+        }
     }
 
     private void issue(
@@ -242,49 +261,75 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 () -> JdbcTransactionSupport.execute(dataSource, "Unable to issue account-link code", connection -> {
                     lockInitiator(connection, direction, discordUserId, minecraftPlayerId);
                     supersedePrior(connection, direction, discordUserId, minecraftPlayerId, createdAt);
-                    UUID codeId = UUID.randomUUID();
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            INSERT INTO discord_link_codes(
-                                code_id, code_hash, direction, initiator_discord_user_id,
-                                initiator_minecraft_player_id, state, created_at, expires_at, revision
-                            ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
-                            """)) {
-                        statement.setBytes(1, UuidBytes.toBytes(codeId));
-                        statement.setString(2, codeHash);
-                        statement.setString(3, direction.name());
-                        if (discordUserId == null) {
-                            statement.setNull(4, java.sql.Types.DECIMAL);
-                        } else {
-                            statement.setBigDecimal(4, discordId(discordUserId));
-                        }
-                        if (minecraftPlayerId == null) {
-                            statement.setNull(5, java.sql.Types.BINARY);
-                        } else {
-                            statement.setBytes(5, UuidBytes.toBytes(minecraftPlayerId));
-                        }
-                        statement.setTimestamp(6, Timestamp.from(createdAt));
-                        statement.setTimestamp(7, Timestamp.from(expiresAt));
-                        JdbcTransactionSupport.requireSingleUpdate(
-                                statement.executeUpdate(),
-                                "account-link code was not inserted"
-                        );
-                    }
+                    insertCode(connection, direction, discordUserId, minecraftPlayerId, codeHash, createdAt, expiresAt);
                     return null;
                 })
         );
     }
 
-    /**
-     * Validates code state while holding its row lock. If an ACTIVE code crossed its deadline,
-     * persist EXPIRED and let the caller return a sentinel so the transaction can commit before
-     * the public operation reports failure.
-     */
+    private static void insertCode(
+            Connection connection,
+            Direction direction,
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            String codeHash,
+            Instant createdAt,
+            Instant expiresAt
+    ) throws SQLException {
+        UUID codeId = UUID.randomUUID();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO discord_link_codes(
+                    code_id, code_hash, direction, initiator_discord_user_id,
+                    initiator_minecraft_player_id, state, created_at, expires_at, revision
+                ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, 0)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(codeId));
+            statement.setString(2, codeHash);
+            statement.setString(3, direction.name());
+            setOptionalDiscordId(statement, 4, discordUserId);
+            setOptionalMinecraftId(statement, 5, minecraftPlayerId);
+            statement.setTimestamp(6, Timestamp.from(createdAt));
+            statement.setTimestamp(7, Timestamp.from(expiresAt));
+            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "account-link code was not inserted");
+        }
+    }
+
+    private static void setOptionalDiscordId(PreparedStatement statement, int index, DiscordUserId discordUserId)
+            throws SQLException {
+        if (discordUserId == null) {
+            statement.setNull(index, java.sql.Types.DECIMAL);
+        } else {
+            statement.setBigDecimal(index, discordId(discordUserId));
+        }
+    }
+
+    private static void setOptionalMinecraftId(PreparedStatement statement, int index, UUID minecraftPlayerId)
+            throws SQLException {
+        if (minecraftPlayerId == null) {
+            statement.setNull(index, java.sql.Types.BINARY);
+        } else {
+            statement.setBytes(index, UuidBytes.toBytes(minecraftPlayerId));
+        }
+    }
+
     private static boolean markExpiredIfNecessary(
             Connection connection,
             StoredCode stored,
             Direction expectedDirection,
             Instant now
     ) throws SQLException {
+        validateAvailableCode(stored, expectedDirection);
+        if (stored.state().equals("CONSUMED")) {
+            return false;
+        }
+        if (!now.isBefore(stored.expiresAt())) {
+            expire(connection, stored.codeId());
+            return true;
+        }
+        return false;
+    }
+
+    private static void validateAvailableCode(StoredCode stored, Direction expectedDirection) throws SQLException {
         if (stored == null || stored.direction() != expectedDirection) {
             throw new SQLException("account-link code is invalid");
         }
@@ -294,17 +339,9 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         if (stored.state().equals("EXPIRED")) {
             throw new SQLException("account-link code expired");
         }
-        if (stored.state().equals("CONSUMED")) {
-            return false;
-        }
-        if (!stored.state().equals("ACTIVE")) {
+        if (!stored.state().equals("ACTIVE") && !stored.state().equals("CONSUMED")) {
             throw new SQLException("account-link code is unavailable");
         }
-        if (!now.isBefore(stored.expiresAt())) {
-            expire(connection, stored.codeId());
-            return true;
-        }
-        return false;
     }
 
     private static void lockInitiator(
@@ -314,21 +351,25 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             UUID minecraftPlayerId
     ) throws SQLException {
         if (direction == Direction.DISCORD_TO_MINECRAFT) {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    SELECT subject_id
-                    FROM moderation_subject_discord_identities
-                    WHERE discord_user_id = ?
-                    FOR UPDATE
-                    """)) {
-                statement.setBigDecimal(1, discordId(discordUserId));
-                try (ResultSet result = statement.executeQuery()) {
-                    if (!result.next()) {
-                        throw new SQLException("Discord initiator has no moderation identity");
-                    }
-                }
-            }
-            return;
+            lockDiscordInitiator(connection, discordUserId);
+        } else {
+            lockMinecraftInitiator(connection, minecraftPlayerId);
         }
+    }
+
+    private static void lockDiscordInitiator(Connection connection, DiscordUserId discordUserId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT subject_id
+                FROM moderation_subject_discord_identities
+                WHERE discord_user_id = ?
+                FOR UPDATE
+                """)) {
+            statement.setBigDecimal(1, discordId(discordUserId));
+            requireInitiatorRow(statement, "Discord initiator has no moderation identity");
+        }
+    }
+
+    private static void lockMinecraftInitiator(Connection connection, UUID minecraftPlayerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT subject_id
                 FROM moderation_subject_minecraft_identities
@@ -336,10 +377,14 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 FOR UPDATE
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(minecraftPlayerId));
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    throw new SQLException("Minecraft initiator has no moderation identity");
-                }
+            requireInitiatorRow(statement, "Minecraft initiator has no moderation identity");
+        }
+    }
+
+    private static void requireInitiatorRow(PreparedStatement statement, String error) throws SQLException {
+        try (ResultSet result = statement.executeQuery()) {
+            if (!result.next()) {
+                throw new SQLException(error);
             }
         }
     }
@@ -352,19 +397,29 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             Instant now
     ) throws SQLException {
         if (direction == Direction.DISCORD_TO_MINECRAFT) {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE discord_link_codes
-                    SET state = 'SUPERSEDED', superseded_at = ?, revision = revision + 1
-                    WHERE direction = 'DISCORD_TO_MINECRAFT'
-                      AND initiator_discord_user_id = ?
-                      AND state = 'ACTIVE'
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setBigDecimal(2, discordId(discordUserId));
-                statement.executeUpdate();
-            }
-            return;
+            supersedeDiscordCodes(connection, discordUserId, now);
+        } else {
+            supersedeMinecraftCodes(connection, minecraftPlayerId, now);
         }
+    }
+
+    private static void supersedeDiscordCodes(Connection connection, DiscordUserId discordUserId, Instant now)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_link_codes
+                SET state = 'SUPERSEDED', superseded_at = ?, revision = revision + 1
+                WHERE direction = 'DISCORD_TO_MINECRAFT'
+                  AND initiator_discord_user_id = ?
+                  AND state = 'ACTIVE'
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBigDecimal(2, discordId(discordUserId));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void supersedeMinecraftCodes(Connection connection, UUID minecraftPlayerId, Instant now)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_link_codes
                 SET state = 'SUPERSEDED', superseded_at = ?, revision = revision + 1
@@ -470,6 +525,20 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             throw new IllegalArgumentException(name + " must be present");
         }
         return value;
+    }
+
+    private record CompletionRequest(
+            String codeHash,
+            Direction expectedDirection,
+            DiscordUserId completingDiscordUserId,
+            UUID completingMinecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant now
+    ) {
+    }
+
+    private record CompletionParties(DiscordUserId discordUserId, UUID minecraftPlayerId) {
     }
 
     private record StoredCode(

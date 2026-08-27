@@ -64,54 +64,68 @@ class DiscordAccountUnlinkAtomicityV20IntegrationTest {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             JdbcAccountLinkingStore codes = new JdbcAccountLinkingStore(dataSource);
-            var firstLink = identities.link(
-                    discord,
-                    first,
-                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    "d04-atomic-first-" + first,
-                    BASE_TIME.plusSeconds(1)
-            );
-            identities.link(
-                    discord,
-                    second,
-                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    "d04-atomic-second-" + second,
-                    BASE_TIME.plusSeconds(2)
-            );
-
-            assertEquals(first, mainPlayer(identities, discord));
-            assertThrows(ModerationPersistenceException.class, () -> identities.unlink(
-                    discord,
-                    first,
-                    firstLink.revision(),
-                    Optional.of(new MainMinecraftAccount(unrelated, MainAccountSelectionSource.AUTOMATIC)),
-                    "d04-atomic-invalid-replacement",
-                    BASE_TIME.plusSeconds(3)
-            ));
-            assertEquals(first, mainPlayer(identities, discord));
-            assertTrue(identities.currentLink(first).isPresent());
-
-            Clock clock = Clock.fixed(BASE_TIME.plusSeconds(4), ZoneOffset.UTC);
-            MainAccountSelectionService mains = new MainAccountSelectionService(
-                    clock,
-                    identities,
-                    playerId -> OptionalLong.of(playerId.equals(first) ? 200L : 100L),
-                    new DefaultAuthorizationPolicy(),
-                    new JdbcAccountLinkAuditStore(dataSource)
-            );
-            AccountLinkingService linking = new AccountLinkingService(
-                    clock,
-                    new SecureRandom(),
-                    identities,
-                    codes,
-                    ignored -> true,
-                    mains
-            );
-
-            assertTrue(linking.unlinkFromMinecraft(first, true));
-            assertFalse(identities.currentLink(first).isPresent());
-            assertEquals(second, mainPlayer(identities, discord));
+            var firstLink = seedAtomicLinks(identities, discord, first, second);
+            verifyInvalidReplacementIsAtomic(identities, discord, first, unrelated, firstLink.revision());
+            verifySuccessfulSelfUnlink(dataSource, identities, codes, discord, first, second);
         }
+    }
+
+    private static net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink seedAtomicLinks(
+            JdbcDiscordModerationPersistenceStore identities,
+            DiscordUserId discord,
+            UUID first,
+            UUID second
+    ) {
+        var firstLink = identities.link(
+                discord, first, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "d04-atomic-first-" + first, BASE_TIME.plusSeconds(1));
+        identities.link(
+                discord, second, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "d04-atomic-second-" + second, BASE_TIME.plusSeconds(2));
+        assertEquals(first, mainPlayer(identities, discord));
+        return firstLink;
+    }
+
+    private static void verifyInvalidReplacementIsAtomic(
+            JdbcDiscordModerationPersistenceStore identities,
+            DiscordUserId discord,
+            UUID first,
+            UUID unrelated,
+            long revision
+    ) {
+        assertThrows(ModerationPersistenceException.class, () -> identities.unlink(
+                discord,
+                first,
+                revision,
+                Optional.of(new MainMinecraftAccount(unrelated, MainAccountSelectionSource.AUTOMATIC)),
+                "d04-atomic-invalid-replacement",
+                BASE_TIME.plusSeconds(3)
+        ));
+        assertEquals(first, mainPlayer(identities, discord));
+        assertTrue(identities.currentLink(first).isPresent());
+    }
+
+    private static void verifySuccessfulSelfUnlink(
+            HikariDataSource dataSource,
+            JdbcDiscordModerationPersistenceStore identities,
+            JdbcAccountLinkingStore codes,
+            DiscordUserId discord,
+            UUID first,
+            UUID second
+    ) {
+        Clock clock = Clock.fixed(BASE_TIME.plusSeconds(4), ZoneOffset.UTC);
+        MainAccountSelectionService mains = new MainAccountSelectionService(
+                clock,
+                identities,
+                playerId -> OptionalLong.of(playerId.equals(first) ? 200L : 100L),
+                new DefaultAuthorizationPolicy(),
+                new JdbcAccountLinkAuditStore(dataSource)
+        );
+        AccountLinkingService linking = new AccountLinkingService(
+                clock, new SecureRandom(), identities, codes, ignored -> true, mains);
+        assertTrue(linking.unlinkFromMinecraft(first, true));
+        assertFalse(identities.currentLink(first).isPresent());
+        assertEquals(second, mainPlayer(identities, discord));
     }
 
     @Test
@@ -129,50 +143,66 @@ class DiscordAccountUnlinkAtomicityV20IntegrationTest {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             JdbcAccountLinkingStore history = new JdbcAccountLinkingStore(dataSource);
             JdbcAccountLinkAuditStore audits = new JdbcAccountLinkAuditStore(dataSource);
-            identities.link(
-                    oldDiscord,
-                    moving,
-                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    "d04-reassign-moving-" + moving,
-                    BASE_TIME.plusSeconds(21)
-            );
-            identities.link(
-                    oldDiscord,
-                    remaining,
-                    DiscordMinecraftLinkSource.STAFF_RECOVERY,
-                    "d04-reassign-remaining-" + remaining,
-                    BASE_TIME.plusSeconds(22)
-            );
-            assertEquals(moving, mainPlayer(identities, oldDiscord));
-
-            MainAccountSelectionService mains = new MainAccountSelectionService(
-                    clock,
-                    identities,
-                    playerId -> OptionalLong.of(playerId.equals(moving) ? 500L : 250L),
-                    new DefaultAuthorizationPolicy(),
-                    audits
-            );
-            AccountLinkRecoveryService recovery = new AccountLinkRecoveryService(
-                    clock,
-                    new DefaultAuthorizationPolicy(),
-                    identities,
-                    audits,
-                    mains
-            );
-
-            recovery.reassign(admin, newDiscord, moving, "d04-atomic-reassign");
-
-            assertEquals(newDiscord, identities.currentLink(moving).orElseThrow().link().discordUserId());
-            assertEquals(remaining, mainPlayer(identities, oldDiscord));
-            assertEquals(moving, mainPlayer(identities, newDiscord));
-            assertEquals(2, history.historyForMinecraft(moving).size());
-            assertEquals(1, history.historyForMinecraft(moving).stream()
-                    .filter(link -> link.link().unlinkedAt().isPresent())
-                    .count());
-            assertEquals(1, history.historyForMinecraft(moving).stream()
-                    .filter(link -> link.link().unlinkedAt().isEmpty())
-                    .count());
+            seedReassignmentLinks(identities, oldDiscord, moving, remaining);
+            performReassignment(dataSource, identities, audits, oldDiscord, newDiscord, moving, remaining, admin, clock);
+            assertReassignmentState(identities, history, oldDiscord, newDiscord, moving, remaining);
         }
+    }
+
+    private static void seedReassignmentLinks(
+            JdbcDiscordModerationPersistenceStore identities,
+            DiscordUserId oldDiscord,
+            UUID moving,
+            UUID remaining
+    ) {
+        identities.link(
+                oldDiscord, moving, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "d04-reassign-moving-" + moving, BASE_TIME.plusSeconds(21));
+        identities.link(
+                oldDiscord, remaining, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "d04-reassign-remaining-" + remaining, BASE_TIME.plusSeconds(22));
+        assertEquals(moving, mainPlayer(identities, oldDiscord));
+    }
+
+    private static void performReassignment(
+            HikariDataSource dataSource,
+            JdbcDiscordModerationPersistenceStore identities,
+            JdbcAccountLinkAuditStore audits,
+            DiscordUserId oldDiscord,
+            DiscordUserId newDiscord,
+            UUID moving,
+            UUID remaining,
+            Actor admin,
+            Clock clock
+    ) {
+        MainAccountSelectionService mains = new MainAccountSelectionService(
+                clock,
+                identities,
+                playerId -> OptionalLong.of(playerId.equals(moving) ? 500L : 250L),
+                new DefaultAuthorizationPolicy(),
+                audits
+        );
+        AccountLinkRecoveryService recovery = new AccountLinkRecoveryService(
+                clock, new DefaultAuthorizationPolicy(), identities, audits, mains);
+        recovery.reassign(admin, newDiscord, moving, "d04-atomic-reassign");
+    }
+
+    private static void assertReassignmentState(
+            JdbcDiscordModerationPersistenceStore identities,
+            JdbcAccountLinkingStore history,
+            DiscordUserId oldDiscord,
+            DiscordUserId newDiscord,
+            UUID moving,
+            UUID remaining
+    ) {
+        assertEquals(newDiscord, identities.currentLink(moving).orElseThrow().link().discordUserId());
+        assertEquals(remaining, mainPlayer(identities, oldDiscord));
+        assertEquals(moving, mainPlayer(identities, newDiscord));
+        assertEquals(2, history.historyForMinecraft(moving).size());
+        assertEquals(1, history.historyForMinecraft(moving).stream()
+                .filter(link -> link.link().unlinkedAt().isPresent()).count());
+        assertEquals(1, history.historyForMinecraft(moving).stream()
+                .filter(link -> link.link().unlinkedAt().isEmpty()).count());
     }
 
     private static UUID mainPlayer(

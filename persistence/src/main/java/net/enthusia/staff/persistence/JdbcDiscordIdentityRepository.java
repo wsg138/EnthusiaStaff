@@ -27,6 +27,8 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.Version
 
 /** Read/ensure owner for moderation subjects. Link mutations live in JdbcDiscordLinkRepository. */
 final class JdbcDiscordIdentityRepository {
+    private static final int SUBJECT_ALLOCATION_ATTEMPTS = 4;
+
     private final DataSource dataSource;
 
     JdbcDiscordIdentityRepository(DataSource dataSource) {
@@ -49,27 +51,7 @@ final class JdbcDiscordIdentityRepository {
         return JdbcTransactionSupport.execute(
                 dataSource,
                 "Unable to ensure Discord moderation subject",
-                connection -> {
-                    ModerationSubjectId existing = subjectIdForDiscord(connection, userId, true);
-                    if (existing != null) {
-                        return loadSubject(connection, existing);
-                    }
-                    ModerationSubjectId subjectId = insertFreshSubject(connection, now);
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            INSERT INTO moderation_subject_discord_identities(
-                                discord_user_id, subject_id, linked_at
-                            ) VALUES (?, ?, ?)
-                            """)) {
-                        statement.setBigDecimal(1, discordId(userId));
-                        statement.setBytes(2, UuidBytes.toBytes(subjectId.value()));
-                        statement.setTimestamp(3, Timestamp.from(now));
-                        JdbcTransactionSupport.requireSingleUpdate(
-                                statement.executeUpdate(),
-                                "Discord identity mapping was not inserted"
-                        );
-                    }
-                    return loadSubject(connection, subjectId);
-                }
+                connection -> ensureDiscordSubject(connection, userId, now)
         );
     }
 
@@ -106,6 +88,41 @@ final class JdbcDiscordIdentityRepository {
         );
     }
 
+    private static VersionedSubject ensureDiscordSubject(
+            Connection connection,
+            DiscordUserId userId,
+            Instant now
+    ) throws SQLException {
+        ModerationSubjectId existing = subjectIdForDiscord(connection, userId, true);
+        if (existing != null) {
+            return loadSubject(connection, existing);
+        }
+        ModerationSubjectId subjectId = insertFreshSubject(connection, now);
+        insertDiscordIdentity(connection, userId, subjectId, now);
+        return loadSubject(connection, subjectId);
+    }
+
+    private static void insertDiscordIdentity(
+            Connection connection,
+            DiscordUserId userId,
+            ModerationSubjectId subjectId,
+            Instant linkedAt
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO moderation_subject_discord_identities(
+                    discord_user_id, subject_id, linked_at
+                ) VALUES (?, ?, ?)
+                """)) {
+            statement.setBigDecimal(1, discordId(userId));
+            statement.setBytes(2, UuidBytes.toBytes(subjectId.value()));
+            statement.setTimestamp(3, Timestamp.from(linkedAt));
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Discord identity mapping was not inserted"
+            );
+        }
+    }
+
     private static VersionedSubject ensureMinecraftSubject(Connection connection, UUID playerId, Instant now)
             throws SQLException {
         ModerationSubjectId existing = subjectIdForMinecraft(connection, playerId, true);
@@ -121,25 +138,43 @@ final class JdbcDiscordIdentityRepository {
         if (subjectId.value().equals(playerId)) {
             insertSubject(connection, subjectId, now);
         }
+        insertMinecraftIdentity(connection, playerId, subjectId, now);
+        ensureMainAccount(connection, subjectId, playerId, now);
+        return loadSubject(connection, subjectId);
+    }
+
+    private static void insertMinecraftIdentity(
+            Connection connection,
+            UUID playerId,
+            ModerationSubjectId subjectId,
+            Instant linkedAt
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO moderation_subject_minecraft_identities(player_id, subject_id, linked_at)
                 VALUES (?, ?, ?)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(playerId));
             statement.setBytes(2, UuidBytes.toBytes(subjectId.value()));
-            statement.setTimestamp(3, Timestamp.from(now));
+            statement.setTimestamp(3, Timestamp.from(linkedAt));
             JdbcTransactionSupport.requireSingleUpdate(
                     statement.executeUpdate(),
                     "Minecraft identity mapping was not inserted"
             );
         }
-        ensureMainAccount(connection, subjectId, playerId, now);
-        return loadSubject(connection, subjectId);
     }
 
     private static VersionedSubject loadSubject(Connection connection, ModerationSubjectId subjectId)
             throws SQLException {
-        long revision;
+        long revision = readSubjectRevision(connection, subjectId);
+        Set<ModerationIdentity> identities = new HashSet<>();
+        readMinecraftIdentities(connection, subjectId, identities);
+        readDiscordIdentities(connection, subjectId, identities);
+        Optional<MainMinecraftAccount> mainAccount = readMainAccount(connection, subjectId);
+        return new VersionedSubject(new ModerationSubject(subjectId, Set.copyOf(identities), mainAccount), revision);
+    }
+
+    private static long readSubjectRevision(Connection connection, ModerationSubjectId subjectId)
+            throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT revision FROM moderation_subjects WHERE subject_id = ?")) {
             statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
@@ -147,11 +182,16 @@ final class JdbcDiscordIdentityRepository {
                 if (!result.next()) {
                     throw new SQLException("moderation subject does not exist");
                 }
-                revision = result.getLong("revision");
+                return result.getLong("revision");
             }
         }
+    }
 
-        Set<ModerationIdentity> identities = new HashSet<>();
+    private static void readMinecraftIdentities(
+            Connection connection,
+            ModerationSubjectId subjectId,
+            Set<ModerationIdentity> identities
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT player_id FROM moderation_subject_minecraft_identities WHERE subject_id = ?")) {
             statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
@@ -161,6 +201,13 @@ final class JdbcDiscordIdentityRepository {
                 }
             }
         }
+    }
+
+    private static void readDiscordIdentities(
+            Connection connection,
+            ModerationSubjectId subjectId,
+            Set<ModerationIdentity> identities
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT discord_user_id FROM moderation_subject_discord_identities WHERE subject_id = ?")) {
             statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
@@ -170,8 +217,12 @@ final class JdbcDiscordIdentityRepository {
                 }
             }
         }
+    }
 
-        Optional<MainMinecraftAccount> mainAccount = Optional.empty();
+    private static Optional<MainMinecraftAccount> readMainAccount(
+            Connection connection,
+            ModerationSubjectId subjectId
+    ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT player_id, selection_source
                 FROM moderation_subject_main_accounts
@@ -179,15 +230,15 @@ final class JdbcDiscordIdentityRepository {
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
             try (ResultSet result = statement.executeQuery()) {
-                if (result.next()) {
-                    mainAccount = Optional.of(new MainMinecraftAccount(
-                            UuidBytes.fromBytes(result.getBytes("player_id")),
-                            MainAccountSelectionSource.valueOf(result.getString("selection_source"))
-                    ));
+                if (!result.next()) {
+                    return Optional.empty();
                 }
+                return Optional.of(new MainMinecraftAccount(
+                        UuidBytes.fromBytes(result.getBytes("player_id")),
+                        MainAccountSelectionSource.valueOf(result.getString("selection_source"))
+                ));
             }
         }
-        return new VersionedSubject(new ModerationSubject(subjectId, Set.copyOf(identities), mainAccount), revision);
     }
 
     private static ModerationSubjectId subjectIdForMinecraft(Connection connection, UUID playerId, boolean lock)
@@ -300,7 +351,7 @@ final class JdbcDiscordIdentityRepository {
     }
 
     private static ModerationSubjectId insertFreshSubject(Connection connection, Instant now) throws SQLException {
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (int attempt = 0; attempt < SUBJECT_ALLOCATION_ATTEMPTS; attempt++) {
             ModerationSubjectId subjectId = new ModerationSubjectId(UUID.randomUUID());
             try {
                 insertSubject(connection, subjectId, now);
