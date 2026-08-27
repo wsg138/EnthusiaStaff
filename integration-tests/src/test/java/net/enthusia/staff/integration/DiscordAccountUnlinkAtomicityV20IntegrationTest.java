@@ -144,7 +144,7 @@ class DiscordAccountUnlinkAtomicityV20IntegrationTest {
             JdbcAccountLinkingStore history = new JdbcAccountLinkingStore(dataSource);
             JdbcAccountLinkAuditStore audits = new JdbcAccountLinkAuditStore(dataSource);
             seedReassignmentLinks(identities, oldDiscord, moving, remaining);
-            performReassignment(dataSource, identities, audits, oldDiscord, newDiscord, moving, remaining, admin, clock);
+            performReassignment(identities, audits, newDiscord, moving, admin, clock);
             assertReassignmentState(identities, history, oldDiscord, newDiscord, moving, remaining);
         }
     }
@@ -165,13 +165,10 @@ class DiscordAccountUnlinkAtomicityV20IntegrationTest {
     }
 
     private static void performReassignment(
-            HikariDataSource dataSource,
             JdbcDiscordModerationPersistenceStore identities,
             JdbcAccountLinkAuditStore audits,
-            DiscordUserId oldDiscord,
             DiscordUserId newDiscord,
             UUID moving,
-            UUID remaining,
             Actor admin,
             Clock clock
     ) {

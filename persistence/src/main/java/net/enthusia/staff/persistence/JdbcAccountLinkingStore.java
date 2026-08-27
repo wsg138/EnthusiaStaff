@@ -7,15 +7,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
-import net.enthusia.staff.domain.moderation.DiscordMinecraftLink;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
-import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.AccountLinkingStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 
@@ -119,35 +116,13 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
     @Override
     public List<VersionedLink> historyForMinecraft(UUID minecraftPlayerId) {
         require(minecraftPlayerId, "minecraftPlayerId");
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read account-link history", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    SELECT link_id, subject_id, discord_user_id, minecraft_player_id, linked_at,
-                           unlinked_at, source, revision
-                    FROM discord_minecraft_links
-                    WHERE minecraft_player_id = ?
-                    ORDER BY linked_at DESC, link_id DESC
-                    """)) {
-                statement.setBytes(1, UuidBytes.toBytes(minecraftPlayerId));
-                return readHistory(statement);
-            }
-        });
+        return JdbcAccountLinkHistoryReader.historyForMinecraft(dataSource, minecraftPlayerId);
     }
 
     @Override
     public List<VersionedLink> historyForDiscord(DiscordUserId discordUserId) {
         require(discordUserId, "discordUserId");
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read account-link history", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    SELECT link_id, subject_id, discord_user_id, minecraft_player_id, linked_at,
-                           unlinked_at, source, revision
-                    FROM discord_minecraft_links
-                    WHERE discord_user_id = ?
-                    ORDER BY linked_at DESC, link_id DESC
-                    """)) {
-                statement.setBigDecimal(1, discordId(discordUserId));
-                return readHistory(statement);
-            }
-        });
+        return JdbcAccountLinkHistoryReader.historyForDiscord(dataSource, discordUserId);
     }
 
     private VersionedLink complete(CompletionRequest request) {
@@ -447,16 +422,6 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         }
     }
 
-    private static List<VersionedLink> readHistory(PreparedStatement statement) throws SQLException {
-        try (ResultSet result = statement.executeQuery()) {
-            List<VersionedLink> links = new ArrayList<>();
-            while (result.next()) {
-                links.add(readLink(result));
-            }
-            return List.copyOf(links);
-        }
-    }
-
     private static StoredCode codeByHash(Connection connection, String hash, boolean lock) throws SQLException {
         String sql = "SELECT code_id, direction, initiator_discord_user_id, initiator_minecraft_player_id, "
                 + "state, expires_at, consumed_operation_key FROM discord_link_codes WHERE code_hash = ?"
@@ -480,23 +445,6 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 result.getString("state"),
                 result.getTimestamp("expires_at").toInstant(),
                 result.getString("consumed_operation_key")
-        );
-    }
-
-    private static VersionedLink readLink(ResultSet result) throws SQLException {
-        Timestamp unlinked = result.getTimestamp("unlinked_at");
-        return new VersionedLink(
-                UuidBytes.fromBytes(result.getBytes("link_id")),
-                new ModerationSubjectId(UuidBytes.fromBytes(result.getBytes("subject_id"))),
-                new DiscordMinecraftLink(
-                        discordUserId(result.getBigDecimal("discord_user_id")),
-                        UuidBytes.fromBytes(result.getBytes("minecraft_player_id")),
-                        result.getTimestamp("linked_at").toInstant(),
-                        unlinked == null ? Optional.empty() : Optional.of(unlinked.toInstant()),
-                        DiscordMinecraftLinkSource.valueOf(result.getString("source"))
-                ),
-                result.getLong("revision"),
-                false
         );
     }
 

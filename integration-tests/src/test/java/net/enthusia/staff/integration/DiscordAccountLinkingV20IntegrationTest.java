@@ -467,8 +467,8 @@ class DiscordAccountLinkingV20IntegrationTest {
             start.await();
             service.completeFromMinecraft(code, playerId);
             successes.incrementAndGet();
-        } catch (RuntimeException expectedRaceLoss) {
-            assertTrue(expectedRaceLoss instanceof ModerationPersistenceException);
+        } catch (ModerationPersistenceException expectedRaceLoss) {
+            return;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(interrupted);
