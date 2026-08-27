@@ -49,6 +49,18 @@ class StaffModerationConfigurationTest {
                 () -> StaffModerationConfiguration.fromEnvironment(weakSecret));
     }
 
+    @Test
+    void rejectsAlternateIpv6LoopbackAuthorityEndpoint() {
+        Map<String, String> alternateLoopback = complete();
+        alternateLoopback.put(
+                StaffModerationConfiguration.AUTHORITY_URL_KEY,
+                "http://[::1]:8771/v1/staff-rank"
+        );
+
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromEnvironment(alternateLoopback));
+    }
+
     private static Map<String, String> complete() {
         Map<String, String> values = new HashMap<>();
         values.put(StaffModerationConfiguration.JDBC_URL_KEY, "jdbc:mariadb://localhost/enthusia");

@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import net.enthusia.staff.persistence.DatabaseConfig;
 
 /** Optional environment-only configuration for D06 read-only moderation interactions. */
@@ -29,8 +28,8 @@ final class StaffModerationConfiguration {
     private static final int MIN_CRYPTO_SECRET_LENGTH = 32;
     private static final int MIN_PORT = 1;
     private static final String HTTP_SCHEME = "http";
+    private static final String AUTHORITY_HOST = "127.0.0.1";
     private static final String AUTHORITY_PATH = "/v1/staff-rank";
-    private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "localhost", "::1", "[::1]");
     private static final List<String> REQUIRED = List.of(
             JDBC_URL_KEY,
             DB_USERNAME_KEY,
@@ -133,7 +132,7 @@ final class StaffModerationConfiguration {
 
     private static boolean validAuthorityNetwork(URI uri) {
         return HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
-                && LOOPBACK_HOSTS.contains(uri.getHost())
+                && AUTHORITY_HOST.equals(uri.getHost())
                 && uri.getPort() >= MIN_PORT;
     }
 
