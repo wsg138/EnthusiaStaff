@@ -2,6 +2,9 @@ name: Staff Bot Staging Release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/staff-bot-staging-release.yml"
   push:
     branches:
       - main
@@ -10,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: staff-bot-staging-release
+  group: staff-bot-staging-release-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +26,7 @@ jobs:
       - name: Check out exact source
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Record exact source SHA
@@ -31,7 +34,9 @@ jobs:
         run: |
           set -Eeuo pipefail
           TESTED_SHA="$(git rev-parse HEAD)"
-          test "${TESTED_SHA}" = "${GITHUB_SHA}"
+          if [[ "${GITHUB_EVENT_NAME}" != 'pull_request' ]]; then
+            test "${TESTED_SHA}" = "${GITHUB_SHA}"
+          fi
           echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
 
       - name: Set up Java 21
@@ -75,9 +80,9 @@ jobs:
           cp -- "${jars[0]}" staging-release/EnthusiaStaff-StaffBot.jar
           test -s staging-release/EnthusiaStaff-StaffBot.jar
           unzip -p staging-release/EnthusiaStaff-StaffBot.jar META-INF/MANIFEST.MF \
-            | grep -Fq 'Main-Class: net.enthusia.staff.discordbot.StaffBotApplication'
+            | grep -F 'Main-Class: net.enthusia.staff.discordbot.StaffBotApplication' >/dev/null
           jar tf staging-release/EnthusiaStaff-StaffBot.jar \
-            | grep -Fq 'net/dv8tion/jda/api/JDA.class'
+            | grep -Fx 'net/dv8tion/jda/api/JDA.class' >/dev/null
 
           (
             cd staging-release
@@ -91,7 +96,20 @@ jobs:
             echo "built_by_attempt=${GITHUB_RUN_ATTEMPT}"
           } > staging-release/staff-bot-staging-source.txt
 
+      - name: Validate pull-request staging assets
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s staging-release/EnthusiaStaff-StaffBot.jar
+          test -s staging-release/EnthusiaStaff-StaffBot.jar.sha256
+          test -s staging-release/staff-bot-staging-source.txt
+          grep -Fx "source_sha=${TESTED_SHA}" staging-release/staff-bot-staging-source.txt >/dev/null
+          echo 'Staging release assets built successfully; publication is disabled on pull requests.' \
+            >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Publish fixed staging release
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -131,15 +149,19 @@ jobs:
             --clobber
 
       - name: Verify published staging asset
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-          published="$({ gh release view staff-bot-staging \
-            --repo "${GITHUB_REPOSITORY}" \
-            --json assets \
-            --jq '.assets[].name'; } | sort)"
+          published="$(
+            gh release view staff-bot-staging \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json assets \
+              --jq '.assets[].name' \
+              | sort
+          )"
           grep -Fxq 'EnthusiaStaff-StaffBot.jar' <<< "${published}"
           grep -Fxq 'EnthusiaStaff-StaffBot.jar.sha256' <<< "${published}"
           grep -Fxq 'staff-bot-staging-source.txt' <<< "${published}"
