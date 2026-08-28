@@ -14,7 +14,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import org.junit.jupiter.api.Test;
 
 class HttpStaffAuthorityClientTest {
-    private static final String SECRET = "test-authority-secret";
+    private static final String SECRET = Character.toString('s').repeat(40);
 
     @Test
     void preservesAuthorityResourcePathWhenAddingPlayerQuery() throws IOException {
