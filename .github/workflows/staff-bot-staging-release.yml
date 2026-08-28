@@ -1,0 +1,153 @@
+name: Staff Bot Staging Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: staff-bot-staging-release
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish staging staff bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Record exact source SHA
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TESTED_SHA="$(git rev-parse HEAD)"
+          test "${TESTED_SHA}" = "${GITHUB_SHA}"
+          echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        with:
+          cache-read-only: true
+
+      - name: Build and verify executable staff-bot JAR
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x gradlew
+          ./gradlew :staff-bot:clean :staff-bot:check :staff-bot:shadowJar \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+          test "${TESTED_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Prepare fixed staging assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p staging-release
+          mapfile -d '' jars < <(
+            find staff-bot/build/libs -maxdepth 1 -type f \
+              -name 'EnthusiaStaff-StaffBot-*.jar' \
+              ! -name '*-sources.jar' -print0
+          )
+          if (( ${#jars[@]} != 1 )); then
+            printf 'Expected exactly one staff-bot runtime JAR; found %d\n' "${#jars[@]}" >&2
+            exit 1
+          fi
+
+          cp -- "${jars[0]}" staging-release/EnthusiaStaff-StaffBot.jar
+          test -s staging-release/EnthusiaStaff-StaffBot.jar
+          unzip -p staging-release/EnthusiaStaff-StaffBot.jar META-INF/MANIFEST.MF \
+            | grep -Fq 'Main-Class: net.enthusia.staff.discordbot.StaffBotApplication'
+          jar tf staging-release/EnthusiaStaff-StaffBot.jar \
+            | grep -Fq 'net/dv8tion/jda/api/JDA.class'
+
+          (
+            cd staging-release
+            sha256sum EnthusiaStaff-StaffBot.jar > EnthusiaStaff-StaffBot.jar.sha256
+          )
+          {
+            echo "source_sha=${TESTED_SHA}"
+            echo "environment=staging"
+            echo "artifact=EnthusiaStaff-StaffBot.jar"
+            echo "built_by_run=${GITHUB_RUN_ID}"
+            echo "built_by_attempt=${GITHUB_RUN_ATTEMPT}"
+          } > staging-release/staff-bot-staging-source.txt
+
+      - name: Publish fixed staging release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          readonly tag='staff-bot-staging'
+          readonly title='EnthusiaStaff Staff Bot — Staging'
+          notes="${RUNNER_TEMP}/staff-bot-staging-notes.md"
+          {
+            echo 'Temporary test-bot runtime built from canonical `main`.'
+            echo
+            echo "Source SHA: \`${TESTED_SHA}\`"
+            echo
+            echo 'This release is staging-only. It contains no Discord token, database credential, authority secret, or production configuration.'
+          } > "${notes}"
+
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --notes-file "${notes}" \
+              --prerelease
+          else
+            gh release create "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${TESTED_SHA}" \
+              --title "${title}" \
+              --notes-file "${notes}" \
+              --prerelease
+          fi
+
+          gh release upload "${tag}" \
+            staging-release/EnthusiaStaff-StaffBot.jar \
+            staging-release/EnthusiaStaff-StaffBot.jar.sha256 \
+            staging-release/staff-bot-staging-source.txt \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
+
+      - name: Verify published staging asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          published="$({ gh release view staff-bot-staging \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json assets \
+            --jq '.assets[].name'; } | sort)"
+          grep -Fxq 'EnthusiaStaff-StaffBot.jar' <<< "${published}"
+          grep -Fxq 'EnthusiaStaff-StaffBot.jar.sha256' <<< "${published}"
+          grep -Fxq 'staff-bot-staging-source.txt' <<< "${published}"
+          {
+            echo '## Staff bot staging release'
+            echo
+            echo "- Exact source: \`${TESTED_SHA}\`"
+            echo '- Release tag: `staff-bot-staging`'
+            echo '- Runtime asset: `EnthusiaStaff-StaffBot.jar`'
+            echo '- Environment fence remains runtime-controlled by `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging`.'
+          } >> "${GITHUB_STEP_SUMMARY}"
