@@ -25,10 +25,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Rank is calculated from current LuckPerms data on every request; Discord roles are never inputs.
  */
 public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
-    // Codacy false positive: the literal is an environment-variable name, not credential material.
-    public static final String SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
-    // Codacy false positive: the literal is an environment-variable name, not credential material.
-    public static final String PORT_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    public static final String SECRET_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
+    public static final String PORT_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT";
 
     private static final int DEFAULT_PORT = 8771;
     private static final int MIN_PORT = 1;
@@ -94,7 +92,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     private static Optional<String> configuredSecret(JavaPlugin plugin) {
-        String secret = System.getenv(SECRET_KEY);
+        String secret = System.getenv(SECRET_ENV);
         if (secret == null || secret.isBlank()) {
             return Optional.empty();
         }
@@ -107,7 +105,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private static Optional<Integer> configuredPort(JavaPlugin plugin) {
         try {
-            return Optional.of(parsePort(System.getenv(PORT_KEY)));
+            return Optional.of(parsePort(System.getenv(PORT_ENV)));
         } catch (IllegalArgumentException exception) {
             log(plugin, "discord_staff_authority_invalid_port", exception);
             return Optional.empty();

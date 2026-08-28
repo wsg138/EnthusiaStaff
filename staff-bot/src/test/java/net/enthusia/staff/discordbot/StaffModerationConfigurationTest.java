@@ -21,7 +21,7 @@ class StaffModerationConfigurationTest {
     @Test
     void partialConfigurationFailsClosed() {
         assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromEnvironment(Map.of(
-                StaffModerationConfiguration.JDBC_URL_KEY, "jdbc:mariadb://localhost/enthusia"
+                StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia"
         )));
     }
 
@@ -39,12 +39,12 @@ class StaffModerationConfigurationTest {
     @Test
     void rejectsNonLoopbackAuthorityEndpointAndWeakCryptoSecret() {
         Map<String, String> nonLoopback = complete();
-        nonLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_KEY, "http://10.0.0.2:8771/v1/staff-rank");
+        nonLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_ENV, "http://10.0.0.2:8771/v1/staff-rank");
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(nonLoopback));
 
         Map<String, String> weakSecret = complete();
-        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, Character.toString('w').repeat(8));
+        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_ENV, Character.toString('w').repeat(8));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(weakSecret));
     }
@@ -53,7 +53,7 @@ class StaffModerationConfigurationTest {
     void rejectsAlternateIpv6LoopbackAuthorityEndpoint() {
         Map<String, String> alternateLoopback = complete();
         alternateLoopback.put(
-                StaffModerationConfiguration.AUTHORITY_URL_KEY,
+                StaffModerationConfiguration.AUTHORITY_URL_ENV,
                 "http://[::1]:8771/v1/staff-rank"
         );
 
@@ -63,12 +63,12 @@ class StaffModerationConfigurationTest {
 
     private static Map<String, String> complete() {
         Map<String, String> values = new HashMap<>();
-        values.put(StaffModerationConfiguration.JDBC_URL_KEY, "jdbc:mariadb://localhost/enthusia");
-        values.put(StaffModerationConfiguration.DB_USERNAME_KEY, "readonly");
-        values.put(StaffModerationConfiguration.DB_PASSWORD_KEY, DATABASE_PASSWORD);
-        values.put(StaffModerationConfiguration.AUTHORITY_URL_KEY, "http://127.0.0.1:8771/v1/staff-rank");
-        values.put(StaffModerationConfiguration.AUTHORITY_SECRET_KEY, AUTHORITY_SECRET);
-        values.put(StaffModerationConfiguration.COMPONENT_SECRET_KEY, COMPONENT_SECRET);
+        values.put(StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia");
+        values.put(StaffModerationConfiguration.DB_USERNAME_ENV, "readonly");
+        values.put(StaffModerationConfiguration.DB_PASSWORD_ENV, DATABASE_PASSWORD);
+        values.put(StaffModerationConfiguration.AUTHORITY_URL_ENV, "http://127.0.0.1:8771/v1/staff-rank");
+        values.put(StaffModerationConfiguration.AUTHORITY_SECRET_ENV, AUTHORITY_SECRET);
+        values.put(StaffModerationConfiguration.COMPONENT_SECRET_ENV, COMPONENT_SECRET);
         return values;
     }
 
