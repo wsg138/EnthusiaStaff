@@ -61,6 +61,18 @@ class StaffModerationConfigurationTest {
                 () -> StaffModerationConfiguration.fromEnvironment(alternateLoopback));
     }
 
+    @Test
+    void rejectsOutOfRangeAuthorityPort() {
+        Map<String, String> invalidPort = complete();
+        invalidPort.put(
+                StaffModerationConfiguration.AUTHORITY_URL_ENV,
+                "http://127.0.0.1:70000/v1/staff-rank"
+        );
+
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromEnvironment(invalidPort));
+    }
+
     private static Map<String, String> complete() {
         Map<String, String> values = new HashMap<>();
         values.put(StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia");
