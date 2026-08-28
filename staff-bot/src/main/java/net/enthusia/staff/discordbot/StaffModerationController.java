@@ -13,6 +13,7 @@ import net.enthusia.staff.domain.moderation.ModerationPlatform;
 
 /** Pure D06 interaction/controller layer. It never invokes a destructive moderation port. */
 final class StaffModerationController {
+    private static final System.Logger LOGGER = System.getLogger(StaffModerationController.class.getName());
     private static final int AMBIGUOUS_LABEL_LIMIT = 90;
     private static final String GENERIC_UNAVAILABLE = "The read-only moderation view is temporarily unavailable.";
     private static final Map<Class<?>, String> DENIAL_MESSAGES = Map.of(
@@ -472,8 +473,16 @@ final class StaffModerationController {
         try {
             return action.get();
         } catch (RuntimeException exception) {
-            String message = DENIAL_MESSAGES.getOrDefault(exception.getClass(), GENERIC_UNAVAILABLE);
-            return Response.text(message, List.of());
+            String denialMessage = DENIAL_MESSAGES.get(exception.getClass());
+            if (denialMessage != null) {
+                return Response.text(denialMessage, List.of());
+            }
+            LOGGER.log(
+                    System.Logger.Level.WARNING,
+                    "discord_read_controller_failed type={0}",
+                    exception.getClass().getSimpleName()
+            );
+            return Response.text(GENERIC_UNAVAILABLE, List.of());
         }
     }
 
