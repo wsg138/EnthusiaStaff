@@ -1,63 +1,71 @@
 # ES-D06 — Read-only staff moderation UX
 
-Status: `MERGE_PENDING`
-Priority: 135
-Depends on: `ES-D04`, `ES-D05`
-Internal package: yes
-Claimed: 2026-08-27 from canonical `main` `500136b37c9acc30b1de8a057feb79d3d16fc400`
-Owner reassignment: 2026-08-28 to the current worker to resume and finish the existing D06 continuation.
-Implementation branch: `package/es-d06-read-only-moderation-ux`
-Implementation PR: #177
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-active.md`
-Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-codacy-blocked.md`
+Status: `COMPLETE`. Priority: 135. Depends on `ES-D04`, `ES-D05` (both `COMPLETE`). Internal package.
 
-## Objective
+## Terminal state
 
-Provide fast, secure read-only Discord moderation surfaces before destructive actions exist.
+Selected on 2026-08-27 and owner-reassigned on 2026-08-28 to finish the existing continuation. Completed on 2026-08-28 through implementation, review repair, exact-head hosted/static/runtime validation, canonical Pi staging, normal merge, containment, cleanup, and terminal publication.
 
-## Scope
+- Starting `main`: `500136b37c9acc30b1de8a057feb79d3d16fc400`.
+- Implementation PR: #177.
+- Frozen reviewed/validated product head: `b624ee799aea7db7c561b0b064733374d4c61067`.
+- Normal product merge commit: `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3`.
+- Product merge parents: pre-merge `main` `500136b37c9acc30b1de8a057feb79d3d16fc400` and exact feature head `b624ee799aea7db7c561b0b064733374d4c61067`.
+- Product and merge tree: `5b3fd4d313dd4437dc04c346bd39efcc4e00f007`.
+- Post-merge containment: one commit ahead of the product head, zero behind, zero file differences.
+- Temporary implementation branch `package/es-d06-read-only-moderation-ux`: absent after merge.
+- Temporary diagnostic branch `diagnostic/es-d06-codacy-remaining-20260828`: contains no file difference from merged `main` after removal of its diagnostic-only workflow; no unique product or diagnostic file remains. The connected mutation surface does not expose branch deletion, so the fully contained branch is safe to delete when that operation is available.
+- D06 adds no Flyway migration.
+- Production Discord changes, deployment/private-production-data access, LiteBans authority changes, issue #43 acceptance, and cutover remain unauthorized and were not performed.
 
-`/moderate <user>`, user/message context moderation, `/moderate-minecraft`, `/linked`, `/history`, notes/cases read views, target resolution by Discord/Minecraft IDs/names with ambiguity selectors, compact ephemeral profile panel, organized history filters, authoritative linked-staff actor resolution, component custom-ID signing/expiry/replay protection, permission-aware discovery and reauthorization.
+Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-28-es-d06-complete.md`.
+Historical active handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-active.md`.
+Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-codacy-blocked.md`.
 
-## Exclusions
+## Delivered scope
 
-No warn/mute/kick/ban/restrict side effects, evidence mutation beyond safe read/context capture primitives, AutoMod or website work.
+D06 provides read-only `/moderate`, user/message context moderation, `/moderate-minecraft`, `/linked`, `/history`, notes/cases views, ambiguity-safe Discord/Minecraft target resolution, compact ephemeral panels, authoritative linked-staff actor resolution, read-time reauthorization, permission-aware discovery, and signed expiring replay-resistant private component controls. Discord roles alone do not grant domain moderation authority.
 
-## Validation
+Security/correctness hardening includes exact `127.0.0.1` authority-bridge binding, a Discord-safe 25-choice ambiguity ceiling with explicit truncation behavior, second-granularity component TTL validation, bounded read/render behavior, explicit allowlisted response construction, and regression coverage for authorization, rejection, replay, ambiguity, lifecycle, and failure paths.
 
-Interaction/target-resolution/authorization/replay/privacy tests, stale-component denial, missing-link denial, Discord-only and Bedrock-linked subjects, full CI/review. Prove Discord roles alone cannot grant moderation authority.
+## Final exact-head evidence — PASS
 
-## Implementation checklist
+For exact frozen product head `b624ee799aea7db7c561b0b064733374d4c61067`:
 
-- [x] Read-only slash/context command and ephemeral panel surface implemented.
-- [x] Authoritative linked-staff actor resolution and read-time authorization implemented; Discord roles do not grant domain authority.
-- [x] Signed, expiring, replay-resistant private component protocol implemented.
-- [x] Discord-only, Java/Bedrock-linked, missing-link, ambiguity, privacy, stale/replay, and authorization paths covered by tests.
-- [x] Authority bridge restricted to the exact IPv4 loopback endpoint used by Paper; alternate loopback hosts are rejected with regression coverage.
-- [x] Ambiguous player resolutions are bounded to Discord's 25-choice limit and mark overflow as truncated; regression coverage exercises 30 matches.
-- [x] The previously opaque Codacy/PMD blocker was reproduced per finding with repository PMD 6.55.0 rules and repaired without broad exclusions.
-- [x] The sole retained PMD suppression is line-specific and documented: the authority endpoint owns its bounded executor and shuts it down both on startup rollback and `close()`.
-- [x] Repair validation run `33144490940` / job `98762443017` passed PMD with zero findings and focused `domain`, `staff-bot`, and `paper` tests.
-- [x] Broad diagnostic run `33188515534` / job `98907671552` reproduced the current Semgrep category and proved all ten local reports are the same `hard-coded-password` false positive on environment-variable-name constants.
-- [x] Ineffective Semgrep suppressions were removed; the false-positive trigger is repaired structurally by naming environment-variable-name constants `*_ENV` rather than misleading `*_KEY`, while leaving every public environment-variable literal and runtime behavior unchanged.
-- [ ] Exact-head hosted Coverage, Staff Bot Configuration Cache, Sentinel Restart Artifact/verdict, Codacy, review, and canonical Pi staging gates must all pass on the commit containing this record before merge.
-- [ ] Immediately before merge, reconcile the PR against the then-current `main`, require mergeability, and use a normal merge commit if `main` advanced; any changed executable head must rerun invalidated exact-head gates.
-- [ ] Merge PR #177 normally, verify containment/no unique work/cleanup, and publish terminal `COMPLETE` only after every applicable gate is actually satisfied.
+- Coverage/full Java 21 validation `33204412446` / job `98961747084`: `SUCCESS`. Clean build/tests including MariaDB/Testcontainers completed; aggregate JaCoCo was 51.39% lines, 41.50% branches, and 53.72% instructions.
+- Validation artifact `9699285991`: `sha256:ded2a61af49f789a6ac18754c0b236281d1ec31be8a7df4fbfb269509e8f9d96`.
+- Runtime packaging inspection: 27 provider API source types checked, zero runtime leaks. Paper SHA-256 `04d23cf54a0d1cd3f524b86b0f380e0ad580a7641d369d46fa67dd156f88ff2f`; Velocity SHA-256 `ef6dcaca430e2e896be5243604de36e037712bc73eec7dd7d84bf25eb78940f1`.
+- Staff Bot Configuration Cache run `33204412468`: `SUCCESS`.
+- Sentinel Restart Artifact run `33204412444` / job `98961683122`: `SUCCESS`.
+- Durable Sentinel restart job `327`: `PAPER_RESTART_OK` after readiness and clean shutdown twice against one disposable state.
+- Hosted Codacy Static Code Analysis check `98961965089`: `SUCCESS`, zero annotations and no new valid findings.
+- Codacy Diff Coverage check `98963786634`: `SUCCESS`, 45.74% diff coverage; no repository gate is defined for this metric.
+- Repository-native PMD 6.55.0 repair validation `33144490940` / job `98762443017`: zero findings plus focused Java 21 tests. Broad static diagnostics were reconciled without broad exclusions; historical false-positive evidence remains documented rather than relabeled.
+- All five visible PR #177 inline review threads were resolved/outdated before merge; every valid CodeRabbit finding was repaired.
+- Canonical public Pi staging run `33204694500`: `SUCCESS` through exact-head build, private dispatch, verdict collection, transient-transfer removal, and terminal result publication.
+- Correlated private staging run `33205431529` / job `98965140421`: `SUCCESS` on trusted `Lincoln-PI-4`, including exact bridge verification, guarded disposable Paper boot/restart, sanitized evidence publication, and durable-evidence enforcement.
+- Sanitized Pi evidence identity: `artifact=enthusiastaff-paper-b624ee799aea-33204694500-1;runtime_sha256=728ab454b9cb546625985a02fa5d6c9fc7a6e37020974a409862f411e58dc96b`.
 
-## Current checkpoint
+## Merge and containment
 
-The historical implementation blocker is cleared. A temporary branch-only PMD diagnostic exposed concrete findings; the first repair addressed resource ownership, literal/performance findings, compact-record parameter reassignment, and mutable-map concurrency in test fakes. Repository-native PMD 6.55.0 repair validation `33144490940` / job `98762443017` then reported zero findings and completed focused Java 21 tests successfully.
+Immediately before merge, `main` was re-read at `500136b37c9acc30b1de8a057feb79d3d16fc400`, PR #177 remained mergeable, the PR head remained exact `b624ee799aea7db7c561b0b064733374d4c61067`, every required exact-head gate was terminal green, and no unresolved inline review thread remained.
 
-A broad Codacy CLI diagnostic at `cd5f274813284b8432c6e128ca7a60ea64ad8cad` (`33144915073` / job `98763712253`) identified ten Semgrep `Semgrep_codacy.java.security.hard-coded-password` reports in exactly two files. Every report was a public environment-variable name, not embedded credential material. Generic and rule-specific `nosemgrep` comments did not reliably clear hosted/current CLI findings and are therefore not used as the terminal repair.
+PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3`; no squash, rebase, force-push, or auto-merge was used. The merge commit has the exact validated feature head as its second parent. Compare from the frozen product head to the merge is one commit ahead, zero behind, with zero file differences, so the validated product is exactly contained.
 
-The current diagnostic branch was fast-forwarded from exact D06 source head `7572017f59057b7e50a75d5d6d193b71ea93fe63` and run `33188515534` / job `98907671552` independently reproduced the same ten reports, all on declarations named `*_KEY`. It found no additional Semgrep category. The D06 repair committed with this record removes that misleading identifier pattern (`*_KEY` → `*_ENV`) while preserving the literal environment names and all secret/runtime semantics. No repository-wide analyzer exclusion is added.
+The implementation branch is absent. The temporary diagnostic workflow was removed from the retained diagnostic branch; comparison against merged `main` has zero file differences. No unique D06 work remains.
 
-The preceding exact head `7572017f59057b7e50a75d5d6d193b71ea93fe63` passed Coverage `33183626083` / job `98890856338`, Staff Bot Configuration Cache `33183626002` / job `98890856444`, and durable Sentinel restart job `321` with `PAPER_RESTART_OK`; Codacy Static check `98891617701` remained `action_required` with seven hosted issues and is explicitly non-passing. Those executable passes are superseded by this source repair and are not reused as exact-head evidence.
+## Completion checklist
 
-One live CodeRabbit inline finding correctly required the final current-`main`/mergeability gate to appear in the package checklist. That gate is now explicit above. The thread may be resolved only after this repair is published and the reviewer-facing evidence is updated.
+- [x] Implement all read-only Discord staff moderation surfaces in scope.
+- [x] Preserve authoritative EnthusiaStaff identity/authorization and prove Discord roles alone cannot grant moderation authority.
+- [x] Implement signed, expiring, replay-resistant private interactions and bounded ambiguity handling.
+- [x] Add authorization, rejection, replay, ambiguity, privacy, lifecycle, integration, and failure-path tests.
+- [x] Harshly review the complete diff and repair all valid CodeRabbit/Codacy/PMD/CI findings without broad exclusions.
+- [x] Pass exact-head Coverage, configuration-cache, Sentinel artifact/verdict, hosted Codacy, review, and canonical public/private Pi staging on the same frozen head.
+- [x] Reconcile unchanged current `main` and mergeability immediately before merge.
+- [x] Merge PR #177 normally and prove exact product containment.
+- [x] Remove unique temporary implementation/diagnostic content and publish terminal `COMPLETE` state.
 
-No merge has been attempted. No production Discord configuration/data access, secret handling, deployment, moderation mutation, LiteBans authority change, or issue #43 acceptance has occurred. Unrelated PR #139 / ES-X03 and PR #178 / ES-D13 remain independent and untouched.
+## Routing
 
-## Exact next action
-
-Treat the commit containing this record as the new merge candidate and publish its immutable SHA on PR #177. Run every applicable exact-head hosted/static/review/Sentinel/canonical-Pi gate on that same head. Require hosted Codacy to report zero new valid findings and zero valid unresolved review threads. Immediately before merge, re-read `main`; if it advanced, preserve legitimate concurrent work with a normal merge commit and rerun invalidated gates. Merge PR #177 normally only after all gates pass, then prove containment, clean up temporary D06/diagnostic branches when safe, publish terminal D06 `COMPLETE` state durably, and stop without beginning another Discord package.
+`ES-D07 — Discord punishment enforcement` is now dependency-complete `READY`. `ES-D13 — Discord role-sync replacement` remains `READY`. A future Discord worker selects D07 first by priority unless live GitHub exposes a higher-priority actionable continuation. This D06 worker stops without starting either package.
