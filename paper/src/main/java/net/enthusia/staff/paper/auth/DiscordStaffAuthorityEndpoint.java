@@ -81,6 +81,16 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
+        Optional<String> secret = configuredSecret(plugin);
+        Optional<Integer> port = configuredPort(plugin);
+        Optional<LuckPerms> luckPerms = configuredLuckPerms(plugin);
+        if (secret.isEmpty() || port.isEmpty() || luckPerms.isEmpty()) {
+            return Optional.empty();
+        }
+        return bind(plugin, secret.orElseThrow(), port.orElseThrow(), luckPerms.orElseThrow());
+    }
+
+    private static Optional<String> configuredSecret(JavaPlugin plugin) {
         String secret = System.getenv(SECRET_KEY);
         if (secret == null || secret.isBlank()) {
             return Optional.empty();
@@ -89,24 +99,37 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             log(plugin, "discord_staff_authority_secret_too_short", null);
             return Optional.empty();
         }
-        int port;
+        return Optional.of(secret);
+    }
+
+    private static Optional<Integer> configuredPort(JavaPlugin plugin) {
         try {
-            port = parsePort(System.getenv(PORT_KEY));
+            return Optional.of(parsePort(System.getenv(PORT_KEY)));
         } catch (IllegalArgumentException exception) {
             log(plugin, "discord_staff_authority_invalid_port", exception);
             return Optional.empty();
         }
+    }
+
+    private static Optional<LuckPerms> configuredLuckPerms(JavaPlugin plugin) {
         if (!plugin.getServer().getPluginManager().isPluginEnabled("LuckPerms")) {
             log(plugin, "discord_staff_authority_luckperms_absent", null);
             return Optional.empty();
         }
-        final LuckPerms luckPerms;
         try {
-            luckPerms = LuckPermsProvider.get();
+            return Optional.of(LuckPermsProvider.get());
         } catch (IllegalStateException exception) {
             log(plugin, "discord_staff_authority_luckperms_unavailable", exception);
             return Optional.empty();
         }
+    }
+
+    private static Optional<DiscordStaffAuthorityEndpoint> bind(
+            JavaPlugin plugin,
+            String secret,
+            int port,
+            LuckPerms luckPerms
+    ) {
         try {
             return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, secret, port, luckPerms));
         } catch (IOException | RuntimeException exception) {

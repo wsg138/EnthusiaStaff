@@ -38,38 +38,51 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
         if (playerId == null) {
             throw new IllegalArgumentException("playerId must be present");
         }
+        HttpResponse<String> response = send(request(playerId));
+        return decode(response);
+    }
+
+    private HttpRequest request(UUID playerId) {
         String encodedPlayer = URLEncoder.encode(playerId.toString(), StandardCharsets.UTF_8);
         // nosemgrep -- endpoint is startup-validated as an explicit loopback-only URI; the only dynamic value is a UUID.
         URI requestUri = endpoint.resolve("?player=" + encodedPlayer);
         // nosemgrep -- Cleartext HTTP is confined to the authenticated loopback bridge and never leaves the host.
-        HttpRequest request = HttpRequest.newBuilder(requestUri)
+        return HttpRequest.newBuilder(requestUri)
                 .timeout(REQUEST_TIMEOUT)
                 .header("Authorization", authorizationHeader)
                 .GET()
                 .build();
-        final HttpResponse<String> response;
+    }
+
+    private HttpResponse<String> send(HttpRequest request) {
         try {
-            // nosemgrep -- requestUri is constrained to the loopback authority endpoint before this client is constructed.
-            response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            // nosemgrep -- request URI is constrained to the loopback authority endpoint before this client is constructed.
+            return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (IOException exception) {
             throw new UnavailableException("staff authority request failed", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new UnavailableException("staff authority request interrupted", exception);
         }
-        int status = response.statusCode();
-        if (status == HTTP_NOT_FOUND) {
+    }
+
+    private static Optional<StaffRank> decode(HttpResponse<String> response) {
+        if (response.statusCode() == HTTP_NOT_FOUND) {
             return Optional.empty();
         }
-        if (status != HTTP_OK) {
+        if (response.statusCode() != HTTP_OK) {
             throw new UnavailableException("staff authority request was not successful");
         }
+        return Optional.of(parseRank(response.body()));
+    }
+
+    private static StaffRank parseRank(String body) {
         try {
-            StaffRank rank = StaffRank.valueOf(response.body().trim());
+            StaffRank rank = StaffRank.valueOf(body.trim());
             if (rank == StaffRank.SYSTEM) {
                 throw new IllegalArgumentException("SYSTEM is not an interactive staff rank");
             }
-            return Optional.of(rank);
+            return rank;
         } catch (IllegalArgumentException exception) {
             throw new UnavailableException("staff authority response was invalid", exception);
         }
