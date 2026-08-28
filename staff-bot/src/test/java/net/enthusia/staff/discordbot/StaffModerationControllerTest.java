@@ -9,7 +9,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -169,9 +169,9 @@ class StaffModerationControllerTest {
     }
 
     private static final class FakeReadData implements StaffModerationReadService.ReadData {
-        private final Map<DiscordUserId, VersionedSubject> discordSubjects = new HashMap<>();
-        private final Map<UUID, VersionedSubject> minecraftSubjects = new HashMap<>();
-        private final Map<UUID, PlayerIdentity> players = new HashMap<>();
+        private final Map<DiscordUserId, VersionedSubject> discordSubjects = new ConcurrentHashMap<>();
+        private final Map<UUID, VersionedSubject> minecraftSubjects = new ConcurrentHashMap<>();
+        private final Map<UUID, PlayerIdentity> players = new ConcurrentHashMap<>();
         private final AtomicInteger targetDiscordReads = new AtomicInteger();
         private final AtomicInteger playerReads = new AtomicInteger();
         private final AtomicInteger resolutionReads = new AtomicInteger();

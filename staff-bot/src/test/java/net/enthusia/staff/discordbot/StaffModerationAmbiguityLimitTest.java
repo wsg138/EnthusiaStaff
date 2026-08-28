@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,7 +92,7 @@ class StaffModerationAmbiguityLimitTest {
     }
 
     private static final class FakeReadData implements StaffModerationReadService.ReadData {
-        private final Map<DiscordUserId, VersionedSubject> discordSubjects = new HashMap<>();
+        private final Map<DiscordUserId, VersionedSubject> discordSubjects = new ConcurrentHashMap<>();
         private PlayerResolution resolution = new PlayerResolution.Missing();
 
         @Override public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) { return Optional.ofNullable(discordSubjects.get(userId)); }

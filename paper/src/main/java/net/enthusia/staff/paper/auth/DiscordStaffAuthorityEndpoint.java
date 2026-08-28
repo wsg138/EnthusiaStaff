@@ -37,6 +37,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final String PATH = "/v1/staff-rank";
+    private static final String GET_METHOD = "GET";
 
     private final JavaPlugin plugin;
     private final String bearer;
@@ -55,7 +56,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         this.luckPerms = luckPerms;
         // nosemgrep -- Literal IPv4 loopback bind; this endpoint is an inbound local authority bridge only.
         HttpServer createdServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), BACKLOG);
-        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
+        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor( // NOPMD - ownership transfers to this AutoCloseable; close() and startup rollback shut it down.
                 WORKER_THREADS,
                 WORKER_THREADS,
                 0L,
@@ -140,7 +141,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         try {
-            if (!"GET".equals(exchange.getRequestMethod())) {
+            if (!GET_METHOD.equals(exchange.getRequestMethod())) {
                 respond(exchange, 405, "");
                 return;
             }

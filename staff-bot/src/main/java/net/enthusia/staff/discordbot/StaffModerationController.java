@@ -24,6 +24,7 @@ final class StaffModerationController {
     private static final int AMBIGUOUS_LABEL_LIMIT = 90;
     private static final int CASE_REASON_LIMIT = 300;
     private static final String GENERIC_UNAVAILABLE = "The read-only moderation view is temporarily unavailable.";
+    private static final String ITEM_SEPARATOR = " — ";
     private static final Map<Class<?>, String> DENIAL_MESSAGES = Map.of(
             LinkedStaffActorResolver.MissingStaffLinkException.class,
             "This Discord account is not linked to a current Enthusia staff identity.",
@@ -313,13 +314,13 @@ final class StaffModerationController {
         require(actor, targetStaff, DiscordModerationOperation.VIEW_HISTORY, target);
         require(actor, targetStaff, DiscordModerationOperation.VIEW_NOTES, target);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**Moderation profile**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Moderation profile**\n");
         appendIdentity(content, snapshot);
-        content.append("Active Discord sanctions: not available before Discord enforcement (D07)\n")
-                .append("Active Minecraft sanctions: ").append(snapshot.activeMinecraftSanctions().size()).append('\n')
-                .append("Recent history entries: ").append(snapshot.recentHistory().size()).append('\n')
-                .append("Recent cases: ").append(snapshot.recentCases().size()).append('\n')
-                .append("Recent notes: ").append(snapshot.recentNotes().size());
+        content.append("Active Discord sanctions: not available before Discord enforcement (D07)\nActive Minecraft sanctions: ")
+                .append(snapshot.activeMinecraftSanctions().size())
+                .append("\nRecent history entries: ").append(snapshot.recentHistory().size())
+                .append("\nRecent cases: ").append(snapshot.recentCases().size())
+                .append("\nRecent notes: ").append(snapshot.recentNotes().size());
         return Response.text(limit(content), navigation(invokerId, targetRef));
     }
 
@@ -331,7 +332,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_LINKED_ACCOUNTS);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**Linked accounts**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Linked accounts**\n");
         appendLinkedAccounts(content, snapshot);
         content.append("Historical link records: ").append(snapshot.historicalLinkCount());
         return Response.text(limit(content), navigation(invokerId, targetRef));
@@ -348,7 +349,7 @@ final class StaffModerationController {
         for (StaffModerationReadService.LinkedMinecraft linked : snapshot.linkedMinecraft()) {
             content.append(linked.main() ? "• **Main:** " : "• ")
                     .append(escape(linked.username().orElse(linked.playerId().toString())))
-                    .append(" — ").append(linked.platform())
+                    .append(ITEM_SEPARATOR).append(linked.platform())
                     .append(" (`").append(linked.playerId()).append("`)\n");
         }
     }
@@ -361,10 +362,10 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**History — All**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**History — All**\n");
         appendMinecraftHistory(content, snapshot);
-        content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\n")
-                .append("Cases: ").append(snapshot.recentCases().size())
+        content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\nCases: ")
+                .append(snapshot.recentCases().size())
                 .append(" | Notes: ").append(snapshot.recentNotes().size());
         return Response.text(limit(content), historyNavigation(invokerId, targetRef));
     }
@@ -391,7 +392,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**History — Minecraft**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**History — Minecraft**\n");
         appendMinecraftHistory(content, snapshot);
         return Response.text(limit(content), historyNavigation(invokerId, targetRef));
     }
@@ -404,7 +405,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**Recent staff notes**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Recent staff notes**\n");
         appendNotes(content, snapshot);
         return Response.text(limit(content), historyNavigation(invokerId, targetRef));
     }
@@ -415,7 +416,7 @@ final class StaffModerationController {
             return;
         }
         for (StaffNote note : snapshot.recentNotes()) {
-            content.append("• ").append(TIME.format(note.createdAt())).append(" — ")
+            content.append("• ").append(TIME.format(note.createdAt())).append(ITEM_SEPARATOR)
                     .append(shorten(escape(note.noteText()), ITEM_TEXT)).append('\n');
         }
     }
@@ -428,7 +429,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = panel("**Recent cases**\n");
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Recent cases**\n");
         appendCases(content, snapshot);
         return Response.text(limit(content), historyNavigation(invokerId, targetRef));
     }
@@ -440,7 +441,7 @@ final class StaffModerationController {
         }
         for (CaseReview review : snapshot.recentCases()) {
             content.append("• `").append(review.caseId()).append("` — ")
-                    .append(review.state()).append(" — ")
+                    .append(review.state()).append(ITEM_SEPARATOR)
                     .append(shorten(escape(review.publicReason()), ITEM_TEXT)).append('\n');
         }
     }
@@ -458,7 +459,7 @@ final class StaffModerationController {
         }
         StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
         require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
-        StringBuilder content = panel("**Case `").append(caseId).append("`**\n")
+        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Case `").append(caseId).append("`**\n")
                 .append("State: ").append(review.state()).append('\n')
                 .append("Issued: ").append(TIME.format(review.issuedAt())).append('\n')
                 .append("Reason: ").append(shorten(escape(review.publicReason()), CASE_REASON_LIMIT)).append('\n')
@@ -566,9 +567,9 @@ final class StaffModerationController {
             return;
         }
         for (ModerationHistoryEntry entry : snapshot.recentHistory()) {
-            content.append("• ").append(TIME.format(entry.occurredAt())).append(" — ")
+            content.append("• ").append(TIME.format(entry.occurredAt())).append(ITEM_SEPARATOR)
                     .append(entry.eventType()).append(" / ").append(escape(entry.status()))
-                    .append(" — ").append(shorten(escape(entry.publicReason()), ITEM_TEXT)).append('\n');
+                    .append(ITEM_SEPARATOR).append(shorten(escape(entry.publicReason()), ITEM_TEXT)).append('\n');
         }
     }
 
@@ -586,10 +587,6 @@ final class StaffModerationController {
             throw new IllegalArgumentException("Discord id must be positive");
         }
         return new DiscordUserId(Long.toString(id));
-    }
-
-    private static StringBuilder panel(String title) {
-        return new StringBuilder(MAX_CONTENT).append(title);
     }
 
     private static String limit(StringBuilder content) {
