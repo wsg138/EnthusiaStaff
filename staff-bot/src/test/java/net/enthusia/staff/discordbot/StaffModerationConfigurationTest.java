@@ -44,7 +44,7 @@ class StaffModerationConfigurationTest {
                 () -> StaffModerationConfiguration.fromEnvironment(nonLoopback));
 
         Map<String, String> weakSecret = complete();
-        weakSecret.put(StaffModerationConfiguration.COMPONENT_SECRET_ENV, Character.toString('w').repeat(8));
+        weakSecret.put(StaffModerationConfiguration.COMPONENT_SIGNING_ENV, Character.toString('w').repeat(8));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(weakSecret));
     }
@@ -65,10 +65,10 @@ class StaffModerationConfigurationTest {
         Map<String, String> values = new HashMap<>();
         values.put(StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia");
         values.put(StaffModerationConfiguration.DB_USERNAME_ENV, "readonly");
-        values.put(StaffModerationConfiguration.DB_PASSWORD_ENV, DATABASE_PASSWORD);
+        values.put(StaffModerationConfiguration.DB_CREDENTIAL_ENV, DATABASE_PASSWORD);
         values.put(StaffModerationConfiguration.AUTHORITY_URL_ENV, "http://127.0.0.1:8771/v1/staff-rank");
-        values.put(StaffModerationConfiguration.AUTHORITY_SECRET_ENV, AUTHORITY_SECRET);
-        values.put(StaffModerationConfiguration.COMPONENT_SECRET_ENV, COMPONENT_SECRET);
+        values.put(StaffModerationConfiguration.AUTHORITY_CREDENTIAL_ENV, AUTHORITY_SECRET);
+        values.put(StaffModerationConfiguration.COMPONENT_SIGNING_ENV, COMPONENT_SECRET);
         return values;
     }
 

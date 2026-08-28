@@ -1,7 +1,5 @@
 package net.enthusia.staff.discordbot;
 
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -10,21 +8,13 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordModerationOperation;
 import net.enthusia.staff.domain.casefile.CaseReview;
-import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationPlatform;
-import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 
 /** Pure D06 interaction/controller layer. It never invokes a destructive moderation port. */
 final class StaffModerationController {
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm 'UTC'")
-            .withZone(ZoneOffset.UTC);
-    private static final int MAX_CONTENT = 1_900;
-    private static final int ITEM_TEXT = 180;
     private static final int AMBIGUOUS_LABEL_LIMIT = 90;
-    private static final int CASE_REASON_LIMIT = 300;
     private static final String GENERIC_UNAVAILABLE = "The read-only moderation view is temporarily unavailable.";
-    private static final String ITEM_SEPARATOR = " — ";
     private static final Map<Class<?>, String> DENIAL_MESSAGES = Map.of(
             LinkedStaffActorResolver.MissingStaffLinkException.class,
             "This Discord account is not linked to a current Enthusia staff identity.",
@@ -314,14 +304,7 @@ final class StaffModerationController {
         require(actor, targetStaff, DiscordModerationOperation.VIEW_HISTORY, target);
         require(actor, targetStaff, DiscordModerationOperation.VIEW_NOTES, target);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Moderation profile**\n");
-        appendIdentity(content, snapshot);
-        content.append("Active Discord sanctions: not available before Discord enforcement (D07)\nActive Minecraft sanctions: ")
-                .append(snapshot.activeMinecraftSanctions().size())
-                .append("\nRecent history entries: ").append(snapshot.recentHistory().size())
-                .append("\nRecent cases: ").append(snapshot.recentCases().size())
-                .append("\nRecent notes: ").append(snapshot.recentNotes().size());
-        return Response.text(limit(content), navigation(invokerId, targetRef));
+        return Response.text(StaffModerationTextRenderer.profile(snapshot), navigation(invokerId, targetRef));
     }
 
     private Response linked(
@@ -332,26 +315,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_LINKED_ACCOUNTS);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Linked accounts**\n");
-        appendLinkedAccounts(content, snapshot);
-        content.append("Historical link records: ").append(snapshot.historicalLinkCount());
-        return Response.text(limit(content), navigation(invokerId, targetRef));
-    }
-
-    private static void appendLinkedAccounts(
-            StringBuilder content,
-            StaffModerationReadService.Snapshot snapshot
-    ) {
-        if (snapshot.linkedMinecraft().isEmpty()) {
-            content.append("No current Minecraft accounts are linked. This is a Discord-only or unlinked target.\n");
-            return;
-        }
-        for (StaffModerationReadService.LinkedMinecraft linked : snapshot.linkedMinecraft()) {
-            content.append(linked.main() ? "• **Main:** " : "• ")
-                    .append(escape(linked.username().orElse(linked.playerId().toString())))
-                    .append(ITEM_SEPARATOR).append(linked.platform())
-                    .append(" (`").append(linked.playerId()).append("`)\n");
-        }
+        return Response.text(StaffModerationTextRenderer.linked(snapshot), navigation(invokerId, targetRef));
     }
 
     private Response historyAll(
@@ -362,12 +326,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**History — All**\n");
-        appendMinecraftHistory(content, snapshot);
-        content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\nCases: ")
-                .append(snapshot.recentCases().size())
-                .append(" | Notes: ").append(snapshot.recentNotes().size());
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+        return Response.text(StaffModerationTextRenderer.historyAll(snapshot), historyNavigation(invokerId, targetRef));
     }
 
     private Response historyDiscordOnly(
@@ -378,8 +337,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         return Response.text(
-                "**History — Discord**\nNo Discord punishment history exists before D07. "
-                        + "D06 does not create or invent Discord sanctions.",
+                StaffModerationTextRenderer.historyDiscordOnly(),
                 historyNavigation(invokerId, targetRef)
         );
     }
@@ -392,9 +350,10 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**History — Minecraft**\n");
-        appendMinecraftHistory(content, snapshot);
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
+        return Response.text(
+                StaffModerationTextRenderer.historyMinecraft(snapshot),
+                historyNavigation(invokerId, targetRef)
+        );
     }
 
     private Response notes(
@@ -405,20 +364,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Recent staff notes**\n");
-        appendNotes(content, snapshot);
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
-    }
-
-    private static void appendNotes(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
-        if (snapshot.recentNotes().isEmpty()) {
-            content.append("No staff notes are available for the current linked Minecraft identities.");
-            return;
-        }
-        for (StaffNote note : snapshot.recentNotes()) {
-            content.append("• ").append(TIME.format(note.createdAt())).append(ITEM_SEPARATOR)
-                    .append(shorten(escape(note.noteText()), ITEM_TEXT)).append('\n');
-        }
+        return Response.text(StaffModerationTextRenderer.notes(snapshot), historyNavigation(invokerId, targetRef));
     }
 
     private Response cases(
@@ -429,21 +375,7 @@ final class StaffModerationController {
     ) {
         authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_HISTORY);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Recent cases**\n");
-        appendCases(content, snapshot);
-        return Response.text(limit(content), historyNavigation(invokerId, targetRef));
-    }
-
-    private static void appendCases(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
-        if (snapshot.recentCases().isEmpty()) {
-            content.append("No cases are available for the current linked Minecraft identities.");
-            return;
-        }
-        for (CaseReview review : snapshot.recentCases()) {
-            content.append("• `").append(review.caseId()).append("` — ")
-                    .append(review.state()).append(ITEM_SEPARATOR)
-                    .append(shorten(escape(review.publicReason()), ITEM_TEXT)).append('\n');
-        }
+        return Response.text(StaffModerationTextRenderer.cases(snapshot), historyNavigation(invokerId, targetRef));
     }
 
     private Response caseView(long invokerId, String invokerName, CaseId caseId) {
@@ -459,12 +391,7 @@ final class StaffModerationController {
         }
         StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
         require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
-        StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Case `").append(caseId).append("`**\n")
-                .append("State: ").append(review.state()).append('\n')
-                .append("Issued: ").append(TIME.format(review.issuedAt())).append('\n')
-                .append("Reason: ").append(shorten(escape(review.publicReason()), CASE_REASON_LIMIT)).append('\n')
-                .append("Sanctions: ").append(review.sanctions().size());
-        return Response.text(limit(content), List.of());
+        return Response.text(StaffModerationTextRenderer.caseView(caseId, review), List.of());
     }
 
     private Actor authorize(
@@ -541,38 +468,6 @@ final class StaffModerationController {
         return new Button(label, components.encode(action, target, invokerId));
     }
 
-    private static void appendIdentity(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
-        snapshot.target().discordId().ifPresentOrElse(
-                id -> content.append("Discord ID: `").append(id.value()).append("`\n"),
-                () -> content.append("Discord: not currently linked\n")
-        );
-        Optional<StaffModerationReadService.LinkedMinecraft> main = snapshot.linkedMinecraft().stream()
-                .filter(StaffModerationReadService.LinkedMinecraft::main)
-                .findFirst();
-        main.ifPresentOrElse(
-                linked -> content.append("Main Minecraft: ")
-                        .append(escape(linked.username().orElse(linked.playerId().toString())))
-                        .append(" (").append(linked.platform()).append(")\n"),
-                () -> content.append("Main Minecraft: none\n")
-        );
-        content.append("Linked Minecraft accounts: ").append(snapshot.linkedMinecraft().size()).append('\n');
-    }
-
-    private static void appendMinecraftHistory(
-            StringBuilder content,
-            StaffModerationReadService.Snapshot snapshot
-    ) {
-        if (snapshot.recentHistory().isEmpty()) {
-            content.append("Minecraft: no moderation history is available for the current linked identities.\n");
-            return;
-        }
-        for (ModerationHistoryEntry entry : snapshot.recentHistory()) {
-            content.append("• ").append(TIME.format(entry.occurredAt())).append(ITEM_SEPARATOR)
-                    .append(entry.eventType()).append(" / ").append(escape(entry.status()))
-                    .append(ITEM_SEPARATOR).append(shorten(escape(entry.publicReason()), ITEM_TEXT)).append('\n');
-        }
-    }
-
     private Response guarded(Supplier<Response> action) {
         try {
             return action.get();
@@ -589,18 +484,10 @@ final class StaffModerationController {
         return new DiscordUserId(Long.toString(id));
     }
 
-    private static String limit(StringBuilder content) {
-        return shorten(content.toString(), MAX_CONTENT);
-    }
-
     private static String shorten(String value, int max) {
         if (value.length() <= max) {
             return value;
         }
         return value.substring(0, Math.max(0, max - 1)).concat("…");
-    }
-
-    private static String escape(String value) {
-        return value.replace("`", "'").replace("@", "＠");
     }
 }
