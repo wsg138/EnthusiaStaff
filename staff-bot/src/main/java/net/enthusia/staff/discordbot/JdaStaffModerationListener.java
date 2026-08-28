@@ -230,10 +230,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     private static void send(InteractionHook hook, StaffModerationController.Response response) {
-        var action = hook.sendMessage(response.content());
+        var embed = StaffModerationDiscordPresentation.embed(response.content());
+        var action = hook.sendMessageEmbeds(embed);
         if (!response.buttons().isEmpty()) {
             List<Button> buttons = response.buttons().stream()
-                    .map(button -> Button.secondary(button.customId(), button.label()))
+                    .map(button -> StaffModerationDiscordPresentation.button(button, response.content()))
                     .toList();
             action = action.addComponents(ActionRow.of(buttons));
         }
