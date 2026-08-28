@@ -39,10 +39,10 @@ final class StaffModerationConfiguration {
             COMPONENT_SECRET_KEY
     );
 
-    private final DatabaseConfig database;
-    private final URI authorityUri;
-    private final String authoritySecret;
-    private final String componentSecret;
+    private final DatabaseConfig databaseConfig;
+    private final URI authorityEndpoint;
+    private final String authorityCredential;
+    private final String componentSigningSecret;
 
     private StaffModerationConfiguration(
             DatabaseConfig database,
@@ -50,10 +50,10 @@ final class StaffModerationConfiguration {
             String authoritySecret,
             String componentSecret
     ) {
-        this.database = Objects.requireNonNull(database, "database");
-        this.authorityUri = Objects.requireNonNull(authorityUri, "authorityUri");
-        this.authoritySecret = cryptoSecret(authoritySecret, AUTHORITY_SECRET_KEY);
-        this.componentSecret = cryptoSecret(componentSecret, COMPONENT_SECRET_KEY);
+        this.databaseConfig = Objects.requireNonNull(database, "database");
+        this.authorityEndpoint = Objects.requireNonNull(authorityUri, "authorityUri");
+        this.authorityCredential = cryptoSecret(authoritySecret, AUTHORITY_SECRET_KEY);
+        this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SECRET_KEY);
     }
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
@@ -93,25 +93,25 @@ final class StaffModerationConfiguration {
     }
 
     DatabaseConfig database() {
-        return database;
+        return databaseConfig;
     }
 
     URI authorityUri() {
-        return authorityUri;
+        return authorityEndpoint;
     }
 
     String authoritySecret() {
-        return authoritySecret;
+        return authorityCredential;
     }
 
     String componentSecret() {
-        return componentSecret;
+        return componentSigningSecret;
     }
 
     @Override
     public String toString() {
         return "StaffModerationConfiguration[authorityUri=%s, database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
-                .formatted(authorityUri);
+                .formatted(authorityEndpoint);
     }
 
     private static URI authorityUri(String raw) {

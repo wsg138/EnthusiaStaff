@@ -20,6 +20,7 @@ final class SignedComponentCodec {
     private static final int SIGNATURE_BYTES = 12;
     private static final int MAX_CUSTOM_ID_LENGTH = 100;
     private static final int COMPONENT_PART_COUNT = 8;
+    private static final int SIGNATURE_PART = COMPONENT_PART_COUNT - 1;
     private static final int UUID_HEX_LENGTH = 32;
     private static final int UUID_TEXT_LENGTH = 36;
 
@@ -34,19 +35,19 @@ final class SignedComponentCodec {
         SELECT_MINECRAFT("s"),
         CASE("k");
 
-        private final String code;
+        private final String wireCode;
 
         Action(String code) {
-            this.code = code;
+            this.wireCode = code;
         }
 
         String code() {
-            return code;
+            return wireCode;
         }
 
         static Action parse(String value) {
             for (Action action : values()) {
-                if (action.code.equals(value)) {
+                if (action.wireCode.equals(value)) {
                     return action;
                 }
             }
@@ -60,15 +61,15 @@ final class SignedComponentCodec {
         CASE("c"),
         NONE("x");
 
-        private final String code;
+        private final String wireCode;
 
         TargetType(String code) {
-            this.code = code;
+            this.wireCode = code;
         }
 
         static TargetType parse(String value) {
             for (TargetType type : values()) {
-                if (type.code.equals(value)) {
+                if (type.wireCode.equals(value)) {
                     return type;
                 }
             }
@@ -154,15 +155,15 @@ final class SignedComponentCodec {
 
     static final class InvalidComponentException extends RuntimeException {
         private static final long serialVersionUID = 1L;
-        private final Denial denial;
+        private final Denial reason;
 
         InvalidComponentException(Denial denial) {
             super("component denied: " + denial);
-            this.denial = denial;
+            this.reason = denial;
         }
 
         Denial denial() {
-            return denial;
+            return reason;
         }
     }
 
@@ -205,7 +206,7 @@ final class SignedComponentCodec {
         String payload = String.join(":",
                 PREFIX,
                 action.code(),
-                target.type().code,
+                target.type().wireCode,
                 target.value(),
                 Long.toString(actorDiscordId, 36),
                 Long.toString(expires, 36),
@@ -242,7 +243,7 @@ final class SignedComponentCodec {
 
     private void verifySignature(String[] parts) {
         String payload = String.join(":", parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]);
-        if (!constantTimeEquals(signature(payload), parts[7])) {
+        if (!constantTimeEquals(signature(payload), parts[SIGNATURE_PART])) {
             throw denial(Denial.INVALID);
         }
     }

@@ -8,10 +8,10 @@ import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 /** Owns every D06 database/authority/component resource. */
 final class StaffModerationRuntime implements AutoCloseable {
     private final DiscordStaffReadRuntime data;
-    private final StaffModerationReadService reads;
-    private final LinkedStaffActorResolver actors;
-    private final StaffReadAuthorization authorization;
-    private final SignedComponentCodec components;
+    private final StaffModerationReadService readService;
+    private final LinkedStaffActorResolver actorResolver;
+    private final StaffReadAuthorization readAuthorization;
+    private final SignedComponentCodec componentCodec;
 
     private StaffModerationRuntime(
             DiscordStaffReadRuntime data,
@@ -21,10 +21,10 @@ final class StaffModerationRuntime implements AutoCloseable {
             SignedComponentCodec components
     ) {
         this.data = data;
-        this.reads = reads;
-        this.actors = actors;
-        this.authorization = authorization;
-        this.components = components;
+        this.readService = reads;
+        this.actorResolver = actors;
+        this.readAuthorization = authorization;
+        this.componentCodec = components;
     }
 
     static Optional<StaffModerationRuntime> openFromEnvironment(
@@ -66,19 +66,19 @@ final class StaffModerationRuntime implements AutoCloseable {
     }
 
     StaffModerationReadService reads() {
-        return reads;
+        return readService;
     }
 
     LinkedStaffActorResolver actors() {
-        return actors;
+        return actorResolver;
     }
 
     StaffReadAuthorization authorization() {
-        return authorization;
+        return readAuthorization;
     }
 
     SignedComponentCodec components() {
-        return components;
+        return componentCodec;
     }
 
     @Override
