@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -20,6 +21,7 @@ public final class StaffBotRuntime implements AutoCloseable {
     private final InteractionReplayGuard interactionReplayGuard;
     private final HealthEndpoint healthEndpoint;
     private final DiscordGateway gateway;
+    private final Optional<StaffModerationRuntime> moderationRuntime;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final CompletableFuture<Boolean> readiness = new CompletableFuture<>();
@@ -32,12 +34,24 @@ public final class StaffBotRuntime implements AutoCloseable {
             InteractionReplayGuard interactionReplayGuard,
             HealthEndpoint healthEndpoint,
             DiscordGateway gateway) {
+        this(configuration, health, workerPool, interactionReplayGuard, healthEndpoint, gateway, Optional.empty());
+    }
+
+    StaffBotRuntime(
+            StaffBotConfiguration configuration,
+            StaffBotHealth health,
+            StaffBotWorkerPool workerPool,
+            InteractionReplayGuard interactionReplayGuard,
+            HealthEndpoint healthEndpoint,
+            DiscordGateway gateway,
+            Optional<StaffModerationRuntime> moderationRuntime) {
         this.configuration = Objects.requireNonNull(configuration, "configuration");
         this.health = Objects.requireNonNull(health, "health");
         this.workerPool = Objects.requireNonNull(workerPool, "workerPool");
         this.interactionReplayGuard = Objects.requireNonNull(interactionReplayGuard, "interactionReplayGuard");
         this.healthEndpoint = Objects.requireNonNull(healthEndpoint, "healthEndpoint");
         this.gateway = Objects.requireNonNull(gateway, "gateway");
+        this.moderationRuntime = Objects.requireNonNull(moderationRuntime, "moderationRuntime");
     }
 
     public static StaffBotRuntime create(StaffBotConfiguration configuration) throws IOException {
@@ -50,14 +64,27 @@ public final class StaffBotRuntime implements AutoCloseable {
         InteractionReplayGuard replayGuard = new InteractionReplayGuard(
                 configuration.interactionCapacity(),
                 configuration.interactionTtl());
-        StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
-        return new StaffBotRuntime(
-                configuration,
-                health,
-                workers,
-                replayGuard,
-                healthServer,
-                new JdaDiscordGateway(configuration));
+        Optional<StaffModerationRuntime> moderation = Optional.empty();
+        try {
+            moderation = StaffModerationRuntime.openFromEnvironment(
+                    configuration.interactionCapacity(),
+                    configuration.interactionTtl()
+            );
+            StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
+            DiscordGateway gateway = new JdaDiscordGateway(configuration, workers, replayGuard, moderation);
+            return new StaffBotRuntime(
+                    configuration,
+                    health,
+                    workers,
+                    replayGuard,
+                    healthServer,
+                    gateway,
+                    moderation);
+        } catch (IOException | RuntimeException exception) {
+            moderation.ifPresent(StaffModerationRuntime::close);
+            workers.close();
+            throw exception;
+        }
     }
 
     public void start() throws IOException {
@@ -138,6 +165,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
 
         healthEndpoint.close();
+        moderationRuntime.ifPresent(StaffModerationRuntime::close);
         workerPool.close();
         terminated.countDown();
 
@@ -188,6 +216,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                 failClosed(result.reason());
                 return;
             }
+            gateway.enableInteractions();
             health.transition(StaffBotHealth.Phase.READY, result.reason());
             readiness.complete(true);
             logIfEnabled(

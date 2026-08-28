@@ -13,7 +13,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
-| `ES-D06` | Read-only staff moderation UX | `READY` | 135 | `ES-D04`, `ES-D05` |
+| `ES-D06` | Read-only staff moderation UX | `MERGE_PENDING` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
@@ -26,7 +26,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-No Discord implementation package remains active after D04 terminal publication. D04 and D05 are complete. D06 and D13 are dependency-complete `READY`; a future Discord worker selects D06 first by priority unless live GitHub exposes a higher-priority actionable continuation. This D04 worker does not start either package.
+D04 and D05 are complete. D06 is the single active Discord-program package and remains the required `ACTIONABLE_CONTINUATION` on existing PR #177. Its former Codacy evidence blocker has been reproduced per finding and repaired without broad exclusions; it is now `MERGE_PENDING` while final owner-authored exact-head hosted validation, review, canonical Pi staging, merge, containment, cleanup, and terminal-state publication remain outstanding. D13 remains dependency-complete `READY`, but this worker must stop after D06 reaches its own terminal state and must not begin D13 or a second Discord package.
 
 ## ES-D04 terminal record
 
@@ -93,11 +93,21 @@ PR #160 merged normally, never squash/rebase/force/auto-merge. Merge commit `7bc
 
 Post-merge compare is one commit ahead, zero behind, with zero file differences. The temporary D05 branch is gone, so no unique implementation work remains. D05 adds no migration and did not absorb D04/X03/provider/website/competition work.
 
+## ES-D06 merge-candidate record
+
+Status: `MERGE_PENDING` / `ACTIONABLE_CONTINUATION`.
+
+Implementation PR #177 remains the sole D06 implementation PR on `package/es-d06-read-only-moderation-ux`. Canonical active handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-active.md`. Historical blocked evidence remains at `ai-agents/reports/package-handoffs/2026-08-27-es-d06-codacy-blocked.md` and is retained rather than rewritten as passing history.
+
+The former hosted Codacy blocker was cleared as an evidence-access blocker by reproducing the repository's own PMD 6.55.0 rules on every PR-changed Java source. Diagnostic run `33144344043` / job `98761994237` exposed the individual findings; repair run `33144490940` / job `98762443017` then reported zero PMD findings and passed focused `domain`, `staff-bot`, and `paper` tests on Java 21. Findings were fixed directly, except for one line-specific documented `CloseResource` false positive on an executor whose ownership intentionally transfers into an `AutoCloseable` and is shut down both on rollback and close. No broad PMD/Codacy exclusion was introduced.
+
+The temporary diagnostic/repair workflow files are absent from the merge-candidate tree. Bot-authored PR Actions on the repair commit were `action_required` with zero jobs and are not counted as passing gates. The owner-authored merge-candidate commit containing this record must receive fresh exact-head Coverage, Staff Bot Configuration Cache, Sentinel Restart Artifact, hosted Codacy, review, and canonical Pi staging evidence before merge.
+
+No merge, production deployment/configuration/data access, moderation mutation, secret access, LiteBans authority change, or issue #43 acceptance has occurred.
+
 ## Latest completion
 
-`ES-D04 — Account linking and DiscordSRV migration` is the latest completed Discord package.
-
-D06 and D13 are now dependency-complete `READY`. D07+ remain sequenced behind their stated dependencies. This D04 worker stops without beginning another Discord package.
+`ES-D05 — Staff bot runtime foundation` remains the latest completed Discord package until D06 is actually merged, contained, cleaned up, and published `COMPLETE`. D06 is merge-pending. D13 remains dependency-complete `READY`, but this worker does not start it.
 
 ## Selection
 

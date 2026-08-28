@@ -20,10 +20,12 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
+    compileOnly("net.luckperms:api:5.4")
     testImplementation(integrationContractsProject)
     testRuntimeOnly(files(integrationContractMainOutput))
     testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
+    testImplementation("net.luckperms:api:5.4")
 }
 
 tasks.processResources {

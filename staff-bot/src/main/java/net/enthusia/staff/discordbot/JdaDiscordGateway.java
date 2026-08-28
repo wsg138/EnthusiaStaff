@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -25,11 +26,30 @@ final class JdaDiscordGateway implements DiscordGateway {
     private static final System.Logger LOGGER = System.getLogger(JdaDiscordGateway.class.getName());
 
     private final StaffBotConfiguration configuration;
+    private final StaffBotWorkerPool workers;
+    private final InteractionReplayGuard interactions;
+    private final Optional<StaffModerationRuntime> moderation;
     private final Object lifecycleLock = new Object();
     private JDA jda;
+    private JdaStaffModerationListener moderationListener;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
+        this(configuration, null, null, Optional.empty());
+    }
+
+    JdaDiscordGateway(
+            StaffBotConfiguration configuration,
+            StaffBotWorkerPool workers,
+            InteractionReplayGuard interactions,
+            Optional<StaffModerationRuntime> moderation
+    ) {
         this.configuration = configuration;
+        this.workers = workers;
+        this.interactions = interactions;
+        this.moderation = moderation == null ? Optional.empty() : moderation;
+        if (this.moderation.isPresent() && (workers == null || interactions == null)) {
+            throw new IllegalArgumentException("moderation listener requires bounded runtime resources");
+        }
     }
 
     @Override
@@ -38,22 +58,55 @@ final class JdaDiscordGateway implements DiscordGateway {
             if (jda != null) {
                 throw new IllegalStateException("Discord gateway already started");
             }
-            SessionListener listener = new SessionListener(configuration.environment(), observer);
-            jda = JDABuilder.createLight(configuration.discordToken(), Set.of())
+            SessionListener listener = new SessionListener(
+                    configuration.environment(),
+                    observer,
+                    this::disableInteractions
+            );
+            JDABuilder builder = JDABuilder.createLight(configuration.discordToken(), Set.of())
                     .setMemberCachePolicy(MemberCachePolicy.NONE)
                     .setChunkingFilter(ChunkingFilter.NONE)
                     .setAutoReconnect(true)
                     .setMaxReconnectDelay(configuration.maxReconnectDelaySeconds())
                     .setEnableShutdownHook(false)
                     .setEventPassthrough(false)
-                    .addEventListeners(listener)
-                    .build();
+                    .addEventListeners(listener);
+            moderation.ifPresent(runtime -> {
+                moderationListener = new JdaStaffModerationListener(
+                        configuration.environment().guildId(),
+                        workers,
+                        interactions,
+                        runtime
+                );
+                builder.addEventListeners(moderationListener);
+            });
+            jda = builder.build();
+        }
+    }
+
+    @Override
+    public void enableInteractions() {
+        synchronized (lifecycleLock) {
+            if (jda != null && moderationListener != null) {
+                moderationListener.enable(jda);
+            }
+        }
+    }
+
+    private void disableInteractions() {
+        synchronized (lifecycleLock) {
+            if (moderationListener != null) {
+                moderationListener.disable();
+            }
         }
     }
 
     @Override
     public void shutdown() {
         synchronized (lifecycleLock) {
+            if (moderationListener != null) {
+                moderationListener.disable();
+            }
             if (jda != null) {
                 jda.shutdown();
             }
@@ -63,6 +116,9 @@ final class JdaDiscordGateway implements DiscordGateway {
     @Override
     public void shutdownNow() {
         synchronized (lifecycleLock) {
+            if (moderationListener != null) {
+                moderationListener.disable();
+            }
             if (jda != null) {
                 jda.shutdownNow();
             }
@@ -108,11 +164,17 @@ final class JdaDiscordGateway implements DiscordGateway {
     private static final class SessionListener extends ListenerAdapter {
         private final StaffBotEnvironment environment;
         private final DiscordGatewayObserver observer;
+        private final Runnable disableInteractions;
         private final CallbackFence identityCallbacks = new CallbackFence();
 
-        private SessionListener(StaffBotEnvironment environment, DiscordGatewayObserver observer) {
+        private SessionListener(
+                StaffBotEnvironment environment,
+                DiscordGatewayObserver observer,
+                Runnable disableInteractions
+        ) {
             this.environment = environment;
             this.observer = observer;
+            this.disableInteractions = disableInteractions;
         }
 
         @Override
@@ -132,12 +194,14 @@ final class JdaDiscordGateway implements DiscordGateway {
 
         @Override
         public void onSessionDisconnect(SessionDisconnectEvent event) {
+            disableInteractions.run();
             identityCallbacks.invalidate();
             observer.onDisconnected();
         }
 
         @Override
         public void onShutdown(ShutdownEvent event) {
+            disableInteractions.run();
             identityCallbacks.invalidate();
             observer.onShutdown();
         }

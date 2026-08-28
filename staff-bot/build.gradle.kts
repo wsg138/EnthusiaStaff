@@ -161,6 +161,7 @@ abstract class VerifyStaffBotRuntime : DefaultTask() {
 }
 
 dependencies {
+    implementation(project(":persistence"))
     implementation("net.dv8tion:JDA:6.5.0") {
         exclude(module = "opus-java")
         exclude(module = "tink")
