@@ -1,0 +1,59 @@
+name: D06 Codacy remaining diagnostics
+
+on:
+  push:
+    branches:
+      - "package/es-d06-read-only-moderation-ux"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Reproduce remaining Codacy categories locally
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install Codacy Analysis CLI
+        shell: bash
+        run: npm install --global @codacy/analysis-cli
+
+      - name: Initialize broad configuration for remaining categories
+        shell: bash
+        run: codacy-analysis init --auto "AllCritical,AllSecurity,BestPractice,Complexity"
+
+      - name: Analyze PR-changed files and print structured findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java' '*.kt' '*.kts' '*.xml' '*.yml' '*.yaml' '*.sql')
+          if (( ${#files[@]} == 0 )); then
+            echo 'No analyzable changed files.'
+            exit 0
+          fi
+          set +e
+          codacy-analysis analyze \
+            --install-dependencies \
+            --files "${files[@]}" \
+            --parallel-tools 2 \
+            --tool-timeout 900000 \
+            --output-format json \
+            --output /tmp/codacy-results.json
+          status=$?
+          set -e
+          echo "Codacy Analysis CLI exit status: ${status}"
+          jq '{issues: [.issues[] | {toolId, patternId, filePath, line, column, message, severity, category}], toolResults, errors}' /tmp/codacy-results.json
+          if (( status > 1 )); then
+            exit "${status}"
+          fi
