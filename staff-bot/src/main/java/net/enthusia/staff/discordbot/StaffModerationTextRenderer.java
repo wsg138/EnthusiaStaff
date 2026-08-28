@@ -37,8 +37,9 @@ final class StaffModerationTextRenderer {
     static String profile(StaffModerationReadService.Snapshot snapshot) {
         StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Moderation profile**\n");
         appendIdentity(content, snapshot);
-        content.append("Active Discord sanctions: not available before Discord enforcement (D07)\n")
-                .append("Active Minecraft sanctions: ").append(snapshot.activeMinecraftSanctions().size())
+        content.append("Active Discord sanctions: not available before Discord enforcement (D07)\n"
+                        + "Active Minecraft sanctions: ")
+                .append(snapshot.activeMinecraftSanctions().size())
                 .append("\nRecent history entries: ").append(snapshot.recentHistory().size())
                 .append("\nRecent cases: ").append(snapshot.recentCases().size())
                 .append("\nRecent notes: ").append(snapshot.recentNotes().size());
@@ -55,8 +56,9 @@ final class StaffModerationTextRenderer {
     static String historyAll(StaffModerationReadService.Snapshot snapshot) {
         StringBuilder content = new StringBuilder(MAX_CONTENT).append("**History — All**\n");
         appendMinecraftHistory(content, snapshot);
-        content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\n")
-                .append("Cases: ").append(snapshot.recentCases().size())
+        content.append("Discord: no Discord punishment history exists before D07; D06 does not invent entries.\n"
+                        + "Cases: ")
+                .append(snapshot.recentCases().size())
                 .append(" | Notes: ").append(snapshot.recentNotes().size());
         return limit(content);
     }
