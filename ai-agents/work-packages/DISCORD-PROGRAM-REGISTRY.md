@@ -2,7 +2,7 @@
 
 Owner authorization: on 2026-08-23 the owner authorized continued implementation of the Discord moderation platform and explicitly authorized a sequential worker system to carry the project forward. This registry activates `ES-D02` through `ES-D15` as the dedicated Discord-program lane. It does **not** authorize production deployment, production data access, LiteBans cutover, Discord production configuration changes, or issue #43 acceptance; those remain separately gated by repository policy.
 
-The product authority is `docs/discord-moderation-platform.md`. The sequencing authority is this file plus the individual `ES-Dxx` package files. Live GitHub always overrides stale status text.
+The product authority is `docs/discord-moderation-platform.md`. The sequencing authority is this file plus the individual `ES-Dxx` package files. Live GitHub always overrides stale status text. Detailed historical validation evidence belongs in package files, PRs, and canonical package handoffs rather than being duplicated indefinitely here.
 
 Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md` and all live PRs/branches for conflicts, but they select implementation work only from this lane. Unrelated `ES-Xxx`, `ES-Pxx`, website, competition, or other work never preempts a Discord-program worker unless it creates an actual path/schema/protocol collision that makes the selected Discord package unsafe.
 
@@ -13,8 +13,8 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
-| `ES-D06` | Read-only staff moderation UX | `MERGE_PENDING` | 135 | `ES-D04`, `ES-D05` |
-| `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
+| `ES-D06` | Read-only staff moderation UX | `COMPLETE` | 135 | `ES-D04`, `ES-D05` |
+| `ES-D07` | Discord punishment enforcement | `READY` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
 | `ES-D10` | AutoMod shadow engine | `PLANNED` | 139 | `ES-D05`, `ES-D09` |
@@ -26,88 +26,41 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-D04 and D05 are complete. D06 is the single active Discord-program package and remains the required `ACTIONABLE_CONTINUATION` on existing PR #177. Its former Codacy evidence blocker has been reproduced per finding and repaired without broad exclusions; it is now `MERGE_PENDING` while final owner-authored exact-head hosted validation, review, canonical Pi staging, merge, containment, cleanup, and terminal-state publication remain outstanding. D13 remains dependency-complete `READY`, but this worker must stop after D06 reaches its own terminal state and must not begin D13 or a second Discord package.
+No Discord-program implementation package is active after D06 terminal publication. `ES-D07` and `ES-D13` are dependency-complete `READY`; this D06 worker does not begin either package.
 
-## ES-D04 terminal record
+## Terminal package references
 
-Status: `COMPLETE`.
+- `ES-D04 — Account linking and DiscordSRV migration`: `COMPLETE`; implementation PR #151 merged normally as `4e7621b7a42e812cc7bf806a029f37a753cdd9f3`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d04-complete.md`.
+- `ES-D05 — Staff bot runtime foundation`: `COMPLETE`; implementation PR #160 merged normally as `7bc8739bdc3f77db23c8b649f8c227f008162e47`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-complete.md`.
+- `ES-D06 — Read-only staff moderation UX`: `COMPLETE`; implementation PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3` from exact validated product head `b624ee799aea7db7c561b0b064733374d4c61067`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-28-es-d06-complete.md`. Historical active and blocked records remain preserved.
 
-Implementation PR #151 merged normally as `4e7621b7a42e812cc7bf806a029f37a753cdd9f3`. Final reviewed/validated product head was `da0371681f5a44c72a614c8d6637b85d9080291d`. The temporary implementation branch `package/es-d04-account-linking` is absent after merge.
+## ES-D06 terminal record
 
-Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d04-complete.md`.
-Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d04-account-linking-blocked.md`.
+D06 delivers read-only `/moderate`, Discord user/message context moderation, `/moderate-minecraft`, `/linked`, `/history`, private notes/cases views, ambiguity-safe Minecraft resolution, compact ephemeral panels, authoritative linked-staff actor resolution, signed expiring replay-resistant components, permission-aware discovery, and read-time reauthorization. Discord roles alone never grant domain moderation authority.
 
-D04 delivers authoritative account linking/unlinking, durable link-code replay/expiry semantics, historical ownership, audited staff recovery and main overrides, active-playtime main selection, DiscordSRV public-API import/mirroring, transactional mutation/audit/main replacement, and forward-only V20 persistence. Production import/deployment/configuration and LiteBans authority remain outside D04.
+Final reviewed repairs include exact IPv4 loopback authority binding, Discord's 25-option ambiguity ceiling, privacy-safe unexpected-read logging, preservation of the `/v1/staff-rank` authority path when adding the player query, valid authority-port bounds, and rejection of signed-component TTLs below one second. Test-only credential-shaped analyzer data was generated rather than hard-coded. No broad static-analysis exclusion was introduced.
 
-### Final exact-head gates — PASS
+For exact product head `b624ee799aea7db7c561b0b064733374d4c61067`:
 
-For exact final head `da0371681f5a44c72a614c8d6637b85d9080291d`:
+- Coverage/full Java 21 validation `33204412446` / job `98961747084`: PASS. Clean build/tests including MariaDB/Testcontainers, Paper/staff-bot/Velocity tests, runtime-JAR integrity/provider-leak checks, and Codacy coverage reporting passed. JaCoCo: 51.39% line / 41.50% branch / 53.72% instruction. Artifact `9699285991`, digest `sha256:ded2a61af49f789a6ac18754c0b236281d1ec31be8a7df4fbfb269509e8f9d96`.
+- Staff Bot Configuration Cache `33204412468` / job `98961683087`: PASS.
+- Sentinel Restart Artifact `33204412444` / job `98961683122`: PASS.
+- Hosted Codacy Static Code Analysis check `98961965089`: PASS with zero annotations/new issues. Non-gating Codacy Diff Coverage check `98963786634`: success, 45.74%, with no gate defined.
+- Supplemental exact-product diagnostic `33204549522` / job `98962146236`: repository-native PMD 6.55.0 zero findings; Semgrep, Lizard, Trivy, Checkov, and Spectral zero issues. The PMD 7 adapter's inability to load the repository's PMD 6 XPath ruleset remains diagnostic-only and was never relabeled as product success.
+- Durable Sentinel job `327`: `PAPER_RESTART_OK`.
+- Canonical Pi public run `33204694500`: PASS through exact-source build, private dispatch/verdict collection, transient-transfer cleanup, and terminal publication.
+- Correlated private run `33205431529` / job `98965140421`: PASS on trusted `Lincoln-PI-4`, including exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup. Sanitized runtime digest: `sha256:728ab454b9cb546625985a02fa5d6c9fc7a6e37020974a409862f411e58dc96b`.
+- All visible PR #177 inline review threads are resolved/outdated. The final manual harsh review found no remaining valid actionable defect. A later CodeRabbit incremental rerun was rate-limited after the final repair; that availability limit is not an additional package-contract acceptance gate.
 
-- Coverage/full Java 21/MariaDB/Testcontainers `33029697612` / job `98379158884`: success.
-- Codacy Static Code Analysis `98379478044`: success, zero annotations and six prior findings solved.
-- Codacy Diff Coverage `98380515790`: success, 73.86% diff coverage with no repository gate defined.
-- Sentinel Restart Artifact `33029697604` / job `98379112319`: success; artifact `9629765037`, digest `sha256:57ece0dbccc120c69f6a846d80aa5bf60aab04472f1439af5abe799c19074b99`.
-- Durable Sentinel job `292`: terminal `PAPER_RESTART_OK`.
-- Canonical public Pi `33029762105`: success through exact-head build, private dispatch, verdict collection, transfer cleanup, and terminal publication.
-- Correlated private staging `33030278019` / job `98380970512`: success on trusted `Lincoln-PI-4`; exact bridge verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup passed.
-- All visible PR #151 inline review threads were resolved before merge.
+PR #177 merged with a normal two-parent merge commit `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3`, parents unchanged pre-merge `main` `500136b37c9acc30b1de8a057feb79d3d16fc400` and exact product head `b624ee799aea7db7c561b0b064733374d4c61067`. Post-merge compare is one commit ahead, zero behind, with zero file differences, proving exact containment and no unique implementation work. The implementation branch is absent. D06 adds no Flyway migration.
 
-### Merge and containment
+The residual `diagnostic/es-d06-codacy-remaining-20260828` branch contains diagnostic-workflow history only relative to the product and is safe to delete. The connected GitHub mutation surface available to this worker does not expose ref deletion, so this branch-cleanup item is recorded rather than falsely claimed complete. It does not contain unique D06 product work and is not a package blocker.
 
-PR #151 merged normally, never squash/rebase/force/auto-merge. Merge commit `4e7621b7a42e812cc7bf806a029f37a753cdd9f3` has parents pre-merge `main` `36af6fc85052cbc38bb9840899b415fc53503af3` and exact feature head `da0371681f5a44c72a614c8d6637b85d9080291d`.
-
-The merge and feature trees are identical at `63c2a0924d38ac9ce8e0a208f0eb79a671af37fc`. Post-merge compare is one commit ahead and zero behind, so the validated product is exactly contained. `V20__discord_account_linking.sql` is canonical on `main`, and the D04 branch is absent.
-
-## ES-D05 terminal record
-
-Status: `COMPLETE`.
-
-Implementation PR #160 merged normally as `7bc8739bdc3f77db23c8b649f8c227f008162e47`. Final synchronized/reviewed head was `936155cc356075aff10fd966de19e3d4bd8ca5f0`; frozen reviewed D05 product head remains `5f24ba1818c81e0a30a516fa70c8597586184b00`. The temporary implementation branch `package/es-d05-staff-bot-runtime` is absent after merge.
-
-Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-complete.md`.
-Acceptance checkpoint handoff: `ai-agents/reports/package-handoffs/2026-08-26-es-d05-discord-acceptance.md`.
-Historical blocked handoff: `ai-agents/reports/package-handoffs/2026-08-24-es-d05-staff-bot-runtime.md`.
-
-The isolated Java 21 staff-bot runtime, packaging, health/readiness, bounded workload/replay primitives, exact application/guild/channel fences, lifecycle/shutdown behavior, tests, docs, and non-destructive `--smoke-test` are implemented. JDA 6.5.0 uses no privileged Gateway intents in D05. Tokens remain secret and are never committed, logged, requested in chat, exposed in artifacts, or placed on command lines.
-
-### Required live Discord acceptance — PASS
-
-Trusted staging workflow `wsg138/EnthusiaStaff-Staging` run `32926306691`, attempt 3 / job `98071453002`, completed successfully on trusted self-hosted runner `Lincoln-PI-4` (Linux/ARM64). Trusted staging-control head `03b3fce61bffe552d7905a4e4aa18e3015ea4e00` pins exact frozen D05 source `5f24ba1818c81e0a30a516fa70c8597586184b00`, requires Java 21, builds/verifies the runtime before secret scope, and executes the non-destructive `--smoke-test`.
-
-Sanitized outcome: staging application `1541279616881397772` PASS; Enthusia guild `1410303324745371709` PASS; required test channel `1541286004298752091` PASS for view/send; readiness PASS; smoke exit 0; graceful close/shutdown PASS. The workflow sends no moderation action or test message and performs no Discord configuration change or production-data access. No bot-token value was inspected or exposed.
-
-### Final exact-head gates — PASS
-
-For exact final head `936155cc356075aff10fd966de19e3d4bd8ca5f0`:
-
-- Coverage `33006430216`: success.
-- Staff Bot Configuration Cache `33006430238`: success.
-- Sentinel Restart Artifact `33006430207`: success.
-- Canonical public Pi staging `33007222310`: success through exact-head build, private dispatch, verdict collection, cleanup, and terminal publication.
-- Correlated private staging `33008160488` / job `98307232213`: success on trusted `Lincoln-PI-4`; exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup passed.
-- All visible PR #160 inline review threads were resolved/outdated before merge.
-
-### Merge and containment
-
-PR #160 merged normally, never squash/rebase/force/auto-merge. Merge commit `7bc8739bdc3f77db23c8b649f8c227f008162e47` has parents pre-merge `main` `977216dc42a169a966c518545cc08cbc55617ebc` and final feature head `936155cc356075aff10fd966de19e3d4bd8ca5f0`.
-
-Post-merge compare is one commit ahead, zero behind, with zero file differences. The temporary D05 branch is gone, so no unique implementation work remains. D05 adds no migration and did not absorb D04/X03/provider/website/competition work.
-
-## ES-D06 merge-candidate record
-
-Status: `MERGE_PENDING` / `ACTIONABLE_CONTINUATION`.
-
-Implementation PR #177 remains the sole D06 implementation PR on `package/es-d06-read-only-moderation-ux`. Canonical active handoff: `ai-agents/reports/package-handoffs/2026-08-27-es-d06-active.md`. Historical blocked evidence remains at `ai-agents/reports/package-handoffs/2026-08-27-es-d06-codacy-blocked.md` and is retained rather than rewritten as passing history.
-
-The former hosted Codacy blocker was cleared as an evidence-access blocker by reproducing the repository's own PMD 6.55.0 rules on every PR-changed Java source. Diagnostic run `33144344043` / job `98761994237` exposed the individual findings; repair run `33144490940` / job `98762443017` then reported zero PMD findings and passed focused `domain`, `staff-bot`, and `paper` tests on Java 21. Findings were fixed directly, except for one line-specific documented `CloseResource` false positive on an executor whose ownership intentionally transfers into an `AutoCloseable` and is shut down both on rollback and close. No broad PMD/Codacy exclusion was introduced.
-
-The temporary diagnostic/repair workflow files are absent from the merge-candidate tree. Bot-authored PR Actions on the repair commit were `action_required` with zero jobs and are not counted as passing gates. The owner-authored merge-candidate commit containing this record must receive fresh exact-head Coverage, Staff Bot Configuration Cache, Sentinel Restart Artifact, hosted Codacy, review, and canonical Pi staging evidence before merge.
-
-No merge, production deployment/configuration/data access, moderation mutation, secret access, LiteBans authority change, or issue #43 acceptance has occurred.
+No production Discord configuration/data access, punishment side effect, AutoMod enforcement, website/competition work, deployment, LiteBans authority change, issue #43 acceptance, or secret exposure occurred.
 
 ## Latest completion
 
-`ES-D05 — Staff bot runtime foundation` remains the latest completed Discord package until D06 is actually merged, contained, cleaned up, and published `COMPLETE`. D06 is merge-pending. D13 remains dependency-complete `READY`, but this worker does not start it.
+`ES-D06 — Read-only staff moderation UX` is the latest completed Discord package. `ES-D07` and `ES-D13` are `READY`; neither is started by this worker.
 
 ## Selection
 
