@@ -27,6 +27,7 @@ final class StaffModerationConfiguration {
     private static final int MAX_TIMEOUT_MILLIS = 60_000;
     private static final int MIN_CRYPTO_SECRET_LENGTH = 32;
     private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65_535;
     private static final String HTTP_SCHEME = "http";
     private static final String AUTHORITY_HOST = "127.0.0.1";
     private static final String AUTHORITY_PATH = "/v1/staff-rank";
@@ -133,7 +134,8 @@ final class StaffModerationConfiguration {
     private static boolean validAuthorityNetwork(URI uri) {
         return HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
                 && AUTHORITY_HOST.equals(uri.getHost())
-                && uri.getPort() >= MIN_PORT;
+                && uri.getPort() >= MIN_PORT
+                && uri.getPort() <= MAX_PORT;
     }
 
     private static boolean validAuthorityResource(URI uri) {
