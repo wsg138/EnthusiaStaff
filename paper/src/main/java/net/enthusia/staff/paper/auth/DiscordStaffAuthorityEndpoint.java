@@ -25,8 +25,10 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Rank is calculated from current LuckPerms data on every request; Discord roles are never inputs.
  */
 public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
-    public static final String SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    public static final String PORT_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT"; // nosemgrep -- Environment variable name only; no credential value is embedded.
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    public static final String SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    public static final String PORT_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
 
     private static final int DEFAULT_PORT = 8771;
     private static final int MIN_PORT = 1;

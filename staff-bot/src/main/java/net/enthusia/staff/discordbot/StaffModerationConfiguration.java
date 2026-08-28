@@ -10,14 +10,22 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 
 /** Optional environment-only configuration for D06 read-only moderation interactions. */
 final class StaffModerationConfiguration {
-    static final String JDBC_URL_KEY = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String DB_USERNAME_KEY = "ENTHUSIA_STAFF_BOT_DB_USERNAME"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String DB_PASSWORD_KEY = "ENTHUSIA_STAFF_BOT_DB_PASSWORD"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String AUTHORITY_URL_KEY = "ENTHUSIA_STAFF_BOT_AUTHORITY_URL"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String AUTHORITY_SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String COMPONENT_SECRET_KEY = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String DB_POOL_SIZE_KEY = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE"; // nosemgrep -- Environment variable name only; no credential value is embedded.
-    static final String DB_TIMEOUT_MILLIS_KEY = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS"; // nosemgrep -- Environment variable name only; no credential value is embedded.
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String JDBC_URL_KEY = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String DB_USERNAME_KEY = "ENTHUSIA_STAFF_BOT_DB_USERNAME"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String DB_PASSWORD_KEY = "ENTHUSIA_STAFF_BOT_DB_PASSWORD"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String AUTHORITY_URL_KEY = "ENTHUSIA_STAFF_BOT_AUTHORITY_URL"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String AUTHORITY_SECRET_KEY = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String COMPONENT_SECRET_KEY = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String DB_POOL_SIZE_KEY = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
+    // Codacy false positive: the literal is an environment-variable name, not credential material.
+    static final String DB_TIMEOUT_MILLIS_KEY = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS"; // nosemgrep: Semgrep_codacy.java.security.hard-coded-password
 
     private static final int DEFAULT_POOL_SIZE = 4;
     private static final int MIN_POOL_SIZE = 2;
