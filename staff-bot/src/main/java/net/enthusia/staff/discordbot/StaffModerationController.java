@@ -477,11 +477,13 @@ final class StaffModerationController {
             if (denialMessage != null) {
                 return Response.text(denialMessage, List.of());
             }
-            LOGGER.log(
-                    System.Logger.Level.WARNING,
-                    "discord_read_controller_failed type={0}",
-                    exception.getClass().getSimpleName()
-            );
+            if (LOGGER.isLoggable(System.Logger.Level.WARNING)) {
+                LOGGER.log(
+                        System.Logger.Level.WARNING,
+                        "discord_read_controller_failed type={0}",
+                        exception.getClass().getSimpleName()
+                );
+            }
             return Response.text(GENERIC_UNAVAILABLE, List.of());
         }
     }
