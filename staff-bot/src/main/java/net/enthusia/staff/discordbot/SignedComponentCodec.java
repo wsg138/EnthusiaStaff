@@ -23,6 +23,7 @@ final class SignedComponentCodec {
     private static final int SIGNATURE_PART = COMPONENT_PART_COUNT - 1;
     private static final int UUID_HEX_LENGTH = 32;
     private static final int UUID_TEXT_LENGTH = 36;
+    private static final Duration MIN_TTL = Duration.ofSeconds(1);
 
     enum Action {
         PROFILE("p"),
@@ -240,7 +241,7 @@ final class SignedComponentCodec {
         if (clock == null || random == null || replay == null) {
             throw new IllegalArgumentException("component codec configuration is invalid");
         }
-        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+        if (ttl == null || ttl.compareTo(MIN_TTL) < 0) {
             throw new IllegalArgumentException("component codec configuration is invalid");
         }
         if (secret == null || secret.isBlank()) {

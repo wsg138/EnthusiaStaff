@@ -69,6 +69,17 @@ class SignedComponentCodecTest {
         assertEquals(SignedComponentCodec.Denial.STALE, stale.denial());
     }
 
+    @Test
+    void rejectsTtlShorterThanWireClockPrecision() {
+        assertThrows(IllegalArgumentException.class, () -> new SignedComponentCodec(
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                Duration.ofMillis(999),
+                SECRET,
+                new SecureRandom(),
+                new InteractionReplayGuard(64, Duration.ofMinutes(10))
+        ));
+    }
+
     private static SignedComponentCodec codec(Clock clock) {
         return new SignedComponentCodec(
                 clock,
