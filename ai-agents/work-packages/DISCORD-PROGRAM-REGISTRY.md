@@ -13,20 +13,24 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D03` | Authorization and cross-platform policy | `COMPLETE` | 132 | `ES-D01`, `ES-D02` |
 | `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
-| `ES-D06` | Read-only staff moderation UX | `READY` | 135 | `ES-D04`, `ES-D05` |
+| `ES-D06` | Read-only staff moderation UX | `IN_PROGRESS` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D07` | Discord punishment enforcement | `PLANNED` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
 | `ES-D10` | AutoMod shadow engine | `PLANNED` | 139 | `ES-D05`, `ES-D09` |
 | `ES-D11` | AutoMod enforcement and security locks | `PLANNED` | 140 | accepted `ES-D10` shadow evidence |
 | `ES-D12` | Staff website Discord expansion | `PLANNED` | 141 | `ES-D02`, `ES-D07`, `ES-D09` |
-| `ES-D13` | Discord role-sync replacement | `READY` | 142 | `ES-D04`, `ES-D05` |
+| `ES-D13` | Discord role-sync replacement | `IN_PROGRESS` | 142 | `ES-D04`, `ES-D05` |
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
 ## Active packages
 
-No Discord implementation package remains active after D04 terminal publication. D04 and D05 are complete. D06 and D13 are dependency-complete `READY`; a future Discord worker selects D06 first by priority unless live GitHub exposes a higher-priority actionable continuation. This D04 worker does not start either package.
+`ES-D06` is an actionable continuation on `package/es-d06-read-only-moderation-ux` / PR #177 and is actively owned by another worker. Its head moved during the 2026-08-28 D13 selection reconciliation, so this worker must not modify or resume D06.
+
+`ES-D13` is active on `package/es-d13-role-sync-replacement`, selected from starting `main` `500136b37c9acc30b1de8a057feb79d3d16fc400` under the Discord-program collision rule because D06 is concurrently owned. D13 is restricted to the role-sync replacement package and must preserve D06, ES-X03, website, competition, provider, and other concurrent work.
+
+At D13 claim, `main` contains immutable Flyway V1–V20. D13 does not claim V21 because active ES-X03 has an older branch migration that must be reconciled against the post-D04 ceiling. D13 remains migration-free unless a later live reconciliation proves a version is safely available.
 
 ## ES-D04 terminal record
 
@@ -97,7 +101,7 @@ Post-merge compare is one commit ahead, zero behind, with zero file differences.
 
 `ES-D04 — Account linking and DiscordSRV migration` is the latest completed Discord package.
 
-D06 and D13 are now dependency-complete `READY`. D07+ remain sequenced behind their stated dependencies. This D04 worker stops without beginning another Discord package.
+D06 remains an externally owned actionable continuation; D13 is the active package for this worker under the collision rule. D07+ remain sequenced behind their stated dependencies.
 
 ## Selection
 
