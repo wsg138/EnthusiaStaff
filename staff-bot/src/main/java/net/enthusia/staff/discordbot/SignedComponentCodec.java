@@ -183,10 +183,7 @@ final class SignedComponentCodec {
             SecureRandom random,
             InteractionReplayGuard replay
     ) {
-        if (clock == null || ttl == null || ttl.isZero() || ttl.isNegative()
-                || secret == null || secret.isBlank() || random == null || replay == null) {
-            throw new IllegalArgumentException("component codec configuration is invalid");
-        }
+        validateConfiguration(clock, ttl, secret, random, replay);
         this.clock = clock;
         this.ttl = ttl;
         this.key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), ALGORITHM);
@@ -230,6 +227,24 @@ final class SignedComponentCodec {
             throw exception;
         } catch (RuntimeException exception) {
             throw denial(Denial.INVALID);
+        }
+    }
+
+    private static void validateConfiguration(
+            Clock clock,
+            Duration ttl,
+            String secret,
+            SecureRandom random,
+            InteractionReplayGuard replay
+    ) {
+        if (clock == null || random == null || replay == null) {
+            throw new IllegalArgumentException("component codec configuration is invalid");
+        }
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            throw new IllegalArgumentException("component codec configuration is invalid");
+        }
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalArgumentException("component codec configuration is invalid");
         }
     }
 

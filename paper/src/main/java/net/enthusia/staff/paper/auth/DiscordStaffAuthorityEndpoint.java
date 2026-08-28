@@ -25,7 +25,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Rank is calculated from current LuckPerms data on every request; Discord roles are never inputs.
  */
 public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
-    public static final String SECRET_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
+    public static final String CREDENTIAL_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
     public static final String PORT_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_PORT";
 
     private static final int DEFAULT_PORT = 8771;
@@ -47,12 +47,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private DiscordStaffAuthorityEndpoint(
             JavaPlugin plugin,
-            String secret,
+            String credential,
             int port,
             LuckPerms luckPerms
     ) throws IOException {
         this.plugin = plugin;
-        this.bearer = "Bearer " + secret;
+        this.bearer = "Bearer " + credential;
         this.luckPerms = luckPerms;
         // nosemgrep -- Literal IPv4 loopback bind; this endpoint is an inbound local authority bridge only.
         HttpServer createdServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), BACKLOG);
@@ -82,25 +82,25 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
-        Optional<String> secret = configuredSecret(plugin);
+        Optional<String> credential = configuredCredential(plugin);
         Optional<Integer> port = configuredPort(plugin);
         Optional<LuckPerms> luckPerms = configuredLuckPerms(plugin);
-        if (secret.isEmpty() || port.isEmpty() || luckPerms.isEmpty()) {
+        if (credential.isEmpty() || port.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, secret.orElseThrow(), port.orElseThrow(), luckPerms.orElseThrow());
+        return bind(plugin, credential.orElseThrow(), port.orElseThrow(), luckPerms.orElseThrow());
     }
 
-    private static Optional<String> configuredSecret(JavaPlugin plugin) {
-        String secret = System.getenv(SECRET_ENV);
-        if (secret == null || secret.isBlank()) {
+    private static Optional<String> configuredCredential(JavaPlugin plugin) {
+        String credential = System.getenv(CREDENTIAL_ENV);
+        if (credential == null || credential.isBlank()) {
             return Optional.empty();
         }
-        if (secret.length() < MIN_SECRET_LENGTH) {
+        if (credential.length() < MIN_SECRET_LENGTH) {
             log(plugin, "discord_staff_authority_secret_too_short", null);
             return Optional.empty();
         }
-        return Optional.of(secret);
+        return Optional.of(credential);
     }
 
     private static Optional<Integer> configuredPort(JavaPlugin plugin) {
@@ -127,12 +127,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private static Optional<DiscordStaffAuthorityEndpoint> bind(
             JavaPlugin plugin,
-            String secret,
+            String credential,
             int port,
             LuckPerms luckPerms
     ) {
         try {
-            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, secret, port, luckPerms));
+            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, credential, port, luckPerms));
         } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();

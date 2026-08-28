@@ -12,10 +12,10 @@ import net.enthusia.staff.persistence.DatabaseConfig;
 final class StaffModerationConfiguration {
     static final String JDBC_URL_ENV = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL";
     static final String DB_USERNAME_ENV = "ENTHUSIA_STAFF_BOT_DB_USERNAME";
-    static final String DB_PASSWORD_ENV = "ENTHUSIA_STAFF_BOT_DB_PASSWORD";
+    static final String DB_CREDENTIAL_ENV = "ENTHUSIA_STAFF_BOT_DB_PASSWORD";
     static final String AUTHORITY_URL_ENV = "ENTHUSIA_STAFF_BOT_AUTHORITY_URL";
-    static final String AUTHORITY_SECRET_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
-    static final String COMPONENT_SECRET_ENV = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET";
+    static final String AUTHORITY_CREDENTIAL_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
+    static final String COMPONENT_SIGNING_ENV = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET";
     static final String DB_POOL_SIZE_ENV = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE";
     static final String DB_TIMEOUT_MILLIS_ENV = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS";
 
@@ -33,10 +33,10 @@ final class StaffModerationConfiguration {
     private static final List<String> REQUIRED = List.of(
             JDBC_URL_ENV,
             DB_USERNAME_ENV,
-            DB_PASSWORD_ENV,
+            DB_CREDENTIAL_ENV,
             AUTHORITY_URL_ENV,
-            AUTHORITY_SECRET_ENV,
-            COMPONENT_SECRET_ENV
+            AUTHORITY_CREDENTIAL_ENV,
+            COMPONENT_SIGNING_ENV
     );
 
     private final DatabaseConfig databaseConfig;
@@ -52,8 +52,8 @@ final class StaffModerationConfiguration {
     ) {
         this.databaseConfig = Objects.requireNonNull(database, "database");
         this.authorityEndpoint = Objects.requireNonNull(authorityUri, "authorityUri");
-        this.authorityCredential = cryptoSecret(authoritySecret, AUTHORITY_SECRET_ENV);
-        this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SECRET_ENV);
+        this.authorityCredential = cryptoSecret(authoritySecret, AUTHORITY_CREDENTIAL_ENV);
+        this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SIGNING_ENV);
     }
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
@@ -80,15 +80,15 @@ final class StaffModerationConfiguration {
         DatabaseConfig database = new DatabaseConfig(
                 values.get(JDBC_URL_ENV).trim(),
                 values.get(DB_USERNAME_ENV).trim(),
-                required(values.get(DB_PASSWORD_ENV), DB_PASSWORD_ENV),
+                required(values.get(DB_CREDENTIAL_ENV), DB_CREDENTIAL_ENV),
                 poolSize,
                 timeout
         );
         return Optional.of(new StaffModerationConfiguration(
                 database,
                 authorityUri(values.get(AUTHORITY_URL_ENV)),
-                values.get(AUTHORITY_SECRET_ENV),
-                values.get(COMPONENT_SECRET_ENV)
+                values.get(AUTHORITY_CREDENTIAL_ENV),
+                values.get(COMPONENT_SIGNING_ENV)
         ));
     }
 
