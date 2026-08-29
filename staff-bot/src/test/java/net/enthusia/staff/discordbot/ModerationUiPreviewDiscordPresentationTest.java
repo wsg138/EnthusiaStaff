@@ -21,10 +21,9 @@ class ModerationUiPreviewDiscordPresentationTest {
         assertEquals(2, rendered.rows().size());
         assertEquals(5, rendered.rows().getFirst().getComponents().size());
         assertTrue(rendered.embed().getFooter().getText().contains("No moderation action is possible"));
-        rendered.rows().stream()
-                .flatMap(row -> row.getComponents().stream())
-                .filter(component -> component.getCustomId() != null)
-                .forEach(component -> assertTrue(component.getCustomId().length() <= 100));
+        assertTrue(ModerationUiPreviewController.componentId(snapshot, "punish", "").length() <= 100);
+        assertTrue(ModerationUiPreviewController.componentId(snapshot, "nav", "accounts").length() <= 100);
+        assertTrue(ModerationUiPreviewController.componentId(snapshot, "scenario", "").length() <= 100);
     }
 
     @Test

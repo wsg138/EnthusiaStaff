@@ -69,6 +69,26 @@ public final class StaffBotConfiguration {
         }
     }
 
+    StaffBotConfiguration(
+            StaffBotEnvironment environment,
+            String discordToken,
+            InetSocketAddress healthAddress,
+            int workerThreads,
+            int workerQueueCapacity,
+            int interactionCapacity,
+            Duration interactionTtl) {
+        this(
+                environment,
+                discordToken,
+                false,
+                healthAddress,
+                workerThreads,
+                workerQueueCapacity,
+                interactionCapacity,
+                interactionTtl
+        );
+    }
+
     public static StaffBotConfiguration fromSystemEnvironment() {
         return fromEnvironment(System.getenv());
     }
