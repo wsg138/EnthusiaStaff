@@ -5,8 +5,8 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
 const OFFENSES = [
-  ['spam', 'Spam'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
-  ['advertising', 'Advertising'], ['cheating', 'Cheating'], ['other', 'Other']
+  ['spam', 'Spam / flooding'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
+  ['advertising', 'Advertising / unwanted invites'], ['cheating', 'Cheating'], ['other', 'Other / custom']
 ];
 const RESTRICTION_TARGETS = [
   {id:'general', type:'channel', label:'#general', detail:'Community chat'},
@@ -47,16 +47,16 @@ const baseMessages = [
 
 const historyTemplates = {
   repeat: [
-    ['2026-08-20','spam','Spam','Warning','—','Morgan','Closed',true],
-    ['2026-07-20','spam','Spam','Mute','2 hours','Sam','Expired',true],
+    ['2026-08-20','spam','Spam / flooding','Warning','—','Morgan','Closed',true],
+    ['2026-07-20','spam','Spam / flooding','Mute','2 hours','Sam','Expired',true],
     ['2026-08-05','harassment','Harassment','Mute','2 hours','Avery','Expired',true],
     ['2026-06-29','cheating','Cheating','Warning','—','Morgan','Closed',true]
   ],
   minor: [['2026-06-17','harassment','Harassment','Warning','—','Avery','Closed',true]],
-  severe: [['2026-08-17','spam','Spam','Warning','—','Sam','Closed',true],['2026-07-15','advertising','Advertising','Kick','—','Morgan','Closed',true]],
-  admin: [['2026-08-21','hate','Hate / slurs','Ban','30 days','AdminFox','Expired',true],['2026-07-10','hate','Hate / slurs','Mute','14 days','Avery','Expired',true],['2026-04-29','hate','Hate / slurs','Mute','7 days','Morgan','Expired',true],['2026-07-29','spam','Spam','Warning','—','Sam','Closed',true]],
-  custom: [['2026-08-14','harassment','Harassment','Mute','1 day','Morgan','Expired',true],['2026-07-08','harassment','Harassment','Warning','—','Avery','Closed',true],['2026-08-09','spam','Spam','Warning','—','Sam','Closed',true]],
-  unrelated: [['2026-08-22','spam','Spam','Warning','—','Sam','Closed',true],['2026-08-16','harassment','Harassment','Mute','1 day','Morgan','Expired',true],['2026-08-01','cheating','Cheating','Ban','7 days','AdminFox','Expired',true],['2026-07-21','advertising','Advertising','Kick','—','Avery','Closed',true],['2026-06-19','hate','Hate / slurs','Mute','7 days','AdminFox','Expired',true],['2026-05-26','harassment','Harassment','Warning','—','Morgan','Closed',false]]
+  severe: [['2026-08-17','spam','Spam / flooding','Warning','—','Sam','Closed',true],['2026-07-15','advertising','Advertising / unwanted invites','Kick','—','Morgan','Closed',true]],
+  admin: [['2026-08-21','hate','Hate / slurs','Ban','30 days','AdminFox','Expired',true],['2026-07-10','hate','Hate / slurs','Mute','14 days','Avery','Expired',true],['2026-04-29','hate','Hate / slurs','Mute','7 days','Morgan','Expired',true],['2026-07-29','spam','Spam / flooding','Warning','—','Sam','Closed',true]],
+  custom: [['2026-08-14','harassment','Harassment','Mute','1 day','Morgan','Expired',true],['2026-07-08','harassment','Harassment','Warning','—','Avery','Closed',true],['2026-08-09','spam','Spam / flooding','Warning','—','Sam','Closed',true]],
+  unrelated: [['2026-08-22','spam','Spam / flooding','Warning','—','Sam','Closed',true],['2026-08-16','harassment','Harassment','Mute','1 day','Morgan','Expired',true],['2026-08-01','cheating','Cheating','Ban','7 days','AdminFox','Expired',true],['2026-07-21','advertising','Advertising / unwanted invites','Kick','—','Avery','Closed',true],['2026-06-19','hate','Hate / slurs','Mute','7 days','AdminFox','Expired',true],['2026-05-26','harassment','Harassment','Warning','—','Morgan','Closed',false]]
 };
 
 const state = {
