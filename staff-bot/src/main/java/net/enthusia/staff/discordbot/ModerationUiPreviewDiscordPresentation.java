@@ -21,9 +21,6 @@ final class ModerationUiPreviewDiscordPresentation {
     private static final int PREVIEW_COLOR = 0x5865F2;
     private static final int WARNING_COLOR = 0xF0B232;
     private static final int FAILURE_COLOR = 0xED4245;
-    private static final String OP_NAV = "nav";
-    private static final String OP_ACTION = "action";
-    private static final String OP_BACK = "back";
     private static final String FOOTER = "STAGING UI PREVIEW · Sample data · No moderation action is possible";
     private static final Set<ModerationUiPreviewModel.Screen> DATA_SCREENS = EnumSet.of(
             ModerationUiPreviewModel.Screen.OVERVIEW,
@@ -282,11 +279,11 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> overviewComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(
                 ActionRow.of(
-                        Button.danger(id(snapshot, "punish", ""), "Punish"),
-                        Button.secondary(id(snapshot, OP_NAV, "history"), "History"),
-                        Button.secondary(id(snapshot, OP_NAV, "accounts"), "Accounts"),
-                        Button.secondary(id(snapshot, OP_NAV, "notes"), "Notes"),
-                        Button.secondary(id(snapshot, OP_NAV, "cases"), "Cases")
+                        Button.danger(id(snapshot, ModerationUiPreviewController.OP_PUNISH, ""), "Punish"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_NAV, "history"), "History"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_NAV, "accounts"), "Accounts"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_NAV, "notes"), "Notes"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_NAV, "cases"), "Cases")
                 ),
                 ActionRow.of(scenarioMenu(snapshot))
         );
@@ -295,11 +292,11 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> actionComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(
                 ActionRow.of(
-                        Button.secondary(id(snapshot, OP_ACTION, "warn"), "Warn"),
-                        Button.primary(id(snapshot, OP_ACTION, "mute"), "Mute"),
-                        Button.secondary(id(snapshot, OP_ACTION, "kick"), "Kick"),
-                        Button.danger(id(snapshot, OP_ACTION, "ban"), "Ban"),
-                        Button.primary(id(snapshot, OP_ACTION, "restrict"), "Restrict")
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_ACTION, "warn"), "Warn"),
+                        Button.primary(id(snapshot, ModerationUiPreviewController.OP_ACTION, "mute"), "Mute"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_ACTION, "kick"), "Kick"),
+                        Button.danger(id(snapshot, ModerationUiPreviewController.OP_ACTION, "ban"), "Ban"),
+                        Button.primary(id(snapshot, ModerationUiPreviewController.OP_ACTION, "restrict"), "Restrict")
                 ),
                 backRow(snapshot)
         );
@@ -308,16 +305,17 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> scopeComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(
                 ActionRow.of(
-                        Button.primary(id(snapshot, "scope", "discord"), "Discord"),
-                        Button.secondary(id(snapshot, "scope", "minecraft"), "Minecraft"),
-                        Button.secondary(id(snapshot, "scope", "both"), "Both")
+                        Button.primary(id(snapshot, ModerationUiPreviewController.OP_SCOPE, "discord"), "Discord"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_SCOPE, "minecraft"), "Minecraft"),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_SCOPE, "both"), "Both")
                 ),
                 backRow(snapshot)
         );
     }
 
     private static List<ActionRow> reasonComponents(ModerationUiPreviewModel.Snapshot snapshot) {
-        StringSelectMenu menu = StringSelectMenu.create(id(snapshot, "reason", ""))
+        StringSelectMenu menu = StringSelectMenu.create(
+                        id(snapshot, ModerationUiPreviewController.OP_REASON, ""))
                 .setPlaceholder("Choose offense / reason")
                 .setRequiredRange(1, 1)
                 .addOptions(REASON_OPTIONS)
@@ -326,7 +324,8 @@ final class ModerationUiPreviewDiscordPresentation {
     }
 
     private static List<ActionRow> durationComponents(ModerationUiPreviewModel.Snapshot snapshot) {
-        StringSelectMenu menu = StringSelectMenu.create(id(snapshot, "duration", ""))
+        StringSelectMenu menu = StringSelectMenu.create(
+                        id(snapshot, ModerationUiPreviewController.OP_DURATION, ""))
                 .setPlaceholder("Choose duration")
                 .setRequiredRange(1, 1)
                 .addOptions(DURATION_OPTIONS)
@@ -338,9 +337,11 @@ final class ModerationUiPreviewDiscordPresentation {
         ModerationUiPreviewModel.State state = snapshot.state();
         return List.of(
                 ActionRow.of(
-                        Button.secondary(id(snapshot, "toggle", "dm"), "DM user: " + onOff(state.dmUser())),
-                        Button.secondary(id(snapshot, "toggle", "delete"), "Delete message: " + onOff(state.deleteMessage())),
-                        Button.success(id(snapshot, "review", ""), "Review")
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_TOGGLE, "dm"),
+                                "DM user: " + onOff(state.dmUser())),
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_TOGGLE, "delete"),
+                                "Delete message: " + onOff(state.deleteMessage())),
+                        Button.success(id(snapshot, ModerationUiPreviewController.OP_REVIEW, ""), "Review")
                 ),
                 backRow(snapshot)
         );
@@ -348,17 +349,18 @@ final class ModerationUiPreviewDiscordPresentation {
 
     private static List<ActionRow> confirmComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(ActionRow.of(
-                Button.danger(id(snapshot, "confirm", ""), "Confirm preview"),
-                Button.secondary(id(snapshot, OP_BACK, ""), "Back")
+                Button.danger(id(snapshot, ModerationUiPreviewController.OP_CONFIRM, ""), "Confirm preview"),
+                Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back")
         ));
     }
 
     private static ActionRow backRow(ModerationUiPreviewModel.Snapshot snapshot) {
-        return ActionRow.of(Button.secondary(id(snapshot, OP_BACK, ""), "Back"));
+        return ActionRow.of(Button.secondary(
+                id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back"));
     }
 
     private static StringSelectMenu scenarioMenu(ModerationUiPreviewModel.Snapshot snapshot) {
-        return StringSelectMenu.create(id(snapshot, "scenario", ""))
+        return StringSelectMenu.create(id(snapshot, ModerationUiPreviewController.OP_SCENARIO, ""))
                 .setPlaceholder("Preview edge / failure states")
                 .setRequiredRange(1, 1)
                 .addOptions(SCENARIO_OPTIONS)

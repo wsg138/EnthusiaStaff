@@ -11,17 +11,17 @@ import java.util.function.UnaryOperator;
 /** Orchestrates the fake moderation preview. No moderation or persistence service is reachable from this type. */
 final class ModerationUiPreviewController {
     private static final String PREFIX = "pui";
-    private static final String OP_NAV = "nav";
-    private static final String OP_PUNISH = "punish";
-    private static final String OP_ACTION = "action";
-    private static final String OP_SCOPE = "scope";
-    private static final String OP_REASON = "reason";
-    private static final String OP_DURATION = "duration";
-    private static final String OP_TOGGLE = "toggle";
-    private static final String OP_REVIEW = "review";
-    private static final String OP_CONFIRM = "confirm";
-    private static final String OP_SCENARIO = "scenario";
-    private static final String OP_BACK = "back";
+    static final String OP_NAV = "nav";
+    static final String OP_PUNISH = "punish";
+    static final String OP_ACTION = "action";
+    static final String OP_SCOPE = "scope";
+    static final String OP_REASON = "reason";
+    static final String OP_DURATION = "duration";
+    static final String OP_TOGGLE = "toggle";
+    static final String OP_REVIEW = "review";
+    static final String OP_CONFIRM = "confirm";
+    static final String OP_SCENARIO = "scenario";
+    static final String OP_BACK = "back";
     private static final String OP_MODAL = "modal";
     private static final int MAX_CUSTOM_REASON = 300;
     private static final int MAX_CUSTOM_DURATION = 40;
