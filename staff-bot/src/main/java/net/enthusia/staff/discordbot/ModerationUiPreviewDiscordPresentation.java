@@ -1,6 +1,8 @@
 package net.enthusia.staff.discordbot;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
@@ -17,27 +19,24 @@ final class ModerationUiPreviewDiscordPresentation {
     private static final int WARNING_COLOR = 0xF0B232;
     private static final int FAILURE_COLOR = 0xED4245;
     private static final String FOOTER = "STAGING UI PREVIEW · Sample data · No moderation action is possible";
+    private static final Set<ModerationUiPreviewModel.Screen> DATA_SCREENS = EnumSet.of(
+            ModerationUiPreviewModel.Screen.OVERVIEW,
+            ModerationUiPreviewModel.Screen.ACCOUNTS,
+            ModerationUiPreviewModel.Screen.HISTORY,
+            ModerationUiPreviewModel.Screen.NOTES,
+            ModerationUiPreviewModel.Screen.CASES);
+    private static final Set<ModerationUiPreviewModel.Screen> BACK_ONLY_SCREENS = EnumSet.of(
+            ModerationUiPreviewModel.Screen.ACCOUNTS,
+            ModerationUiPreviewModel.Screen.HISTORY,
+            ModerationUiPreviewModel.Screen.NOTES,
+            ModerationUiPreviewModel.Screen.CASES,
+            ModerationUiPreviewModel.Screen.SCENARIO);
 
     record Rendered(MessageEmbed embed, List<ActionRow> rows) {
     }
 
     Rendered render(ModerationUiPreviewModel.Snapshot snapshot) {
-        MessageEmbed embed = switch (snapshot.state().screen()) {
-            case OVERVIEW -> overview();
-            case ACCOUNTS -> accounts();
-            case HISTORY -> history();
-            case NOTES -> notes();
-            case CASES -> cases();
-            case ACTION -> simple("Choose punishment", "Select the action you want to prototype.");
-            case SCOPE -> simple("Choose platform scope", "This is visual only; no platform action will run.");
-            case REASON -> simple("Choose offense", "Pick a representative offense or enter a custom reason.");
-            case DURATION -> simple("Choose duration", "Choose a preset or preview a custom duration.");
-            case OPTIONS -> options(snapshot.state());
-            case CONFIRM -> confirmation(snapshot.state());
-            case SCENARIO -> scenario(snapshot.state().scenario());
-            case COMPLETE -> complete();
-        };
-        return new Rendered(embed, components(snapshot));
+        return new Rendered(embed(snapshot), components(snapshot));
     }
 
     Modal modal(ModerationUiPreviewController.ModalSpec spec) {
@@ -49,6 +48,38 @@ final class ModerationUiPreviewDiscordPresentation {
         return Modal.create(spec.customId(), spec.title())
                 .addComponents(Label.of(spec.label(), input))
                 .build();
+    }
+
+    private static MessageEmbed embed(ModerationUiPreviewModel.Snapshot snapshot) {
+        if (DATA_SCREENS.contains(snapshot.state().screen())) {
+            return dataEmbed(snapshot.state().screen());
+        }
+        return workflowEmbed(snapshot);
+    }
+
+    private static MessageEmbed dataEmbed(ModerationUiPreviewModel.Screen screen) {
+        return switch (screen) {
+            case OVERVIEW -> overview();
+            case ACCOUNTS -> accounts();
+            case HISTORY -> history();
+            case NOTES -> notes();
+            case CASES -> cases();
+            default -> throw new IllegalArgumentException("not a preview data screen: " + screen);
+        };
+    }
+
+    private static MessageEmbed workflowEmbed(ModerationUiPreviewModel.Snapshot snapshot) {
+        return switch (snapshot.state().screen()) {
+            case ACTION -> simple("Choose punishment", "Select the action you want to prototype.");
+            case SCOPE -> simple("Choose platform scope", "This is visual only; no platform action will run.");
+            case REASON -> simple("Choose offense", "Pick a representative offense or enter a custom reason.");
+            case DURATION -> simple("Choose duration", "Choose a preset or preview a custom duration.");
+            case OPTIONS -> options(snapshot.state());
+            case CONFIRM -> confirmation(snapshot.state());
+            case SCENARIO -> scenario(snapshot.state().scenario());
+            case COMPLETE -> complete();
+            default -> throw new IllegalArgumentException("not a preview workflow screen: " + snapshot.state().screen());
+        };
     }
 
     private static MessageEmbed overview() {
@@ -107,7 +138,8 @@ final class ModerationUiPreviewDiscordPresentation {
                 .addField("Action / platform", state.action().label() + " · " + state.scope().label(), true)
                 .addField("Duration", state.duration(), true)
                 .addField("Reason", state.reason(), false)
-                .addField("Options", "DM user: " + onOff(state.dmUser()) + "\nDelete message: " + onOff(state.deleteMessage()), false)
+                .addField("Options", "DM user: " + onOff(state.dmUser())
+                        + "\nDelete message: " + onOff(state.deleteMessage()), false)
                 .addField("Higher approval", state.approvalSummary(), false)
                 .build();
     }
@@ -117,12 +149,24 @@ final class ModerationUiPreviewDiscordPresentation {
             return simple("Preview state unavailable", "Choose a representative state from the overview.");
         }
         return switch (scenario) {
-            case INSUFFICIENT -> scenarioEmbed("Insufficient authority", "Action blocked", "Your linked staff authority does not allow this sanction.", FAILURE_COLOR);
-            case PROTECTED -> scenarioEmbed("Protected target", "Action blocked", "This target is equal/higher staff or otherwise protected by hierarchy.", FAILURE_COLOR);
-            case APPROVAL -> scenarioEmbed("Approval required", "Pending higher approval", "The requested permanent/elevated consequence needs Admin+ authorization before commit.", WARNING_COLOR);
-            case STALE -> scenarioEmbed("Confirmation expired", "Refresh required", "The confirmation is stale. Reopen the punishment flow and reauthorize current policy.", WARNING_COLOR);
-            case DISCORD_FAILURE -> scenarioEmbed("Discord enforcement failed", "Retry pending", "Authoritative intent would remain truthful while the Discord side effect is retried/reconciled.", FAILURE_COLOR);
-            case PARTIAL -> scenarioEmbed("Partial result", "Discord succeeded · Minecraft pending", "A cross-platform flow would report each platform result separately instead of claiming global success.", WARNING_COLOR);
+            case INSUFFICIENT -> scenarioEmbed(
+                    "Insufficient authority", "Action blocked",
+                    "Your linked staff authority does not allow this sanction.", FAILURE_COLOR);
+            case PROTECTED -> scenarioEmbed(
+                    "Protected target", "Action blocked",
+                    "This target is equal/higher staff or otherwise protected by hierarchy.", FAILURE_COLOR);
+            case APPROVAL -> scenarioEmbed(
+                    "Approval required", "Pending higher approval",
+                    "The requested permanent/elevated consequence needs Admin+ authorization before commit.", WARNING_COLOR);
+            case STALE -> scenarioEmbed(
+                    "Confirmation expired", "Refresh required",
+                    "The confirmation is stale. Reopen the punishment flow and reauthorize current policy.", WARNING_COLOR);
+            case DISCORD_FAILURE -> scenarioEmbed(
+                    "Discord enforcement failed", "Retry pending",
+                    "Authoritative intent would remain truthful while the Discord side effect is retried/reconciled.", FAILURE_COLOR);
+            case PARTIAL -> scenarioEmbed(
+                    "Partial result", "Discord succeeded · Minecraft pending",
+                    "A cross-platform flow would report each platform result separately instead of claiming global success.", WARNING_COLOR);
         };
     }
 
@@ -159,9 +203,18 @@ final class ModerationUiPreviewDiscordPresentation {
     }
 
     private List<ActionRow> components(ModerationUiPreviewModel.Snapshot snapshot) {
+        ModerationUiPreviewModel.Screen screen = snapshot.state().screen();
+        if (screen == ModerationUiPreviewModel.Screen.OVERVIEW) {
+            return overviewComponents(snapshot);
+        }
+        if (BACK_ONLY_SCREENS.contains(screen)) {
+            return List.of(backRow(snapshot));
+        }
+        return workflowComponents(snapshot);
+    }
+
+    private List<ActionRow> workflowComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return switch (snapshot.state().screen()) {
-            case OVERVIEW -> overviewComponents(snapshot);
-            case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO -> List.of(backRow(snapshot));
             case ACTION -> actionComponents(snapshot);
             case SCOPE -> scopeComponents(snapshot);
             case REASON -> reasonComponents(snapshot);
@@ -169,6 +222,8 @@ final class ModerationUiPreviewDiscordPresentation {
             case OPTIONS -> optionComponents(snapshot);
             case CONFIRM -> confirmComponents(snapshot);
             case COMPLETE -> List.of();
+            default -> throw new IllegalArgumentException(
+                    "not a preview component screen: " + snapshot.state().screen());
         };
     }
 

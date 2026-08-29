@@ -1,7 +1,6 @@
 package net.enthusia.staff.discordbot;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
@@ -47,7 +46,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
             enabled.set(false);
             return;
         }
-        guild.updateCommands().addCommands(command()).queue(this::commandsRegistered, this::commandRegistrationFailed);
+        guild.upsertCommand(command()).queue(this::commandRegistered, this::commandRegistrationFailed);
     }
 
     void disable() {
@@ -123,8 +122,8 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
                 .setDefaultPermissions(DefaultMemberPermissions.DISABLED);
     }
 
-    private void commandsRegistered(List<Command> registered) {
-        boolean complete = registered.size() == 1 && COMMAND.equals(registered.getFirst().getName());
+    private void commandRegistered(Command registered) {
+        boolean complete = COMMAND.equals(registered.getName());
         enabled.set(complete);
         if (!complete) {
             log("discord_ui_preview_command_registration_incomplete", null);

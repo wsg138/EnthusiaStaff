@@ -8,6 +8,7 @@ import java.util.Base64;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 
@@ -57,9 +58,9 @@ final class ModerationUiPreviewSessionStore {
             throw new IllegalArgumentException("preview TTL must be positive");
         }
         this.capacity = capacity;
-        this.ttl = ttl;
-        this.clock = clock;
-        this.random = random;
+        this.ttl = Objects.requireNonNull(ttl, "ttl");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.random = Objects.requireNonNull(random, "random");
     }
 
     synchronized Optional<ModerationUiPreviewModel.Snapshot> create(long ownerId) {
@@ -97,6 +98,7 @@ final class ModerationUiPreviewSessionStore {
             int expectedRevision,
             UnaryOperator<ModerationUiPreviewModel.State> mutation
     ) {
+        Objects.requireNonNull(mutation, "mutation");
         Access inspected = inspect(id, ownerId, expectedRevision);
         if (inspected.status() != AccessStatus.OK) {
             return inspected;
@@ -138,8 +140,8 @@ final class ModerationUiPreviewSessionStore {
     }
 
     private String newSessionId() {
+        byte[] bytes = new byte[RANDOM_ID_BYTES];
         for (int attempt = 0; attempt < ID_ATTEMPTS; attempt++) {
-            byte[] bytes = new byte[RANDOM_ID_BYTES];
             random.nextBytes(bytes);
             String id = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             if (!sessions.containsKey(id)) {

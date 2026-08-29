@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.security.SecureRandom;
@@ -33,6 +34,9 @@ class ModerationUiPreviewControllerTest {
 
         current = button(controller, current, "confirm", "");
         assertEquals(ModerationUiPreviewModel.Screen.COMPLETE, current.snapshot().state().screen());
+        assertEquals(
+                ModerationUiPreviewController.ResultType.ERROR,
+                controller.interact(OWNER, id(current, "back", ""), Optional.empty()).type());
     }
 
     @Test
@@ -54,12 +58,37 @@ class ModerationUiPreviewControllerTest {
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
                 controller.interact(OWNER, "pui:not-valid", Optional.empty()).type());
+        assertEquals(
+                ModerationUiPreviewController.ResultType.ERROR,
+                controller.interact(OWNER, "pui:session:-1:punish", Optional.empty()).type());
+        assertEquals(
+                ModerationUiPreviewController.ResultType.ERROR,
+                controller.interact(OWNER, "pui:session:0:unsupported", Optional.empty()).type());
 
         ModerationUiPreviewController.Result second = controller.start(OWNER);
         clock.advance(Duration.ofMinutes(6));
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
                 controller.interact(OWNER, id(second, "punish", ""), Optional.empty()).type());
+    }
+
+    @Test
+    void capacityIsBoundedAndExpiredSessionsReleaseCapacity() {
+        MutableClock clock = new MutableClock();
+        ModerationUiPreviewController controller = new ModerationUiPreviewController(
+                new ModerationUiPreviewSessionStore(1, Duration.ofMinutes(5), clock, new SecureRandom()));
+
+        assertEquals(ModerationUiPreviewController.ResultType.VIEW, controller.start(OWNER).type());
+        assertEquals(ModerationUiPreviewController.ResultType.ERROR, controller.start(OWNER + 1).type());
+        clock.advance(Duration.ofMinutes(6));
+        assertEquals(ModerationUiPreviewController.ResultType.VIEW, controller.start(OWNER + 1).type());
+    }
+
+    @Test
+    void componentIdsRejectDiscordLimitOverflow() {
+        ModerationUiPreviewController.Result started = controller(new MutableClock()).start(OWNER);
+        assertThrows(IllegalArgumentException.class, () -> ModerationUiPreviewController.componentId(
+                started.snapshot(), "nav", "x".repeat(100)));
     }
 
     @Test

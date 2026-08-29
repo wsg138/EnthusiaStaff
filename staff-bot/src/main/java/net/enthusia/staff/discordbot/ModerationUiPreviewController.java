@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /** Orchestrates the fake moderation preview. No moderation or persistence service is reachable from this type. */
@@ -12,6 +13,8 @@ final class ModerationUiPreviewController {
     private static final String PREFIX = "pui";
     private static final int MAX_CUSTOM_REASON = 300;
     private static final int MAX_CUSTOM_DURATION = 40;
+    private static final Set<String> SELECTION_OPERATIONS = Set.of(
+            "nav", "punish", "action", "scope", "reason", "duration");
 
     enum ResultType {
         VIEW,
@@ -103,17 +106,10 @@ final class ModerationUiPreviewController {
             Optional<String> selectedValue,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
-        if (isSelectionOperation(token.operation())) {
+        if (SELECTION_OPERATIONS.contains(token.operation())) {
             return routeSelection(ownerId, token, selectedValue, snapshot);
         }
         return routeCompletion(ownerId, token, selectedValue, snapshot);
-    }
-
-    private static boolean isSelectionOperation(String operation) {
-        return switch (operation) {
-            case "nav", "punish", "action", "scope", "reason", "duration" -> true;
-            default -> false;
-        };
     }
 
     private Result routeSelection(
@@ -153,14 +149,21 @@ final class ModerationUiPreviewController {
         if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OVERVIEW) {
             return staleFlow();
         }
-        ModerationUiPreviewModel.Screen screen = switch (token.argument()) {
-            case "accounts" -> ModerationUiPreviewModel.Screen.ACCOUNTS;
-            case "history" -> ModerationUiPreviewModel.Screen.HISTORY;
-            case "notes" -> ModerationUiPreviewModel.Screen.NOTES;
-            case "cases" -> ModerationUiPreviewModel.Screen.CASES;
-            default -> null;
+        Optional<ModerationUiPreviewModel.Screen> destination = navigationScreen(token.argument());
+        if (destination.isEmpty()) {
+            return malformed();
+        }
+        return transition(ownerId, token, state -> state.withScreen(destination.get()));
+    }
+
+    private static Optional<ModerationUiPreviewModel.Screen> navigationScreen(String argument) {
+        return switch (argument) {
+            case "accounts" -> Optional.of(ModerationUiPreviewModel.Screen.ACCOUNTS);
+            case "history" -> Optional.of(ModerationUiPreviewModel.Screen.HISTORY);
+            case "notes" -> Optional.of(ModerationUiPreviewModel.Screen.NOTES);
+            case "cases" -> Optional.of(ModerationUiPreviewModel.Screen.CASES);
+            default -> Optional.empty();
         };
-        return screen == null ? malformed() : transition(ownerId, token, state -> state.withScreen(screen));
     }
 
     private Result chooseAction(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
@@ -199,7 +202,8 @@ final class ModerationUiPreviewController {
         try {
             ModerationUiPreviewModel.Reason reason = ModerationUiPreviewModel.Reason.parse(selectedValue.get());
             if (reason == ModerationUiPreviewModel.Reason.CUSTOM) {
-                return customModal(snapshot, "reason", "Custom reason", "Reason", "Describe the moderation reason", MAX_CUSTOM_REASON);
+                return customModal(snapshot, "reason", "Custom reason", "Reason",
+                        "Describe the moderation reason", MAX_CUSTOM_REASON);
             }
             return transition(ownerId, token, state -> state.withReason(reason.label()));
         } catch (IllegalArgumentException exception) {
@@ -220,7 +224,8 @@ final class ModerationUiPreviewController {
             ModerationUiPreviewModel.DurationChoice duration =
                     ModerationUiPreviewModel.DurationChoice.parse(selectedValue.get());
             if (duration == ModerationUiPreviewModel.DurationChoice.CUSTOM) {
-                return customModal(snapshot, "duration", "Custom duration", "Duration", "Example: 5d 12h", MAX_CUSTOM_DURATION);
+                return customModal(snapshot, "duration", "Custom duration", "Duration",
+                        "Example: 5d 12h", MAX_CUSTOM_DURATION);
             }
             return transition(ownerId, token, state -> state.withDuration(duration.label()));
         } catch (IllegalArgumentException exception) {
@@ -232,12 +237,16 @@ final class ModerationUiPreviewController {
         if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OPTIONS) {
             return staleFlow();
         }
-        UnaryOperator<ModerationUiPreviewModel.State> mutation = switch (token.argument()) {
-            case "dm" -> ModerationUiPreviewModel.State::toggleDm;
-            case "delete" -> ModerationUiPreviewModel.State::toggleDelete;
-            default -> null;
+        Optional<UnaryOperator<ModerationUiPreviewModel.State>> mutation = toggleMutation(token.argument());
+        return mutation.isEmpty() ? malformed() : transition(ownerId, token, mutation.get());
+    }
+
+    private static Optional<UnaryOperator<ModerationUiPreviewModel.State>> toggleMutation(String argument) {
+        return switch (argument) {
+            case "dm" -> Optional.of(ModerationUiPreviewModel.State::toggleDm);
+            case "delete" -> Optional.of(ModerationUiPreviewModel.State::toggleDelete);
+            default -> Optional.empty();
         };
-        return mutation == null ? malformed() : transition(ownerId, token, mutation);
     }
 
     private Result review(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
@@ -272,26 +281,28 @@ final class ModerationUiPreviewController {
     }
 
     private Result back(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
-        ModerationUiPreviewModel.Screen destination = backDestination(snapshot.state());
-        if (destination == null) {
+        Optional<ModerationUiPreviewModel.Screen> destination = backDestination(snapshot.state());
+        if (destination.isEmpty()) {
             return staleFlow();
         }
-        return transition(ownerId, token, state -> state.withScreen(destination));
+        return transition(ownerId, token, state -> state.withScreen(destination.get()));
     }
 
-    private static ModerationUiPreviewModel.Screen backDestination(ModerationUiPreviewModel.State state) {
+    private static Optional<ModerationUiPreviewModel.Screen> backDestination(ModerationUiPreviewModel.State state) {
         if (state.screen() == ModerationUiPreviewModel.Screen.OPTIONS) {
-            return state.action() != null && state.action().durationSupported()
+            ModerationUiPreviewModel.Screen destination = state.action() != null && state.action().durationSupported()
                     ? ModerationUiPreviewModel.Screen.DURATION
                     : ModerationUiPreviewModel.Screen.REASON;
+            return Optional.of(destination);
         }
         return switch (state.screen()) {
-            case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO, ACTION -> ModerationUiPreviewModel.Screen.OVERVIEW;
-            case SCOPE -> ModerationUiPreviewModel.Screen.ACTION;
-            case REASON -> ModerationUiPreviewModel.Screen.SCOPE;
-            case DURATION -> ModerationUiPreviewModel.Screen.REASON;
-            case CONFIRM -> ModerationUiPreviewModel.Screen.OPTIONS;
-            default -> null;
+            case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO, ACTION ->
+                    Optional.of(ModerationUiPreviewModel.Screen.OVERVIEW);
+            case SCOPE -> Optional.of(ModerationUiPreviewModel.Screen.ACTION);
+            case REASON -> Optional.of(ModerationUiPreviewModel.Screen.SCOPE);
+            case DURATION -> Optional.of(ModerationUiPreviewModel.Screen.REASON);
+            case CONFIRM -> Optional.of(ModerationUiPreviewModel.Screen.OPTIONS);
+            default -> Optional.empty();
         };
     }
 
