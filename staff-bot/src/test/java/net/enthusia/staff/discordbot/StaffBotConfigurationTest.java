@@ -26,8 +26,28 @@ class StaffBotConfigurationTest {
         assertEquals(1541279616881397772L, configuration.environment().applicationId());
         assertEquals(1410303324745371709L, configuration.environment().guildId());
         assertEquals(0, configuration.healthAddress().getPort());
+        assertFalse(configuration.uiPreviewEnabled());
         assertFalse(configuration.toString().contains("secret-token-value"));
         assertTrue(configuration.toString().contains("discordToken=<redacted>"));
+    }
+
+    @Test
+    void previewRequiresExplicitStagingPair() {
+        StaffBotConfiguration staging = StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                StaffBotConfiguration.UI_PREVIEW_KEY, "true",
+                StaffBotConfiguration.HEALTH_PORT_KEY, "0"));
+
+        assertTrue(staging.uiPreviewEnabled());
+        assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, "production",
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                StaffBotConfiguration.UI_PREVIEW_KEY, "true")));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                StaffBotConfiguration.UI_PREVIEW_KEY, "yes")));
     }
 
     @Test

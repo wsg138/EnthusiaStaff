@@ -66,10 +66,12 @@ public final class StaffBotRuntime implements AutoCloseable {
                 configuration.interactionTtl());
         Optional<StaffModerationRuntime> moderation = Optional.empty();
         try {
-            moderation = StaffModerationRuntime.openFromEnvironment(
-                    configuration.interactionCapacity(),
-                    configuration.interactionTtl()
-            );
+            if (!configuration.uiPreviewEnabled()) {
+                moderation = StaffModerationRuntime.openFromEnvironment(
+                        configuration.interactionCapacity(),
+                        configuration.interactionTtl()
+                );
+            }
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
             DiscordGateway gateway = new JdaDiscordGateway(configuration, workers, replayGuard, moderation);
             return new StaffBotRuntime(
@@ -116,9 +118,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
         try {
             return readiness.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (TimeoutException exception) {
-            return false;
-        } catch (ExecutionException exception) {
+        } catch (TimeoutException | ExecutionException exception) {
             return false;
         }
     }
@@ -147,36 +147,15 @@ public final class StaffBotRuntime implements AutoCloseable {
         health.transition(StaffBotHealth.Phase.STOPPING, "process_stopping");
         readiness.complete(false);
 
-        String shutdownFailure = null;
-        if (started.get()) {
-            gateway.shutdown();
-            try {
-                if (!gateway.awaitShutdown(configuration.shutdownTimeout())) {
-                    gateway.shutdownNow();
-                    if (!gateway.awaitShutdown(Duration.ofSeconds(2))) {
-                        shutdownFailure = "gateway_shutdown_timeout";
-                    }
-                }
-            } catch (InterruptedException exception) {
-                gateway.shutdownNow();
-                Thread.currentThread().interrupt();
-                shutdownFailure = "gateway_shutdown_interrupted";
-            }
-        }
-
+        String shutdownFailure = stopGateway();
         healthEndpoint.close();
         moderationRuntime.ifPresent(StaffModerationRuntime::close);
         workerPool.close();
         terminated.countDown();
 
         if (shutdownFailure != null) {
-            health.transition(StaffBotHealth.Phase.FAILED, shutdownFailure);
-            logIfEnabled(
-                    System.Logger.Level.ERROR,
-                    "staff_bot_failed environment={0} reason={1}",
-                    configuration.environment().label(),
-                    shutdownFailure);
-            throw new IllegalStateException("staff bot gateway did not terminate cleanly");
+            failShutdown(shutdownFailure);
+            return;
         }
 
         health.transition(StaffBotHealth.Phase.STOPPED, "process_stopped");
@@ -184,6 +163,34 @@ public final class StaffBotRuntime implements AutoCloseable {
                 System.Logger.Level.INFO,
                 "staff_bot_stopped environment={0}",
                 configuration.environment().label());
+    }
+
+    private String stopGateway() {
+        if (!started.get()) {
+            return null;
+        }
+        gateway.shutdown();
+        try {
+            if (gateway.awaitShutdown(configuration.shutdownTimeout())) {
+                return null;
+            }
+            gateway.shutdownNow();
+            return gateway.awaitShutdown(Duration.ofSeconds(2)) ? null : "gateway_shutdown_timeout";
+        } catch (InterruptedException exception) {
+            gateway.shutdownNow();
+            Thread.currentThread().interrupt();
+            return "gateway_shutdown_interrupted";
+        }
+    }
+
+    private void failShutdown(String reason) {
+        health.transition(StaffBotHealth.Phase.FAILED, reason);
+        logIfEnabled(
+                System.Logger.Level.ERROR,
+                "staff_bot_failed environment={0} reason={1}",
+                configuration.environment().label(),
+                reason);
+        throw new IllegalStateException("staff bot gateway did not terminate cleanly");
     }
 
     private void failClosed(String reason) {

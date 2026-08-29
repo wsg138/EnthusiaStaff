@@ -12,6 +12,7 @@ import java.util.Set;
 public final class StaffBotConfiguration {
     public static final String ENVIRONMENT_KEY = "ENTHUSIA_STAFF_BOT_ENVIRONMENT";
     public static final String TOKEN_KEY = "ENTHUSIA_STAFF_BOT_TOKEN";
+    public static final String UI_PREVIEW_KEY = "ENTHUSIA_STAFF_BOT_UI_PREVIEW";
     public static final String HEALTH_HOST_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_HOST";
     public static final String HEALTH_PORT_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_PORT";
     public static final String WORKER_THREADS_KEY = "ENTHUSIA_STAFF_BOT_WORKER_THREADS";
@@ -33,6 +34,7 @@ public final class StaffBotConfiguration {
 
     private final StaffBotEnvironment environment;
     private final String discordToken;
+    private final boolean uiPreviewEnabled;
     private final InetSocketAddress healthAddress;
     private final int workerThreads;
     private final int workerQueueCapacity;
@@ -42,6 +44,7 @@ public final class StaffBotConfiguration {
     StaffBotConfiguration(
             StaffBotEnvironment environment,
             String discordToken,
+            boolean uiPreviewEnabled,
             InetSocketAddress healthAddress,
             int workerThreads,
             int workerQueueCapacity,
@@ -49,6 +52,7 @@ public final class StaffBotConfiguration {
             Duration interactionTtl) {
         this.environment = Objects.requireNonNull(environment, "environment");
         this.discordToken = requireSecret(discordToken);
+        this.uiPreviewEnabled = uiPreviewEnabled;
         this.healthAddress = Objects.requireNonNull(healthAddress, "healthAddress");
         this.workerThreads = bounded("worker threads", workerThreads, 1, 16);
         this.workerQueueCapacity = bounded("worker queue capacity", workerQueueCapacity, 1, 4096);
@@ -56,6 +60,9 @@ public final class StaffBotConfiguration {
         this.interactionTtl = Objects.requireNonNull(interactionTtl, "interactionTtl");
         if (interactionTtl.isZero() || interactionTtl.isNegative() || interactionTtl.compareTo(Duration.ofHours(24)) > 0) {
             throw new IllegalArgumentException("interaction TTL must be between 1 second and 24 hours");
+        }
+        if (uiPreviewEnabled && environment != StaffBotEnvironment.STAGING) {
+            throw new IllegalArgumentException("staff bot UI preview is staging-only");
         }
         if (environment == StaffBotEnvironment.PRODUCTION && healthAddress.getPort() == 0) {
             throw new IllegalArgumentException("production health port cannot be ephemeral");
@@ -70,6 +77,7 @@ public final class StaffBotConfiguration {
         Objects.requireNonNull(values, "values");
         StaffBotEnvironment environment = StaffBotEnvironment.parse(required(values, ENVIRONMENT_KEY));
         String token = requireSecret(values.get(TOKEN_KEY));
+        boolean uiPreviewEnabled = booleanValue(values, UI_PREVIEW_KEY, false);
         String healthHost = values.getOrDefault(HEALTH_HOST_KEY, IPV4_LOOPBACK_HOST).trim();
         if (!LOOPBACK_HOSTS.contains(healthHost)) {
             throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
@@ -87,6 +95,7 @@ public final class StaffBotConfiguration {
         return new StaffBotConfiguration(
                 environment,
                 token,
+                uiPreviewEnabled,
                 loopbackSocketAddress(healthHost, healthPort),
                 workerThreads,
                 queueCapacity,
@@ -100,6 +109,10 @@ public final class StaffBotConfiguration {
 
     String discordToken() {
         return discordToken;
+    }
+
+    public boolean uiPreviewEnabled() {
+        return uiPreviewEnabled;
     }
 
     public InetSocketAddress healthAddress() {
@@ -133,6 +146,7 @@ public final class StaffBotConfiguration {
     @Override
     public String toString() {
         return "StaffBotConfiguration[environment=" + environment.label()
+                + ", uiPreviewEnabled=" + uiPreviewEnabled
                 + ", healthAddress=" + healthAddress
                 + ", workerThreads=" + workerThreads
                 + ", workerQueueCapacity=" + workerQueueCapacity
@@ -168,6 +182,20 @@ public final class StaffBotConfiguration {
             throw new IllegalArgumentException(TOKEN_KEY + " is required");
         }
         return value;
+    }
+
+    private static boolean booleanValue(Map<String, String> values, String key, boolean fallback) {
+        String raw = values.get(key);
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        if ("true".equalsIgnoreCase(raw.trim())) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(raw.trim())) {
+            return false;
+        }
+        throw new IllegalArgumentException(key + " must be true or false");
     }
 
     private static int integer(Map<String, String> values, String key, int fallback, int minimum, int maximum) {
