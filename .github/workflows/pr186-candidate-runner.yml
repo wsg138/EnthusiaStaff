@@ -45,20 +45,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=$(cat <<'EOF'
-staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java
-staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
-staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java
-staff-bot/src/main/resources/moderation-preview/app.js
-staff-bot/src/main/resources/moderation-preview/model.js
-staff-bot/src/main/resources/moderation-preview/review.js
-staff-bot/src/main/resources/moderation-preview/workflow.js
-staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
-staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java
-staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
-EOF
-          )
+          EXPECTED="$(printf '%s\n' \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java \
+            staff-bot/src/main/resources/moderation-preview/app.js \
+            staff-bot/src/main/resources/moderation-preview/model.js \
+            staff-bot/src/main/resources/moderation-preview/review.js \
+            staff-bot/src/main/resources/moderation-preview/workflow.js \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java)"
           ACTUAL="$(git diff --name-only | sort)"
           test "${ACTUAL}" = "${EXPECTED}"
           for file in staff-bot/src/main/resources/moderation-preview/{model,app,workflow,review}.js; do
