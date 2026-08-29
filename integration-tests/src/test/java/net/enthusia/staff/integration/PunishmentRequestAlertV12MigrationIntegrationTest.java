@@ -12,8 +12,6 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Calendar;
-import java.util.TimeZone;
 import java.util.UUID;
 import net.enthusia.staff.persistence.MariaDb;
 import org.flywaydb.core.Flyway;
@@ -32,7 +30,10 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_alert_v12_upgrade_test")
             .withUsername("enthusia_test")
-            .withPassword("enthusia_test_password");
+            .withPassword("enthusia_test_password")
+            .withUrlParam("connectionTimeZone", "UTC")
+            .withUrlParam("forceConnectionTimeZoneToSession", "true")
+            .withUrlParam("preserveInstants", "true");
 
     @Test
     void upgradesV11RowsWithoutConsumingSharedAudienceIntent() throws Exception {
@@ -70,7 +71,7 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             assertEquals(CREATED.plusSeconds(30L * 24 * 60 * 60), expiresAt(dataSource, audienceAlert));
             assertTrue(columnIsNotNullable(dataSource, "staff_alerts", "expires_at"));
             assertTrue(columnHasDefault(dataSource, "staff_alerts", "expires_at"));
-            assertEquals("alert_id,recipient_id", primaryKeyColumns(dataSource, "staff_alert_deliveries"));
+            assertEquals("alert_id,recipient_id", primaryKeyColumns(dataSource, "staff_alerts"));
             assertFalse("CASCADE".equals(deliveryForeignKeyDeleteRule(dataSource)));
             assertFalse(hasCascadeDelete(dataSource, "staff_alert_deliveries"));
         }
@@ -112,11 +113,10 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
                 statement.setNull(7, java.sql.Types.BINARY);
             }
             statement.setString(8, state);
-            Calendar utc = utcCalendar();
-            statement.setTimestamp(9, Timestamp.from(CREATED), utc);
-            statement.setTimestamp(10, Timestamp.from(CREATED), utc);
+            statement.setTimestamp(9, Timestamp.from(CREATED));
+            statement.setTimestamp(10, Timestamp.from(CREATED));
             statement.setTimestamp(11, "DELIVERED".equals(state)
-                    ? Timestamp.from(CREATED.plusSeconds(10)) : null, utc);
+                    ? Timestamp.from(CREATED.plusSeconds(10)) : null);
             assertEquals(1, statement.executeUpdate());
         }
     }
@@ -164,13 +164,9 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
-                return result.getTimestamp(1, utcCalendar()).toInstant();
+                return result.getTimestamp(1).toInstant();
             }
         }
-    }
-
-    private static Calendar utcCalendar() {
-        return Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     }
 
     private static boolean columnIsNotNullable(
