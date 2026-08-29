@@ -20,7 +20,7 @@ class ModerationPreviewWebConfigTest {
     }
 
     @Test
-    void publicDeploymentRequiresFixedBindAndHttps() {
+    void publicDeploymentRequiresFixedLoopbackBindAndHttps() {
         Map<String, String> valid = Map.of(
                 ModerationPreviewWebConfig.BIND_ENV, "127.0.0.1:8765",
                 ModerationPreviewWebConfig.PUBLIC_URL_ENV, "https://staff-preview.example.test");
@@ -35,6 +35,15 @@ class ModerationPreviewWebConfigTest {
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
                 ModerationPreviewWebConfig.BIND_ENV, "127.0.0.1:8765",
                 ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://staff-preview.example.test")));
+        assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8765",
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "https://staff-preview.example.test")));
+    }
+
+    @Test
+    void rawNonLoopbackListenerIsRejectedEvenWithoutPublicLauncher() {
+        assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8765")));
     }
 
     @Test

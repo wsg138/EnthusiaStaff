@@ -15,6 +15,9 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
     ModerationPreviewWebConfig {
         Objects.requireNonNull(bindAddress, "bindAddress");
         Objects.requireNonNull(publicBaseUri, "publicBaseUri");
+        if (bindAddress.getAddress() == null || !bindAddress.getAddress().isLoopbackAddress()) {
+            throw new IllegalArgumentException("preview web bind must use a loopback address");
+        }
         if (publicBaseUri.isPresent() && bindAddress.getPort() == 0) {
             throw new IllegalArgumentException("preview public URL requires an explicit web bind port");
         }

@@ -7,6 +7,7 @@ function openWorkflow() {
   };
   renderWorkflow();
   $('#punishmentDialog').showModal();
+  $('[data-offense]')?.focus();
 }
 function closeWorkflow() { if ($('#punishmentDialog').open) $('#punishmentDialog').close(); state.workflow=null; }
 
@@ -32,7 +33,7 @@ function renderWorkflowSteps(step) {
 
 function renderOffenseStep() {
   const suggested = scenarioOffense();
-  $('#workflowBody').innerHTML = `<div class="step-intro"><h3>What happened?</h3><p>Choose the policy family first. History is evaluated only after the offense is known.</p></div><div class="option-grid">${OFFENSES.map(([key,label])=>`<button type="button" class="choice-card ${key===suggested?'suggested':''}" data-offense="${key}"><strong>${label}</strong><span>${offenseHint(key)}</span>${key===suggested?'<small>Suggested for this scenario</small>':''}</button>`).join('')}</div>`;
+  $('#workflowBody').innerHTML = `<div class="step-intro"><h3>What happened?</h3><p>Choose the policy family first. History is evaluated only after the offense is known.</p></div><div class="option-grid">${OFFENSES.map(([key,label])=>`<button type="button" class="choice-card ${key===suggested?'suggested':''}" data-offense="${key}"><strong>${label}</strong><span>${offenseHint(key)}</span>${key===suggested?'<small>Suggested for this sample</small>':''}</button>`).join('')}</div>`;
   $('#workflowFooter').innerHTML = `<button class="button ghost" type="button" data-cancel>Cancel</button>`;
   $$('[data-offense]').forEach((button)=>button.addEventListener('click',()=>chooseOffense(button.dataset.offense)));
   $('[data-cancel]').addEventListener('click',closeWorkflow);
@@ -65,7 +66,7 @@ function consequenceFor(key,step) {
 
 function recommendationReason(key,relevant,step,base) {
   const offense = OFFENSES.find(([value])=>value===key)?.[1] || 'Other';
-  if (base > 1 && relevant === 0) return `${offense} starts at step ${base} in this preview policy because of severity.`;
+  if (base > 1 && relevant === 0) return `${offense} starts at ladder step ${base} because of severity.`;
   const incident = relevant===0?'first relevant incident':relevant===1?'second relevant incident':relevant===2?'third relevant incident':`${relevant+1}th relevant incident`;
   return `${offense} — ${incident}; ladder step ${step}.`;
 }
@@ -85,13 +86,18 @@ function useRecommendation(custom) {
   const w=state.workflow, r=w.recommendation;
   w.custom=custom;
   w.actual={action:r.action}; w.scope=r.scope; w.duration=r.duration;
+  if (custom) seedCustomScenario(w);
+  w.step='options'; renderWorkflow();
+}
+
+function seedCustomScenario(w) {
   if (state.scenario==='restrict-one' || state.scenario==='restrict-many') {
-    w.custom=true; w.actual={action:'Restrict'}; w.scope='Discord'; w.duration='3 days';
+    w.actual={action:'Restrict'}; w.scope='Discord'; w.duration='3 days';
     if (state.scenario==='restrict-one') w.restrictionTargets.add('general');
     else { w.restrictionTargets.add('general'); w.restrictionTargets.add('market'); w.restrictionTargets.add('trading'); w.restrictMode='no-access'; }
+  } else if (state.scenario==='custom') {
+    w.actual={action:'Kick'}; w.scope='Discord'; w.duration='—';
   }
-  if (state.scenario==='custom') { w.custom=true; w.actual={action:'Mute'}; w.scope='Discord'; w.duration='7 days'; }
-  w.step='options'; renderWorkflow();
 }
 
 function renderOptionsStep() {
@@ -110,7 +116,7 @@ function customControlsHtml(w) {
   const actions=['Warning','Mute','Kick','Ban','Restrict'];
   const restrict=w.actual.action==='Restrict';
   const needsDuration=!['Warning','Kick'].includes(w.actual.action);
-  return `<section class="card option-section"><div class="field-row wrap"><label class="field-label">Punishment<select id="customAction">${actions.map((value)=>`<option ${w.actual.action===value?'selected':''}>${value}</option>`).join('')}</select></label>${restrict?'<label class="field-label">Scope<select id="customScope" disabled><option selected>Discord</option></select></label>':`<label class="field-label">Scope<select id="customScope"><option ${w.scope==='Discord'?'selected':''}>Discord</option><option ${w.scope==='Minecraft'?'selected':''}>Minecraft</option><option ${w.scope==='Both'?'selected':''}>Both</option></select></label>`}${needsDuration?`<label class="field-label">Duration<select id="customDuration">${['30 minutes','2 hours','1 day','3 days','7 days','14 days','30 days','Permanent'].map((value)=>`<option ${w.duration===value?'selected':''}>${value}</option>`).join('')}</select></label>`:''}</div><div class="override-note"><strong>Custom override</strong><span>The backend would still reauthorize the concrete action before commit.</span></div></section>`;
+  return `<section class="card option-section"><div class="field-row wrap"><label class="field-label">Punishment<select id="customAction">${actions.map((value)=>`<option ${w.actual.action===value?'selected':''}>${value}</option>`).join('')}</select></label>${restrict?'<label class="field-label">Scope<select id="customScope" disabled><option selected>Discord</option></select></label>':`<label class="field-label">Scope<select id="customScope"><option ${w.scope==='Discord'?'selected':''}>Discord</option><option ${w.scope==='Minecraft'?'selected':''}>Minecraft</option><option ${w.scope==='Both'?'selected':''}>Both</option></select></label>`}${needsDuration?`<label class="field-label">Duration<select id="customDuration">${['30 minutes','2 hours','1 day','3 days','7 days','14 days','30 days','Permanent'].map((value)=>`<option ${w.duration===value?'selected':''}>${value}</option>`).join('')}</select></label>`:''}</div><div class="override-note"><strong>Custom override</strong><span>This differs from the normal ladder path. Review the action, scope, duration, and approval requirement carefully.</span></div></section>`;
 }
 
 function summaryActualHtml(w) {
@@ -134,13 +140,23 @@ function bindOptionsEvents() {
   $('[data-review-messages]').addEventListener('click',()=>{ captureOptions(); closeWorkflow(); switchView('messages'); showToast('Message selections are preserved. Reopen Issue Punishment when ready.'); });
   $('#dmUserOption').addEventListener('change',(event)=>{w.dm=event.target.checked;});
   $('#reasonInput').addEventListener('input',(event)=>{w.reason=event.target.value;});
-  $('#customAction')?.addEventListener('change',(event)=>{ w.actual={action:event.target.value}; if (event.target.value==='Restrict') {w.scope='Discord'; if (!w.duration||w.duration==='—') w.duration='3 days';} renderWorkflow(); });
+  $('#customAction')?.addEventListener('change',(event)=>setCustomAction(event.target.value));
   $('#customScope')?.addEventListener('change',(event)=>{w.scope=event.target.value;});
   $('#customDuration')?.addEventListener('change',(event)=>{w.duration=event.target.value;});
   $$('[name="restrictMode"]').forEach((input)=>input.addEventListener('change',(event)=>{w.restrictMode=event.target.value;}));
   $('#targetSearch')?.addEventListener('input',(event)=>{ $('#restrictionTargetList').innerHTML=restrictionTargetsHtml(w,event.target.value); bindRestrictionTargets(); });
   bindRestrictionTargets();
 }
+
+function setCustomAction(action) {
+  const w=state.workflow;
+  w.actual={action};
+  if (['Warning','Kick'].includes(action)) w.duration='—';
+  else if (!w.duration || w.duration==='—') w.duration='3 days';
+  if (action==='Restrict') w.scope='Discord';
+  renderWorkflow();
+}
+
 function bindRestrictionTargets() { $$('[data-restriction-target]').forEach((input)=>input.addEventListener('change',(event)=>toggleSet(state.workflow.restrictionTargets,event.target.dataset.restrictionTarget,event.target.checked))); }
 function captureOptions() {
   const w=state.workflow;

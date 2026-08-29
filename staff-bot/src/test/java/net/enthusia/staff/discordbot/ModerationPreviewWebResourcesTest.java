@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,6 +33,8 @@ class ModerationPreviewWebResourcesTest {
 
         assertOrdered(html, "/assets/model.js", "/assets/app.js", "/assets/workflow.js", "/assets/review.js");
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
+        assertTrue(html.contains("Sample case"));
+        assertFalse(html.contains("Preview scenario"));
     }
 
     @Test
@@ -49,6 +52,19 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(review.contains("Messages to delete"));
         assertTrue(review.contains("Simulation complete"));
         assertTrue(review.contains("No live moderation action was performed."));
+    }
+
+    @Test
+    void recommendationPathDoesNotSilentlyBecomeScenarioOverride() throws IOException {
+        String workflow = resourceText("/moderation-preview/workflow.js");
+        int start = workflow.indexOf("function useRecommendation(custom)");
+        int end = workflow.indexOf("function seedCustomScenario", start);
+
+        assertTrue(start >= 0 && end > start);
+        String recommendationPath = workflow.substring(start, end);
+        assertTrue(recommendationPath.contains("if (custom) seedCustomScenario(w);"));
+        assertFalse(recommendationPath.contains("state.scenario==='restrict-one'"));
+        assertFalse(recommendationPath.contains("state.scenario==='custom'"));
     }
 
     private String resourceText(String resource) throws IOException {

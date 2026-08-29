@@ -78,7 +78,7 @@ async function loadSession() {
     const response = await fetch('/api/session', {headers:{Accept:'application/json'}});
     if (!response.ok) throw new Error('Session unavailable');
     state.session = await response.json();
-    $('#actorMeta').textContent = `Actor ${state.session.actorId} · session bound`;
+    $('#actorMeta').textContent = 'Verified staff session';
   } catch (error) {
     $('#actorMeta').textContent = 'Session unavailable';
     showToast('Open this panel from the Discord launcher.', true);
