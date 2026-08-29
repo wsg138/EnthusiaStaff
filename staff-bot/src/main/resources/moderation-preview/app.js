@@ -5,26 +5,26 @@ function renderAll() {
 }
 
 function renderTargetHeader() {
-  $('#targetHeader').innerHTML = `
+  replaceMarkup($('#targetHeader'), `
     <div class="target-avatar" aria-hidden="true">RA</div>
     <div class="target-identity">
-      <div class="identity-line"><h1 id="targetName">${identity.displayName}</h1><span class="status-badge warning">${identity.status}</span><span class="status-badge neutral">Java + Bedrock linked</span></div>
-      <div class="target-subline">@${identity.username} <span>•</span> ${identity.minecraft} <span>•</span> ${identity.alts.length} linked alt</div>
-      <details class="technical-meta"><summary>Technical IDs</summary><div>Discord ${identity.discordId} · Minecraft ${identity.minecraftUuid}</div></details>
+      <div class="identity-line"><h1 id="targetName">${esc(identity.displayName)}</h1><span class="status-badge warning">${esc(identity.status)}</span><span class="status-badge neutral">Java + Bedrock linked</span></div>
+      <div class="target-subline">@${esc(identity.username)} <span>•</span> ${esc(identity.minecraft)} <span>•</span> ${identity.alts.length} linked alt</div>
+      <details class="technical-meta"><summary>Technical IDs</summary><div>Discord ${esc(identity.discordId)} · Minecraft ${esc(identity.minecraftUuid)}</div></details>
     </div>
-    <div class="target-actions"><button class="button secondary" type="button" data-open-messages>Review messages</button><button class="button primary" type="button" data-punish>Issue Punishment</button></div>`;
+    <div class="target-actions"><button class="button secondary" type="button" data-open-messages>Review messages</button><button class="button primary" type="button" data-punish>Issue Punishment</button></div>`);
   $('[data-open-messages]').addEventListener('click', () => switchView('messages'));
   $('[data-punish]').addEventListener('click', openWorkflow);
 }
 
 function renderContextPanel() {
   const active = identity.status === 'Discord mute' ? `<span class="status-badge warning">Active</span>` : '';
-  $('#contextPanel').innerHTML = `
-    <div class="context-section"><div class="section-heading"><h3>Linked accounts</h3><button class="text-button" data-context-view="accounts">View</button></div><div class="account-line"><strong>${identity.minecraft}</strong><span>Main · Java</span></div><div class="account-line"><strong>${identity.alts[0].name}</strong><span>${identity.alts[0].platform} · linked alt</span></div></div>
+  replaceMarkup($('#contextPanel'), `
+    <div class="context-section"><div class="section-heading"><h3>Linked accounts</h3><button class="text-button" data-context-view="accounts">View</button></div><div class="account-line"><strong>${esc(identity.minecraft)}</strong><span>Main · Java</span></div><div class="account-line"><strong>${esc(identity.alts[0].name)}</strong><span>${esc(identity.alts[0].platform)} · linked alt</span></div></div>
     <div class="context-section"><div class="section-heading"><h3>Current sanctions</h3>${active}</div><div class="context-value">Discord mute</div><div class="muted small">1h 18m remaining · chat only</div></div>
     <div class="context-section"><div class="section-heading"><h3>Open case</h3><button class="text-button" data-context-view="cases">View</button></div><div class="context-value">CASE-1187</div><div class="muted small">Spam pattern review · Morgan</div></div>
     <div class="context-section"><div class="section-heading"><h3>Latest staff note</h3><button class="text-button" data-context-view="notes">View</button></div><p class="compact-copy">Repeated flood behavior documented. Player was cooperative during the last contact.</p><div class="muted tiny">Avery · Aug 20, 2026 8:14 PM</div></div>
-    <div class="context-section"><h3>Authority context</h3><p class="compact-copy">This browser presents options only. Final authority, target protection, duration limits and approvals are server decisions.</p></div>`;
+    <div class="context-section"><h3>Case readiness</h3><p class="compact-copy">Review the offense, evidence, recommendation, and any approval requirement before confirmation.</p></div>`);
   $$('[data-context-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.contextView)));
 }
 
@@ -36,13 +36,16 @@ function renderCounts() {
 }
 
 function renderWorkspace() {
-  const content = $('#workspaceContent');
-  if (state.view === 'overview') content.innerHTML = overviewHtml();
-  else if (state.view === 'messages') content.innerHTML = messagesHtml();
-  else if (state.view === 'history') content.innerHTML = historyHtml();
-  else if (state.view === 'cases') content.innerHTML = casesHtml();
-  else if (state.view === 'notes') content.innerHTML = notesHtml();
-  else if (state.view === 'accounts') content.innerHTML = accountsHtml();
+  const views = {
+    overview: overviewHtml,
+    messages: messagesHtml,
+    history: historyHtml,
+    cases: casesHtml,
+    notes: notesHtml,
+    accounts: accountsHtml
+  };
+  const renderer = views[state.view] || overviewHtml;
+  replaceMarkup($('#workspaceContent'), renderer());
   bindViewEvents();
 }
 
@@ -56,7 +59,7 @@ function overviewHtml() {
     <section class="card"><div class="section-heading"><h3>Investigation</h3><button class="text-button" data-view-link="messages">Open messages</button></div><div class="summary-list"><div class="summary-row"><span>Selected messages</span><strong>${state.selected.size}</strong></div><div class="summary-row"><span>Evidence</span><strong>${state.evidence.size}</strong></div><div class="summary-row"><span>Delete on confirm</span><strong>${state.deleting.size}</strong></div></div><button class="button primary full" type="button" data-punish>Issue Punishment</button></section></div>`;
 }
 
-function metric(label,value,detail,tone='') { return `<div class="metric-card ${tone}"><span>${label}</span><strong>${value}</strong><small>${detail}</small></div>`; }
+function metric(label,value,detail,tone='') { return `<div class="metric-card ${esc(tone)}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div>`; }
 function historyCompact(row) { return `<div class="compact-row"><div><strong>${esc(row.offense)}</strong><span>${formatDate(row.date)} · ${esc(row.staff)}</span></div><div class="right"><strong>${esc(row.action)}</strong><span>${esc(row.duration)}</span></div></div>`; }
 
 function messagesHtml() {
@@ -93,29 +96,31 @@ function groupedMessagesHtml(messages) {
 }
 
 function groupHeader(message) {
-  return `<div class="conversation-divider"><span>${dateHeading(message.time)}</span><span>#${message.channel}</span></div>`;
+  return `<div class="conversation-divider"><span>${esc(dateHeading(message.time))}</span><span>#${esc(message.channel)}</span></div>`;
 }
 
 function messageHtml(message) {
   const selected = state.selected.has(message.id);
-  const reply = message.replyTo ? `<div class="reply-reference">↳ Replying to message ${message.replyTo}</div>` : '';
+  const id = esc(message.id);
+  const time = esc(message.time);
+  const reply = message.replyTo ? `<div class="reply-reference">↳ Replying to message ${esc(message.replyTo)}</div>` : '';
   const attachment = message.attachment ? `<div class="attachment-card"><div class="attachment-icon">IMG</div><div><strong>${esc(message.attachment.name)}</strong><span>${esc(message.attachment.detail)}</span></div></div>` : '';
   const statuses = [state.evidence.has(message.id) ? '<span class="message-pill evidence">Evidence</span>' : '', state.violating.has(message.id) ? '<span class="message-pill violating">Violating</span>' : '', state.deleting.has(message.id) ? '<span class="message-pill delete">Delete on confirm</span>' : ''].join('');
-  return `<article class="message-row ${selected?'selected':''} ${message.deleted?'deleted':''}" data-message-id="${message.id}">
-    <div><input class="message-select" type="checkbox" aria-label="Select message from ${esc(message.author)} at ${formatExact(message.time)}" ${selected?'checked':''}></div>
+  return `<article class="message-row ${selected?'selected':''} ${message.deleted?'deleted':''}" data-message-id="${id}">
+    <div><input class="message-select" type="checkbox" aria-label="Select message from ${esc(message.author)} at ${esc(formatExact(message.time))}" ${selected?'checked':''}></div>
     <div class="message-avatar ${message.target?'target':''}" aria-hidden="true">${esc(message.initials)}</div>
-    <div class="message-body">${reply}<div class="message-meta"><strong>${esc(message.author)}</strong>${message.target?'<span class="target-chip">Target</span>':''}<span>@${esc(message.username)}</span><time datetime="${message.time}">${formatExact(message.time)}</time>${message.edited?'<span>(edited)</span>':''}</div>
-      <div class="message-text">${message.deleted?'<em>Message deleted in source context</em>':esc(message.text)}</div>${attachment}<div class="message-statuses">${statuses}</div><div class="message-id">Message ID ${message.id}</div></div>
-    <button class="icon-button context-button" type="button" data-context-message="${message.id}" aria-label="Inspect surrounding context for message ${message.id}">•••</button>
+    <div class="message-body">${reply}<div class="message-meta"><strong>${esc(message.author)}</strong>${message.target?'<span class="target-chip">Target</span>':''}<span>@${esc(message.username)}</span><time datetime="${time}">${esc(formatExact(message.time))}</time>${message.edited?'<span>(edited)</span>':''}</div>
+      <div class="message-text">${message.deleted?'<em>Message deleted in source context</em>':esc(message.text)}</div>${attachment}<div class="message-statuses">${statuses}</div><div class="message-id">Message ID ${id}</div></div>
+    <button class="icon-button" type="button" data-context-message="${id}" aria-label="Inspect surrounding context for message ${id}">•••</button>
   </article>`;
 }
 
 function renderSelectionBar() {
   const bar = $('#selectionBar');
-  if (state.selected.size === 0) { bar.hidden = true; bar.innerHTML = ''; return; }
+  if (state.selected.size === 0) { bar.hidden = true; bar.replaceChildren(); return; }
   bar.hidden = false;
-  bar.innerHTML = `<div class="selection-summary"><strong>${state.selected.size} selected</strong><span>${state.evidence.size} evidence · ${state.deleting.size} delete on confirm</span></div><div class="selection-actions">
-    <button class="button secondary" data-selection-action="evidence" type="button">${allSelectedIn(state.evidence)?'Remove Evidence':'Add to Evidence'}</button><button class="button secondary" data-selection-action="violating" type="button">${allSelectedIn(state.violating)?'Clear Violating':'Mark Violating'}</button><button class="button danger-secondary" data-selection-action="delete" type="button">${allSelectedIn(state.deleting)?'Preserve Messages':'Delete on Confirm'}</button><button class="button ghost" data-selection-action="clear" type="button">Remove Selection</button></div>`;
+  replaceMarkup(bar, `<div class="selection-summary"><strong>${state.selected.size} selected</strong><span>${state.evidence.size} evidence · ${state.deleting.size} delete on confirm</span></div><div class="selection-actions">
+    <button class="button secondary" data-selection-action="evidence" type="button">${allSelectedIn(state.evidence)?'Remove Evidence':'Add to Evidence'}</button><button class="button secondary" data-selection-action="violating" type="button">${allSelectedIn(state.violating)?'Clear Violating':'Mark Violating'}</button><button class="button danger-secondary" data-selection-action="delete" type="button">${allSelectedIn(state.deleting)?'Preserve Messages':'Delete on Confirm'}</button><button class="button ghost" data-selection-action="clear" type="button">Remove Selection</button></div>`);
   $$('[data-selection-action]').forEach((button) => button.addEventListener('click', () => selectionAction(button.dataset.selectionAction)));
 }
 
@@ -178,15 +183,15 @@ function contextMessageIds(id) {
 
 function historyHtml() {
   return `<div class="page-heading"><div><div class="eyebrow">Moderation record</div><h2>History</h2><p>Total history remains visible; the punishment workflow separately identifies only ladder-relevant records for the selected offense.</p></div></div>
-    <section class="card table-card"><div class="responsive-table"><table><thead><tr><th>Date</th><th>Offense</th><th>Action</th><th>Duration</th><th>Staff</th><th>Status</th></tr></thead><tbody>${state.history.map((row)=>`<tr><td>${formatDate(row.date)}</td><td>${esc(row.offense)}</td><td><strong>${esc(row.action)}</strong></td><td>${esc(row.duration)}</td><td>${esc(row.staff)}</td><td><span class="status-badge neutral">${esc(row.status)}</span></td></tr>`).join('')}</tbody></table></div></section>`;
+    <section class="card table-card"><div class="responsive-table"><table><thead><tr><th>Date</th><th>Offense</th><th>Action</th><th>Duration</th><th>Staff</th><th>Status</th></tr></thead><tbody>${state.history.map((row)=>`<tr><td>${esc(formatDate(row.date))}</td><td>${esc(row.offense)}</td><td><strong>${esc(row.action)}</strong></td><td>${esc(row.duration)}</td><td>${esc(row.staff)}</td><td><span class="status-badge neutral">${esc(row.status)}</span></td></tr>`).join('')}</tbody></table></div></section>`;
 }
 
 function casesHtml() { return `<div class="page-heading"><div><div class="eyebrow">Case management</div><h2>Cases</h2><p>Current and historical investigations connected to this player.</p></div></div><div class="card-list">${[
   ['CASE-1187','Aug 29, 2026','Spam pattern review','Open','Morgan','Pending punishment'],['CASE-1044','Aug 20, 2026','Repeated flooding','Closed','Sam','Warning'],['CASE-0911','Jun 17, 2026','Harassment review','Closed','Avery','Warning']
-].map((row)=>`<section class="card case-card"><div><span class="eyebrow">${row[0]}</span><h3>${row[2]}</h3><p>${row[1]} · ${row[4]}</p></div><div class="case-status"><span class="status-badge ${row[3]==='Open'?'warning':'neutral'}">${row[3]}</span><strong>${row[5]}</strong></div></section>`).join('')}</div>`; }
+].map((row)=>`<section class="card case-card"><div><span class="eyebrow">${esc(row[0])}</span><h3>${esc(row[2])}</h3><p>${esc(row[1])} · ${esc(row[4])}</p></div><div class="case-status"><span class="status-badge ${row[3]==='Open'?'warning':'neutral'}">${esc(row[3])}</span><strong>${esc(row[5])}</strong></div></section>`).join('')}</div>`; }
 
 function notesHtml() { return `<div class="page-heading"><div><div class="eyebrow">Staff context</div><h2>Notes</h2><p>Concise internal notes attached to the player record.</p></div></div><div class="timeline">${[
   ['Aug 29, 2026 · 5:48 PM','Morgan','Investigating repeated promotional flooding across #general and #market.'],['Aug 20, 2026 · 8:14 PM','Avery','Player acknowledged the prior warning and was cooperative.'],['Jun 17, 2026 · 3:02 PM','Sam','Initial behavior note; no account-link concerns observed.']
-].map((note)=>`<article class="timeline-item"><div class="timeline-dot"></div><div class="card"><div class="section-heading"><strong>${note[1]}</strong><time>${note[0]}</time></div><p>${note[2]}</p></div></article>`).join('')}</div>`; }
+].map((note)=>`<article class="timeline-item"><div class="timeline-dot"></div><div class="card"><div class="section-heading"><strong>${esc(note[1])}</strong><time>${esc(note[0])}</time></div><p>${esc(note[2])}</p></div></article>`).join('')}</div>`; }
 
-function accountsHtml() { return `<div class="page-heading"><div><div class="eyebrow">Identity graph</div><h2>Accounts</h2><p>Discord and Minecraft identities associated with this moderation target.</p></div></div><div class="account-grid"><section class="card"><span class="eyebrow">Discord identity</span><h3>${identity.displayName}</h3><p>@${identity.username}</p><dl class="detail-list"><div><dt>Discord ID</dt><dd>${identity.discordId}</dd></div><div><dt>Link status</dt><dd>Verified</dd></div></dl></section><section class="card"><span class="eyebrow">Minecraft main</span><h3>${identity.minecraft}</h3><p>Java Edition · Main account</p><dl class="detail-list"><div><dt>UUID</dt><dd>${identity.minecraftUuid}</dd></div><div><dt>Link status</dt><dd>Verified</dd></div></dl></section><section class="card"><span class="eyebrow">Linked alt</span><h3>${identity.alts[0].name}</h3><p>Bedrock Edition</p><dl class="detail-list"><div><dt>Relationship</dt><dd>Linked alt</dd></div><div><dt>Status</dt><dd>Active link</dd></div></dl></section></div>`; }
+function accountsHtml() { return `<div class="page-heading"><div><div class="eyebrow">Identity graph</div><h2>Accounts</h2><p>Discord and Minecraft identities associated with this moderation target.</p></div></div><div class="account-grid"><section class="card"><span class="eyebrow">Discord identity</span><h3>${esc(identity.displayName)}</h3><p>@${esc(identity.username)}</p><dl class="detail-list"><div><dt>Discord ID</dt><dd>${esc(identity.discordId)}</dd></div><div><dt>Link status</dt><dd>Verified</dd></div></dl></section><section class="card"><span class="eyebrow">Minecraft main</span><h3>${esc(identity.minecraft)}</h3><p>Java Edition · Main account</p><dl class="detail-list"><div><dt>UUID</dt><dd>${esc(identity.minecraftUuid)}</dd></div><div><dt>Link status</dt><dd>Verified</dd></div></dl></section><section class="card"><span class="eyebrow">Linked alt</span><h3>${esc(identity.alts[0].name)}</h3><p>Bedrock Edition</p><dl class="detail-list"><div><dt>Relationship</dt><dd>Linked alt</dd></div><div><dt>Status</dt><dd>Active link</dd></div></dl></section></div>`; }

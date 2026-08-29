@@ -5,15 +5,15 @@ function renderReviewStep() {
   const approval=approvalFor(w.actual.action,w.duration);
   const restrict=w.actual.action==='Restrict';
   const targets=[...w.restrictionTargets].map((id)=>RESTRICTION_TARGETS.find((target)=>target.id===id)).filter(Boolean);
-  $('#workflowBody').innerHTML = `${stale?`<div class="alert warning"><strong>Evidence changed after the recommendation.</strong><span>Recalculate before simulation so the review matches the current incident.</span></div>`:''}
+  replaceMarkup($('#workflowBody'), `${stale?`<div class="alert warning"><strong>Evidence changed after the recommendation.</strong><span>Recalculate before simulation so the review matches the current incident.</span></div>`:''}
     <div class="review-grid">
       ${reviewItem('Target',`${identity.displayName} · ${identity.minecraft}`)}${reviewItem('Offense',w.offense.label)}${reviewItem('Relevant history',`${r.relevant.length} of ${r.total} total records`)}${reviewItem('Ladder recommendation',`${r.action} · ${r.duration}`)}
       ${reviewItem('Actual action',`${w.actual.action}${w.custom?' · Custom override':''}`)}${reviewItem('Following recommendation',w.custom?'No — Custom override':'Yes')}${w.duration!=='—'?reviewItem('Duration',w.duration):''}${reviewItem('Scope / platform',w.scope)}
       ${restrict?reviewItem('Restriction mode',w.restrictMode==='read-only'?'Read only':'No access'):''}${restrict?reviewItem('Restriction targets',targets.length?targets.map((target)=>target.label).join(', '):'None selected'):''}
       ${reviewItem('Evidence messages',String(state.evidence.size))}${reviewItem('Messages to delete',String(state.deleting.size))}${reviewItem('Preserve',`${preservedEvidenceCount()} evidence message${preservedEvidenceCount()===1?'':'s'}`)}${reviewItem('DM user',w.dm?'Yes':'No')}${reviewItem('Approval requirement',approval)}
     </div>
-    <section class="card review-evidence"><div class="section-heading"><div><h3>Case & evidence summary</h3><p>Selected Discord messages remain distinct from deletion instructions.</p></div></div>${evidenceSummaryHtml()}${w.reason?`<div class="staff-reason"><span>Staff explanation</span><p>${esc(w.reason)}</p></div>`:''}</section>`;
-  $('#workflowFooter').innerHTML = `<button class="button ghost" type="button" data-back>Back</button><div class="inline">${stale?'<button class="button secondary" type="button" data-recalculate>Recalculate</button>':''}<button class="button primary" type="button" data-confirm ${stale || (restrict&&targets.length===0)?'disabled':''}>Confirm simulation</button></div>`;
+    <section class="card review-evidence"><div class="section-heading"><div><h3>Case & evidence summary</h3><p>Selected Discord messages remain distinct from deletion instructions.</p></div></div>${evidenceSummaryHtml()}${w.reason?`<div class="staff-reason"><span>Staff explanation</span><p>${esc(w.reason)}</p></div>`:''}</section>`);
+  replaceMarkup($('#workflowFooter'), `<button class="button ghost" type="button" data-back>Back</button><div class="inline">${stale?'<button class="button secondary" type="button" data-recalculate>Recalculate</button>':''}<button class="button primary" type="button" data-confirm ${stale || (restrict&&targets.length===0)?'disabled':''}>Confirm simulation</button></div>`);
   $('[data-back]').addEventListener('click',()=>{w.step='options';renderWorkflow();});
   $('[data-recalculate]')?.addEventListener('click',()=>{w.recommendation=recommend(w.offense.key);w.recommendationEvidenceRevision=state.evidenceRevision;w.stale=false;renderWorkflow();});
   $('[data-confirm]').addEventListener('click',confirmSimulation);
@@ -22,8 +22,13 @@ function renderReviewStep() {
 function reviewItem(label,value) { return `<div class="review-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`; }
 function evidenceSummaryHtml() {
   const ids=[...state.evidence];
-  if (!ids.length) return `<div class="empty-inline">No message evidence selected.</div>`;
-  return ids.map((id)=>{const message=baseMessages.find((item)=>item.id===id);if(!message)return'';return `<div class="evidence-line"><div><strong>#${message.channel} · ${formatExact(message.time)}</strong><span>${esc(message.text)}</span></div><div class="chip-row"><span class="message-pill evidence">Evidence</span>${state.violating.has(id)?'<span class="message-pill violating">Violating</span>':''}${state.deleting.has(id)?'<span class="message-pill delete">Delete</span>':'<span class="message-pill preserve">Preserve</span>'}</div></div>`;}).join('');
+  if (!ids.length) return '<div class="empty-inline">No message evidence selected.</div>';
+  return ids.map((id)=>{
+    const message=baseMessages.find((item)=>item.id===id);
+    if(!message)return'';
+    const disposition=state.deleting.has(id)?'<span class="message-pill delete">Delete</span>':'<span class="message-pill preserve">Preserve</span>';
+    return `<div class="evidence-line"><div><strong>#${esc(message.channel)} · ${esc(formatExact(message.time))}</strong><span>${esc(message.text)}</span></div><div class="chip-row"><span class="message-pill evidence">Evidence</span>${state.violating.has(id)?'<span class="message-pill violating">Violating</span>':''}${disposition}</div></div>`;
+  }).join('');
 }
 function preservedEvidenceCount() { return [...state.evidence].filter((id)=>!state.deleting.has(id)).length; }
 function approvalFor(action,duration) { return duration==='Permanent' && ['Ban','Mute','Restrict'].includes(action)?'Admin+ approval required':'None'; }
@@ -41,9 +46,9 @@ async function confirmSimulation() {
 }
 
 function renderCompleteStep() {
-  $('#workflowSteps').innerHTML='';
-  $('#workflowBody').innerHTML=`<div class="completion-state"><div class="completion-icon" aria-hidden="true">✓</div><h3>Simulation complete</h3><p>The review flow completed successfully.</p><span>No live moderation action was performed.</span></div>`;
-  $('#workflowFooter').innerHTML=`<button class="button primary" type="button" data-done>Done</button>`;
+  $('#workflowSteps').replaceChildren();
+  replaceMarkup($('#workflowBody'), '<div class="completion-state"><div class="completion-icon" aria-hidden="true">✓</div><h3>Simulation complete</h3><p>The review flow completed successfully.</p><span>No live moderation action was performed.</span></div>');
+  replaceMarkup($('#workflowFooter'), '<button class="button primary" type="button" data-done>Done</button>');
   $('[data-done]').addEventListener('click',closeWorkflow);
 }
 
@@ -67,8 +72,8 @@ function formatDate(date) { return new Intl.DateTimeFormat('en-US',{month:'short
 function empty(title,detail='') { return `<div class="empty-state"><strong>${esc(title)}</strong>${detail?`<span>${esc(detail)}</span>`:''}</div>`; }
 function showToast(message,isError=false) {
   const region=$('#toastRegion');
-  region.innerHTML=`<div class="toast ${isError?'error':''}">${esc(message)}</div>`;
-  clearTimeout(state.toastTimer); state.toastTimer=setTimeout(()=>{region.innerHTML='';},4200);
+  replaceMarkup(region, `<div class="toast ${isError?'error':''}">${esc(message)}</div>`);
+  clearTimeout(state.toastTimer); state.toastTimer=setTimeout(()=>{region.replaceChildren();},4200);
 }
 
 document.addEventListener('DOMContentLoaded', init);

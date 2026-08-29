@@ -19,6 +19,11 @@ class ModerationPreviewWebResourcesTest {
             "/moderation-preview/app.js",
             "/moderation-preview/workflow.js",
             "/moderation-preview/review.js");
+    private static final List<String> SCRIPTS = List.of(
+            "/moderation-preview/model.js",
+            "/moderation-preview/app.js",
+            "/moderation-preview/workflow.js",
+            "/moderation-preview/review.js");
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -52,6 +57,23 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(review.contains("Messages to delete"));
         assertTrue(review.contains("Simulation complete"));
         assertTrue(review.contains("No live moderation action was performed."));
+    }
+
+    @Test
+    void generatedMarkupAvoidsDirectInnerHtmlSinks() throws IOException {
+        for (String script : SCRIPTS) {
+            assertFalse(resourceText(script).contains(".innerHTML"), script);
+        }
+        assertTrue(resourceText("/moderation-preview/model.js").contains("new DOMParser()"));
+    }
+
+    @Test
+    void surroundingMessageContextRemainsAvailableWithoutDesktopOnlyClass() throws IOException {
+        String workspace = resourceText("/moderation-preview/app.js");
+
+        assertTrue(workspace.contains("data-context-message"));
+        assertFalse(workspace.contains("context-button"));
+        assertFalse(workspace.contains("Authority context"));
     }
 
     @Test

@@ -28,13 +28,14 @@ function renderWorkflowSteps(step) {
   const order = ['offense','recommendation','options','review'];
   const labels = ['Offense','Recommendation','Options','Review'];
   const current = Math.max(0, order.indexOf(step));
-  $('#workflowSteps').innerHTML = labels.map((label,index)=>`<div class="workflow-step ${index===current?'active':''} ${index<current?'done':''}"><span>${index+1}</span>${label}</div>`).join('');
+  replaceMarkup($('#workflowSteps'), labels.map((label,index)=>`<div class="workflow-step ${index===current?'active':''} ${index<current?'done':''}"><span>${index+1}</span>${esc(label)}</div>`).join(''));
 }
 
 function renderOffenseStep() {
   const suggested = scenarioOffense();
-  $('#workflowBody').innerHTML = `<div class="step-intro"><h3>What happened?</h3><p>Choose the policy family first. History is evaluated only after the offense is known.</p></div><div class="option-grid">${OFFENSES.map(([key,label])=>`<button type="button" class="choice-card ${key===suggested?'suggested':''}" data-offense="${key}"><strong>${label}</strong><span>${offenseHint(key)}</span>${key===suggested?'<small>Suggested for this sample</small>':''}</button>`).join('')}</div>`;
-  $('#workflowFooter').innerHTML = `<button class="button ghost" type="button" data-cancel>Cancel</button>`;
+  const options = OFFENSES.map(([key,label])=>`<button type="button" class="choice-card ${key===suggested?'suggested':''}" data-offense="${esc(key)}"><strong>${esc(label)}</strong><span>${esc(offenseHint(key))}</span>${key===suggested?'<small>Suggested for this sample</small>':''}</button>`).join('');
+  replaceMarkup($('#workflowBody'), `<div class="step-intro"><h3>What happened?</h3><p>Choose the policy family first. History is evaluated only after the offense is known.</p></div><div class="option-grid">${options}</div>`);
+  replaceMarkup($('#workflowFooter'), '<button class="button ghost" type="button" data-cancel>Cancel</button>');
   $$('[data-offense]').forEach((button)=>button.addEventListener('click',()=>chooseOffense(button.dataset.offense)));
   $('[data-cancel]').addEventListener('click',closeWorkflow);
 }
@@ -74,9 +75,10 @@ function recommendationReason(key,relevant,step,base) {
 function renderRecommendationStep() {
   const w=state.workflow, r=w.recommendation;
   const unrelated = r.total-r.relevant.length;
-  $('#workflowBody').innerHTML = `<div class="recommendation-layout"><section class="recommendation-card"><div class="eyebrow">Recommended</div><div class="recommendation-action">${esc(r.action)}</div><div class="recommendation-duration">${esc(r.duration)} · ${esc(r.scope)}</div><p>${esc(r.explanation)}</p>${approvalFor(r.action,r.duration)!=='None'?`<div class="approval-note">${esc(approvalFor(r.action,r.duration))}</div>`:''}</section>
-    <section class="card"><h3>Relevant history for ${esc(w.offense.label)}</h3><div class="summary-list"><div class="summary-row"><span>Total history</span><strong>${r.total}</strong></div><div class="summary-row"><span>Relevant history</span><strong>${r.relevant.length}</strong></div><div class="summary-row"><span>Unrelated records</span><strong>${unrelated}</strong></div><div class="summary-row"><span>Ladder step</span><strong>${r.step}</strong></div></div>${r.relevant.length?`<div class="relevant-history">${r.relevant.map(historyCompact).join('')}</div>`:'<p class="muted small">No prior matching incidents.</p>'}</section></div>`;
-  $('#workflowFooter').innerHTML = `<button class="button ghost" type="button" data-back>Back</button><div class="inline"><button class="button secondary" type="button" data-custom>Custom Punishment</button><button class="button primary" type="button" data-use-recommendation>Use Recommendation</button></div>`;
+  const approval = approvalFor(r.action,r.duration);
+  replaceMarkup($('#workflowBody'), `<div class="recommendation-layout"><section class="recommendation-card"><div class="eyebrow">Recommended</div><div class="recommendation-action">${esc(r.action)}</div><div class="recommendation-duration">${esc(r.duration)} · ${esc(r.scope)}</div><p>${esc(r.explanation)}</p>${approval!=='None'?`<div class="approval-note">${esc(approval)}</div>`:''}</section>
+    <section class="card"><h3>Relevant history for ${esc(w.offense.label)}</h3><div class="summary-list"><div class="summary-row"><span>Total history</span><strong>${r.total}</strong></div><div class="summary-row"><span>Relevant history</span><strong>${r.relevant.length}</strong></div><div class="summary-row"><span>Unrelated records</span><strong>${unrelated}</strong></div><div class="summary-row"><span>Ladder step</span><strong>${r.step}</strong></div></div>${r.relevant.length?`<div class="relevant-history">${r.relevant.map(historyCompact).join('')}</div>`:'<p class="muted small">No prior matching incidents.</p>'}</section></div>`);
+  replaceMarkup($('#workflowFooter'), '<button class="button ghost" type="button" data-back>Back</button><div class="inline"><button class="button secondary" type="button" data-custom>Custom Punishment</button><button class="button primary" type="button" data-use-recommendation>Use Recommendation</button></div>');
   $('[data-back]').addEventListener('click',()=>{w.step='offense';renderWorkflow();});
   $('[data-use-recommendation]').addEventListener('click',()=>useRecommendation(false));
   $('[data-custom]').addEventListener('click',()=>useRecommendation(true));
@@ -103,12 +105,12 @@ function seedCustomScenario(w) {
 function renderOptionsStep() {
   const w=state.workflow;
   const action=w.actual.action;
-  $('#workflowBody').innerHTML = `<div class="step-intro"><div><span class="eyebrow">${w.custom?'Custom override':'Following recommendation'}</span><h3>${w.custom?'Configure the actual action':'Confirm action options'}</h3></div></div>
+  replaceMarkup($('#workflowBody'), `<div class="step-intro"><div><span class="eyebrow">${w.custom?'Custom override':'Following recommendation'}</span><h3>${w.custom?'Configure the actual action':'Confirm action options'}</h3></div></div>
     ${w.custom?customControlsHtml(w):summaryActualHtml(w)}
     ${action==='Restrict'?restrictionControlsHtml(w):''}
     <section class="card option-section"><div class="section-heading"><div><h3>Evidence & message actions</h3><p>Evidence and Discord deletion are intentionally separate.</p></div></div><div class="summary-list"><div class="summary-row"><span>Evidence messages</span><strong>${state.evidence.size}</strong></div><div class="summary-row"><span>Delete from Discord</span><strong>${state.deleting.size}</strong></div><div class="summary-row"><span>Preserve evidence</span><strong>${preservedEvidenceCount()}</strong></div></div><button class="button secondary" type="button" data-review-messages>Review selected messages</button></section>
-    <section class="card option-section"><label class="checkbox-control prominent"><input id="dmUserOption" type="checkbox" ${w.dm?'checked':''}> DM user with the moderation result</label><label class="field-label">Staff explanation / case note<textarea id="reasonInput" rows="3" maxlength="300" placeholder="Concise context for the case">${esc(w.reason)}</textarea></label></section>`;
-  $('#workflowFooter').innerHTML = `<button class="button ghost" type="button" data-back>Back</button><button class="button primary" type="button" data-review>Review action</button>`;
+    <section class="card option-section"><label class="checkbox-control prominent"><input id="dmUserOption" type="checkbox" ${w.dm?'checked':''}> DM user with the moderation result</label><label class="field-label">Staff explanation / case note<textarea id="reasonInput" rows="3" maxlength="300" placeholder="Concise context for the case">${esc(w.reason)}</textarea></label></section>`);
+  replaceMarkup($('#workflowFooter'), '<button class="button ghost" type="button" data-back>Back</button><button class="button primary" type="button" data-review>Review action</button>');
   bindOptionsEvents();
 }
 
@@ -116,7 +118,10 @@ function customControlsHtml(w) {
   const actions=['Warning','Mute','Kick','Ban','Restrict'];
   const restrict=w.actual.action==='Restrict';
   const needsDuration=!['Warning','Kick'].includes(w.actual.action);
-  return `<section class="card option-section"><div class="field-row wrap"><label class="field-label">Punishment<select id="customAction">${actions.map((value)=>`<option ${w.actual.action===value?'selected':''}>${value}</option>`).join('')}</select></label>${restrict?'<label class="field-label">Scope<select id="customScope" disabled><option selected>Discord</option></select></label>':`<label class="field-label">Scope<select id="customScope"><option ${w.scope==='Discord'?'selected':''}>Discord</option><option ${w.scope==='Minecraft'?'selected':''}>Minecraft</option><option ${w.scope==='Both'?'selected':''}>Both</option></select></label>`}${needsDuration?`<label class="field-label">Duration<select id="customDuration">${['30 minutes','2 hours','1 day','3 days','7 days','14 days','30 days','Permanent'].map((value)=>`<option ${w.duration===value?'selected':''}>${value}</option>`).join('')}</select></label>`:''}</div><div class="override-note"><strong>Custom override</strong><span>This differs from the normal ladder path. Review the action, scope, duration, and approval requirement carefully.</span></div></section>`;
+  const actionOptions = actions.map((value)=>`<option ${w.actual.action===value?'selected':''}>${esc(value)}</option>`).join('');
+  const durations = ['30 minutes','2 hours','1 day','3 days','7 days','14 days','30 days','Permanent'];
+  const durationOptions = durations.map((value)=>`<option ${w.duration===value?'selected':''}>${esc(value)}</option>`).join('');
+  return `<section class="card option-section"><div class="field-row wrap"><label class="field-label">Punishment<select id="customAction">${actionOptions}</select></label>${restrict?'<label class="field-label">Scope<select id="customScope" disabled><option selected>Discord</option></select></label>':`<label class="field-label">Scope<select id="customScope"><option ${w.scope==='Discord'?'selected':''}>Discord</option><option ${w.scope==='Minecraft'?'selected':''}>Minecraft</option><option ${w.scope==='Both'?'selected':''}>Both</option></select></label>`}${needsDuration?`<label class="field-label">Duration<select id="customDuration">${durationOptions}</select></label>`:''}</div><div class="override-note"><strong>Custom override</strong><span>This differs from the normal ladder path. Review the action, scope, duration, and approval requirement carefully.</span></div></section>`;
 }
 
 function summaryActualHtml(w) {
@@ -130,7 +135,7 @@ function restrictionControlsHtml(w) {
 }
 
 function restrictionTargetsHtml(w,term) {
-  return RESTRICTION_TARGETS.filter((target)=>`${target.label} ${target.detail}`.toLowerCase().includes(term.toLowerCase())).map((target)=>`<label class="target-option"><input type="checkbox" data-restriction-target="${target.id}" ${w.restrictionTargets.has(target.id)?'checked':''}><span class="target-type">${target.type==='channel'?'#':'▣'}</span><span><strong>${esc(target.label)}</strong><small>${esc(target.type)} · ${esc(target.detail)}</small></span></label>`).join('') || empty('No matching channel or category');
+  return RESTRICTION_TARGETS.filter((target)=>`${target.label} ${target.detail}`.toLowerCase().includes(term.toLowerCase())).map((target)=>`<label class="target-option"><input type="checkbox" data-restriction-target="${esc(target.id)}" ${w.restrictionTargets.has(target.id)?'checked':''}><span class="target-type">${target.type==='channel'?'#':'▣'}</span><span><strong>${esc(target.label)}</strong><small>${esc(target.type)} · ${esc(target.detail)}</small></span></label>`).join('') || empty('No matching channel or category');
 }
 
 function bindOptionsEvents() {
@@ -144,7 +149,7 @@ function bindOptionsEvents() {
   $('#customScope')?.addEventListener('change',(event)=>{w.scope=event.target.value;});
   $('#customDuration')?.addEventListener('change',(event)=>{w.duration=event.target.value;});
   $$('[name="restrictMode"]').forEach((input)=>input.addEventListener('change',(event)=>{w.restrictMode=event.target.value;}));
-  $('#targetSearch')?.addEventListener('input',(event)=>{ $('#restrictionTargetList').innerHTML=restrictionTargetsHtml(w,event.target.value); bindRestrictionTargets(); });
+  $('#targetSearch')?.addEventListener('input',(event)=>{ replaceMarkup($('#restrictionTargetList'),restrictionTargetsHtml(w,event.target.value)); bindRestrictionTargets(); });
   bindRestrictionTargets();
 }
 

@@ -252,16 +252,20 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
         if (query == null) {
             return Optional.empty();
         }
-        for (String pair : query.split("&")) {
-            String[] parts = pair.split("=", 2);
-            String key = URLDecoder.decode(parts[0], StandardCharsets.UTF_8);
-            if (name.equals(key)) {
-                return Optional.of(parts.length == 2
-                        ? URLDecoder.decode(parts[1], StandardCharsets.UTF_8)
-                        : "");
+        try {
+            for (String pair : query.split("&")) {
+                String[] parts = pair.split("=", 2);
+                String key = URLDecoder.decode(parts[0], StandardCharsets.UTF_8);
+                if (name.equals(key)) {
+                    return Optional.of(parts.length == 2
+                            ? URLDecoder.decode(parts[1], StandardCharsets.UTF_8)
+                            : "");
+                }
             }
+            return Optional.empty();
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
         }
-        return Optional.empty();
     }
 
     private static void applySecurityHeaders(Headers headers) {

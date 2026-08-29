@@ -4,6 +4,11 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
 
+function replaceMarkup(element, markup) {
+  const parsed = new DOMParser().parseFromString(markup, 'text/html');
+  element.replaceChildren(...parsed.body.childNodes);
+}
+
 const OFFENSES = [
   ['spam', 'Spam / flooding'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
   ['advertising', 'Advertising / unwanted invites'], ['cheating', 'Cheating'], ['other', 'Other / custom']
@@ -86,12 +91,12 @@ async function loadSession() {
 }
 
 function fillScenarioSelect() {
-  $('#scenarioSelect').innerHTML = SCENARIOS.map(([value,label]) => `<option value="${value}">${esc(label)}</option>`).join('');
+  replaceMarkup($('#scenarioSelect'), SCENARIOS.map(([value,label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join(''));
   $('#scenarioSelect').addEventListener('change', (event) => applyScenario(event.target.value));
 }
 
 function renderNav() {
-  $('#primaryNav').innerHTML = NAV.map(([key,label]) => `<button class="nav-item" data-view="${key}" type="button"><span>${label}</span><span class="nav-count" data-count="${key}"></span></button>`).join('');
+  replaceMarkup($('#primaryNav'), NAV.map(([key,label]) => `<button class="nav-item" data-view="${esc(key)}" type="button"><span>${esc(label)}</span><span class="nav-count" data-count="${esc(key)}"></span></button>`).join(''));
   $$('.nav-item').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 }
 

@@ -1,6 +1,8 @@
 package net.enthusia.staff.discordbot;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
@@ -33,6 +35,7 @@ class ModerationPreviewWebRuntimeTest {
                     .build();
 
             assertEquals(401, get(client, origin.resolve("/moderation"), null).statusCode());
+            assertEquals(401, get(client, origin.resolve("/launch?t=%"), null).statusCode());
 
             String token = tickets.issue(1234L, 5678L, "sample-river-ash");
             URI launch = origin.resolve("/launch?t=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
@@ -53,12 +56,27 @@ class ModerationPreviewWebRuntimeTest {
             assertTrue(session.body().contains("\"targetKey\":\"sample-river-ash\""));
             String csrf = csrf(session.body());
 
-            assertEquals(403, postSimulation(client, origin, cookie, null).statusCode());
-            HttpResponse<String> simulated = postSimulation(client, origin, cookie, csrf);
+            assertEquals(403, postSimulation(client, origin, cookie, null, "{}").statusCode());
+            String destructiveLooking = "{\"action\":\"Ban\",\"delete\":[\"19002\"],\"duration\":\"Permanent\"}";
+            HttpResponse<String> simulated = postSimulation(client, origin, cookie, csrf, destructiveLooking);
             assertEquals(200, simulated.statusCode());
             assertTrue(simulated.body().contains("Simulation complete"));
             assertTrue(simulated.body().contains("No live moderation action was performed."));
+            assertFalse(simulated.body().contains("Ban"));
+            assertFalse(simulated.body().contains("19002"));
         }
+    }
+
+    @Test
+    void runtimeConstructorAcceptsOnlyPreviewInfrastructureDependencies() {
+        var constructors = ModerationPreviewWebRuntime.class.getDeclaredConstructors();
+
+        assertEquals(1, constructors.length);
+        assertArrayEquals(new Class<?>[] {
+                ModerationPreviewWebConfig.class,
+                ModerationPreviewLaunchTicketService.class,
+                ModerationPreviewWebSessionStore.class
+        }, constructors[0].getParameterTypes());
     }
 
     private static HttpResponse<String> get(HttpClient client, URI uri, String cookie) throws Exception {
@@ -73,12 +91,13 @@ class ModerationPreviewWebRuntimeTest {
             HttpClient client,
             URI origin,
             String cookie,
-            String csrf
+            String csrf,
+            String body
     ) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(origin.resolve("/api/simulate"))
                 .header("Cookie", cookie)
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"preview\":true}"));
+                .POST(HttpRequest.BodyPublishers.ofString(body));
         if (csrf != null) {
             request.header("X-Preview-Csrf", csrf);
         }
