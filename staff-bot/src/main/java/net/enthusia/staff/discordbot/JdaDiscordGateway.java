@@ -96,8 +96,7 @@ final class JdaDiscordGateway implements DiscordGateway {
             previewListener = new JdaModerationUiPreviewListener(
                     configuration.environment().guildId(),
                     interactions,
-                    configuration.interactionCapacity(),
-                    configuration.interactionTtl()
+                    configuration.interactionCapacity()
             );
             previewListener.startWeb();
             builder.addEventListeners(previewListener);
