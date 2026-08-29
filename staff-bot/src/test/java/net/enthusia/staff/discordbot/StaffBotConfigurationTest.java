@@ -10,12 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class StaffBotConfigurationTest {
     private static final String STAGING = "staging";
+    private static final String PRODUCTION = "production";
     private static final String DUMMY_TOKEN = "token";
+    private static final String TRUE = "true";
 
     @TempDir
     Path tempDir;
@@ -88,21 +91,21 @@ class StaffBotConfigurationTest {
 
     @Test
     void tokenNeverAppearsInRenderedConfigurationOrErrors() throws IOException {
-        String secret = "do-not-leak-this-discord-token";
-        Path validTokenFile = writeTokenFile(secret);
+        String token = UUID.randomUUID().toString();
+        Path validTokenFile = writeTokenFile(token);
         StaffBotConfiguration configuration = StaffBotConfiguration.fromStartup(
                 previewCommandLine(validTokenFile),
                 Map.of());
 
-        assertFalse(configuration.toString().contains(secret));
+        assertFalse(configuration.toString().contains(token));
 
         Path invalidTokenFile = tempDir.resolve("invalid-token.txt");
-        Files.writeString(invalidTokenFile, secret + " invalid");
+        Files.writeString(invalidTokenFile, token + " invalid");
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromStartup(previewCommandLine(invalidTokenFile), Map.of()));
 
-        assertFalse(exception.toString().contains(secret));
+        assertFalse(exception.toString().contains(token));
     }
 
     @Test
@@ -113,7 +116,7 @@ class StaffBotConfigurationTest {
                 Map.of(
                         StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
                         StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
-                        StaffBotConfiguration.UI_PREVIEW_KEY, "true"));
+                        StaffBotConfiguration.UI_PREVIEW_KEY, TRUE));
 
         assertEquals(StaffBotEnvironment.STAGING, configuration.environment());
         assertEquals(DUMMY_TOKEN, configuration.discordToken());
@@ -128,9 +131,9 @@ class StaffBotConfigurationTest {
                 IllegalArgumentException.class,
                 () -> StaffBotConfiguration.fromStartup(
                         previewCommandLine(tokenFile),
-                        Map.of(StaffBotConfiguration.ENVIRONMENT_KEY, "production")));
+                        Map.of(StaffBotConfiguration.ENVIRONMENT_KEY, PRODUCTION)));
 
-        assertTrue(exception.getMessage().contains("production"));
+        assertTrue(exception.getMessage().contains(PRODUCTION));
     }
 
     @Test
@@ -138,7 +141,7 @@ class StaffBotConfigurationTest {
         StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
                 StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
-                StaffBotConfiguration.UI_PREVIEW_KEY, "true"));
+                StaffBotConfiguration.UI_PREVIEW_KEY, TRUE));
 
         assertTrue(configuration.uiPreviewEnabled());
         assertEquals(StaffBotEnvironment.STAGING, configuration.environment());
@@ -150,14 +153,14 @@ class StaffBotConfigurationTest {
         StaffBotConfiguration staging = StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
                 StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
-                StaffBotConfiguration.UI_PREVIEW_KEY, "true",
+                StaffBotConfiguration.UI_PREVIEW_KEY, TRUE,
                 StaffBotConfiguration.HEALTH_PORT_KEY, "0"));
 
         assertTrue(staging.uiPreviewEnabled());
         assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(Map.of(
-                StaffBotConfiguration.ENVIRONMENT_KEY, "production",
+                StaffBotConfiguration.ENVIRONMENT_KEY, PRODUCTION,
                 StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
-                StaffBotConfiguration.UI_PREVIEW_KEY, "true")));
+                StaffBotConfiguration.UI_PREVIEW_KEY, TRUE)));
         assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
                 StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
@@ -167,7 +170,7 @@ class StaffBotConfigurationTest {
     @Test
     void productionRejectsEphemeralHealthPort() {
         Map<String, String> values = new HashMap<>();
-        values.put(StaffBotConfiguration.ENVIRONMENT_KEY, "production");
+        values.put(StaffBotConfiguration.ENVIRONMENT_KEY, PRODUCTION);
         values.put(StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN);
         values.put(StaffBotConfiguration.HEALTH_PORT_KEY, "0");
 
