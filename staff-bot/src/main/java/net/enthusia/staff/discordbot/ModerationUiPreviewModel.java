@@ -199,7 +199,7 @@ final class ModerationUiPreviewModel {
             boolean permanentElevated = PERMANENT.equals(duration)
                     && (action == Action.BAN || action == Action.MUTE || action == Action.RESTRICT);
             if (permanentElevated) {
-                return "Required — permanent Discord ban/mute/restriction requires Admin+ authority.";
+                return "Required — permanent ban/mute/restriction requires Admin+ authority for the selected platform scope.";
             }
             if (scope == Scope.BOTH) {
                 return "Separate authority checks — each platform would be reauthorized before commit.";

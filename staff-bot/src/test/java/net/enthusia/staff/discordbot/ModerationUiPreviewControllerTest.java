@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,6 +43,18 @@ class ModerationUiPreviewControllerTest {
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
                 controller.interact(OWNER, id(current, "back", ""), Optional.empty()).type());
+    }
+
+    @Test
+    void permanentApprovalCopyDoesNotMislabelMinecraftAsDiscord() {
+        ModerationUiPreviewModel.State state = ModerationUiPreviewModel.State.initial()
+                .withAction(ModerationUiPreviewModel.Action.BAN)
+                .withScope(ModerationUiPreviewModel.Scope.MINECRAFT)
+                .withReason("Harassment")
+                .withDuration("Permanent");
+
+        assertTrue(state.approvalSummary().contains("selected platform scope"));
+        assertFalse(state.approvalSummary().contains("Discord"));
     }
 
     @Test
