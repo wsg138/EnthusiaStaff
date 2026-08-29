@@ -13,23 +13,30 @@ final class ModerationUiPreviewController {
     private static final String PREFIX = "pui";
     static final String OP_NAV = "nav";
     static final String OP_PUNISH = "punish";
+    static final String OP_OFFENSE = "offense";
+    static final String OP_APPLY = "apply";
+    static final String OP_CUSTOM = "custom";
     static final String OP_ACTION = "action";
     static final String OP_SCOPE = "scope";
-    static final String OP_REASON = "reason";
     static final String OP_DURATION = "duration";
     static final String OP_TOGGLE = "toggle";
+    static final String OP_EXPLANATION = "explain";
     static final String OP_REVIEW = "review";
     static final String OP_CONFIRM = "confirm";
-    static final String OP_SCENARIO = "scenario";
+    static final String OP_SAMPLE = "sample";
+    static final String OP_EDGE = "edge";
     static final String OP_BACK = "back";
     private static final String OP_MODAL = "modal";
-    private static final int MAX_CUSTOM_REASON = 300;
+    private static final int MAX_CUSTOM_OFFENSE = 180;
     private static final int MAX_CUSTOM_DURATION = 40;
+    private static final int MAX_EXPLANATION = 300;
     private static final int MAX_COMPONENT_ID_LENGTH = 100;
     private static final int MIN_TOKEN_PARTS = 4;
     private static final int TOKEN_PARTS_WITH_ARGUMENT = 5;
+    private static final Set<String> ENTRY_OPERATIONS = Set.of(
+            OP_NAV, OP_PUNISH, OP_OFFENSE, OP_SAMPLE, OP_EDGE);
     private static final Set<String> SELECTION_OPERATIONS = Set.of(
-            OP_NAV, OP_PUNISH, OP_ACTION, OP_SCOPE, OP_REASON, OP_DURATION);
+            OP_APPLY, OP_CUSTOM, OP_ACTION, OP_SCOPE, OP_DURATION);
 
     enum ResultType {
         VIEW,
@@ -63,6 +70,7 @@ final class ModerationUiPreviewController {
     }
 
     private final ModerationUiPreviewSessionStore sessions;
+    private final ModerationUiPreviewPolicy policy;
 
     ModerationUiPreviewController(int capacity, Duration ttl) {
         this(new ModerationUiPreviewSessionStore(capacity, ttl, Clock.systemUTC(), new SecureRandom()));
@@ -70,6 +78,7 @@ final class ModerationUiPreviewController {
 
     ModerationUiPreviewController(ModerationUiPreviewSessionStore sessions) {
         this.sessions = sessions;
+        this.policy = new ModerationUiPreviewPolicy();
     }
 
     Result start(long ownerId) {
@@ -121,10 +130,29 @@ final class ModerationUiPreviewController {
             Optional<String> selectedValue,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
+        if (ENTRY_OPERATIONS.contains(token.operation())) {
+            return routeEntry(ownerId, token, selectedValue, snapshot);
+        }
         if (SELECTION_OPERATIONS.contains(token.operation())) {
             return routeSelection(ownerId, token, selectedValue, snapshot);
         }
-        return routeCompletion(ownerId, token, selectedValue, snapshot);
+        return routeCompletion(ownerId, token, snapshot);
+    }
+
+    private Result routeEntry(
+            long ownerId,
+            Token token,
+            Optional<String> selectedValue,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        return switch (token.operation()) {
+            case OP_NAV -> navigate(ownerId, token, snapshot);
+            case OP_PUNISH -> punish(ownerId, token, snapshot);
+            case OP_OFFENSE -> chooseOffense(ownerId, token, selectedValue, snapshot);
+            case OP_SAMPLE -> sample(ownerId, token, selectedValue, snapshot);
+            case OP_EDGE -> edge(ownerId, token, selectedValue, snapshot);
+            default -> malformed();
+        };
     }
 
     private Result routeSelection(
@@ -134,11 +162,10 @@ final class ModerationUiPreviewController {
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
         return switch (token.operation()) {
-            case OP_NAV -> navigate(ownerId, token, snapshot);
-            case OP_PUNISH -> transition(ownerId, token, state -> state.withScreen(ModerationUiPreviewModel.Screen.ACTION));
+            case OP_APPLY -> applyRecommendation(ownerId, token, snapshot);
+            case OP_CUSTOM -> beginCustom(ownerId, token, snapshot);
             case OP_ACTION -> chooseAction(ownerId, token, snapshot);
             case OP_SCOPE -> chooseScope(ownerId, token, snapshot);
-            case OP_REASON -> chooseReason(ownerId, token, selectedValue, snapshot);
             case OP_DURATION -> chooseDuration(ownerId, token, selectedValue, snapshot);
             default -> malformed();
         };
@@ -147,14 +174,13 @@ final class ModerationUiPreviewController {
     private Result routeCompletion(
             long ownerId,
             Token token,
-            Optional<String> selectedValue,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
         return switch (token.operation()) {
             case OP_TOGGLE -> toggle(ownerId, token, snapshot);
+            case OP_EXPLANATION -> editExplanation(token, snapshot);
             case OP_REVIEW -> review(ownerId, token, snapshot);
             case OP_CONFIRM -> confirm(ownerId, token, snapshot);
-            case OP_SCENARIO -> scenario(ownerId, token, selectedValue, snapshot);
             case OP_BACK -> back(ownerId, token, snapshot);
             default -> malformed();
         };
@@ -165,10 +191,9 @@ final class ModerationUiPreviewController {
             return staleFlow();
         }
         Optional<ModerationUiPreviewModel.Screen> destination = navigationScreen(token.argument());
-        if (destination.isEmpty()) {
-            return malformed();
-        }
-        return transition(ownerId, token, state -> state.withScreen(destination.get()));
+        return destination.isEmpty()
+                ? malformed()
+                : transition(ownerId, token, state -> state.withScreen(destination.get()));
     }
 
     private static Optional<ModerationUiPreviewModel.Screen> navigationScreen(String argument) {
@@ -181,46 +206,82 @@ final class ModerationUiPreviewController {
         };
     }
 
+    private Result punish(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OVERVIEW) {
+            return staleFlow();
+        }
+        return transition(ownerId, token, ModerationUiPreviewModel.State::beginPunish);
+    }
+
+    private Result chooseOffense(
+            long ownerId,
+            Token token,
+            Optional<String> selectedValue,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OFFENSE || selectedValue.isEmpty()) {
+            return staleFlow();
+        }
+        try {
+            ModerationUiPreviewModel.Offense offense = ModerationUiPreviewModel.Offense.parse(selectedValue.get());
+            if (offense == ModerationUiPreviewModel.Offense.OTHER_CUSTOM) {
+                return customModal(snapshot, OP_OFFENSE, "Custom offense", "Offense / reason",
+                        "Describe the offense for this preview", MAX_CUSTOM_OFFENSE);
+            }
+            return recommend(ownerId, token, offense, offense.label(), snapshot.state().sampleScenario());
+        } catch (IllegalArgumentException exception) {
+            return malformed();
+        }
+    }
+
+    private Result recommend(
+            long ownerId,
+            Token token,
+            ModerationUiPreviewModel.Offense offense,
+            String label,
+            ModerationUiPreviewModel.SampleScenario scenario
+    ) {
+        ModerationUiPreviewModel.Recommendation recommendation = policy.evaluate(scenario, offense);
+        return transition(ownerId, token, state -> state.withRecommendation(offense, label, recommendation));
+    }
+
+    private Result applyRecommendation(
+            long ownerId,
+            Token token,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.RECOMMENDATION) {
+            return staleFlow();
+        }
+        return transition(ownerId, token, ModerationUiPreviewModel.State::applyRecommendation);
+    }
+
+    private Result beginCustom(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.RECOMMENDATION) {
+            return staleFlow();
+        }
+        return transition(ownerId, token, ModerationUiPreviewModel.State::beginCustom);
+    }
+
     private Result chooseAction(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.ACTION) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.CUSTOM_ACTION) {
             return staleFlow();
         }
         try {
             ModerationUiPreviewModel.Action action = ModerationUiPreviewModel.Action.parse(token.argument());
-            return transition(ownerId, token, state -> state.withAction(action));
+            return transition(ownerId, token, state -> state.withCustomAction(action));
         } catch (IllegalArgumentException exception) {
             return malformed();
         }
     }
 
     private Result chooseScope(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.SCOPE) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.CUSTOM_SCOPE) {
             return staleFlow();
         }
         try {
             ModerationUiPreviewModel.Scope scope = ModerationUiPreviewModel.Scope.parse(token.argument());
-            return transition(ownerId, token, state -> state.withScope(scope));
-        } catch (IllegalArgumentException exception) {
-            return malformed();
-        }
-    }
-
-    private Result chooseReason(
-            long ownerId,
-            Token token,
-            Optional<String> selectedValue,
-            ModerationUiPreviewModel.Snapshot snapshot
-    ) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.REASON || selectedValue.isEmpty()) {
-            return staleFlow();
-        }
-        try {
-            ModerationUiPreviewModel.Reason reason = ModerationUiPreviewModel.Reason.parse(selectedValue.get());
-            if (reason == ModerationUiPreviewModel.Reason.CUSTOM) {
-                return customModal(snapshot, OP_REASON, "Custom reason", "Reason",
-                        "Describe the moderation reason", MAX_CUSTOM_REASON);
-            }
-            return transition(ownerId, token, state -> state.withReason(reason.label()));
+            return transition(ownerId, token, state -> state.withCustomScope(scope));
         } catch (IllegalArgumentException exception) {
             return malformed();
         }
@@ -232,7 +293,7 @@ final class ModerationUiPreviewController {
             Optional<String> selectedValue,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.DURATION || selectedValue.isEmpty()) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.CUSTOM_DURATION || selectedValue.isEmpty()) {
             return staleFlow();
         }
         try {
@@ -242,7 +303,7 @@ final class ModerationUiPreviewController {
                 return customModal(snapshot, OP_DURATION, "Custom duration", "Duration",
                         "Example: 5d 12h", MAX_CUSTOM_DURATION);
             }
-            return transition(ownerId, token, state -> state.withDuration(duration.label()));
+            return transition(ownerId, token, state -> state.withCustomDuration(duration.label()));
         } catch (IllegalArgumentException exception) {
             return malformed();
         }
@@ -264,6 +325,14 @@ final class ModerationUiPreviewController {
         };
     }
 
+    private Result editExplanation(Token token, ModerationUiPreviewModel.Snapshot snapshot) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OPTIONS) {
+            return staleFlow();
+        }
+        return customModal(snapshot, OP_EXPLANATION, "Edit explanation", "Explanation / context",
+                "Optional staff-facing context for this preview", MAX_EXPLANATION);
+    }
+
     private Result review(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
         if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OPTIONS) {
             return staleFlow();
@@ -278,7 +347,7 @@ final class ModerationUiPreviewController {
         return transition(ownerId, token, state -> state.withScreen(ModerationUiPreviewModel.Screen.COMPLETE));
     }
 
-    private Result scenario(
+    private Result sample(
             long ownerId,
             Token token,
             Optional<String> selectedValue,
@@ -288,8 +357,27 @@ final class ModerationUiPreviewController {
             return staleFlow();
         }
         try {
-            ModerationUiPreviewModel.Scenario scenario = ModerationUiPreviewModel.Scenario.parse(selectedValue.get());
-            return transition(ownerId, token, state -> state.withScenario(scenario));
+            ModerationUiPreviewModel.SampleScenario scenario =
+                    ModerationUiPreviewModel.SampleScenario.parse(selectedValue.get());
+            return transition(ownerId, token, state -> state.withSampleScenario(scenario));
+        } catch (IllegalArgumentException exception) {
+            return malformed();
+        }
+    }
+
+    private Result edge(
+            long ownerId,
+            Token token,
+            Optional<String> selectedValue,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OVERVIEW || selectedValue.isEmpty()) {
+            return staleFlow();
+        }
+        try {
+            ModerationUiPreviewModel.EdgeState edgeState =
+                    ModerationUiPreviewModel.EdgeState.parse(selectedValue.get());
+            return transition(ownerId, token, state -> state.withEdgeState(edgeState));
         } catch (IllegalArgumentException exception) {
             return malformed();
         }
@@ -297,40 +385,40 @@ final class ModerationUiPreviewController {
 
     private Result back(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
         Optional<ModerationUiPreviewModel.Screen> destination = backDestination(snapshot.state());
-        if (destination.isEmpty()) {
-            return staleFlow();
-        }
-        return transition(ownerId, token, state -> state.withScreen(destination.get()));
+        return destination.isEmpty()
+                ? staleFlow()
+                : transition(ownerId, token, state -> state.withScreen(destination.get()));
     }
 
     private static Optional<ModerationUiPreviewModel.Screen> backDestination(ModerationUiPreviewModel.State state) {
         if (state.screen() == ModerationUiPreviewModel.Screen.OPTIONS) {
-            return optionsBackDestination(state);
+            return Optional.of(optionsBackDestination(state));
         }
         return fixedBackDestination(state.screen());
-    }
-
-    private static Optional<ModerationUiPreviewModel.Screen> optionsBackDestination(
-            ModerationUiPreviewModel.State state
-    ) {
-        ModerationUiPreviewModel.Screen destination = state.action() != null && state.action().durationSupported()
-                ? ModerationUiPreviewModel.Screen.DURATION
-                : ModerationUiPreviewModel.Screen.REASON;
-        return Optional.of(destination);
     }
 
     private static Optional<ModerationUiPreviewModel.Screen> fixedBackDestination(
             ModerationUiPreviewModel.Screen screen
     ) {
         return switch (screen) {
-            case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO, ACTION ->
+            case ACCOUNTS, HISTORY, NOTES, CASES, EDGE_STATE, OFFENSE ->
                     Optional.of(ModerationUiPreviewModel.Screen.OVERVIEW);
-            case SCOPE -> Optional.of(ModerationUiPreviewModel.Screen.ACTION);
-            case REASON -> Optional.of(ModerationUiPreviewModel.Screen.SCOPE);
-            case DURATION -> Optional.of(ModerationUiPreviewModel.Screen.REASON);
+            case RECOMMENDATION -> Optional.of(ModerationUiPreviewModel.Screen.OFFENSE);
+            case CUSTOM_ACTION -> Optional.of(ModerationUiPreviewModel.Screen.RECOMMENDATION);
+            case CUSTOM_SCOPE -> Optional.of(ModerationUiPreviewModel.Screen.CUSTOM_ACTION);
+            case CUSTOM_DURATION -> Optional.of(ModerationUiPreviewModel.Screen.CUSTOM_SCOPE);
             case CONFIRM -> Optional.of(ModerationUiPreviewModel.Screen.OPTIONS);
             default -> Optional.empty();
         };
+    }
+
+    private static ModerationUiPreviewModel.Screen optionsBackDestination(ModerationUiPreviewModel.State state) {
+        if (!state.overridden()) {
+            return ModerationUiPreviewModel.Screen.RECOMMENDATION;
+        }
+        return state.actualAction() != null && state.actualAction().durationSupported()
+                ? ModerationUiPreviewModel.Screen.CUSTOM_DURATION
+                : ModerationUiPreviewModel.Screen.CUSTOM_SCOPE;
     }
 
     private Result applyModal(
@@ -344,22 +432,30 @@ final class ModerationUiPreviewController {
             return Result.error("Enter a value before submitting the preview form.");
         }
         return switch (token.argument()) {
-            case OP_REASON -> applyCustomReason(ownerId, token, normalized, snapshot);
+            case OP_OFFENSE -> applyCustomOffense(ownerId, token, normalized, snapshot);
             case OP_DURATION -> applyCustomDuration(ownerId, token, normalized, snapshot);
+            case OP_EXPLANATION -> applyExplanation(ownerId, token, normalized, snapshot);
             default -> malformed();
         };
     }
 
-    private Result applyCustomReason(
+    private Result applyCustomOffense(
             long ownerId,
             Token token,
             String value,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.REASON || value.length() > MAX_CUSTOM_REASON) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OFFENSE
+                || value.length() > MAX_CUSTOM_OFFENSE) {
             return staleFlow();
         }
-        return transition(ownerId, token, state -> state.withReason("Custom — " + value));
+        return recommend(
+                ownerId,
+                token,
+                ModerationUiPreviewModel.Offense.OTHER_CUSTOM,
+                "Other / custom — " + value,
+                snapshot.state().sampleScenario()
+        );
     }
 
     private Result applyCustomDuration(
@@ -368,10 +464,23 @@ final class ModerationUiPreviewController {
             String value,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
-        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.DURATION || value.length() > MAX_CUSTOM_DURATION) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.CUSTOM_DURATION
+                || value.length() > MAX_CUSTOM_DURATION) {
             return staleFlow();
         }
-        return transition(ownerId, token, state -> state.withDuration("Custom — " + value));
+        return transition(ownerId, token, state -> state.withCustomDuration("Custom — " + value));
+    }
+
+    private Result applyExplanation(
+            long ownerId,
+            Token token,
+            String value,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OPTIONS || value.length() > MAX_EXPLANATION) {
+            return staleFlow();
+        }
+        return transition(ownerId, token, state -> state.withExplanation(value));
     }
 
     private Result transition(long ownerId, Token token, UnaryOperator<ModerationUiPreviewModel.State> mutation) {
@@ -420,9 +529,7 @@ final class ModerationUiPreviewController {
     }
 
     private static boolean validTokenParts(String[] parts) {
-        return parts.length >= MIN_TOKEN_PARTS
-                && PREFIX.equals(parts[0])
-                && !parts[1].isBlank();
+        return parts.length >= MIN_TOKEN_PARTS && PREFIX.equals(parts[0]) && !parts[1].isBlank();
     }
 
     private static Optional<Token> parseTokenParts(String[] parts) {
@@ -439,9 +546,7 @@ final class ModerationUiPreviewController {
     }
 
     private static String tokenArgument(String[] parts) {
-        return parts.length == TOKEN_PARTS_WITH_ARGUMENT
-                ? parts[4].toLowerCase(Locale.ROOT)
-                : "";
+        return parts.length == TOKEN_PARTS_WITH_ARGUMENT ? parts[4].toLowerCase(Locale.ROOT) : "";
     }
 
     private static Result malformed() {

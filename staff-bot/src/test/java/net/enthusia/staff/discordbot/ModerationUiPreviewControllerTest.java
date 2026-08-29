@@ -11,50 +11,167 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ModerationUiPreviewControllerTest {
     private static final long OWNER = 41L;
-    private static final String OP_PUNISH = "punish";
-    private static final String OP_ACTION = "action";
-    private static final String OP_SCOPE = "scope";
-    private static final String OP_REASON = "reason";
-    private static final String OP_DURATION = "duration";
 
     @Test
-    void completesPreviewWithoutAnyExternalAdapter() {
+    void normalPathCarriesRecommendationIntoConfirmationAndRemainsNonDestructive() {
         ModerationUiPreviewController controller = controller(new MutableClock());
         ModerationUiPreviewController.Result current = controller.start(OWNER);
 
-        current = button(controller, current, OP_PUNISH, "");
-        current = button(controller, current, OP_ACTION, "ban");
-        current = button(controller, current, OP_SCOPE, "both");
-        current = select(controller, current, OP_REASON, "harassment");
-        current = select(controller, current, OP_DURATION, "permanent");
-        current = button(controller, current, "toggle", "delete");
-        current = button(controller, current, "review", "");
+        current = button(controller, current, ModerationUiPreviewController.OP_PUNISH, "");
+        assertEquals(ModerationUiPreviewModel.Screen.OFFENSE, current.snapshot().state().screen());
 
+        current = select(controller, current, ModerationUiPreviewController.OP_OFFENSE, "spam");
+        ModerationUiPreviewModel.Recommendation recommendation = current.snapshot().state().recommendation();
+        assertEquals(ModerationUiPreviewModel.Screen.RECOMMENDATION, current.snapshot().state().screen());
+        assertEquals(2, recommendation.relevantHistory());
+        assertEquals(4, recommendation.totalHistory());
+
+        current = button(controller, current, ModerationUiPreviewController.OP_APPLY, "");
+        ModerationUiPreviewModel.State applied = current.snapshot().state();
+        assertEquals(ModerationUiPreviewModel.Screen.OPTIONS, applied.screen());
+        assertEquals(recommendation.action(), applied.actualAction());
+        assertEquals(recommendation.scope(), applied.actualScope());
+        assertEquals(recommendation.duration(), applied.actualDuration());
+        assertTrue(applied.followedRecommendation());
+        assertFalse(applied.overridden());
+
+        current = button(controller, current, ModerationUiPreviewController.OP_REVIEW, "");
         assertEquals(ModerationUiPreviewModel.Screen.CONFIRM, current.snapshot().state().screen());
-        assertTrue(current.snapshot().state().approvalSummary().startsWith("Required"));
+        assertTrue(current.snapshot().state().followedRecommendation());
 
-        current = button(controller, current, "confirm", "");
+        current = button(controller, current, ModerationUiPreviewController.OP_CONFIRM, "");
         assertEquals(ModerationUiPreviewModel.Screen.COMPLETE, current.snapshot().state().screen());
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
-                controller.interact(OWNER, id(current, "back", ""), Optional.empty()).type());
+                controller.interact(OWNER, id(current, ModerationUiPreviewController.OP_BACK, ""), Optional.empty())
+                        .type());
     }
 
     @Test
-    void permanentApprovalCopyDoesNotMislabelMinecraftAsDiscord() {
-        ModerationUiPreviewModel.State state = ModerationUiPreviewModel.State.initial()
-                .withAction(ModerationUiPreviewModel.Action.BAN)
-                .withScope(ModerationUiPreviewModel.Scope.MINECRAFT)
-                .withReason("Harassment")
-                .withDuration("Permanent");
+    void manualPunishmentControlsRequireExplicitCustomOverride() {
+        ModerationUiPreviewController controller = controller(new MutableClock());
+        ModerationUiPreviewController.Result current = recommendation(controller, "spam");
 
-        assertTrue(state.approvalSummary().contains("selected platform scope"));
-        assertFalse(state.approvalSummary().contains("Discord"));
+        assertEquals(
+                ModerationUiPreviewController.ResultType.ERROR,
+                controller.interact(
+                        OWNER,
+                        id(current, ModerationUiPreviewController.OP_ACTION, "ban"),
+                        Optional.empty()).type());
+
+        current = button(controller, current, ModerationUiPreviewController.OP_CUSTOM, "");
+        assertEquals(ModerationUiPreviewModel.Screen.CUSTOM_ACTION, current.snapshot().state().screen());
+        assertTrue(current.snapshot().state().overridden());
+
+        current = button(controller, current, ModerationUiPreviewController.OP_ACTION, "ban");
+        current = button(controller, current, ModerationUiPreviewController.OP_SCOPE, "discord");
+        current = select(controller, current, ModerationUiPreviewController.OP_DURATION, "permanent");
+
+        ModerationUiPreviewModel.State custom = current.snapshot().state();
+        assertEquals(ModerationUiPreviewModel.Screen.OPTIONS, custom.screen());
+        assertTrue(custom.overridden());
+        assertFalse(custom.followedRecommendation());
+        assertEquals(ModerationUiPreviewModel.Action.BAN, custom.actualAction());
+        assertEquals(ModerationUiPreviewModel.PERMANENT, custom.actualDuration());
+        assertTrue(custom.approvalSummary().startsWith("Required"));
+
+        current = button(controller, current, ModerationUiPreviewController.OP_REVIEW, "");
+        assertEquals(ModerationUiPreviewModel.Screen.CONFIRM, current.snapshot().state().screen());
+        assertFalse(current.snapshot().state().followedRecommendation());
+    }
+
+    @Test
+    void customOverrideScenarioKeepsRecommendationVisibleWhileStaffChangesAction() {
+        ModerationUiPreviewController controller = controller(new MutableClock());
+        ModerationUiPreviewController.Result current = controller.start(OWNER);
+        current = select(controller, current, ModerationUiPreviewController.OP_SAMPLE, "custom_override");
+        current = button(controller, current, ModerationUiPreviewController.OP_PUNISH, "");
+        current = select(controller, current, ModerationUiPreviewController.OP_OFFENSE, "harassment");
+
+        ModerationUiPreviewModel.Recommendation recommendation = current.snapshot().state().recommendation();
+        assertEquals(ModerationUiPreviewModel.Action.MUTE, recommendation.action());
+        assertEquals("7d", recommendation.duration());
+
+        current = button(controller, current, ModerationUiPreviewController.OP_CUSTOM, "");
+        current = button(controller, current, ModerationUiPreviewController.OP_ACTION, "kick");
+        current = button(controller, current, ModerationUiPreviewController.OP_SCOPE, "discord");
+
+        ModerationUiPreviewModel.State custom = current.snapshot().state();
+        assertEquals(ModerationUiPreviewModel.Screen.OPTIONS, custom.screen());
+        assertEquals(ModerationUiPreviewModel.Action.KICK, custom.actualAction());
+        assertEquals(ModerationUiPreviewModel.NOT_APPLICABLE, custom.actualDuration());
+        assertTrue(custom.overridden());
+        assertEquals(recommendation, custom.recommendation());
+    }
+
+    @Test
+    void supportsCustomOffenseDurationAndExplanationModals() {
+        ModerationUiPreviewController controller = controller(new MutableClock());
+        ModerationUiPreviewController.Result current = controller.start(OWNER);
+        current = button(controller, current, ModerationUiPreviewController.OP_PUNISH, "");
+
+        ModerationUiPreviewController.Result offenseModal = controller.interact(
+                OWNER,
+                id(current, ModerationUiPreviewController.OP_OFFENSE, ""),
+                Optional.of("other_custom"));
+        assertEquals(ModerationUiPreviewController.ResultType.MODAL, offenseModal.type());
+        assertNotNull(offenseModal.modal());
+        current = controller.submitModal(OWNER, offenseModal.modal().customId(), "Repeated disruptive behavior");
+        assertEquals(ModerationUiPreviewModel.Screen.RECOMMENDATION, current.snapshot().state().screen());
+        assertTrue(current.snapshot().state().offenseLabel().contains("Repeated disruptive behavior"));
+
+        current = button(controller, current, ModerationUiPreviewController.OP_CUSTOM, "");
+        current = button(controller, current, ModerationUiPreviewController.OP_ACTION, "mute");
+        current = button(controller, current, ModerationUiPreviewController.OP_SCOPE, "discord");
+
+        ModerationUiPreviewController.Result durationModal = controller.interact(
+                OWNER,
+                id(current, ModerationUiPreviewController.OP_DURATION, ""),
+                Optional.of("custom"));
+        current = controller.submitModal(OWNER, durationModal.modal().customId(), "5d 12h");
+        assertEquals("Custom — 5d 12h", current.snapshot().state().actualDuration());
+
+        ModerationUiPreviewController.Result explanationModal = controller.interact(
+                OWNER,
+                id(current, ModerationUiPreviewController.OP_EXPLANATION, ""),
+                Optional.empty());
+        current = controller.submitModal(
+                OWNER, explanationModal.modal().customId(), "Staff-facing preview context");
+        assertEquals("Staff-facing preview context", current.snapshot().state().explanation());
+    }
+
+    @Test
+    void exposesAllDeterministicLadderScenarios() {
+        ModerationUiPreviewController controller = controller(new MutableClock());
+        for (ModerationUiPreviewModel.SampleScenario scenario : ModerationUiPreviewModel.SampleScenario.values()) {
+            ModerationUiPreviewController.Result started = controller.start(OWNER);
+            ModerationUiPreviewController.Result selected = controller.interact(
+                    OWNER,
+                    id(started, ModerationUiPreviewController.OP_SAMPLE, ""),
+                    Optional.of(scenario.name().toLowerCase(Locale.ROOT)));
+            assertEquals(ModerationUiPreviewModel.Screen.OVERVIEW, selected.snapshot().state().screen());
+            assertEquals(scenario, selected.snapshot().state().sampleScenario());
+        }
+    }
+
+    @Test
+    void exposesAllRepresentativeAuthorityAndFailureStates() {
+        ModerationUiPreviewController controller = controller(new MutableClock());
+        for (ModerationUiPreviewModel.EdgeState edgeState : ModerationUiPreviewModel.EdgeState.values()) {
+            ModerationUiPreviewController.Result started = controller.start(OWNER);
+            ModerationUiPreviewController.Result selected = controller.interact(
+                    OWNER,
+                    id(started, ModerationUiPreviewController.OP_EDGE, ""),
+                    Optional.of(edgeState.name().toLowerCase(Locale.ROOT)));
+            assertEquals(ModerationUiPreviewModel.Screen.EDGE_STATE, selected.snapshot().state().screen());
+            assertEquals(edgeState, selected.snapshot().state().edgeState());
+        }
     }
 
     @Test
@@ -62,7 +179,7 @@ class ModerationUiPreviewControllerTest {
         MutableClock clock = new MutableClock();
         ModerationUiPreviewController controller = controller(clock);
         ModerationUiPreviewController.Result started = controller.start(OWNER);
-        String punish = id(started, OP_PUNISH, "");
+        String punish = id(started, ModerationUiPreviewController.OP_PUNISH, "");
 
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
@@ -87,7 +204,10 @@ class ModerationUiPreviewControllerTest {
         clock.advance(Duration.ofMinutes(6));
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
-                controller.interact(OWNER, id(second, OP_PUNISH, ""), Optional.empty()).type());
+                controller.interact(
+                        OWNER,
+                        id(second, ModerationUiPreviewController.OP_PUNISH, ""),
+                        Optional.empty()).type());
     }
 
     @Test
@@ -109,43 +229,13 @@ class ModerationUiPreviewControllerTest {
                 started.snapshot(), "nav", "x".repeat(100)));
     }
 
-    @Test
-    void supportsCustomReasonAndDurationModals() {
-        ModerationUiPreviewController controller = controller(new MutableClock());
+    private static ModerationUiPreviewController.Result recommendation(
+            ModerationUiPreviewController controller,
+            String offense
+    ) {
         ModerationUiPreviewController.Result current = controller.start(OWNER);
-        current = button(controller, current, OP_PUNISH, "");
-        current = button(controller, current, OP_ACTION, "mute");
-        current = button(controller, current, OP_SCOPE, "discord");
-
-        String reasonId = id(current, OP_REASON, "");
-        ModerationUiPreviewController.Result reasonModal = controller.interact(
-                OWNER, reasonId, Optional.of("custom"));
-        assertEquals(ModerationUiPreviewController.ResultType.MODAL, reasonModal.type());
-        assertNotNull(reasonModal.modal());
-        current = controller.submitModal(OWNER, reasonModal.modal().customId(), "Repeated targeted harassment");
-
-        String durationId = id(current, OP_DURATION, "");
-        ModerationUiPreviewController.Result durationModal = controller.interact(
-                OWNER, durationId, Optional.of("custom"));
-        current = controller.submitModal(OWNER, durationModal.modal().customId(), "5d 12h");
-
-        assertEquals(ModerationUiPreviewModel.Screen.OPTIONS, current.snapshot().state().screen());
-        assertEquals("Custom — Repeated targeted harassment", current.snapshot().state().reason());
-        assertEquals("Custom — 5d 12h", current.snapshot().state().duration());
-    }
-
-    @Test
-    void exposesAllRepresentativeFailureStates() {
-        ModerationUiPreviewController controller = controller(new MutableClock());
-        for (ModerationUiPreviewModel.Scenario scenario : ModerationUiPreviewModel.Scenario.values()) {
-            ModerationUiPreviewController.Result started = controller.start(OWNER);
-            ModerationUiPreviewController.Result selected = controller.interact(
-                    OWNER,
-                    id(started, "scenario", ""),
-                    Optional.of(scenario.name().toLowerCase(java.util.Locale.ROOT)));
-            assertEquals(ModerationUiPreviewModel.Screen.SCENARIO, selected.snapshot().state().screen());
-            assertEquals(scenario, selected.snapshot().state().scenario());
-        }
+        current = button(controller, current, ModerationUiPreviewController.OP_PUNISH, "");
+        return select(controller, current, ModerationUiPreviewController.OP_OFFENSE, offense);
     }
 
     private static ModerationUiPreviewController controller(MutableClock clock) {
