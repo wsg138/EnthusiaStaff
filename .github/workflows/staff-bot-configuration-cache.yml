@@ -61,3 +61,20 @@ jobs:
               --console=plain
           done
           test "${TESTED_SHA}" = "$(git rev-parse HEAD)"
+
+      - name: Report Codacy PR issue details
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error \
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/${{ github.event.pull_request.number }}/issues" \
+            | jq -r '.data[] | [
+                .commitIssue.toolInfo.name,
+                .commitIssue.patternInfo.id,
+                .commitIssue.patternInfo.category,
+                .commitIssue.patternInfo.severityLevel,
+                .commitIssue.filePath,
+                (.commitIssue.lineNumber | tostring),
+                .commitIssue.message
+              ] | @tsv'
