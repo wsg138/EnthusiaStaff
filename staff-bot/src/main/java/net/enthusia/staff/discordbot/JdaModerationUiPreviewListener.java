@@ -1,5 +1,6 @@
 package net.enthusia.staff.discordbot;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -17,8 +18,8 @@ import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
-/** Staging-only JDA adapter for the fake moderation UI preview. */
-final class JdaModerationUiPreviewListener extends ListenerAdapter {
+/** Staging-only Discord launcher for the web-first moderation preview. */
+final class JdaModerationUiPreviewListener extends ListenerAdapter implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
     private static final String COMMAND = "moderate-preview";
     private static final String COMPONENT_PREFIX = "pui:";
@@ -27,7 +28,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
     private final long guildId;
     private final InteractionReplayGuard interactions;
     private final ModerationUiPreviewController controller;
-    private final ModerationUiPreviewDiscordPresentation presentation = new ModerationUiPreviewDiscordPresentation();
+    private final ModerationUiPreviewDiscordPresentation legacyPresentation = new ModerationUiPreviewDiscordPresentation();
+    private final ModerationPreviewLauncherPresentation launcherPresentation = new ModerationPreviewLauncherPresentation();
+    private final ModerationPreviewWebRuntime webRuntime;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
 
@@ -40,6 +43,11 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
         this.guildId = guildId;
         this.interactions = interactions;
         this.controller = new ModerationUiPreviewController(sessionCapacity, sessionTtl);
+        this.webRuntime = ModerationPreviewWebRuntime.fromEnvironment(sessionCapacity);
+    }
+
+    void startWeb() {
+        webRuntime.start();
     }
 
     void enable(JDA jda) {
@@ -72,8 +80,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
-        ModerationUiPreviewController.Result result = controller.start(event.getUser().getIdLong());
-        sendInitial(event, result);
+        Optional<URI> launchUri = webRuntime.issueLaunchUri(event.getUser().getIdLong(), guildId);
+        ModerationPreviewLauncherPresentation.Rendered rendered = launcherPresentation.render(launchUri);
+        event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
     }
 
     @Override
@@ -105,7 +114,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
         ModerationUiPreviewController.Result result = controller.interact(
                 event.getUser().getIdLong(), event.getComponentId(), value);
         if (result.type() == ModerationUiPreviewController.ResultType.MODAL) {
-            event.replyModal(presentation.modal(result.modal())).queue();
+            event.replyModal(legacyPresentation.modal(result.modal())).queue();
             return;
         }
         editOrError(event, result);
@@ -128,7 +137,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
     }
 
     static CommandData command() {
-        return Commands.slash(COMMAND, "Preview the staging punishment interface with sample data")
+        return Commands.slash(COMMAND, "Open the staging moderation web panel")
                 .setDefaultPermissions(DefaultMemberPermissions.DISABLED);
     }
 
@@ -149,21 +158,12 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
         return interactions.claim(event.getIdLong()) == InteractionReplayGuard.ClaimResult.CLAIMED;
     }
 
-    private void sendInitial(SlashCommandInteractionEvent event, ModerationUiPreviewController.Result result) {
-        if (result.type() == ModerationUiPreviewController.ResultType.ERROR) {
-            event.reply(result.message()).setEphemeral(true).queue();
-            return;
-        }
-        ModerationUiPreviewDiscordPresentation.Rendered rendered = presentation.render(result.snapshot());
-        event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
-    }
-
     private void editOrError(ButtonInteractionEvent event, ModerationUiPreviewController.Result result) {
         if (result.type() == ModerationUiPreviewController.ResultType.ERROR) {
             event.reply(result.message()).setEphemeral(true).queue();
             return;
         }
-        ModerationUiPreviewDiscordPresentation.Rendered rendered = presentation.render(result.snapshot());
+        ModerationUiPreviewDiscordPresentation.Rendered rendered = legacyPresentation.render(result.snapshot());
         event.editMessageEmbeds(rendered.embed()).setComponents(rendered.rows()).queue();
     }
 
@@ -172,7 +172,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
             event.reply(result.message()).setEphemeral(true).queue();
             return;
         }
-        ModerationUiPreviewDiscordPresentation.Rendered rendered = presentation.render(result.snapshot());
+        ModerationUiPreviewDiscordPresentation.Rendered rendered = legacyPresentation.render(result.snapshot());
         event.editMessageEmbeds(rendered.embed()).setComponents(rendered.rows()).queue();
     }
 
@@ -181,7 +181,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
             event.reply(result.message()).setEphemeral(true).queue();
             return;
         }
-        ModerationUiPreviewDiscordPresentation.Rendered rendered = presentation.render(result.snapshot());
+        ModerationUiPreviewDiscordPresentation.Rendered rendered = legacyPresentation.render(result.snapshot());
         event.editMessageEmbeds(rendered.embed()).setComponents(rendered.rows()).queue();
     }
 
@@ -195,7 +195,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
 
     private static void unavailable(IReplyCallback event) {
         if (!event.isAcknowledged()) {
-            event.reply("The staging moderation UI preview is unavailable in this context.")
+            event.reply("The staging moderation preview is unavailable in this context.")
                     .setEphemeral(true)
                     .queue();
         }
@@ -206,5 +206,11 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
             String type = failure == null ? "unknown" : failure.getClass().getSimpleName();
             LOGGER.log(System.Logger.Level.WARNING, "{0} type={1}", code, type);
         }
+    }
+
+    @Override
+    public void close() {
+        disable();
+        webRuntime.close();
     }
 }
