@@ -2,13 +2,12 @@ package net.enthusia.staff.discordbot;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * Environment-only staff-bot configuration. Secrets are deliberately excluded from {@link #toString()}.
- */
+/** Staff-bot runtime configuration. Secrets are deliberately excluded from {@link #toString()}. */
 public final class StaffBotConfiguration {
     public static final String ENVIRONMENT_KEY = "ENTHUSIA_STAFF_BOT_ENVIRONMENT";
     public static final String TOKEN_KEY = "ENTHUSIA_STAFF_BOT_TOKEN";
@@ -93,6 +92,26 @@ public final class StaffBotConfiguration {
         return fromEnvironment(System.getenv());
     }
 
+    static StaffBotConfiguration fromStartup(StaffBotCommandLine commandLine) {
+        return fromStartup(commandLine, System.getenv());
+    }
+
+    static StaffBotConfiguration fromStartup(StaffBotCommandLine commandLine, Map<String, String> values) {
+        Objects.requireNonNull(commandLine, "commandLine");
+        Objects.requireNonNull(values, "values");
+        if (!commandLine.stagingUiPreview()) {
+            return fromEnvironment(values);
+        }
+
+        rejectProductionPreviewEnvironment(values);
+        Map<String, String> effectiveValues = new HashMap<>(values);
+        effectiveValues.put(ENVIRONMENT_KEY, StaffBotEnvironment.STAGING.label());
+        effectiveValues.put(UI_PREVIEW_KEY, Boolean.TRUE.toString());
+        effectiveValues.put(TOKEN_KEY, StaffBotTokenFile.read(commandLine.tokenFile().orElseThrow(
+                () -> new IllegalArgumentException("staging UI preview requires a token file"))));
+        return fromEnvironment(effectiveValues);
+    }
+
     public static StaffBotConfiguration fromEnvironment(Map<String, String> values) {
         Objects.requireNonNull(values, "values");
         StaffBotEnvironment environment = StaffBotEnvironment.parse(required(values, ENVIRONMENT_KEY));
@@ -173,6 +192,16 @@ public final class StaffBotConfiguration {
                 + ", interactionCapacity=" + interactionCapacity
                 + ", interactionTtl=" + interactionTtl
                 + ", discordToken=<redacted>]";
+    }
+
+    private static void rejectProductionPreviewEnvironment(Map<String, String> values) {
+        String configuredEnvironment = values.get(ENVIRONMENT_KEY);
+        if (configuredEnvironment == null || configuredEnvironment.isBlank()) {
+            return;
+        }
+        if (StaffBotEnvironment.parse(configuredEnvironment) == StaffBotEnvironment.PRODUCTION) {
+            throw new IllegalArgumentException("staging UI preview rejects production environment configuration");
+        }
     }
 
     private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {

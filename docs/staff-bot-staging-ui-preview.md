@@ -4,18 +4,40 @@ This runbook is for the owner-directed Discord moderation UI prototype. It is no
 
 ## Safety model
 
-The preview is intentionally available only when both runtime conditions are true:
+The preview remains staging-only. It can be enabled in either of these explicit ways:
 
-- `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging`
-- `ENTHUSIA_STAFF_BOT_UI_PREVIEW=true`
+- environment configuration: `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging` together with `ENTHUSIA_STAFF_BOT_UI_PREVIEW=true`; or
+- the dedicated-host convenience CLI: `--staging-ui-preview` together with `--token-file=<path>`.
 
-Production rejects the preview flag. Preview mode uses the existing fixed staging Discord application and its existing staging guild/test-channel identity fence.
+The convenience CLI always selects the existing `STAGING` environment and rejects an explicitly configured production environment. The normal production configuration cannot enable preview mode. The existing fixed staging Discord application, guild, and test-channel identity fence still applies before interactions are enabled.
 
 When preview mode is enabled, the process does not initialize the D06 moderation database/authority runtime. The preview workflow uses deterministic in-memory sample data and has no punishment service, Discord moderation adapter, Minecraft/Paper authority adapter, or persistence adapter. Final confirmation only changes the in-memory preview state.
 
-## Dedicated-host configuration
+## Bloom Generic-JDA panel
 
-Only these three environment values are required for the preview runtime:
+Place a runtime-only file named `staging-bot-token.txt` in the bot server filesystem. The file must contain only the Discord **staging bot token**; a normal trailing newline is acceptable. Do not commit this file, paste its contents into APP FLAGS, or include it in logs/screenshots/support messages.
+
+Use these exact panel settings:
+
+```text
+Java Version:
+Java 21
+
+JAR FILE:
+EnthusiaStaff-StaffBot.jar
+
+FLAGS:
+-Dterminal.jline=false -Dterminal.ansi=true
+
+APP FLAGS:
+--staging-ui-preview --token-file=staging-bot-token.txt
+```
+
+With these APP FLAGS, no machine-level environment variables are required for the UI preview. `--token-file` is accepted only as part of the explicit staging-preview CLI path; it is not a production token-file interface.
+
+## Existing environment-variable configuration
+
+The original environment-variable deployment path remains supported unchanged:
 
 ```bash
 export ENTHUSIA_STAFF_BOT_TOKEN='<staging bot token>'
@@ -24,7 +46,7 @@ export ENTHUSIA_STAFF_BOT_UI_PREVIEW='true'
 java -jar EnthusiaStaff-StaffBot.jar
 ```
 
-Do not place the token in source control, logs, screenshots, shell history intended for sharing, or support messages.
+The existing `--smoke-test` argument is also preserved and may be used with the environment path or combined with the staging-preview CLI when non-destructive readiness validation is needed.
 
 The runtime keeps the existing optional loopback health endpoint defaults. No SQL database, Paper authority endpoint, LiteBans connection, production data, or production Discord token is needed merely to use preview mode.
 
@@ -57,4 +79,4 @@ Selecting the final confirmation produces `Preview complete — no moderation ac
 
 ## Disabling preview
 
-Stop the process and remove or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false` before starting the normal staging runtime. The production application must never be configured with the preview flag.
+On the Bloom panel, stop the process and remove `--staging-ui-preview --token-file=staging-bot-token.txt` from APP FLAGS before starting any normal runtime. For the environment-variable path, stop the process and remove or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false` before starting the normal staging runtime. Production must never be configured with either preview activation path.

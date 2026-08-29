@@ -11,9 +11,6 @@ public final class StaffBotApplication {
     private static final int CONFIGURATION_ERROR = 2;
     private static final int RUNTIME_ERROR = 3;
     private static final int INTERRUPTED = 130;
-    private static final int NO_ARGUMENTS = 0;
-    private static final int SMOKE_TEST_ARGUMENT_COUNT = 1;
-    private static final String SMOKE_TEST_ARGUMENT = "--smoke-test";
 
     private StaffBotApplication() {
     }
@@ -26,25 +23,25 @@ public final class StaffBotApplication {
     }
 
     static int run(String[] args) {
-        final boolean smokeTest;
+        final StaffBotCommandLine commandLine;
         try {
-            smokeTest = parseSmokeTest(args);
+            commandLine = StaffBotCommandLine.parse(args);
         } catch (IllegalArgumentException exception) {
             logIfEnabled(System.Logger.Level.ERROR, "staff_bot_invalid_arguments");
             return CONFIGURATION_ERROR;
         }
-        return runConfigured(smokeTest);
+        return runConfigured(commandLine);
     }
 
-    private static int runConfigured(boolean smokeTest) {
+    private static int runConfigured(StaffBotCommandLine commandLine) {
         final StaffBotConfiguration configuration;
         try {
-            configuration = StaffBotConfiguration.fromSystemEnvironment();
+            configuration = StaffBotConfiguration.fromStartup(commandLine);
         } catch (IllegalArgumentException exception) {
             logIfEnabled(System.Logger.Level.ERROR, "staff_bot_configuration_invalid");
             return CONFIGURATION_ERROR;
         }
-        return runRuntime(configuration, smokeTest);
+        return runRuntime(configuration, commandLine.smokeTest());
     }
 
     private static int runRuntime(StaffBotConfiguration configuration, boolean smokeTest) {
@@ -80,16 +77,6 @@ public final class StaffBotApplication {
                 "staff_bot_smoke_ready environment={0}",
                 configuration.environment().label());
         return SUCCESS;
-    }
-
-    private static boolean parseSmokeTest(String[] args) {
-        if (args.length == NO_ARGUMENTS) {
-            return false;
-        }
-        if (args.length == SMOKE_TEST_ARGUMENT_COUNT && SMOKE_TEST_ARGUMENT.equals(args[0])) {
-            return true;
-        }
-        throw new IllegalArgumentException("unsupported staff bot arguments");
     }
 
     private static void logIfEnabled(System.Logger.Level level, String message, Object... parameters) {
