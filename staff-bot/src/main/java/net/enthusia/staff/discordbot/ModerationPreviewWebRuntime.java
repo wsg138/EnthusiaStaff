@@ -64,7 +64,7 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
                 new ModerationPreviewWebSessionStore(capacity, SESSION_TTL));
     }
 
-    void start() {
+    synchronized void start() {
         if (!started.compareAndSet(false, true)) {
             return;
         }
@@ -294,7 +294,7 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (!closed.compareAndSet(false, true)) {
             return;
         }

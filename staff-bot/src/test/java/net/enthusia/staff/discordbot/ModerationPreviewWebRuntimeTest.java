@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
@@ -35,7 +36,7 @@ class ModerationPreviewWebRuntimeTest {
                     .build();
 
             assertEquals(401, get(client, origin.resolve("/moderation"), null).statusCode());
-            assertEquals(401, get(client, origin.resolve("/launch?t=%"), null).statusCode());
+            assertEquals(401, get(client, origin.resolve("/launch?t=%25"), null).statusCode());
 
             String token = tickets.issue(1234L, 5678L, "sample-river-ash");
             URI launch = origin.resolve("/launch?t=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
@@ -65,6 +66,19 @@ class ModerationPreviewWebRuntimeTest {
             assertFalse(simulated.body().contains("Ban"));
             assertFalse(simulated.body().contains("19002"));
         }
+    }
+
+    @Test
+    void runtimeCannotStartAfterClose() {
+        var config = new ModerationPreviewWebConfig(new InetSocketAddress("127.0.0.1", 0), Optional.empty());
+        var runtime = new ModerationPreviewWebRuntime(
+                config,
+                new ModerationPreviewLaunchTicketService(2, Duration.ofMinutes(2)),
+                new ModerationPreviewWebSessionStore(2, Duration.ofMinutes(15)));
+
+        runtime.close();
+
+        assertThrows(IllegalStateException.class, runtime::start);
     }
 
     @Test

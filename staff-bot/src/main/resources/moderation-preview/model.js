@@ -130,6 +130,10 @@ function scenarioHistory(name) {
 }
 
 function configureScenario(name) {
+  state.search = '';
+  state.channel = 'all';
+  state.date = 'all';
+  state.selectedOnly = false;
   if (name === 'multi') {
     ['19002','19003','19005'].forEach((id) => { state.selected.add(id); state.evidence.add(id); });
     state.deleting.add('19002'); state.deleting.add('19005');
@@ -137,7 +141,5 @@ function configureScenario(name) {
     state.search = 'last chance';
   } else if (name === 'attachment') {
     state.channel = 'market'; state.search = 'Selling kits';
-  } else {
-    state.search = ''; state.channel = 'all'; state.date = 'all'; state.selectedOnly = false;
   }
 }
