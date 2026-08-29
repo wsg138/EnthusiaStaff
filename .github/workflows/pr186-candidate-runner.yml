@@ -1,0 +1,111 @@
+name: PR186 candidate runner
+
+on:
+  push:
+    branches:
+      - "diagnostic/pr186-codacy-remaining-20260829"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-push:
+    name: Validate and publish one repair commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out frozen product head
+        uses: actions/checkout@v6
+        with:
+          ref: 13b9fdcddb995ba30ce781337690dcd5f007db29
+          fetch-depth: 0
+
+      - name: Verify frozen branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
+          test "${REMOTE}" = "${EXPECTED}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+
+      - name: Apply reviewed candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            'https://raw.githubusercontent.com/wsg138/EnthusiaStaff/5aa7c4426ac8df8bb02f2eba38e27d56f9684188/.github/workflows/pr186-codacy-diagnostics.yml' \
+            -o /tmp/source.yml
+          awk '/^H4s/{capture=1} /^BUNDLE$/{capture=0} capture' /tmp/source.yml > /tmp/pr186-bundle.b64
+          test "$(wc -c < /tmp/pr186-bundle.b64)" -gt 30000
+          base64 -d /tmp/pr186-bundle.b64 > /tmp/pr186-bundle.tar.gz
+          tar -xzf /tmp/pr186-bundle.tar.gz -C "$GITHUB_WORKSPACE"
+
+      - name: Verify candidate scope and browser source
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=$(cat <<'EOF'
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java
+staff-bot/src/main/resources/moderation-preview/app.js
+staff-bot/src/main/resources/moderation-preview/model.js
+staff-bot/src/main/resources/moderation-preview/review.js
+staff-bot/src/main/resources/moderation-preview/workflow.js
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+EOF
+          )
+          ACTUAL="$(git diff --name-only | sort)"
+          test "${ACTUAL}" = "${EXPECTED}"
+          for file in staff-bot/src/main/resources/moderation-preview/{model,app,workflow,review}.js; do
+            node --check "$file"
+          done
+          ! grep -R -n -E 'innerHTML|DOMParser|insertAdjacentHTML|createContextualFragment' staff-bot/src/main/resources/moderation-preview/*.js
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+
+      - name: Clean build, tests, coverage, runtime jars
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+
+      - name: Publish one product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
+          test "${REMOTE}" = "${EXPECTED}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java \
+            staff-bot/src/main/resources/moderation-preview/app.js \
+            staff-bot/src/main/resources/moderation-preview/model.js \
+            staff-bot/src/main/resources/moderation-preview/review.js \
+            staff-bot/src/main/resources/moderation-preview/workflow.js \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+          git diff --cached --check
+          git commit -m "Resolve staging preview analysis findings"
+          git push origin HEAD:refs/heads/owner/staging-web-moderation-console
