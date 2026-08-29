@@ -36,9 +36,19 @@ jobs:
           curl --fail --silent --show-error \
             'https://raw.githubusercontent.com/wsg138/EnthusiaStaff/5aa7c4426ac8df8bb02f2eba38e27d56f9684188/.github/workflows/pr186-codacy-diagnostics.yml' \
             -o /tmp/source.yml
-          awk '/^H4s/{capture=1} /^BUNDLE$/{capture=0} capture' /tmp/source.yml > /tmp/pr186-bundle.b64
-          test "$(wc -c < /tmp/pr186-bundle.b64)" -gt 30000
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('/tmp/source.yml').read_text(encoding='utf-8')
+          start = source.index('\nH4s') + 1
+          end = source.index('\nBUNDLE', start)
+          encoded = ''.join(source[start:end].split())
+          print(f'bundle base64 chars={len(encoded)}')
+          if len(encoded) < 30000:
+              raise SystemExit('stored candidate bundle is unexpectedly short')
+          Path('/tmp/pr186-bundle.b64').write_text(encoded, encoding='ascii')
+          PY
           base64 -d /tmp/pr186-bundle.b64 > /tmp/pr186-bundle.tar.gz
+          tar -tzf /tmp/pr186-bundle.tar.gz
           tar -xzf /tmp/pr186-bundle.tar.gz -C "$GITHUB_WORKSPACE"
 
       - name: Verify candidate scope and browser source
