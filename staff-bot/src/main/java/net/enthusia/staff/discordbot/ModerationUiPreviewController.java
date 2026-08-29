@@ -103,6 +103,25 @@ final class ModerationUiPreviewController {
             Optional<String> selectedValue,
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
+        if (isSelectionOperation(token.operation())) {
+            return routeSelection(ownerId, token, selectedValue, snapshot);
+        }
+        return routeCompletion(ownerId, token, selectedValue, snapshot);
+    }
+
+    private static boolean isSelectionOperation(String operation) {
+        return switch (operation) {
+            case "nav", "punish", "action", "scope", "reason", "duration" -> true;
+            default -> false;
+        };
+    }
+
+    private Result routeSelection(
+            long ownerId,
+            Token token,
+            Optional<String> selectedValue,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
         return switch (token.operation()) {
             case "nav" -> navigate(ownerId, token, snapshot);
             case "punish" -> transition(ownerId, token, state -> state.withScreen(ModerationUiPreviewModel.Screen.ACTION));
@@ -110,12 +129,23 @@ final class ModerationUiPreviewController {
             case "scope" -> chooseScope(ownerId, token, snapshot);
             case "reason" -> chooseReason(ownerId, token, selectedValue, snapshot);
             case "duration" -> chooseDuration(ownerId, token, selectedValue, snapshot);
+            default -> malformed();
+        };
+    }
+
+    private Result routeCompletion(
+            long ownerId,
+            Token token,
+            Optional<String> selectedValue,
+            ModerationUiPreviewModel.Snapshot snapshot
+    ) {
+        return switch (token.operation()) {
             case "toggle" -> toggle(ownerId, token, snapshot);
             case "review" -> review(ownerId, token, snapshot);
             case "confirm" -> confirm(ownerId, token, snapshot);
             case "scenario" -> scenario(ownerId, token, selectedValue, snapshot);
             case "back" -> back(ownerId, token, snapshot);
-            default -> Result.error("That preview control is malformed or no longer supported.");
+            default -> malformed();
         };
     }
 
@@ -242,20 +272,24 @@ final class ModerationUiPreviewController {
     }
 
     private Result back(long ownerId, Token token, ModerationUiPreviewModel.Snapshot snapshot) {
-        ModerationUiPreviewModel.Screen destination = backDestination(snapshot.state().screen());
+        ModerationUiPreviewModel.Screen destination = backDestination(snapshot.state());
         if (destination == null) {
             return staleFlow();
         }
         return transition(ownerId, token, state -> state.withScreen(destination));
     }
 
-    private static ModerationUiPreviewModel.Screen backDestination(ModerationUiPreviewModel.Screen current) {
-        return switch (current) {
+    private static ModerationUiPreviewModel.Screen backDestination(ModerationUiPreviewModel.State state) {
+        if (state.screen() == ModerationUiPreviewModel.Screen.OPTIONS) {
+            return state.action() != null && state.action().durationSupported()
+                    ? ModerationUiPreviewModel.Screen.DURATION
+                    : ModerationUiPreviewModel.Screen.REASON;
+        }
+        return switch (state.screen()) {
             case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO, ACTION -> ModerationUiPreviewModel.Screen.OVERVIEW;
             case SCOPE -> ModerationUiPreviewModel.Screen.ACTION;
             case REASON -> ModerationUiPreviewModel.Screen.SCOPE;
             case DURATION -> ModerationUiPreviewModel.Screen.REASON;
-            case OPTIONS -> ModerationUiPreviewModel.Screen.REASON;
             case CONFIRM -> ModerationUiPreviewModel.Screen.OPTIONS;
             default -> null;
         };
