@@ -32,6 +32,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private final Object lifecycleLock = new Object();
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
+    private JdaModerationUiPreviewListener previewListener;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
         this(configuration, null, null, Optional.empty());
@@ -47,8 +48,18 @@ final class JdaDiscordGateway implements DiscordGateway {
         this.workers = workers;
         this.interactions = interactions;
         this.moderation = moderation == null ? Optional.empty() : moderation;
-        if (this.moderation.isPresent() && (workers == null || interactions == null)) {
+        validateInteractionResources();
+    }
+
+    private void validateInteractionResources() {
+        if (configuration.uiPreviewEnabled() && moderation.isPresent()) {
+            throw new IllegalArgumentException("UI preview cannot share a live moderation runtime");
+        }
+        if (moderation.isPresent() && (workers == null || interactions == null)) {
             throw new IllegalArgumentException("moderation listener requires bounded runtime resources");
+        }
+        if (configuration.uiPreviewEnabled() && interactions == null) {
+            throw new IllegalArgumentException("UI preview requires replay protection");
         }
     }
 
@@ -63,31 +74,54 @@ final class JdaDiscordGateway implements DiscordGateway {
                     observer,
                     this::disableInteractions
             );
-            JDABuilder builder = JDABuilder.createLight(configuration.discordToken(), Set.of())
-                    .setMemberCachePolicy(MemberCachePolicy.NONE)
-                    .setChunkingFilter(ChunkingFilter.NONE)
-                    .setAutoReconnect(true)
-                    .setMaxReconnectDelay(configuration.maxReconnectDelaySeconds())
-                    .setEnableShutdownHook(false)
-                    .setEventPassthrough(false)
-                    .addEventListeners(listener);
-            moderation.ifPresent(runtime -> {
-                moderationListener = new JdaStaffModerationListener(
-                        configuration.environment().guildId(),
-                        workers,
-                        interactions,
-                        runtime
-                );
-                builder.addEventListeners(moderationListener);
-            });
+            JDABuilder builder = baseBuilder(listener);
+            addInteractionListener(builder);
             jda = builder.build();
         }
+    }
+
+    private JDABuilder baseBuilder(SessionListener listener) {
+        return JDABuilder.createLight(configuration.discordToken(), Set.of())
+                .setMemberCachePolicy(MemberCachePolicy.NONE)
+                .setChunkingFilter(ChunkingFilter.NONE)
+                .setAutoReconnect(true)
+                .setMaxReconnectDelay(configuration.maxReconnectDelaySeconds())
+                .setEnableShutdownHook(false)
+                .setEventPassthrough(false)
+                .addEventListeners(listener);
+    }
+
+    private void addInteractionListener(JDABuilder builder) {
+        if (configuration.uiPreviewEnabled()) {
+            previewListener = new JdaModerationUiPreviewListener(
+                    configuration.environment().guildId(),
+                    interactions,
+                    configuration.interactionCapacity(),
+                    configuration.interactionTtl()
+            );
+            builder.addEventListeners(previewListener);
+            return;
+        }
+        moderation.ifPresent(runtime -> {
+            moderationListener = new JdaStaffModerationListener(
+                    configuration.environment().guildId(),
+                    workers,
+                    interactions,
+                    runtime
+            );
+            builder.addEventListeners(moderationListener);
+        });
     }
 
     @Override
     public void enableInteractions() {
         synchronized (lifecycleLock) {
-            if (jda != null && moderationListener != null) {
+            if (jda == null) {
+                return;
+            }
+            if (previewListener != null) {
+                previewListener.enable(jda);
+            } else if (moderationListener != null) {
                 moderationListener.enable(jda);
             }
         }
@@ -95,6 +129,9 @@ final class JdaDiscordGateway implements DiscordGateway {
 
     private void disableInteractions() {
         synchronized (lifecycleLock) {
+            if (previewListener != null) {
+                previewListener.disable();
+            }
             if (moderationListener != null) {
                 moderationListener.disable();
             }
@@ -104,9 +141,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     @Override
     public void shutdown() {
         synchronized (lifecycleLock) {
-            if (moderationListener != null) {
-                moderationListener.disable();
-            }
+            disableListeners();
             if (jda != null) {
                 jda.shutdown();
             }
@@ -116,12 +151,19 @@ final class JdaDiscordGateway implements DiscordGateway {
     @Override
     public void shutdownNow() {
         synchronized (lifecycleLock) {
-            if (moderationListener != null) {
-                moderationListener.disable();
-            }
+            disableListeners();
             if (jda != null) {
                 jda.shutdownNow();
             }
+        }
+    }
+
+    private void disableListeners() {
+        if (previewListener != null) {
+            previewListener.disable();
+        }
+        if (moderationListener != null) {
+            moderationListener.disable();
         }
     }
 

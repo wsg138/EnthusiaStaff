@@ -9,7 +9,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import net.enthusia.staff.persistence.MariaDb;
 import org.flywaydb.core.Flyway;
@@ -20,13 +22,18 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class PunishmentRequestAlertV12MigrationIntegrationTest {
-    private static final Instant CREATED = Instant.parse("2026-07-30T03:00:00Z");
+    private static final Instant CREATED = Instant.now()
+            .minus(Duration.ofDays(1))
+            .truncatedTo(ChronoUnit.SECONDS);
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_alert_v12_upgrade_test")
             .withUsername("enthusia_test")
-            .withPassword("enthusia_test_password");
+            .withPassword("enthusia_test_password")
+            .withUrlParam("connectionTimeZone", "UTC")
+            .withUrlParam("forceConnectionTimeZoneToSession", "true")
+            .withUrlParam("preserveInstants", "true");
 
     @Test
     void upgradesV11RowsWithoutConsumingSharedAudienceIntent() throws Exception {

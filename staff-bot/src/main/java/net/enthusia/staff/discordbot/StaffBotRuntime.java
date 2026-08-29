@@ -66,10 +66,12 @@ public final class StaffBotRuntime implements AutoCloseable {
                 configuration.interactionTtl());
         Optional<StaffModerationRuntime> moderation = Optional.empty();
         try {
-            moderation = StaffModerationRuntime.openFromEnvironment(
-                    configuration.interactionCapacity(),
-                    configuration.interactionTtl()
-            );
+            if (!configuration.uiPreviewEnabled()) {
+                moderation = StaffModerationRuntime.openFromEnvironment(
+                        configuration.interactionCapacity(),
+                        configuration.interactionTtl()
+                );
+            }
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
             DiscordGateway gateway = new JdaDiscordGateway(configuration, workers, replayGuard, moderation);
             return new StaffBotRuntime(
