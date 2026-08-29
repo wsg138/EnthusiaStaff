@@ -28,6 +28,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
     private final ModerationUiPreviewController controller;
     private final ModerationUiPreviewDiscordPresentation presentation = new ModerationUiPreviewDiscordPresentation();
     private final AtomicBoolean enabled = new AtomicBoolean();
+    private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
 
     JdaModerationUiPreviewListener(
             long guildId,
@@ -41,15 +42,23 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
     }
 
     void enable(JDA jda) {
+        long generation = registrationCallbacks.beginResolution();
+        enabled.set(false);
         Guild guild = jda.getGuildById(guildId);
         if (guild == null) {
-            enabled.set(false);
             return;
         }
-        guild.upsertCommand(command()).queue(this::commandRegistered, this::commandRegistrationFailed);
+        guild.upsertCommand(command()).queue(
+                registered -> registrationCallbacks.runIfCurrent(
+                        generation,
+                        () -> commandRegistered(registered)),
+                failure -> registrationCallbacks.runIfCurrent(
+                        generation,
+                        () -> commandRegistrationFailed(failure)));
     }
 
     void disable() {
+        registrationCallbacks.invalidate();
         enabled.set(false);
     }
 
