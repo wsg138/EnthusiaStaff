@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -29,6 +30,20 @@ class StaffBotRuntimeTest {
         }
         assertTrue(fixture.endpoint.closed);
         assertTrue(fixture.gateway.shutdownRequested);
+    }
+
+    @Test
+    void previewRuntimeCreatesWithoutModerationDependencies() throws Exception {
+        StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
+                StaffBotConfiguration.TOKEN_KEY, "preview-test-token",
+                StaffBotConfiguration.UI_PREVIEW_KEY, "true",
+                StaffBotConfiguration.HEALTH_PORT_KEY, "0"));
+
+        try (StaffBotRuntime runtime = StaffBotRuntime.create(configuration)) {
+            assertFalse(runtime.health().isReady());
+            assertTrue(configuration.uiPreviewEnabled());
+        }
     }
 
     @Test

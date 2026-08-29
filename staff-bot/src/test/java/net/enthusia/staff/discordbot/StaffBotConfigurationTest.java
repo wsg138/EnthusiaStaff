@@ -32,6 +32,18 @@ class StaffBotConfigurationTest {
     }
 
     @Test
+    void previewDedicatedHostNeedsOnlyTokenEnvironmentAndFlag() {
+        StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                StaffBotConfiguration.UI_PREVIEW_KEY, "true"));
+
+        assertTrue(configuration.uiPreviewEnabled());
+        assertEquals(StaffBotEnvironment.STAGING, configuration.environment());
+        assertEquals(8765, configuration.healthAddress().getPort());
+    }
+
+    @Test
     void previewRequiresExplicitStagingPair() {
         StaffBotConfiguration staging = StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
