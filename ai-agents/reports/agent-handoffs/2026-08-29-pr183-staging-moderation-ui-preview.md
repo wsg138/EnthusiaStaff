@@ -1,75 +1,86 @@
 # Owner staging moderation UI preview handoff
 
+## Terminal state
+
+`COMPLETE` — owner-directed staging-only Discord moderation UI preview. This work is not ES-D07 and does not begin punishment enforcement.
+
 ## Identity
 
 - Repository: `wsg138/EnthusiaStaff`
-- Date/timezone: 2026-08-29, America/Indiana/Indianapolis
-- Work item: owner-directed staging-only Discord punishment UI preview; not an ES-D package
-- Starting `main`: `5d6011ba6f7a1435ec981e2c3b5550d8488cd635`
-- Branch: `owner/staging-moderation-ui-preview`
-- PR: #183 — https://github.com/wsg138/EnthusiaStaff/pull/183
+- Date: 2026-08-29
+- Feature branch: `owner/staging-moderation-ui-preview`
+- PR: #183 — `[Owner] Add staging-only moderation UI preview`
+- Frozen validated product head: `35f67005d5d2927266a8c509a930069af58f2c89`
+- Pre-merge `main`: `5d6011ba6f7a1435ec981e2c3b5550d8488cd635`
+- Normal merge commit: `8940f09a8c1a99c04446952a584491e2c2aa9417`
 
-## Baseline
+## Delivered preview
 
-D06 was already complete and provided the isolated staff-bot runtime, fixed staging Discord identity fence, bounded worker/replay resources, and optional read-only database/authority moderation runtime. ES-D07 remained `PLANNED` and had not started. The owner requested a real Discord-native UX prototype before enforcement is implemented.
+The staging staff bot now supports `/moderate-preview` when both `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging` and `ENTHUSIA_STAFF_BOT_UI_PREVIEW=true` are enabled. The preview uses deterministic in-memory sample data and includes overview/navigation, Warn/Mute/Kick/Ban/Restrict presentation, Discord/Minecraft/Both visual scope, preset/custom reasons and durations, options, confirmation, approval/rejection examples, failure/partial-result examples, owner-bound revisioned sessions, replay protection, TTL/capacity limits, and ephemeral Discord interactions.
 
-Concurrent ES-D13 work remained independently active on PR #178 / `package/es-d13-role-sync-replacement`. ES-X03 PR #139 and unrelated website/competition/provider work remained out of scope.
+Preview mode deliberately skips initialization of the D06 moderation database/authority runtime. It has no punishment service, destructive Discord moderation adapter, database mutation adapter, Minecraft/Paper authority adapter, LiteBans path, production data path, or other enforcement dependency. Final confirmation changes preview state only.
 
-## Implementation
+## Exact-head validation
 
-PR #183 adds an explicit `ENTHUSIA_STAFF_BOT_UI_PREVIEW` runtime flag. It is accepted only with `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging`; production rejects the combination.
+The frozen product head `35f67005d5d2927266a8c509a930069af58f2c89` passed the required pre-merge gates:
 
-When preview is enabled, `StaffBotRuntime` deliberately skips initialization of the D06 moderation database/authority runtime. `JdaDiscordGateway` registers only a dedicated preview listener after the existing staging application/guild/test-channel identity validation succeeds.
+- Java 21 Coverage/build/test workflow: run `33259336672` — SUCCESS;
+- Staff Bot Configuration Cache: run `33259336697` — SUCCESS;
+- Sentinel Restart Artifact: run `33259336682` — SUCCESS;
+- Codacy Static Code Analysis check `99119301945` — SUCCESS, no issues;
+- Codacy coverage variation and diff-coverage checks — SUCCESS;
+- all live inline review threads resolved;
+- canonical Pi staging public run `33259378492` — SUCCESS;
+- correlated private staging run `wsg138/EnthusiaStaff-Staging` `33259838366` — SUCCESS.
 
-The preview listener registers `/moderate-preview`, keeps responses ephemeral, and renders deterministic sample moderation data. The flow includes overview/navigation, punishment action, platform scope, reason/custom reason, duration/custom duration, options, confirmation, completion, and representative rejection/failure/partial-result appearances.
+The private staging run passed trusted runner identity, exact bridge artifact verification, guarded disposable Paper boot/restart, sanitized evidence publication, and durable evidence enforcement. The public run collected the private verdict, removed the transient transfer, and published the terminal exact-head PASS.
 
-Preview state is bounded, in-memory, owner-bound, revisioned, TTL-limited, and replay-protected. Component identifiers are allowlisted/parsed and capped to Discord's custom-ID limit. The controller has no punishment service, Discord moderation REST adapter, database mutation adapter, Minecraft/Paper authority adapter, or external authority dependency. Final confirmation only transitions preview state to `COMPLETE`.
+## Merge and containment
 
-Dedicated-host instructions are tracked in `docs/staff-bot-staging-ui-preview.md`. The intended runtime requires only the staging bot token, `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging`, and `ENTHUSIA_STAFF_BOT_UI_PREVIEW=true`; normal optional health settings retain their defaults.
+PR #183 merged using GitHub's normal merge method only. Merge commit `8940f09a8c1a99c04446952a584491e2c2aa9417` has parents:
 
-## Harsh review
+1. `5d6011ba6f7a1435ec981e2c3b5550d8488cd635`
+2. `35f67005d5d2927266a8c509a930069af58f2c89`
 
-Merge blockers found and repaired before final freeze:
+A post-merge comparison from validated product head `35f67005...` to merge commit `8940f09a...` reports zero file differences, proving the merge tree is exactly the validated candidate with no conflict-resolution or unrelated content added.
 
-- the first Java 21 run found an existing test constructor compatibility break and a JDA union-type test API misuse; both were repaired without relaxing preview safety;
-- Options back-navigation initially skipped Duration for duration-bearing actions; corrected;
-- the central controller dispatch was split to keep orchestration complexity bounded;
-- an unnecessary D06 lifecycle refactor was removed so non-preview D06 shutdown/readiness behavior remains unchanged;
-- custom reason/duration modal completion was changed to edit the existing ephemeral panel instead of creating a second stale-looking panel;
-- dedicated-host configuration and preview runtime construction receive explicit regression coverage.
+Concurrent work remained untouched:
 
-At tracked-content freeze, no unresolved review thread had been reported. Live PR review state remains authoritative.
+- ES-D13 PR #178 remains open/draft on `package/es-d13-role-sync-replacement`, observed head `732ecb14ebefdf17b15a3eeabf5d28fe7a67f40c`;
+- ES-X03 PR #139 remains open on `package/es-x03-market-provider`, observed head `702b13438fd95da235b4a87218901be04999aaea`;
+- ES-D07 remains `PLANNED` in `ai-agents/work-packages/packages/ES-D07.md`;
+- unrelated website, competition, provider, production, and secret/configuration work was not modified.
 
-## Validation location
+## Staging release
 
-Exact final-head validation belongs in PR #183, not in this tracked report, to avoid changing the SHA after evidence is recorded.
+The merge-triggered `Staff Bot Staging Release` workflow run `33262789759` completed SUCCESS for exact merge source `8940f09a8c1a99c04446952a584491e2c2aa9417`. It rebuilt and republished the fixed `staff-bot-staging` prerelease and verified the published assets.
 
-Before merge, require on the exact final PR head:
+Published fixed assets include:
 
-- Java 21 repository Coverage/build/test gate;
-- `Staff Bot Configuration Cache` gate;
-- all other path-applicable repository workflows;
-- Codacy Static Code Analysis with zero new valid findings;
-- terminal review-thread reconciliation;
-- live `main` and concurrent PR reconciliation;
-- explicit diff review confirming there is no real moderation path and no ES-D13 overlap.
+- `EnthusiaStaff-StaffBot.jar` — SHA-256 `b9a5e4bb83b85749613525ced5c60c6dc18c6968a18d9547aae2a92806cdde45` for the merge-triggered publication;
+- `EnthusiaStaff-StaffBot.jar.sha256`;
+- `staff-bot-staging-source.txt`.
 
-After merge, require the `Staff Bot Staging Release` push workflow for the exact merge/main source and verify the fixed `staff-bot-staging` release assets/source provenance.
+The release workflow writes `source_sha=${TESTED_SHA}` into `staff-bot-staging-source.txt`; for the successful merge-triggered run, `TESTED_SHA` was the merge commit `8940f09a8c1a99c04446952a584491e2c2aa9417`. The release notes also record that exact source. Therefore the published runtime provenance contains the merged staging preview.
 
-## Intended merge or blocker state
+Fixed runtime download:
 
-Intended state is a normal merge commit only after exact-head evidence is terminal and current `main` is reconciled. Do not squash, rebase, force-push, or auto-merge. Delete the feature branch only after merge when safe.
+`https://github.com/wsg138/EnthusiaStaff/releases/download/staff-bot-staging/EnthusiaStaff-StaffBot.jar`
 
-## Boundaries
+## Owner Bloom startup
 
-- ES-D07 remains not started by this work.
-- No actual Warn/Mute/Kick/Ban/Restrict enforcement is implemented.
-- No production Discord application or production Discord configuration is changed.
-- No production database, Minecraft/Paper authority endpoint, LiteBans, production data, punishment persistence, or destructive Discord moderation action is used by preview mode.
-- ES-D13 PR #178 and its branch/records remain independent and untouched.
-- ES-X03 PR #139 and unrelated website/competition/provider work remain untouched.
-- No secret is stored in the repository or handoff.
+The Bloom host must already provide `ENTHUSIA_STAFF_BOT_TOKEN` in its environment. Start the downloaded fixed staging JAR with:
 
-## Remaining work
+```bash
+ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging ENTHUSIA_STAFF_BOT_UI_PREVIEW=true java -jar EnthusiaStaff-StaffBot.jar
+```
 
-The owner should run and visually evaluate `/moderate-preview` on the dedicated staging bot and iterate on UX as desired. ES-D07 remains a separate future package; this preview must not be treated as evidence that D07 has begun or completed.
+Do not put the token on the command line or in source control. The process reads `ENTHUSIA_STAFF_BOT_TOKEN` from the host environment.
+
+## Owner verification
+
+After startup, run `/moderate-preview` in the dedicated staging guild/test channel. The UI is expected to be ephemeral and fake-data-only. Selecting final confirmation must report that no moderation action was applied.
+
+## Boundary after completion
+
+This preview is a UX checkpoint only. ES-D07 remains a separate future package and must not be inferred to have started or completed from this work.
