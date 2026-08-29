@@ -115,7 +115,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
         String input = value == null ? "" : value.getAsString();
         ModerationUiPreviewController.Result result = controller.submitModal(
                 event.getUser().getIdLong(), event.getModalId(), input);
-        replyOrError(event, result);
+        editModalOrError(event, result);
     }
 
     static CommandData command() {
@@ -167,13 +167,13 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter {
         event.editMessageEmbeds(rendered.embed()).setComponents(rendered.rows()).queue();
     }
 
-    private void replyOrError(ModalInteractionEvent event, ModerationUiPreviewController.Result result) {
+    private void editModalOrError(ModalInteractionEvent event, ModerationUiPreviewController.Result result) {
         if (result.type() == ModerationUiPreviewController.ResultType.ERROR) {
             event.reply(result.message()).setEphemeral(true).queue();
             return;
         }
         ModerationUiPreviewDiscordPresentation.Rendered rendered = presentation.render(result.snapshot());
-        event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
+        event.editMessageEmbeds(rendered.embed()).setComponents(rendered.rows()).queue();
     }
 
     private boolean accepted(long eventGuildId) {
