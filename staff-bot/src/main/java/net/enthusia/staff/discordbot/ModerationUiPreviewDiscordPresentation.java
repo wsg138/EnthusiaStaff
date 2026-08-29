@@ -21,6 +21,8 @@ final class ModerationUiPreviewDiscordPresentation {
     private static final int PREVIEW_COLOR = 0x5865F2;
     private static final int WARNING_COLOR = 0xF0B232;
     private static final int FAILURE_COLOR = 0xED4245;
+    private static final String OP_NAV = "nav";
+    private static final String OP_ACTION = "action";
     private static final String OP_BACK = "back";
     private static final String FOOTER = "STAGING UI PREVIEW · Sample data · No moderation action is possible";
     private static final Set<ModerationUiPreviewModel.Screen> DATA_SCREENS = EnumSet.of(
@@ -281,10 +283,10 @@ final class ModerationUiPreviewDiscordPresentation {
         return List.of(
                 ActionRow.of(
                         Button.danger(id(snapshot, "punish", ""), "Punish"),
-                        Button.secondary(id(snapshot, "nav", "history"), "History"),
-                        Button.secondary(id(snapshot, "nav", "accounts"), "Accounts"),
-                        Button.secondary(id(snapshot, "nav", "notes"), "Notes"),
-                        Button.secondary(id(snapshot, "nav", "cases"), "Cases")
+                        Button.secondary(id(snapshot, OP_NAV, "history"), "History"),
+                        Button.secondary(id(snapshot, OP_NAV, "accounts"), "Accounts"),
+                        Button.secondary(id(snapshot, OP_NAV, "notes"), "Notes"),
+                        Button.secondary(id(snapshot, OP_NAV, "cases"), "Cases")
                 ),
                 ActionRow.of(scenarioMenu(snapshot))
         );
@@ -293,11 +295,11 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> actionComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(
                 ActionRow.of(
-                        Button.secondary(id(snapshot, "action", "warn"), "Warn"),
-                        Button.primary(id(snapshot, "action", "mute"), "Mute"),
-                        Button.secondary(id(snapshot, "action", "kick"), "Kick"),
-                        Button.danger(id(snapshot, "action", "ban"), "Ban"),
-                        Button.primary(id(snapshot, "action", "restrict"), "Restrict")
+                        Button.secondary(id(snapshot, OP_ACTION, "warn"), "Warn"),
+                        Button.primary(id(snapshot, OP_ACTION, "mute"), "Mute"),
+                        Button.secondary(id(snapshot, OP_ACTION, "kick"), "Kick"),
+                        Button.danger(id(snapshot, OP_ACTION, "ban"), "Ban"),
+                        Button.primary(id(snapshot, OP_ACTION, "restrict"), "Restrict")
                 ),
                 backRow(snapshot)
         );

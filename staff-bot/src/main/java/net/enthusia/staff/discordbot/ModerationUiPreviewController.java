@@ -305,12 +305,24 @@ final class ModerationUiPreviewController {
 
     private static Optional<ModerationUiPreviewModel.Screen> backDestination(ModerationUiPreviewModel.State state) {
         if (state.screen() == ModerationUiPreviewModel.Screen.OPTIONS) {
-            ModerationUiPreviewModel.Screen destination = state.action() != null && state.action().durationSupported()
-                    ? ModerationUiPreviewModel.Screen.DURATION
-                    : ModerationUiPreviewModel.Screen.REASON;
-            return Optional.of(destination);
+            return optionsBackDestination(state);
         }
-        return switch (state.screen()) {
+        return fixedBackDestination(state.screen());
+    }
+
+    private static Optional<ModerationUiPreviewModel.Screen> optionsBackDestination(
+            ModerationUiPreviewModel.State state
+    ) {
+        ModerationUiPreviewModel.Screen destination = state.action() != null && state.action().durationSupported()
+                ? ModerationUiPreviewModel.Screen.DURATION
+                : ModerationUiPreviewModel.Screen.REASON;
+        return Optional.of(destination);
+    }
+
+    private static Optional<ModerationUiPreviewModel.Screen> fixedBackDestination(
+            ModerationUiPreviewModel.Screen screen
+    ) {
+        return switch (screen) {
             case ACCOUNTS, HISTORY, NOTES, CASES, SCENARIO, ACTION ->
                     Optional.of(ModerationUiPreviewModel.Screen.OVERVIEW);
             case SCOPE -> Optional.of(ModerationUiPreviewModel.Screen.ACTION);
@@ -393,26 +405,43 @@ final class ModerationUiPreviewController {
     }
 
     private static Optional<Token> parse(String customId) {
-        if (customId == null || customId.length() > MAX_COMPONENT_ID_LENGTH) {
+        if (!validComponentId(customId)) {
             return Optional.empty();
         }
         String[] parts = customId.split(":", TOKEN_PARTS_WITH_ARGUMENT);
-        if (parts.length < MIN_TOKEN_PARTS || !PREFIX.equals(parts[0]) || parts[1].isBlank()) {
+        if (!validTokenParts(parts)) {
             return Optional.empty();
         }
+        return parseTokenParts(parts);
+    }
+
+    private static boolean validComponentId(String customId) {
+        return customId != null && customId.length() <= MAX_COMPONENT_ID_LENGTH;
+    }
+
+    private static boolean validTokenParts(String[] parts) {
+        return parts.length >= MIN_TOKEN_PARTS
+                && PREFIX.equals(parts[0])
+                && !parts[1].isBlank();
+    }
+
+    private static Optional<Token> parseTokenParts(String[] parts) {
         try {
             int revision = Integer.parseInt(parts[2]);
             if (revision < 0) {
                 return Optional.empty();
             }
             String operation = parts[3].toLowerCase(Locale.ROOT);
-            String argument = parts.length == TOKEN_PARTS_WITH_ARGUMENT
-                    ? parts[4].toLowerCase(Locale.ROOT)
-                    : "";
-            return Optional.of(new Token(parts[1], revision, operation, argument));
+            return Optional.of(new Token(parts[1], revision, operation, tokenArgument(parts)));
         } catch (NumberFormatException exception) {
             return Optional.empty();
         }
+    }
+
+    private static String tokenArgument(String[] parts) {
+        return parts.length == TOKEN_PARTS_WITH_ARGUMENT
+                ? parts[4].toLowerCase(Locale.ROOT)
+                : "";
     }
 
     private static Result malformed() {

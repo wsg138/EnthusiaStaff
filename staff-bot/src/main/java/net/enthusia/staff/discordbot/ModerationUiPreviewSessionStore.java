@@ -49,6 +49,7 @@ final class ModerationUiPreviewSessionStore {
     private final Duration ttl;
     private final Clock clock;
     private final SecureRandom random;
+    private final Object lock = new Object();
     private final Map<String, Session> sessions = new LinkedHashMap<>();
 
     ModerationUiPreviewSessionStore(int capacity, Duration ttl, Clock clock, SecureRandom random) {
@@ -64,24 +65,52 @@ final class ModerationUiPreviewSessionStore {
         this.capacity = capacity;
     }
 
-    synchronized Optional<ModerationUiPreviewModel.Snapshot> create(long ownerId) {
-        purgeExpired();
-        if (sessions.size() >= capacity) {
-            return Optional.empty();
+    Optional<ModerationUiPreviewModel.Snapshot> create(long ownerId) {
+        synchronized (lock) {
+            purgeExpired();
+            if (sessions.size() >= capacity) {
+                return Optional.empty();
+            }
+            String id = newSessionId();
+            Session session = new Session(
+                    id,
+                    ownerId,
+                    0,
+                    clock.instant().plus(ttl),
+                    ModerationUiPreviewModel.State.initial()
+            );
+            sessions.put(id, session);
+            return Optional.of(session.snapshot());
         }
-        String id = newSessionId();
-        Session session = new Session(
-                id,
-                ownerId,
-                0,
-                clock.instant().plus(ttl),
-                ModerationUiPreviewModel.State.initial()
-        );
-        sessions.put(id, session);
-        return Optional.of(session.snapshot());
     }
 
-    synchronized Access inspect(String id, long ownerId, int expectedRevision) {
+    Access inspect(String id, long ownerId, int expectedRevision) {
+        synchronized (lock) {
+            return inspectLocked(id, ownerId, expectedRevision);
+        }
+    }
+
+    Access update(
+            String id,
+            long ownerId,
+            int expectedRevision,
+            UnaryOperator<ModerationUiPreviewModel.State> mutation
+    ) {
+        Objects.requireNonNull(mutation, "mutation");
+        synchronized (lock) {
+            Access inspected = inspectLocked(id, ownerId, expectedRevision);
+            if (inspected.status() != AccessStatus.OK) {
+                return inspected;
+            }
+            Session current = sessions.get(id);
+            ModerationUiPreviewModel.State nextState = mutation.apply(current.state());
+            Session next = new Session(id, ownerId, current.revision() + 1, current.expiresAt(), nextState);
+            sessions.put(id, next);
+            return new Access(AccessStatus.OK, next.snapshot());
+        }
+    }
+
+    private Access inspectLocked(String id, long ownerId, int expectedRevision) {
         Session session = sessions.get(id);
         AccessStatus status = validate(session, ownerId, expectedRevision);
         if (status != AccessStatus.OK) {
@@ -91,24 +120,6 @@ final class ModerationUiPreviewSessionStore {
             return Access.failure(status);
         }
         return new Access(AccessStatus.OK, session.snapshot());
-    }
-
-    synchronized Access update(
-            String id,
-            long ownerId,
-            int expectedRevision,
-            UnaryOperator<ModerationUiPreviewModel.State> mutation
-    ) {
-        Objects.requireNonNull(mutation, "mutation");
-        Access inspected = inspect(id, ownerId, expectedRevision);
-        if (inspected.status() != AccessStatus.OK) {
-            return inspected;
-        }
-        Session current = sessions.get(id);
-        ModerationUiPreviewModel.State nextState = mutation.apply(current.state());
-        Session next = new Session(id, ownerId, current.revision() + 1, current.expiresAt(), nextState);
-        sessions.put(id, next);
-        return new Access(AccessStatus.OK, next.snapshot());
     }
 
     private AccessStatus validate(Session session, long ownerId, int expectedRevision) {
