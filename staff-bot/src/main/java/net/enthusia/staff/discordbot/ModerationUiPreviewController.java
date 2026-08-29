@@ -178,7 +178,7 @@ final class ModerationUiPreviewController {
     ) {
         return switch (token.operation()) {
             case OP_TOGGLE -> toggle(ownerId, token, snapshot);
-            case OP_EXPLANATION -> editExplanation(token, snapshot);
+            case OP_EXPLANATION -> editExplanation(snapshot);
             case OP_REVIEW -> review(ownerId, token, snapshot);
             case OP_CONFIRM -> confirm(ownerId, token, snapshot);
             case OP_BACK -> back(ownerId, token, snapshot);
@@ -325,7 +325,7 @@ final class ModerationUiPreviewController {
         };
     }
 
-    private Result editExplanation(Token token, ModerationUiPreviewModel.Snapshot snapshot) {
+    private Result editExplanation(ModerationUiPreviewModel.Snapshot snapshot) {
         if (snapshot.state().screen() != ModerationUiPreviewModel.Screen.OPTIONS) {
             return staleFlow();
         }

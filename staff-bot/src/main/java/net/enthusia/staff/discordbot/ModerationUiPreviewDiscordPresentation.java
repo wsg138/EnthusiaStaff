@@ -21,6 +21,7 @@ final class ModerationUiPreviewDiscordPresentation {
     private static final int PREVIEW_COLOR = 0x5865F2;
     private static final int WARNING_COLOR = 0xF0B232;
     private static final int FAILURE_COLOR = 0xED4245;
+    private static final String BACK_LABEL = "Back";
     private static final String FOOTER = "STAGING UI PREVIEW · Sample policy/data · No moderation action is possible";
     private static final Set<ModerationUiPreviewModel.Screen> DATA_SCREENS = EnumSet.of(
             ModerationUiPreviewModel.Screen.OVERVIEW,
@@ -394,7 +395,7 @@ final class ModerationUiPreviewDiscordPresentation {
         return List.of(ActionRow.of(
                 Button.success(id(snapshot, ModerationUiPreviewController.OP_APPLY, ""), "Apply Recommendation"),
                 Button.secondary(id(snapshot, ModerationUiPreviewController.OP_CUSTOM, ""), "Custom Punishment"),
-                Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back")
+                Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), BACK_LABEL)
         ));
     }
 
@@ -444,7 +445,7 @@ final class ModerationUiPreviewDiscordPresentation {
                 ActionRow.of(
                         Button.secondary(id(snapshot, ModerationUiPreviewController.OP_EXPLANATION, ""),
                                 "Edit explanation"),
-                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back")
+                        Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), BACK_LABEL)
                 )
         );
     }
@@ -452,12 +453,12 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> confirmComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(ActionRow.of(
                 Button.danger(id(snapshot, ModerationUiPreviewController.OP_CONFIRM, ""), "Confirm preview"),
-                Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back")
+                Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), BACK_LABEL)
         ));
     }
 
     private static ActionRow backRow(ModerationUiPreviewModel.Snapshot snapshot) {
-        return ActionRow.of(Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), "Back"));
+        return ActionRow.of(Button.secondary(id(snapshot, ModerationUiPreviewController.OP_BACK, ""), BACK_LABEL));
     }
 
     private static StringSelectMenu sampleMenu(ModerationUiPreviewModel.Snapshot snapshot) {

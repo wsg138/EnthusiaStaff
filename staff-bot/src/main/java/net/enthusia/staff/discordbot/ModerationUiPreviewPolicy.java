@@ -4,6 +4,8 @@ import java.util.List;
 
 /** Deterministic fake policy/data source for the staging-only moderation ladder preview. */
 final class ModerationUiPreviewPolicy {
+    private static final String WARNING_PUNISHMENT = "Warning";
+    private static final String STANDARD_LINKED_ACCOUNTS = "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt";
     record HistoryEntry(
             String when,
             ModerationUiPreviewModel.Offense offense,
@@ -171,9 +173,9 @@ final class ModerationUiPreviewPolicy {
     private static Profile firstMinor() {
         return profile(
                 "Discord: none\nMinecraft: none",
-                List.of(entry("73d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Warning",
+                List.of(entry("73d ago", ModerationUiPreviewModel.Offense.HARASSMENT, WARNING_PUNISHMENT,
                         ModerationUiPreviewModel.Scope.DISCORD, true)),
-                "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt",
+                STANDARD_LINKED_ACCOUNTS,
                 "Cooperative during prior staff contact.",
                 "CASE-PREVIEW-0911 · closed · old harassment review"
         );
@@ -183,16 +185,16 @@ final class ModerationUiPreviewPolicy {
         return profile(
                 "Discord: mute · 1h 18m remaining\nMinecraft: none",
                 List.of(
-                        entry("9d ago", ModerationUiPreviewModel.Offense.SPAM, "Warning",
+                        entry("9d ago", ModerationUiPreviewModel.Offense.SPAM, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("40d ago", ModerationUiPreviewModel.Offense.SPAM, "Mute · 2h",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("24d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Mute · 2h",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
-                        entry("61d ago", ModerationUiPreviewModel.Offense.CHEATING, "Warning",
+                        entry("61d ago", ModerationUiPreviewModel.Offense.CHEATING, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.MINECRAFT, true)
                 ),
-                "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt",
+                STANDARD_LINKED_ACCOUNTS,
                 "Pattern note: repeated flood behavior is documented in sample history.",
                 "CASE-PREVIEW-1187 · open · spam pattern review"
         );
@@ -202,12 +204,12 @@ final class ModerationUiPreviewPolicy {
         return profile(
                 "Discord: none\nMinecraft: none",
                 List.of(
-                        entry("12d ago", ModerationUiPreviewModel.Offense.SPAM, "Warning",
+                        entry("12d ago", ModerationUiPreviewModel.Offense.SPAM, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("45d ago", ModerationUiPreviewModel.Offense.ADVERTISING, "Kick",
                                 ModerationUiPreviewModel.Scope.DISCORD, true)
                 ),
-                "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt",
+                STANDARD_LINKED_ACCOUNTS,
                 "No prior hate/slur record in this sample.",
                 "CASE-PREVIEW-1202 · closed · unrelated advertising review"
         );
@@ -223,7 +225,7 @@ final class ModerationUiPreviewPolicy {
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("122d ago", ModerationUiPreviewModel.Offense.HATE_SLURS, "Mute · 7d",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
-                        entry("31d ago", ModerationUiPreviewModel.Offense.SPAM, "Warning",
+                        entry("31d ago", ModerationUiPreviewModel.Offense.SPAM, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true)
                 ),
                 "RiverAshMC · Java · main",
@@ -238,12 +240,12 @@ final class ModerationUiPreviewPolicy {
                 List.of(
                         entry("15d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Mute · 1d",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
-                        entry("52d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Warning",
+                        entry("52d ago", ModerationUiPreviewModel.Offense.HARASSMENT, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
-                        entry("20d ago", ModerationUiPreviewModel.Offense.SPAM, "Warning",
+                        entry("20d ago", ModerationUiPreviewModel.Offense.SPAM, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true)
                 ),
-                "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt",
+                STANDARD_LINKED_ACCOUNTS,
                 "Owner test: use Harassment, then choose Custom Punishment.",
                 "CASE-PREVIEW-1260 · open · harassment pattern review"
         );
@@ -253,7 +255,7 @@ final class ModerationUiPreviewPolicy {
         return profile(
                 "Discord: none\nMinecraft: restrict · 2d remaining",
                 List.of(
-                        entry("7d ago", ModerationUiPreviewModel.Offense.SPAM, "Warning",
+                        entry("7d ago", ModerationUiPreviewModel.Offense.SPAM, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("13d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Mute · 1d",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
@@ -263,10 +265,10 @@ final class ModerationUiPreviewPolicy {
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
                         entry("71d ago", ModerationUiPreviewModel.Offense.HATE_SLURS, "Mute · 7d",
                                 ModerationUiPreviewModel.Scope.DISCORD, true),
-                        entry("95d ago", ModerationUiPreviewModel.Offense.HARASSMENT, "Warning",
+                        entry("95d ago", ModerationUiPreviewModel.Offense.HARASSMENT, WARNING_PUNISHMENT,
                                 ModerationUiPreviewModel.Scope.DISCORD, false)
                 ),
-                "RiverAshMC · Java · main\nAshRiverAlt · Bedrock · linked alt",
+                STANDARD_LINKED_ACCOUNTS,
                 "Several unrelated records are visible; only matching ladder-relevant records count.",
                 "CASE-PREVIEW-1294 · open · mixed moderation history"
         );
