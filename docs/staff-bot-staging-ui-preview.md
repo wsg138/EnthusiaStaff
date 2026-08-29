@@ -11,7 +11,7 @@ The preview remains staging-only. It can be enabled in either of these explicit 
 
 The convenience CLI always selects the existing `STAGING` environment and rejects an explicitly configured production environment. The normal production configuration cannot enable preview mode. The existing fixed staging Discord application, guild, and test-channel identity fence still applies before interactions are enabled.
 
-When preview mode is enabled, the process does not initialize the D06 moderation database/authority runtime. The preview workflow uses deterministic in-memory sample data and has no punishment service, Discord moderation adapter, Minecraft/Paper authority adapter, or persistence adapter. Final confirmation only changes the in-memory preview state.
+When preview mode is enabled, the process does not initialize the D06 moderation database/authority runtime. The preview workflow uses deterministic bounded in-memory sample data and a fake policy evaluator. It has no punishment service, Discord moderation adapter, Minecraft/Paper authority adapter, LiteBans adapter, persistence adapter, or external authority dependency. Final confirmation only changes the in-memory preview state.
 
 ## Bloom Generic-JDA panel
 
@@ -62,18 +62,58 @@ The same release also publishes `EnthusiaStaff-StaffBot.jar.sha256` and `staff-b
 
 ## Using the preview
 
-Run `/moderate-preview` in the staging guild using an account permitted to use the staging application command. The interaction is ephemeral and uses sample identities/moderation history.
+Run `/moderate-preview` in the staging guild using an account permitted to use the staging application command. The interaction is ephemeral and uses sample identities, sample moderation history, and sample policy only.
 
-The preview includes:
+The normal preview path is deliberately policy-driven:
 
-- moderation overview plus Accounts, History, Notes, and Cases sample views;
-- Warn, Mute, Kick, Ban, and Restrict actions;
-- Discord, Minecraft, and Both visual scopes;
-- preset and custom reasons;
-- preset and custom durations;
-- DM-user and message-delete option presentation;
-- final confirmation and intended higher-approval messaging;
-- insufficient-authority, protected-target, approval-required, stale-confirmation, Discord-failure, and partial-result example states.
+```text
+Moderation profile / history
+→ Punish
+→ choose offense / reason
+→ view ladder recommendation
+→ Apply Recommendation
+→ options
+→ final confirmation
+→ preview-only completion
+```
+
+The profile immediately shows the target Discord identity, main Minecraft identity, active punishments, recent moderation history, total history context, and Accounts / History / Notes / Cases navigation.
+
+After an offense is selected, the fake evaluator displays total moderation history separately from the matching ladder-relevant subset. It then shows the sample ladder step, recommended punishment, duration/scope, short explanation, and any representative approval requirement. Unrelated offense families remain visible but do not advance the selected offense's sample ladder.
+
+`Apply Recommendation` is the primary path. It automatically carries the recommended punishment type, scope, and duration forward; staff do not re-select them.
+
+`Custom Punishment` is an explicit override path. Only after selecting it do manual controls appear for Warning, Mute, Kick, Ban, Restrict, Discord/Minecraft/Both scope, and applicable preset/custom/permanent durations. The options and confirmation screens visibly identify the result as an override. Permanent ban/mute/restrict examples show the representative Admin+ approval requirement; the preview never bypasses authority.
+
+The preview also allows staff to toggle the sample DM and triggering-message deletion options and edit bounded sample explanation/context before review.
+
+### Deterministic ladder samples
+
+The profile contains a selector for six bounded scenarios:
+
+- **First / minor offense** — choose Spam / flooding for a step-1 Warning.
+- **Repeat offense** — choose Spam / flooding; two relevant prior spam records escalate to a step-3 3-day Mute while unrelated records remain visible.
+- **Severe offense** — choose Hate / slurs; the sample severity starts at a stronger ladder step without inventing prior matching offenses.
+- **Admin-level escalation** — choose Hate / slurs; matching prior history produces a permanent Ban recommendation with representative Admin+ approval.
+- **Custom override** — choose Harassment, inspect the recommendation, then deliberately select `Custom Punishment`.
+- **Unrelated history** — choose Spam / flooding; several moderation records are visible, but only one matching ladder-relevant spam record advances the ladder.
+
+These values are preview fixtures, not permanent production policy. ES-D07 must implement the approved real policy and authority model separately.
+
+### Authority and result states
+
+A separate preview selector demonstrates representative states at the stage where they belong:
+
+- insufficient authority;
+- protected target;
+- approval required;
+- stale confirmation requiring ladder recalculation;
+- Discord enforcement failure;
+- partial cross-platform result.
+
+These are presentation examples only. No enforcement is reachable from preview mode.
+
+The final confirmation summarizes target, selected offense, relevant/total history, ladder step, recommendation, actual selected punishment, followed-versus-overridden status, duration, scope, DM/delete options, approval requirement, and explanation/context.
 
 Selecting the final confirmation produces `Preview complete — no moderation action was applied.` No real punishment path exists behind that control.
 
