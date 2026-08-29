@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   ready:
@@ -15,8 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      GH_TOKEN: ${{ github.token }}
-      EXPECTED_PARENT: 3c430d041b343f76f61c12591d33ccb0a7aa6060
+      GH_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
+      EXPECTED_PARENT: b77f107f91bdce7b60cea197418a1a1db970b0b3
+      EXPECTED_VALIDATED_ANCESTOR: 3c430d041b343f76f61c12591d33ccb0a7aa6060
       EXPECTED_PR: "183"
       EXPECTED_REF: owner/staging-moderation-ui-preview
     steps:
@@ -24,8 +24,12 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          test -n "${GH_TOKEN}"
+
           parent="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}" --jq '.parents[0].sha')"
           test "${parent}" = "${EXPECTED_PARENT}"
+          validated_ancestor="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${parent}" --jq '.parents[0].sha')"
+          test "${validated_ancestor}" = "${EXPECTED_VALIDATED_ANCESTOR}"
 
           pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${EXPECTED_PR}")"
           test "$(jq -r '.state' <<<"${pr}")" = 'open'
