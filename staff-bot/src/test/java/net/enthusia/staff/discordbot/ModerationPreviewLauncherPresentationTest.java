@@ -2,10 +2,12 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.util.Optional;
+import net.dv8tion.jda.api.components.buttons.Button;
 import org.junit.jupiter.api.Test;
 
 class ModerationPreviewLauncherPresentationTest {
@@ -18,7 +20,8 @@ class ModerationPreviewLauncherPresentationTest {
         assertEquals("STAGING PREVIEW", rendered.embed().getFooter().getText());
         assertEquals(3, rendered.embed().getFields().size());
         assertEquals(1, rendered.rows().size());
-        assertEquals("Open Moderation Panel", rendered.rows().getFirst().getComponents().getFirst().getLabel());
+        Button button = assertInstanceOf(Button.class, rendered.rows().getFirst().getComponents().getFirst());
+        assertEquals("Open Moderation Panel", button.getLabel());
         assertFalse(rendered.embed().getDescription().contains("fake"));
     }
 
@@ -26,7 +29,7 @@ class ModerationPreviewLauncherPresentationTest {
     void missingExternalDeploymentDoesNotCreateAnUnsafeFallbackUrl() {
         var rendered = new ModerationPreviewLauncherPresentation().render(Optional.empty());
 
-        var button = rendered.rows().getFirst().getComponents().getFirst();
+        Button button = assertInstanceOf(Button.class, rendered.rows().getFirst().getComponents().getFirst());
         assertTrue(button.isDisabled());
         assertEquals("Panel deployment required", button.getLabel());
     }
