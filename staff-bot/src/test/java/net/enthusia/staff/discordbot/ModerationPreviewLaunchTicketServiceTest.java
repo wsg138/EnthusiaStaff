@@ -28,6 +28,16 @@ class ModerationPreviewLaunchTicketServiceTest {
     }
 
     @Test
+    void systemClockPrecisionDoesNotInvalidateFreshTicket() {
+        var clock = new MutableClock(Instant.parse("2026-08-29T22:00:00.987654321Z"));
+        var service = new ModerationPreviewLaunchTicketService(8, Duration.ofMinutes(2), clock, new SecureRandom());
+
+        String token = service.issue(9L, 10L, "sample-target");
+
+        assertEquals(ModerationPreviewLaunchTicketService.Status.ACCEPTED, service.consume(token).status());
+    }
+
+    @Test
     void expiredMalformedAndTamperedTicketsAreRejected() {
         var clock = new MutableClock(Instant.parse("2026-08-29T22:00:00Z"));
         var service = new ModerationPreviewLaunchTicketService(8, Duration.ofSeconds(30), clock, new SecureRandom());
