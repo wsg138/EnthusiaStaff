@@ -1,0 +1,102 @@
+package net.enthusia.staff.discordbot;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.junit.jupiter.api.Test;
+
+class ModerationPreviewWebRuntimeTest {
+    private static final Pattern CSRF_PATTERN = Pattern.compile("\\\"csrfToken\\\":\\\"([^\\\"]+)\\\"");
+
+    @Test
+    void launchExchangeProtectsWorkspaceRejectsReplayAndSimulatesWithoutSideEffects() throws Exception {
+        var config = new ModerationPreviewWebConfig(new InetSocketAddress("127.0.0.1", 0), Optional.empty());
+        var tickets = new ModerationPreviewLaunchTicketService(8, Duration.ofMinutes(2));
+        var sessions = new ModerationPreviewWebSessionStore(8, Duration.ofMinutes(15));
+
+        try (var runtime = new ModerationPreviewWebRuntime(config, tickets, sessions)) {
+            runtime.start();
+            URI origin = origin(runtime.boundAddress());
+            HttpClient client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .build();
+
+            assertEquals(401, get(client, origin.resolve("/moderation"), null).statusCode());
+
+            String token = tickets.issue(1234L, 5678L, "sample-river-ash");
+            URI launch = origin.resolve("/launch?t=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
+            HttpResponse<String> launched = get(client, launch, null);
+            assertEquals(303, launched.statusCode());
+            String cookie = cookie(launched);
+
+            assertEquals(401, get(client, launch, null).statusCode());
+
+            HttpResponse<String> page = get(client, origin.resolve("/moderation"), cookie);
+            assertEquals(200, page.statusCode());
+            assertTrue(page.body().contains("STAGING PREVIEW"));
+
+            HttpResponse<String> session = get(client, origin.resolve("/api/session"), cookie);
+            assertEquals(200, session.statusCode());
+            assertTrue(session.body().contains("\"actorId\":\"1234\""));
+            assertTrue(session.body().contains("\"guildId\":\"5678\""));
+            assertTrue(session.body().contains("\"targetKey\":\"sample-river-ash\""));
+            String csrf = csrf(session.body());
+
+            assertEquals(403, postSimulation(client, origin, cookie, null).statusCode());
+            HttpResponse<String> simulated = postSimulation(client, origin, cookie, csrf);
+            assertEquals(200, simulated.statusCode());
+            assertTrue(simulated.body().contains("Simulation complete"));
+            assertTrue(simulated.body().contains("No live moderation action was performed."));
+        }
+    }
+
+    private static HttpResponse<String> get(HttpClient client, URI uri, String cookie) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri).GET();
+        if (cookie != null) {
+            request.header("Cookie", cookie);
+        }
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static HttpResponse<String> postSimulation(
+            HttpClient client,
+            URI origin,
+            String cookie,
+            String csrf
+    ) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(origin.resolve("/api/simulate"))
+                .header("Cookie", cookie)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"preview\":true}"));
+        if (csrf != null) {
+            request.header("X-Preview-Csrf", csrf);
+        }
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static URI origin(InetSocketAddress address) {
+        return URI.create("http://127.0.0.1:" + address.getPort());
+    }
+
+    private static String cookie(HttpResponse<String> response) {
+        String setCookie = response.headers().firstValue("Set-Cookie").orElseThrow();
+        return setCookie.substring(0, setCookie.indexOf(';'));
+    }
+
+    private static String csrf(String json) {
+        Matcher matcher = CSRF_PATTERN.matcher(json);
+        assertTrue(matcher.find());
+        return matcher.group(1);
+    }
+}
