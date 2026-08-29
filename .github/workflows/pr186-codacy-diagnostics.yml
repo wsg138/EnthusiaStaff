@@ -1,0 +1,40 @@
+name: PR186 Codacy diagnostics
+
+on:
+  push:
+    branches:
+      - "diagnostic/pr186-codacy-remaining-20260829"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Print current public Codacy findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch exact PR findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/186/issues?limit=100' \
+            -H 'Accept: application/json' \
+            -o /tmp/codacy-pr-issues.json
+          echo 'Added findings:'
+          jq -r '
+            .data[]
+            | select(.deltaType == "Added")
+            | [
+                .commitIssue.filePath,
+                (.commitIssue.lineNumber | tostring),
+                .commitIssue.patternInfo.id,
+                .commitIssue.patternInfo.level,
+                .commitIssue.message,
+                .commitIssue.lineText
+              ]
+            | @tsv
+          ' /tmp/codacy-pr-issues.json
+          echo 'Added finding count:'
+          jq '[.data[] | select(.deltaType == "Added")] | length' /tmp/codacy-pr-issues.json
