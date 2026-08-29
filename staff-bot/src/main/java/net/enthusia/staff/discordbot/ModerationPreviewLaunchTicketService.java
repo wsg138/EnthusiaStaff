@@ -73,7 +73,7 @@ final class ModerationPreviewLaunchTicketService {
             throw new IllegalArgumentException("launch ticket claims are invalid");
         }
         Instant issuedAt = clock.instant();
-        Instant expiresAt = issuedAt.plus(ttl);
+        Instant expiresAt = canonicalExpiry(issuedAt);
         purgeExpired(issuedAt);
         ensureCapacity();
         String nonce = encode(randomBytes(NONCE_BYTES));
@@ -108,6 +108,10 @@ final class ModerationPreviewLaunchTicketService {
         }
         tickets.remove(parts.nonce());
         return ConsumeResult.accepted(claims);
+    }
+
+    private Instant canonicalExpiry(Instant issuedAt) {
+        return Instant.ofEpochSecond(issuedAt.plus(ttl).getEpochSecond());
     }
 
     private boolean validSignature(TokenParts parts) {
