@@ -1,4 +1,4 @@
-name: PR186 Codacy diagnostics
+name: PR186 candidate validation
 
 on:
   push:
@@ -6,33 +6,104 @@ on:
       - "diagnostic/pr186-codacy-remaining-20260829"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
-    name: Summarize current public Codacy findings
+  validate-and-push:
+    name: Validate and publish one repair commit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
-      - name: Fetch and group exact PR findings
+      - name: Check out frozen product head
+        uses: actions/checkout@v6
+        with:
+          ref: 13b9fdcddb995ba30ce781337690dcd5f007db29
+          fetch-depth: 0
+
+      - name: Verify frozen branch head
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
-            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/186/issues?limit=100' \
-            -H 'Accept: application/json' \
-            -o /tmp/codacy-pr-issues.json
-          jq -r '
-            [.data[] | select(.deltaType == "Added") | {
-              pattern: .commitIssue.patternInfo.id,
-              level: .commitIssue.patternInfo.level,
-              file: .commitIssue.filePath
-            }]
-            | sort_by(.pattern, .file)
-            | group_by(.pattern)
-            | .[]
-            | [.[0].pattern, .[0].level, (length|tostring), ([.[].file] | unique | join(","))]
-            | @tsv
-          ' /tmp/codacy-pr-issues.json
-          echo 'TOTAL'
-          jq '[.data[] | select(.deltaType == "Added")] | length' /tmp/codacy-pr-issues.json
+          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
+          test "${REMOTE}" = "${EXPECTED}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+
+      - name: Apply reviewed candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/pr186-bundle.b64 <<'BUNDLE'
+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
+BUNDLE
+          base64 -d /tmp/pr186-bundle.b64 > /tmp/pr186-bundle.tar.gz
+          tar -xzf /tmp/pr186-bundle.tar.gz -C "$GITHUB_WORKSPACE"
+
+      - name: Verify candidate scope and browser source
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=$(cat <<'EOF'
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java
+staff-bot/src/main/resources/moderation-preview/app.js
+staff-bot/src/main/resources/moderation-preview/model.js
+staff-bot/src/main/resources/moderation-preview/review.js
+staff-bot/src/main/resources/moderation-preview/workflow.js
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java
+staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+EOF
+          )
+          ACTUAL="$(git diff --name-only | sort)"
+          test "${ACTUAL}" = "${EXPECTED}"
+          for file in staff-bot/src/main/resources/moderation-preview/{model,app,workflow,review}.js; do
+            node --check "$file"
+          done
+          ! grep -R -n -E 'innerHTML|DOMParser|insertAdjacentHTML|createContextualFragment' staff-bot/src/main/resources/moderation-preview/*.js
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+
+      - name: Clean build, tests, coverage, runtime jars
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build jacocoAggregateReport runtimeJars \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+
+      - name: Publish one product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
+          test "${REMOTE}" = "${EXPECTED}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java \
+            staff-bot/src/main/resources/moderation-preview/app.js \
+            staff-bot/src/main/resources/moderation-preview/model.js \
+            staff-bot/src/main/resources/moderation-preview/review.js \
+            staff-bot/src/main/resources/moderation-preview/workflow.js \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+          git diff --cached --check
+          git commit -m "Resolve staging preview analysis findings"
+          git push origin HEAD:refs/heads/owner/staging-web-moderation-console
