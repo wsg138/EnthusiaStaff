@@ -71,7 +71,7 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             assertEquals(CREATED.plusSeconds(30L * 24 * 60 * 60), expiresAt(dataSource, audienceAlert));
             assertTrue(columnIsNotNullable(dataSource, "staff_alerts", "expires_at"));
             assertTrue(columnHasDefault(dataSource, "staff_alerts", "expires_at"));
-            assertEquals("alert_id,recipient_id", primaryKeyColumns(dataSource, "staff_alerts"));
+            assertEquals("alert_id,recipient_id", primaryKeyColumns(dataSource, "staff_alert_deliveries"));
             assertFalse("CASCADE".equals(deliveryForeignKeyDeleteRule(dataSource)));
             assertFalse(hasCascadeDelete(dataSource, "staff_alert_deliveries"));
         }
