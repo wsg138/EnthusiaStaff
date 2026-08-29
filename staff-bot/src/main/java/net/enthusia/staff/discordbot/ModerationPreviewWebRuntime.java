@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -45,7 +46,7 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     private HttpServer server;
     private ExecutorService executor;
 
-    private ModerationPreviewWebRuntime(
+    ModerationPreviewWebRuntime(
             ModerationPreviewWebConfig config,
             ModerationPreviewLaunchTicketService tickets,
             ModerationPreviewWebSessionStore sessions
@@ -83,6 +84,14 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             close();
             throw new IllegalStateException("staging moderation web preview failed to bind", exception);
         }
+    }
+
+    InetSocketAddress boundAddress() {
+        HttpServer current = server;
+        if (current == null) {
+            throw new IllegalStateException("preview web runtime is not started");
+        }
+        return current.getAddress();
     }
 
     Optional<URI> issueLaunchUri(long actorId, long guildId) {
