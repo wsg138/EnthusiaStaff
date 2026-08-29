@@ -15,17 +15,22 @@ import org.junit.jupiter.api.Test;
 
 class ModerationUiPreviewControllerTest {
     private static final long OWNER = 41L;
+    private static final String OP_PUNISH = "punish";
+    private static final String OP_ACTION = "action";
+    private static final String OP_SCOPE = "scope";
+    private static final String OP_REASON = "reason";
+    private static final String OP_DURATION = "duration";
 
     @Test
     void completesPreviewWithoutAnyExternalAdapter() {
         ModerationUiPreviewController controller = controller(new MutableClock());
         ModerationUiPreviewController.Result current = controller.start(OWNER);
 
-        current = button(controller, current, "punish", "");
-        current = button(controller, current, "action", "ban");
-        current = button(controller, current, "scope", "both");
-        current = select(controller, current, "reason", "harassment");
-        current = select(controller, current, "duration", "permanent");
+        current = button(controller, current, OP_PUNISH, "");
+        current = button(controller, current, OP_ACTION, "ban");
+        current = button(controller, current, OP_SCOPE, "both");
+        current = select(controller, current, OP_REASON, "harassment");
+        current = select(controller, current, OP_DURATION, "permanent");
         current = button(controller, current, "toggle", "delete");
         current = button(controller, current, "review", "");
 
@@ -44,7 +49,7 @@ class ModerationUiPreviewControllerTest {
         MutableClock clock = new MutableClock();
         ModerationUiPreviewController controller = controller(clock);
         ModerationUiPreviewController.Result started = controller.start(OWNER);
-        String punish = id(started, "punish", "");
+        String punish = id(started, OP_PUNISH, "");
 
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
@@ -69,7 +74,7 @@ class ModerationUiPreviewControllerTest {
         clock.advance(Duration.ofMinutes(6));
         assertEquals(
                 ModerationUiPreviewController.ResultType.ERROR,
-                controller.interact(OWNER, id(second, "punish", ""), Optional.empty()).type());
+                controller.interact(OWNER, id(second, OP_PUNISH, ""), Optional.empty()).type());
     }
 
     @Test
@@ -95,18 +100,18 @@ class ModerationUiPreviewControllerTest {
     void supportsCustomReasonAndDurationModals() {
         ModerationUiPreviewController controller = controller(new MutableClock());
         ModerationUiPreviewController.Result current = controller.start(OWNER);
-        current = button(controller, current, "punish", "");
-        current = button(controller, current, "action", "mute");
-        current = button(controller, current, "scope", "discord");
+        current = button(controller, current, OP_PUNISH, "");
+        current = button(controller, current, OP_ACTION, "mute");
+        current = button(controller, current, OP_SCOPE, "discord");
 
-        String reasonId = id(current, "reason", "");
+        String reasonId = id(current, OP_REASON, "");
         ModerationUiPreviewController.Result reasonModal = controller.interact(
                 OWNER, reasonId, Optional.of("custom"));
         assertEquals(ModerationUiPreviewController.ResultType.MODAL, reasonModal.type());
         assertNotNull(reasonModal.modal());
         current = controller.submitModal(OWNER, reasonModal.modal().customId(), "Repeated targeted harassment");
 
-        String durationId = id(current, "duration", "");
+        String durationId = id(current, OP_DURATION, "");
         ModerationUiPreviewController.Result durationModal = controller.interact(
                 OWNER, durationId, Optional.of("custom"));
         current = controller.submitModal(OWNER, durationModal.modal().customId(), "5d 12h");

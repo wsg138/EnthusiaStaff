@@ -1,12 +1,15 @@
 package net.enthusia.staff.discordbot;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.selections.SelectOption;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
@@ -18,6 +21,7 @@ final class ModerationUiPreviewDiscordPresentation {
     private static final int PREVIEW_COLOR = 0x5865F2;
     private static final int WARNING_COLOR = 0xF0B232;
     private static final int FAILURE_COLOR = 0xED4245;
+    private static final String OP_BACK = "back";
     private static final String FOOTER = "STAGING UI PREVIEW · Sample data · No moderation action is possible";
     private static final Set<ModerationUiPreviewModel.Screen> DATA_SCREENS = EnumSet.of(
             ModerationUiPreviewModel.Screen.OVERVIEW,
@@ -25,12 +29,31 @@ final class ModerationUiPreviewDiscordPresentation {
             ModerationUiPreviewModel.Screen.HISTORY,
             ModerationUiPreviewModel.Screen.NOTES,
             ModerationUiPreviewModel.Screen.CASES);
+    private static final Set<ModerationUiPreviewModel.Screen> CHOICE_EMBED_SCREENS = EnumSet.of(
+            ModerationUiPreviewModel.Screen.ACTION,
+            ModerationUiPreviewModel.Screen.SCOPE,
+            ModerationUiPreviewModel.Screen.REASON,
+            ModerationUiPreviewModel.Screen.DURATION);
+    private static final Set<ModerationUiPreviewModel.Screen> CHOICE_COMPONENT_SCREENS = EnumSet.of(
+            ModerationUiPreviewModel.Screen.ACTION,
+            ModerationUiPreviewModel.Screen.SCOPE,
+            ModerationUiPreviewModel.Screen.REASON,
+            ModerationUiPreviewModel.Screen.DURATION);
     private static final Set<ModerationUiPreviewModel.Screen> BACK_ONLY_SCREENS = EnumSet.of(
             ModerationUiPreviewModel.Screen.ACCOUNTS,
             ModerationUiPreviewModel.Screen.HISTORY,
             ModerationUiPreviewModel.Screen.NOTES,
             ModerationUiPreviewModel.Screen.CASES,
             ModerationUiPreviewModel.Screen.SCENARIO);
+    private static final List<SelectOption> REASON_OPTIONS = Arrays.stream(ModerationUiPreviewModel.Reason.values())
+            .map(reason -> option(reason.label(), reason.name()))
+            .toList();
+    private static final List<SelectOption> DURATION_OPTIONS = Arrays.stream(ModerationUiPreviewModel.DurationChoice.values())
+            .map(duration -> option(duration.label(), duration.name()))
+            .toList();
+    private static final List<SelectOption> SCENARIO_OPTIONS = Arrays.stream(ModerationUiPreviewModel.Scenario.values())
+            .map(scenario -> option(scenario.label(), scenario.name()))
+            .toList();
 
     record Rendered(MessageEmbed embed, List<ActionRow> rows) {
     }
@@ -69,16 +92,29 @@ final class ModerationUiPreviewDiscordPresentation {
     }
 
     private static MessageEmbed workflowEmbed(ModerationUiPreviewModel.Snapshot snapshot) {
-        return switch (snapshot.state().screen()) {
+        ModerationUiPreviewModel.Screen screen = snapshot.state().screen();
+        return CHOICE_EMBED_SCREENS.contains(screen)
+                ? choiceEmbed(screen)
+                : outcomeEmbed(snapshot);
+    }
+
+    private static MessageEmbed choiceEmbed(ModerationUiPreviewModel.Screen screen) {
+        return switch (screen) {
             case ACTION -> simple("Choose punishment", "Select the action you want to prototype.");
             case SCOPE -> simple("Choose platform scope", "This is visual only; no platform action will run.");
             case REASON -> simple("Choose offense", "Pick a representative offense or enter a custom reason.");
             case DURATION -> simple("Choose duration", "Choose a preset or preview a custom duration.");
+            default -> throw new IllegalArgumentException("not a preview choice screen: " + screen);
+        };
+    }
+
+    private static MessageEmbed outcomeEmbed(ModerationUiPreviewModel.Snapshot snapshot) {
+        return switch (snapshot.state().screen()) {
             case OPTIONS -> options(snapshot.state());
             case CONFIRM -> confirmation(snapshot.state());
             case SCENARIO -> scenario(snapshot.state().scenario());
             case COMPLETE -> complete();
-            default -> throw new IllegalArgumentException("not a preview workflow screen: " + snapshot.state().screen());
+            default -> throw new IllegalArgumentException("not a preview outcome screen: " + snapshot.state().screen());
         };
     }
 
@@ -214,16 +250,30 @@ final class ModerationUiPreviewDiscordPresentation {
     }
 
     private List<ActionRow> workflowComponents(ModerationUiPreviewModel.Snapshot snapshot) {
+        ModerationUiPreviewModel.Screen screen = snapshot.state().screen();
+        return CHOICE_COMPONENT_SCREENS.contains(screen)
+                ? choiceComponents(snapshot)
+                : outcomeComponents(snapshot);
+    }
+
+    private List<ActionRow> choiceComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return switch (snapshot.state().screen()) {
             case ACTION -> actionComponents(snapshot);
             case SCOPE -> scopeComponents(snapshot);
             case REASON -> reasonComponents(snapshot);
             case DURATION -> durationComponents(snapshot);
+            default -> throw new IllegalArgumentException(
+                    "not a preview choice component screen: " + snapshot.state().screen());
+        };
+    }
+
+    private List<ActionRow> outcomeComponents(ModerationUiPreviewModel.Snapshot snapshot) {
+        return switch (snapshot.state().screen()) {
             case OPTIONS -> optionComponents(snapshot);
             case CONFIRM -> confirmComponents(snapshot);
             case COMPLETE -> List.of();
             default -> throw new IllegalArgumentException(
-                    "not a preview component screen: " + snapshot.state().screen());
+                    "not a preview outcome component screen: " + snapshot.state().screen());
         };
     }
 
@@ -265,23 +315,21 @@ final class ModerationUiPreviewDiscordPresentation {
     }
 
     private static List<ActionRow> reasonComponents(ModerationUiPreviewModel.Snapshot snapshot) {
-        StringSelectMenu.Builder menu = StringSelectMenu.create(id(snapshot, "reason", ""))
+        StringSelectMenu menu = StringSelectMenu.create(id(snapshot, "reason", ""))
                 .setPlaceholder("Choose offense / reason")
-                .setRequiredRange(1, 1);
-        for (ModerationUiPreviewModel.Reason reason : ModerationUiPreviewModel.Reason.values()) {
-            menu.addOption(reason.label(), reason.name().toLowerCase(java.util.Locale.ROOT));
-        }
-        return List.of(ActionRow.of(menu.build()), backRow(snapshot));
+                .setRequiredRange(1, 1)
+                .addOptions(REASON_OPTIONS)
+                .build();
+        return List.of(ActionRow.of(menu), backRow(snapshot));
     }
 
     private static List<ActionRow> durationComponents(ModerationUiPreviewModel.Snapshot snapshot) {
-        StringSelectMenu.Builder menu = StringSelectMenu.create(id(snapshot, "duration", ""))
+        StringSelectMenu menu = StringSelectMenu.create(id(snapshot, "duration", ""))
                 .setPlaceholder("Choose duration")
-                .setRequiredRange(1, 1);
-        for (ModerationUiPreviewModel.DurationChoice duration : ModerationUiPreviewModel.DurationChoice.values()) {
-            menu.addOption(duration.label(), duration.name().toLowerCase(java.util.Locale.ROOT));
-        }
-        return List.of(ActionRow.of(menu.build()), backRow(snapshot));
+                .setRequiredRange(1, 1)
+                .addOptions(DURATION_OPTIONS)
+                .build();
+        return List.of(ActionRow.of(menu), backRow(snapshot));
     }
 
     private static List<ActionRow> optionComponents(ModerationUiPreviewModel.Snapshot snapshot) {
@@ -299,22 +347,24 @@ final class ModerationUiPreviewDiscordPresentation {
     private static List<ActionRow> confirmComponents(ModerationUiPreviewModel.Snapshot snapshot) {
         return List.of(ActionRow.of(
                 Button.danger(id(snapshot, "confirm", ""), "Confirm preview"),
-                Button.secondary(id(snapshot, "back", ""), "Back")
+                Button.secondary(id(snapshot, OP_BACK, ""), "Back")
         ));
     }
 
     private static ActionRow backRow(ModerationUiPreviewModel.Snapshot snapshot) {
-        return ActionRow.of(Button.secondary(id(snapshot, "back", ""), "Back"));
+        return ActionRow.of(Button.secondary(id(snapshot, OP_BACK, ""), "Back"));
     }
 
     private static StringSelectMenu scenarioMenu(ModerationUiPreviewModel.Snapshot snapshot) {
-        StringSelectMenu.Builder menu = StringSelectMenu.create(id(snapshot, "scenario", ""))
+        return StringSelectMenu.create(id(snapshot, "scenario", ""))
                 .setPlaceholder("Preview edge / failure states")
-                .setRequiredRange(1, 1);
-        for (ModerationUiPreviewModel.Scenario scenario : ModerationUiPreviewModel.Scenario.values()) {
-            menu.addOption(scenario.label(), scenario.name().toLowerCase(java.util.Locale.ROOT));
-        }
-        return menu.build();
+                .setRequiredRange(1, 1)
+                .addOptions(SCENARIO_OPTIONS)
+                .build();
+    }
+
+    private static SelectOption option(String label, String value) {
+        return SelectOption.of(label, value.toLowerCase(Locale.ROOT));
     }
 
     private static String id(ModerationUiPreviewModel.Snapshot snapshot, String operation, String argument) {

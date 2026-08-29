@@ -6,6 +6,9 @@ import java.util.Locale;
 final class ModerationUiPreviewModel {
     static final String SAMPLE_DISCORD = "RiverAsh (sample Discord user)";
     static final String SAMPLE_MINECRAFT = "RiverAshMC (sample main account)";
+    private static final String NOT_SELECTED = "Not selected";
+    private static final String NOT_APPLICABLE = "Not applicable";
+    private static final String PERMANENT = "Permanent";
 
     private ModerationUiPreviewModel() {
     }
@@ -103,7 +106,7 @@ final class ModerationUiPreviewModel {
         DAY_3("3d"),
         WEEK_2("2w"),
         MONTH_1("1mo"),
-        PERMANENT("Permanent"),
+        PERMANENT(ModerationUiPreviewModel.PERMANENT),
         CUSTOM("Custom");
 
         private final String label;
@@ -155,7 +158,7 @@ final class ModerationUiPreviewModel {
             Scenario scenario
     ) {
         static State initial() {
-            return new State(Screen.OVERVIEW, null, null, "Not selected", "Not applicable", true, false, null);
+            return new State(Screen.OVERVIEW, null, null, NOT_SELECTED, NOT_APPLICABLE, true, false, null);
         }
 
         State withScreen(Screen next) {
@@ -163,12 +166,12 @@ final class ModerationUiPreviewModel {
         }
 
         State withAction(Action next) {
-            String nextDuration = next.durationSupported() ? "Not selected" : "Not applicable";
-            return new State(Screen.SCOPE, next, null, "Not selected", nextDuration, dmUser, deleteMessage, null);
+            String nextDuration = next.durationSupported() ? NOT_SELECTED : NOT_APPLICABLE;
+            return new State(Screen.SCOPE, next, null, NOT_SELECTED, nextDuration, dmUser, deleteMessage, null);
         }
 
         State withScope(Scope next) {
-            return new State(Screen.REASON, action, next, "Not selected", duration, dmUser, deleteMessage, null);
+            return new State(Screen.REASON, action, next, NOT_SELECTED, duration, dmUser, deleteMessage, null);
         }
 
         State withReason(String next) {
@@ -193,7 +196,7 @@ final class ModerationUiPreviewModel {
         }
 
         String approvalSummary() {
-            boolean permanentElevated = "Permanent".equals(duration)
+            boolean permanentElevated = PERMANENT.equals(duration)
                     && (action == Action.BAN || action == Action.MUTE || action == Action.RESTRICT);
             if (permanentElevated) {
                 return "Required — permanent Discord ban/mute/restriction requires Admin+ authority.";

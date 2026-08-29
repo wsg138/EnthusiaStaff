@@ -41,6 +41,7 @@ final class ModerationUiPreviewSessionStore {
         }
     }
 
+    private static final int MIN_CAPACITY = 1;
     private static final int RANDOM_ID_BYTES = 12;
     private static final int ID_ATTEMPTS = 8;
 
@@ -51,16 +52,16 @@ final class ModerationUiPreviewSessionStore {
     private final Map<String, Session> sessions = new LinkedHashMap<>();
 
     ModerationUiPreviewSessionStore(int capacity, Duration ttl, Clock clock, SecureRandom random) {
-        if (capacity < 1) {
-            throw new IllegalArgumentException("preview capacity must be positive");
-        }
-        if (ttl.isZero() || ttl.isNegative()) {
-            throw new IllegalArgumentException("preview TTL must be positive");
-        }
-        this.capacity = capacity;
         this.ttl = Objects.requireNonNull(ttl, "ttl");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.random = Objects.requireNonNull(random, "random");
+        if (capacity < MIN_CAPACITY) {
+            throw new IllegalArgumentException("preview capacity must be positive");
+        }
+        if (this.ttl.isZero() || this.ttl.isNegative()) {
+            throw new IllegalArgumentException("preview TTL must be positive");
+        }
+        this.capacity = capacity;
     }
 
     synchronized Optional<ModerationUiPreviewModel.Snapshot> create(long ownerId) {

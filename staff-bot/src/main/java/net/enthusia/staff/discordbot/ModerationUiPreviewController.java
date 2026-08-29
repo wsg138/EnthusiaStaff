@@ -11,10 +11,25 @@ import java.util.function.UnaryOperator;
 /** Orchestrates the fake moderation preview. No moderation or persistence service is reachable from this type. */
 final class ModerationUiPreviewController {
     private static final String PREFIX = "pui";
+    private static final String OP_NAV = "nav";
+    private static final String OP_PUNISH = "punish";
+    private static final String OP_ACTION = "action";
+    private static final String OP_SCOPE = "scope";
+    private static final String OP_REASON = "reason";
+    private static final String OP_DURATION = "duration";
+    private static final String OP_TOGGLE = "toggle";
+    private static final String OP_REVIEW = "review";
+    private static final String OP_CONFIRM = "confirm";
+    private static final String OP_SCENARIO = "scenario";
+    private static final String OP_BACK = "back";
+    private static final String OP_MODAL = "modal";
     private static final int MAX_CUSTOM_REASON = 300;
     private static final int MAX_CUSTOM_DURATION = 40;
+    private static final int MAX_COMPONENT_ID_LENGTH = 100;
+    private static final int MIN_TOKEN_PARTS = 4;
+    private static final int TOKEN_PARTS_WITH_ARGUMENT = 5;
     private static final Set<String> SELECTION_OPERATIONS = Set.of(
-            "nav", "punish", "action", "scope", "reason", "duration");
+            OP_NAV, OP_PUNISH, OP_ACTION, OP_SCOPE, OP_REASON, OP_DURATION);
 
     enum ResultType {
         VIEW,
@@ -66,7 +81,7 @@ final class ModerationUiPreviewController {
     Result interact(long ownerId, String customId, Optional<String> selectedValue) {
         Optional<Token> parsed = parse(customId);
         if (parsed.isEmpty()) {
-            return Result.error("That preview control is malformed or no longer supported.");
+            return malformed();
         }
         Token token = parsed.get();
         ModerationUiPreviewSessionStore.Access access = sessions.inspect(
@@ -79,8 +94,8 @@ final class ModerationUiPreviewController {
 
     Result submitModal(long ownerId, String customId, String input) {
         Optional<Token> parsed = parse(customId);
-        if (parsed.isEmpty() || !"modal".equals(parsed.get().operation())) {
-            return Result.error("That preview form is malformed or no longer supported.");
+        if (parsed.isEmpty() || !OP_MODAL.equals(parsed.get().operation())) {
+            return malformed();
         }
         Token token = parsed.get();
         ModerationUiPreviewSessionStore.Access access = sessions.inspect(
@@ -94,7 +109,7 @@ final class ModerationUiPreviewController {
     static String componentId(ModerationUiPreviewModel.Snapshot snapshot, String operation, String argument) {
         String suffix = argument == null || argument.isBlank() ? "" : ":" + argument;
         String value = PREFIX + ":" + snapshot.sessionId() + ":" + snapshot.revision() + ":" + operation + suffix;
-        if (value.length() > 100) {
+        if (value.length() > MAX_COMPONENT_ID_LENGTH) {
             throw new IllegalArgumentException("preview component id exceeds Discord limit");
         }
         return value;
@@ -119,12 +134,12 @@ final class ModerationUiPreviewController {
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
         return switch (token.operation()) {
-            case "nav" -> navigate(ownerId, token, snapshot);
-            case "punish" -> transition(ownerId, token, state -> state.withScreen(ModerationUiPreviewModel.Screen.ACTION));
-            case "action" -> chooseAction(ownerId, token, snapshot);
-            case "scope" -> chooseScope(ownerId, token, snapshot);
-            case "reason" -> chooseReason(ownerId, token, selectedValue, snapshot);
-            case "duration" -> chooseDuration(ownerId, token, selectedValue, snapshot);
+            case OP_NAV -> navigate(ownerId, token, snapshot);
+            case OP_PUNISH -> transition(ownerId, token, state -> state.withScreen(ModerationUiPreviewModel.Screen.ACTION));
+            case OP_ACTION -> chooseAction(ownerId, token, snapshot);
+            case OP_SCOPE -> chooseScope(ownerId, token, snapshot);
+            case OP_REASON -> chooseReason(ownerId, token, selectedValue, snapshot);
+            case OP_DURATION -> chooseDuration(ownerId, token, selectedValue, snapshot);
             default -> malformed();
         };
     }
@@ -136,11 +151,11 @@ final class ModerationUiPreviewController {
             ModerationUiPreviewModel.Snapshot snapshot
     ) {
         return switch (token.operation()) {
-            case "toggle" -> toggle(ownerId, token, snapshot);
-            case "review" -> review(ownerId, token, snapshot);
-            case "confirm" -> confirm(ownerId, token, snapshot);
-            case "scenario" -> scenario(ownerId, token, selectedValue, snapshot);
-            case "back" -> back(ownerId, token, snapshot);
+            case OP_TOGGLE -> toggle(ownerId, token, snapshot);
+            case OP_REVIEW -> review(ownerId, token, snapshot);
+            case OP_CONFIRM -> confirm(ownerId, token, snapshot);
+            case OP_SCENARIO -> scenario(ownerId, token, selectedValue, snapshot);
+            case OP_BACK -> back(ownerId, token, snapshot);
             default -> malformed();
         };
     }
@@ -202,7 +217,7 @@ final class ModerationUiPreviewController {
         try {
             ModerationUiPreviewModel.Reason reason = ModerationUiPreviewModel.Reason.parse(selectedValue.get());
             if (reason == ModerationUiPreviewModel.Reason.CUSTOM) {
-                return customModal(snapshot, "reason", "Custom reason", "Reason",
+                return customModal(snapshot, OP_REASON, "Custom reason", "Reason",
                         "Describe the moderation reason", MAX_CUSTOM_REASON);
             }
             return transition(ownerId, token, state -> state.withReason(reason.label()));
@@ -224,7 +239,7 @@ final class ModerationUiPreviewController {
             ModerationUiPreviewModel.DurationChoice duration =
                     ModerationUiPreviewModel.DurationChoice.parse(selectedValue.get());
             if (duration == ModerationUiPreviewModel.DurationChoice.CUSTOM) {
-                return customModal(snapshot, "duration", "Custom duration", "Duration",
+                return customModal(snapshot, OP_DURATION, "Custom duration", "Duration",
                         "Example: 5d 12h", MAX_CUSTOM_DURATION);
             }
             return transition(ownerId, token, state -> state.withDuration(duration.label()));
@@ -317,8 +332,8 @@ final class ModerationUiPreviewController {
             return Result.error("Enter a value before submitting the preview form.");
         }
         return switch (token.argument()) {
-            case "reason" -> applyCustomReason(ownerId, token, normalized, snapshot);
-            case "duration" -> applyCustomDuration(ownerId, token, normalized, snapshot);
+            case OP_REASON -> applyCustomReason(ownerId, token, normalized, snapshot);
+            case OP_DURATION -> applyCustomDuration(ownerId, token, normalized, snapshot);
             default -> malformed();
         };
     }
@@ -363,7 +378,7 @@ final class ModerationUiPreviewController {
             String placeholder,
             int maxLength
     ) {
-        String id = componentId(snapshot, "modal", kind);
+        String id = componentId(snapshot, OP_MODAL, kind);
         return Result.modal(snapshot, new ModalSpec(id, title, label, placeholder, maxLength));
     }
 
@@ -378,11 +393,11 @@ final class ModerationUiPreviewController {
     }
 
     private static Optional<Token> parse(String customId) {
-        if (customId == null || customId.length() > 100) {
+        if (customId == null || customId.length() > MAX_COMPONENT_ID_LENGTH) {
             return Optional.empty();
         }
-        String[] parts = customId.split(":", 5);
-        if (parts.length < 4 || !PREFIX.equals(parts[0]) || parts[1].isBlank()) {
+        String[] parts = customId.split(":", TOKEN_PARTS_WITH_ARGUMENT);
+        if (parts.length < MIN_TOKEN_PARTS || !PREFIX.equals(parts[0]) || parts[1].isBlank()) {
             return Optional.empty();
         }
         try {
@@ -391,7 +406,9 @@ final class ModerationUiPreviewController {
                 return Optional.empty();
             }
             String operation = parts[3].toLowerCase(Locale.ROOT);
-            String argument = parts.length == 5 ? parts[4].toLowerCase(Locale.ROOT) : "";
+            String argument = parts.length == TOKEN_PARTS_WITH_ARGUMENT
+                    ? parts[4].toLowerCase(Locale.ROOT)
+                    : "";
             return Optional.of(new Token(parts[1], revision, operation, argument));
         } catch (NumberFormatException exception) {
             return Optional.empty();
