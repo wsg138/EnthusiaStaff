@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   diagnose:
-    name: Print current public Codacy findings
+    name: Summarize current public Codacy findings
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fetch exact PR findings
+      - name: Fetch and group exact PR findings
         shell: bash
         run: |
           set -euo pipefail
@@ -22,19 +22,17 @@ jobs:
             'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/186/issues?limit=100' \
             -H 'Accept: application/json' \
             -o /tmp/codacy-pr-issues.json
-          echo 'Added findings:'
           jq -r '
-            .data[]
-            | select(.deltaType == "Added")
-            | [
-                .commitIssue.filePath,
-                (.commitIssue.lineNumber | tostring),
-                .commitIssue.patternInfo.id,
-                .commitIssue.patternInfo.level,
-                .commitIssue.message,
-                .commitIssue.lineText
-              ]
+            [.data[] | select(.deltaType == "Added") | {
+              pattern: .commitIssue.patternInfo.id,
+              level: .commitIssue.patternInfo.level,
+              file: .commitIssue.filePath
+            }]
+            | sort_by(.pattern, .file)
+            | group_by(.pattern)
+            | .[]
+            | [.[0].pattern, .[0].level, (length|tostring), ([.[].file] | unique | join(","))]
             | @tsv
           ' /tmp/codacy-pr-issues.json
-          echo 'Added finding count:'
+          echo 'TOTAL'
           jq '[.data[] | select(.deltaType == "Added")] | length' /tmp/codacy-pr-issues.json
