@@ -12,6 +12,8 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Calendar;
+import java.util.TimeZone;
 import java.util.UUID;
 import net.enthusia.staff.persistence.MariaDb;
 import org.flywaydb.core.Flyway;
@@ -110,10 +112,11 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
                 statement.setNull(7, java.sql.Types.BINARY);
             }
             statement.setString(8, state);
-            statement.setTimestamp(9, Timestamp.from(CREATED));
-            statement.setTimestamp(10, Timestamp.from(CREATED));
+            Calendar utc = utcCalendar();
+            statement.setTimestamp(9, Timestamp.from(CREATED), utc);
+            statement.setTimestamp(10, Timestamp.from(CREATED), utc);
             statement.setTimestamp(11, "DELIVERED".equals(state)
-                    ? Timestamp.from(CREATED.plusSeconds(10)) : null);
+                    ? Timestamp.from(CREATED.plusSeconds(10)) : null, utc);
             assertEquals(1, statement.executeUpdate());
         }
     }
@@ -161,9 +164,13 @@ class PunishmentRequestAlertV12MigrationIntegrationTest {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alertId));
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
-                return result.getTimestamp(1).toInstant();
+                return result.getTimestamp(1, utcCalendar()).toInstant();
             }
         }
+    }
+
+    private static Calendar utcCalendar() {
+        return Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     }
 
     private static boolean columnIsNotNullable(
