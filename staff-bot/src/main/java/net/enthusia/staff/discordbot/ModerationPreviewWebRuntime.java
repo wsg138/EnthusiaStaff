@@ -25,6 +25,17 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     private static final int MAX_REQUEST_BYTES = 65_536;
     private static final String SESSION_COOKIE = "enthusia_mod_preview";
     private static final String SAMPLE_TARGET = "sample-river-ash";
+    private static final String HTML = "text/html; charset=utf-8";
+    private static final String CSS = "text/css; charset=utf-8";
+    private static final String JAVASCRIPT = "text/javascript; charset=utf-8";
+    private static final Map<String, StaticResource> STATIC_RESOURCES = Map.of(
+            "/", new StaticResource("/moderation-preview/index.html", HTML),
+            "/moderation", new StaticResource("/moderation-preview/index.html", HTML),
+            "/assets/app.css", new StaticResource("/moderation-preview/app.css", CSS),
+            "/assets/model.js", new StaticResource("/moderation-preview/model.js", JAVASCRIPT),
+            "/assets/app.js", new StaticResource("/moderation-preview/app.js", JAVASCRIPT),
+            "/assets/workflow.js", new StaticResource("/moderation-preview/workflow.js", JAVASCRIPT),
+            "/assets/review.js", new StaticResource("/moderation-preview/review.js", JAVASCRIPT));
 
     private final ModerationPreviewWebConfig config;
     private final ModerationPreviewLaunchTicketService tickets;
@@ -101,19 +112,22 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
         String path = exchange.getRequestURI().getPath();
         if ("/launch".equals(path)) {
             handleLaunch(exchange);
-        } else if ("/moderation".equals(path) || "/".equals(path)) {
-            serveProtectedResource(exchange, "/moderation-preview/index.html", "text/html; charset=utf-8");
-        } else if ("/assets/app.css".equals(path)) {
-            serveProtectedResource(exchange, "/moderation-preview/app.css", "text/css; charset=utf-8");
-        } else if ("/assets/app.js".equals(path)) {
-            serveProtectedResource(exchange, "/moderation-preview/app.js", "text/javascript; charset=utf-8");
-        } else if ("/api/session".equals(path)) {
-            handleSession(exchange);
-        } else if ("/api/simulate".equals(path)) {
-            handleSimulation(exchange);
-        } else {
-            respondText(exchange, 404, "Not found.");
+            return;
         }
+        if ("/api/session".equals(path)) {
+            handleSession(exchange);
+            return;
+        }
+        if ("/api/simulate".equals(path)) {
+            handleSimulation(exchange);
+            return;
+        }
+        StaticResource resource = STATIC_RESOURCES.get(path);
+        if (resource != null) {
+            serveProtectedResource(exchange, resource);
+            return;
+        }
+        respondText(exchange, 404, "Not found.");
     }
 
     private void handleLaunch(HttpExchange exchange) throws IOException {
@@ -144,12 +158,12 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             return;
         }
         ModerationPreviewWebSessionStore.Session value = session.get();
-        String json = "{\"actorId\":\"" + value.claims().actorId()
+        String responseJson = "{\"actorId\":\"" + value.claims().actorId()
                 + "\",\"guildId\":\"" + value.claims().guildId()
                 + "\",\"targetKey\":\"" + json(value.claims().targetKey())
                 + "\",\"csrfToken\":\"" + json(value.csrfToken())
                 + "\",\"expiresAt\":\"" + value.expiresAt() + "\",\"staging\":true}";
-        respond(exchange, 200, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
+        respond(exchange, 200, "application/json; charset=utf-8", responseJson.getBytes(StandardCharsets.UTF_8));
     }
 
     private void handleSimulation(HttpExchange exchange) throws IOException {
@@ -166,12 +180,12 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             respondText(exchange, 413, "Preview request is too large.");
             return;
         }
-        String json = "{\"status\":\"complete\",\"message\":\"Simulation complete\","
+        String responseJson = "{\"status\":\"complete\",\"message\":\"Simulation complete\","
                 + "\"detail\":\"No live moderation action was performed.\"}";
-        respond(exchange, 200, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
+        respond(exchange, 200, "application/json; charset=utf-8", responseJson.getBytes(StandardCharsets.UTF_8));
     }
 
-    private void serveProtectedResource(HttpExchange exchange, String resource, String contentType) throws IOException {
+    private void serveProtectedResource(HttpExchange exchange, StaticResource resource) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             respondText(exchange, 405, "Method not allowed.");
             return;
@@ -180,12 +194,12 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             respondText(exchange, 401, "Open this panel from Discord.");
             return;
         }
-        try (InputStream input = ModerationPreviewWebRuntime.class.getResourceAsStream(resource)) {
+        try (InputStream input = ModerationPreviewWebRuntime.class.getResourceAsStream(resource.path())) {
             if (input == null) {
                 respondText(exchange, 500, "Preview resource unavailable.");
                 return;
             }
-            respond(exchange, 200, contentType, input.readAllBytes());
+            respond(exchange, 200, resource.contentType(), input.readAllBytes());
         }
     }
 
@@ -283,5 +297,8 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
         if (LOGGER.isLoggable(level)) {
             LOGGER.log(level, message, values);
         }
+    }
+
+    private record StaticResource(String path, String contentType) {
     }
 }
