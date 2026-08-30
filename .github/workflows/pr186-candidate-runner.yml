@@ -3,7 +3,7 @@ name: PR186 candidate runner
 on:
   push:
     branches:
-      - "diagnostic/pr186-codacy-remaining-20260829"
+      - "diagnostic/pr186-final-gate-worker-20260830-a"
 
 permissions:
   contents: read
