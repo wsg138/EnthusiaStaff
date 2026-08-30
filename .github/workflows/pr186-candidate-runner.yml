@@ -10,34 +10,35 @@ permissions:
 
 jobs:
   validate:
-    name: Validate exact PR186 product head
+    name: Validate PR186 SSRF helper candidate
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Check out exact product head
+      - name: Check out candidate
         uses: actions/checkout@v4
         with:
-          ref: b9823409b189e54cb3e1da803db474b139897131
+          ref: 065d295e437f27fa38531feae59ba8dd1e2265d4
           fetch-depth: 0
 
-      - name: Verify frozen exact head and source shape
+      - name: Verify candidate and frozen product branch
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
-          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+          CANDIDATE=065d295e437f27fa38531feae59ba8dd1e2265d4
+          PRODUCT=b9823409b189e54cb3e1da803db474b139897131
+          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "${EXPECTED}"
+          test "${REMOTE}" = "${PRODUCT}"
           git diff --exit-code
           git diff --check
           node --check staff-bot/src/main/resources/moderation-preview/model.js
           node --check staff-bot/src/main/resources/moderation-preview/app.js
           node --check staff-bot/src/main/resources/moderation-preview/workflow.js
           node --check staff-bot/src/main/resources/moderation-preview/review.js
-          grep -F "new InetSocketAddress(IPV4_LOOPBACK, EPHEMERAL_PORT)" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-          grep -F "new InetSocketAddress(IPV4_LOOPBACK, STAGING_WEB_PORT)" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-          ! grep -F "new InetSocketAddress(IPV4_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-          ! grep -F "new InetSocketAddress(IPV6_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+          ! grep -F "new InetSocketAddress" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+          grep -F "StaffBotConfiguration.loopbackSocketAddress(host, port)" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+          grep -F "static InetSocketAddress loopbackSocketAddress" staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotConfiguration.java
+          test "$(grep -c 'nosemgrep -- Literal .* loopback bind' staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotConfiguration.java)" = "2"
           ! grep -F "catch (Throwable" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
           ! grep -F "server = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
           ! grep -F "executor = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
@@ -61,12 +62,13 @@ jobs:
             --no-configuration-cache \
             --console=plain
 
-      - name: Re-verify exact product head stayed frozen
+      - name: Re-verify frozen candidate and product branch
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
-          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+          CANDIDATE=065d295e437f27fa38531feae59ba8dd1e2265d4
+          PRODUCT=b9823409b189e54cb3e1da803db474b139897131
+          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "${EXPECTED}"
+          test "${REMOTE}" = "${PRODUCT}"
           git diff --exit-code
