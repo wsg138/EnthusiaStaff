@@ -8,7 +8,8 @@ function openWorkflow() {
   };
   renderWorkflow();
   $('#punishmentDialog').showModal();
-  $('[data-offense]')?.focus();
+  const firstOffense = $('[data-offense]');
+  if (firstOffense) firstOffense.focus();
 }
 
 function closeWorkflow() {
@@ -33,8 +34,14 @@ function renderWorkflowSteps(step) {
 }
 
 function workflowStepNode(label, index, current) {
-  const classes = ['workflow-step', index === current ? 'active' : '', index < current ? 'done' : ''].filter(Boolean).join(' ');
-  return element('div', {className: classes}, element('span', {text: index + 1}), label);
+  return element('div', {className: workflowStepClass(index, current)},
+    element('span', {text: index + 1}), label);
+}
+
+function workflowStepClass(index, current) {
+  if (index === current) return 'workflow-step active';
+  if (index < current) return 'workflow-step done';
+  return 'workflow-step';
 }
 
 function renderOffenseStep() {
@@ -63,12 +70,17 @@ function offenseChoiceNode(key, label, suggested) {
 }
 
 function chooseOffense(key) {
-  const label = OFFENSES.find(([value]) => value === key)?.[1] || 'Other';
+  const label = offenseLabel(key);
   state.workflow.offense = {key, label};
   state.workflow.recommendation = recommend(key);
   state.workflow.recommendationEvidenceRevision = state.evidenceRevision;
   state.workflow.step = 'recommendation';
   renderWorkflow();
+}
+
+function offenseLabel(key) {
+  const match = OFFENSES.find((entry) => entry[0] === key);
+  return match ? match[1] : 'Other';
 }
 
 function recommend(key) {
@@ -97,7 +109,7 @@ function muteDiscord(duration) { return {action: 'Mute', scope: 'Discord', durat
 function banDiscord(duration) { return {action: 'Ban', scope: 'Discord', duration}; }
 
 function recommendationReason(key, relevant, step, base) {
-  const offense = OFFENSES.find(([value]) => value === key)?.[1] || 'Other';
+  const offense = offenseLabel(key);
   if (base > 1 && relevant === 0) return `${offense} starts at ladder step ${base} because of severity.`;
   const incident = relevant === 0 ? 'first relevant incident'
     : relevant === 1 ? 'second relevant incident'

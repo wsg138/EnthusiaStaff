@@ -67,25 +67,47 @@ const state = {
 
 function element(tag, options = {}, ...children) {
   const created = document.createElement(tag);
-  if (options.className) created.className = options.className;
+  applyElementTextAndValue(created, options);
+  applyElementScalarProperties(created, options);
+  applyElementBooleanProperties(created, options);
+  applyElementMaps(created, options);
+  appendChildren(created, children);
+  return created;
+}
+
+function applyElementTextAndValue(created, options) {
   if (options.text !== undefined) created.textContent = String(options.text);
+  if (options.value !== undefined) created.value = String(options.value);
+}
+
+function applyElementScalarProperties(created, options) {
+  if (options.className) created.className = options.className;
   if (options.type) created.type = options.type;
   if (options.id) created.id = options.id;
-  if (options.value !== undefined) created.value = String(options.value);
   if (options.placeholder) created.placeholder = options.placeholder;
   if (options.name) created.name = options.name;
   if (options.htmlFor) created.htmlFor = options.htmlFor;
+}
+
+function applyElementBooleanProperties(created, options) {
   if (options.checked !== undefined) created.checked = Boolean(options.checked);
   if (options.disabled !== undefined) created.disabled = Boolean(options.disabled);
   if (options.hidden !== undefined) created.hidden = Boolean(options.hidden);
-  if (options.attrs) {
-    for (const [name, value] of Object.entries(options.attrs)) created.setAttribute(name, String(value));
-  }
-  if (options.dataset) {
-    for (const [name, value] of Object.entries(options.dataset)) created.dataset[name] = String(value);
-  }
-  appendChildren(created, children);
-  return created;
+}
+
+function applyElementMaps(created, options) {
+  applyAttributes(created, options.attrs);
+  applyDataset(created, options.dataset);
+}
+
+function applyAttributes(created, attrs) {
+  if (!attrs) return;
+  for (const [name, value] of Object.entries(attrs)) created.setAttribute(name, String(value));
+}
+
+function applyDataset(created, dataset) {
+  if (!dataset) return;
+  for (const [name, value] of Object.entries(dataset)) created.dataset[name] = String(value);
 }
 
 function appendChildren(parent, children) {

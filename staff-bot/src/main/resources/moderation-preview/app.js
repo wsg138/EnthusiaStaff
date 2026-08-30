@@ -186,10 +186,33 @@ function filteredMessages() {
 }
 
 function messageMatchesFilters(message, term, contextIds) {
-  if (contextIds && !contextIds.has(message.id)) return false;
-  if (term && !messageSearchText(message).includes(term)) return false;
-  if (state.channel !== 'all' && message.channel !== state.channel) return false;
-  if (state.date !== 'all' && messageDateKey(message.time) !== state.date) return false;
+  const checks = [
+    matchesContext(message, contextIds),
+    matchesSearchTerm(message, term),
+    matchesChannel(message),
+    matchesDate(message),
+    matchesSelection(message)
+  ];
+  return checks.every(Boolean);
+}
+
+function matchesContext(message, contextIds) {
+  return contextIds === null || contextIds.has(message.id);
+}
+
+function matchesSearchTerm(message, term) {
+  return term === '' || messageSearchText(message).includes(term);
+}
+
+function matchesChannel(message) {
+  return state.channel === 'all' || message.channel === state.channel;
+}
+
+function matchesDate(message) {
+  return state.date === 'all' || messageDateKey(message.time) === state.date;
+}
+
+function matchesSelection(message) {
   return !state.selectedOnly || state.selected.has(message.id);
 }
 

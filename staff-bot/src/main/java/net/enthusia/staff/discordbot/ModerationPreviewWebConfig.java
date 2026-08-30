@@ -50,7 +50,13 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
 
     private static InetSocketAddress parseBind(String value) {
         HostAndPort parsed = parseHostAndPort(value);
-        return new InetSocketAddress(loopbackAddress(parsed.host()), parsed.port());
+        if (IPV4_LOOPBACK_HOST.equals(parsed.host()) || LOCALHOST.equalsIgnoreCase(parsed.host())) {
+            return new InetSocketAddress(IPV4_LOOPBACK, parsed.port());
+        }
+        if (IPV6_LOOPBACK_HOST.equals(parsed.host())) {
+            return new InetSocketAddress(IPV6_LOOPBACK, parsed.port());
+        }
+        throw new IllegalArgumentException("preview web bind must use an explicit loopback host");
     }
 
     private static HostAndPort parseHostAndPort(String value) {
@@ -64,16 +70,6 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
             host = host.substring(1, host.length() - 1);
         }
         return new HostAndPort(host, parsePort(normalized.substring(separator + 1)));
-    }
-
-    private static InetAddress loopbackAddress(String host) {
-        if (IPV4_LOOPBACK_HOST.equals(host) || LOCALHOST.equalsIgnoreCase(host)) {
-            return IPV4_LOOPBACK;
-        }
-        if (IPV6_LOOPBACK_HOST.equals(host)) {
-            return IPV6_LOOPBACK;
-        }
-        throw new IllegalArgumentException("preview web bind must use an explicit loopback host");
     }
 
     private static int parsePort(String value) {

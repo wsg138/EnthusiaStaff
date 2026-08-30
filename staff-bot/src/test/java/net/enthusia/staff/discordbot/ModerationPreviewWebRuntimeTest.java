@@ -83,7 +83,7 @@ class ModerationPreviewWebRuntimeTest {
     void concurrentStartAndCloseCannotLeaveRuntimeReachable() throws Exception {
         var runtime = runtime();
         var start = new CountDownLatch(1);
-        var startFailure = new AtomicReference<Throwable>();
+        var startFailure = new AtomicReference<RuntimeException>();
         Thread starter = Thread.ofPlatform().start(() -> runStart(runtime, start, startFailure));
         Thread closer = Thread.ofPlatform().start(() -> runClose(runtime, start));
 
@@ -91,7 +91,7 @@ class ModerationPreviewWebRuntimeTest {
         starter.join();
         closer.join();
 
-        Throwable failure = startFailure.get();
+        RuntimeException failure = startFailure.get();
         assertTrue(failure == null || failure instanceof IllegalStateException);
         assertThrows(IllegalStateException.class, runtime::boundAddress);
     }
@@ -122,13 +122,13 @@ class ModerationPreviewWebRuntimeTest {
     private static void runStart(
             ModerationPreviewWebRuntime runtime,
             CountDownLatch start,
-            AtomicReference<Throwable> failure
+            AtomicReference<RuntimeException> failure
     ) {
         await(start);
         try {
             runtime.start();
-        } catch (Throwable throwable) {
-            failure.set(throwable);
+        } catch (RuntimeException exception) {
+            failure.set(exception);
         }
     }
 

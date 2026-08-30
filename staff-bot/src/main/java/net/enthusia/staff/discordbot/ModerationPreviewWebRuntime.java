@@ -326,8 +326,6 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             }
             closed = true;
             stopResources(server, executor);
-            server = null;
-            executor = null;
         }
     }
 
