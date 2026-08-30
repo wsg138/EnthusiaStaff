@@ -1,0 +1,317 @@
+name: PR186 exact-head static repair
+
+on:
+  push:
+    branches:
+      - "diagnostic/pr186-codacy-remaining-20260829"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    name: Repair and validate frozen PR186 product head
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out frozen product branch
+        uses: actions/checkout@v4
+        with:
+          ref: owner/staging-web-moderation-console
+          fetch-depth: 0
+
+      - name: Verify frozen product head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "baf423d6d2fafa56a2034976927fad67b9a7ead1"
+
+      - name: Apply focused static-analysis repairs
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java",
+              '''    private static InetSocketAddress parseBind(String value) {
+                  HostAndPort parsed = parseHostAndPort(value);
+                  return new InetSocketAddress(loopbackAddress(parsed.host()), parsed.port());
+              }
+''',
+              '''    private static InetSocketAddress parseBind(String value) {
+                  HostAndPort parsed = parseHostAndPort(value);
+                  if (IPV4_LOOPBACK_HOST.equals(parsed.host()) || LOCALHOST.equalsIgnoreCase(parsed.host())) {
+                      return new InetSocketAddress(IPV4_LOOPBACK, parsed.port());
+                  }
+                  if (IPV6_LOOPBACK_HOST.equals(parsed.host())) {
+                      return new InetSocketAddress(IPV6_LOOPBACK, parsed.port());
+                  }
+                  throw new IllegalArgumentException("preview web bind must use an explicit loopback host");
+              }
+''')
+
+          replace_once(
+              "staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java",
+              '''    private static InetAddress loopbackAddress(String host) {
+                  if (IPV4_LOOPBACK_HOST.equals(host) || LOCALHOST.equalsIgnoreCase(host)) {
+                      return IPV4_LOOPBACK;
+                  }
+                  if (IPV6_LOOPBACK_HOST.equals(host)) {
+                      return IPV6_LOOPBACK;
+                  }
+                  throw new IllegalArgumentException("preview web bind must use an explicit loopback host");
+              }
+
+''',
+              '''''')
+
+          replace_once(
+              "staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java",
+              '''            stopResources(server, executor);
+                  server = null;
+                  executor = null;
+''',
+              '''            stopResources(server, executor);
+''')
+
+          replace_once(
+              "staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java",
+              '''        var startFailure = new AtomicReference<Throwable>();
+''',
+              '''        var startFailure = new AtomicReference<RuntimeException>();
+''')
+          replace_once(
+              "staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java",
+              '''        Throwable failure = startFailure.get();
+''',
+              '''        RuntimeException failure = startFailure.get();
+''')
+          replace_once(
+              "staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java",
+              '''            AtomicReference<Throwable> failure
+''',
+              '''            AtomicReference<RuntimeException> failure
+''')
+          replace_once(
+              "staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java",
+              '''        } catch (Throwable throwable) {
+                  failure.set(throwable);
+''',
+              '''        } catch (RuntimeException exception) {
+                  failure.set(exception);
+''')
+
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/app.js",
+              '''function messageMatchesFilters(message, term, contextIds) {
+                if (contextIds && !contextIds.has(message.id)) return false;
+                if (term && !messageSearchText(message).includes(term)) return false;
+                if (state.channel !== 'all' && message.channel !== state.channel) return false;
+                if (state.date !== 'all' && messageDateKey(message.time) !== state.date) return false;
+                return !state.selectedOnly || state.selected.has(message.id);
+              }
+''',
+              '''function messageMatchesFilters(message, term, contextIds) {
+                const checks = [
+                  matchesContext(message, contextIds),
+                  matchesSearchTerm(message, term),
+                  matchesChannel(message),
+                  matchesDate(message),
+                  matchesSelection(message)
+                ];
+                return checks.every(Boolean);
+              }
+
+              function matchesContext(message, contextIds) {
+                return contextIds === null || contextIds.has(message.id);
+              }
+
+              function matchesSearchTerm(message, term) {
+                return term === '' || messageSearchText(message).includes(term);
+              }
+
+              function matchesChannel(message) {
+                return state.channel === 'all' || message.channel === state.channel;
+              }
+
+              function matchesDate(message) {
+                return state.date === 'all' || messageDateKey(message.time) === state.date;
+              }
+
+              function matchesSelection(message) {
+                return !state.selectedOnly || state.selected.has(message.id);
+              }
+''')
+
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/model.js",
+              '''function element(tag, options = {}, ...children) {
+                const created = document.createElement(tag);
+                if (options.className) created.className = options.className;
+                if (options.text !== undefined) created.textContent = String(options.text);
+                if (options.type) created.type = options.type;
+                if (options.id) created.id = options.id;
+                if (options.value !== undefined) created.value = String(options.value);
+                if (options.placeholder) created.placeholder = options.placeholder;
+                if (options.name) created.name = options.name;
+                if (options.htmlFor) created.htmlFor = options.htmlFor;
+                if (options.checked !== undefined) created.checked = Boolean(options.checked);
+                if (options.disabled !== undefined) created.disabled = Boolean(options.disabled);
+                if (options.hidden !== undefined) created.hidden = Boolean(options.hidden);
+                if (options.attrs) {
+                  for (const [name, value] of Object.entries(options.attrs)) created.setAttribute(name, String(value));
+                }
+                if (options.dataset) {
+                  for (const [name, value] of Object.entries(options.dataset)) created.dataset[name] = String(value);
+                }
+                appendChildren(created, children);
+                return created;
+              }
+''',
+              '''function element(tag, options = {}, ...children) {
+                const created = document.createElement(tag);
+                applyElementTextAndValue(created, options);
+                applyElementScalarProperties(created, options);
+                applyElementBooleanProperties(created, options);
+                applyElementMaps(created, options);
+                appendChildren(created, children);
+                return created;
+              }
+
+              function applyElementTextAndValue(created, options) {
+                if (options.text !== undefined) created.textContent = String(options.text);
+                if (options.value !== undefined) created.value = String(options.value);
+              }
+
+              function applyElementScalarProperties(created, options) {
+                if (options.className) created.className = options.className;
+                if (options.type) created.type = options.type;
+                if (options.id) created.id = options.id;
+                if (options.placeholder) created.placeholder = options.placeholder;
+                if (options.name) created.name = options.name;
+                if (options.htmlFor) created.htmlFor = options.htmlFor;
+              }
+
+              function applyElementBooleanProperties(created, options) {
+                if (options.checked !== undefined) created.checked = Boolean(options.checked);
+                if (options.disabled !== undefined) created.disabled = Boolean(options.disabled);
+                if (options.hidden !== undefined) created.hidden = Boolean(options.hidden);
+              }
+
+              function applyElementMaps(created, options) {
+                applyAttributes(created, options.attrs);
+                applyDataset(created, options.dataset);
+              }
+
+              function applyAttributes(created, attrs) {
+                if (!attrs) return;
+                for (const [name, value] of Object.entries(attrs)) created.setAttribute(name, String(value));
+              }
+
+              function applyDataset(created, dataset) {
+                if (!dataset) return;
+                for (const [name, value] of Object.entries(dataset)) created.dataset[name] = String(value);
+              }
+''')
+
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/workflow.js",
+              '''  $('[data-offense]')?.focus();
+''',
+              '''  const firstOffense = $('[data-offense]');
+                if (firstOffense) firstOffense.focus();
+''')
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/workflow.js",
+              '''function workflowStepNode(label, index, current) {
+                const classes = ['workflow-step', index === current ? 'active' : '', index < current ? 'done' : ''].filter(Boolean).join(' ');
+                return element('div', {className: classes}, element('span', {text: index + 1}), label);
+              }
+''',
+              '''function workflowStepNode(label, index, current) {
+                return element('div', {className: workflowStepClass(index, current)},
+                  element('span', {text: index + 1}), label);
+              }
+
+              function workflowStepClass(index, current) {
+                if (index === current) return 'workflow-step active';
+                if (index < current) return 'workflow-step done';
+                return 'workflow-step';
+              }
+''')
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/workflow.js",
+              '''  const label = OFFENSES.find(([value]) => value === key)?.[1] || 'Other';
+''',
+              '''  const label = offenseLabel(key);
+''')
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/workflow.js",
+              '''function recommend(key) {
+''',
+              '''function offenseLabel(key) {
+                const match = OFFENSES.find((entry) => entry[0] === key);
+                return match ? match[1] : 'Other';
+              }
+
+              function recommend(key) {
+''')
+          replace_once(
+              "staff-bot/src/main/resources/moderation-preview/workflow.js",
+              '''  const offense = OFFENSES.find(([value]) => value === key)?.[1] || 'Other';
+''',
+              '''  const offense = offenseLabel(key);
+''')
+
+      - name: Verify focused source shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check staff-bot/src/main/resources/moderation-preview/model.js
+          node --check staff-bot/src/main/resources/moderation-preview/app.js
+          node --check staff-bot/src/main/resources/moderation-preview/workflow.js
+          grep -F "new InetSocketAddress(IPV4_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+          ! grep -F "catch (Throwable" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+          ! grep -F "server = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+          ! grep -F "executor = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run full repository gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew clean build jacocoAggregateReport runtimeJars --no-daemon --no-build-cache --no-configuration-cache --console=plain
+
+      - name: Publish one product repair commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git config user.name "P2wn"
+          git config user.email "racecarboy77@gmail.com"
+          git add \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java \
+            staff-bot/src/main/resources/moderation-preview/app.js \
+            staff-bot/src/main/resources/moderation-preview/model.js \
+            staff-bot/src/main/resources/moderation-preview/workflow.js
+          git diff --cached --check
+          git commit -m "Repair PR186 hosted static-analysis findings"
+          git push origin HEAD:owner/staging-web-moderation-console
