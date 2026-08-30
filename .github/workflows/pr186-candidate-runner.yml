@@ -10,41 +10,25 @@ permissions:
 
 jobs:
   validate:
-    name: Validate next PR186 bind-hardening candidate
+    name: Validate exact PR186 product head
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Check out frozen product head
+      - name: Check out exact product head
         uses: actions/checkout@v4
         with:
-          ref: 9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
+          ref: b9823409b189e54cb3e1da803db474b139897131
           fetch-depth: 0
 
-      - name: Verify frozen product head
+      - name: Verify frozen exact head and source shape
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
+          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
           test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
-
-      - name: Apply fixed-loopback bind repair candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin diagnostic/pr186-codacy-remaining-20260829
-          git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-static-repair.py" > /tmp/pr186-static-repair.py
-          python /tmp/pr186-static-repair.py
-
-      - name: Verify candidate source shape
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git diff --name-only | sort)" = "$(printf '%s\n' \
-            docs/staff-bot-staging-ui-preview.md \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java | sort)"
+          git diff --exit-code
           git diff --check
           node --check staff-bot/src/main/resources/moderation-preview/model.js
           node --check staff-bot/src/main/resources/moderation-preview/app.js
@@ -54,8 +38,9 @@ jobs:
           grep -F "new InetSocketAddress(IPV4_LOOPBACK, STAGING_WEB_PORT)" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
           ! grep -F "new InetSocketAddress(IPV4_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
           ! grep -F "new InetSocketAddress(IPV6_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-          grep -F "preview web bind port must be 0 or 8765" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-          grep -F "127.0.0.1:9000" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
+          ! grep -F "catch (Throwable" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+          ! grep -F "server = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+          ! grep -F "executor = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -76,12 +61,12 @@ jobs:
             --no-configuration-cache \
             --console=plain
 
-      - name: Re-verify frozen source and product branch
+      - name: Re-verify exact product head stayed frozen
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
+          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
           test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
-          git diff --check
+          git diff --exit-code
