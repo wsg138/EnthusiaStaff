@@ -22,6 +22,16 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
     private static final InetAddress IPV6_LOOPBACK = literalAddress(new byte[] {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
     });
+    private static final int EPHEMERAL_PORT = 0;
+    private static final int STAGING_WEB_PORT = 8_765;
+    private static final InetSocketAddress IPV4_EPHEMERAL_BIND =
+            new InetSocketAddress(IPV4_LOOPBACK, EPHEMERAL_PORT);
+    private static final InetSocketAddress IPV6_EPHEMERAL_BIND =
+            new InetSocketAddress(IPV6_LOOPBACK, EPHEMERAL_PORT);
+    private static final InetSocketAddress IPV4_STAGING_BIND =
+            new InetSocketAddress(IPV4_LOOPBACK, STAGING_WEB_PORT);
+    private static final InetSocketAddress IPV6_STAGING_BIND =
+            new InetSocketAddress(IPV6_LOOPBACK, STAGING_WEB_PORT);
 
     ModerationPreviewWebConfig {
         Objects.requireNonNull(bindAddress, "bindAddress");
@@ -50,13 +60,28 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
 
     private static InetSocketAddress parseBind(String value) {
         HostAndPort parsed = parseHostAndPort(value);
-        if (IPV4_LOOPBACK_HOST.equals(parsed.host()) || LOCALHOST.equalsIgnoreCase(parsed.host())) {
-            return new InetSocketAddress(IPV4_LOOPBACK, parsed.port());
+        LoopbackHost host = parseLoopbackHost(parsed.host());
+        return fixedBindAddress(host, parsed.port());
+    }
+
+    private static LoopbackHost parseLoopbackHost(String host) {
+        if (IPV4_LOOPBACK_HOST.equals(host) || LOCALHOST.equalsIgnoreCase(host)) {
+            return LoopbackHost.IPV4;
         }
-        if (IPV6_LOOPBACK_HOST.equals(parsed.host())) {
-            return new InetSocketAddress(IPV6_LOOPBACK, parsed.port());
+        if (IPV6_LOOPBACK_HOST.equals(host)) {
+            return LoopbackHost.IPV6;
         }
         throw new IllegalArgumentException("preview web bind must use an explicit loopback host");
+    }
+
+    private static InetSocketAddress fixedBindAddress(LoopbackHost host, int port) {
+        if (port == EPHEMERAL_PORT) {
+            return host == LoopbackHost.IPV6 ? IPV6_EPHEMERAL_BIND : IPV4_EPHEMERAL_BIND;
+        }
+        if (port == STAGING_WEB_PORT) {
+            return host == LoopbackHost.IPV6 ? IPV6_STAGING_BIND : IPV4_STAGING_BIND;
+        }
+        throw new IllegalArgumentException("preview web bind port must be 0 or 8765");
     }
 
     private static HostAndPort parseHostAndPort(String value) {
@@ -115,6 +140,11 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
         } catch (UnknownHostException exception) {
             throw new ExceptionInInitializerError(exception);
         }
+    }
+
+    private enum LoopbackHost {
+        IPV4,
+        IPV6
     }
 
     private record HostAndPort(String host, int port) {

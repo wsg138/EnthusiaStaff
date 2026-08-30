@@ -203,7 +203,7 @@ Requirements:
 - do not add tokens or long-lived credentials to the public URL;
 - preserve the fixed staging Discord identity fence.
 
-For local-only development, `http://127.0.0.1:<port>` or `http://localhost:<port>` is permitted as the public origin. Non-loopback public HTTP is rejected.
+For local-only development, omit the bind variable for an ephemeral loopback listener, or use the fixed staging bind port `8765` on `127.0.0.1`, `localhost`, or `[::1]`. A loopback HTTP public origin is permitted only for that local development case. Other explicit bind ports and non-loopback public HTTP are rejected.
 
 No external staging hostname, reverse-proxy route, TLS certificate, or hosting credential is provisioned by this repository change. A disabled launcher button therefore means the deployment contract is intentionally incomplete, not that the bot should fall back to an insecure link.
 

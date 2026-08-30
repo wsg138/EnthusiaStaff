@@ -57,6 +57,14 @@ class ModerationPreviewWebConfigTest {
     }
 
     @Test
+    void explicitBindPortIsRestrictedToDocumentedStagingPort() {
+        assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "127.0.0.1:9000")));
+        assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "localhost:65535")));
+    }
+
+    @Test
     void rawNonLoopbackListenerIsRejectedEvenWithoutPublicLauncher() {
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
                 ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8765")));
