@@ -24,6 +24,9 @@ function renderWorkflow() {
   renderWorkflowSteps(state.workflow.step);
   const renderers = {offense: renderOffenseStep, recommendation: renderRecommendationStep, options: renderOptionsStep, review: renderReviewStep};
   (renderers[state.workflow.step] || renderCompleteStep)();
+  const body = $('#workflowBody');
+  body.scrollTop = 0;
+  body.scrollLeft = 0;
 }
 
 function renderWorkflowSteps(step) {
