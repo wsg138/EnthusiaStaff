@@ -12,18 +12,18 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ModerationPreviewWebResourcesTest {
+    private static final String MODEL_SCRIPT = "/moderation-preview/model.js";
+    private static final String APP_SCRIPT = "/moderation-preview/app.js";
+    private static final String WORKFLOW_SCRIPT = "/moderation-preview/workflow.js";
+    private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
             "/moderation-preview/app.css",
-            "/moderation-preview/model.js",
-            "/moderation-preview/app.js",
-            "/moderation-preview/workflow.js",
-            "/moderation-preview/review.js");
-    private static final List<String> SCRIPTS = List.of(
-            "/moderation-preview/model.js",
-            "/moderation-preview/app.js",
-            "/moderation-preview/workflow.js",
-            "/moderation-preview/review.js");
+            MODEL_SCRIPT,
+            APP_SCRIPT,
+            WORKFLOW_SCRIPT,
+            REVIEW_SCRIPT);
+    private static final List<String> SCRIPTS = List.of(MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -44,9 +44,9 @@ class ModerationPreviewWebResourcesTest {
 
     @Test
     void workspaceContainsRequiredEvidenceRestrictionAndReviewConcepts() throws IOException {
-        String workspace = resourceText("/moderation-preview/app.js");
-        String workflow = resourceText("/moderation-preview/workflow.js");
-        String review = resourceText("/moderation-preview/review.js");
+        String workspace = resourceText(APP_SCRIPT);
+        String workflow = resourceText(WORKFLOW_SCRIPT);
+        String review = resourceText(REVIEW_SCRIPT);
 
         assertTrue(workspace.contains("Add to Evidence"));
         assertTrue(workspace.contains("Delete on Confirm"));
@@ -60,33 +60,46 @@ class ModerationPreviewWebResourcesTest {
     }
 
     @Test
-    void generatedMarkupAvoidsDirectInnerHtmlSinks() throws IOException {
+    void generatedUiUsesDomConstructionWithoutRawHtmlParsingSinks() throws IOException {
         for (String script : SCRIPTS) {
-            assertFalse(resourceText(script).contains(".innerHTML"), script);
+            String source = resourceText(script);
+            assertFalse(source.contains(".innerHTML"), script);
+            assertFalse(source.contains("DOMParser"), script);
+            assertFalse(source.contains("insertAdjacentHTML"), script);
+            assertFalse(source.contains("createContextualFragment"), script);
         }
-        assertTrue(resourceText("/moderation-preview/model.js").contains("new DOMParser()"));
+        assertTrue(resourceText(MODEL_SCRIPT).contains("document.createElement"));
     }
 
     @Test
     void surroundingMessageContextRemainsAvailableWithoutDesktopOnlyClass() throws IOException {
-        String workspace = resourceText("/moderation-preview/app.js");
+        String workspace = resourceText(APP_SCRIPT);
 
-        assertTrue(workspace.contains("data-context-message"));
+        assertTrue(workspace.contains("contextMessage"));
         assertFalse(workspace.contains("context-button"));
         assertFalse(workspace.contains("Authority context"));
     }
 
     @Test
     void recommendationPathDoesNotSilentlyBecomeScenarioOverride() throws IOException {
-        String workflow = resourceText("/moderation-preview/workflow.js");
+        String workflow = resourceText(WORKFLOW_SCRIPT);
         int start = workflow.indexOf("function useRecommendation(custom)");
         int end = workflow.indexOf("function seedCustomScenario", start);
 
         assertTrue(start >= 0 && end > start);
         String recommendationPath = workflow.substring(start, end);
         assertTrue(recommendationPath.contains("if (custom) seedCustomScenario(w);"));
-        assertFalse(recommendationPath.contains("state.scenario==='restrict-one'"));
-        assertFalse(recommendationPath.contains("state.scenario==='custom'"));
+        assertFalse(recommendationPath.contains("state.scenario === 'restrict-one'"));
+        assertFalse(recommendationPath.contains("state.scenario === 'custom'"));
+    }
+
+    @Test
+    void exactTimestampsAndDateHeadingsUseOneExplicitTimeZone() throws IOException {
+        String review = resourceText(REVIEW_SCRIPT);
+
+        assertTrue(review.contains("DISPLAY_TIME_ZONE"));
+        assertTrue(review.contains("displayDateKey(iso)"));
+        assertTrue(review.contains("timeZone: DISPLAY_TIME_ZONE"));
     }
 
     private String resourceText(String resource) throws IOException {
@@ -107,10 +120,10 @@ class ModerationPreviewWebResourcesTest {
 
     private static int occurrences(String text, String value) {
         int count = 0;
-        int position = 0;
-        while ((position = text.indexOf(value, position)) >= 0) {
+        int position = text.indexOf(value);
+        while (position >= 0) {
             count++;
-            position += value.length();
+            position = text.indexOf(value, position + value.length());
         }
         return count;
     }

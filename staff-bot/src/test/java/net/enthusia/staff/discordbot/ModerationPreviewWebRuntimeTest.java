@@ -15,6 +15,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -24,7 +26,7 @@ class ModerationPreviewWebRuntimeTest {
 
     @Test
     void launchExchangeProtectsWorkspaceRejectsReplayAndSimulatesWithoutSideEffects() throws Exception {
-        var config = new ModerationPreviewWebConfig(new InetSocketAddress("127.0.0.1", 0), Optional.empty());
+        var config = loopbackConfig();
         var tickets = new ModerationPreviewLaunchTicketService(8, Duration.ofMinutes(2));
         var sessions = new ModerationPreviewWebSessionStore(8, Duration.ofMinutes(15));
 
@@ -70,15 +72,28 @@ class ModerationPreviewWebRuntimeTest {
 
     @Test
     void runtimeCannotStartAfterClose() {
-        var config = new ModerationPreviewWebConfig(new InetSocketAddress("127.0.0.1", 0), Optional.empty());
-        var runtime = new ModerationPreviewWebRuntime(
-                config,
-                new ModerationPreviewLaunchTicketService(2, Duration.ofMinutes(2)),
-                new ModerationPreviewWebSessionStore(2, Duration.ofMinutes(15)));
+        var runtime = runtime();
 
         runtime.close();
 
         assertThrows(IllegalStateException.class, runtime::start);
+    }
+
+    @Test
+    void concurrentStartAndCloseCannotLeaveRuntimeReachable() throws Exception {
+        var runtime = runtime();
+        var start = new CountDownLatch(1);
+        var startFailure = new AtomicReference<Throwable>();
+        Thread starter = Thread.ofPlatform().start(() -> runStart(runtime, start, startFailure));
+        Thread closer = Thread.ofPlatform().start(() -> runClose(runtime, start));
+
+        start.countDown();
+        starter.join();
+        closer.join();
+
+        Throwable failure = startFailure.get();
+        assertTrue(failure == null || failure instanceof IllegalStateException);
+        assertThrows(IllegalStateException.class, runtime::boundAddress);
     }
 
     @Test
@@ -91,6 +106,44 @@ class ModerationPreviewWebRuntimeTest {
                 ModerationPreviewLaunchTicketService.class,
                 ModerationPreviewWebSessionStore.class
         }, constructors[0].getParameterTypes());
+    }
+
+    private static ModerationPreviewWebRuntime runtime() {
+        return new ModerationPreviewWebRuntime(
+                loopbackConfig(),
+                new ModerationPreviewLaunchTicketService(2, Duration.ofMinutes(2)),
+                new ModerationPreviewWebSessionStore(2, Duration.ofMinutes(15)));
+    }
+
+    private static ModerationPreviewWebConfig loopbackConfig() {
+        return new ModerationPreviewWebConfig(new InetSocketAddress("127.0.0.1", 0), Optional.empty());
+    }
+
+    private static void runStart(
+            ModerationPreviewWebRuntime runtime,
+            CountDownLatch start,
+            AtomicReference<Throwable> failure
+    ) {
+        await(start);
+        try {
+            runtime.start();
+        } catch (Throwable throwable) {
+            failure.set(throwable);
+        }
+    }
+
+    private static void runClose(ModerationPreviewWebRuntime runtime, CountDownLatch start) {
+        await(start);
+        runtime.close();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
     }
 
     private static HttpResponse<String> get(HttpClient client, URI uri, String cookie) throws Exception {

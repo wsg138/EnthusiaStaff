@@ -2,12 +2,6 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
-
-function replaceMarkup(element, markup) {
-  const parsed = new DOMParser().parseFromString(markup, 'text/html');
-  element.replaceChildren(...parsed.body.childNodes);
-}
 
 const OFFENSES = [
   ['spam', 'Spam / flooding'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
@@ -70,6 +64,57 @@ const state = {
   history:[], workflow:null, evidenceRevision:0, toastTimer:null
 };
 
+
+function element(tag, options = {}, ...children) {
+  const created = document.createElement(tag);
+  if (options.className) created.className = options.className;
+  if (options.text !== undefined) created.textContent = String(options.text);
+  if (options.type) created.type = options.type;
+  if (options.id) created.id = options.id;
+  if (options.value !== undefined) created.value = String(options.value);
+  if (options.placeholder) created.placeholder = options.placeholder;
+  if (options.name) created.name = options.name;
+  if (options.htmlFor) created.htmlFor = options.htmlFor;
+  if (options.checked !== undefined) created.checked = Boolean(options.checked);
+  if (options.disabled !== undefined) created.disabled = Boolean(options.disabled);
+  if (options.hidden !== undefined) created.hidden = Boolean(options.hidden);
+  if (options.attrs) {
+    for (const [name, value] of Object.entries(options.attrs)) created.setAttribute(name, String(value));
+  }
+  if (options.dataset) {
+    for (const [name, value] of Object.entries(options.dataset)) created.dataset[name] = String(value);
+  }
+  appendChildren(created, children);
+  return created;
+}
+
+function appendChildren(parent, children) {
+  for (const child of children.flat(Infinity)) {
+    if (child === null || child === undefined || child === false) continue;
+    parent.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+}
+
+function replaceChildrenOf(parent, ...children) {
+  const fragment = document.createDocumentFragment();
+  appendChildren(fragment, children);
+  parent.replaceChildren(fragment);
+}
+
+function textNode(tag, className, text) {
+  return element(tag, {className, text});
+}
+
+function buttonNode(text, className, dataset = {}) {
+  return element('button', {type: 'button', className, text, dataset});
+}
+
+function optionNode(value, label, selected = false) {
+  const option = element('option', {value, text: label});
+  option.selected = selected;
+  return option;
+}
+
 function init() {
   fillScenarioSelect();
   renderNav();
@@ -91,18 +136,26 @@ async function loadSession() {
 }
 
 function fillScenarioSelect() {
-  replaceMarkup($('#scenarioSelect'), SCENARIOS.map(([value,label]) => `<option value="${esc(value)}">${esc(label)}</option>`).join(''));
+  replaceChildrenOf($('#scenarioSelect'), SCENARIOS.map(([value, label]) => optionNode(value, label)));
   $('#scenarioSelect').addEventListener('change', (event) => applyScenario(event.target.value));
 }
 
 function renderNav() {
-  replaceMarkup($('#primaryNav'), NAV.map(([key,label]) => `<button class="nav-item" data-view="${esc(key)}" type="button"><span>${esc(label)}</span><span class="nav-count" data-count="${esc(key)}"></span></button>`).join(''));
+  const nodes = NAV.map(([key, label]) => {
+    const button = buttonNode('', 'nav-item', {view:key});
+    button.append(textNode('span', '', label), element('span', {className:'nav-count', dataset:{count:key}}));
+    return button;
+  });
+  replaceChildrenOf($('#primaryNav'), nodes);
   $$('.nav-item').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 }
 
 function bindShellEvents() {
   $('#closeWorkflow').addEventListener('click', closeWorkflow);
-  $('#punishmentDialog').addEventListener('cancel', (event) => { event.preventDefault(); closeWorkflow(); });
+  $('#punishmentDialog').addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeWorkflow();
+  });
 }
 
 function switchView(view) {
@@ -113,7 +166,12 @@ function switchView(view) {
 function applyScenario(name) {
   state.scenario = name;
   $('#scenarioSelect').value = name;
-  state.selected.clear(); state.evidence.clear(); state.violating.clear(); state.deleting.clear(); state.anchor = null; state.contextId = null;
+  state.selected.clear();
+  state.evidence.clear();
+  state.violating.clear();
+  state.deleting.clear();
+  state.anchor = null;
+  state.contextId = null;
   state.history = scenarioHistory(name);
   state.evidenceRevision++;
   state.workflow = null;
@@ -123,7 +181,7 @@ function applyScenario(name) {
 }
 
 function scenarioHistory(name) {
-  const source = historyTemplates[name] || (['approval'].includes(name) ? historyTemplates.admin : historyTemplates.repeat);
+  const source = historyTemplates[name] || (name === 'approval' ? historyTemplates.admin : historyTemplates.repeat);
   return source.map(([date,key,offense,action,duration,staff,status,ladderRelevant], index) => ({
     id:`CASE-${1301-index}`, date,key,offense,action,duration,staff,status,ladderRelevant
   }));
@@ -135,11 +193,16 @@ function configureScenario(name) {
   state.date = 'all';
   state.selectedOnly = false;
   if (name === 'multi') {
-    ['19002','19003','19005'].forEach((id) => { state.selected.add(id); state.evidence.add(id); });
-    state.deleting.add('19002'); state.deleting.add('19005');
+    ['19002','19003','19005'].forEach((id) => {
+      state.selected.add(id);
+      state.evidence.add(id);
+    });
+    state.deleting.add('19002');
+    state.deleting.add('19005');
   } else if (name === 'edited') {
     state.search = 'last chance';
   } else if (name === 'attachment') {
-    state.channel = 'market'; state.search = 'Selling kits';
+    state.channel = 'market';
+    state.search = 'Selling kits';
   }
 }

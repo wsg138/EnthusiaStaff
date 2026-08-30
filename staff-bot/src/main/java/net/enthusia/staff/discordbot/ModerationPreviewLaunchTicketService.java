@@ -19,6 +19,7 @@ import javax.crypto.spec.SecretKeySpec;
 /** Issues bounded, one-time, signed launch tickets for the staging moderation web console. */
 final class ModerationPreviewLaunchTicketService {
     private static final String HMAC = "HmacSHA256";
+    private static final int MIN_CAPACITY = 1;
     private static final int KEY_BYTES = 32;
     private static final int NONCE_BYTES = 24;
 
@@ -48,6 +49,7 @@ final class ModerationPreviewLaunchTicketService {
     private final Clock clock;
     private final SecureRandom random;
     private final byte[] signingKey;
+    private final Object ticketLock = new Object();
     private final Map<String, Claims> tickets = new LinkedHashMap<>();
 
     ModerationPreviewLaunchTicketService(int capacity, Duration ttl) {
@@ -55,7 +57,7 @@ final class ModerationPreviewLaunchTicketService {
     }
 
     ModerationPreviewLaunchTicketService(int capacity, Duration ttl, Clock clock, SecureRandom random) {
-        if (capacity < 1) {
+        if (capacity < MIN_CAPACITY) {
             throw new IllegalArgumentException("ticket capacity must be positive");
         }
         if (ttl.isZero() || ttl.isNegative()) {
@@ -68,18 +70,18 @@ final class ModerationPreviewLaunchTicketService {
         this.signingKey = randomBytes(KEY_BYTES);
     }
 
-    synchronized String issue(long actorId, long guildId, String targetKey) {
-        if (actorId <= 0 || guildId <= 0 || targetKey == null || targetKey.isBlank() || targetKey.length() > 64) {
-            throw new IllegalArgumentException("launch ticket claims are invalid");
+    String issue(long actorId, long guildId, String targetKey) {
+        validateClaims(actorId, guildId, targetKey);
+        synchronized (ticketLock) {
+            Instant issuedAt = clock.instant();
+            Instant expiresAt = canonicalExpiry(issuedAt);
+            purgeExpired(issuedAt);
+            ensureCapacity();
+            String nonce = encode(randomBytes(NONCE_BYTES));
+            tickets.put(nonce, new Claims(actorId, guildId, targetKey, issuedAt, expiresAt));
+            String body = nonce + "." + expiresAt.getEpochSecond();
+            return body + "." + encode(sign(body));
         }
-        Instant issuedAt = clock.instant();
-        Instant expiresAt = canonicalExpiry(issuedAt);
-        purgeExpired(issuedAt);
-        ensureCapacity();
-        String nonce = encode(randomBytes(NONCE_BYTES));
-        tickets.put(nonce, new Claims(actorId, guildId, targetKey, issuedAt, expiresAt));
-        String body = nonce + "." + expiresAt.getEpochSecond();
-        return body + "." + encode(sign(body));
     }
 
     ConsumeResult consume(String token) {
@@ -98,16 +100,24 @@ final class ModerationPreviewLaunchTicketService {
         return consumeStored(parts);
     }
 
-    private synchronized ConsumeResult consumeStored(TokenParts parts) {
-        Claims claims = tickets.get(parts.nonce());
-        if (claims == null) {
-            return ConsumeResult.rejected(Status.REPLAYED);
+    private ConsumeResult consumeStored(TokenParts parts) {
+        synchronized (ticketLock) {
+            Claims claims = tickets.get(parts.nonce());
+            if (claims == null) {
+                return ConsumeResult.rejected(Status.REPLAYED);
+            }
+            if (!claims.expiresAt().equals(parts.expiresAt())) {
+                return ConsumeResult.rejected(Status.INVALID);
+            }
+            tickets.remove(parts.nonce());
+            return ConsumeResult.accepted(claims);
         }
-        if (!claims.expiresAt().equals(parts.expiresAt())) {
-            return ConsumeResult.rejected(Status.INVALID);
+    }
+
+    private static void validateClaims(long actorId, long guildId, String targetKey) {
+        if (actorId <= 0 || guildId <= 0 || targetKey == null || targetKey.isBlank() || targetKey.length() > 64) {
+            throw new IllegalArgumentException("launch ticket claims are invalid");
         }
-        tickets.remove(parts.nonce());
-        return ConsumeResult.accepted(claims);
     }
 
     private Instant canonicalExpiry(Instant issuedAt) {
@@ -146,8 +156,10 @@ final class ModerationPreviewLaunchTicketService {
         }
     }
 
-    private synchronized void discard(String nonce) {
-        tickets.remove(nonce);
+    private void discard(String nonce) {
+        synchronized (ticketLock) {
+            tickets.remove(nonce);
+        }
     }
 
     private void purgeExpired(Instant now) {

@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Hosts the staging-only moderation web preview. It has no moderation or persistence adapter. */
 final class ModerationPreviewWebRuntime implements AutoCloseable {
@@ -24,6 +23,10 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     private static final Duration LAUNCH_TTL = Duration.ofMinutes(2);
     private static final Duration SESSION_TTL = Duration.ofMinutes(15);
     private static final int MAX_REQUEST_BYTES = 65_536;
+    private static final int WORKER_THREADS = 4;
+    private static final String GET = "GET";
+    private static final String POST = "POST";
+    private static final String METHOD_NOT_ALLOWED = "Method not allowed.";
     private static final String SESSION_COOKIE = "enthusia_mod_preview";
     private static final String SAMPLE_TARGET = "sample-river-ash";
     private static final String HTML = "text/html; charset=utf-8";
@@ -41,8 +44,9 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     private final ModerationPreviewWebConfig config;
     private final ModerationPreviewLaunchTicketService tickets;
     private final ModerationPreviewWebSessionStore sessions;
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final AtomicBoolean closed = new AtomicBoolean();
+    private final Object lifecycleLock = new Object();
+    private boolean started;
+    private boolean closed;
     private HttpServer server;
     private ExecutorService executor;
 
@@ -64,34 +68,53 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
                 new ModerationPreviewWebSessionStore(capacity, SESSION_TTL));
     }
 
-    synchronized void start() {
-        if (!started.compareAndSet(false, true)) {
-            return;
+    void start() {
+        synchronized (lifecycleLock) {
+            ensureOpen();
+            if (started) {
+                return;
+            }
+            startLocked();
         }
-        if (closed.get()) {
+    }
+
+    private void ensureOpen() {
+        if (closed) {
             throw new IllegalStateException("preview web runtime is closed");
         }
+    }
+
+    private void startLocked() {
+        HttpServer createdServer = null;
+        ExecutorService createdExecutor = null;
         try {
-            server = HttpServer.create(config.bindAddress(), 0);
-            executor = Executors.newFixedThreadPool(
-                    4,
+            createdServer = HttpServer.create(config.bindAddress(), 0);
+            createdExecutor = Executors.newFixedThreadPool(
+                    WORKER_THREADS,
                     Thread.ofPlatform().name("moderation-preview-web-", 0).factory());
-            server.setExecutor(executor);
-            server.createContext("/", this::handle);
-            server.start();
-            log(System.Logger.Level.INFO, "moderation_preview_web_started bind={0}", server.getAddress());
-        } catch (IOException exception) {
-            close();
+            createdServer.setExecutor(createdExecutor);
+            createdServer.createContext("/", this::handle);
+            createdServer.start();
+            server = createdServer;
+            executor = createdExecutor;
+            started = true;
+            if (LOGGER.isLoggable(System.Logger.Level.INFO)) {
+                LOGGER.log(System.Logger.Level.INFO, "moderation_preview_web_started bind={0}", server.getAddress());
+            }
+        } catch (IOException | RuntimeException exception) {
+            stopResources(createdServer, createdExecutor);
+            closed = true;
             throw new IllegalStateException("staging moderation web preview failed to bind", exception);
         }
     }
 
     InetSocketAddress boundAddress() {
-        HttpServer current = server;
-        if (current == null) {
-            throw new IllegalStateException("preview web runtime is not started");
+        synchronized (lifecycleLock) {
+            if (!started || closed || server == null) {
+                throw new IllegalStateException("preview web runtime is not started");
+            }
+            return server.getAddress();
         }
-        return current.getAddress();
     }
 
     Optional<URI> issueLaunchUri(long actorId, long guildId) {
@@ -107,8 +130,10 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
             applySecurityHeaders(exchange.getResponseHeaders());
             route(exchange);
         } catch (RuntimeException exception) {
-            log(System.Logger.Level.WARNING, "moderation_preview_web_request_failed type={0}",
-                    exception.getClass().getSimpleName());
+            if (LOGGER.isLoggable(System.Logger.Level.WARNING)) {
+                LOGGER.log(System.Logger.Level.WARNING, "moderation_preview_web_request_failed type={0}",
+                        exception.getClass().getSimpleName());
+            }
             if (exchange.getResponseCode() == -1) {
                 respondText(exchange, 500, "Preview request failed.");
             }
@@ -140,8 +165,8 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     private void handleLaunch(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respondText(exchange, 405, "Method not allowed.");
+        if (!GET.equals(exchange.getRequestMethod())) {
+            respondText(exchange, 405, METHOD_NOT_ALLOWED);
             return;
         }
         String token = queryParameter(exchange.getRequestURI(), "t").orElse("");
@@ -157,8 +182,8 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     private void handleSession(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respondText(exchange, 405, "Method not allowed.");
+        if (!GET.equals(exchange.getRequestMethod())) {
+            respondText(exchange, 405, METHOD_NOT_ALLOWED);
             return;
         }
         Optional<ModerationPreviewWebSessionStore.Session> session = session(exchange);
@@ -176,8 +201,8 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     private void handleSimulation(HttpExchange exchange) throws IOException {
-        if (!"POST".equals(exchange.getRequestMethod())) {
-            respondText(exchange, 405, "Method not allowed.");
+        if (!POST.equals(exchange.getRequestMethod())) {
+            respondText(exchange, 405, METHOD_NOT_ALLOWED);
             return;
         }
         Optional<ModerationPreviewWebSessionStore.Session> session = session(exchange);
@@ -195,8 +220,8 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     private void serveProtectedResource(HttpExchange exchange, StaticResource resource) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            respondText(exchange, 405, "Method not allowed.");
+        if (!GET.equals(exchange.getRequestMethod())) {
+            respondText(exchange, 405, METHOD_NOT_ALLOWED);
             return;
         }
         if (session(exchange).isEmpty()) {
@@ -294,21 +319,24 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     @Override
-    public synchronized void close() {
-        if (!closed.compareAndSet(false, true)) {
-            return;
-        }
-        if (server != null) {
-            server.stop(0);
-        }
-        if (executor != null) {
-            executor.shutdownNow();
+    public void close() {
+        synchronized (lifecycleLock) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            stopResources(server, executor);
+            server = null;
+            executor = null;
         }
     }
 
-    private static void log(System.Logger.Level level, String message, Object... values) {
-        if (LOGGER.isLoggable(level)) {
-            LOGGER.log(level, message, values);
+    private static void stopResources(HttpServer currentServer, ExecutorService currentExecutor) {
+        if (currentServer != null) {
+            currentServer.stop(0);
+        }
+        if (currentExecutor != null) {
+            currentExecutor.shutdownNow();
         }
     }
 
