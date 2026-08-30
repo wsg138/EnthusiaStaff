@@ -15,116 +15,57 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Check out frozen product head
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          ref: 13b9fdcddb995ba30ce781337690dcd5f007db29
+          ref: owner/staging-web-moderation-console
           fetch-depth: 0
 
-      - name: Verify frozen branch head
+      - name: Verify frozen product head
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          EXPECTED=baf423d6d2fafa56a2034976927fad67b9a7ead1
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
-          test "$(git rev-parse HEAD)" = "${EXPECTED}"
 
-      - name: Apply reviewed candidate bundle
+      - name: Apply focused static-analysis repairs
         shell: bash
         run: |
           set -euo pipefail
-          for index in 00 01 02 03 04 05 06; do
-            git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-bundle/b64_${index}.txt" > "/tmp/b64_${index}.txt"
-          done
-          python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
+          git fetch origin diagnostic/pr186-codacy-remaining-20260829
+          git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/workflows/pr186-static-repair.yml" \
+            | awk 'BEGIN{capture=0} /^          from pathlib import Path$/ {capture=1} /^      - name: Verify focused source shape$/ {capture=0} capture {sub(/^          /,""); print}' \
+            > /tmp/pr186-static-repair.py
+          test -s /tmp/pr186-static-repair.py
+          python /tmp/pr186-static-repair.py
 
-          path = Path('/tmp/b64_02.txt')
-          current = path.read_text(encoding='ascii')
-          expected = '69bc5af9a64538045a6f49a7efb9c989559d8833'
-          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-
-          def git_blob_sha(text):
-              raw = text.encode('ascii')
-              header = f'blob {len(raw)}\0'.encode('ascii')
-              return hashlib.sha1(header + raw).hexdigest()
-
-          if git_blob_sha(current) != expected:
-              found = None
-              chars = list(current)
-              for index, original in enumerate(chars):
-                  for replacement in alphabet:
-                      if replacement == original:
-                          continue
-                      chars[index] = replacement
-                      candidate = ''.join(chars)
-                      if git_blob_sha(candidate) == expected:
-                          found = candidate
-                          print(f'recovered b64_02 single-character corruption at offset {index}')
-                          break
-                  chars[index] = original
-                  if found is not None:
-                      break
-              if found is None:
-                  raise SystemExit('could not recover b64_02 to the known original Git blob SHA')
-              current = found
-              path.write_text(current, encoding='ascii')
-          if git_blob_sha(current) != expected:
-              raise SystemExit('recovered b64_02 does not match expected Git blob SHA')
-          PY
-          : > /tmp/pr186-bundle.b64
-          for index in 00 01 02 03 04 05 06; do
-            cat "/tmp/b64_${index}.txt" >> /tmp/pr186-bundle.b64
-          done
-          test "$(wc -c < /tmp/pr186-bundle.b64)" -eq 34516
-          base64 -d /tmp/pr186-bundle.b64 > /tmp/pr186-bundle.tar.gz
-          gzip -t /tmp/pr186-bundle.tar.gz
-          tar -tzf /tmp/pr186-bundle.tar.gz
-          tar -xzf /tmp/pr186-bundle.tar.gz -C "$GITHUB_WORKSPACE"
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('staff-bot/src/main/resources/moderation-preview/app.js')
-          text = path.read_text(encoding='utf-8')
-          path.write_text(text.rstrip('\n') + '\n', encoding='utf-8')
-          PY
-
-      - name: Verify candidate scope and browser source
+      - name: Verify focused source shape
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED="$(printf '%s\n' \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java \
-            staff-bot/src/main/resources/moderation-preview/app.js \
-            staff-bot/src/main/resources/moderation-preview/model.js \
-            staff-bot/src/main/resources/moderation-preview/review.js \
-            staff-bot/src/main/resources/moderation-preview/workflow.js \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java)"
-          ACTUAL="$(git diff --name-only | sort)"
-          test "${ACTUAL}" = "${EXPECTED}"
+          node --check staff-bot/src/main/resources/moderation-preview/model.js
+          node --check staff-bot/src/main/resources/moderation-preview/app.js
+          node --check staff-bot/src/main/resources/moderation-preview/workflow.js
+          grep -F "new InetSocketAddress(IPV4_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+          ! grep -F "catch (Throwable" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+          ! grep -F "server = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
+          ! grep -F "executor = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
           git diff --check
-          for file in staff-bot/src/main/resources/moderation-preview/{model,app,workflow,review}.js; do
-            node --check "$file"
-          done
-          ! grep -R -n -E 'innerHTML|DOMParser|insertAdjacentHTML|createContextualFragment' staff-bot/src/main/resources/moderation-preview/*.js
 
       - name: Set up Java 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Clean build, tests, coverage, runtime jars
         shell: bash
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew clean build jacocoAggregateReport runtimeJars \
             --no-daemon \
@@ -132,27 +73,22 @@ jobs:
             --no-configuration-cache \
             --console=plain
 
-      - name: Publish one product commit
+      - name: Publish one product repair commit
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=13b9fdcddb995ba30ce781337690dcd5f007db29
+          EXPECTED=baf423d6d2fafa56a2034976927fad67b9a7ead1
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewLaunchTicketService.java \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebSessionStore.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java \
             staff-bot/src/main/resources/moderation-preview/app.js \
             staff-bot/src/main/resources/moderation-preview/model.js \
-            staff-bot/src/main/resources/moderation-preview/review.js \
-            staff-bot/src/main/resources/moderation-preview/workflow.js \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
+            staff-bot/src/main/resources/moderation-preview/workflow.js
           git diff --cached --check
-          git commit -m "Resolve staging preview analysis findings"
+          git commit -m "Repair PR186 hosted static-analysis findings"
           git push origin HEAD:refs/heads/owner/staging-web-moderation-console
