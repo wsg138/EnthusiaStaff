@@ -204,7 +204,7 @@ public final class StaffBotConfiguration {
         }
     }
 
-    private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
+    static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
         return switch (healthHost) {
             case IPV4_LOOPBACK_HOST, LOCALHOST -> {
                 // nosemgrep -- Literal IPv4 loopback bind; validated allowlist input cannot reach this sink.
