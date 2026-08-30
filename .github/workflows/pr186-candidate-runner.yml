@@ -33,12 +33,53 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          for index in 00 01 02 03 04 05 06; do
+            git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-bundle/b64_${index}.txt" > "/tmp/b64_${index}.txt"
+          done
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          path = Path('/tmp/b64_02.txt')
+          current = path.read_text(encoding='ascii')
+          expected = '69bc5af9a64538045a6f49a7efb9c989559d8833'
+          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+          def git_blob_sha(text):
+              raw = text.encode('ascii')
+              header = f'blob {len(raw)}\0'.encode('ascii')
+              return hashlib.sha1(header + raw).hexdigest()
+
+          if git_blob_sha(current) != expected:
+              found = None
+              chars = list(current)
+              for index, original in enumerate(chars):
+                  for replacement in alphabet:
+                      if replacement == original:
+                          continue
+                      chars[index] = replacement
+                      candidate = ''.join(chars)
+                      if git_blob_sha(candidate) == expected:
+                          found = candidate
+                          print(f'recovered b64_02 single-character corruption at offset {index}')
+                          break
+                  chars[index] = original
+                  if found is not None:
+                      break
+              if found is None:
+                  raise SystemExit('could not recover b64_02 to the known original Git blob SHA')
+              current = found
+              path.write_text(current, encoding='ascii')
+          if git_blob_sha(current) != expected:
+              raise SystemExit('recovered b64_02 does not match expected Git blob SHA')
+          PY
           : > /tmp/pr186-bundle.b64
           for index in 00 01 02 03 04 05 06; do
-            git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-bundle/b64_${index}.txt" >> /tmp/pr186-bundle.b64
+            cat "/tmp/b64_${index}.txt" >> /tmp/pr186-bundle.b64
           done
           test "$(wc -c < /tmp/pr186-bundle.b64)" -eq 34516
           base64 -d /tmp/pr186-bundle.b64 > /tmp/pr186-bundle.tar.gz
+          gzip -t /tmp/pr186-bundle.tar.gz
           tar -tzf /tmp/pr186-bundle.tar.gz
           tar -xzf /tmp/pr186-bundle.tar.gz -C "$GITHUB_WORKSPACE"
 
