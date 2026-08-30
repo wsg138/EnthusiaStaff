@@ -1,0 +1,170 @@
+name: PR186 browser validation
+
+on:
+  push:
+    branches:
+      - "diagnostic/pr186-browser-final-20260830"
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    name: Render exact PR186 candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact product candidate
+        uses: actions/checkout@v6
+        with:
+          ref: baf423d6d2fafa56a2034976927fad67b9a7ead1
+
+      - name: Verify exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "baf423d6d2fafa56a2034976927fad67b9a7ead1"
+          git diff --exit-code
+
+      - name: Install Playwright Python package
+        run: python3 -m pip install --disable-pip-version-check playwright==1.55.0
+
+      - name: Run responsive browser validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/pr186-browser
+          cat > /tmp/pr186_server.py <<'PY'
+          from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+          from pathlib import Path
+          import json
+          ROOT = Path('staff-bot/src/main/resources/moderation-preview')
+          MIME = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'}
+          class Handler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path == '/api/session':
+                      self._json(200, {'actorId':'1234','guildId':'5678','targetKey':'sample-river-ash','csrfToken':'browser-csrf'})
+                      return
+                  if self.path in ('/', '/moderation'):
+                      self._file(ROOT / 'index.html')
+                      return
+                  if self.path.startswith('/assets/'):
+                      self._file(ROOT / self.path.removeprefix('/assets/'))
+                      return
+                  self.send_error(404)
+              def do_POST(self):
+                  if self.path != '/api/simulate':
+                      self.send_error(404); return
+                  length = int(self.headers.get('Content-Length', '0'))
+                  self.rfile.read(length)
+                  if self.headers.get('X-Preview-Csrf') != 'browser-csrf':
+                      self._json(403, {'message':'Rejected'}); return
+                  self._json(200, {'message':'Simulation complete','detail':'No live moderation action was performed.'})
+              def _json(self, status, value):
+                  data = json.dumps(value).encode()
+                  self.send_response(status); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+              def _file(self, path):
+                  if not path.is_file(): self.send_error(404); return
+                  data = path.read_bytes(); self.send_response(200); self.send_header('Content-Type', MIME.get(path.suffix,'application/octet-stream')); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+              def log_message(self, *args): pass
+          ThreadingHTTPServer(('127.0.0.1', 8765), Handler).serve_forever()
+          PY
+          python3 /tmp/pr186_server.py &
+          SERVER_PID=$!
+          trap 'kill ${SERVER_PID}' EXIT
+          cat > /tmp/pr186_browser.py <<'PY'
+          import asyncio, os, shutil
+          from pathlib import Path
+          from playwright.async_api import async_playwright
+
+          OUT = Path('build/pr186-browser')
+          BASE = 'http://127.0.0.1:8765/moderation'
+          VIEWPORTS = [('desktop',1440,1000),('tablet',900,1000),('mobile',390,844)]
+
+          async def shot(page, name):
+              await page.screenshot(path=str(OUT / name), full_page=True)
+              overflow = await page.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1')
+              if overflow:
+                  raise AssertionError(f'horizontal overflow in {name}')
+
+          async def choose_offense(page, key='spam'):
+              await page.locator('[data-punish]').first.click()
+              await page.locator(f'[data-offense="{key}"]').click()
+
+          async def validate_viewport(browser, label, width, height):
+              context = await browser.new_context(viewport={'width':width,'height':height})
+              page = await context.new_page()
+              errors = []
+              page.on('pageerror', lambda error: errors.append(f'pageerror: {error}'))
+              page.on('console', lambda msg: errors.append(f'console error: {msg.text}') if msg.type == 'error' else None)
+              await page.goto(BASE, wait_until='networkidle')
+              await page.locator('#actorMeta').wait_for()
+              assert await page.locator('#actorMeta').inner_text() == 'Verified staff session'
+              await shot(page, f'{label}-messages.png')
+
+              selected = page.locator('[data-message-id="19002"] .message-select')
+              await selected.check()
+              await page.locator('#selectionBar:not([hidden])').wait_for()
+              await shot(page, f'{label}-selection.png')
+              await page.locator('[data-context-message="19002"]').click()
+              await page.get_by_text('Conversation context', exact=True).wait_for()
+              await shot(page, f'{label}-context.png')
+
+              await choose_offense(page)
+              assert await page.locator('#workflowTitle').inner_text() == 'Ladder recommendation'
+              await shot(page, f'{label}-recommendation.png')
+              await page.locator('[data-custom]').click()
+              assert await page.get_by_text('Custom override', exact=True).count() > 0
+              await shot(page, f'{label}-custom.png')
+              await page.locator('#closeWorkflow').click()
+
+              await page.locator('#scenarioSelect').select_option('restrict-one')
+              await choose_offense(page)
+              await page.locator('[data-custom]').click()
+              assert await page.locator('#customAction').input_value() == 'Restrict'
+              assert await page.locator('[data-restriction-target="general"]').is_checked()
+              await shot(page, f'{label}-restrict-one.png')
+              await page.locator('#closeWorkflow').click()
+
+              await page.locator('#scenarioSelect').select_option('restrict-many')
+              await choose_offense(page)
+              await page.locator('[data-custom]').click()
+              assert await page.locator('#customAction').input_value() == 'Restrict'
+              assert await page.locator('[name="restrictMode"][value="no-access"]').is_checked()
+              assert await page.locator('[data-restriction-target]:checked').count() == 3
+              await shot(page, f'{label}-restrict-many.png')
+              await page.locator('[data-review]').click()
+              assert await page.locator('#workflowTitle').inner_text() == 'Final review'
+              await page.get_by_text('Restriction targets', exact=True).wait_for()
+              await shot(page, f'{label}-review.png')
+
+              if label == 'mobile':
+                  assert await page.locator('[data-context-message]').first.is_visible()
+                  dialog_box = await page.locator('#punishmentDialog').bounding_box()
+                  assert dialog_box and dialog_box['width'] <= width
+
+              if errors:
+                  raise AssertionError('; '.join(errors))
+              await context.close()
+
+          async def main():
+              executable = shutil.which('google-chrome') or shutil.which('chromium') or shutil.which('chromium-browser')
+              if not executable:
+                  raise SystemExit('No Chromium/Chrome executable available')
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True, executable_path=executable, args=['--no-sandbox'])
+                  for args in VIEWPORTS:
+                      await validate_viewport(browser, *args)
+                  await browser.close()
+          asyncio.run(main())
+          PY
+          python3 /tmp/pr186_browser.py
+          ls -lh build/pr186-browser
+
+      - name: Upload browser evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr186-browser-validation-baf423d6
+          path: build/pr186-browser/*.png
+          if-no-files-found: error
+          retention-days: 14
