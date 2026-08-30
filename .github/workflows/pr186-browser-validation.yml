@@ -42,6 +42,8 @@ jobs:
           MIME = {'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'}
           class Handler(BaseHTTPRequestHandler):
               def do_GET(self):
+                  if self.path == '/favicon.ico':
+                      self.send_response(204); self.end_headers(); return
                   if self.path == '/api/session':
                       self._json(200, {'actorId':'1234','guildId':'5678','targetKey':'sample-river-ash','csrfToken':'browser-csrf'})
                       return
@@ -51,9 +53,11 @@ jobs:
                   if self.path.startswith('/assets/'):
                       self._file(ROOT / self.path.removeprefix('/assets/'))
                       return
+                  print(f'unhandled GET {self.path}', flush=True)
                   self.send_error(404)
               def do_POST(self):
                   if self.path != '/api/simulate':
+                      print(f'unhandled POST {self.path}', flush=True)
                       self.send_error(404); return
                   length = int(self.headers.get('Content-Length', '0'))
                   self.rfile.read(length)
@@ -73,7 +77,7 @@ jobs:
           SERVER_PID=$!
           trap 'kill ${SERVER_PID}' EXIT
           cat > /tmp/pr186_browser.py <<'PY'
-          import asyncio, os, shutil
+          import asyncio, shutil
           from pathlib import Path
           from playwright.async_api import async_playwright
 
