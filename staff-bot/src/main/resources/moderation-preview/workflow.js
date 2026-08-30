@@ -24,6 +24,7 @@ function renderWorkflow() {
   renderWorkflowSteps(state.workflow.step);
   const renderers = {offense: renderOffenseStep, recommendation: renderRecommendationStep, options: renderOptionsStep, review: renderReviewStep};
   (renderers[state.workflow.step] || renderCompleteStep)();
+  $('#punishmentDialog').scrollTop = 0;
   const body = $('#workflowBody');
   body.scrollTop = 0;
   body.scrollLeft = 0;
