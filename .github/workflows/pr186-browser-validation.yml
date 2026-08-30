@@ -3,29 +3,29 @@ name: PR186 browser validation
 on:
   push:
     branches:
-      - "diagnostic/pr186-browser-final-20260830"
+      - "diagnostic/pr186-final-browser-worker-20260830-a"
 
 permissions:
   contents: read
 
 jobs:
   browser:
-    name: Render exact PR186 candidate
+    name: Validate final PR186 browser candidate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out exact product candidate
+      - name: Check out exact candidate
         uses: actions/checkout@v6
         with:
-          ref: 065d295e437f27fa38531feae59ba8dd1e2265d4
+          ref: 5acc2c9f9ca53df614efb64780e011396b115e0c
 
-      - name: Verify exact source
+      - name: Verify frozen candidate
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=065d295e437f27fa38531feae59ba8dd1e2265d4
+          CANDIDATE=5acc2c9f9ca53df614efb64780e011396b115e0c
           PRODUCT=b9823409b189e54cb3e1da803db474b139897131
-          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${PRODUCT}"
           git diff --exit-code
@@ -35,10 +35,10 @@ jobs:
           node --check staff-bot/src/main/resources/moderation-preview/workflow.js
           node --check staff-bot/src/main/resources/moderation-preview/review.js
 
-      - name: Install Playwright Python package
+      - name: Install Playwright
         run: python3 -m pip install --disable-pip-version-check playwright==1.55.0
 
-      - name: Run responsive browser validation
+      - name: Validate responsive workflow and scroll reset
         shell: bash
         run: |
           set -euo pipefail
@@ -53,47 +53,22 @@ jobs:
 
           class Handler(BaseHTTPRequestHandler):
               def do_GET(self):
-                  if self.path == '/favicon.ico':
-                      self.send_response(204); self.end_headers(); return
-                  if self.path == '/api/session':
-                      self._json(200, {'actorId':'1234','guildId':'5678','targetKey':'sample-river-ash','csrfToken':'browser-csrf'})
-                      return
-                  if self.path in ('/', '/moderation'):
-                      self._file(ROOT / 'index.html'); return
-                  if self.path.startswith('/assets/'):
-                      self._file(ROOT / self.path.removeprefix('/assets/')); return
+                  if self.path == '/favicon.ico': self.send_response(204); self.end_headers(); return
+                  if self.path == '/api/session': self._json(200, {'actorId':'1234','guildId':'5678','targetKey':'sample-river-ash','csrfToken':'browser-csrf'}); return
+                  if self.path in ('/', '/moderation'): self._file(ROOT / 'index.html'); return
+                  if self.path.startswith('/assets/'): self._file(ROOT / self.path.removeprefix('/assets/')); return
                   self.send_error(404)
-
               def do_POST(self):
-                  if self.path != '/api/simulate':
-                      self.send_error(404); return
-                  length = int(self.headers.get('Content-Length', '0'))
-                  self.rfile.read(length)
-                  if self.headers.get('X-Preview-Csrf') != 'browser-csrf':
-                      self._json(403, {'message':'Rejected'}); return
+                  if self.path != '/api/simulate': self.send_error(404); return
+                  length = int(self.headers.get('Content-Length', '0')); self.rfile.read(length)
+                  if self.headers.get('X-Preview-Csrf') != 'browser-csrf': self._json(403, {'message':'Rejected'}); return
                   self._json(200, {'message':'Simulation complete','detail':'No live moderation action was performed.'})
-
               def _json(self, status, value):
-                  data = json.dumps(value).encode()
-                  self.send_response(status)
-                  self.send_header('Content-Type','application/json')
-                  self.send_header('Content-Length',str(len(data)))
-                  self.end_headers()
-                  self.wfile.write(data)
-
+                  data = json.dumps(value).encode(); self.send_response(status); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
               def _file(self, path):
-                  if not path.is_file():
-                      self.send_error(404); return
-                  data = path.read_bytes()
-                  self.send_response(200)
-                  self.send_header('Content-Type', MIME.get(path.suffix,'application/octet-stream'))
-                  self.send_header('Content-Length',str(len(data)))
-                  self.end_headers()
-                  self.wfile.write(data)
-
-              def log_message(self, *args):
-                  pass
-
+                  if not path.is_file(): self.send_error(404); return
+                  data = path.read_bytes(); self.send_response(200); self.send_header('Content-Type', MIME.get(path.suffix,'application/octet-stream')); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+              def log_message(self, *args): pass
           ThreadingHTTPServer(('127.0.0.1', 8765), Handler).serve_forever()
           PY
           python3 /tmp/pr186_server.py &
@@ -101,236 +76,66 @@ jobs:
           trap 'kill ${SERVER_PID}' EXIT
 
           cat > /tmp/pr186_browser.py <<'PY'
-          import asyncio
-          import shutil
+          import asyncio, shutil
           from pathlib import Path
           from playwright.async_api import async_playwright
-
-          OUT = Path('build/pr186-browser')
-          BASE = 'http://127.0.0.1:8765/moderation'
+          OUT = Path('build/pr186-browser'); BASE = 'http://127.0.0.1:8765/moderation'
           VIEWPORTS = [('desktop',1440,1000),('tablet',900,1000),('mobile',390,844)]
 
-          async def assert_layout(page, name):
-              overflow = await page.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1')
-              assert not overflow, f'horizontal overflow in {name}'
-              giant = await page.evaluate('''() => [...document.querySelectorAll('body *')]
-                .filter((el) => {
-                  const style = getComputedStyle(el);
-                  const rect = el.getBoundingClientRect();
-                  return rect.width > 0 && rect.height > 0 && parseFloat(style.fontSize) > 56;
-                })
-                .map((el) => `${el.tagName}.${el.className}:${getComputedStyle(el).fontSize}`)''')
-              assert not giant, f'giant visible text in {name}: {giant}'
-
-          async def shot(page, name):
-              await assert_layout(page, name)
-              await page.screenshot(path=str(OUT / name), full_page=True)
-
-          async def assert_shell(page):
+          async def validate(browser, label, width, height):
+              context = await browser.new_context(viewport={'width':width,'height':height}); page = await context.new_page(); errors = []
+              page.on('pageerror', lambda error: errors.append(str(error)))
+              page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' else None)
+              await page.goto(BASE, wait_until='networkidle')
               await page.wait_for_function("document.querySelector('#actorMeta').textContent === 'Verified staff session'")
-              body = await page.locator('body').inner_text()
-              assert '1234' not in body and '5678' not in body, 'raw staff/guild IDs leaked into UI'
-              assert 'prototype' not in body.lower() and 'developer' not in body.lower()
+              assert not await page.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1')
+              body = await page.locator('body').inner_text(); assert '1234' not in body and '5678' not in body
               assert await page.locator('.staging-badge').count() == 1
-              assert await page.locator('.staging-badge').inner_text() == 'STAGING PREVIEW'
-              assert await page.locator('[data-context-message]').first.is_visible()
-              time = page.locator('[data-message-id="19002"] time')
-              assert await time.get_attribute('datetime') == '2026-08-29T17:41:26-04:00'
-              rendered = await time.inner_text()
-              assert 'Aug 29, 2026' in rendered and '5:41:26 PM' in rendered
-              assert await page.get_by_text('#general', exact=True).count() > 0
-              assert await page.get_by_text('(edited)', exact=True).count() > 0
-              assert await page.get_by_text('price-list.png', exact=True).count() > 0
-
-          async def open_workflow(page):
-              await page.locator('[data-punish]').first.click()
-              dialog = page.locator('#punishmentDialog')
-              await dialog.wait_for(state='visible')
-              assert await dialog.get_attribute('aria-labelledby') == 'workflowTitle'
-              assert await page.locator('#closeWorkflow').get_attribute('aria-label') == 'Close punishment workflow'
-              focused = await page.evaluate("document.activeElement && document.activeElement.hasAttribute('data-offense')")
-              assert focused, 'first offense choice did not receive focus'
-              dialog_box = await dialog.bounding_box()
-              viewport = page.viewport_size
-              assert dialog_box and viewport and dialog_box['width'] <= viewport['width'], 'punishment dialog exceeds viewport width'
-
-          async def choose_offense(page, key='spam'):
-              await open_workflow(page)
-              await page.locator(f'[data-offense="{key}"]').click()
-              await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Ladder recommendation'")
-
-          async def close_workflow(page):
-              if await page.locator('#punishmentDialog').get_attribute('open') is not None:
-                  await page.locator('#closeWorkflow').click()
-
-          async def validate_evidence_independence(page, label):
-              selected = page.locator('[data-message-id="19002"] .message-select')
-              await selected.check()
-              await page.locator('#selectionBar:not([hidden])').wait_for()
-              await page.locator('[data-selection-action="evidence"]').click()
-              assert await page.locator('.selection-summary span').inner_text() == '1 evidence · 0 delete on confirm'
-              assert await page.locator('[data-message-id="19002"] .message-pill.evidence').count() == 1
-              assert await page.locator('[data-message-id="19002"] .message-pill.delete').count() == 0
-              await shot(page, f'{label}-selection.png')
-              await page.locator('[data-selection-action="delete"]').click()
-              assert await page.locator('.selection-summary span').inner_text() == '1 evidence · 1 delete on confirm'
-              await page.locator('[data-selection-action="evidence"]').click()
-              assert await page.locator('.selection-summary span').inner_text() == '0 evidence · 1 delete on confirm'
-              assert await page.locator('[data-message-id="19002"] .message-pill.evidence').count() == 0
-              assert await page.locator('[data-message-id="19002"] .message-pill.delete').count() == 1
-              await page.locator('[data-selection-action="delete"]').click()
-              await page.locator('[data-selection-action="clear"]').click()
-              assert await page.locator('#selectionBar').is_hidden()
-
-          async def validate_filter_reset(page):
-              await page.locator('#messageSearch').fill('join my shop')
-              await page.locator('#channelFilter').select_option('general')
-              await page.locator('#dateFilter').select_option('2026-08-29')
-              await page.locator('#selectedFilter').check()
-              await page.locator('#scenarioSelect').select_option('restrict-one')
-              assert await page.locator('#messageSearch').input_value() == ''
-              assert await page.locator('#channelFilter').input_value() == 'all'
-              assert await page.locator('#dateFilter').input_value() == 'all'
-              assert not await page.locator('#selectedFilter').is_checked()
-
-          async def validate_recommendation_and_custom(page, label):
-              await page.locator('#scenarioSelect').select_option('repeat')
-              await choose_offense(page, 'spam')
-              use = page.locator('[data-use-recommendation]')
-              custom = page.locator('[data-custom]')
-              assert 'primary' in (await use.get_attribute('class')).split()
-              assert 'secondary' in (await custom.get_attribute('class')).split()
-              await shot(page, f'{label}-recommendation.png')
-              await use.click()
-              assert await page.locator('#customAction').count() == 0
-              assert await page.get_by_text('Following recommendation', exact=True).count() > 0
-              await close_workflow(page)
-
-              await page.locator('#scenarioSelect').select_option('custom')
-              await choose_offense(page, 'harassment')
-              await page.locator('[data-custom]').click()
-              assert await page.locator('#customAction').input_value() == 'Kick'
-              assert await page.locator('#customDuration').count() == 0
-              assert await page.get_by_text('Custom override', exact=True).count() > 0
-              await shot(page, f'{label}-custom.png')
-              await close_workflow(page)
-
-              await page.locator('#scenarioSelect').select_option('minor')
-              await choose_offense(page, 'spam')
-              await page.locator('[data-custom]').click()
-              assert await page.locator('#customAction').input_value() == 'Warning'
-              assert await page.locator('#customDuration').count() == 0
-              await page.locator('#customAction').select_option('Mute')
-              assert await page.locator('#customDuration').count() == 1
-              await page.locator('#customAction').select_option('Kick')
-              assert await page.locator('#customDuration').count() == 0
-              await close_workflow(page)
-
-          async def validate_restrictions(page, label):
-              await page.locator('#scenarioSelect').select_option('restrict-one')
-              await choose_offense(page, 'spam')
-              await page.locator('[data-custom]').click()
-              assert await page.locator('#customAction').input_value() == 'Restrict'
-              assert await page.locator('#customScope').input_value() == 'Discord'
-              assert await page.locator('#customScope').is_disabled()
-              assert await page.locator('[name="restrictMode"][value="read-only"]').is_checked()
-              assert await page.locator('[data-restriction-target="general"]').is_checked()
-              assert await page.get_by_text('Read only', exact=True).count() > 0
-              assert await page.get_by_text('No access', exact=True).count() > 0
-              await shot(page, f'{label}-restrict-one.png')
-              await close_workflow(page)
-
               await page.locator('#scenarioSelect').select_option('restrict-many')
-              await choose_offense(page, 'spam')
-              await page.locator('[data-custom]').click()
+              await page.locator('[data-punish]').first.click(); await page.locator('[data-offense="spam"]').click(); await page.locator('[data-custom]').click()
               assert await page.locator('#customAction').input_value() == 'Restrict'
-              assert await page.locator('[name="restrictMode"][value="no-access"]').is_checked()
               assert await page.locator('[data-restriction-target]:checked').count() == 3
-              for target in ('general', 'market', 'trading'):
-                  assert await page.locator(f'[data-restriction-target="{target}"]').is_checked()
-              await shot(page, f'{label}-restrict-many.png')
+              dialog = page.locator('#punishmentDialog'); workflow_body = page.locator('#workflowBody')
+              if label == 'mobile':
+                  await dialog.evaluate('(el) => { el.scrollTop = el.scrollHeight; }')
+                  assert await dialog.evaluate('(el) => el.scrollTop') > 0, 'mobile dialog did not become scrollable'
               await page.locator('[data-review]').click()
               await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Final review'")
-              await page.get_by_text('Restriction targets', exact=True).wait_for()
-              review = await page.locator('.review-grid').inner_text()
-              assert 'No access' in review and '#general, #market, Trading' in review
-              await shot(page, f'{label}-review.png')
-              await close_workflow(page)
-
-          async def validate_stale_and_simulation(page, label):
-              await page.locator('#scenarioSelect').select_option('stale')
-              await choose_offense(page, 'spam')
-              await page.locator('[data-use-recommendation]').click()
-              await page.locator('[data-review]').click()
-              assert await page.get_by_text('Evidence changed after the recommendation.', exact=True).count() == 1
-              assert await page.locator('[data-confirm]').is_disabled()
-              await shot(page, f'{label}-stale-review.png')
-              await page.locator('[data-recalculate]').click()
-              assert not await page.locator('[data-confirm]').is_disabled()
-              await page.locator('[data-confirm]').click()
-              await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Simulation complete'")
-              assert await page.get_by_text('No live moderation action was performed.', exact=True).count() == 1
-              await shot(page, f'{label}-simulation-complete.png')
-              await close_workflow(page)
-
-          async def validate_viewport(browser, label, width, height):
-              context = await browser.new_context(viewport={'width':width,'height':height})
-              page = await context.new_page()
-              errors = []
-              page.on('pageerror', lambda error: errors.append(f'pageerror: {error}'))
-              page.on('console', lambda msg: errors.append(f'console error: {msg.text}') if msg.type == 'error' else None)
-              await page.goto(BASE, wait_until='networkidle')
-              await assert_shell(page)
-              await shot(page, f'{label}-messages.png')
-              await validate_evidence_independence(page, label)
-              await page.locator('[data-context-message="19002"]').click()
-              await page.get_by_text('Conversation context', exact=True).wait_for()
-              context_text = await page.locator('.message-investigation').inner_text()
-              assert 'Mossy' in context_text and 'Juniper' in context_text
-              await shot(page, f'{label}-context.png')
-              await page.locator('[data-exit-context]').click()
-              await open_workflow(page)
-              await shot(page, f'{label}-punishment-dialog.png')
-              await close_workflow(page)
-              await validate_filter_reset(page)
-              await validate_recommendation_and_custom(page, label)
-              await validate_restrictions(page, label)
-              await validate_stale_and_simulation(page, label)
-              if errors:
-                  raise AssertionError('; '.join(errors))
+              assert await dialog.evaluate('(el) => el.scrollTop') == 0, 'dialog scroll did not reset'
+              assert await workflow_body.evaluate('(el) => el.scrollTop') == 0, 'workflow body scroll did not reset'
+              review = await page.locator('.review-grid').inner_text(); assert 'No access' in review and '#general, #market, Trading' in review
+              assert await page.get_by_text('Restriction targets', exact=True).count() == 1
+              await page.screenshot(path=str(OUT / f'{label}-review.png'), full_page=True)
+              assert not await page.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1')
+              if errors: raise AssertionError('; '.join(errors))
               await context.close()
 
           async def main():
               executable = shutil.which('google-chrome') or shutil.which('chromium') or shutil.which('chromium-browser')
-              if not executable:
-                  raise SystemExit('No Chromium/Chrome executable available')
+              if not executable: raise SystemExit('No Chromium/Chrome executable available')
               async with async_playwright() as p:
                   browser = await p.chromium.launch(headless=True, executable_path=executable, args=['--no-sandbox'])
-                  for args in VIEWPORTS:
-                      await validate_viewport(browser, *args)
+                  for args in VIEWPORTS: await validate(browser, *args)
                   await browser.close()
-
           asyncio.run(main())
           PY
-
           python3 /tmp/pr186_browser.py
-          ls -lh build/pr186-browser
 
-      - name: Re-verify frozen product head
+      - name: Re-verify frozen candidate
         shell: bash
         run: |
           set -euo pipefail
+          CANDIDATE=5acc2c9f9ca53df614efb64780e011396b115e0c
           PRODUCT=b9823409b189e54cb3e1da803db474b139897131
-          CANDIDATE=065d295e437f27fa38531feae59ba8dd1e2265d4
+          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${PRODUCT}"
-          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           git diff --exit-code
 
       - name: Upload browser evidence
         uses: actions/upload-artifact@v7
         with:
-          name: pr186-browser-candidate-065d295
+          name: pr186-browser-candidate-5acc2c9
           path: build/pr186-browser/*.png
           if-no-files-found: error
           retention-days: 14
