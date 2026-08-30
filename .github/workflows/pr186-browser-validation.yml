@@ -17,16 +17,17 @@ jobs:
       - name: Check out exact product candidate
         uses: actions/checkout@v6
         with:
-          ref: b9823409b189e54cb3e1da803db474b139897131
+          ref: 6373b593e418402b4c7f59f9f560c516ca22e982
 
       - name: Verify exact source
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
+          EXPECTED=6373b593e418402b4c7f59f9f560c516ca22e982
+          PRODUCT=b9823409b189e54cb3e1da803db474b139897131
           test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "${EXPECTED}"
+          test "${REMOTE}" = "${PRODUCT}"
           git diff --exit-code
           git diff --check
           node --check staff-bot/src/main/resources/moderation-preview/model.js
@@ -248,8 +249,13 @@ jobs:
               for target in ('general', 'market', 'trading'):
                   assert await page.locator(f'[data-restriction-target="{target}"]').is_checked()
               await shot(page, f'{label}-restrict-many.png')
+              workflow_body = page.locator('#workflowBody')
+              if label == 'mobile':
+                  await workflow_body.evaluate('(el) => { el.scrollTop = el.scrollHeight; }')
+                  assert await workflow_body.evaluate('(el) => el.scrollTop') > 0
               await page.locator('[data-review]').click()
               await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Final review'")
+              assert await workflow_body.evaluate('(el) => el.scrollTop') == 0
               await page.get_by_text('Restriction targets', exact=True).wait_for()
               review = await page.locator('.review-grid').inner_text()
               assert 'No access' in review and '#general, #market, Trading' in review
@@ -319,15 +325,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          PRODUCT=b9823409b189e54cb3e1da803db474b139897131
+          CANDIDATE=6373b593e418402b4c7f59f9f560c516ca22e982
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "b9823409b189e54cb3e1da803db474b139897131"
-          test "$(git rev-parse HEAD)" = "b9823409b189e54cb3e1da803db474b139897131"
+          test "${REMOTE}" = "${PRODUCT}"
+          test "$(git rev-parse HEAD)" = "${CANDIDATE}"
           git diff --exit-code
 
       - name: Upload browser evidence
         uses: actions/upload-artifact@v7
         with:
-          name: pr186-browser-b982340
+          name: pr186-browser-candidate-6373b59
           path: build/pr186-browser/*.png
           if-no-files-found: error
           retention-days: 14
