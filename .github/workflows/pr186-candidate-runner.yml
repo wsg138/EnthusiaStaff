@@ -6,49 +6,38 @@ on:
       - "diagnostic/pr186-codacy-remaining-20260829"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  validate-and-push:
-    name: Validate and publish one repair commit
+  validate:
+    name: Validate exact PR186 candidate
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Check out frozen product head
+      - name: Check out exact product head
         uses: actions/checkout@v4
         with:
-          ref: owner/staging-web-moderation-console
+          ref: 9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
           fetch-depth: 0
 
-      - name: Verify frozen product head
+      - name: Verify frozen exact head and source shape
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=baf423d6d2fafa56a2034976927fad67b9a7ead1
+          EXPECTED=9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
           test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
-
-      - name: Apply focused static-analysis repairs
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin diagnostic/pr186-codacy-remaining-20260829
-          git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-static-repair.py" > /tmp/pr186-static-repair.py
-          python /tmp/pr186-static-repair.py
-
-      - name: Verify focused source shape
-        shell: bash
-        run: |
-          set -euo pipefail
+          git diff --exit-code
+          git diff --check
           node --check staff-bot/src/main/resources/moderation-preview/model.js
           node --check staff-bot/src/main/resources/moderation-preview/app.js
           node --check staff-bot/src/main/resources/moderation-preview/workflow.js
+          node --check staff-bot/src/main/resources/moderation-preview/review.js
           grep -F "new InetSocketAddress(IPV4_LOOPBACK, parsed.port())" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
           ! grep -F "catch (Throwable" staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java
           ! grep -F "server = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
           ! grep -F "executor = null" staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java
-          git diff --check
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -63,29 +52,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x gradlew
           ./gradlew clean build jacocoAggregateReport runtimeJars \
             --no-daemon \
             --no-build-cache \
             --no-configuration-cache \
             --console=plain
 
-      - name: Publish one product repair commit
+      - name: Re-verify exact product head stayed frozen
         shell: bash
         run: |
           set -euo pipefail
-          EXPECTED=baf423d6d2fafa56a2034976927fad67b9a7ead1
+          EXPECTED=9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
           test "${REMOTE}" = "${EXPECTED}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntime.java \
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebRuntimeTest.java \
-            staff-bot/src/main/resources/moderation-preview/app.js \
-            staff-bot/src/main/resources/moderation-preview/model.js \
-            staff-bot/src/main/resources/moderation-preview/workflow.js
-          git diff --cached --check
-          git commit -m "Repair PR186 hosted static-analysis findings"
-          git push origin HEAD:refs/heads/owner/staging-web-moderation-console
+          git diff --exit-code
