@@ -121,6 +121,8 @@ function replaceChildrenOf(parent, ...children) {
   const fragment = document.createDocumentFragment();
   appendChildren(fragment, children);
   parent.replaceChildren(fragment);
+  parent.scrollTop = 0;
+  parent.scrollLeft = 0;
 }
 
 function textNode(tag, className, text) {
