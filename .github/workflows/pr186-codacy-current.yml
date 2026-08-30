@@ -1,0 +1,53 @@
+name: PR186 current Codacy diagnostics
+
+on:
+  push:
+    branches:
+      - "diagnostic/pr186-browser-final-20260830"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Summarize current PR findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Query public Codacy PR findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/186/issues?limit=100' \
+            -H 'Accept: application/json' \
+            -o /tmp/codacy.json
+          echo 'ADDED FINDINGS'
+          jq -r '
+            [.data[] | select(.deltaType == "Added") | {
+              pattern: .commitIssue.patternInfo.id,
+              level: .commitIssue.patternInfo.level,
+              file: .commitIssue.filePath,
+              message: .commitIssue.message,
+              line: .commitIssue.line
+            }]
+            | sort_by(.pattern, .file, .line)
+            | .[]
+            | [.pattern, .level, .file, (.line|tostring), (.message // "")]
+            | @tsv
+          ' /tmp/codacy.json
+          echo 'GROUPED'
+          jq -r '
+            [.data[] | select(.deltaType == "Added") | {
+              pattern: .commitIssue.patternInfo.id,
+              level: .commitIssue.patternInfo.level,
+              file: .commitIssue.filePath
+            }]
+            | sort_by(.pattern, .file)
+            | group_by(.pattern)
+            | .[]
+            | [.[0].pattern, .[0].level, (length|tostring), ([.[].file] | unique | join(","))]
+            | @tsv
+          ' /tmp/codacy.json
+          echo 'TOTAL'
+          jq '[.data[] | select(.deltaType == "Added")] | length' /tmp/codacy.json
