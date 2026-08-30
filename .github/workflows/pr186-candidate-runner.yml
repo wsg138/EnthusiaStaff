@@ -34,10 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin diagnostic/pr186-codacy-remaining-20260829
-          git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/workflows/pr186-static-repair.yml" \
-            | awk 'BEGIN{capture=0} /^          from pathlib import Path$/ {capture=1} /^      - name: Verify focused source shape$/ {capture=0} capture {sub(/^          /,""); print}' \
-            > /tmp/pr186-static-repair.py
-          test -s /tmp/pr186-static-repair.py
+          git show "origin/diagnostic/pr186-codacy-remaining-20260829:.github/pr186-static-repair.py" > /tmp/pr186-static-repair.py
           python /tmp/pr186-static-repair.py
 
       - name: Verify focused source shape
