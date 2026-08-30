@@ -135,11 +135,15 @@ jobs:
 
           async def open_workflow(page):
               await page.locator('[data-punish]').first.click()
-              await page.locator('#punishmentDialog').wait_for(state='visible')
-              assert await page.locator('#punishmentDialog').get_attribute('aria-labelledby') == 'workflowTitle'
+              dialog = page.locator('#punishmentDialog')
+              await dialog.wait_for(state='visible')
+              assert await dialog.get_attribute('aria-labelledby') == 'workflowTitle'
               assert await page.locator('#closeWorkflow').get_attribute('aria-label') == 'Close punishment workflow'
               focused = await page.evaluate("document.activeElement && document.activeElement.hasAttribute('data-offense')")
               assert focused, 'first offense choice did not receive focus'
+              dialog_box = await dialog.bounding_box()
+              viewport = page.viewport_size
+              assert dialog_box and viewport and dialog_box['width'] <= viewport['width'], 'punishment dialog exceeds viewport width'
 
           async def choose_offense(page, key='spam'):
               await open_workflow(page)
@@ -256,7 +260,8 @@ jobs:
               await page.locator('[data-recalculate]').click()
               assert not await page.locator('[data-confirm]').is_disabled()
               await page.locator('[data-confirm]').click()
-              await page.get_by_text('Simulation complete', exact=True).wait_for()
+              await page.locator('#workflowTitle').wait_for()
+              assert await page.locator('#workflowTitle').inner_text() == 'Simulation complete'
               assert await page.get_by_text('No live moderation action was performed.', exact=True).count() == 1
               await shot(page, f'{label}-simulation-complete.png')
               await close_workflow(page)
@@ -287,11 +292,6 @@ jobs:
               await validate_recommendation_and_custom(page, label)
               await validate_restrictions(page, label)
               await validate_stale_and_simulation(page, label)
-
-              if label == 'mobile':
-                  dialog_box = await page.locator('#punishmentDialog').bounding_box()
-                  if dialog_box:
-                      assert dialog_box['width'] <= width
 
               if errors:
                   raise AssertionError('; '.join(errors))
