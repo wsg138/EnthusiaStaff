@@ -17,15 +17,16 @@ jobs:
       - name: Check out exact product candidate
         uses: actions/checkout@v6
         with:
-          ref: 9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb
+          ref: b9823409b189e54cb3e1da803db474b139897131
 
       - name: Verify exact source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb"
+          EXPECTED=b9823409b189e54cb3e1da803db474b139897131
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb"
+          test "${REMOTE}" = "${EXPECTED}"
           git diff --exit-code
           git diff --check
           node --check staff-bot/src/main/resources/moderation-preview/model.js
@@ -60,12 +61,10 @@ jobs:
                       self._file(ROOT / 'index.html'); return
                   if self.path.startswith('/assets/'):
                       self._file(ROOT / self.path.removeprefix('/assets/')); return
-                  print(f'unhandled GET {self.path}', flush=True)
                   self.send_error(404)
 
               def do_POST(self):
                   if self.path != '/api/simulate':
-                      print(f'unhandled POST {self.path}', flush=True)
                       self.send_error(404); return
                   length = int(self.headers.get('Content-Length', '0'))
                   self.rfile.read(length)
@@ -110,14 +109,23 @@ jobs:
           BASE = 'http://127.0.0.1:8765/moderation'
           VIEWPORTS = [('desktop',1440,1000),('tablet',900,1000),('mobile',390,844)]
 
-          async def shot(page, name):
-              await page.screenshot(path=str(OUT / name), full_page=True)
+          async def assert_layout(page, name):
               overflow = await page.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1')
-              if overflow:
-                  raise AssertionError(f'horizontal overflow in {name}')
+              assert not overflow, f'horizontal overflow in {name}'
+              giant = await page.evaluate('''() => [...document.querySelectorAll('body *')]
+                .filter((el) => {
+                  const style = getComputedStyle(el);
+                  const rect = el.getBoundingClientRect();
+                  return rect.width > 0 && rect.height > 0 && parseFloat(style.fontSize) > 56;
+                })
+                .map((el) => `${el.tagName}.${el.className}:${getComputedStyle(el).fontSize}`)''')
+              assert not giant, f'giant visible text in {name}: {giant}'
+
+          async def shot(page, name):
+              await assert_layout(page, name)
+              await page.screenshot(path=str(OUT / name), full_page=True)
 
           async def assert_shell(page):
-              await page.locator('#actorMeta').wait_for(state='attached')
               await page.wait_for_function("document.querySelector('#actorMeta').textContent === 'Verified staff session'")
               body = await page.locator('body').inner_text()
               assert '1234' not in body and '5678' not in body, 'raw staff/guild IDs leaked into UI'
@@ -148,7 +156,7 @@ jobs:
           async def choose_offense(page, key='spam'):
               await open_workflow(page)
               await page.locator(f'[data-offense="{key}"]').click()
-              assert await page.locator('#workflowTitle').inner_text() == 'Ladder recommendation'
+              await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Ladder recommendation'")
 
           async def close_workflow(page):
               if await page.locator('#punishmentDialog').get_attribute('open') is not None:
@@ -163,7 +171,6 @@ jobs:
               assert await page.locator('[data-message-id="19002"] .message-pill.evidence').count() == 1
               assert await page.locator('[data-message-id="19002"] .message-pill.delete').count() == 0
               await shot(page, f'{label}-selection.png')
-
               await page.locator('[data-selection-action="delete"]').click()
               assert await page.locator('.selection-summary span').inner_text() == '1 evidence · 1 delete on confirm'
               await page.locator('[data-selection-action="evidence"]').click()
@@ -242,7 +249,7 @@ jobs:
                   assert await page.locator(f'[data-restriction-target="{target}"]').is_checked()
               await shot(page, f'{label}-restrict-many.png')
               await page.locator('[data-review]').click()
-              assert await page.locator('#workflowTitle').inner_text() == 'Final review'
+              await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Final review'")
               await page.get_by_text('Restriction targets', exact=True).wait_for()
               review = await page.locator('.review-grid').inner_text()
               assert 'No access' in review and '#general, #market, Trading' in review
@@ -260,8 +267,7 @@ jobs:
               await page.locator('[data-recalculate]').click()
               assert not await page.locator('[data-confirm]').is_disabled()
               await page.locator('[data-confirm]').click()
-              await page.locator('#workflowTitle').wait_for()
-              assert await page.locator('#workflowTitle').inner_text() == 'Simulation complete'
+              await page.wait_for_function("document.querySelector('#workflowTitle').textContent === 'Simulation complete'")
               assert await page.get_by_text('No live moderation action was performed.', exact=True).count() == 1
               await shot(page, f'{label}-simulation-complete.png')
               await close_workflow(page)
@@ -275,7 +281,6 @@ jobs:
               await page.goto(BASE, wait_until='networkidle')
               await assert_shell(page)
               await shot(page, f'{label}-messages.png')
-
               await validate_evidence_independence(page, label)
               await page.locator('[data-context-message="19002"]').click()
               await page.get_by_text('Conversation context', exact=True).wait_for()
@@ -283,16 +288,13 @@ jobs:
               assert 'Mossy' in context_text and 'Juniper' in context_text
               await shot(page, f'{label}-context.png')
               await page.locator('[data-exit-context]').click()
-
               await open_workflow(page)
               await shot(page, f'{label}-punishment-dialog.png')
               await close_workflow(page)
-
               await validate_filter_reset(page)
               await validate_recommendation_and_custom(page, label)
               await validate_restrictions(page, label)
               await validate_stale_and_simulation(page, label)
-
               if errors:
                   raise AssertionError('; '.join(errors))
               await context.close()
@@ -318,14 +320,14 @@ jobs:
         run: |
           set -euo pipefail
           REMOTE="$(git ls-remote origin refs/heads/owner/staging-web-moderation-console | cut -f1)"
-          test "${REMOTE}" = "9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb"
-          test "$(git rev-parse HEAD)" = "9fe224e9ab03fee63ecfa6d249caf1eb2bd4a8cb"
+          test "${REMOTE}" = "b9823409b189e54cb3e1da803db474b139897131"
+          test "$(git rev-parse HEAD)" = "b9823409b189e54cb3e1da803db474b139897131"
           git diff --exit-code
 
       - name: Upload browser evidence
         uses: actions/upload-artifact@v7
         with:
-          name: pr186-browser-validation-9fe224e9
+          name: pr186-browser-b982340
           path: build/pr186-browser/*.png
           if-no-files-found: error
           retention-days: 14
