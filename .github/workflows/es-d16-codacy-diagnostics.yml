@@ -2,17 +2,14 @@ name: ES-D16 Coordinated Repair
 
 on:
   push:
-    branches:
-      - package/es-d16-moderation-read-bridge
-    paths:
-      - ".github/workflows/es-d16-codacy-diagnostics.yml"
+    branches: [package/es-d16-moderation-read-bridge]
+    paths: [".github/workflows/es-d16-codacy-diagnostics.yml"]
 
 permissions:
   contents: write
 
 jobs:
   repair:
-    name: Repair current ES-D16 findings and validate before push
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -20,12 +17,10 @@ jobs:
         with:
           ref: package/es-d16-moderation-read-bridge
           fetch-depth: 0
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -35,42 +30,36 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 <<'PY'
+          import re
           from pathlib import Path
 
-          def replace_once(path, old, new):
-              file = Path(path)
-              text = file.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one replacement, found {count}')
-              file.write_text(text.replace(old, new), encoding='utf-8')
+          def edit(path, transform):
+              p = Path(path)
+              before = p.read_text(encoding='utf-8')
+              after = transform(before)
+              if after == before:
+                  raise SystemExit(f'{path}: transform made no change')
+              p.write_text(after, encoding='utf-8')
 
-          # Java: eliminate null collection result, method-level synchronization, repeated literals,
-          # dynamic regex compilation, and nullable read-server lifecycle state.
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticator.java'
-          replace_once(path, 'import java.util.Objects;\n', 'import java.util.Objects;\nimport java.util.Optional;\n')
-          replace_once(path, '''        byte[] suppliedSignature = decodeSignature(signature);
-          if (suppliedSignature == null) {
-              return Result.MALFORMED;
-          }
-          byte[] expected = sign(canonical(method, path, body, timestamp.raw(), nonce));
-          if (!MessageDigest.isEqual(expected, suppliedSignature)) {
-          ''', '''        Optional<byte[]> suppliedSignature = decodeSignature(signature);
-          if (suppliedSignature.isEmpty()) {
-              return Result.MALFORMED;
-          }
-          byte[] expected = sign(canonical(method, path, body, timestamp.raw(), nonce));
-          if (!MessageDigest.isEqual(expected, suppliedSignature.orElseThrow())) {
-          ''')
-          replace_once(path, '''    private static byte[] decodeSignature(String signature) {
-              try {
-                  byte[] decoded = Base64.getUrlDecoder().decode(signature);
-                  return decoded.length == KEY_BYTES ? decoded : null;
-              } catch (IllegalArgumentException exception) {
-                  return null;
-              }
-          }
-          ''', '''    private static Optional<byte[]> decodeSignature(String signature) {
+          def once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected one literal, found {text.count(old)}')
+              return text.replace(old, new)
+
+          def rx(text, pattern, replacement, label, flags=re.S | re.M):
+              out, count = re.subn(pattern, lambda _: replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one regex match, found {count}')
+              return out
+
+          def authenticator(text):
+              text = once(text, 'import java.util.Objects;\n', 'import java.util.Objects;\nimport java.util.Optional;\n', 'auth import')
+              text = once(text, 'byte[] suppliedSignature = decodeSignature(signature);', 'Optional<byte[]> suppliedSignature = decodeSignature(signature);', 'auth signature type')
+              text = once(text, 'if (suppliedSignature == null) {', 'if (suppliedSignature.isEmpty()) {', 'auth empty')
+              text = once(text, 'MessageDigest.isEqual(expected, suppliedSignature)', 'MessageDigest.isEqual(expected, suppliedSignature.orElseThrow())', 'auth compare')
+              return rx(text,
+                  r'^    private static byte\[\] decodeSignature\(String signature\) \{.*?^    \}\n',
+                  '''    private static Optional<byte[]> decodeSignature(String signature) {
               try {
                   byte[] decoded = Base64.getUrlDecoder().decode(signature);
                   return decoded.length == KEY_BYTES ? Optional.of(decoded) : Optional.empty();
@@ -78,31 +67,19 @@ jobs:
                   return Optional.empty();
               }
           }
-          ''')
+          ''', 'auth decode')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticator.java', authenticator)
 
-          path = 'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticatorTest.java'
-          replace_once(path, '    private static final String PATH = "/v1/moderation/bootstrap";\n', '    private static final String PATH = "/v1/moderation/bootstrap";\n    private static final String POST_METHOD = "POST";\n')
-          file = Path(path)
-          text = file.read_text(encoding='utf-8')
-          text = text.replace('signature(KEY, "POST",', 'signature(KEY, POST_METHOD,')
-          text = text.replace('verify("POST",', 'verify(POST_METHOD,')
-          file.write_text(text, encoding='utf-8')
+          def auth_test(text):
+              text = once(text, '    private static final String PATH = "/v1/moderation/bootstrap";\n', '    private static final String PATH = "/v1/moderation/bootstrap";\n    private static final String POST_METHOD = "POST";\n', 'test constant')
+              text = text.replace('signature(KEY, "POST",', 'signature(KEY, POST_METHOD,')
+              text = text.replace('verify("POST",', 'verify(POST_METHOD,')
+              return text
+          edit('staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticatorTest.java', auth_test)
 
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiRateLimiter.java'
-          replace_once(path, 'final class ModerationReadApiRateLimiter {\n    private final int capacity;\n', 'final class ModerationReadApiRateLimiter {\n    private final Object monitor = new Object();\n    private final int capacity;\n')
-          replace_once(path, '''    synchronized boolean tryAcquire() {
-              Instant now = clock.instant();
-              if (!now.isBefore(windowStart.plus(window))) {
-                  windowStart = now;
-                  used = 0;
-              }
-              if (used >= capacity) {
-                  return false;
-              }
-              used++;
-              return true;
-          }
-          ''', '''    boolean tryAcquire() {
+          def rate_limiter(text):
+              text = once(text, 'final class ModerationReadApiRateLimiter {\n    private final int capacity;\n', 'final class ModerationReadApiRateLimiter {\n    private final Object monitor = new Object();\n    private final int capacity;\n', 'rate lock')
+              return rx(text, r'^    synchronized boolean tryAcquire\(\) \{.*?^    \}\n', '''    boolean tryAcquire() {
               synchronized (monitor) {
                   Instant now = clock.instant();
                   if (!now.isBefore(windowStart.plus(window))) {
@@ -116,24 +93,13 @@ jobs:
                   return true;
               }
           }
-          ''')
+          ''', 'rate method')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiRateLimiter.java', rate_limiter)
 
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadReplayGuard.java'
-          replace_once(path, 'import java.util.Objects;\n', 'import java.util.Objects;\nimport java.util.regex.Pattern;\n')
-          replace_once(path, 'final class ModerationReadReplayGuard {\n    private final int capacity;\n', 'final class ModerationReadReplayGuard {\n    private static final Pattern NONCE = Pattern.compile("[A-Za-z0-9_-]{32,64}");\n\n    private final Object monitor = new Object();\n    private final int capacity;\n')
-          replace_once(path, '''    synchronized boolean claim(String nonce, Instant now) {
-              Objects.requireNonNull(now, "now");
-              if (nonce == null || !nonce.matches("[A-Za-z0-9_-]{32,64}")) {
-                  return false;
-              }
-              prune(now);
-              if (expirations.containsKey(nonce) || expirations.size() >= capacity) {
-                  return false;
-              }
-              expirations.put(nonce, now.plus(ttl));
-              return true;
-          }
-          ''', '''    boolean claim(String nonce, Instant now) {
+          def replay_guard(text):
+              text = once(text, 'import java.util.Objects;\n', 'import java.util.Objects;\nimport java.util.regex.Pattern;\n', 'replay import')
+              text = once(text, 'final class ModerationReadReplayGuard {\n    private final int capacity;\n', 'final class ModerationReadReplayGuard {\n    private static final Pattern NONCE = Pattern.compile("[A-Za-z0-9_-]{32,64}");\n\n    private final Object monitor = new Object();\n    private final int capacity;\n', 'replay fields')
+              return rx(text, r'^    synchronized boolean claim\(String nonce, Instant now\) \{.*?^    \}\n', '''    boolean claim(String nonce, Instant now) {
               Objects.requireNonNull(now, "now");
               if (nonce == null || !NONCE.matcher(nonce).matches()) {
                   return false;
@@ -147,50 +113,25 @@ jobs:
                   return true;
               }
           }
-          ''')
+          ''', 'replay method')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadReplayGuard.java', replay_guard)
 
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadTarget.java'
-          replace_once(path, 'import java.util.OptionalLong;\n', 'import java.util.OptionalLong;\nimport java.util.regex.Pattern;\n')
-          replace_once(path, '''sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {
-              long userId();
-          ''', '''sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {
-              int DISCORD_PARTS = 2;
-              int MESSAGE_PARTS = 4;
-              String DISCORD_KIND = "discord";
-              String MESSAGE_KIND = "message";
-              Pattern SNOWFLAKE = Pattern.compile("[1-9][0-9]{0,19}");
+          def target(text):
+              text = once(text, 'import java.util.OptionalLong;\n', 'import java.util.OptionalLong;\nimport java.util.regex.Pattern;\n', 'target import')
+              text = once(text, 'sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {\n    long userId();', 'sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {\n    int DISCORD_PARTS = 2;\n    int MESSAGE_PARTS = 4;\n    String DISCORD_KIND = "discord";\n    String MESSAGE_KIND = "message";\n    Pattern SNOWFLAKE = Pattern.compile("[1-9][0-9]{0,19}");\n\n    long userId();', 'target constants')
+              text = once(text, 'parts.length == 2 && "discord".equals(parts[0])', 'parts.length == DISCORD_PARTS && DISCORD_KIND.equals(parts[0])', 'target discord')
+              text = once(text, 'parts.length == 4 && "message".equals(parts[0])', 'parts.length == MESSAGE_PARTS && MESSAGE_KIND.equals(parts[0])', 'target message')
+              return once(text, '!value.matches("[1-9][0-9]{0,19}")', '!SNOWFLAKE.matcher(value).matches()', 'target snowflake')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadTarget.java', target)
 
-              long userId();
-          ''')
-          replace_once(path, '        if (parts.length == 2 && "discord".equals(parts[0])) {\n', '        if (parts.length == DISCORD_PARTS && DISCORD_KIND.equals(parts[0])) {\n')
-          replace_once(path, '        if (parts.length == 4 && "message".equals(parts[0])) {\n', '        if (parts.length == MESSAGE_PARTS && MESSAGE_KIND.equals(parts[0])) {\n')
-          replace_once(path, '        if (value == null || !value.matches("[1-9][0-9]{0,19}")) {\n', '        if (value == null || !SNOWFLAKE.matcher(value).matches()) {\n')
+          def api_server(text):
+              text = once(text, '    private static final String BIND_HOST = "127.0.0.1";\n', '    private static final String BIND_HOST = "127.0.0.1";\n    private static final String POST_METHOD = "POST";\n', 'server constant')
+              return once(text, '!"POST".equals(exchange.getRequestMethod())', '!POST_METHOD.equals(exchange.getRequestMethod())', 'server post')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiServer.java', api_server)
 
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiServer.java'
-          replace_once(path, '    private static final String BIND_HOST = "127.0.0.1";\n', '    private static final String BIND_HOST = "127.0.0.1";\n    private static final String POST_METHOD = "POST";\n')
-          replace_once(path, '            if (!"POST".equals(exchange.getRequestMethod())) {\n', '            if (!POST_METHOD.equals(exchange.getRequestMethod())) {\n')
-
-          path = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaModerationUiPreviewListener.java'
-          replace_once(path, '    private ModerationReadApiServer readApiServer;\n', '    private Optional<ModerationReadApiServer> readApiServer = Optional.empty();\n')
-          replace_once(path, '''    private boolean startReadApi(JDA jda) {
-              if (readApiServer != null) {
-                  return true;
-              }
-              if (moderation.isEmpty()) {
-                  return false;
-              }
-              try {
-                  ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
-                  readApiServer = new ModerationReadApiServer(discordBotToken, service);
-                  readApiServer.start();
-                  return true;
-              } catch (java.io.IOException | RuntimeException exception) {
-                  log("moderation_read_api_start_failed", exception);
-                  closeReadApi();
-                  return false;
-              }
-          }
-          ''', '''    private boolean startReadApi(JDA jda) {
+          def listener(text):
+              text = once(text, '    private ModerationReadApiServer readApiServer;\n', '    private Optional<ModerationReadApiServer> readApiServer = Optional.empty();\n', 'listener field')
+              text = rx(text, r'^    private boolean startReadApi\(JDA jda\) \{.*?^    \}\n', '''    private boolean startReadApi(JDA jda) {
               if (readApiServer.isPresent()) {
                   return true;
               }
@@ -207,76 +148,29 @@ jobs:
               }
           }
 
-              private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOException {
-                  ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
-                  ModerationReadApiServer candidate = new ModerationReadApiServer(discordBotToken, service);
-                  try {
-                      candidate.start();
-                      return candidate;
-                  } catch (RuntimeException exception) {
-                      candidate.close();
-                      throw exception;
-                  }
-              }
-          ''')
-          replace_once(path, '''    private void closeReadApi() {
-              if (readApiServer != null) {
-                  readApiServer.close();
-                  readApiServer = null;
+          private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOException {
+              ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
+              ModerationReadApiServer candidate = new ModerationReadApiServer(discordBotToken, service);
+              try {
+                  candidate.start();
+                  return candidate;
+              } catch (RuntimeException exception) {
+                  candidate.close();
+                  throw exception;
               }
           }
-          ''', '''    private void closeReadApi() {
+          ''', 'listener start')
+              return rx(text, r'^    private void closeReadApi\(\) \{.*?^    \}\n', '''    private void closeReadApi() {
               readApiServer.ifPresent(ModerationReadApiServer::close);
               readApiServer = Optional.empty();
           }
-          ''')
+          ''', 'listener close')
+          edit('staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaModerationUiPreviewListener.java', listener)
 
-          # Worker: accept only explicit browser message-filter fields and keep outbound origin fixed.
-          path = 'moderation-web/src/backend.js'
-          replace_once(path, '''export async function proxyModerationRead(env, session, endpoint, browserUrl) {
-              const keyHex = readSigningKey(env);
-              if (!keyHex) return unavailable();
-              const path = endpointPath(endpoint);
-              const body = JSON.stringify(readRequest(session, endpoint, browserUrl));
-          ''', '''export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
-              const keyHex = readSigningKey(env);
-              if (!keyHex) return unavailable();
-              const path = endpointPath(endpoint);
-              const body = JSON.stringify(readRequest(session, endpoint, browserInput));
-          ''')
-          replace_once(path, '''export function browserMessageQuery(url) {
-              const query = {};
-              copySnowflake(url, query, 'channelId', 'channel');
-              copySnowflake(url, query, 'beforeMessageId', 'before');
-              copySnowflake(url, query, 'afterMessageId', 'after');
-              copySnowflake(url, query, 'authorId', 'author');
-              const text = url.searchParams.get('text');
-              if (text !== null) {
-                  if (text.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
-                  query.text = text;
-              }
-              const date = url.searchParams.get('date');
-              if (date !== null) {
-                  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error('invalid date filter');
-                  query.date = date;
-              }
-              const rawLimit = url.searchParams.get('limit');
-              query.limit = rawLimit === null ? 25 : boundedLimit(rawLimit);
-              if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
-              return query;
-          }
-
-          export function readRequest(session, endpoint, browserUrl) {
-              const request = {
-                  actorId: session.actorId,
-                  guildId: session.guildId,
-                  targetKey: session.targetKey,
-                  messages: null
-              };
-              if (endpoint === 'messages') request.messages = browserMessageQuery(browserUrl);
-              return request;
-          }
-          ''', '''const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
+          def backend(text):
+              text = once(text, 'proxyModerationRead(env, session, endpoint, browserUrl)', 'proxyModerationRead(env, session, endpoint, browserInput = {})', 'backend proxy args')
+              text = once(text, 'readRequest(session, endpoint, browserUrl)', 'readRequest(session, endpoint, browserInput)', 'backend proxy body')
+              text = rx(text, r'^export function browserMessageQuery\(url\) \{.*?^\}\n\n^export function readRequest\(session, endpoint, browserUrl\) \{.*?^\}\n', '''const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
 
           export function browserMessageQuery(input) {
               if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid message filters');
@@ -293,15 +187,11 @@ jobs:
               if (afterMessageId !== null) query.afterMessageId = afterMessageId;
               if (authorId !== null) query.authorId = authorId;
               if (input.text !== undefined) {
-                  if (typeof input.text !== 'string' || input.text.length > MAX_FILTER_TEXT) {
-                      throw new Error('invalid message text filter');
-                  }
+                  if (typeof input.text !== 'string' || input.text.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
                   query.text = input.text;
               }
               if (input.date !== undefined) {
-                  if (typeof input.date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date)) {
-                      throw new Error('invalid date filter');
-                  }
+                  if (typeof input.date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date)) throw new Error('invalid date filter');
                   query.date = input.date;
               }
               query.limit = input.limit === undefined ? 25 : boundedLimit(String(input.limit));
@@ -310,44 +200,23 @@ jobs:
           }
 
           export function readRequest(session, endpoint, browserInput = {}) {
-              const request = {
-                  actorId: session.actorId,
-                  guildId: session.guildId,
-                  targetKey: session.targetKey,
-                  messages: null
-              };
+              const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
               if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
               return request;
           }
-          ''')
-          replace_once(path, '''function copySnowflake(url, target, field, parameter) {
-              const value = url.searchParams.get(parameter);
-              if (value === null) return;
-              if (!/^[1-9][0-9]{0,19}$/.test(value)) throw new Error(`invalid ${parameter} filter`);
-              target[field] = value;
-          }
-          ''', '''function snowflakeFilter(value, parameter) {
+          ''', 'backend query')
+              return rx(text, r'^function copySnowflake\(url, target, field, parameter\) \{.*?^\}\n', '''function snowflakeFilter(value, parameter) {
               if (value === undefined || value === null) return null;
-              if (typeof value !== 'string' || !/^[1-9][0-9]{0,19}$/.test(value)) {
-                  throw new Error(`invalid ${parameter} filter`);
-              }
+              if (typeof value !== 'string' || !/^[1-9][0-9]{0,19}$/.test(value)) throw new Error(`invalid ${parameter} filter`);
               return value;
           }
-          ''')
+          ''', 'backend snowflake')
+          edit('moderation-web/src/backend.js', backend)
 
-          path = 'moderation-web/src/index.js'
-          replace_once(path, "  if (url.pathname === '/api/bootstrap') return handleRead(request, env, url, 'bootstrap');\n  if (url.pathname === '/api/messages') return handleRead(request, env, url, 'messages');\n", "  if (url.pathname === '/api/bootstrap') return handleRead(request, env, 'bootstrap');\n  if (url.pathname === '/api/messages') return handleRead(request, env, 'messages');\n")
-          replace_once(path, '''async function handleRead(request, env, url, endpoint) {
-              if (request.method !== 'GET') return methodNotAllowed();
-              const session = await currentSession(request, env);
-              if (!session) return textResponse('Session expired.', 401);
-              try {
-                  return await proxyModerationRead(env, session, endpoint, url);
-              } catch {
-                  return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
-              }
-          }
-          ''', '''async function handleRead(request, env, endpoint) {
+          def worker_index(text):
+              text = once(text, "handleRead(request, env, url, 'bootstrap')", "handleRead(request, env, 'bootstrap')", 'index bootstrap')
+              text = once(text, "handleRead(request, env, url, 'messages')", "handleRead(request, env, 'messages')", 'index messages')
+              return rx(text, r'^async function handleRead\(request, env, url, endpoint\) \{.*?^\}\n', '''async function handleRead(request, env, endpoint) {
               const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
               if (request.method !== expectedMethod) return methodNotAllowed();
               const session = await currentSession(request, env);
@@ -365,70 +234,29 @@ jobs:
               const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
               if (!body) return {error: textResponse('Read request is too large.', 413)};
               try {
-                  const value = JSON.parse(new TextDecoder().decode(body));
-                  return {value};
+                  return {value: JSON.parse(new TextDecoder().decode(body))};
               } catch {
                   return {error: textResponse('Read request is invalid.', 400)};
               }
           }
-          ''')
+          ''', 'index read')
+          edit('moderation-web/src/index.js', worker_index)
 
-          path = 'moderation-web/test/backend.test.mjs'
-          replace_once(path, '''  const url = new URL('https://staff-staging.enthusia.info/api/messages?channel=1541286004298752091&before=1541300000000000001&author=1049827163345127424&date=2026-08-31&text=hello&limit=50');
-              assert.deepEqual(browserMessageQuery(url), {
-          ''', '''  const filters = {channel:'1541286004298752091', before:'1541300000000000001', author:'1049827163345127424', date:'2026-08-31', text:'hello', limit:'50'};
-              assert.deepEqual(browserMessageQuery(filters), {
-          ''')
-          replace_once(path, '''  for (const raw of [
-              '?channel=0',
-              '?before=1&after=2',
-              '?author=abc',
-              '?date=August-31',
-              '?limit=51',
-              `?text=${'x'.repeat(201)}`
-            ]) {
-              assert.throws(() => browserMessageQuery(new URL(`https://staff-staging.enthusia.info/api/messages${raw}`)));
-            }
-          ''', '''  for (const filters of [
-              {channel:'0'},
-              {before:'1', after:'2'},
-              {author:'abc'},
-              {date:'August-31'},
-              {limit:'51'},
-              {text:'x'.repeat(201)},
-              {target:'discord:999'},
-              {actor:'999'},
-              {guild:'999'}
+          def backend_test(text):
+              text = rx(text, r"  const url = new URL\('https://staff-staging\.enthusia\.info/api/messages\?.*?'\);\n  assert\.deepEqual\(browserMessageQuery\(url\),", "  const filters = {channel:'1541286004298752091', before:'1541300000000000001', author:'1049827163345127424', date:'2026-08-31', text:'hello', limit:'50'};\n  assert.deepEqual(browserMessageQuery(filters),", 'test valid')
+              text = rx(text, r"  for \(const raw of \[.*?^  \}\n", '''  for (const filters of [
+              {channel:'0'}, {before:'1', after:'2'}, {author:'abc'}, {date:'August-31'},
+              {limit:'51'}, {text:'x'.repeat(201)}, {target:'discord:999'}, {actor:'999'}, {guild:'999'}
             ]) {
               assert.throws(() => browserMessageQuery(filters));
             }
-          ''')
-          replace_once(path, '''  const browser = new URL('https://staff-staging.enthusia.info/api/messages?target=discord:999&actor=999&guild=999&channel=1541286004298752091');
+          ''', 'test rejects')
+              text = rx(text, r"  const browser = new URL\('https://staff-staging\.enthusia\.info/api/messages\?.*?'\);", "  const browser = {channel:'1541286004298752091'};", 'test bind')
+              return once(text, "await proxyModerationRead(env, session, 'bootstrap', new URL('https://staff-staging.enthusia.info/api/bootstrap'));", "await proxyModerationRead(env, session, 'bootstrap');", 'test fixed origin')
+          edit('moderation-web/test/backend.test.mjs', backend_test)
 
-              assert.deepEqual(readRequest(session, 'messages', browser), {
-          ''', '''  const browser = {channel:'1541286004298752091'};
-
-              assert.deepEqual(readRequest(session, 'messages', browser), {
-          ''')
-          replace_once(path, "    await proxyModerationRead(env, session, 'bootstrap', new URL('https://staff-staging.enthusia.info/api/bootstrap'));\n", "    await proxyModerationRead(env, session, 'bootstrap');\n")
-
-          # UI: remove duplicate history mapper, simplify hotspots, and send message filters to a fixed literal endpoint.
-          path = 'staff-bot/src/main/resources/moderation-preview/real-data.js'
-          replace_once(path, '''function applyLiveBootstrap(payload) {
-              liveModeration.bootstrap = payload;
-              liveModeration.cases = Array.isArray(payload.cases) ? payload.cases : [];
-              liveModeration.notes = Array.isArray(payload.notes) ? payload.notes : [];
-              liveModeration.sanctions = Array.isArray(payload.activeSanctions) ? payload.activeSanctions : [];
-              liveModeration.accounts = Array.isArray(payload.linkedAccounts) ? payload.linkedAccounts : [];
-              liveModeration.channels = Array.isArray(payload.channels) ? payload.channels : [];
-              applyIdentity(payload.identity || {});
-              applyRestrictionTargets();
-              state.history = (Array.isArray(payload.history) ? payload.history : []).map(mapHistoryRow);
-              replaceMessagePage(payload.messages || {});
-              state.contextId = payload.centeredMessageId || null;
-              renderAll();
-          }
-          ''', '''function asArray(value) {
+          def real_data(text):
+              text = rx(text, r'^function applyLiveBootstrap\(payload\) \{.*?^\}\n', '''function asArray(value) {
               return Array.isArray(value) ? value : [];
           }
 
@@ -466,31 +294,8 @@ jobs:
               liveModeration.accounts = asArray(payload.linkedAccounts);
               liveModeration.channels = asArray(payload.channels);
           }
-          ''')
-          replace_once(path, '''function applyIdentity(source) {
-              const main = liveModeration.accounts.find((account) => account.main) || null;
-              const alts = liveModeration.accounts.filter((account) => !account.main).map((account) => ({
-                  name: account.username || account.playerId,
-                  platform: friendlyPlatform(account.platform),
-                  status: 'Linked',
-                  playerId: account.playerId
-              }));
-              Object.assign(identity, {
-                  displayName: source.displayName || source.serverName || source.globalName || source.username || source.discordId || 'Unknown Discord user',
-                  username: source.username || 'unknown',
-                  discordId: source.discordId || 'Unavailable',
-                  minecraft: source.minecraftMain || (main ? (main.username || main.playerId) : 'No linked Minecraft main'),
-                  minecraftUuid: main?.playerId || 'Unavailable',
-                  alts,
-                  status: source.targetStatus || 'Unknown',
-                  statusDetail: liveModeration.sanctions.length ? `${liveModeration.sanctions.length} active` : 'No active sanctions',
-                  avatarUrl: source.avatarUrl || '',
-                  linkState: source.linkState || 'Unknown',
-                  globalName: source.globalName || '',
-                  serverName: source.serverName || ''
-              });
-          }
-          ''', '''function applyIdentity(source) {
+          ''', 'real bootstrap')
+              text = rx(text, r'^function applyIdentity\(source\) \{.*?^\}\n', '''function applyIdentity(source) {
               const main = liveModeration.accounts.find((account) => account.main);
               const alts = liveModeration.accounts.filter((account) => !account.main).map(mapLinkedAlt);
               Object.assign(identity, {
@@ -498,24 +303,15 @@ jobs:
                   username: firstText(source.username, 'unknown'),
                   discordId: firstText(source.discordId, 'Unavailable'),
                   minecraft: firstText(source.minecraftMain, linkedAccountName(main), 'No linked Minecraft main'),
-                  minecraftUuid: firstText(main?.playerId, 'Unavailable'),
-                  alts,
-                  status: firstText(source.targetStatus, 'Unknown'),
-                  statusDetail: sanctionStatusDetail(),
-                  avatarUrl: optionalText(source.avatarUrl),
-                  linkState: firstText(source.linkState, 'Unknown'),
-                  globalName: optionalText(source.globalName),
-                  serverName: optionalText(source.serverName)
+                  minecraftUuid: firstText(main?.playerId, 'Unavailable'), alts,
+                  status: firstText(source.targetStatus, 'Unknown'), statusDetail: sanctionStatusDetail(),
+                  avatarUrl: optionalText(source.avatarUrl), linkState: firstText(source.linkState, 'Unknown'),
+                  globalName: optionalText(source.globalName), serverName: optionalText(source.serverName)
               });
           }
 
           function mapLinkedAlt(account) {
-              return {
-                  name: firstText(account.username, account.playerId),
-                  platform: friendlyPlatform(account.platform),
-                  status: 'Linked',
-                  playerId: account.playerId
-              };
+              return {name:firstText(account.username, account.playerId), platform:friendlyPlatform(account.platform), status:'Linked', playerId:account.playerId};
           }
 
           function linkedAccountName(account) {
@@ -526,221 +322,66 @@ jobs:
               const count = liveModeration.sanctions.length;
               return count > 0 ? `${count} active` : 'No active sanctions';
           }
-          ''')
-          replace_once(path, "  return String(value).replaceAll('_', ' ').toLowerCase().replace(/\\b\\w/g, (letter) => letter.toUpperCase());\n", "  return String(value).replace(/_/g, ' ').toLowerCase().replace(/\\b\\w/g, (letter) => letter.toUpperCase());\n")
-          replace_once(path, '''function mapHistoryRow(row) {
-              const occurred = row.occurredAt || new Date(0).toISOString();
-              return {
-                  id: row.caseId || row.stableKey,
-                  date: occurred.slice(0, 10),
-                  key: row.exactReasonId || row.sanctionFamily || 'other',
-                  offense: row.reason || row.exactReasonId || row.eventType || 'Moderation event',
-                  action: row.punishmentType || row.eventType || 'Record',
-                  duration: '—',
-                  staff: row.actorName || 'System',
-                  status: row.status || 'Recorded',
-                  ladderRelevant: false,
-                  exactReasonId: row.exactReasonId || null,
-                  sanctionFamily: row.sanctionFamily || null
-              };
-          }
-
-          ''', '')
-          replace_once(path, '''function mapMessage(message) {
-              const attachments = Array.isArray(message.attachments) ? message.attachments.map((attachment) => ({
-                  name: attachment.fileName,
-                  detail: [attachment.contentType || 'Attachment', formatBytes(attachment.size)].filter(Boolean).join(' · '),
-                  url: attachment.url
-              })) : [];
-              return {
-                  id: message.id,
-                  author: message.author?.displayName || message.author?.username || message.author?.discordId || 'Unknown author',
-                  username: message.author?.username || 'unknown',
-                  initials: initials(message.author?.displayName || message.author?.username || '?'),
-                  target: Boolean(message.targetAuthor),
-                  channel: message.channelName || message.channelId,
-                  channelId: message.channelId,
-                  category: message.categoryName || '',
-                  time: message.createdAt,
-                  text: message.content || '',
-                  edited: Boolean(message.editedAt),
-                  editedAt: message.editedAt || null,
-                  attachments,
-                  replyTo: message.replyToMessageId || null,
-                  deleted: Boolean(message.deletedKnown),
-                  authorId: message.author?.discordId || ''
-              };
-          }
-
-          function initials(value) {
-              return String(value || '?').split(/\\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?';
-          }
-          ''', '''function mapMessage(message) {
+          ''', 'real identity')
+              text = once(text, ".replaceAll('_', ' ')", ".replace(/_/g, ' ')", 'real compatibility')
+              text = rx(text, r'^function mapHistoryRow\(row\) \{.*?^\}\n\n', '', 'real duplicate history')
+              text = rx(text, r'^function mapMessage\(message\) \{.*?^\}\n', '''function mapMessage(message) {
               const author = message.author ?? {};
               const authorName = firstText(author.displayName, author.username, author.discordId, 'Unknown author');
               return {
-                  id: message.id,
-                  author: authorName,
-                  username: firstText(author.username, 'unknown'),
-                  initials: initials(authorName),
-                  target: Boolean(message.targetAuthor),
-                  channel: firstText(message.channelName, message.channelId),
-                  channelId: message.channelId,
-                  category: optionalText(message.categoryName),
-                  time: message.createdAt,
-                  text: optionalText(message.content),
-                  edited: Boolean(message.editedAt),
-                  editedAt: nullableText(message.editedAt),
-                  attachments: asArray(message.attachments).map(mapAttachment),
-                  replyTo: nullableText(message.replyToMessageId),
-                  deleted: Boolean(message.deletedKnown),
-                  authorId: optionalText(author.discordId)
+                  id:message.id, author:authorName, username:firstText(author.username, 'unknown'), initials:initials(authorName),
+                  target:Boolean(message.targetAuthor), channel:firstText(message.channelName, message.channelId), channelId:message.channelId,
+                  category:optionalText(message.categoryName), time:message.createdAt, text:optionalText(message.content),
+                  edited:Boolean(message.editedAt), editedAt:nullableText(message.editedAt), attachments:asArray(message.attachments).map(mapAttachment),
+                  replyTo:nullableText(message.replyToMessageId), deleted:Boolean(message.deletedKnown), authorId:optionalText(author.discordId)
               };
           }
 
           function mapAttachment(attachment) {
-              return {
-                  name: firstText(attachment.fileName, 'Attachment'),
-                  detail: [firstText(attachment.contentType, 'Attachment'), formatBytes(attachment.size)].filter(Boolean).join(' · '),
-                  url: optionalText(attachment.url)
-              };
+              return {name:firstText(attachment.fileName, 'Attachment'), detail:[firstText(attachment.contentType, 'Attachment'), formatBytes(attachment.size)].filter(Boolean).join(' · '), url:optionalText(attachment.url)};
           }
-
-          function initials(value) {
+          ''', 'real message')
+              text = rx(text, r'^function initials\(value\) \{.*?^\}\n', '''function initials(value) {
               const text = String(value ?? '').trim();
               if (!text) return '?';
               return text.split(/\\s+/).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase();
           }
-          ''')
-          replace_once(path, '''function filtersNode() {
-              const search = element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search});
-              const author = element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author || ''});
-              const channel = element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'),
-                  liveModeration.channels.map((item) => optionNode(item.id, `#${item.name}${item.categoryName ? ` · ${item.categoryName}` : ''}`, state.channel === item.id)));
-              const date = element('input', {id:'dateFilter', type:'date', value:state.date === 'all' ? '' : state.date});
-              const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly});
+          ''', 'real initials')
+              text = rx(text, r'^function filtersNode\(\) \{.*?^\}\n', '''function filtersNode() {
               return element('section', {className:'card filters-card'}, element('div', {className:'filter-row'},
-                  labeledControl('Search messages', search), labeledControl('Author', author), labeledControl('Channel', channel), labeledControl('Date', date),
-                  element('label', {className:'checkbox-control'}, selected, ' Selected only')));
-          }
-          ''', '''function filtersNode() {
-              return element('section', {className:'card filters-card'}, element('div', {className:'filter-row'},
-                  labeledControl('Search messages', searchFilterNode()),
-                  labeledControl('Author', authorFilterNode()),
-                  labeledControl('Channel', channelFilterNode()),
-                  labeledControl('Date', dateFilterNode()),
-                  selectedFilterNode()));
+                  labeledControl('Search messages', searchFilterNode()), labeledControl('Author', authorFilterNode()),
+                  labeledControl('Channel', channelFilterNode()), labeledControl('Date', dateFilterNode()), selectedFilterNode()));
           }
 
-          function searchFilterNode() {
-              return element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search});
-          }
+          function searchFilterNode() { return element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search}); }
+          function authorFilterNode() { return element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author ?? ''}); }
+          function channelFilterNode() { return element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'), liveModeration.channels.map(channelFilterOption)); }
+          function channelFilterOption(item) { const category = item.categoryName ? ` · ${item.categoryName}` : ''; return optionNode(item.id, `#${item.name}${category}`, state.channel === item.id); }
+          function dateFilterNode() { return element('input', {id:'dateFilter', type:'date', value:state.date === 'all' ? '' : state.date}); }
+          function selectedFilterNode() { const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly}); return element('label', {className:'checkbox-control'}, selected, ' Selected only'); }
+          ''', 'real filters')
+              return once(text, "const response = await fetch(`/api/messages?${params}`, {headers:{Accept:'application/json'}});", "const response = await fetch('/api/messages', {method:'POST', headers:{Accept:'application/json', 'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(params.entries()))});", 'real fixed fetch')
+          edit('staff-bot/src/main/resources/moderation-preview/real-data.js', real_data)
 
-          function authorFilterNode() {
-              return element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author ?? ''});
-          }
-
-          function channelFilterNode() {
-              return element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'),
-                  liveModeration.channels.map(channelFilterOption));
-          }
-
-          function channelFilterOption(item) {
-              const category = item.categoryName ? ` · ${item.categoryName}` : '';
-              return optionNode(item.id, `#${item.name}${category}`, state.channel === item.id);
-          }
-
-          function dateFilterNode() {
-              const value = state.date === 'all' ? '' : state.date;
-              return element('input', {id:'dateFilter', type:'date', value});
-          }
-
-          function selectedFilterNode() {
-              const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly});
-              return element('label', {className:'checkbox-control'}, selected, ' Selected only');
-          }
-          ''')
-          replace_once(path, '''    const response = await fetch(`/api/messages?${params}`, {headers:{Accept:'application/json'}});
-          ''', '''    const response = await fetch('/api/messages', {
-                  method:'POST',
-                  headers:{Accept:'application/json', 'Content-Type':'application/json'},
-                  body:JSON.stringify(Object.fromEntries(params.entries()))
-              });
-          ''')
-
-          path = 'staff-bot/src/main/resources/moderation-preview/real-policy.js'
-          replace_once(path, '''function mapHistoryRow(row) {
-              const occurred = row.occurredAt || new Date(0).toISOString();
-              const family = typeof row.sanctionFamily === 'string' ? row.sanctionFamily : '';
-              return {
-                  id: row.caseId || row.stableKey,
-                  date: occurred.slice(0, 10),
-                  key: family || 'other',
-                  offense: row.reason || row.exactReasonId || row.eventType || 'Moderation event',
-                  action: row.punishmentType || row.eventType || 'Record',
-                  duration: '—',
-                  staff: row.actorName || 'System',
-                  status: row.status || 'Recorded',
-                  ladderRelevant: LIVE_LADDER_FAMILIES.has(family),
-                  exactReasonId: row.exactReasonId || null,
-                  sanctionFamily: family || null
-              };
-          }
-          ''', '''function mapHistoryRow(row) {
+          def real_policy(text):
+              return rx(text, r'^function mapHistoryRow\(row\) \{.*?^\}\n', '''function mapHistoryRow(row) {
               const occurred = firstText(row.occurredAt, new Date(0).toISOString());
               const family = optionalText(row.sanctionFamily);
               return {
-                  id: firstText(row.caseId, row.stableKey),
-                  date: occurred.slice(0, 10),
-                  key: firstText(family, 'other'),
-                  offense: firstText(row.reason, row.exactReasonId, row.eventType, 'Moderation event'),
-                  action: firstText(row.punishmentType, row.eventType, 'Record'),
-                  duration: '—',
-                  staff: firstText(row.actorName, 'System'),
-                  status: firstText(row.status, 'Recorded'),
-                  ladderRelevant: LIVE_LADDER_FAMILIES.has(family),
-                  exactReasonId: nullableText(row.exactReasonId),
-                  sanctionFamily: nullableText(family)
+                  id:firstText(row.caseId, row.stableKey), date:occurred.slice(0, 10), key:firstText(family, 'other'),
+                  offense:firstText(row.reason, row.exactReasonId, row.eventType, 'Moderation event'), action:firstText(row.punishmentType, row.eventType, 'Record'),
+                  duration:'—', staff:firstText(row.actorName, 'System'), status:firstText(row.status, 'Recorded'),
+                  ladderRelevant:LIVE_LADDER_FAMILIES.has(family), exactReasonId:nullableText(row.exactReasonId), sanctionFamily:nullableText(family)
               };
           }
-          ''')
+          ''', 'policy history')
+          edit('staff-bot/src/main/resources/moderation-preview/real-policy.js', real_policy)
 
-          # Staging workflow: use a synthetic contract actor and remove temporary Codacy diagnostics.
-          path = '.github/workflows/moderation-web-staging-deploy.yml'
-          replace_once(path, '''          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
-              body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|discord:846729778400460871|{now}|{now + 120}'
-          ''', '''          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
-              test_actor_id = str(10**17 + secrets.randbelow(9 * 10**17))
-              body = f'v1|staging|{nonce}|{test_actor_id}|1410303324745371709|discord:{test_actor_id}|{now}|{now + 120}'
-          ''')
-          replace_once(path, '''
-              - name: Record sanitized Codacy issue metadata
-                  if: always()
-                  shell: bash
-                  run: |
-                    set -Eeuo pipefail
-                    endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues'
-                    response=''
-                    for attempt in $(seq 1 12); do
-                      if candidate="$(curl --fail-with-body --silent --show-error "$endpoint" 2>/dev/null)" \\
-                        && printf '%s' "$candidate" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
-                        response="$candidate"
-                        break
-                      fi
-                      sleep 5
-                    done
-                    [[ -n "$response" ]]
-                    printf '%s' "$response" | jq '{count:(.data|length), issues:[.data[] | {
-                      filePath,
-                      lineNumber,
-                      message,
-                      category,
-                      patternInfo,
-                      toolInfo
-                    }]}'
-          ''', '\n')
+          def deployment(text):
+              text = once(text, "body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|discord:846729778400460871|{now}|{now + 120}'", "test_actor_id = str(10**17 + secrets.randbelow(9 * 10**17))\n          body = f'v1|staging|{nonce}|{test_actor_id}|1410303324745371709|discord:{test_actor_id}|{now}|{now + 120}'", 'deploy synthetic actor')
+              return rx(text, r'\n      - name: Record sanitized Codacy issue metadata\n.*?(?=\n      - name: Require fixed private tunnel provisioning)', '', 'deploy diagnostics')
+          edit('.github/workflows/moderation-web-staging-deploy.yml', deployment)
           PY
-
           git diff --check
 
       - name: Validate moderation web
