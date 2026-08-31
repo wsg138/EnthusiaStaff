@@ -1,0 +1,44 @@
+name: ES-D16 Repair Driver Fix
+
+on:
+  push:
+    branches: [package/es-d16-moderation-read-bridge]
+    paths: [".github/workflows/es-d16-driver-fix.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-driver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: package/es-d16-moderation-read-bridge
+          fetch-depth: 0
+      - name: Narrow ambiguous transform and schedule cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/es-d16-codacy-diagnostics.yml')
+          text = path.read_text(encoding='utf-8')
+          old = "text = once(text, 'readRequest(session, endpoint, browserUrl)', 'readRequest(session, endpoint, browserInput)', 'backend proxy body')"
+          new = "text = once(text, 'const body = JSON.stringify(readRequest(session, endpoint, browserUrl));', 'const body = JSON.stringify(readRequest(session, endpoint, browserInput));', 'backend proxy body')"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one ambiguous transform line, found {text.count(old)}')
+          text = text.replace(old, new)
+          old_commit = "          git add moderation-web staff-bot .github/workflows/moderation-web-staging-deploy.yml\n          git diff --cached --check"
+          new_commit = "          rm -f .github/workflows/es-d16-codacy-diagnostics.yml .github/workflows/es-d16-driver-fix.yml\n          git add -A moderation-web staff-bot .github/workflows/moderation-web-staging-deploy.yml .github/workflows/es-d16-codacy-diagnostics.yml .github/workflows/es-d16-driver-fix.yml\n          git diff --cached --check"
+          if text.count(old_commit) != 1:
+              raise SystemExit(f'expected one cleanup insertion point, found {text.count(old_commit)}')
+          path.write_text(text.replace(old_commit, new_commit), encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add .github/workflows/es-d16-codacy-diagnostics.yml
+          git commit -m 'ES-D16: narrow coordinated repair transform'
+          git push origin HEAD:package/es-d16-moderation-read-bridge
