@@ -1,0 +1,43 @@
+name: PR186 Lockfile Bootstrap
+
+on:
+  push:
+    branches:
+      - owner/staging-web-moderation-console
+    paths:
+      - ".github/workflows/pr186-lockfile-bootstrap.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    name: Generate exact moderation-web lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Generate lockfile without lifecycle scripts
+        working-directory: moderation-web
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          test -s package-lock.json
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr186-moderation-web-lockfile
+          path: moderation-web/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
