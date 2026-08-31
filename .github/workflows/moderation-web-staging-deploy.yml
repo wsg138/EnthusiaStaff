@@ -169,6 +169,7 @@ jobs:
           first_status="$(curl --silent --show-error --output "$body_file" --dump-header "$headers_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
           if [[ "$first_status" != '303' ]]; then
             echo "Live first-use launch returned HTTP ${first_status}; expected 303." >&2
+            grep -i '^x-preview-reject-reason:' "$headers_file" >&2 || true
             cat "$body_file" >&2
             exit 1
           fi
