@@ -8,14 +8,21 @@ const CLOCK_SKEW_SECONDS = 30;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-export async function verifyLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds = Math.floor(Date.now() / 1000)) {
+export async function inspectLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds = Math.floor(Date.now() / 1000)) {
   const parsed = parseLaunchToken(token);
-  if (!parsed || !claimsAllowed(parsed.claims, expectedGuildId, expectedTargetKey, nowSeconds)) return null;
+  if (!parsed) return { claims: null, reason: 'malformed' };
+  if (!claimsAllowed(parsed.claims, expectedGuildId, expectedTargetKey, nowSeconds)) {
+    return { claims: null, reason: 'claims' };
+  }
   const keyBytes = hexToBytes(keyHex);
-  if (!keyBytes) return null;
+  if (!keyBytes) return { claims: null, reason: 'key' };
   const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
   const valid = await crypto.subtle.verify('HMAC', key, parsed.signature, textEncoder.encode(parsed.encodedBody));
-  return valid ? parsed.claims : null;
+  return valid ? { claims: parsed.claims, reason: null } : { claims: null, reason: 'signature' };
+}
+
+export async function verifyLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds = Math.floor(Date.now() / 1000)) {
+  return (await inspectLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds)).claims;
 }
 
 export function parseLaunchToken(token) {
