@@ -162,6 +162,11 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         }
     }
 
+    private void commandRegistrationFailed(Throwable failure) {
+        enabled.set(false);
+        log("discord_ui_preview_command_registration_failed", failure);
+    }
+
     private boolean accepted(IReplyCallback event) {
         return enabled.get() && guildId(event.getGuild()) == guildId;
     }
