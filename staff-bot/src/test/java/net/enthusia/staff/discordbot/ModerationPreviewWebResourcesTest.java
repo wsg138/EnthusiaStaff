@@ -17,6 +17,7 @@ class ModerationPreviewWebResourcesTest {
     private static final String WORKFLOW_SCRIPT = "/moderation-preview/workflow.js";
     private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
     private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
+    private static final String REAL_POLICY_SCRIPT = "/moderation-preview/real-policy.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
             "/moderation-preview/app.css",
@@ -24,9 +25,10 @@ class ModerationPreviewWebResourcesTest {
             APP_SCRIPT,
             WORKFLOW_SCRIPT,
             REVIEW_SCRIPT,
-            REAL_DATA_SCRIPT);
+            REAL_DATA_SCRIPT,
+            REAL_POLICY_SCRIPT);
     private static final List<String> SCRIPTS = List.of(
-            MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT, REAL_DATA_SCRIPT);
+            MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT, REAL_DATA_SCRIPT, REAL_POLICY_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -44,7 +46,8 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/app.js",
                 "/assets/workflow.js",
                 "/assets/review.js",
-                "/assets/real-data.js");
+                "/assets/real-data.js",
+                "/assets/real-policy.js");
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
         assertTrue(html.contains("Live data"));
         assertFalse(html.contains("Sample case"));
@@ -60,6 +63,16 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));
+    }
+
+    @Test
+    void relevantHistoryUsesOnlyAuthoritativeSanctionFamily() throws IOException {
+        String policy = resourceText(REAL_POLICY_SCRIPT);
+
+        assertTrue(policy.contains("row.sanctionFamily"));
+        assertTrue(policy.contains("LIVE_LADDER_FAMILIES.has(family)"));
+        assertFalse(policy.contains("row.reason.includes"));
+        assertFalse(policy.contains("Suggested for this sample"));
     }
 
     @Test
