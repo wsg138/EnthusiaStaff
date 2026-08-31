@@ -68,17 +68,15 @@ jobs:
       - name: Run clean Java 21 gate
         run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
 
-      - name: Stage workflow blob and push validated runtime repair
+      - name: Commit validated runtime repair
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p .es-d16-staged
-          cp .github/workflows/moderation-web-staging-deploy.yml .es-d16-staged/moderation-web-staging-deploy.yml
           git checkout -- .github/workflows/moderation-web-staging-deploy.yml
           git diff --check
           git config user.name 'P2wn'
           git config user.email 'racecarboy77@gmail.com'
-          git add moderation-web staff-bot .es-d16-staged/moderation-web-staging-deploy.yml
+          git add moderation-web staff-bot
           git diff --cached --check
           git commit -m 'ES-D16: resolve moderation bridge static findings'
           git push origin HEAD:package/es-d16-moderation-read-bridge
