@@ -10,13 +10,21 @@ export async function readBoundedBody(request, maxBytes) {
       if (done) return combine(chunks, total);
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel();
+        await cancelQuietly(reader);
         return null;
       }
       chunks.push(value);
     }
   } finally {
     reader.releaseLock();
+  }
+}
+
+async function cancelQuietly(reader) {
+  try {
+    await reader.cancel();
+  } catch {
+    // Cancellation is best-effort; the caller still needs to reject the body.
   }
 }
 

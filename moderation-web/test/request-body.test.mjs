@@ -17,6 +17,22 @@ function streamedRequest(chunks, headers = {}) {
   });
 }
 
+function requestWithFailingCancellation() {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3, 4, 5, 6]));
+    },
+    cancel() {
+      throw new Error('cancel failed');
+    }
+  });
+  return new Request('https://staff-staging.enthusia.info/api/simulate', {
+    method: 'POST',
+    body: stream,
+    duplex: 'half'
+  });
+}
+
 test('reads a streamed request only when it stays within the byte limit', async () => {
   const body = await readBoundedBody(streamedRequest([[1, 2], [3, 4]]), 4);
   assert.deepEqual([...body], [1, 2, 3, 4]);
@@ -24,6 +40,11 @@ test('reads a streamed request only when it stays within the byte limit', async 
 
 test('rejects an oversized stream without requiring Content-Length', async () => {
   const body = await readBoundedBody(streamedRequest([[1, 2, 3], [4, 5, 6]]), 5);
+  assert.equal(body, null);
+});
+
+test('still rejects an oversized stream when cancellation fails', async () => {
+  const body = await readBoundedBody(requestWithFailingCancellation(), 5);
   assert.equal(body, null);
 });
 
