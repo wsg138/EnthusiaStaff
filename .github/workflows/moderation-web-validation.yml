@@ -1,0 +1,50 @@
+name: Moderation Web Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "moderation-web/**"
+      - "staff-bot/src/main/resources/moderation-preview/**"
+      - ".github/workflows/moderation-web-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moderation-web-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Validate Cloudflare moderation web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record checked-out SHA
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TESTED_SHA="$(git rev-parse HEAD)"
+          test -n "${TESTED_SHA}"
+          echo "TESTED_SHA=${TESTED_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Validate Worker, assets and security contract
+        working-directory: moderation-web
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm install --no-package-lock --ignore-scripts
+          npm run check
+          test "${TESTED_SHA}" = "$(git -C .. rev-parse HEAD)"
