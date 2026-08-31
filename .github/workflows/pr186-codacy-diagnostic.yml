@@ -1,0 +1,22 @@
+name: PR186 Codacy diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/pr186-codacy-current
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch public Codacy PR issues
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/186/issues?status=new'
+          curl --fail --silent --show-error -H 'Accept: application/json' "$endpoint" > issues.json
+          jq '{data: [.data[] | {filePath, lineNumber, message, patternInfo, toolInfo, commitInfo}], pagination}' issues.json
