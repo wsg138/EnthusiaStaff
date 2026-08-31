@@ -16,14 +16,17 @@ class ModerationPreviewWebResourcesTest {
     private static final String APP_SCRIPT = "/moderation-preview/app.js";
     private static final String WORKFLOW_SCRIPT = "/moderation-preview/workflow.js";
     private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
+    private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
             "/moderation-preview/app.css",
             MODEL_SCRIPT,
             APP_SCRIPT,
             WORKFLOW_SCRIPT,
-            REVIEW_SCRIPT);
-    private static final List<String> SCRIPTS = List.of(MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT);
+            REVIEW_SCRIPT,
+            REAL_DATA_SCRIPT);
+    private static final List<String> SCRIPTS = List.of(
+            MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT, REAL_DATA_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -36,10 +39,27 @@ class ModerationPreviewWebResourcesTest {
     void pageLoadsSplitScriptsInDependencyOrderAndUsesOneStagingIndicator() throws IOException {
         String html = resourceText("/moderation-preview/index.html");
 
-        assertOrdered(html, "/assets/model.js", "/assets/app.js", "/assets/workflow.js", "/assets/review.js");
+        assertOrdered(html,
+                "/assets/model.js",
+                "/assets/app.js",
+                "/assets/workflow.js",
+                "/assets/review.js",
+                "/assets/real-data.js");
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
-        assertTrue(html.contains("Sample case"));
+        assertTrue(html.contains("Live data"));
+        assertFalse(html.contains("Sample case"));
         assertFalse(html.contains("Preview scenario"));
+    }
+
+    @Test
+    void realDataAdapterUsesProtectedReadEndpointsAndTruthfulFailureState() throws IOException {
+        String adapter = resourceText(REAL_DATA_SCRIPT);
+
+        assertTrue(adapter.contains("fetch('/api/bootstrap'"));
+        assertTrue(adapter.contains("fetch(`/api/messages?${params}`"));
+        assertTrue(adapter.contains("Read data unavailable"));
+        assertTrue(adapter.contains("Text content unavailable from Discord"));
+        assertFalse(adapter.contains("sample-river-ash"));
     }
 
     @Test
