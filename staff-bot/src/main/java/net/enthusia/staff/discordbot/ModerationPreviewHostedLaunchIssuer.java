@@ -1,0 +1,101 @@
+package net.enthusia.staff.discordbot;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Objects;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+/** Issues short-lived stateless launch tickets for the externally hosted staging moderation site. */
+final class ModerationPreviewHostedLaunchIssuer {
+    static final String SAMPLE_TARGET = "sample-river-ash";
+    private static final String HMAC = "HmacSHA256";
+    private static final String DIGEST = "SHA-256";
+    private static final byte[] DOMAIN_SEPARATOR = "enthusia-staff-moderation-launch-v1\0"
+            .getBytes(StandardCharsets.UTF_8);
+    private static final Duration TICKET_TTL = Duration.ofMinutes(2);
+    private static final int NONCE_BYTES = 24;
+
+    private final URI publicBaseUri;
+    private final byte[] signingKey;
+    private final Clock clock;
+    private final SecureRandom random;
+
+    ModerationPreviewHostedLaunchIssuer(URI publicBaseUri, String discordBotToken) {
+        this(publicBaseUri, deriveSigningKey(discordBotToken), Clock.systemUTC(), new SecureRandom());
+    }
+
+    ModerationPreviewHostedLaunchIssuer(URI publicBaseUri, byte[] signingKey, Clock clock, SecureRandom random) {
+        this.publicBaseUri = Objects.requireNonNull(publicBaseUri, "publicBaseUri");
+        this.signingKey = Objects.requireNonNull(signingKey, "signingKey").clone();
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.random = Objects.requireNonNull(random, "random");
+        if (this.signingKey.length != 32) {
+            throw new IllegalArgumentException("hosted launch signing key must be 32 bytes");
+        }
+    }
+
+    URI issueLaunchUri(long actorId, long guildId) {
+        String token = issueToken(actorId, guildId, SAMPLE_TARGET);
+        return URI.create(publicBaseUri + "/launch?t=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
+    }
+
+    private String issueToken(long actorId, long guildId, String targetKey) {
+        if (actorId <= 0 || guildId <= 0 || targetKey == null || !targetKey.matches("[A-Za-z0-9:_-]{1,64}")) {
+            throw new IllegalArgumentException("hosted launch claims are invalid");
+        }
+        Instant issuedAt = clock.instant();
+        Instant expiresAt = issuedAt.plus(TICKET_TTL);
+        String body = "v1|staging|" + nonce()
+                + "|" + Long.toUnsignedString(actorId)
+                + "|" + Long.toUnsignedString(guildId)
+                + "|" + targetKey
+                + "|" + issuedAt.getEpochSecond()
+                + "|" + expiresAt.getEpochSecond();
+        String encodedBody = encode(body.getBytes(StandardCharsets.UTF_8));
+        return encodedBody + "." + encode(sign(encodedBody));
+    }
+
+    static byte[] deriveSigningKey(String discordBotToken) {
+        String token = Objects.requireNonNull(discordBotToken, "discordBotToken");
+        if (token.isBlank()) {
+            throw new IllegalArgumentException("Discord bot token is required for hosted launch signing");
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance(DIGEST);
+            digest.update(DOMAIN_SEPARATOR);
+            digest.update(token.getBytes(StandardCharsets.UTF_8));
+            return digest.digest();
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
+    }
+
+    private byte[] sign(String value) {
+        try {
+            Mac mac = Mac.getInstance(HMAC);
+            mac.init(new SecretKeySpec(signingKey, HMAC));
+            return mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException("HMAC unavailable", exception);
+        }
+    }
+
+    private String nonce() {
+        byte[] bytes = new byte[NONCE_BYTES];
+        random.nextBytes(bytes);
+        return encode(bytes);
+    }
+
+    private static String encode(byte[] value) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+    }
+}

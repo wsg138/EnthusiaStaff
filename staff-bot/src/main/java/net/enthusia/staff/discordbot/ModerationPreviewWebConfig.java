@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Staging-only web-preview bind/public-address configuration. */
+/** Staging-only moderation-site location and local-development bind configuration. */
 record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> publicBaseUri) {
     static final String BIND_ENV = "ENTHUSIA_STAFF_BOT_UI_PREVIEW_WEB_BIND";
     static final String PUBLIC_URL_ENV = "ENTHUSIA_STAFF_BOT_UI_PREVIEW_PUBLIC_URL";
@@ -25,8 +25,9 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
         if (bindAddress.getAddress() == null || !bindAddress.getAddress().isLoopbackAddress()) {
             throw new IllegalArgumentException("preview web bind must use a loopback address");
         }
-        if (publicBaseUri.isPresent() && bindAddress.getPort() == EPHEMERAL_PORT) {
-            throw new IllegalArgumentException("preview public URL requires an explicit web bind port");
+        if (publicBaseUri.isPresent() && !externalPublicUri(publicBaseUri.orElseThrow())
+                && bindAddress.getPort() == EPHEMERAL_PORT) {
+            throw new IllegalArgumentException("local preview public URL requires an explicit web bind port");
         }
     }
 
@@ -38,6 +39,10 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
                 ? Optional.empty()
                 : Optional.of(parsePublicUri(publicValue));
         return new ModerationPreviewWebConfig(bind, publicUri);
+    }
+
+    boolean hostedExternally() {
+        return publicBaseUri.map(ModerationPreviewWebConfig::externalPublicUri).orElse(false);
     }
 
     boolean secureCookie() {
@@ -110,11 +115,15 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
         return URI.create(uri.getScheme() + "://" + uri.getAuthority());
     }
 
+    private static boolean externalPublicUri(URI uri) {
+        return !loopbackHost(uri.getHost());
+    }
+
     private static boolean localHttp(URI uri) {
-        if (!HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())) {
-            return false;
-        }
-        String host = uri.getHost();
+        return HTTP_SCHEME.equalsIgnoreCase(uri.getScheme()) && loopbackHost(uri.getHost());
+    }
+
+    private static boolean loopbackHost(String host) {
         return LOCALHOST.equalsIgnoreCase(host) || IPV4_LOOPBACK_HOST.equals(host) || IPV6_LOOPBACK_HOST.equals(host);
     }
 

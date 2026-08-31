@@ -19,28 +19,33 @@ class ModerationPreviewWebConfigTest {
         assertEquals("127.0.0.1", config.bindAddress().getHostString());
         assertEquals(0, config.bindAddress().getPort());
         assertTrue(config.publicBaseUri().isEmpty());
+        assertFalse(config.hostedExternally());
         assertFalse(config.secureCookie());
     }
 
     @Test
-    void publicDeploymentRequiresFixedLoopbackBindAndHttps() {
-        Map<String, String> valid = Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, LOOPBACK_BIND,
-                ModerationPreviewWebConfig.PUBLIC_URL_ENV, PUBLIC_ORIGIN);
-        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(valid);
+    void externalHttpsOriginUsesCloudflareHostedModeWithoutLocalListener() {
+        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, PUBLIC_ORIGIN));
 
-        assertEquals(8766, config.bindAddress().getPort());
+        assertEquals(0, config.bindAddress().getPort());
         assertEquals(PUBLIC_ORIGIN, config.publicBaseUri().orElseThrow().toString());
+        assertTrue(config.hostedExternally());
         assertTrue(config.secureCookie());
 
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.PUBLIC_URL_ENV, PUBLIC_ORIGIN)));
-        assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, LOOPBACK_BIND,
                 ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://staff-preview.example.test")));
+    }
+
+    @Test
+    void localPublicDevelopmentRequiresFixedLoopbackBind() {
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8766",
-                ModerationPreviewWebConfig.PUBLIC_URL_ENV, PUBLIC_ORIGIN)));
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://127.0.0.1:8766")));
+        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, LOOPBACK_BIND,
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://127.0.0.1:8766"));
+        assertFalse(config.hostedExternally());
+        assertFalse(config.secureCookie());
     }
 
     @Test
@@ -67,17 +72,9 @@ class ModerationPreviewWebConfigTest {
     }
 
     @Test
-    void rawNonLoopbackListenerIsRejectedEvenWithoutPublicLauncher() {
+    void rawNonLoopbackListenerIsRejectedEvenForExternallyHostedOrigin() {
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8766")));
-    }
-
-    @Test
-    void loopbackHttpIsAllowedForLocalStagingDevelopment() {
-        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, LOOPBACK_BIND,
-                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://127.0.0.1:8766"));
-
-        assertFalse(config.secureCookie());
+                ModerationPreviewWebConfig.BIND_ENV, "0.0.0.0:8766",
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, PUBLIC_ORIGIN)));
     }
 }

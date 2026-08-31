@@ -23,7 +23,8 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final long guildId;
     private final InteractionReplayGuard interactions;
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
-    private final ModerationPreviewWebRuntime webRuntime;
+    private final Optional<ModerationPreviewWebRuntime> localWebRuntime;
+    private final Optional<ModerationPreviewHostedLaunchIssuer> hostedLaunchIssuer;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
 
@@ -31,15 +32,24 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             long guildId,
             InteractionReplayGuard interactions,
             int sessionCapacity,
-            ModerationPreviewWebConfig webConfig
+            ModerationPreviewWebConfig webConfig,
+            String discordBotToken
     ) {
         this.guildId = guildId;
         this.interactions = interactions;
-        this.webRuntime = ModerationPreviewWebRuntime.fromConfig(webConfig, sessionCapacity);
+        if (webConfig.hostedExternally()) {
+            this.localWebRuntime = Optional.empty();
+            this.hostedLaunchIssuer = Optional.of(new ModerationPreviewHostedLaunchIssuer(
+                    webConfig.publicBaseUri().orElseThrow(),
+                    discordBotToken));
+        } else {
+            this.localWebRuntime = Optional.of(ModerationPreviewWebRuntime.fromConfig(webConfig, sessionCapacity));
+            this.hostedLaunchIssuer = Optional.empty();
+        }
     }
 
     void startWeb() {
-        webRuntime.start();
+        localWebRuntime.ifPresent(ModerationPreviewWebRuntime::start);
     }
 
     void enable(JDA jda) {
@@ -72,9 +82,16 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             unavailable(event);
             return;
         }
-        Optional<URI> launchUri = webRuntime.issueLaunchUri(event.getUser().getIdLong(), guildId);
+        Optional<URI> launchUri = issueLaunchUri(event.getUser().getIdLong());
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(launchUri);
         event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
+    }
+
+    private Optional<URI> issueLaunchUri(long actorId) {
+        if (hostedLaunchIssuer.isPresent()) {
+            return Optional.of(hostedLaunchIssuer.orElseThrow().issueLaunchUri(actorId, guildId));
+        }
+        return localWebRuntime.flatMap(runtime -> runtime.issueLaunchUri(actorId, guildId));
     }
 
     static CommandData command() {
@@ -125,6 +142,6 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     @Override
     public void close() {
         disable();
-        webRuntime.close();
+        localWebRuntime.ifPresent(ModerationPreviewWebRuntime::close);
     }
 }
