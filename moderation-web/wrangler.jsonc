@@ -35,7 +35,9 @@
   },
   "secrets": {
     "required": [
-      "LAUNCH_SIGNING_KEY_HEX"
+      "LAUNCH_SIGNING_KEY_HEX",
+      "READ_API_SIGNING_KEY_HEX",
+      "READ_API_ORIGIN"
     ]
   }
 }
