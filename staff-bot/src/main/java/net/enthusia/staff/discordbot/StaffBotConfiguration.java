@@ -39,6 +39,7 @@ public final class StaffBotConfiguration {
     private final int workerQueueCapacity;
     private final int interactionCapacity;
     private final Duration interactionTtl;
+    private final ModerationPreviewWebConfig previewWebConfig;
 
     StaffBotConfiguration(
             StaffBotEnvironment environment,
@@ -49,6 +50,28 @@ public final class StaffBotConfiguration {
             int workerQueueCapacity,
             int interactionCapacity,
             Duration interactionTtl) {
+        this(
+                environment,
+                discordToken,
+                uiPreviewEnabled,
+                healthAddress,
+                workerThreads,
+                workerQueueCapacity,
+                interactionCapacity,
+                interactionTtl,
+                ModerationPreviewWebConfig.fromEnvironment(Map.of()));
+    }
+
+    private StaffBotConfiguration(
+            StaffBotEnvironment environment,
+            String discordToken,
+            boolean uiPreviewEnabled,
+            InetSocketAddress healthAddress,
+            int workerThreads,
+            int workerQueueCapacity,
+            int interactionCapacity,
+            Duration interactionTtl,
+            ModerationPreviewWebConfig previewWebConfig) {
         this.environment = Objects.requireNonNull(environment, "environment");
         this.discordToken = requireSecret(discordToken);
         this.uiPreviewEnabled = uiPreviewEnabled;
@@ -57,6 +80,7 @@ public final class StaffBotConfiguration {
         this.workerQueueCapacity = bounded("worker queue capacity", workerQueueCapacity, 1, 4096);
         this.interactionCapacity = bounded("interaction capacity", interactionCapacity, 16, 65536);
         this.interactionTtl = Objects.requireNonNull(interactionTtl, "interactionTtl");
+        this.previewWebConfig = Objects.requireNonNull(previewWebConfig, "previewWebConfig");
         if (interactionTtl.isZero() || interactionTtl.isNegative() || interactionTtl.compareTo(Duration.ofHours(24)) > 0) {
             throw new IllegalArgumentException("interaction TTL must be between 1 second and 24 hours");
         }
@@ -109,6 +133,8 @@ public final class StaffBotConfiguration {
         effectiveValues.put(UI_PREVIEW_KEY, Boolean.TRUE.toString());
         effectiveValues.put(TOKEN_KEY, StaffBotTokenFile.read(commandLine.tokenFile().orElseThrow(
                 () -> new IllegalArgumentException("staging UI preview requires a token file"))));
+        commandLine.previewWebBind().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.BIND_ENV, value));
+        commandLine.previewPublicUrl().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.PUBLIC_URL_ENV, value));
         return fromEnvironment(effectiveValues);
     }
 
@@ -131,6 +157,9 @@ public final class StaffBotConfiguration {
                 DEFAULT_INTERACTION_TTL_SECONDS,
                 1,
                 86400);
+        ModerationPreviewWebConfig previewWebConfig = uiPreviewEnabled
+                ? ModerationPreviewWebConfig.fromEnvironment(values)
+                : ModerationPreviewWebConfig.fromEnvironment(Map.of());
         return new StaffBotConfiguration(
                 environment,
                 token,
@@ -139,7 +168,8 @@ public final class StaffBotConfiguration {
                 workerThreads,
                 queueCapacity,
                 interactionCapacity,
-                Duration.ofSeconds(interactionTtlSeconds));
+                Duration.ofSeconds(interactionTtlSeconds),
+                previewWebConfig);
     }
 
     public StaffBotEnvironment environment() {
@@ -174,6 +204,10 @@ public final class StaffBotConfiguration {
         return interactionTtl;
     }
 
+    ModerationPreviewWebConfig previewWebConfig() {
+        return previewWebConfig;
+    }
+
     public int maxReconnectDelaySeconds() {
         return MAX_RECONNECT_DELAY_SECONDS;
     }
@@ -191,6 +225,7 @@ public final class StaffBotConfiguration {
                 + ", workerQueueCapacity=" + workerQueueCapacity
                 + ", interactionCapacity=" + interactionCapacity
                 + ", interactionTtl=" + interactionTtl
+                + ", previewWebPublic=" + (previewWebConfig.publicBaseUri().isPresent() ? "<configured>" : "<none>")
                 + ", discordToken=<redacted>]";
     }
 
