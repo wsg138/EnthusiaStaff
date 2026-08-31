@@ -83,7 +83,7 @@ class ModerationUiPreviewDiscordPresentationTest {
 
     @Test
     void commandIsDedicatedPreviewCommand() {
-        assertEquals("moderate-preview", JdaModerationUiPreviewListener.command().getName());
+        assertEquals("moderate-preview", JdaModerationUiPreviewListener.commands().getFirst().getName());
     }
 
     private ModerationUiPreviewModel.State stateWithRecommendation(
