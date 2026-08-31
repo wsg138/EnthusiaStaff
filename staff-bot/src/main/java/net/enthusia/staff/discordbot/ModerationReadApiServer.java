@@ -7,7 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -17,11 +17,13 @@ final class ModerationReadApiServer implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(ModerationReadApiServer.class.getName());
     private static final int MAX_BODY_BYTES = 65_536;
     private static final int WORKER_THREADS = 2;
+    private static final int REQUESTS_PER_MINUTE = 120;
 
     private final HttpServer server;
     private final ExecutorService executor;
     private final ObjectMapper json;
     private final ModerationReadApiAuthenticator authenticator;
+    private final ModerationReadApiRateLimiter rateLimiter;
     private final ModerationReadApiService service;
 
     ModerationReadApiServer(
@@ -35,6 +37,7 @@ final class ModerationReadApiServer implements AutoCloseable {
         }
         this.service = Objects.requireNonNull(service, "service");
         this.authenticator = new ModerationReadApiAuthenticator(discordBotToken);
+        this.rateLimiter = new ModerationReadApiRateLimiter(REQUESTS_PER_MINUTE, Duration.ofMinutes(1));
         this.json = new ObjectMapper().registerModule(new Jdk8Module());
         this.server = HttpServer.create(bindAddress, 0);
         this.executor = Executors.newFixedThreadPool(WORKER_THREADS, runnable -> {
@@ -66,6 +69,10 @@ final class ModerationReadApiServer implements AutoCloseable {
             ModerationReadApiAuthenticator.Result authentication = authenticate(exchange, body);
             if (authentication != ModerationReadApiAuthenticator.Result.ACCEPTED) {
                 respond(exchange, 401, new ModerationReadApiModel.ErrorResponse("unauthorized", "Request rejected."));
+                return;
+            }
+            if (!rateLimiter.tryAcquire()) {
+                respond(exchange, 429, new ModerationReadApiModel.ErrorResponse("rate_limited", "Too many read requests."));
                 return;
             }
             if (!"POST".equals(exchange.getRequestMethod())) {
