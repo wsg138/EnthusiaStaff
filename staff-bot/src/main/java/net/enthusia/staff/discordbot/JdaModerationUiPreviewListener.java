@@ -27,10 +27,15 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
 
-    JdaModerationUiPreviewListener(long guildId, InteractionReplayGuard interactions, int sessionCapacity) {
+    JdaModerationUiPreviewListener(
+            long guildId,
+            InteractionReplayGuard interactions,
+            int sessionCapacity,
+            ModerationPreviewWebConfig webConfig
+    ) {
         this.guildId = guildId;
         this.interactions = interactions;
-        this.webRuntime = ModerationPreviewWebRuntime.fromEnvironment(sessionCapacity);
+        this.webRuntime = ModerationPreviewWebRuntime.fromConfig(webConfig, sessionCapacity);
     }
 
     void startWeb() {
