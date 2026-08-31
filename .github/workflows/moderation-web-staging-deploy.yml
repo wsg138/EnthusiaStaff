@@ -103,10 +103,21 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          health="$(curl --fail --silent --show-error --max-time 20 "https://${EXPECTED_HOST}/health")"
-          printf '%s' "$health" | jq -e '.status == "ok" and .environment == "staging" and .mode == "simulation-only"' >/dev/null
 
-          root_status="$(curl --silent --output root.out --write-out '%{http_code}' --max-time 20 "https://${EXPECTED_HOST}/")"
+          health=''
+          for attempt in $(seq 1 30); do
+            if candidate="$(curl --fail --silent --show-error --max-time 20 "https://${EXPECTED_HOST}/health" 2>/dev/null)" \
+              && printf '%s' "$candidate" | jq -e '.status == "ok" and .environment == "staging" and .mode == "simulation-only"' >/dev/null 2>&1; then
+              health="$candidate"
+              break
+            fi
+            echo "Waiting for Cloudflare DNS/TLS propagation (${attempt}/30)..."
+            sleep 10
+          done
+
+          [[ -n "$health" ]]
+
+          root_status="$(curl --fail-with-body --silent --output root.out --write-out '%{http_code}' --max-time 20 "https://${EXPECTED_HOST}/" || true)"
           [[ "$root_status" == '401' ]]
           grep -Fqx 'Open this panel from Discord.' root.out
           rm -f root.out
@@ -118,6 +129,7 @@ jobs:
             echo "- host: \`https://${EXPECTED_HOST}\`"
             echo '- Worker + protected assets: **PASS**'
             echo '- Durable Object/session configuration: **deployed**'
+            echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
             echo '- runtime mode: **staging simulation only**'
             echo '- Discord bot token uploaded to Cloudflare: **NO**'
