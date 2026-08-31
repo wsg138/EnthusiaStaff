@@ -31,6 +31,8 @@ final class ModerationReadApiService {
                 snapshots.linked(snapshot),
                 snapshots.sanctions(snapshot),
                 snapshots.history(snapshot),
+                snapshot.totalHistoryCount(),
+                snapshots.relevantHistoryCounts(snapshot),
                 snapshots.cases(snapshot),
                 snapshots.notes(snapshot),
                 channels,

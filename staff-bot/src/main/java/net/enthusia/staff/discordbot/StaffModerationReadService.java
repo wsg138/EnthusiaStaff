@@ -4,8 +4,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.casefile.CaseReview;
@@ -45,6 +47,10 @@ final class StaffModerationReadService {
                 int pageSize,
                 HistoryQueryOptions options
         );
+
+        default Map<String, Long> relevantCaseCounts(UUID targetId) {
+            return Map.of();
+        }
 
         List<CaseReview> recentCases(UUID targetId, int limit);
 
@@ -96,26 +102,31 @@ final class StaffModerationReadService {
             List<LinkedMinecraft> linkedMinecraft,
             List<ActiveSanction> activeMinecraftSanctions,
             List<ModerationHistoryEntry> recentHistory,
+            long totalHistoryCount,
+            Map<String, Long> relevantHistoryCounts,
             List<StaffNote> recentNotes,
             List<CaseReview> recentCases,
             long historicalLinkCount
     ) {
-        Snapshot(
-                Target target,
-                List<LinkedMinecraft> linkedMinecraft,
-                List<ActiveSanction> activeMinecraftSanctions,
-                List<ModerationHistoryEntry> recentHistory,
-                List<StaffNote> recentNotes,
-                List<CaseReview> recentCases,
-                long historicalLinkCount
-        ) {
-            this.target = target;
-            this.linkedMinecraft = List.copyOf(linkedMinecraft);
-            this.activeMinecraftSanctions = List.copyOf(activeMinecraftSanctions);
-            this.recentHistory = List.copyOf(recentHistory);
-            this.recentNotes = List.copyOf(recentNotes);
-            this.recentCases = List.copyOf(recentCases);
-            this.historicalLinkCount = historicalLinkCount;
+        Snapshot {
+            linkedMinecraft = List.copyOf(linkedMinecraft);
+            activeMinecraftSanctions = List.copyOf(activeMinecraftSanctions);
+            recentHistory = List.copyOf(recentHistory);
+            relevantHistoryCounts = Map.copyOf(relevantHistoryCounts);
+            recentNotes = List.copyOf(recentNotes);
+            recentCases = List.copyOf(recentCases);
+            if (totalHistoryCount < 0 || historicalLinkCount < 0) {
+                throw new IllegalArgumentException("snapshot counts must not be negative");
+            }
+        }
+    }
+
+    private record HistorySummary(List<ModerationHistoryEntry> entries, long totalEntries) {
+        private HistorySummary {
+            entries = List.copyOf(entries);
+            if (totalEntries < 0) {
+                throw new IllegalArgumentException("history total must not be negative");
+            }
         }
     }
 
@@ -192,12 +203,15 @@ final class StaffModerationReadService {
         }
         ModerationSubject subject = checkedTarget.subject().orElseThrow().subject();
         Set<UUID> accountIds = subject.minecraftAccountIds();
+        HistorySummary history = historySummary(accountIds);
         Instant now = clock.instant();
         return new Snapshot(
                 checkedTarget,
                 linkedAccounts(subject, accountIds),
                 activeSanctions(accountIds, now),
-                recentHistory(accountIds),
+                history.entries(),
+                history.totalEntries(),
+                relevantHistoryCounts(accountIds),
                 recentNotes(accountIds),
                 recentCases(accountIds),
                 historicalLinkCount(checkedTarget)
@@ -205,7 +219,7 @@ final class StaffModerationReadService {
     }
 
     private static Snapshot emptySnapshot(Target target) {
-        return new Snapshot(target, List.of(), List.of(), List.of(), List.of(), List.of(), 0L);
+        return new Snapshot(target, List.of(), List.of(), List.of(), 0L, Map.of(), List.of(), List.of(), 0L);
     }
 
     private List<LinkedMinecraft> linkedAccounts(ModerationSubject subject, Set<UUID> accountIds) {
@@ -226,12 +240,24 @@ final class StaffModerationReadService {
                 .toList();
     }
 
-    private List<ModerationHistoryEntry> recentHistory(Set<UUID> accountIds) {
-        return accountIds.stream()
-                .flatMap(id -> history(id).stream())
+    private HistorySummary historySummary(Set<UUID> accountIds) {
+        List<ModerationHistoryPage> pages = accountIds.stream().map(this::historyPage).toList();
+        List<ModerationHistoryEntry> entries = pages.stream()
+                .flatMap(page -> page.entries().stream())
                 .sorted(Comparator.comparing(ModerationHistoryEntry::occurredAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
+        long total = pages.stream().mapToLong(ModerationHistoryPage::totalEntries).sum();
+        return new HistorySummary(entries, total);
+    }
+
+    private Map<String, Long> relevantHistoryCounts(Set<UUID> accountIds) {
+        Map<String, Long> totals = new TreeMap<>();
+        for (UUID accountId : accountIds) {
+            data.relevantCaseCounts(accountId).forEach((family, count) ->
+                    totals.merge(family, count, (left, right) -> Math.addExact(left, right)));
+        }
+        return Map.copyOf(totals);
     }
 
     private List<StaffNote> recentNotes(Set<UUID> accountIds) {
@@ -254,13 +280,13 @@ final class StaffModerationReadService {
         return target.discordId().map(data::linkHistoryCountForDiscord).orElse(0L);
     }
 
-    private List<ModerationHistoryEntry> history(UUID playerId) {
+    private ModerationHistoryPage historyPage(UUID playerId) {
         return data.historyPage(
                 playerId,
                 1,
                 PER_ACCOUNT_LIMIT,
                 HistoryQueryOptions.publicStaffView(true, true)
-        ).entries();
+        );
     }
 
     private LinkedMinecraft linkedAccount(ModerationSubject subject, UUID playerId) {
@@ -338,6 +364,11 @@ final class StaffModerationReadService {
                 HistoryQueryOptions options
         ) {
             return runtime.historyPage(targetId, page, pageSize, options);
+        }
+
+        @Override
+        public Map<String, Long> relevantCaseCounts(UUID targetId) {
+            return runtime.relevantCaseCounts(targetId);
         }
 
         @Override

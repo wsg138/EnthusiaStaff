@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
@@ -86,6 +87,10 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
             HistoryQueryOptions options
     ) {
         return history.page(targetId, page, pageSize, options);
+    }
+
+    public Map<String, Long> relevantCaseCounts(UUID targetId) {
+        return JdbcModerationReadSummary.relevantCaseCounts(dataSource, targetId);
     }
 
     public List<CaseReview> recentCases(UUID targetId, int limit) {

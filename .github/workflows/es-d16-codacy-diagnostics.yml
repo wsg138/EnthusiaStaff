@@ -1,0 +1,33 @@
+name: ES-D16 Codacy Diagnostics
+
+on:
+  push:
+    branches:
+      - package/es-d16-moderation-read-bridge
+    paths:
+      - ".github/workflows/es-d16-codacy-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  codacy-metadata:
+    name: Fetch public Codacy PR issue metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch exact PR issue metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues'
+          curl --fail-with-body --silent --show-error "$endpoint" > codacy-issues.json
+          jq -e '.data | type == "array"' codacy-issues.json >/dev/null
+          jq '{count:(.data|length), issues:[.data[] | {
+            filePath,
+            lineNumber,
+            message,
+            category,
+            patternInfo,
+            toolInfo
+          }]}' codacy-issues.json

@@ -59,6 +59,15 @@ final class ModerationReadSnapshotMapper {
         return snapshot.recentHistory().stream().map(entry -> history(entry, cases)).toList();
     }
 
+    List<ModerationReadApiModel.FamilyCountDto> relevantHistoryCounts(
+            StaffModerationReadService.Snapshot snapshot
+    ) {
+        return snapshot.relevantHistoryCounts().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> new ModerationReadApiModel.FamilyCountDto(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
     List<ModerationReadApiModel.CaseDto> cases(StaffModerationReadService.Snapshot snapshot) {
         return snapshot.recentCases().stream().map(review -> new ModerationReadApiModel.CaseDto(
                 review.caseId().toString(), review.publicReason(), review.exactReasonId(), review.sanctionFamily(),

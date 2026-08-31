@@ -44,6 +44,8 @@ final class ModerationReadApiModel {
             List<LinkedAccountDto> linkedAccounts,
             List<SanctionDto> activeSanctions,
             List<HistoryDto> history,
+            long totalHistoryCount,
+            List<FamilyCountDto> relevantHistoryCounts,
             List<CaseDto> cases,
             List<NoteDto> notes,
             List<ChannelDto> channels,
@@ -54,10 +56,14 @@ final class ModerationReadApiModel {
             linkedAccounts = List.copyOf(linkedAccounts);
             activeSanctions = List.copyOf(activeSanctions);
             history = List.copyOf(history);
+            relevantHistoryCounts = List.copyOf(relevantHistoryCounts);
             cases = List.copyOf(cases);
             notes = List.copyOf(notes);
             channels = List.copyOf(channels);
             centeredMessageId = centeredMessageId == null ? Optional.empty() : centeredMessageId;
+            if (totalHistoryCount < 0) {
+                throw new IllegalArgumentException("history total must not be negative");
+            }
         }
     }
 
@@ -119,6 +125,14 @@ final class ModerationReadApiModel {
             actorName = actorName == null ? Optional.empty() : actorName;
             exactReasonId = exactReasonId == null ? Optional.empty() : exactReasonId;
             sanctionFamily = sanctionFamily == null ? Optional.empty() : sanctionFamily;
+        }
+    }
+
+    record FamilyCountDto(String sanctionFamily, long count) {
+        FamilyCountDto {
+            if (sanctionFamily == null || sanctionFamily.isBlank() || count < 1) {
+                throw new IllegalArgumentException("relevant history count is invalid");
+            }
         }
     }
 
