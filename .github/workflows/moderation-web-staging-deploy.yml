@@ -85,15 +85,22 @@ jobs:
           trap cleanup EXIT
           chmod 600 "$secrets_file"
 
-          launch_key="$(printf 'enthusia-staff-moderation-launch-v1\0%s' "$BOT_TOKEN" | sha256sum | awk '{print $1}')"
-          unset BOT_TOKEN
-          python3 - "$secrets_file" "$launch_key" <<'PY'
+          python3 - "$secrets_file" <<'PY'
+          import hashlib
           import json
+          import os
           import sys
+
+          token = os.environ['BOT_TOKEN'].strip()
+          if not token or any(ch.isspace() for ch in token):
+              raise SystemExit('protected bot token is empty or malformed')
+          key_hex = hashlib.sha256(
+              b'enthusia-staff-moderation-launch-v1\0' + token.encode('utf-8')
+          ).hexdigest()
           with open(sys.argv[1], 'w', encoding='utf-8') as handle:
-              json.dump({'LAUNCH_SIGNING_KEY_HEX': sys.argv[2]}, handle)
+              json.dump({'LAUNCH_SIGNING_KEY_HEX': key_hex}, handle)
           PY
-          unset launch_key
+          unset BOT_TOKEN
 
           npx wrangler deploy --secrets-file "$secrets_file"
           rm -f "$secrets_file"
@@ -160,7 +167,11 @@ jobs:
           PY
 
           first_status="$(curl --silent --show-error --output "$body_file" --dump-header "$headers_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
-          [[ "$first_status" == '303' ]]
+          if [[ "$first_status" != '303' ]]; then
+            echo "Live first-use launch returned HTTP ${first_status}; expected 303." >&2
+            cat "$body_file" >&2
+            exit 1
+          fi
           grep -Eiq '^location: /moderation\r?$' "$headers_file"
           grep -Eiq '^set-cookie: __Host-enthusia_mod_preview=' "$headers_file"
 
