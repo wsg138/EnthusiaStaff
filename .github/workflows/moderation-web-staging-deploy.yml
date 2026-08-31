@@ -75,6 +75,8 @@ jobs:
           echo "Resolved ${EXPECTED_ZONE} to its owning Cloudflare account." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Provision fixed moderation read tunnel and hostname
+        id: provision_read_tunnel
+        continue-on-error: true
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -351,7 +353,7 @@ jobs:
             echo "- host: \`https://${EXPECTED_HOST}\`"
             echo '- Worker + protected assets: **PASS**'
             echo '- Durable Object/session configuration: **deployed**'
-            echo '- fixed private read hostname/tunnel configuration: **deployed**'
+            echo '- fixed private read hostname/tunnel configuration: **attempted separately**'
             echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
             echo '- protected-secret launch ticket first use: **PASS**'
@@ -360,3 +362,35 @@ jobs:
             echo '- runtime mode: **staging simulation only**'
             echo '- Discord bot token uploaded to Cloudflare: **NO**'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record sanitized Codacy issue metadata
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues'
+          response=''
+          for attempt in $(seq 1 12); do
+            if candidate="$(curl --fail-with-body --silent --show-error "$endpoint" 2>/dev/null)" \
+              && printf '%s' "$candidate" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
+              response="$candidate"
+              break
+            fi
+            sleep 5
+          done
+          [[ -n "$response" ]]
+          printf '%s' "$response" | jq '{count:(.data|length), issues:[.data[] | {
+            filePath,
+            lineNumber,
+            message,
+            category,
+            patternInfo,
+            toolInfo
+          }]}'
+
+      - name: Require fixed private tunnel provisioning
+        if: always() && steps.provision_read_tunnel.outcome != 'success'
+        shell: bash
+        run: |
+          echo '::error::The protected Cloudflare token cannot provision the fixed moderation read tunnel/hostname. This remains a hard ES-D16 staging gate.'
+          exit 1
