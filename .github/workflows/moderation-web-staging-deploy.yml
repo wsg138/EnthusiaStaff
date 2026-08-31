@@ -122,6 +122,55 @@ jobs:
           grep -Fqx 'Open this panel from Discord.' root.out
           rm -f root.out
 
+      - name: Verify live launch ticket and replay contract
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ticket_file="$(mktemp)"
+          headers_file="$(mktemp)"
+          body_file="$(mktemp)"
+          replay_file="$(mktemp)"
+          cleanup() { rm -f "$ticket_file" "$headers_file" "$body_file" "$replay_file"; }
+          trap cleanup EXIT
+          chmod 600 "$ticket_file"
+
+          python3 - "$ticket_file" "$EXPECTED_HOST" <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import os
+          import secrets
+          import sys
+          import time
+          import urllib.parse
+
+          output_path, host = sys.argv[1:]
+          bot_token = os.environ['BOT_TOKEN'].strip()
+          if not bot_token or any(ch.isspace() for ch in bot_token):
+              raise SystemExit('protected bot token is empty or malformed')
+          key = hashlib.sha256(b'enthusia-staff-moderation-launch-v1\0' + bot_token.encode('utf-8')).digest()
+          now = int(time.time())
+          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
+          body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|sample-river-ash|{now}|{now + 120}'
+          encoded = base64.urlsafe_b64encode(body.encode('utf-8')).rstrip(b'=').decode('ascii')
+          signature = base64.urlsafe_b64encode(hmac.new(key, encoded.encode('ascii'), hashlib.sha256).digest()).rstrip(b'=').decode('ascii')
+          token = f'{encoded}.{signature}'
+          with open(output_path, 'w', encoding='utf-8') as handle:
+              handle.write(f'https://{host}/launch?t={urllib.parse.quote(token, safe="")}')
+          PY
+
+          first_status="$(curl --silent --show-error --output "$body_file" --dump-header "$headers_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
+          [[ "$first_status" == '303' ]]
+          grep -Eiq '^location: /moderation\r?$' "$headers_file"
+          grep -Eiq '^set-cookie: __Host-enthusia_mod_preview=' "$headers_file"
+
+          replay_status="$(curl --silent --show-error --output "$replay_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
+          [[ "$replay_status" == '401' ]]
+          grep -Fqx 'This moderation link is invalid, expired, or already used.' "$replay_file"
+
+          cleanup
+          trap - EXIT
+
           {
             echo '## Moderation web staging deployment'
             echo
@@ -131,6 +180,8 @@ jobs:
             echo '- Durable Object/session configuration: **deployed**'
             echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
+            echo '- protected-secret launch ticket first use: **PASS**'
+            echo '- one-time launch replay rejection: **PASS**'
             echo '- runtime mode: **staging simulation only**'
             echo '- Discord bot token uploaded to Cloudflare: **NO**'
           } >> "$GITHUB_STEP_SUMMARY"
