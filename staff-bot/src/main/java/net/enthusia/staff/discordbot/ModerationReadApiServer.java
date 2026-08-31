@@ -15,6 +15,8 @@ import java.util.concurrent.Executors;
 /** Loopback-only authenticated private read API. It exposes no mutation route. */
 final class ModerationReadApiServer implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(ModerationReadApiServer.class.getName());
+    private static final String BIND_HOST = "127.0.0.1";
+    private static final int BIND_PORT = 8766;
     private static final int MAX_BODY_BYTES = 65_536;
     private static final int WORKER_THREADS = 2;
     private static final int REQUESTS_PER_MINUTE = 120;
@@ -26,20 +28,12 @@ final class ModerationReadApiServer implements AutoCloseable {
     private final ModerationReadApiRateLimiter rateLimiter;
     private final ModerationReadApiService service;
 
-    ModerationReadApiServer(
-            InetSocketAddress bindAddress,
-            String discordBotToken,
-            ModerationReadApiService service
-    ) throws IOException {
-        Objects.requireNonNull(bindAddress, "bindAddress");
-        if (bindAddress.getAddress() == null || !bindAddress.getAddress().isLoopbackAddress()) {
-            throw new IllegalArgumentException("moderation read API must bind to loopback");
-        }
+    ModerationReadApiServer(String discordBotToken, ModerationReadApiService service) throws IOException {
         this.service = Objects.requireNonNull(service, "service");
         this.authenticator = new ModerationReadApiAuthenticator(discordBotToken);
         this.rateLimiter = new ModerationReadApiRateLimiter(REQUESTS_PER_MINUTE, Duration.ofMinutes(1));
         this.json = new ObjectMapper().registerModule(new Jdk8Module());
-        this.server = HttpServer.create(bindAddress, 0);
+        this.server = HttpServer.create(bindAddress(), 0);
         this.executor = Executors.newFixedThreadPool(WORKER_THREADS, runnable -> {
             Thread thread = new Thread(runnable, "enthusia-moderation-read-api");
             thread.setDaemon(true);
@@ -48,6 +42,10 @@ final class ModerationReadApiServer implements AutoCloseable {
         server.setExecutor(executor);
         server.createContext("/v1/moderation/bootstrap", exchange -> handle(exchange, true));
         server.createContext("/v1/moderation/messages", exchange -> handle(exchange, false));
+    }
+
+    static InetSocketAddress bindAddress() {
+        return new InetSocketAddress(BIND_HOST, BIND_PORT);
     }
 
     void start() {

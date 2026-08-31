@@ -36,7 +36,6 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
     private final Optional<ModerationPreviewHostedLaunchIssuer> hostedLaunchIssuer;
     private final Optional<StaffModerationRuntime> moderation;
-    private final ModerationPreviewWebConfig webConfig;
     private final String discordBotToken;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
@@ -55,7 +54,6 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         }
         this.guildId = guildId;
         this.interactions = interactions;
-        this.webConfig = webConfig;
         this.discordBotToken = discordBotToken;
         this.moderation = moderation == null ? Optional.empty() : moderation;
         this.hostedLaunchIssuer = webConfig.hostedExternally()
@@ -143,7 +141,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         }
         try {
             ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
-            readApiServer = new ModerationReadApiServer(webConfig.bindAddress(), discordBotToken, service);
+            readApiServer = new ModerationReadApiServer(discordBotToken, service);
             readApiServer.start();
             return true;
         } catch (java.io.IOException | RuntimeException exception) {

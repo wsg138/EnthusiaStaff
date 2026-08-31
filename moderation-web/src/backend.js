@@ -3,16 +3,17 @@
 const textEncoder = new TextEncoder();
 const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
+const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 
 export async function proxyModerationRead(env, session, endpoint, browserUrl) {
-  const configuration = readConfiguration(env);
-  if (!configuration) return unavailable();
+  const keyHex = readSigningKey(env);
+  if (!keyHex) return unavailable();
+  const path = endpointPath(endpoint);
   const body = JSON.stringify(readRequest(session, endpoint, browserUrl));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomToken(24);
-  const signature = await signRequest(
-    configuration.keyHex, 'POST', endpointPath(endpoint), body, timestamp, nonce);
-  const response = await fetch(new URL(endpointPath(endpoint), configuration.origin), {
+  const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
+  const response = await fetch(new URL(path, READ_API_ORIGIN), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -59,23 +60,9 @@ export function readRequest(session, endpoint, browserUrl) {
   return request;
 }
 
-function readConfiguration(env) {
-  const origin = parseOrigin(env.READ_API_ORIGIN);
+function readSigningKey(env) {
   const keyHex = typeof env.READ_API_SIGNING_KEY_HEX === 'string' ? env.READ_API_SIGNING_KEY_HEX : '';
-  if (!origin || !/^[0-9a-fA-F]{64}$/.test(keyHex)) return null;
-  return {origin, keyHex};
-}
-
-function parseOrigin(value) {
-  if (typeof value !== 'string' || value.length > 512) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return null;
-    if (url.pathname !== '/' && url.pathname !== '') return null;
-    return url;
-  } catch {
-    return null;
-  }
+  return /^[0-9a-fA-F]{64}$/.test(keyHex) ? keyHex : null;
 }
 
 function copySnowflake(url, target, field, parameter) {
