@@ -1,4 +1,4 @@
-name: PR186 Lockfile Bootstrap
+name: PR186 Final Review Repair
 
 on:
   push:
@@ -8,13 +8,13 @@ on:
       - ".github/workflows/pr186-lockfile-bootstrap.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  lockfile:
-    name: Generate exact moderation-web lockfile
+  repair:
+    name: Apply and validate final review repairs
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out exact commit
         uses: actions/checkout@v6
@@ -26,18 +26,217 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Generate lockfile without lifecycle scripts
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+        with:
+          cache-read-only: true
+
+      - name: Apply reviewed repairs and generate lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected one match in {path}: {old!r}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          deploy = '.github/workflows/moderation-web-staging-deploy.yml'
+          replace_once(
+              deploy,
+              '      - name: Check out exact commit\n        uses: actions/checkout@v6\n',
+              '      - name: Check out exact commit\n        uses: actions/checkout@v6\n        with:\n          persist-credentials: false\n'
+          )
+          replace_once(
+              deploy,
+              '          npm install --no-package-lock --ignore-scripts\n',
+              '          npm ci --ignore-scripts\n'
+          )
+
+          validation = '.github/workflows/moderation-web-validation.yml'
+          replace_once(
+              validation,
+              '        with:\n          ref: ${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}\n',
+              '        with:\n          persist-credentials: false\n          ref: ${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}\n'
+          )
+          replace_once(
+              validation,
+              '          npm install --no-package-lock --ignore-scripts\n',
+              '          npm ci --ignore-scripts\n'
+          )
+
+          index = 'moderation-web/src/index.js'
+          replace_once(
+              index,
+              "import { inspectLaunchToken } from './security.js';\n",
+              "import { inspectLaunchToken } from './security.js';\nimport { readBoundedBody } from './request-body.js';\n"
+          )
+          replace_once(
+              index,
+              "async function readSimulationPayload(request) {\n  if (declaredRequestTooLarge(request)) return { error: textResponse('Preview request is too large.', 413) };\n  const body = new Uint8Array(await request.arrayBuffer());\n  if (body.byteLength > MAX_REQUEST_BYTES) return { error: textResponse('Preview request is too large.', 413) };\n  return parseSimulationJson(body);\n}\n\nfunction declaredRequestTooLarge(request) {\n  const declaredLength = Number(request.headers.get('Content-Length') || '0');\n  if (!Number.isFinite(declaredLength)) return false;\n  return declaredLength > MAX_REQUEST_BYTES;\n}\n",
+              "async function readSimulationPayload(request) {\n  const body = await readBoundedBody(request, MAX_REQUEST_BYTES);\n  if (!body) return { error: textResponse('Preview request is too large.', 413) };\n  return parseSimulationJson(body);\n}\n"
+          )
+
+          Path('moderation-web/src/request-body.js').write_text("""export async function readBoundedBody(request, maxBytes) {
+            if (declaredTooLarge(request, maxBytes)) return null;
+            if (!request.body) return new Uint8Array();
+            const reader = request.body.getReader();
+            const chunks = [];
+            let total = 0;
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) return combine(chunks, total);
+                total += value.byteLength;
+                if (total > maxBytes) {
+                  await reader.cancel();
+                  return null;
+                }
+                chunks.push(value);
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          }
+
+          function declaredTooLarge(request, maxBytes) {
+            const raw = request.headers.get('Content-Length');
+            if (raw === null || raw.trim() === '') return false;
+            const declared = Number(raw);
+            return Number.isFinite(declared) && declared > maxBytes;
+          }
+
+          function combine(chunks, total) {
+            const body = new Uint8Array(total);
+            let offset = 0;
+            for (const chunk of chunks) {
+              body.set(chunk, offset);
+              offset += chunk.byteLength;
+            }
+            return body;
+          }
+          """.replace('          ', ''), encoding='utf-8')
+
+          Path('moderation-web/test/request-body.test.mjs').write_text("""import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import { readBoundedBody } from '../src/request-body.js';
+
+          function streamedRequest(chunks, headers = {}) {
+            const stream = new ReadableStream({
+              start(controller) {
+                for (const chunk of chunks) controller.enqueue(new Uint8Array(chunk));
+                controller.close();
+              }
+            });
+            return new Request('https://staff-staging.enthusia.info/api/simulate', {
+              method: 'POST',
+              headers,
+              body: stream,
+              duplex: 'half'
+            });
+          }
+
+          test('reads a streamed request only when it stays within the byte limit', async () => {
+            const body = await readBoundedBody(streamedRequest([[1, 2], [3, 4]]), 4);
+            assert.deepEqual([...body], [1, 2, 3, 4]);
+          });
+
+          test('rejects an oversized stream without requiring Content-Length', async () => {
+            const body = await readBoundedBody(streamedRequest([[1, 2, 3], [4, 5, 6]]), 5);
+            assert.equal(body, null);
+          });
+
+          test('rejects an oversized declared request before reading its body', async () => {
+            const request = streamedRequest([[1]], { 'Content-Length': '6' });
+            assert.equal(await readBoundedBody(request, 5), null);
+          });
+          """.replace('          ', ''), encoding='utf-8')
+
+          config = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java'
+          replace_once(
+              config,
+              '    private static boolean loopbackHost(String host) {\n        return LOCALHOST.equalsIgnoreCase(host) || IPV4_LOOPBACK_HOST.equals(host) || IPV6_LOOPBACK_HOST.equals(host);\n    }\n',
+              '    private static boolean loopbackHost(String host) {\n        String normalized = unbracketedHost(host);\n        return LOCALHOST.equalsIgnoreCase(normalized)\n                || IPV4_LOOPBACK_HOST.equals(normalized)\n                || IPV6_LOOPBACK_HOST.equals(normalized);\n    }\n\n    private static String unbracketedHost(String host) {\n        if (host != null && host.startsWith("[") && host.endsWith("]")) {\n            return host.substring(1, host.length() - 1);\n        }\n        return host;\n    }\n'
+          )
+
+          test_file = 'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java'
+          marker = '    @Test\n    void explicitBindPortIsRestrictedToDocumentedStagingPort() {\n'
+          addition = '''    @Test
+    void localIpv6PublicDevelopmentOriginIsAccepted() {
+        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "[::1]:8766",
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://[::1]:8766"));
+
+        assertEquals("http://[::1]:8766", config.publicBaseUri().orElseThrow().toString());
+        assertFalse(config.hostedExternally());
+        assertFalse(config.secureCookie());
+    }
+
+'''
+          replace_once(test_file, marker, addition + marker)
+          PY
+
+          cd moderation-web
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          test -s package-lock.json
+          cd ..
+          rm .github/workflows/pr186-lockfile-bootstrap.yml
+
+      - name: Validate moderation web with locked dependencies
         working-directory: moderation-web
         shell: bash
         run: |
           set -Eeuo pipefail
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          test -s package-lock.json
+          npm ci --ignore-scripts
+          npm run check
 
-      - name: Upload lockfile
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr186-moderation-web-lockfile
-          path: moderation-web/package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+      - name: Validate focused Java configuration tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x gradlew
+          ./gradlew :staff-bot:test \
+            --tests net.enthusia.staff.discordbot.ModerationPreviewWebConfigTest \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+          git diff --check
+
+      - name: Commit consolidated repairs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add .github/workflows/moderation-web-staging-deploy.yml \
+            .github/workflows/moderation-web-validation.yml \
+            .github/workflows/pr186-lockfile-bootstrap.yml \
+            moderation-web/package-lock.json \
+            moderation-web/src/index.js \
+            moderation-web/src/request-body.js \
+            moderation-web/test/request-body.test.mjs \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
+          git diff --cached --check
+          git commit -m '[PR186] Resolve final review security findings'
+
+      - name: Push validated repair commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic ${auth}" \
+            push origin HEAD:owner/staging-web-moderation-console
