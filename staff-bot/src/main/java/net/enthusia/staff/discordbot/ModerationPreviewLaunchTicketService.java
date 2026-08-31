@@ -109,6 +109,11 @@ final class ModerationPreviewLaunchTicketService {
             if (!claims.expiresAt().equals(parts.expiresAt())) {
                 return ConsumeResult.rejected(Status.INVALID);
             }
+            Instant lockedNow = clock.instant();
+            if (!lockedNow.isBefore(claims.expiresAt())) {
+                tickets.remove(parts.nonce());
+                return ConsumeResult.rejected(Status.EXPIRED);
+            }
             tickets.remove(parts.nonce());
             return ConsumeResult.accepted(claims);
         }
