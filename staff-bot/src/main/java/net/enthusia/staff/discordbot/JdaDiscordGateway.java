@@ -97,8 +97,10 @@ final class JdaDiscordGateway implements DiscordGateway {
                     configuration.environment().guildId(),
                     interactions,
                     configuration.interactionCapacity(),
-                    configuration.interactionTtl()
+                    configuration.previewWebConfig(),
+                    configuration.discordToken()
             );
+            previewListener.startWeb();
             builder.addEventListeners(previewListener);
             return;
         }
@@ -141,7 +143,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     @Override
     public void shutdown() {
         synchronized (lifecycleLock) {
-            disableListeners();
+            closeListeners();
             if (jda != null) {
                 jda.shutdown();
             }
@@ -151,16 +153,16 @@ final class JdaDiscordGateway implements DiscordGateway {
     @Override
     public void shutdownNow() {
         synchronized (lifecycleLock) {
-            disableListeners();
+            closeListeners();
             if (jda != null) {
                 jda.shutdownNow();
             }
         }
     }
 
-    private void disableListeners() {
+    private void closeListeners() {
         if (previewListener != null) {
-            previewListener.disable();
+            previewListener.close();
         }
         if (moderationListener != null) {
             moderationListener.disable();

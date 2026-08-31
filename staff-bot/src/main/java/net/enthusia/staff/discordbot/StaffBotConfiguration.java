@@ -39,6 +39,7 @@ public final class StaffBotConfiguration {
     private final int workerQueueCapacity;
     private final int interactionCapacity;
     private final Duration interactionTtl;
+    private final ModerationPreviewWebConfig previewWebConfig;
 
     StaffBotConfiguration(
             StaffBotEnvironment environment,
@@ -57,15 +58,21 @@ public final class StaffBotConfiguration {
         this.workerQueueCapacity = bounded("worker queue capacity", workerQueueCapacity, 1, 4096);
         this.interactionCapacity = bounded("interaction capacity", interactionCapacity, 16, 65536);
         this.interactionTtl = Objects.requireNonNull(interactionTtl, "interactionTtl");
-        if (interactionTtl.isZero() || interactionTtl.isNegative() || interactionTtl.compareTo(Duration.ofHours(24)) > 0) {
-            throw new IllegalArgumentException("interaction TTL must be between 1 second and 24 hours");
-        }
-        if (uiPreviewEnabled && environment != StaffBotEnvironment.STAGING) {
-            throw new IllegalArgumentException("staff bot UI preview is staging-only");
-        }
-        if (environment == StaffBotEnvironment.PRODUCTION && healthAddress.getPort() == 0) {
-            throw new IllegalArgumentException("production health port cannot be ephemeral");
-        }
+        this.previewWebConfig = ModerationPreviewWebConfig.fromEnvironment(Map.of());
+        validateRuntimeBounds();
+    }
+
+    private StaffBotConfiguration(StaffBotConfiguration source, ModerationPreviewWebConfig previewWebConfig) {
+        Objects.requireNonNull(source, "source");
+        this.environment = source.environment;
+        this.discordToken = source.discordToken;
+        this.uiPreviewEnabled = source.uiPreviewEnabled;
+        this.healthAddress = source.healthAddress;
+        this.workerThreads = source.workerThreads;
+        this.workerQueueCapacity = source.workerQueueCapacity;
+        this.interactionCapacity = source.interactionCapacity;
+        this.interactionTtl = source.interactionTtl;
+        this.previewWebConfig = Objects.requireNonNull(previewWebConfig, "previewWebConfig");
     }
 
     StaffBotConfiguration(
@@ -109,6 +116,8 @@ public final class StaffBotConfiguration {
         effectiveValues.put(UI_PREVIEW_KEY, Boolean.TRUE.toString());
         effectiveValues.put(TOKEN_KEY, StaffBotTokenFile.read(commandLine.tokenFile().orElseThrow(
                 () -> new IllegalArgumentException("staging UI preview requires a token file"))));
+        commandLine.previewWebBind().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.BIND_ENV, value));
+        commandLine.previewPublicUrl().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.PUBLIC_URL_ENV, value));
         return fromEnvironment(effectiveValues);
     }
 
@@ -131,7 +140,7 @@ public final class StaffBotConfiguration {
                 DEFAULT_INTERACTION_TTL_SECONDS,
                 1,
                 86400);
-        return new StaffBotConfiguration(
+        StaffBotConfiguration base = new StaffBotConfiguration(
                 environment,
                 token,
                 uiPreviewEnabled,
@@ -140,6 +149,10 @@ public final class StaffBotConfiguration {
                 queueCapacity,
                 interactionCapacity,
                 Duration.ofSeconds(interactionTtlSeconds));
+        if (!uiPreviewEnabled) {
+            return base;
+        }
+        return new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values));
     }
 
     public StaffBotEnvironment environment() {
@@ -174,6 +187,10 @@ public final class StaffBotConfiguration {
         return interactionTtl;
     }
 
+    ModerationPreviewWebConfig previewWebConfig() {
+        return previewWebConfig;
+    }
+
     public int maxReconnectDelaySeconds() {
         return MAX_RECONNECT_DELAY_SECONDS;
     }
@@ -191,7 +208,20 @@ public final class StaffBotConfiguration {
                 + ", workerQueueCapacity=" + workerQueueCapacity
                 + ", interactionCapacity=" + interactionCapacity
                 + ", interactionTtl=" + interactionTtl
+                + ", previewWebPublic=" + (previewWebConfig.publicBaseUri().isPresent() ? "<configured>" : "<none>")
                 + ", discordToken=<redacted>]";
+    }
+
+    private void validateRuntimeBounds() {
+        if (interactionTtl.isZero() || interactionTtl.isNegative() || interactionTtl.compareTo(Duration.ofHours(24)) > 0) {
+            throw new IllegalArgumentException("interaction TTL must be between 1 second and 24 hours");
+        }
+        if (uiPreviewEnabled && environment != StaffBotEnvironment.STAGING) {
+            throw new IllegalArgumentException("staff bot UI preview is staging-only");
+        }
+        if (environment == StaffBotEnvironment.PRODUCTION && healthAddress.getPort() == 0) {
+            throw new IllegalArgumentException("production health port cannot be ephemeral");
+        }
     }
 
     private static void rejectProductionPreviewEnvironment(Map<String, String> values) {
@@ -204,7 +234,7 @@ public final class StaffBotConfiguration {
         }
     }
 
-    private static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
+    static InetSocketAddress loopbackSocketAddress(String healthHost, int healthPort) {
         return switch (healthHost) {
             case IPV4_LOOPBACK_HOST, LOCALHOST -> {
                 // nosemgrep -- Literal IPv4 loopback bind; validated allowlist input cannot reach this sink.

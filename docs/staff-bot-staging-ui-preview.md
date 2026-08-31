@@ -1,28 +1,56 @@
-# Staff bot staging moderation UI preview
+# Staff bot staging moderation web preview
 
-This runbook is for the owner-directed Discord moderation UI prototype. It is not ES-D07 punishment enforcement.
+This runbook covers the owner-directed, staging-only moderation preview. Discord is the launch surface and `https://staff-staging.enthusia.info` is the permanent web workspace. This is not ES-D07 and it has no live punishment, message deletion, Minecraft enforcement, LiteBans mutation, punishment-database mutation, or production authority path.
+
+## Accepted architecture
+
+- The staging Discord bot runs on Bloom.
+- `/moderate-preview` returns an ephemeral `Open Moderation Panel` link.
+- The moderation website is permanently hosted by Cloudflare from this repository.
+- Cloudflare Workers Static Assets serve the approved UI through the Worker; direct unauthenticated workspace access is rejected.
+- A SQLite-backed Durable Object owns one-time launch replay state and browser session/CSRF state.
+- `EnthusiaStaff-Staging` is not the website host. It is reserved for narrow temporary diagnostics or acceptance when genuinely useful.
+- The former Java `HttpServer` moderation-preview runtime has been removed from the executable path. No reverse proxy, Pi web host, or Bloom-hosted website is part of the accepted design.
+
+The static UI source remains under `staff-bot/src/main/resources/moderation-preview` so the product contract tests and Cloudflare build share exactly one owner-approved asset set. `moderation-web/scripts/build.mjs` copies those assets into the Cloudflare deployment bundle. Their presence in the JAR resources does not start or expose a Java web server.
 
 ## Safety model
 
-The preview remains staging-only. It can be enabled in either of these explicit ways:
+Preview mode can be enabled only for the fixed staging environment. Production configuration rejects it. When preview mode is enabled, the process does not initialize the live moderation database/authority runtime.
 
-- environment configuration: `ENTHUSIA_STAFF_BOT_ENVIRONMENT=staging` together with `ENTHUSIA_STAFF_BOT_UI_PREVIEW=true`; or
-- the dedicated-host convenience CLI: `--staging-ui-preview` together with `--token-file=<path>`.
+The browser workspace uses deterministic sample state and the final confirmation calls only `/api/simulate`. The Worker validates an explicit allowlisted target and never accepts browser-supplied authority as sufficient authorization.
 
-The convenience CLI always selects the existing `STAGING` environment and rejects an explicitly configured production environment. The normal production configuration cannot enable preview mode. The existing fixed staging Discord application, guild, and test-channel identity fence still applies before interactions are enabled.
+A future real-data/enforcement package must reauthorize the concrete staff actor, target, sanction, duration, scope, restriction targets, permanent-action permission, approval requirement, and evidence state at the server-side commit boundary. That work is deliberately outside this PR.
 
-When preview mode is enabled, the process does not initialize the D06 moderation database/authority runtime. The preview workflow uses deterministic bounded in-memory sample data and a fake policy evaluator. It has no punishment service, Discord moderation adapter, Minecraft/Paper authority adapter, LiteBans adapter, persistence adapter, or external authority dependency. Final confirmation only changes the in-memory preview state.
+## Launch and browser-session security
 
-## Bloom Generic-JDA panel
+Each Discord launch URL contains only a short-lived signed staging ticket. Claims bind:
 
-Place a runtime-only file named `staging-bot-token.txt` in the bot server filesystem. The file must contain only the Discord **staging bot token**; a normal trailing newline is acceptable. Do not commit this file, paste its contents into APP FLAGS, or include it in logs/screenshots/support messages.
+- staff actor ID;
+- staging guild ID;
+- allowlisted staging target key;
+- issue and expiry timestamps;
+- a random nonce.
 
-Use these exact panel settings:
+The Worker verifies HMAC-SHA256, rejects malformed/tampered/expired/wrong-guild/wrong-target tickets, and atomically consumes the nonce in the Durable Object. First use creates a random server-side browser session; replay of the exact same launch is rejected.
+
+The browser session cookie is host-only, `Secure`, `HttpOnly`, and `SameSite=Strict`, expires after 15 minutes, and is paired with server-side CSRF material for state-changing preview requests. Responses use `no-store`, HSTS, restrictive CSP, frame denial, referrer and MIME protections, cross-origin protections, and disabled camera/microphone/geolocation permissions.
+
+Rejection responses intentionally do not expose internal validation/replay reasons. Live acceptance verifies the public contract by status and body.
+
+## Signing-secret boundary and staging bootstrap debt
+
+The raw Discord bot token is used only where the staging bot or protected deployment automation already needs it. It must never appear in browser code, public source, URLs, logs, artifacts, or the Cloudflare runtime.
+
+Today the bot and protected GitHub Actions workflow derive the same 32-byte launch-signing key from the staging Discord bot token using a domain-separated SHA-256 derivation. Only that derived key is uploaded to Cloudflare as `LAUNCH_SIGNING_KEY_HEX`; the raw Discord token is not uploaded to Cloudflare. The deployment workflow scopes each protected secret to only the individual steps that require it rather than exposing the bot token job-wide.
+
+This coupling is accepted **staging bootstrap debt**, not the desired long-term secret design. A future hardening change should provision a dedicated random launch-signing secret to both Bloom and the protected Cloudflare deployment environment, then remove token-derived signing in one coordinated cutover. Do not make an uncoordinated partial migration that breaks launch verification or causes either side to fall back insecurely.
+
+## Bloom startup
+
+Use Java 21 and the staff-bot JAR. Keep the staging bot token in a runtime-only file rather than process arguments.
 
 ```text
-Java Version:
-Java 21
-
 JAR FILE:
 EnthusiaStaff-StaffBot.jar
 
@@ -30,93 +58,65 @@ FLAGS:
 -Dterminal.jline=false -Dterminal.ansi=true
 
 APP FLAGS:
---staging-ui-preview --token-file=staging-bot-token.txt
+--staging-ui-preview --token-file=staging-bot-token.txt --preview-public-url=https://staff-staging.enthusia.info
 ```
 
-With these APP FLAGS, no machine-level environment variables are required for the UI preview. `--token-file` is accepted only as part of the explicit staging-preview CLI path; it is not a production token-file interface.
-
-## Existing environment-variable configuration
-
-The original environment-variable deployment path remains supported unchanged:
+The equivalent environment path is:
 
 ```bash
 export ENTHUSIA_STAFF_BOT_TOKEN='<staging bot token>'
 export ENTHUSIA_STAFF_BOT_ENVIRONMENT='staging'
 export ENTHUSIA_STAFF_BOT_UI_PREVIEW='true'
+export ENTHUSIA_STAFF_BOT_UI_PREVIEW_PUBLIC_URL='https://staff-staging.enthusia.info'
 java -jar EnthusiaStaff-StaffBot.jar
 ```
 
-The existing `--smoke-test` argument is also preserved and may be used with the environment path or combined with the staging-preview CLI when non-destructive readiness validation is needed.
+Do not configure a public Java web listener, reverse proxy, or Pi web host. The bot only issues signed links to the Cloudflare origin.
 
-The runtime keeps the existing optional loopback health endpoint defaults. No SQL database, Paper authority endpoint, LiteBans connection, production data, or production Discord token is needed merely to use preview mode.
+If the safe hosted origin is absent, the Discord launcher fails closed with `Panel deployment required` rather than inventing or exposing an unsafe fallback URL.
 
-## Fixed staging download
+## Permanent Cloudflare deployment
 
-After a safely merged `main` build, the existing `staff-bot-staging` prerelease publishes the runtime under the fixed asset name:
+The permanent staging workflow is `.github/workflows/moderation-web-staging-deploy.yml` in `wsg138/EnthusiaStaff`. It automatically deploys relevant changes from `main`, retains manual dispatch support, and also admits this feature branch during PR acceptance so the frozen candidate can be proven live before merge.
+
+For an exact source commit it:
+
+1. resolves the owning Cloudflare account for `enthusia.info`;
+2. installs Node 22 dependencies without lifecycle scripts;
+3. runs the moderation-web build/tests and Wrangler dry-run checks through `npm run check`;
+4. derives and uploads only the launch-signing key, never the raw Discord token;
+5. deploys the Worker + static assets + Durable Object binding;
+6. verifies `https://staff-staging.enthusia.info/health` and the staging/simulation-only origin contract;
+7. proves unauthenticated workspace rejection;
+8. proves signed launch first use returns the expected redirect and session cookie;
+9. proves the authenticated moderation page loads;
+10. proves replay of the exact same signed launch returns the public 401 rejection contract.
+
+The workflow records the exact source SHA in its run summary. A queued, skipped, failed, cancelled, or wrong-head run is not acceptance evidence.
+
+## Owner acceptance
+
+The owner manually exercised the real flow after the Durable Object first-use/replay bug was fixed:
+
+```text
+Discord /moderate-preview
+→ Open Moderation Panel
+→ https://staff-staging.enthusia.info
+→ authenticated Cloudflare moderation workspace
+```
+
+The owner reported that it worked, looked great, and approved the current visual/UX foundation. Do not redesign the interface in cleanup work unless a concrete correctness, accessibility, or security defect requires it.
+
+## Release provenance
+
+The existing `staff-bot-staging` prerelease publishes:
 
 ```text
 https://github.com/wsg138/EnthusiaStaff/releases/download/staff-bot-staging/EnthusiaStaff-StaffBot.jar
 ```
 
-The same release also publishes `EnthusiaStaff-StaffBot.jar.sha256` and `staff-bot-staging-source.txt`. Verify the source record and checksum before replacing a dedicated-host runtime.
-
-## Using the preview
-
-Run `/moderate-preview` in the staging guild using an account permitted to use the staging application command. The interaction is ephemeral and uses sample identities, sample moderation history, and sample policy only.
-
-The normal preview path is deliberately policy-driven:
-
-```text
-Moderation profile / history
-→ Punish
-→ choose offense / reason
-→ view ladder recommendation
-→ Apply Recommendation
-→ options
-→ final confirmation
-→ preview-only completion
-```
-
-The profile immediately shows the target Discord identity, main Minecraft identity, active punishments, recent moderation history, total history context, and Accounts / History / Notes / Cases navigation.
-
-After an offense is selected, the fake evaluator displays total moderation history separately from the matching ladder-relevant subset. It then shows the sample ladder step, recommended punishment, duration/scope, short explanation, and any representative approval requirement. Unrelated offense families remain visible but do not advance the selected offense's sample ladder.
-
-`Apply Recommendation` is the primary path. It automatically carries the recommended punishment type, scope, and duration forward; staff do not re-select them.
-
-`Custom Punishment` is an explicit override path. Only after selecting it do manual controls appear for Warning, Mute, Kick, Ban, Restrict, Discord/Minecraft/Both scope, and applicable preset/custom/permanent durations. The options and confirmation screens visibly identify the result as an override. Permanent ban/mute/restrict examples show the representative Admin+ approval requirement; the preview never bypasses authority.
-
-The preview also allows staff to toggle the sample DM and triggering-message deletion options and edit bounded sample explanation/context before review.
-
-### Deterministic ladder samples
-
-The profile contains a selector for six bounded scenarios:
-
-- **First / minor offense** — choose Spam / flooding for a step-1 Warning.
-- **Repeat offense** — choose Spam / flooding; two relevant prior spam records escalate to a step-3 3-day Mute while unrelated records remain visible.
-- **Severe offense** — choose Hate / slurs; the sample severity starts at a stronger ladder step without inventing prior matching offenses.
-- **Admin-level escalation** — choose Hate / slurs; matching prior history produces a permanent Ban recommendation with representative Admin+ approval.
-- **Custom override** — choose Harassment, inspect the recommendation, then deliberately select `Custom Punishment`.
-- **Unrelated history** — choose Spam / flooding; several moderation records are visible, but only one matching ladder-relevant spam record advances the ladder.
-
-These values are preview fixtures, not permanent production policy. ES-D07 must implement the approved real policy and authority model separately.
-
-### Authority and result states
-
-A separate preview selector demonstrates representative states at the stage where they belong:
-
-- insufficient authority;
-- protected target;
-- approval required;
-- stale confirmation requiring ladder recalculation;
-- Discord enforcement failure;
-- partial cross-platform result.
-
-These are presentation examples only. No enforcement is reachable from preview mode.
-
-The final confirmation summarizes target, selected offense, relevant/total history, ladder step, recommendation, actual selected punishment, followed-versus-overridden status, duration, scope, DM/delete options, approval requirement, and explanation/context.
-
-Selecting the final confirmation produces `Preview complete — no moderation action was applied.` No real punishment path exists behind that control.
+It also publishes `EnthusiaStaff-StaffBot.jar.sha256` and `staff-bot-staging-source.txt`. Before replacing the Bloom staging runtime, verify that the source file names the exact frozen product SHA and that the JAR checksum matches.
 
 ## Disabling preview
 
-On the Bloom panel, stop the process and remove `--staging-ui-preview --token-file=staging-bot-token.txt` from APP FLAGS before starting any normal runtime. For the environment-variable path, stop the process and remove or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false` before starting the normal staging runtime. Production must never be configured with either preview activation path.
+Stop the Bloom process and remove the staging-preview activation flags, or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false` for environment-based startup. Production must never be configured with either preview activation path.
