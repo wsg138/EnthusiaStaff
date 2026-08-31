@@ -61,7 +61,10 @@ final class ModerationPreviewWebRuntime implements AutoCloseable {
     }
 
     static ModerationPreviewWebRuntime fromEnvironment(int capacity) {
-        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(System.getenv());
+        return fromConfig(ModerationPreviewWebConfig.fromEnvironment(System.getenv()), capacity);
+    }
+
+    static ModerationPreviewWebRuntime fromConfig(ModerationPreviewWebConfig config, int capacity) {
         return new ModerationPreviewWebRuntime(
                 config,
                 new ModerationPreviewLaunchTicketService(capacity, LAUNCH_TTL),
