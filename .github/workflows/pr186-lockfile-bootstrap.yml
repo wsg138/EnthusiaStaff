@@ -57,11 +57,7 @@ jobs:
               '      - name: Check out exact commit\n        uses: actions/checkout@v6\n',
               '      - name: Check out exact commit\n        uses: actions/checkout@v6\n        with:\n          persist-credentials: false\n'
           )
-          replace_once(
-              deploy,
-              '          npm install --no-package-lock --ignore-scripts\n',
-              '          npm ci --ignore-scripts\n'
-          )
+          replace_once(deploy, '          npm install --no-package-lock --ignore-scripts\n', '          npm ci --ignore-scripts\n')
 
           validation = '.github/workflows/moderation-web-validation.yml'
           replace_once(
@@ -69,11 +65,7 @@ jobs:
               '        with:\n          ref: ${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}\n',
               '        with:\n          persist-credentials: false\n          ref: ${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}\n'
           )
-          replace_once(
-              validation,
-              '          npm install --no-package-lock --ignore-scripts\n',
-              '          npm ci --ignore-scripts\n'
-          )
+          replace_once(validation, '          npm install --no-package-lock --ignore-scripts\n', '          npm ci --ignore-scripts\n')
 
           index = 'moderation-web/src/index.js'
           replace_once(
@@ -171,18 +163,19 @@ jobs:
 
           test_file = 'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java'
           marker = '    @Test\n    void explicitBindPortIsRestrictedToDocumentedStagingPort() {\n'
-          addition = '''    @Test
-    void localIpv6PublicDevelopmentOriginIsAccepted() {
-        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
-                ModerationPreviewWebConfig.BIND_ENV, "[::1]:8766",
-                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://[::1]:8766"));
-
-        assertEquals("http://[::1]:8766", config.publicBaseUri().orElseThrow().toString());
-        assertFalse(config.hostedExternally());
-        assertFalse(config.secureCookie());
-    }
-
-'''
+          addition = (
+              '    @Test\n'
+              '    void localIpv6PublicDevelopmentOriginIsAccepted() {\n'
+              '        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(\n'
+              '                ModerationPreviewWebConfig.BIND_ENV, "[::1]:8766",\n'
+              '                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://[::1]:8766"));\n'
+              '\n'
+              '        assertEquals("http://[::1]:8766", config.publicBaseUri().orElseThrow().toString());\n'
+              '        assertFalse(config.hostedExternally());\n'
+              '        assertFalse(config.secureCookie());\n'
+              '    }\n'
+              '\n'
+          )
           replace_once(test_file, marker, addition + marker)
           PY
 
