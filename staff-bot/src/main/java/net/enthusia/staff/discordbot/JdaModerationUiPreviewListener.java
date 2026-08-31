@@ -18,7 +18,7 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
-/** Staging-only Discord launcher for the Cloudflare-hosted moderation preview. */
+/** Staging-only Discord launcher and private read-API owner for the Cloudflare moderation preview. */
 final class JdaModerationUiPreviewListener extends ListenerAdapter implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
     private static final String SLASH_COMMAND = "moderate-preview";
@@ -33,25 +33,32 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final InteractionReplayGuard interactions;
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
     private final Optional<ModerationPreviewHostedLaunchIssuer> hostedLaunchIssuer;
+    private final Optional<StaffModerationRuntime> moderation;
+    private final ModerationPreviewWebConfig webConfig;
+    private final String discordBotToken;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
+    private ModerationReadApiServer readApiServer;
 
     JdaModerationUiPreviewListener(
             long guildId,
             InteractionReplayGuard interactions,
             int sessionCapacity,
             ModerationPreviewWebConfig webConfig,
-            String discordBotToken
+            String discordBotToken,
+            Optional<StaffModerationRuntime> moderation
     ) {
         if (sessionCapacity < MIN_SESSION_CAPACITY) {
             throw new IllegalArgumentException("UI preview requires positive bounded capacity");
         }
         this.guildId = guildId;
         this.interactions = interactions;
+        this.webConfig = webConfig;
+        this.discordBotToken = discordBotToken;
+        this.moderation = moderation == null ? Optional.empty() : moderation;
         this.hostedLaunchIssuer = webConfig.hostedExternally()
                 ? Optional.of(new ModerationPreviewHostedLaunchIssuer(
-                        webConfig.publicBaseUri().orElseThrow(),
-                        discordBotToken))
+                        webConfig.publicBaseUri().orElseThrow(), discordBotToken))
                 : Optional.empty();
     }
 
@@ -59,22 +66,23 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         if (hostedLaunchIssuer.isEmpty()) {
             log("discord_ui_preview_hosted_origin_unavailable", null);
         }
+        if (moderation.isEmpty()) {
+            log("discord_ui_preview_real_data_unavailable", null);
+        }
     }
 
     void enable(JDA jda) {
         long generation = registrationCallbacks.beginResolution();
         enabled.set(false);
         Guild guild = jda.getGuildById(guildId);
-        if (guild == null) {
+        if (guild == null || !startReadApi(jda)) {
             return;
         }
         guild.updateCommands().addCommands(commands()).queue(
                 registered -> registrationCallbacks.runIfCurrent(
-                        generation,
-                        () -> commandsRegistered(registered)),
+                        generation, () -> commandsRegistered(registered)),
                 failure -> registrationCallbacks.runIfCurrent(
-                        generation,
-                        () -> commandRegistrationFailed(failure)));
+                        generation, () -> commandRegistrationFailed(failure)));
     }
 
     void disable() {
@@ -124,17 +132,32 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         reply(event, messageLaunch(event.getUser().getIdLong(), message));
     }
 
+    private boolean startReadApi(JDA jda) {
+        if (readApiServer != null) {
+            return true;
+        }
+        if (moderation.isEmpty()) {
+            return false;
+        }
+        try {
+            ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
+            readApiServer = new ModerationReadApiServer(webConfig.bindAddress(), discordBotToken, service);
+            readApiServer.start();
+            return true;
+        } catch (java.io.IOException | RuntimeException exception) {
+            log("moderation_read_api_start_failed", exception);
+            closeReadApi();
+            return false;
+        }
+    }
+
     private Optional<URI> userLaunch(long actorId, long targetUserId) {
         return hostedLaunchIssuer.map(issuer -> issuer.issueUserLaunchUri(actorId, guildId, targetUserId));
     }
 
     private Optional<URI> messageLaunch(long actorId, Message message) {
         return hostedLaunchIssuer.map(issuer -> issuer.issueMessageLaunchUri(
-                actorId,
-                guildId,
-                message.getChannelIdLong(),
-                message.getIdLong(),
-                message.getAuthor().getIdLong()));
+                actorId, guildId, message.getChannelIdLong(), message.getIdLong(), message.getAuthor().getIdLong()));
     }
 
     private void reply(IReplyCallback event, Optional<URI> launchUri) {
@@ -182,8 +205,14 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private static void unavailable(IReplyCallback event) {
         if (!event.isAcknowledged()) {
             event.reply("The staging moderation preview is unavailable in this context.")
-                    .setEphemeral(true)
-                    .queue();
+                    .setEphemeral(true).queue();
+        }
+    }
+
+    private void closeReadApi() {
+        if (readApiServer != null) {
+            readApiServer.close();
+            readApiServer = null;
         }
     }
 
@@ -197,5 +226,6 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     @Override
     public void close() {
         disable();
+        closeReadApi();
     }
 }
