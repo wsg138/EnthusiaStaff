@@ -40,7 +40,7 @@ For each launch, the staging process creates a bounded one-time signed ticket. S
 - expiry;
 - random nonce.
 
-Tickets use an in-process HMAC key, expire after two minutes, and are consumed once. A successful launch exchanges the URL ticket for a random `HttpOnly`, `SameSite=Strict` browser-session cookie. Browser sessions are bounded and expire after 15 minutes. State-changing preview requests also require the session CSRF token. Static and API responses use `no-store` plus a restrictive CSP, frame denial, referrer policy, MIME sniffing protection, and disabled camera/microphone/geolocation permissions.
+Tickets use an in-process HMAC key, expire after two minutes, and are consumed once. Expiry is checked again while the one-time ticket state is locked so a ticket cannot cross its expiry boundary while waiting to be consumed. A successful launch exchanges the URL ticket for a random `HttpOnly`, `SameSite=Strict` browser-session cookie. Browser sessions are bounded and expire after 15 minutes. State-changing preview requests also require the session CSRF token. Static and API responses use `no-store` plus a restrictive CSP, frame denial, referrer policy, MIME sniffing protection, and disabled camera/microphone/geolocation permissions.
 
 This is a staging session contract, not production authentication. A future production web console must integrate canonical staff authentication and preserve server-side authorization at the action boundary.
 
@@ -172,7 +172,15 @@ APP FLAGS:
 --staging-ui-preview --token-file=staging-bot-token.txt
 ```
 
-With no additional web environment variables, the preview web server binds to an ephemeral loopback port and no external launch URL is advertised. This preserves existing staging startup/smoke behavior without exposing a new network listener.
+With no additional web configuration, the preview web server binds to an ephemeral loopback port and no external launch URL is advertised. This preserves existing staging startup/smoke behavior without exposing a new network listener.
+
+Bloom-style dedicated hosts that do not expose machine-level environment variables may configure the non-secret web bind/public origin directly in APP FLAGS:
+
+```text
+--staging-ui-preview --token-file=staging-bot-token.txt --preview-web-bind=127.0.0.1:8766 --preview-public-url=https://<staff-staging-host>
+```
+
+The token remains in `staging-bot-token.txt`; it must not be placed in APP FLAGS. The web bind and public origin are non-secret deployment values.
 
 The environment-variable startup path also remains supported:
 
@@ -185,12 +193,20 @@ java -jar EnthusiaStaff-StaffBot.jar
 
 ## Clickable staging web deployment
 
-A real remote staging link requires infrastructure outside the repository. Do not weaken the launch-ticket model merely to avoid this deployment step.
+A real remote staging link requires an HTTPS staging origin in front of the loopback web listener. Do not weaken the launch-ticket model merely to avoid this deployment step.
 
-Configure a fixed loopback bind behind an HTTPS reverse proxy, for example:
+The staff bot health endpoint keeps its existing default loopback port `8765`. The moderation web preview uses the separate fixed loopback port `8766` so the two listeners cannot collide.
+
+Configure a fixed loopback web bind behind an HTTPS reverse proxy. Either use APP FLAGS on a dedicated host:
+
+```text
+--staging-ui-preview --token-file=staging-bot-token.txt --preview-web-bind=127.0.0.1:8766 --preview-public-url=https://<staff-staging-host>
+```
+
+or the equivalent environment variables:
 
 ```bash
-export ENTHUSIA_STAFF_BOT_UI_PREVIEW_WEB_BIND='127.0.0.1:8765'
+export ENTHUSIA_STAFF_BOT_UI_PREVIEW_WEB_BIND='127.0.0.1:8766'
 export ENTHUSIA_STAFF_BOT_UI_PREVIEW_PUBLIC_URL='https://<staff-staging-host>'
 ```
 
@@ -198,12 +214,18 @@ Requirements:
 
 - the public URL must be an HTTPS origin with no path, query, fragment, or embedded credentials;
 - the bind port must be explicit when a public URL is configured;
-- TLS should terminate at the staging reverse proxy and proxy only to the loopback bind;
+- TLS should terminate at the staging reverse proxy and proxy only to the loopback web bind on port `8766`;
 - do not expose the loopback HTTP port directly to the Internet;
 - do not add tokens or long-lived credentials to the public URL;
 - preserve the fixed staging Discord identity fence.
 
-For local-only development, omit the bind variable for an ephemeral loopback listener, or use the fixed staging bind port `8765` on `127.0.0.1`, `localhost`, or `[::1]`. A loopback HTTP public origin is permitted only for that local development case. Other explicit bind ports and non-loopback public HTTP are rejected.
+For local-only development on the same computer as the browser, use:
+
+```text
+--staging-ui-preview --token-file=staging-bot-token.txt --preview-web-bind=127.0.0.1:8766 --preview-public-url=http://127.0.0.1:8766
+```
+
+Loopback HTTP is permitted only for that local development case. Other explicit bind ports and non-loopback public HTTP are rejected.
 
 No external staging hostname, reverse-proxy route, TLS certificate, or hosting credential is provisioned by this repository change. A disabled launcher button therefore means the deployment contract is intentionally incomplete, not that the bot should fall back to an insecure link.
 
@@ -219,4 +241,4 @@ The release also publishes `EnthusiaStaff-StaffBot.jar.sha256` and `staff-bot-st
 
 ## Disabling preview
 
-On Bloom, stop the process and remove `--staging-ui-preview --token-file=staging-bot-token.txt` from APP FLAGS before starting a normal runtime. For the environment path, stop the process and remove or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false`. Production must never be configured with either preview activation path.
+On Bloom, stop the process and remove the staging preview APP FLAGS before starting a normal runtime. For the environment path, stop the process and remove or set `ENTHUSIA_STAFF_BOT_UI_PREVIEW=false`. Production must never be configured with either preview activation path.
