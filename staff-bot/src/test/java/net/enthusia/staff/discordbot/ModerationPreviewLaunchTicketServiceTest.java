@@ -50,8 +50,22 @@ class ModerationPreviewLaunchTicketServiceTest {
         assertEquals(ModerationPreviewLaunchTicketService.Status.EXPIRED, service.consume(token).status());
     }
 
+    @Test
+    void ticketThatExpiresBetweenPrecheckAndLockedConsumeIsRejected() {
+        var clock = new MutableClock(Instant.parse("2026-08-29T22:00:00Z"));
+        var service = new ModerationPreviewLaunchTicketService(8, Duration.ofSeconds(2), clock, new SecureRandom());
+        String token = service.issue(1L, 2L, "sample-target");
+
+        clock.advance(Duration.ofSeconds(1));
+        clock.advanceAfterNextRead(Duration.ofSeconds(2));
+
+        assertEquals(ModerationPreviewLaunchTicketService.Status.EXPIRED, service.consume(token).status());
+        assertEquals(ModerationPreviewLaunchTicketService.Status.REPLAYED, service.consume(token).status());
+    }
+
     private static final class MutableClock extends Clock {
         private Instant instant;
+        private Duration advanceAfterRead = Duration.ZERO;
 
         private MutableClock(Instant instant) {
             this.instant = instant;
@@ -59,6 +73,10 @@ class ModerationPreviewLaunchTicketServiceTest {
 
         void advance(Duration duration) {
             instant = instant.plus(duration);
+        }
+
+        void advanceAfterNextRead(Duration duration) {
+            advanceAfterRead = duration;
         }
 
         @Override
@@ -74,7 +92,10 @@ class ModerationPreviewLaunchTicketServiceTest {
 
         @Override
         public Instant instant() {
-            return instant;
+            Instant current = instant;
+            instant = instant.plus(advanceAfterRead);
+            advanceAfterRead = Duration.ZERO;
+            return current;
         }
     }
 }
