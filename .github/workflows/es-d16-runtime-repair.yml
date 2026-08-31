@@ -1,0 +1,76 @@
+name: ES-D16 Runtime Repair
+
+on:
+  push:
+    branches: [package/es-d16-moderation-read-bridge]
+    paths: [".github/workflows/es-d16-runtime-repair.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: package/es-d16-moderation-read-bridge
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Apply coordinated source repair from reviewed driver
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import subprocess
+          import textwrap
+
+          driver = Path('.github/workflows/es-d16-codacy-diagnostics.yml').read_text(encoding='utf-8')
+          marker = "          python3 <<'PY'\n"
+          end_marker = "\n          PY\n          git diff --check"
+          if driver.count(marker) != 1 or driver.count(end_marker) != 1:
+              raise SystemExit('repair driver markers are ambiguous')
+          script = driver.split(marker, 1)[1].split(end_marker, 1)[0]
+          script = textwrap.dedent(script)
+          old = "text = once(text, 'readRequest(session, endpoint, browserUrl)', 'readRequest(session, endpoint, browserInput)', 'backend proxy body')"
+          new = "text = once(text, 'const body = JSON.stringify(readRequest(session, endpoint, browserUrl));', 'const body = JSON.stringify(readRequest(session, endpoint, browserInput));', 'backend proxy body')"
+          if script.count(old) != 1:
+              raise SystemExit(f'expected one ambiguous backend transform, found {script.count(old)}')
+          script = script.replace(old, new)
+          Path('/tmp/es-d16-repair.py').write_text(script, encoding='utf-8')
+          subprocess.run(['python3', '/tmp/es-d16-repair.py'], check=True)
+          PY
+          git diff --check
+
+      - name: Validate moderation web
+        working-directory: moderation-web
+        run: |
+          npm ci --ignore-scripts
+          npm run check
+
+      - name: Run clean Java 21 gate
+        run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
+
+      - name: Stage workflow blob and push validated runtime repair
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p .es-d16-staged
+          cp .github/workflows/moderation-web-staging-deploy.yml .es-d16-staged/moderation-web-staging-deploy.yml
+          git checkout -- .github/workflows/moderation-web-staging-deploy.yml
+          git diff --check
+          git config user.name 'P2wn'
+          git config user.email 'racecarboy77@gmail.com'
+          git add moderation-web staff-bot .es-d16-staged/moderation-web-staging-deploy.yml
+          git diff --cached --check
+          git commit -m 'ES-D16: resolve moderation bridge static findings'
+          git push origin HEAD:package/es-d16-moderation-read-bridge
