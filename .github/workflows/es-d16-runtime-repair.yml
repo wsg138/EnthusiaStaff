@@ -48,6 +48,14 @@ jobs:
           script = script.replace(old, new)
           Path('/tmp/es-d16-repair.py').write_text(script, encoding='utf-8')
           subprocess.run(['python3', '/tmp/es-d16-repair.py'], check=True)
+
+          resource_test = Path('staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java')
+          test_text = resource_test.read_text(encoding='utf-8')
+          old_assert = '        assertTrue(adapter.contains("fetch(`/api/messages?${params}`"));'
+          new_assert = '        assertTrue(adapter.contains("fetch(\'/api/messages\', {method:\'POST\'"));'
+          if test_text.count(old_assert) != 1:
+              raise SystemExit(f'resource test assertion: expected one literal, found {test_text.count(old_assert)}')
+          resource_test.write_text(test_text.replace(old_assert, new_assert), encoding='utf-8')
           PY
           git diff --check
 
