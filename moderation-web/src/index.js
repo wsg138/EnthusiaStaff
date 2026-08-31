@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { inspectLaunchToken } from './security.js';
 import { readBoundedBody } from './request-body.js';
+import { proxyModerationRead } from './backend.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -109,6 +110,8 @@ async function route(request, env) {
   if (url.pathname === '/health') return handleHealth(request);
   if (url.pathname === '/launch') return handleLaunch(request, env, url);
   if (url.pathname === '/api/session') return handleSession(request, env);
+  if (url.pathname === '/api/bootstrap') return handleRead(request, env, url, 'bootstrap');
+  if (url.pathname === '/api/messages') return handleRead(request, env, url, 'messages');
   if (url.pathname === '/api/simulate') return handleSimulation(request, env);
   if (url.pathname === '/' || url.pathname === '/moderation' || STATIC_PATHS.has(url.pathname)) {
     return serveProtectedAsset(request, env, url.pathname);
@@ -124,11 +127,7 @@ function handleHealth(request) {
 async function handleLaunch(request, env, url) {
   if (request.method !== 'GET') return methodNotAllowed();
   const token = url.searchParams.get('t') || '';
-  const inspection = await inspectLaunchToken(
-    token,
-    env.LAUNCH_SIGNING_KEY_HEX,
-    env.EXPECTED_GUILD_ID
-  );
+  const inspection = await inspectLaunchToken(token, env.LAUNCH_SIGNING_KEY_HEX, env.EXPECTED_GUILD_ID);
   if (!inspection.claims) return unauthorizedLaunch();
   const result = await store(env).consumeLaunch(inspection.claims);
   if (!result || result.status !== 'accepted') return unauthorizedLaunch();
@@ -149,6 +148,17 @@ async function handleSession(request, env) {
     expiresAt: new Date(session.expiresAt * 1000).toISOString(),
     staging: true
   });
+}
+
+async function handleRead(request, env, url, endpoint) {
+  if (request.method !== 'GET') return methodNotAllowed();
+  const session = await currentSession(request, env);
+  if (!session) return textResponse('Session expired.', 401);
+  try {
+    return await proxyModerationRead(env, session, endpoint, url);
+  } catch {
+    return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
+  }
 }
 
 async function handleSimulation(request, env) {
