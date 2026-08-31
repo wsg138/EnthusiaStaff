@@ -153,22 +153,39 @@ async function handleSession(request, env) {
 
 async function handleSimulation(request, env) {
   if (request.method !== 'POST') return methodNotAllowed();
+  const session = await authorizedMutationSession(request, env);
+  if (!session) return textResponse('Session verification failed.', 403);
+  const parsed = await readSimulationPayload(request);
+  if (parsed.error) return parsed.error;
+  if (!validSimulation(parsed.value, session)) return textResponse('Preview request is invalid.', 400);
+  return jsonResponse({ status: 'complete', message: 'Simulation complete', detail: 'No live moderation action was performed.' });
+}
+
+async function authorizedMutationSession(request, env) {
   const sessionId = cookieValue(request.headers.get('Cookie'), SESSION_COOKIE);
   const csrf = request.headers.get('X-Preview-Csrf') || '';
-  const session = await store(env).authorizeMutation(sessionId, csrf);
-  if (!session) return textResponse('Session verification failed.', 403);
-  const declaredLength = Number(request.headers.get('Content-Length') || '0');
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) return textResponse('Preview request is too large.', 413);
+  return store(env).authorizeMutation(sessionId, csrf);
+}
+
+async function readSimulationPayload(request) {
+  if (declaredRequestTooLarge(request)) return { error: textResponse('Preview request is too large.', 413) };
   const body = new Uint8Array(await request.arrayBuffer());
-  if (body.byteLength > MAX_REQUEST_BYTES) return textResponse('Preview request is too large.', 413);
-  let payload;
+  if (body.byteLength > MAX_REQUEST_BYTES) return { error: textResponse('Preview request is too large.', 413) };
+  return parseSimulationJson(body);
+}
+
+function declaredRequestTooLarge(request) {
+  const declaredLength = Number(request.headers.get('Content-Length') || '0');
+  if (!Number.isFinite(declaredLength)) return false;
+  return declaredLength > MAX_REQUEST_BYTES;
+}
+
+function parseSimulationJson(body) {
   try {
-    payload = JSON.parse(new TextDecoder().decode(body));
+    return { value: JSON.parse(new TextDecoder().decode(body)) };
   } catch {
-    return textResponse('Preview request is invalid.', 400);
+    return { error: textResponse('Preview request is invalid.', 400) };
   }
-  if (!validSimulation(payload, session)) return textResponse('Preview request is invalid.', 400);
-  return jsonResponse({ status: 'complete', message: 'Simulation complete', detail: 'No live moderation action was performed.' });
 }
 
 async function serveProtectedAsset(request, env, pathname) {
@@ -191,9 +208,12 @@ function store(env) {
 }
 
 function validSimulation(payload, session) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  if (!payload) return false;
+  if (typeof payload !== 'object') return false;
+  if (Array.isArray(payload)) return false;
   if (payload.target !== session.targetKey) return false;
-  if (!boundedString(payload.offense, 64) || !boundedString(payload.action, 32)) return false;
+  if (!boundedString(payload.offense, 64)) return false;
+  if (!boundedString(payload.action, 32)) return false;
   return idList(payload.evidence) && idList(payload.delete);
 }
 
@@ -243,6 +263,8 @@ function secure(response) {
   headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
+  // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
+  // The value is a fixed DENY literal and cannot be influenced by request input.
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('Cross-Origin-Opener-Policy', 'same-origin');

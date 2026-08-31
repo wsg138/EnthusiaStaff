@@ -3,6 +3,7 @@ name: Moderation Web Staging Deploy
 on:
   push:
     branches:
+      - main
       - owner/staging-web-moderation-console
     paths:
       - "moderation-web/**"
@@ -22,9 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: cloudflare-staging
     timeout-minutes: 20
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
 
     steps:
       - name: Check out exact commit
@@ -40,6 +38,9 @@ jobs:
 
       - name: Assert required secrets
         shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
         run: |
           set -Eeuo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" ]]
@@ -47,6 +48,8 @@ jobs:
 
       - name: Resolve Cloudflare zone account
         shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -Eeuo pipefail
           response="$(curl --fail-with-body --silent --show-error \
@@ -78,6 +81,9 @@ jobs:
       - name: Deploy Worker with derived launch-signing secret
         working-directory: moderation-web
         shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
         run: |
           set -Eeuo pipefail
           secrets_file="$(mktemp)"
@@ -131,6 +137,8 @@ jobs:
 
       - name: Verify live launch, session and replay contract
         shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
         run: |
           set -Eeuo pipefail
           ticket_file="$(mktemp)"
@@ -170,6 +178,7 @@ jobs:
           with open(output_path, 'w', encoding='utf-8') as handle:
               handle.write(f'https://{host}/launch?t={urllib.parse.quote(token, safe="")}')
           PY
+          unset BOT_TOKEN
 
           first_status="$(curl --silent --show-error \
             --cookie-jar "$cookie_jar" \

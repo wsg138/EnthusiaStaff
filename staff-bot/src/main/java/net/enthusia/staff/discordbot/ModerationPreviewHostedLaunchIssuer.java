@@ -19,10 +19,13 @@ final class ModerationPreviewHostedLaunchIssuer {
     static final String SAMPLE_TARGET = "sample-river-ash";
     private static final String HMAC = "HmacSHA256";
     private static final String DIGEST = "SHA-256";
+    private static final String TARGET_KEY_PATTERN = "[A-Za-z0-9:_-]{1,64}";
     private static final byte[] DOMAIN_SEPARATOR = "enthusia-staff-moderation-launch-v1\0"
             .getBytes(StandardCharsets.UTF_8);
     private static final Duration TICKET_TTL = Duration.ofMinutes(2);
     private static final int NONCE_BYTES = 24;
+    private static final int SIGNING_KEY_BYTES = 32;
+    private static final long MIN_DISCORD_ID = 1L;
 
     private final URI publicBaseUri;
     private final byte[] signingKey;
@@ -38,7 +41,7 @@ final class ModerationPreviewHostedLaunchIssuer {
         this.signingKey = Objects.requireNonNull(signingKey, "signingKey").clone();
         this.clock = Objects.requireNonNull(clock, "clock");
         this.random = Objects.requireNonNull(random, "random");
-        if (this.signingKey.length != 32) {
+        if (this.signingKey.length != SIGNING_KEY_BYTES) {
             throw new IllegalArgumentException("hosted launch signing key must be 32 bytes");
         }
     }
@@ -49,7 +52,7 @@ final class ModerationPreviewHostedLaunchIssuer {
     }
 
     private String issueToken(long actorId, long guildId, String targetKey) {
-        if (actorId <= 0 || guildId <= 0 || targetKey == null || !targetKey.matches("[A-Za-z0-9:_-]{1,64}")) {
+        if (!validClaims(actorId, guildId, targetKey)) {
             throw new IllegalArgumentException("hosted launch claims are invalid");
         }
         Instant issuedAt = clock.instant();
@@ -62,6 +65,16 @@ final class ModerationPreviewHostedLaunchIssuer {
                 + "|" + expiresAt.getEpochSecond();
         String encodedBody = encode(body.getBytes(StandardCharsets.UTF_8));
         return encodedBody + "." + encode(sign(encodedBody));
+    }
+
+    private static boolean validClaims(long actorId, long guildId, String targetKey) {
+        if (actorId < MIN_DISCORD_ID) {
+            return false;
+        }
+        if (guildId < MIN_DISCORD_ID) {
+            return false;
+        }
+        return targetKey != null && targetKey.matches(TARGET_KEY_PATTERN);
     }
 
     static byte[] deriveSigningKey(String discordBotToken) {

@@ -19,6 +19,8 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
     private static final String COMMAND = "moderate-preview";
     private static final long NO_GUILD = 0L;
+    private static final int MIN_SESSION_CAPACITY = 1;
+    private static final int EXPECTED_COMMAND_COUNT = 1;
 
     private final long guildId;
     private final InteractionReplayGuard interactions;
@@ -34,7 +36,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             ModerationPreviewWebConfig webConfig,
             String discordBotToken
     ) {
-        if (sessionCapacity < 1) {
+        if (sessionCapacity < MIN_SESSION_CAPACITY) {
             throw new IllegalArgumentException("UI preview requires positive bounded capacity");
         }
         this.guildId = guildId;
@@ -97,7 +99,8 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     private void commandsRegistered(List<Command> registered) {
-        boolean complete = registered.size() == 1 && COMMAND.equals(registered.getFirst().getName());
+        boolean complete = registered.size() == EXPECTED_COMMAND_COUNT
+                && COMMAND.equals(registered.getFirst().getName());
         enabled.set(complete);
         if (!complete) {
             log("discord_ui_preview_command_registration_incomplete", null);

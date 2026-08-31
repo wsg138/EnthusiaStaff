@@ -42,7 +42,7 @@ Rejection responses intentionally do not expose internal validation/replay reaso
 
 The raw Discord bot token is used only where the staging bot or protected deployment automation already needs it. It must never appear in browser code, public source, URLs, logs, artifacts, or the Cloudflare runtime.
 
-Today the bot and protected GitHub Actions workflow derive the same 32-byte launch-signing key from the staging Discord bot token using a domain-separated SHA-256 derivation. Only that derived key is uploaded to Cloudflare as `LAUNCH_SIGNING_KEY_HEX`; the raw Discord token is not uploaded to Cloudflare.
+Today the bot and protected GitHub Actions workflow derive the same 32-byte launch-signing key from the staging Discord bot token using a domain-separated SHA-256 derivation. Only that derived key is uploaded to Cloudflare as `LAUNCH_SIGNING_KEY_HEX`; the raw Discord token is not uploaded to Cloudflare. The deployment workflow scopes each protected secret to only the individual steps that require it rather than exposing the bot token job-wide.
 
 This coupling is accepted **staging bootstrap debt**, not the desired long-term secret design. A future hardening change should provision a dedicated random launch-signing secret to both Bloom and the protected Cloudflare deployment environment, then remove token-derived signing in one coordinated cutover. Do not make an uncoordinated partial migration that breaks launch verification or causes either side to fall back insecurely.
 
@@ -77,7 +77,7 @@ If the safe hosted origin is absent, the Discord launcher fails closed with `Pan
 
 ## Permanent Cloudflare deployment
 
-The permanent staging workflow is `.github/workflows/moderation-web-staging-deploy.yml` in `wsg138/EnthusiaStaff`.
+The permanent staging workflow is `.github/workflows/moderation-web-staging-deploy.yml` in `wsg138/EnthusiaStaff`. It automatically deploys relevant changes from `main`, retains manual dispatch support, and also admits this feature branch during PR acceptance so the frozen candidate can be proven live before merge.
 
 For an exact source commit it:
 
