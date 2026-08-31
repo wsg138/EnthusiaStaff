@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Check out exact commit
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Record source SHA
         shell: bash
@@ -74,7 +76,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npm install --no-package-lock --ignore-scripts
+          npm ci --ignore-scripts
           npm run check
           [[ "$SOURCE_SHA" == "$(git -C .. rev-parse HEAD)" ]]
 

@@ -62,6 +62,17 @@ class ModerationPreviewWebConfigTest {
     }
 
     @Test
+    void localIpv6PublicDevelopmentOriginIsAccepted() {
+        ModerationPreviewWebConfig config = ModerationPreviewWebConfig.fromEnvironment(Map.of(
+                ModerationPreviewWebConfig.BIND_ENV, "[::1]:8766",
+                ModerationPreviewWebConfig.PUBLIC_URL_ENV, "http://[::1]:8766"));
+
+        assertEquals("http://[::1]:8766", config.publicBaseUri().orElseThrow().toString());
+        assertFalse(config.hostedExternally());
+        assertFalse(config.secureCookie());
+    }
+
+    @Test
     void explicitBindPortIsRestrictedToDocumentedStagingPort() {
         assertThrows(IllegalArgumentException.class, () -> ModerationPreviewWebConfig.fromEnvironment(Map.of(
                 ModerationPreviewWebConfig.BIND_ENV, "127.0.0.1:8765")));

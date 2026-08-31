@@ -124,7 +124,17 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
     }
 
     private static boolean loopbackHost(String host) {
-        return LOCALHOST.equalsIgnoreCase(host) || IPV4_LOOPBACK_HOST.equals(host) || IPV6_LOOPBACK_HOST.equals(host);
+        String normalized = unbracketedHost(host);
+        return LOCALHOST.equalsIgnoreCase(normalized)
+                || IPV4_LOOPBACK_HOST.equals(normalized)
+                || IPV6_LOOPBACK_HOST.equals(normalized);
+    }
+
+    private static String unbracketedHost(String host) {
+        if (host != null && host.startsWith("[") && host.endsWith("]")) {
+            return host.substring(1, host.length() - 1);
+        }
+        return host;
     }
 
     private record HostAndPort(String host, int port) {

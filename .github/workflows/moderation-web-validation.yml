@@ -25,6 +25,7 @@ jobs:
       - name: Check out tested commit
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Record checked-out SHA
@@ -45,6 +46,6 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npm install --no-package-lock --ignore-scripts
+          npm ci --ignore-scripts
           npm run check
           test "${TESTED_SHA}" = "$(git -C .. rev-parse HEAD)"

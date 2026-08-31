@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { inspectLaunchToken } from './security.js';
+import { readBoundedBody } from './request-body.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -168,16 +169,9 @@ async function authorizedMutationSession(request, env) {
 }
 
 async function readSimulationPayload(request) {
-  if (declaredRequestTooLarge(request)) return { error: textResponse('Preview request is too large.', 413) };
-  const body = new Uint8Array(await request.arrayBuffer());
-  if (body.byteLength > MAX_REQUEST_BYTES) return { error: textResponse('Preview request is too large.', 413) };
+  const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
+  if (!body) return { error: textResponse('Preview request is too large.', 413) };
   return parseSimulationJson(body);
-}
-
-function declaredRequestTooLarge(request) {
-  const declaredLength = Number(request.headers.get('Content-Length') || '0');
-  if (!Number.isFinite(declaredLength)) return false;
-  return declaredLength > MAX_REQUEST_BYTES;
 }
 
 function parseSimulationJson(body) {
