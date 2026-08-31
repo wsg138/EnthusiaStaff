@@ -48,7 +48,7 @@ export function browserMessageQuery(url) {
   return query;
 }
 
-function readRequest(session, endpoint, browserUrl) {
+export function readRequest(session, endpoint, browserUrl) {
   const request = {
     actorId: session.actorId,
     guildId: session.guildId,
