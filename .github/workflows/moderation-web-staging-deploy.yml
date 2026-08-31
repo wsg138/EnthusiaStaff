@@ -14,6 +14,7 @@ permissions:
 
 env:
   EXPECTED_HOST: staff-staging.enthusia.info
+  EXPECTED_ZONE: enthusia.info
 
 jobs:
   deploy:
@@ -23,7 +24,6 @@ jobs:
     timeout-minutes: 20
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
 
     steps:
@@ -43,8 +43,23 @@ jobs:
         run: |
           set -Eeuo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" ]]
-          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]]
           [[ -n "$BOT_TOKEN" ]]
+
+      - name: Resolve Cloudflare zone account
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/zones?name=${EXPECTED_ZONE}&status=active")"
+          printf '%s' "$response" | jq -e '.success == true' >/dev/null
+          count="$(printf '%s' "$response" | jq '[.result[] | select(.name == env.EXPECTED_ZONE)] | length')"
+          [[ "$count" == '1' ]]
+          account_id="$(printf '%s' "$response" | jq -r '.result[] | select(.name == env.EXPECTED_ZONE) | .account.id')"
+          [[ "$account_id" =~ ^[0-9a-f]{32}$ ]]
+          echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          echo "Resolved ${EXPECTED_ZONE} to its owning Cloudflare account." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v5
