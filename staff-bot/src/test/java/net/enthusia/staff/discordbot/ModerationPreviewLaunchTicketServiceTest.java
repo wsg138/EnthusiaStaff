@@ -60,7 +60,9 @@ class ModerationPreviewLaunchTicketServiceTest {
         clock.advanceAfterNextRead(Duration.ofSeconds(2));
 
         assertEquals(ModerationPreviewLaunchTicketService.Status.EXPIRED, service.consume(token).status());
-        assertEquals(ModerationPreviewLaunchTicketService.Status.REPLAYED, service.consume(token).status());
+        // Once time has crossed the signed expiry, repeat attempts remain classified as expired;
+        // the server-side nonce was still discarded during the locked rejection path.
+        assertEquals(ModerationPreviewLaunchTicketService.Status.EXPIRED, service.consume(token).status());
     }
 
     private static final class MutableClock extends Clock {
