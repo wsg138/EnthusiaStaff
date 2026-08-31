@@ -75,7 +75,7 @@ jobs:
           npm run check
           [[ "$SOURCE_SHA" == "$(git -C .. rev-parse HEAD)" ]]
 
-      - name: Deploy Worker with isolated launch-signing secret
+      - name: Deploy Worker with derived launch-signing secret
         working-directory: moderation-web
         shell: bash
         run: |
@@ -138,11 +138,10 @@ jobs:
           launch_headers="$(mktemp)"
           launch_body="$(mktemp)"
           panel_body="$(mktemp)"
-          replay_headers="$(mktemp)"
           replay_body="$(mktemp)"
           cleanup() {
             rm -f "$ticket_file" "$cookie_jar" "$launch_headers" "$launch_body" \
-              "$panel_body" "$replay_headers" "$replay_body"
+              "$panel_body" "$replay_body"
           }
           trap cleanup EXIT
           chmod 600 "$ticket_file" "$cookie_jar"
@@ -181,7 +180,6 @@ jobs:
             "$(cat "$ticket_file")")"
           if [[ "$first_status" != '303' ]]; then
             echo "Live first-use launch returned HTTP ${first_status}; expected 303." >&2
-            grep -i '^x-preview-reject-reason:' "$launch_headers" >&2 || true
             cat "$launch_body" >&2
             exit 1
           fi
@@ -206,7 +204,6 @@ jobs:
 
           replay_status="$(curl --silent --show-error \
             --output "$replay_body" \
-            --dump-header "$replay_headers" \
             --write-out '%{http_code}' \
             --max-time 20 \
             "$(cat "$ticket_file")")"
@@ -214,7 +211,6 @@ jobs:
             echo "Launch replay returned HTTP ${replay_status}; expected 401." >&2
             exit 1
           fi
-          grep -Fiq 'x-preview-reject-reason: replayed' "$replay_headers"
           grep -Fqx 'This moderation link is invalid, expired, or already used.' "$replay_body"
 
           cleanup

@@ -14,7 +14,7 @@ import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
-/** Staging-only Discord launcher for the web-first moderation preview. */
+/** Staging-only Discord launcher for the Cloudflare-hosted moderation preview. */
 final class JdaModerationUiPreviewListener extends ListenerAdapter implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
     private static final String COMMAND = "moderate-preview";
@@ -23,7 +23,6 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final long guildId;
     private final InteractionReplayGuard interactions;
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
-    private final Optional<ModerationPreviewWebRuntime> localWebRuntime;
     private final Optional<ModerationPreviewHostedLaunchIssuer> hostedLaunchIssuer;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
@@ -35,21 +34,22 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             ModerationPreviewWebConfig webConfig,
             String discordBotToken
     ) {
+        if (sessionCapacity < 1) {
+            throw new IllegalArgumentException("UI preview requires positive bounded capacity");
+        }
         this.guildId = guildId;
         this.interactions = interactions;
-        if (webConfig.hostedExternally()) {
-            this.localWebRuntime = Optional.empty();
-            this.hostedLaunchIssuer = Optional.of(new ModerationPreviewHostedLaunchIssuer(
-                    webConfig.publicBaseUri().orElseThrow(),
-                    discordBotToken));
-        } else {
-            this.localWebRuntime = Optional.of(ModerationPreviewWebRuntime.fromConfig(webConfig, sessionCapacity));
-            this.hostedLaunchIssuer = Optional.empty();
-        }
+        this.hostedLaunchIssuer = webConfig.hostedExternally()
+                ? Optional.of(new ModerationPreviewHostedLaunchIssuer(
+                        webConfig.publicBaseUri().orElseThrow(),
+                        discordBotToken))
+                : Optional.empty();
     }
 
     void startWeb() {
-        localWebRuntime.ifPresent(ModerationPreviewWebRuntime::start);
+        if (hostedLaunchIssuer.isEmpty()) {
+            log("discord_ui_preview_hosted_origin_unavailable", null);
+        }
     }
 
     void enable(JDA jda) {
@@ -88,10 +88,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     private Optional<URI> issueLaunchUri(long actorId) {
-        if (hostedLaunchIssuer.isPresent()) {
-            return Optional.of(hostedLaunchIssuer.orElseThrow().issueLaunchUri(actorId, guildId));
-        }
-        return localWebRuntime.flatMap(runtime -> runtime.issueLaunchUri(actorId, guildId));
+        return hostedLaunchIssuer.map(issuer -> issuer.issueLaunchUri(actorId, guildId));
     }
 
     static CommandData command() {
@@ -142,6 +139,5 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     @Override
     public void close() {
         disable();
-        localWebRuntime.ifPresent(ModerationPreviewWebRuntime::close);
     }
 }
