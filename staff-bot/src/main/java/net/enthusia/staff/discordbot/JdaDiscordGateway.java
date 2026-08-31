@@ -97,7 +97,8 @@ final class JdaDiscordGateway implements DiscordGateway {
                     configuration.environment().guildId(),
                     interactions,
                     configuration.interactionCapacity(),
-                    configuration.previewWebConfig()
+                    configuration.previewWebConfig(),
+                    configuration.discordToken()
             );
             previewListener.startWeb();
             builder.addEventListeners(previewListener);
