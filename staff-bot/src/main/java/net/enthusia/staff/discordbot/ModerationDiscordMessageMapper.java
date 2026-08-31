@@ -8,6 +8,8 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 
 final class ModerationDiscordMessageMapper {
     ModerationReadApiModel.MessagePageDto page(
@@ -55,8 +57,11 @@ final class ModerationDiscordMessageMapper {
     static Member memberIfPresent(Guild guild, long userId) {
         try {
             return guild.retrieveMemberById(userId).complete();
-        } catch (RuntimeException exception) {
-            return null;
+        } catch (ErrorResponseException exception) {
+            if (exception.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER) {
+                return null;
+            }
+            throw exception;
         }
     }
 

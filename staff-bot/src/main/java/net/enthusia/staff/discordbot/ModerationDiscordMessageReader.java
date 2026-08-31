@@ -22,7 +22,7 @@ final class ModerationDiscordMessageReader {
         return context.guild().getTextChannels().stream()
                 .filter(channel -> context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL))
                 .sorted(Comparator.comparing(TextChannel::getPosition).thenComparing(TextChannel::getName))
-                .map(channel -> channelDto(channel, context))
+                .map(ModerationDiscordMessageReader::channelDto)
                 .toList();
     }
 
@@ -105,10 +105,7 @@ final class ModerationDiscordMessageReader {
         return channel;
     }
 
-    private static ModerationReadApiModel.ChannelDto channelDto(
-            TextChannel channel,
-            ModerationReadContext context
-    ) {
+    private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {
         Category category = channel.getParentCategory();
         return new ModerationReadApiModel.ChannelDto(
                 channel.getId(), channel.getName(),

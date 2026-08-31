@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordModerationOperation;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -12,6 +13,8 @@ import net.dv8tion.jda.api.entities.Member;
 
 /** Resolves and authorizes the immutable actor/guild/target binding for a private read. */
 final class ModerationReadRequestAuthorizer {
+    private static final Pattern SNOWFLAKE = Pattern.compile("[1-9][0-9]{0,19}");
+
     private final long guildId;
     private final StaffModerationRuntime moderation;
     private final JDA jda;
@@ -61,7 +64,7 @@ final class ModerationReadRequestAuthorizer {
     }
 
     static long snowflake(String value, String label) {
-        if (value == null || !value.matches("[1-9][0-9]{0,19}")) {
+        if (value == null || !SNOWFLAKE.matcher(value).matches()) {
             throw new IllegalArgumentException(label + " ID is invalid");
         }
         return Long.parseUnsignedLong(value);

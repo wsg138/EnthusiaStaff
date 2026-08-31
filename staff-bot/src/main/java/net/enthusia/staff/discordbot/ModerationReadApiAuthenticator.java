@@ -4,10 +4,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -23,6 +25,10 @@ final class ModerationReadApiAuthenticator {
     private static final String SHA_256 = "SHA-256";
     private static final Duration MAX_SKEW = Duration.ofSeconds(30);
     private static final int KEY_BYTES = 32;
+    private static final Pattern PATH = Pattern.compile("/v1/moderation/(bootstrap|messages)");
+    private static final Pattern NONCE = Pattern.compile("[A-Za-z0-9_-]{32,64}");
+    private static final Pattern SIGNATURE = Pattern.compile("[A-Za-z0-9_-]{43,44}");
+    private static final Pattern TIMESTAMP = Pattern.compile("[0-9]{1,12}");
 
     enum Result {
         ACCEPTED,
@@ -103,22 +109,19 @@ final class ModerationReadApiAuthenticator {
 
     private static boolean validText(String method, String path, String nonce, String signature) {
         return "POST".equals(method)
-                && path != null && path.matches("/v1/moderation/(bootstrap|messages)")
-                && nonce != null && nonce.matches("[A-Za-z0-9_-]{32,64}")
-                && signature != null && signature.matches("[A-Za-z0-9_-]{43,44}");
+                && path != null && PATH.matcher(path).matches()
+                && nonce != null && NONCE.matcher(nonce).matches()
+                && signature != null && SIGNATURE.matcher(signature).matches();
     }
 
     private static ParsedTimestamp parseTimestamp(String raw) {
-        if (raw == null || !raw.matches("[0-9]{1,12}")) {
+        if (raw == null || !TIMESTAMP.matcher(raw).matches()) {
             return null;
         }
         try {
             long epoch = Long.parseLong(raw);
-            if (epoch <= 0) {
-                return null;
-            }
-            return new ParsedTimestamp(raw, Instant.ofEpochSecond(epoch));
-        } catch (RuntimeException exception) {
+            return epoch <= 0 ? null : new ParsedTimestamp(raw, Instant.ofEpochSecond(epoch));
+        } catch (NumberFormatException | DateTimeException exception) {
             return null;
         }
     }
