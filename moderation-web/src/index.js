@@ -41,11 +41,11 @@ export class ModerationSessionStore extends DurableObject {
     this.purge(now);
     if (!claims || now >= claims.expiresAt) return { status: 'expired' };
     const inserted = this.sql.exec(
-      'INSERT OR IGNORE INTO used_launches (nonce, expires_at) VALUES (?, ?)',
+      'INSERT INTO used_launches (nonce, expires_at) VALUES (?, ?) ON CONFLICT(nonce) DO NOTHING RETURNING nonce',
       claims.nonce,
       claims.expiresAt
-    );
-    if (inserted.rowsWritten !== 1) return { status: 'replayed' };
+    ).toArray();
+    if (inserted.length !== 1) return { status: 'replayed' };
     const sessionId = randomToken(32);
     const csrfToken = randomToken(24);
     const expiresAt = now + SESSION_TTL_SECONDS;
