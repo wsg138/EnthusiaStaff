@@ -1,4 +1,4 @@
-name: PR186 Repair Tree Export
+name: PR186 Final Repair Publisher
 
 on:
   push:
@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
-    name: Validate and export repaired files
+  publish:
+    name: Validate and publish consolidated repair
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -62,19 +62,77 @@ jobs:
             --console=plain
           git diff --check
 
-      - name: Upload exact repaired files
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr186-final-repair-tree
-          if-no-files-found: error
-          retention-days: 1
-          include-hidden-files: true
-          path: |
-            .github/workflows/moderation-web-staging-deploy.yml
-            .github/workflows/moderation-web-validation.yml
-            moderation-web/package-lock.json
-            moderation-web/src/index.js
-            moderation-web/src/request-body.js
-            moderation-web/test/request-body.test.mjs
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
+      - name: Publish one guarded repair commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          import json
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          API = "https://api.github.com"
+          REPOSITORY = os.environ["GITHUB_REPOSITORY"]
+          EXPECTED_HEAD = os.environ["EXPECTED_HEAD"]
+          BRANCH = "owner/staging-web-moderation-console"
+          TOKEN = os.environ["GH_TOKEN"]
+          FILES = [
+              ".github/workflows/moderation-web-staging-deploy.yml",
+              ".github/workflows/moderation-web-validation.yml",
+              "moderation-web/package-lock.json",
+              "moderation-web/src/index.js",
+              "moderation-web/src/request-body.js",
+              "moderation-web/test/request-body.test.mjs",
+              "staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java",
+              "staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java",
+          ]
+          TEMP_FILES = [
+              ".github/workflows/pr186-lockfile-bootstrap.yml",
+              "tools/pr186-final-review-repair.py",
+          ]
+          HEAD_REF = f"heads/{BRANCH}"
+          HEAD_PATH = f"/repos/{REPOSITORY}/git/ref/{HEAD_REF}"
+          UPDATE_PATH = f"/repos/{REPOSITORY}/git/refs/{HEAD_REF}"
+          HEADERS = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {TOKEN}",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def api(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(API + path, data=data, method=method, headers=HEADERS)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  raw = response.read()
+              return json.loads(raw) if raw else {}
+
+          def require_expected_head():
+              actual = api("GET", HEAD_PATH)["object"]["sha"]
+              if actual != EXPECTED_HEAD:
+                  raise SystemExit(f"branch moved: expected {EXPECTED_HEAD}, found {actual}")
+
+          require_expected_head()
+          parent = api("GET", f"/repos/{REPOSITORY}/git/commits/{EXPECTED_HEAD}")
+          base_tree = parent["tree"]["sha"]
+          entries = []
+          for path in FILES:
+              content = Path(path).read_text(encoding="utf-8")
+              blob = api("POST", f"/repos/{REPOSITORY}/git/blobs", {"content": content, "encoding": "utf-8"})
+              entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+          for path in TEMP_FILES:
+              entries.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
+
+          tree = api("POST", f"/repos/{REPOSITORY}/git/trees", {"base_tree": base_tree, "tree": entries})
+          commit = api("POST", f"/repos/{REPOSITORY}/git/commits", {
+              "message": "[PR186] Resolve final review security findings",
+              "tree": tree["sha"],
+              "parents": [EXPECTED_HEAD],
+          })
+          require_expected_head()
+          api("PATCH", UPDATE_PATH, {"sha": commit["sha"], "force": False})
+          print(f"Published consolidated repair commit {commit['sha']}")
+          PY
