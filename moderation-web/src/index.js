@@ -263,9 +263,8 @@ function secure(response) {
   headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
-  // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
   // The value is a fixed DENY literal and cannot be influenced by request input.
-  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   headers.set('Cross-Origin-Resource-Policy', 'same-origin');
