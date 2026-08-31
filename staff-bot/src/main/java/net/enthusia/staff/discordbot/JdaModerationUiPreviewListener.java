@@ -6,21 +6,28 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.command.UserContextInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
 /** Staging-only Discord launcher for the Cloudflare-hosted moderation preview. */
 final class JdaModerationUiPreviewListener extends ListenerAdapter implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
-    private static final String COMMAND = "moderate-preview";
+    private static final String SLASH_COMMAND = "moderate-preview";
+    private static final String USER_COMMAND = "Moderate Preview";
+    private static final String MESSAGE_COMMAND = "Moderate Message Preview";
+    private static final String TARGET_OPTION = "player";
     private static final long NO_GUILD = 0L;
     private static final int MIN_SESSION_CAPACITY = 1;
-    private static final int EXPECTED_COMMAND_COUNT = 1;
+    private static final int EXPECTED_COMMAND_COUNT = 3;
 
     private final long guildId;
     private final InteractionReplayGuard interactions;
@@ -61,7 +68,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         if (guild == null) {
             return;
         }
-        guild.updateCommands().addCommands(command()).queue(
+        guild.updateCommands().addCommands(commands()).queue(
                 registered -> registrationCallbacks.runIfCurrent(
                         generation,
                         () -> commandsRegistered(registered)),
@@ -77,47 +84,90 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!COMMAND.equals(event.getName())) {
+        if (!SLASH_COMMAND.equals(event.getName())) {
             return;
         }
-        if (!accepted(guildId(event.getGuild())) || !claim(event)) {
+        if (!accepted(event) || !claim(event)) {
             unavailable(event);
             return;
         }
-        Optional<URI> launchUri = issueLaunchUri(event.getUser().getIdLong());
+        var option = event.getOption(TARGET_OPTION);
+        if (option == null) {
+            unavailable(event);
+            return;
+        }
+        reply(event, userLaunch(event.getUser().getIdLong(), option.getAsUser().getIdLong()));
+    }
+
+    @Override
+    public void onUserContextInteraction(UserContextInteractionEvent event) {
+        if (!USER_COMMAND.equals(event.getName())) {
+            return;
+        }
+        if (!accepted(event) || !claim(event)) {
+            unavailable(event);
+            return;
+        }
+        reply(event, userLaunch(event.getUser().getIdLong(), event.getTarget().getIdLong()));
+    }
+
+    @Override
+    public void onMessageContextInteraction(MessageContextInteractionEvent event) {
+        if (!MESSAGE_COMMAND.equals(event.getName())) {
+            return;
+        }
+        if (!accepted(event) || !claim(event)) {
+            unavailable(event);
+            return;
+        }
+        Message message = event.getTarget();
+        reply(event, messageLaunch(event.getUser().getIdLong(), message));
+    }
+
+    private Optional<URI> userLaunch(long actorId, long targetUserId) {
+        return hostedLaunchIssuer.map(issuer -> issuer.issueUserLaunchUri(actorId, guildId, targetUserId));
+    }
+
+    private Optional<URI> messageLaunch(long actorId, Message message) {
+        return hostedLaunchIssuer.map(issuer -> issuer.issueMessageLaunchUri(
+                actorId,
+                guildId,
+                message.getChannelIdLong(),
+                message.getIdLong(),
+                message.getAuthor().getIdLong()));
+    }
+
+    private void reply(IReplyCallback event, Optional<URI> launchUri) {
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(launchUri);
         event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
     }
 
-    private Optional<URI> issueLaunchUri(long actorId) {
-        return hostedLaunchIssuer.map(issuer -> issuer.issueLaunchUri(actorId, guildId));
-    }
-
-    static CommandData command() {
-        return Commands.slash(COMMAND, "Open the staging moderation web panel")
-                .setDefaultPermissions(DefaultMemberPermissions.DISABLED);
+    static List<CommandData> commands() {
+        return List.of(
+                Commands.slash(SLASH_COMMAND, "Open the staging moderation web panel for a Discord user")
+                        .addOption(OptionType.USER, TARGET_OPTION, "Discord user to inspect", true)
+                        .setDefaultPermissions(DefaultMemberPermissions.DISABLED),
+                Commands.user(USER_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED),
+                Commands.message(MESSAGE_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED)
+        );
     }
 
     private void commandsRegistered(List<Command> registered) {
         boolean complete = registered.size() == EXPECTED_COMMAND_COUNT
-                && COMMAND.equals(registered.getFirst().getName());
+                && registered.stream().map(Command::getName).collect(java.util.stream.Collectors.toSet())
+                .equals(java.util.Set.of(SLASH_COMMAND, USER_COMMAND, MESSAGE_COMMAND));
         enabled.set(complete);
         if (!complete) {
             log("discord_ui_preview_command_registration_incomplete", null);
         }
     }
 
-    private void commandRegistrationFailed(Throwable failure) {
-        enabled.set(false);
-        log("discord_ui_preview_command_registration_failed", failure);
+    private boolean accepted(IReplyCallback event) {
+        return enabled.get() && guildId(event.getGuild()) == guildId;
     }
 
     private boolean claim(IReplyCallback event) {
         return interactions.claim(event.getIdLong()) == InteractionReplayGuard.ClaimResult.CLAIMED;
-    }
-
-    private boolean accepted(long eventGuildId) {
-        return enabled.get() && eventGuildId == guildId;
     }
 
     private static long guildId(Guild guild) {

@@ -127,8 +127,7 @@ async function handleLaunch(request, env, url) {
   const inspection = await inspectLaunchToken(
     token,
     env.LAUNCH_SIGNING_KEY_HEX,
-    env.EXPECTED_GUILD_ID,
-    env.EXPECTED_TARGET_KEY
+    env.EXPECTED_GUILD_ID
   );
   if (!inspection.claims) return unauthorizedLaunch();
   const result = await store(env).consumeLaunch(inspection.claims);
@@ -202,12 +201,9 @@ function store(env) {
 }
 
 function validSimulation(payload, session) {
-  if (!payload) return false;
-  if (typeof payload !== 'object') return false;
-  if (Array.isArray(payload)) return false;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   if (payload.target !== session.targetKey) return false;
-  if (!boundedString(payload.offense, 64)) return false;
-  if (!boundedString(payload.action, 32)) return false;
+  if (!boundedString(payload.offense, 64) || !boundedString(payload.action, 32)) return false;
   return idList(payload.evidence) && idList(payload.delete);
 }
 
@@ -252,12 +248,11 @@ function jsonResponse(value, status = 200) {
 function secure(response) {
   const secured = new Response(response.body, response);
   const headers = secured.headers;
-  headers.set('Cache-Control', 'no-store');
+  headers.set('Cache-Control', 'private, no-store');
   headers.set('Pragma', 'no-cache');
   headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
-  // The value is a fixed DENY literal and cannot be influenced by request input.
   headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('Cross-Origin-Opener-Policy', 'same-origin');

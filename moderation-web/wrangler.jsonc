@@ -31,7 +31,6 @@
   },
   "vars": {
     "EXPECTED_GUILD_ID": "1410303324745371709",
-    "EXPECTED_TARGET_KEY": "sample-river-ash",
     "STAGING_LABEL": "staging"
   },
   "secrets": {
