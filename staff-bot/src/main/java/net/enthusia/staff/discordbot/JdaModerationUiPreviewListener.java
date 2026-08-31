@@ -3,8 +3,10 @@ package net.enthusia.staff.discordbot;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
@@ -75,7 +77,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         long generation = registrationCallbacks.beginResolution();
         enabled.set(false);
         Guild guild = jda.getGuildById(guildId);
-        if (guild == null || !startReadApi(jda)) {
+        if (guild == null || !messageContentEntitled(jda) || !startReadApi(jda)) {
             return;
         }
         guild.updateCommands().addCommands(commands()).queue(
@@ -149,6 +151,25 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             closeReadApi();
             return false;
         }
+    }
+
+    private static boolean messageContentEntitled(JDA jda) {
+        try {
+            Set<ApplicationInfo.Flag> flags = jda.retrieveApplicationInfo().complete().getFlags();
+            boolean entitled = hasMessageContentEntitlement(flags);
+            if (!entitled) {
+                log("discord_ui_preview_message_content_intent_unavailable", null);
+            }
+            return entitled;
+        } catch (RuntimeException exception) {
+            log("discord_ui_preview_message_content_intent_check_failed", exception);
+            return false;
+        }
+    }
+
+    static boolean hasMessageContentEntitlement(Set<ApplicationInfo.Flag> flags) {
+        return flags != null && (flags.contains(ApplicationInfo.Flag.GATEWAY_MESSAGE_CONTENT)
+                || flags.contains(ApplicationInfo.Flag.GATEWAY_MESSAGE_CONTENT_LIMITED));
     }
 
     private Optional<URI> userLaunch(long actorId, long targetUserId) {
