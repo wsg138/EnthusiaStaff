@@ -20,14 +20,19 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues'
-          curl --fail-with-body --silent --show-error "$endpoint" > codacy-issues.json
+          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues?limit=100'
+          curl --fail-with-body --silent --show-error -H 'Accept: application/json' "$endpoint" > codacy-issues.json
           jq -e '.data | type == "array"' codacy-issues.json >/dev/null
-          jq '{count:(.data|length), issues:[.data[] | {
-            filePath,
-            lineNumber,
-            message,
-            category,
-            patternInfo,
-            toolInfo
-          }]}' codacy-issues.json
+          jq -r '
+            .data[]
+            | select(.deltaType == "Added")
+            | [
+                .commitIssue.filePath,
+                (.commitIssue.lineNumber | tostring),
+                .commitIssue.patternInfo.id,
+                .commitIssue.patternInfo.level,
+                .commitIssue.message,
+                .commitIssue.lineText
+              ]
+            | @tsv
+          ' codacy-issues.json
