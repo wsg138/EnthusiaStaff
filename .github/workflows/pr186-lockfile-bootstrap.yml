@@ -1,4 +1,4 @@
-name: PR186 Lockfile Export
+name: PR186 Repair Tree Export
 
 on:
   push:
@@ -12,10 +12,10 @@ permissions:
   contents: read
 
 jobs:
-  lockfile:
-    name: Generate exact npm lockfile
+  export:
+    name: Validate and export repaired files
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out exact commit
         uses: actions/checkout@v6
@@ -27,18 +27,54 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Generate lockfile
-        working-directory: moderation-web
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+        with:
+          cache-read-only: true
+
+      - name: Apply reviewed repairs and exact lockfile
         shell: bash
         run: |
           set -Eeuo pipefail
+          python3 tools/pr186-final-review-repair.py
+          cd moderation-web
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           test -s package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run check
 
-      - name: Upload lockfile
+      - name: Validate focused Java configuration tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x gradlew
+          ./gradlew :staff-bot:test \
+            --tests net.enthusia.staff.discordbot.ModerationPreviewWebConfigTest \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+          git diff --check
+
+      - name: Upload exact repaired files
         uses: actions/upload-artifact@v4
         with:
-          name: pr186-package-lock
-          path: moderation-web/package-lock.json
+          name: pr186-final-repair-tree
           if-no-files-found: error
           retention-days: 1
+          include-hidden-files: true
+          path: |
+            .github/workflows/moderation-web-staging-deploy.yml
+            .github/workflows/moderation-web-validation.yml
+            moderation-web/package-lock.json
+            moderation-web/src/index.js
+            moderation-web/src/request-body.js
+            moderation-web/test/request-body.test.mjs
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfig.java
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebConfigTest.java
