@@ -17,6 +17,8 @@ permissions:
 env:
   EXPECTED_HOST: staff-staging.enthusia.info
   EXPECTED_ZONE: enthusia.info
+  READ_BACKEND_HOST: moderation-read-staging.enthusia.info
+  READ_TUNNEL_NAME: enthusia-moderation-read-staging
 
 jobs:
   deploy:
@@ -44,15 +46,12 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
-          READ_API_ORIGIN: ${{ secrets.MODERATION_READ_API_ORIGIN }}
         run: |
           set -Eeuo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" ]]
           [[ -n "$BOT_TOKEN" ]]
-          [[ "$READ_API_ORIGIN" =~ ^https://[^/?#]+/?$ ]] || {
-            echo '::error::cloudflare-staging must provide MODERATION_READ_API_ORIGIN as an HTTPS origin.'
-            exit 1
-          }
+          [[ "$READ_BACKEND_HOST" == 'moderation-read-staging.enthusia.info' ]]
+          [[ "$READ_TUNNEL_NAME" == 'enthusia-moderation-read-staging' ]]
 
       - name: Resolve Cloudflare zone account
         shell: bash
@@ -68,9 +67,115 @@ jobs:
           count="$(printf '%s' "$response" | jq '[.result[] | select(.name == env.EXPECTED_ZONE)] | length')"
           [[ "$count" == '1' ]]
           account_id="$(printf '%s' "$response" | jq -r '.result[] | select(.name == env.EXPECTED_ZONE) | .account.id')"
+          zone_id="$(printf '%s' "$response" | jq -r '.result[] | select(.name == env.EXPECTED_ZONE) | .id')"
           [[ "$account_id" =~ ^[0-9a-f]{32}$ ]]
+          [[ "$zone_id" =~ ^[0-9a-f]{32}$ ]]
           echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_ZONE_ID=$zone_id" >> "$GITHUB_ENV"
           echo "Resolved ${EXPECTED_ZONE} to its owning Cloudflare account." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Provision fixed moderation read tunnel and hostname
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          api_base='https://api.cloudflare.com/client/v4'
+          auth_header="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+          tunnels="$(curl --fail-with-body --silent --show-error --get \
+            -H "$auth_header" -H 'Content-Type: application/json' \
+            --data-urlencode "name=${READ_TUNNEL_NAME}" \
+            --data-urlencode 'is_deleted=false' \
+            --data-urlencode 'per_page=100' \
+            "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel")"
+          printf '%s' "$tunnels" | jq -e '.success == true' >/dev/null
+          tunnel_count="$(printf '%s' "$tunnels" | jq --arg name "$READ_TUNNEL_NAME" '[.result[] | select(.name == $name and .deleted_at == null)] | length')"
+
+          if [[ "$tunnel_count" == '0' ]]; then
+            payload="$(jq -cn --arg name "$READ_TUNNEL_NAME" '{name:$name, config_src:"cloudflare"}')"
+            created="$(curl --fail-with-body --silent --show-error \
+              -X POST -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$payload" \
+              "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel")"
+            printf '%s' "$created" | jq -e '.success == true and .result.config_src == "cloudflare"' >/dev/null
+            tunnel_id="$(printf '%s' "$created" | jq -r '.result.id')"
+            tunnel_created='yes'
+          elif [[ "$tunnel_count" == '1' ]]; then
+            tunnel_id="$(printf '%s' "$tunnels" | jq -r --arg name "$READ_TUNNEL_NAME" '.result[] | select(.name == $name and .deleted_at == null) | .id')"
+            config_src="$(printf '%s' "$tunnels" | jq -r --arg name "$READ_TUNNEL_NAME" '.result[] | select(.name == $name and .deleted_at == null) | .config_src')"
+            [[ "$config_src" == 'cloudflare' ]] || {
+              echo '::error::Existing moderation read tunnel is not remotely managed; refusing to repurpose it.'
+              exit 1
+            }
+            tunnel_created='no'
+          else
+            echo '::error::Multiple active moderation read tunnels share the protected staging name.'
+            exit 1
+          fi
+          [[ "$tunnel_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+
+          ingress="$(jq -cn --arg host "$READ_BACKEND_HOST" '{config:{ingress:[{hostname:$host,service:"http://127.0.0.1:8766"},{service:"http_status:404"}]}}')"
+          configured="$(curl --fail-with-body --silent --show-error \
+            -X PUT -H "$auth_header" -H 'Content-Type: application/json' \
+            --data "$ingress" \
+            "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel/${tunnel_id}/configurations")"
+          printf '%s' "$configured" | jq -e --arg host "$READ_BACKEND_HOST" '
+            .success == true
+            and .result.config.ingress[0].hostname == $host
+            and .result.config.ingress[0].service == "http://127.0.0.1:8766"
+            and .result.config.ingress[1].service == "http_status:404"' >/dev/null
+
+          records="$(curl --fail-with-body --silent --show-error --get \
+            -H "$auth_header" -H 'Content-Type: application/json' \
+            --data-urlencode "name=${READ_BACKEND_HOST}" \
+            --data-urlencode 'per_page=100' \
+            "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
+          printf '%s' "$records" | jq -e '.success == true' >/dev/null
+          record_count="$(printf '%s' "$records" | jq --arg name "$READ_BACKEND_HOST" '[.result[] | select(.name == $name)] | length')"
+          cname_target="${tunnel_id}.cfargotunnel.com"
+          dns_payload="$(jq -cn \
+            --arg name "$READ_BACKEND_HOST" \
+            --arg content "$cname_target" \
+            '{type:"CNAME",name:$name,content:$content,ttl:1,proxied:true,comment:"ES-D16 staging moderation read bridge"}')"
+
+          if [[ "$record_count" == '0' ]]; then
+            dns_result="$(curl --fail-with-body --silent --show-error \
+              -X POST -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$dns_payload" \
+              "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
+          elif [[ "$record_count" == '1' ]]; then
+            record_type="$(printf '%s' "$records" | jq -r --arg name "$READ_BACKEND_HOST" '.result[] | select(.name == $name) | .type')"
+            [[ "$record_type" == 'CNAME' ]] || {
+              echo '::error::Protected moderation backend hostname is occupied by a non-CNAME record; refusing to overwrite it.'
+              exit 1
+            }
+            record_id="$(printf '%s' "$records" | jq -r --arg name "$READ_BACKEND_HOST" '.result[] | select(.name == $name) | .id')"
+            [[ "$record_id" =~ ^[0-9a-f]{32}$ ]]
+            dns_result="$(curl --fail-with-body --silent --show-error \
+              -X PATCH -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$dns_payload" \
+              "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record_id}")"
+          else
+            echo '::error::Protected moderation backend hostname has multiple DNS records; refusing ambiguous replacement.'
+            exit 1
+          fi
+          printf '%s' "$dns_result" | jq -e --arg name "$READ_BACKEND_HOST" --arg content "$cname_target" '
+            .success == true
+            and .result.type == "CNAME"
+            and .result.name == $name
+            and .result.content == $content
+            and .result.proxied == true' >/dev/null
+
+          echo "READ_TUNNEL_ID=$tunnel_id" >> "$GITHUB_ENV"
+          {
+            echo '### Private moderation read transport'
+            echo
+            echo "- tunnel: \`${READ_TUNNEL_NAME}\` (created this run: ${tunnel_created})"
+            echo "- hostname: \`https://${READ_BACKEND_HOST}\`"
+            echo '- origin ingress: `http://127.0.0.1:8766`'
+            echo '- direct public origin port: **not configured**'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v5
@@ -92,7 +197,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
-          READ_API_ORIGIN: ${{ secrets.MODERATION_READ_API_ORIGIN }}
         run: |
           set -Eeuo pipefail
           secrets_file="$(mktemp)"
@@ -105,17 +209,10 @@ jobs:
           import json
           import os
           import sys
-          import urllib.parse
 
           token = os.environ['BOT_TOKEN'].strip()
-          origin = os.environ['READ_API_ORIGIN'].strip()
           if not token or any(ch.isspace() for ch in token):
               raise SystemExit('protected bot token is empty or malformed')
-          parsed = urllib.parse.urlparse(origin)
-          if parsed.scheme != 'https' or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
-              raise SystemExit('read API origin must be a credential-free HTTPS origin')
-          if parsed.path not in ('', '/'):
-              raise SystemExit('read API origin must not include a path')
           launch_key_hex = hashlib.sha256(
               b'enthusia-staff-moderation-launch-v1\0' + token.encode('utf-8')
           ).hexdigest()
@@ -126,10 +223,9 @@ jobs:
               json.dump({
                   'LAUNCH_SIGNING_KEY_HEX': launch_key_hex,
                   'READ_API_SIGNING_KEY_HEX': read_key_hex,
-                  'READ_API_ORIGIN': origin,
               }, handle)
           PY
-          unset BOT_TOKEN READ_API_ORIGIN
+          unset BOT_TOKEN
 
           npx wrangler deploy --secrets-file "$secrets_file"
           rm -f "$secrets_file"
@@ -255,7 +351,7 @@ jobs:
             echo "- host: \`https://${EXPECTED_HOST}\`"
             echo '- Worker + protected assets: **PASS**'
             echo '- Durable Object/session configuration: **deployed**'
-            echo '- private read bridge configuration: **deployed**'
+            echo '- fixed private read hostname/tunnel configuration: **deployed**'
             echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
             echo '- protected-secret launch ticket first use: **PASS**'
