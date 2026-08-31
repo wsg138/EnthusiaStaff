@@ -50,7 +50,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
     }
 
     record DiscordUser(long userId) implements ModerationReadTarget {
-        DiscordUser {
+        public DiscordUser {
             if (userId <= 0) {
                 throw new IllegalArgumentException("user ID must be positive");
             }
@@ -63,7 +63,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
     }
 
     record MessageContext(long channelIdValue, long messageIdValue, long userId) implements ModerationReadTarget {
-        MessageContext {
+        public MessageContext {
             if (channelIdValue <= 0 || messageIdValue <= 0 || userId <= 0) {
                 throw new IllegalArgumentException("message target IDs must be positive");
             }
