@@ -17,7 +17,7 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
     private static final String HTTP_SCHEME = "http";
     private static final String HTTPS_SCHEME = "https";
     private static final int EPHEMERAL_PORT = 0;
-    private static final int STAGING_WEB_PORT = 8_765;
+    private static final int STAGING_WEB_PORT = 8_766;
 
     ModerationPreviewWebConfig {
         Objects.requireNonNull(bindAddress, "bindAddress");
@@ -65,7 +65,7 @@ record ModerationPreviewWebConfig(InetSocketAddress bindAddress, Optional<URI> p
         if (port == EPHEMERAL_PORT || port == STAGING_WEB_PORT) {
             return port;
         }
-        throw new IllegalArgumentException("preview web bind port must be 0 or 8765");
+        throw new IllegalArgumentException("preview web bind port must be 0 or 8766");
     }
 
     private static HostAndPort parseHostAndPort(String value) {
