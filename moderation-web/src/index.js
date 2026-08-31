@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { verifyLaunchToken } from './security.js';
+import { inspectLaunchToken } from './security.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -123,15 +123,15 @@ function handleHealth(request) {
 async function handleLaunch(request, env, url) {
   if (request.method !== 'GET') return methodNotAllowed();
   const token = url.searchParams.get('t') || '';
-  const claims = await verifyLaunchToken(
+  const inspection = await inspectLaunchToken(
     token,
     env.LAUNCH_SIGNING_KEY_HEX,
     env.EXPECTED_GUILD_ID,
     env.EXPECTED_TARGET_KEY
   );
-  if (!claims) return unauthorizedLaunch();
-  const result = await store(env).consumeLaunch(claims);
-  if (!result || result.status !== 'accepted') return unauthorizedLaunch();
+  if (!inspection.claims) return unauthorizedLaunch(inspection.reason);
+  const result = await store(env).consumeLaunch(inspection.claims);
+  if (!result || result.status !== 'accepted') return unauthorizedLaunch(result?.status || 'session');
   const headers = new Headers({ Location: '/moderation' });
   headers.append('Set-Cookie', sessionCookie(result.sessionId));
   return new Response(null, { status: 303, headers });
@@ -219,8 +219,10 @@ function sessionCookie(value) {
   return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}`;
 }
 
-function unauthorizedLaunch() {
-  return textResponse('This moderation link is invalid, expired, or already used.', 401);
+function unauthorizedLaunch(reason = 'unknown') {
+  const response = textResponse('This moderation link is invalid, expired, or already used.', 401);
+  response.headers.set('X-Preview-Reject-Reason', reason);
+  return response;
 }
 
 function methodNotAllowed() {
