@@ -129,17 +129,23 @@ jobs:
           grep -Fqx 'Open this panel from Discord.' root.out
           rm -f root.out
 
-      - name: Verify live launch ticket and replay contract
+      - name: Verify live launch, session and replay contract
         shell: bash
         run: |
           set -Eeuo pipefail
           ticket_file="$(mktemp)"
-          headers_file="$(mktemp)"
-          body_file="$(mktemp)"
-          replay_file="$(mktemp)"
-          cleanup() { rm -f "$ticket_file" "$headers_file" "$body_file" "$replay_file"; }
+          cookie_jar="$(mktemp)"
+          launch_headers="$(mktemp)"
+          launch_body="$(mktemp)"
+          panel_body="$(mktemp)"
+          replay_headers="$(mktemp)"
+          replay_body="$(mktemp)"
+          cleanup() {
+            rm -f "$ticket_file" "$cookie_jar" "$launch_headers" "$launch_body" \
+              "$panel_body" "$replay_headers" "$replay_body"
+          }
           trap cleanup EXIT
-          chmod 600 "$ticket_file"
+          chmod 600 "$ticket_file" "$cookie_jar"
 
           python3 - "$ticket_file" "$EXPECTED_HOST" <<'PY'
           import base64
@@ -166,19 +172,50 @@ jobs:
               handle.write(f'https://{host}/launch?t={urllib.parse.quote(token, safe="")}')
           PY
 
-          first_status="$(curl --silent --show-error --output "$body_file" --dump-header "$headers_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
+          first_status="$(curl --silent --show-error \
+            --cookie-jar "$cookie_jar" \
+            --output "$launch_body" \
+            --dump-header "$launch_headers" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "$(cat "$ticket_file")")"
           if [[ "$first_status" != '303' ]]; then
             echo "Live first-use launch returned HTTP ${first_status}; expected 303." >&2
-            grep -i '^x-preview-reject-reason:' "$headers_file" >&2 || true
-            cat "$body_file" >&2
+            grep -i '^x-preview-reject-reason:' "$launch_headers" >&2 || true
+            cat "$launch_body" >&2
             exit 1
           fi
-          grep -Eiq '^location: /moderation\r?$' "$headers_file"
-          grep -Eiq '^set-cookie: __Host-enthusia_mod_preview=' "$headers_file"
 
-          replay_status="$(curl --silent --show-error --output "$replay_file" --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")")"
-          [[ "$replay_status" == '401' ]]
-          grep -Fqx 'This moderation link is invalid, expired, or already used.' "$replay_file"
+          location="$(awk 'BEGIN { IGNORECASE=1 } /^location:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$launch_headers")"
+          if [[ "$location" != '/moderation' ]]; then
+            echo "Live launch redirect target was unexpected: ${location:-<missing>}" >&2
+            exit 1
+          fi
+
+          panel_status="$(curl --silent --show-error \
+            --cookie "$cookie_jar" \
+            --output "$panel_body" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${EXPECTED_HOST}/moderation")"
+          if [[ "$panel_status" != '200' ]]; then
+            echo "Authenticated moderation panel returned HTTP ${panel_status}; expected 200." >&2
+            cat "$panel_body" >&2
+            exit 1
+          fi
+
+          replay_status="$(curl --silent --show-error \
+            --output "$replay_body" \
+            --dump-header "$replay_headers" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "$(cat "$ticket_file")")"
+          if [[ "$replay_status" != '401' ]]; then
+            echo "Launch replay returned HTTP ${replay_status}; expected 401." >&2
+            exit 1
+          fi
+          grep -Fiq 'x-preview-reject-reason: replayed' "$replay_headers"
+          grep -Fqx 'This moderation link is invalid, expired, or already used.' "$replay_body"
 
           cleanup
           trap - EXIT
@@ -193,6 +230,7 @@ jobs:
             echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
             echo '- protected-secret launch ticket first use: **PASS**'
+            echo '- authenticated browser session: **PASS**'
             echo '- one-time launch replay rejection: **PASS**'
             echo '- runtime mode: **staging simulation only**'
             echo '- Discord bot token uploaded to Cloudflare: **NO**'
