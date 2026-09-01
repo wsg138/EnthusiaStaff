@@ -20,7 +20,7 @@ final class ModerationDiscordMessageReader {
 
     List<ModerationReadApiModel.ChannelDto> visibleChannels(ModerationReadContext context) {
         return context.guild().getTextChannels().stream()
-                .filter(channel -> context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL))
+                .filter(channel -> hasReadAccess(context, channel))
                 .sorted(Comparator.comparing(TextChannel::getPosition).thenComparing(TextChannel::getName))
                 .map(ModerationDiscordMessageReader::channelDto)
                 .toList();
@@ -99,11 +99,21 @@ final class ModerationDiscordMessageReader {
 
     private static TextChannel visibleChannel(ModerationReadContext context, long channelId) {
         TextChannel channel = context.guild().getTextChannelById(channelId);
-        if (channel == null || !context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL)) {
+        if (channel == null || !hasReadAccess(context, channel)) {
             throw new StaffReadAuthorization.DeniedException();
         }
         return channel;
     }
+
+    static boolean hasReadPermissions(boolean canView, boolean canReadHistory) {
+    return canView && canReadHistory;
+}
+
+private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
+    return hasReadPermissions(
+            context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
+            context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
+}
 
     private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {
         Category category = channel.getParentCategory();

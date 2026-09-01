@@ -1,9 +1,11 @@
 'use strict';
 
 const textEncoder = new TextEncoder();
+const DEFAULT_LIMIT = 25;
 const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
+const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
 
 export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
   const keyHex = readSigningKey(env);
@@ -12,54 +14,76 @@ export async function proxyModerationRead(env, session, endpoint, browserInput =
   const body = JSON.stringify(readRequest(session, endpoint, browserInput));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomToken(24);
-  const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
-  const response = await fetch(new URL(path, READ_API_ORIGIN), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      Accept: 'application/json',
-      'X-Enthusia-Read-Timestamp': timestamp,
-      'X-Enthusia-Read-Nonce': nonce,
-      'X-Enthusia-Read-Signature': signature
-    },
-    body
-  });
-  return sanitizedBackendResponse(response);
+  try {
+    const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
+    const response = await fetch(new URL(path, READ_API_ORIGIN), {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Accept: 'application/json',
+        'X-Enthusia-Read-Timestamp': timestamp,
+        'X-Enthusia-Read-Nonce': nonce,
+        'X-Enthusia-Read-Signature': signature
+      },
+      body
+    });
+    return await sanitizedBackendResponse(response);
+  } catch {
+    return unavailable();
+  }
 }
 
-const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
-
 export function browserMessageQuery(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid message filters');
-    for (const key of Object.keys(input)) {
-        if (!MESSAGE_FILTER_KEYS.has(key)) throw new Error('invalid message filter');
-    }
-    const query = {};
-    const channelId = snowflakeFilter(input.channel, 'channel');
-    const beforeMessageId = snowflakeFilter(input.before, 'before');
-    const afterMessageId = snowflakeFilter(input.after, 'after');
-    const authorId = snowflakeFilter(input.author, 'author');
-    if (channelId !== null) query.channelId = channelId;
-    if (beforeMessageId !== null) query.beforeMessageId = beforeMessageId;
-    if (afterMessageId !== null) query.afterMessageId = afterMessageId;
-    if (authorId !== null) query.authorId = authorId;
-    if (input.text !== undefined) {
-        if (typeof input.text !== 'string' || input.text.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
-        query.text = input.text;
-    }
-    if (input.date !== undefined) {
-        if (typeof input.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('invalid date filter');
-        query.date = input.date;
-    }
-    query.limit = input.limit === undefined ? 25 : boundedLimit(String(input.limit));
-    if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
-    return query;
+  requireFilterObject(input);
+  requireFilterKeys(input);
+  const query = {};
+  addSnowflakeFilter(query, 'channelId', input.channel, 'channel');
+  addSnowflakeFilter(query, 'beforeMessageId', input.before, 'before');
+  addSnowflakeFilter(query, 'afterMessageId', input.after, 'after');
+  addSnowflakeFilter(query, 'authorId', input.author, 'author');
+  addTextFilter(query, input.text);
+  addDateFilter(query, input.date);
+  query.limit = input.limit === undefined ? DEFAULT_LIMIT : boundedLimit(input.limit);
+  requireCompatibleCursors(query);
+  return query;
 }
 
 export function readRequest(session, endpoint, browserInput = {}) {
-    const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
-    if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
-    return request;
+  const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
+  if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
+  return request;
+}
+
+function requireFilterObject(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid message filters');
+}
+
+function requireFilterKeys(input) {
+  for (const key of Object.keys(input)) {
+    if (!MESSAGE_FILTER_KEYS.has(key)) throw new Error('invalid message filter');
+  }
+}
+
+function addSnowflakeFilter(query, targetKey, value, label) {
+  const parsed = snowflakeFilter(value, label);
+  if (parsed !== null) query[targetKey] = parsed;
+}
+
+function addTextFilter(query, value) {
+  if (value === undefined) return;
+  if (typeof value !== 'string' || value.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
+  query.text = value;
+}
+
+function addDateFilter(query, value) {
+  if (value === undefined) return;
+  if (!validDateFilter(value)) throw new Error('invalid date filter');
+  query.date = value;
+}
+
+function requireCompatibleCursors(query) {
+  if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
 }
 
 function readSigningKey(env) {
@@ -67,15 +91,36 @@ function readSigningKey(env) {
   return /^[0-9a-fA-F]{64}$/.test(keyHex) ? keyHex : null;
 }
 
-function snowflakeFilter(value, parameter) {
-    if (value === undefined || value === null) return null;
-    if (typeof value !== 'string' || !/^[1-9][0-9]{0,19}$/.test(value)) throw new Error(`invalid ${parameter} filter`);
-    return value;
+function snowflakeFilter(value, label) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new Error(`invalid ${label} filter`);
+  if (!validSnowflakeText(value)) throw new Error(`invalid ${label} filter`);
+  return value;
+}
+
+function validSnowflakeText(value) {
+  if (value.length < 1 || value.length > 20 || value[0] === '0') return false;
+  return asciiDigits(value);
+}
+
+function validDateFilter(value) {
+  if (typeof value !== 'string' || value.length !== 10) return false;
+  if (value[4] !== '-' || value[7] !== '-') return false;
+  return asciiDigits(value.slice(0, 4) + value.slice(5, 7) + value.slice(8, 10));
+}
+
+function asciiDigits(value) {
+  for (const character of value) {
+    if (character < '0' || character > '9') return false;
+  }
+  return true;
 }
 
 function boundedLimit(raw) {
-  if (!/^[1-9][0-9]?$/.test(raw)) throw new Error('invalid limit');
-  const value = Number(raw);
+  const text = typeof raw === 'number' ? String(raw) : raw;
+  if (typeof text !== 'string' || text.length < 1 || text.length > 2) throw new Error('invalid limit');
+  if (text[0] === '0' || !asciiDigits(text)) throw new Error('invalid limit');
+  const value = Number(text);
   if (!Number.isInteger(value) || value > MAX_LIMIT) throw new Error('invalid limit');
   return value;
 }
