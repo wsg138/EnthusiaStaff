@@ -10,7 +10,7 @@ Frozen reviewed executable head: `a009f4f5f857cf86a859be0d314264568d181670`.
 Canonical main during terminal publication: `a6ee52ca69cf50f39bd7a18237bbc8cdfc9fc51b`.
 
 ## Terminal outcome for this worker
-ES-D16 implementation and every repository-controlled exact-head gate are complete, but the package cannot become `COMPLETE` because its required sanitized live read staging is blocked by external Cloudflare account authorization. The protected staging API token receives HTTP 403 on the first account-level named-tunnel API request. The hard private-tunnel gate was preserved; PR #187 was not merged and the failure was not relabeled as a pass.
+ES-D16 implementation and every repository-controlled exact-head gate are complete, but the package cannot become `COMPLETE` because its required live read staging, which must be sanitized, is blocked by external Cloudflare account authorization. The protected staging API token receives HTTP 403 on the first account-level named-tunnel API request. The hard private-tunnel gate was preserved; PR #187 was not merged and the failure was not relabeled as a pass.
 
 This is a genuine external blocker after all safe repository actions were exhausted. D07, D13, X03, production Discord configuration/data, LiteBans authority, issue #43, and cutover remain outside this worker's changes.
 
@@ -66,7 +66,7 @@ Actual staging run `33530157844`, job `99930994457`, ran exact `a009f4f5f857cf86
 
 The first account-level named-tunnel API GET returned HTTP 403. Because that read failed, no tunnel configuration or DNS mutation succeeded. The final mandatory `Require fixed private tunnel provisioning` step failed exactly as designed.
 
-This is not eligible for `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`: a runner was allocated, product deployment/tests executed, and D16 explicitly requires sanitized staged live acceptance. The staging result remains `FAIL` / blocked, never `PASS`.
+This is not eligible for `OWNER-APPROVED INFRASTRUCTURE EXCEPTION — STAGING DEFERRED`: a runner was allocated, product deployment/tests executed, and D16 explicitly requires staged live acceptance to be sanitized. The staging result remains `FAIL` / blocked, never `PASS`.
 
 ## Exact unblock
 Grant or replace the protected staging Cloudflare API token with the owning account's required Cloudflare Tunnel account read/edit permissions. Then rerun the exact-head staging workflow. After the private tunnel provisions successfully, complete Bloom/live read acceptance and verify the staging Discord application's Message Content privileged-intent state before claiming message-content acceptance.
