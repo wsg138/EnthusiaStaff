@@ -16,7 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Resolves the loopback Discord staff authority from environment or a panel-uploaded secret file. */
 final class DiscordStaffAuthorityConfiguration {
     static final String FILE_NAME = "discord-staff-authority.properties";
-    static final String SECRET_PROPERTY = "authority.secret";
+    static final String CREDENTIAL_PROPERTY = "authority.secret";
     static final String URL_PROPERTY = "authority.url";
 
     private static final int MIN_SECRET_LENGTH = 32;
@@ -40,56 +40,68 @@ final class DiscordStaffAuthorityConfiguration {
             return Optional.of(fromEnvironment(environment));
         }
         Path file = dataFolder.resolve(FILE_NAME);
-        if (!Files.exists(file)) {
-            return Optional.empty();
-        }
-        return Optional.of(fromFile(file));
+        return Files.exists(file) ? Optional.of(fromFile(file)) : Optional.empty();
     }
 
     private static Value fromEnvironment(Map<String, String> environment) {
-        String secret = required(
+        String credential = required(
                 environment.get(DiscordStaffAuthorityEndpoint.CREDENTIAL_ENV),
                 DiscordStaffAuthorityEndpoint.CREDENTIAL_ENV);
         int port = DiscordStaffAuthorityEndpoint.parsePort(
                 environment.get(DiscordStaffAuthorityEndpoint.PORT_ENV));
-        return new Value(secret(secret), port);
+        return new Value(validateCredential(credential), port);
     }
 
     private static Value fromFile(Path file) {
+        Properties properties = load(file);
+        String credential = validateCredential(required(properties.getProperty(CREDENTIAL_PROPERTY), CREDENTIAL_PROPERTY));
+        URI uri = authorityUri(required(properties.getProperty(URL_PROPERTY), URL_PROPERTY));
+        return new Value(credential, uri.getPort());
+    }
+
+    private static Properties load(Path file) {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             properties.load(reader);
+            return properties;
         } catch (IOException exception) {
             throw new IllegalArgumentException("Discord staff authority config file is unavailable", exception);
         }
-        String secret = secret(required(properties.getProperty(SECRET_PROPERTY), SECRET_PROPERTY));
-        URI uri = authorityUri(required(properties.getProperty(URL_PROPERTY), URL_PROPERTY));
-        return new Value(secret, uri.getPort());
     }
 
     private static URI authorityUri(String raw) {
-        final URI uri;
-        try {
-            uri = new URI(raw.trim());
-        } catch (URISyntaxException exception) {
-            throw new IllegalArgumentException("authority.url is invalid", exception);
-        }
-        if (!SCHEME.equalsIgnoreCase(uri.getScheme())
-                || !HOST.equals(uri.getHost())
-                || uri.getPort() < 1
-                || uri.getPort() > 65_535
-                || !PATH.equals(uri.getPath())
-                || uri.getUserInfo() != null
-                || uri.getQuery() != null
-                || uri.getFragment() != null) {
+        URI uri = parseUri(raw);
+        if (!validNetwork(uri) || !validResource(uri)) {
             throw new IllegalArgumentException("authority.url must be the explicit IPv4 loopback authority URL");
         }
         return uri;
     }
 
-    private static String secret(String value) {
+    private static URI parseUri(String raw) {
+        try {
+            return new URI(raw.trim());
+        } catch (URISyntaxException exception) {
+            throw new IllegalArgumentException("authority.url is invalid", exception);
+        }
+    }
+
+    private static boolean validNetwork(URI uri) {
+        return SCHEME.equalsIgnoreCase(uri.getScheme())
+                && HOST.equals(uri.getHost())
+                && uri.getPort() >= 1
+                && uri.getPort() <= 65_535;
+    }
+
+    private static boolean validResource(URI uri) {
+        return PATH.equals(uri.getPath())
+                && uri.getUserInfo() == null
+                && uri.getQuery() == null
+                && uri.getFragment() == null;
+    }
+
+    private static String validateCredential(String value) {
         if (value.length() < MIN_SECRET_LENGTH) {
-            throw new IllegalArgumentException("authority secret must contain at least 32 characters");
+            throw new IllegalArgumentException("authority credential must contain at least 32 characters");
         }
         return value;
     }
