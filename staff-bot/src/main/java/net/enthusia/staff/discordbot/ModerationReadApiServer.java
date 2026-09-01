@@ -10,7 +10,6 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -85,13 +84,8 @@ final class ModerationReadApiServer implements AutoCloseable {
     }
 
     private void execute(HttpExchange exchange, byte[] body, boolean bootstrap) throws IOException {
-        Optional<ModerationReadApiModel.ReadRequest> parsed = parseRequest(json, body);
-        if (parsed.isEmpty()) {
-            respond(exchange, 400, new ModerationReadApiModel.ErrorResponse("invalid_request", "Request rejected."));
-            return;
-        }
         try {
-            ModerationReadApiModel.ReadRequest request = parsed.orElseThrow();
+            ModerationReadApiModel.ReadRequest request = parseRequest(json, body);
             Object response = bootstrap ? service.bootstrap(request) : service.messages(request);
             respond(exchange, 200, response);
         } catch (StaffReadAuthorization.DeniedException | LinkedStaffActorResolver.MissingStaffLinkException exception) {
@@ -105,11 +99,15 @@ final class ModerationReadApiServer implements AutoCloseable {
         }
     }
 
-    static Optional<ModerationReadApiModel.ReadRequest> parseRequest(ObjectMapper json, byte[] body) throws IOException {
+    static ModerationReadApiModel.ReadRequest parseRequest(ObjectMapper json, byte[] body) throws IOException {
         try {
-            return Optional.ofNullable(json.readValue(body, ModerationReadApiModel.ReadRequest.class));
+            ModerationReadApiModel.ReadRequest request = json.readValue(body, ModerationReadApiModel.ReadRequest.class);
+            if (request == null) {
+                throw new IllegalArgumentException("request JSON must contain an object");
+            }
+            return request;
         } catch (JsonProcessingException exception) {
-            return Optional.empty();
+            throw new IllegalArgumentException("request JSON is invalid", exception);
         }
     }
 

@@ -40,15 +40,16 @@ class ModerationDiscordMessageReaderTest {
     }
 
     private static Message message(String id, long authorId, String content, String createdAt) {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
         User author = (User) Proxy.newProxyInstance(
-                User.class.getClassLoader(),
+                loader,
                 new Class<?>[] {User.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getIdLong" -> authorId;
                     default -> throw new UnsupportedOperationException(method.getName());
                 });
         return (Message) Proxy.newProxyInstance(
-                Message.class.getClassLoader(),
+                loader,
                 new Class<?>[] {Message.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getId" -> id;
