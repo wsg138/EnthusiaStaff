@@ -33,7 +33,6 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final int MAX_PORT = 65_535;
     private static final int BACKLOG = 16;
     private static final int WORKER_THREADS = 2;
-    private static final int MIN_SECRET_LENGTH = 32;
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final String PATH = "/v1/staff-rank";
@@ -82,32 +81,20 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
-        Optional<String> credential = configuredCredential(plugin);
-        Optional<Integer> port = configuredPort(plugin);
+        Optional<DiscordStaffAuthorityConfiguration.Value> configuration = configuredAuthority(plugin);
         Optional<LuckPerms> luckPerms = configuredLuckPerms(plugin);
-        if (credential.isEmpty() || port.isEmpty() || luckPerms.isEmpty()) {
+        if (configuration.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, credential.orElseThrow(), port.orElseThrow(), luckPerms.orElseThrow());
+        DiscordStaffAuthorityConfiguration.Value value = configuration.orElseThrow();
+        return bind(plugin, value.secret(), value.port(), luckPerms.orElseThrow());
     }
 
-    private static Optional<String> configuredCredential(JavaPlugin plugin) {
-        String credential = System.getenv(CREDENTIAL_ENV);
-        if (credential == null || credential.isBlank()) {
-            return Optional.empty();
-        }
-        if (credential.length() < MIN_SECRET_LENGTH) {
-            log(plugin, "discord_staff_authority_secret_too_short", null);
-            return Optional.empty();
-        }
-        return Optional.of(credential);
-    }
-
-    private static Optional<Integer> configuredPort(JavaPlugin plugin) {
+    private static Optional<DiscordStaffAuthorityConfiguration.Value> configuredAuthority(JavaPlugin plugin) {
         try {
-            return Optional.of(parsePort(System.getenv(PORT_ENV)));
+            return DiscordStaffAuthorityConfiguration.fromRuntime(plugin);
         } catch (IllegalArgumentException exception) {
-            log(plugin, "discord_staff_authority_invalid_port", exception);
+            log(plugin, "discord_staff_authority_configuration_invalid", exception);
             return Optional.empty();
         }
     }

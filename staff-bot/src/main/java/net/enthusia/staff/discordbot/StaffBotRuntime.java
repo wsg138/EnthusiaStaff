@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
@@ -55,7 +56,15 @@ public final class StaffBotRuntime implements AutoCloseable {
     }
 
     public static StaffBotRuntime create(StaffBotConfiguration configuration) throws IOException {
+        return create(configuration, Optional.empty());
+    }
+
+    static StaffBotRuntime create(
+            StaffBotConfiguration configuration,
+            Optional<Path> moderationConfigFile
+    ) throws IOException {
         Objects.requireNonNull(configuration, "configuration");
+        Objects.requireNonNull(moderationConfigFile, "moderationConfigFile");
         StaffBotHealth health = new StaffBotHealth(configuration.environment());
         StaffBotWorkerPool workers = new StaffBotWorkerPool(
                 configuration.workerThreads(), configuration.workerQueueCapacity(), health);
@@ -63,8 +72,10 @@ public final class StaffBotRuntime implements AutoCloseable {
                 configuration.interactionCapacity(), configuration.interactionTtl());
         Optional<StaffModerationRuntime> moderation = Optional.empty();
         try {
-            moderation = StaffModerationRuntime.openFromEnvironment(
-                    configuration.interactionCapacity(), configuration.interactionTtl());
+            moderation = StaffModerationRuntime.open(
+                    moderationConfigFile,
+                    configuration.interactionCapacity(),
+                    configuration.interactionTtl());
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
             DiscordGateway gateway = new JdaDiscordGateway(configuration, workers, replayGuard, moderation);
             return new StaffBotRuntime(

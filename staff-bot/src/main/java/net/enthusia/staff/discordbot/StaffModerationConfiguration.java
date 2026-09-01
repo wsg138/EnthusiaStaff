@@ -2,13 +2,14 @@ package net.enthusia.staff.discordbot;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import net.enthusia.staff.persistence.DatabaseConfig;
 
-/** Optional environment-only configuration for D06 read-only moderation interactions. */
+/** Optional read-only moderation configuration sourced from a validated runtime map or file. */
 final class StaffModerationConfiguration {
     static final String JDBC_URL_ENV = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL";
     static final String DB_USERNAME_ENV = "ENTHUSIA_STAFF_BOT_DB_USERNAME";
@@ -59,6 +60,11 @@ final class StaffModerationConfiguration {
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
         return fromEnvironment(System.getenv());
+    }
+
+    static StaffModerationConfiguration fromFile(Path path) {
+        return fromEnvironment(StaffModerationConfigFile.read(path))
+                .orElseThrow(() -> new IllegalArgumentException("moderation config file is empty"));
     }
 
     static Optional<StaffModerationConfiguration> fromEnvironment(Map<String, String> values) {

@@ -1,7 +1,9 @@
 package net.enthusia.staff.discordbot;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 
 /** Executable entry point for the isolated Java 21 staff Discord bot process. */
 public final class StaffBotApplication {
@@ -41,11 +43,18 @@ public final class StaffBotApplication {
             logIfEnabled(System.Logger.Level.ERROR, "staff_bot_configuration_invalid");
             return CONFIGURATION_ERROR;
         }
-        return runRuntime(configuration, commandLine.smokeTest());
+        return runRuntime(
+                configuration,
+                commandLine.smokeTest(),
+                commandLine.moderationConfigFile());
     }
 
-    private static int runRuntime(StaffBotConfiguration configuration, boolean smokeTest) {
-        try (StaffBotRuntime runtime = StaffBotRuntime.create(configuration)) {
+    private static int runRuntime(
+            StaffBotConfiguration configuration,
+            boolean smokeTest,
+            Optional<Path> moderationConfigFile
+    ) {
+        try (StaffBotRuntime runtime = StaffBotRuntime.create(configuration, moderationConfigFile)) {
             Runtime.getRuntime().addShutdownHook(
                     Thread.ofPlatform().name("staff-bot-shutdown").unstarted(runtime::close));
             runtime.start();
@@ -56,6 +65,9 @@ public final class StaffBotApplication {
 
             runtime.awaitTermination();
             return runtime.health().failedEver() ? RUNTIME_ERROR : SUCCESS;
+        } catch (IllegalArgumentException exception) {
+            logIfEnabled(System.Logger.Level.ERROR, "staff_bot_configuration_invalid");
+            return CONFIGURATION_ERROR;
         } catch (IOException | RuntimeException exception) {
             logIfEnabled(System.Logger.Level.ERROR, "staff_bot_startup_failed");
             return RUNTIME_ERROR;

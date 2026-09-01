@@ -13,6 +13,8 @@ class StaffBotCommandLineTest {
     private static final String SMOKE_TEST_ARGUMENT = "--smoke-test";
     private static final String TOKEN_FILE_NAME = "staging-bot-token.txt";
     private static final String TOKEN_FILE_ARGUMENT = "--token-file=" + TOKEN_FILE_NAME;
+    private static final String MODERATION_FILE_NAME = "staff-bot-runtime.properties";
+    private static final String MODERATION_FILE_ARGUMENT = "--moderation-config-file=" + MODERATION_FILE_NAME;
     private static final String WEB_BIND_ARGUMENT = "--preview-web-bind=127.0.0.1:8766";
     private static final String PUBLIC_URL_ARGUMENT = "--preview-public-url=http://127.0.0.1:8766";
 
@@ -21,6 +23,7 @@ class StaffBotCommandLineTest {
         StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
                 PREVIEW_ARGUMENT,
                 TOKEN_FILE_ARGUMENT,
+                MODERATION_FILE_ARGUMENT,
                 WEB_BIND_ARGUMENT,
                 PUBLIC_URL_ARGUMENT
         });
@@ -28,6 +31,7 @@ class StaffBotCommandLineTest {
         assertTrue(commandLine.stagingUiPreview());
         assertFalse(commandLine.smokeTest());
         assertEquals(Path.of(TOKEN_FILE_NAME), commandLine.tokenFile().orElseThrow());
+        assertEquals(Path.of(MODERATION_FILE_NAME), commandLine.moderationConfigFile().orElseThrow());
         assertEquals("127.0.0.1:8766", commandLine.previewWebBind().orElseThrow());
         assertEquals("http://127.0.0.1:8766", commandLine.previewPublicUrl().orElseThrow());
     }
@@ -44,6 +48,7 @@ class StaffBotCommandLineTest {
         assertTrue(smokeOnly.smokeTest());
         assertFalse(smokeOnly.stagingUiPreview());
         assertTrue(smokeOnly.tokenFile().isEmpty());
+        assertTrue(smokeOnly.moderationConfigFile().isEmpty());
         assertTrue(smokeOnly.previewWebBind().isEmpty());
         assertTrue(smokeOnly.previewPublicUrl().isEmpty());
         assertTrue(previewSmoke.smokeTest());
@@ -57,11 +62,13 @@ class StaffBotCommandLineTest {
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {"--token-file="}));
         assertThrows(IllegalArgumentException.class,
-                () -> StaffBotCommandLine.parse(new String[] {"--token-file"}));
+                () -> StaffBotCommandLine.parse(new String[] {"--moderation-config-file="}));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {PREVIEW_ARGUMENT}));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {TOKEN_FILE_ARGUMENT}));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {MODERATION_FILE_ARGUMENT}));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {WEB_BIND_ARGUMENT}));
         assertThrows(IllegalArgumentException.class,
@@ -74,6 +81,10 @@ class StaffBotCommandLineTest {
                 () -> StaffBotCommandLine.parse(new String[] {SMOKE_TEST_ARGUMENT, SMOKE_TEST_ARGUMENT}));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {PREVIEW_ARGUMENT, TOKEN_FILE_ARGUMENT, WEB_BIND_ARGUMENT, WEB_BIND_ARGUMENT}));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {
+                        PREVIEW_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT
+                }));
     }
 
     @Test
@@ -81,6 +92,7 @@ class StaffBotCommandLineTest {
         StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
                 PREVIEW_ARGUMENT,
                 "--token-file=private/path/" + TOKEN_FILE_NAME,
+                "--moderation-config-file=private/path/" + MODERATION_FILE_NAME,
                 WEB_BIND_ARGUMENT,
                 PUBLIC_URL_ARGUMENT
         });
@@ -88,8 +100,10 @@ class StaffBotCommandLineTest {
         String rendered = commandLine.toString();
         assertFalse(rendered.contains("private/path"));
         assertFalse(rendered.contains(TOKEN_FILE_NAME));
+        assertFalse(rendered.contains(MODERATION_FILE_NAME));
         assertFalse(rendered.contains("127.0.0.1:8766"));
         assertTrue(rendered.contains("tokenFile=<configured>"));
+        assertTrue(rendered.contains("moderationConfigFile=<configured>"));
         assertTrue(rendered.contains("previewWebBind=<configured>"));
         assertTrue(rendered.contains("previewPublicUrl=<configured>"));
     }

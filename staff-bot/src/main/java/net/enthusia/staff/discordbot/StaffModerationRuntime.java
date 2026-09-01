@@ -1,7 +1,9 @@
 package net.enthusia.staff.discordbot;
 
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Optional;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
@@ -27,42 +29,47 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.componentCodec = components;
     }
 
-    static Optional<StaffModerationRuntime> openFromEnvironment(
+    static Optional<StaffModerationRuntime> open(
+            Optional<Path> configFile,
             int interactionCapacity,
-            java.time.Duration interactionTtl
+            Duration interactionTtl
     ) {
-        return StaffModerationConfiguration.fromSystemEnvironment().map(configuration -> {
-            Clock clock = Clock.systemUTC();
-            DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
-            try {
-                StaffModerationReadService reads = new StaffModerationReadService(data, clock);
-                StaffAuthorityClient authority = new HttpStaffAuthorityClient(
-                        configuration.authorityUri(),
-                        configuration.authoritySecret()
-                );
-                InteractionReplayGuard componentReplay = new InteractionReplayGuard(
-                        interactionCapacity,
-                        interactionTtl
-                );
-                SignedComponentCodec components = new SignedComponentCodec(
-                        clock,
-                        interactionTtl,
-                        configuration.componentSecret(),
-                        new SecureRandom(),
-                        componentReplay
-                );
-                return new StaffModerationRuntime(
-                        data,
-                        reads,
-                        new LinkedStaffActorResolver(reads, authority),
-                        new StaffReadAuthorization(),
-                        components
-                );
-            } catch (RuntimeException exception) {
-                data.close();
-                throw exception;
-            }
-        });
+        Optional<StaffModerationConfiguration> configuration = configFile.isPresent()
+                ? Optional.of(StaffModerationConfiguration.fromFile(configFile.orElseThrow()))
+                : StaffModerationConfiguration.fromSystemEnvironment();
+        return configuration.map(value -> open(value, interactionCapacity, interactionTtl));
+    }
+
+    private static StaffModerationRuntime open(
+            StaffModerationConfiguration configuration,
+            int interactionCapacity,
+            Duration interactionTtl
+    ) {
+        Clock clock = Clock.systemUTC();
+        DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
+        try {
+            StaffModerationReadService reads = new StaffModerationReadService(data, clock);
+            StaffAuthorityClient authority = new HttpStaffAuthorityClient(
+                    configuration.authorityUri(), configuration.authoritySecret());
+            InteractionReplayGuard componentReplay = new InteractionReplayGuard(interactionCapacity, interactionTtl);
+            SignedComponentCodec components = new SignedComponentCodec(
+                    clock,
+                    interactionTtl,
+                    configuration.componentSecret(),
+                    new SecureRandom(),
+                    componentReplay
+            );
+            return new StaffModerationRuntime(
+                    data,
+                    reads,
+                    new LinkedStaffActorResolver(reads, authority),
+                    new StaffReadAuthorization(),
+                    components
+            );
+        } catch (RuntimeException exception) {
+            data.close();
+            throw exception;
+        }
     }
 
     StaffModerationReadService reads() {

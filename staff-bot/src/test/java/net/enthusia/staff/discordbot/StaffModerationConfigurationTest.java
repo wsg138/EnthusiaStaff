@@ -1,17 +1,25 @@
 package net.enthusia.staff.discordbot;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class StaffModerationConfigurationTest {
     private static final String AUTHORITY_SECRET = testSecret('a');
     private static final String COMPONENT_SECRET = testSecret('c');
     private static final String DATABASE_PASSWORD = testSecret('d');
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void completelyAbsentFeatureConfigurationLeavesD05RuntimeUnchanged() {
@@ -34,6 +42,42 @@ class StaffModerationConfigurationTest {
         assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
         assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
         assertFalse(configuration.toString().contains(COMPONENT_SECRET));
+    }
+
+    @Test
+    void panelPropertiesFileLoadsSameValidatedConfiguration() throws IOException {
+        Path file = tempDir.resolve("staff-bot-runtime.properties");
+        Files.writeString(file, String.join("\n",
+                "db.jdbc-url=jdbc:mariadb://localhost/enthusia",
+                "db.username=readonly",
+                "db.password=" + DATABASE_PASSWORD,
+                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
+                "authority.secret=" + AUTHORITY_SECRET,
+                "component.secret=" + COMPONENT_SECRET,
+                "db.pool-size=3",
+                "db.timeout-millis=2500",
+                ""));
+
+        StaffModerationConfiguration configuration = StaffModerationConfiguration.fromFile(file);
+
+        assertEquals("http://127.0.0.1:8771/v1/staff-rank", configuration.authorityUri().toString());
+        assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
+        assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
+        assertFalse(configuration.toString().contains(COMPONENT_SECRET));
+    }
+
+    @Test
+    void panelPropertiesFileRejectsPartialUnknownAndMissingFiles() throws IOException {
+        Path partial = tempDir.resolve("partial.properties");
+        Files.writeString(partial, "db.jdbc-url=jdbc:mariadb://localhost/enthusia\n");
+        assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromFile(partial));
+
+        Path unknown = tempDir.resolve("unknown.properties");
+        Files.writeString(unknown, "unsupported.secret=value\n");
+        assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromFile(unknown));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromFile(tempDir.resolve("missing.properties")));
     }
 
     @Test
