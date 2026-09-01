@@ -16,39 +16,40 @@ class ModerationReadApiAuthenticatorTest {
     private static final byte[] BODY = "{\"actorId\":\"123\"}".getBytes(StandardCharsets.UTF_8);
     private static final String NONCE = "A".repeat(32);
     private static final String PATH = "/v1/moderation/bootstrap";
+    private static final String POST_METHOD = "POST";
 
     @Test
     void acceptsValidRequestAndRejectsReplay() {
         ModerationReadApiAuthenticator authenticator = authenticator();
         String timestamp = Long.toString(NOW.getEpochSecond());
-        String signature = ModerationReadApiAuthenticator.signature(KEY, "POST", PATH, BODY, timestamp, NONCE);
+        String signature = ModerationReadApiAuthenticator.signature(KEY, POST_METHOD, PATH, BODY, timestamp, NONCE);
 
         assertEquals(
                 ModerationReadApiAuthenticator.Result.ACCEPTED,
-                authenticator.verify("POST", PATH, BODY, timestamp, NONCE, signature));
+                authenticator.verify(POST_METHOD, PATH, BODY, timestamp, NONCE, signature));
         assertEquals(
                 ModerationReadApiAuthenticator.Result.REPLAYED,
-                authenticator.verify("POST", PATH, BODY, timestamp, NONCE, signature));
+                authenticator.verify(POST_METHOD, PATH, BODY, timestamp, NONCE, signature));
     }
 
     @Test
     void rejectsTamperingExpiryAndMalformedInputs() {
         ModerationReadApiAuthenticator authenticator = authenticator();
         String timestamp = Long.toString(NOW.getEpochSecond());
-        String signature = ModerationReadApiAuthenticator.signature(KEY, "POST", PATH, BODY, timestamp, NONCE);
+        String signature = ModerationReadApiAuthenticator.signature(KEY, POST_METHOD, PATH, BODY, timestamp, NONCE);
 
         assertEquals(
                 ModerationReadApiAuthenticator.Result.INVALID_SIGNATURE,
-                authenticator.verify("POST", PATH, "{}".getBytes(StandardCharsets.UTF_8), timestamp, NONCE, signature));
+                authenticator.verify(POST_METHOD, PATH, "{}".getBytes(StandardCharsets.UTF_8), timestamp, NONCE, signature));
         assertEquals(
                 ModerationReadApiAuthenticator.Result.EXPIRED,
-                authenticator.verify("POST", PATH, BODY, Long.toString(NOW.minusSeconds(31).getEpochSecond()), NONCE, signature));
+                authenticator.verify(POST_METHOD, PATH, BODY, Long.toString(NOW.minusSeconds(31).getEpochSecond()), NONCE, signature));
         assertEquals(
                 ModerationReadApiAuthenticator.Result.MALFORMED,
                 authenticator.verify("GET", PATH, BODY, timestamp, NONCE, signature));
         assertEquals(
                 ModerationReadApiAuthenticator.Result.MALFORMED,
-                authenticator.verify("POST", "/v1/moderation/delete", BODY, timestamp, NONCE, signature));
+                authenticator.verify(POST_METHOD, "/v1/moderation/delete", BODY, timestamp, NONCE, signature));
     }
 
     private static ModerationReadApiAuthenticator authenticator() {

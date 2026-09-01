@@ -39,7 +39,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private final String discordBotToken;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
-    private ModerationReadApiServer readApiServer;
+    private Optional<ModerationReadApiServer> readApiServer = Optional.empty();
 
     JdaModerationUiPreviewListener(
             long guildId,
@@ -133,23 +133,33 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     private boolean startReadApi(JDA jda) {
-        if (readApiServer != null) {
-            return true;
-        }
-        if (moderation.isEmpty()) {
-            return false;
-        }
-        try {
-            ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
-            readApiServer = new ModerationReadApiServer(discordBotToken, service);
-            readApiServer.start();
-            return true;
-        } catch (java.io.IOException | RuntimeException exception) {
-            log("moderation_read_api_start_failed", exception);
-            closeReadApi();
-            return false;
-        }
+    if (readApiServer.isPresent()) {
+        return true;
     }
+    if (moderation.isEmpty()) {
+        return false;
+    }
+    try {
+        readApiServer = Optional.of(createStartedReadApi(jda));
+        return true;
+    } catch (java.io.IOException | RuntimeException exception) {
+        log("moderation_read_api_start_failed", exception);
+        closeReadApi();
+        return false;
+    }
+}
+
+private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOException {
+    ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
+    ModerationReadApiServer candidate = new ModerationReadApiServer(discordBotToken, service);
+    try {
+        candidate.start();
+        return candidate;
+    } catch (RuntimeException exception) {
+        candidate.close();
+        throw exception;
+    }
+}
 
     private static boolean messageContentEntitled(JDA jda) {
         try {
@@ -229,11 +239,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     private void closeReadApi() {
-        if (readApiServer != null) {
-            readApiServer.close();
-            readApiServer = null;
-        }
-    }
+    readApiServer.ifPresent(ModerationReadApiServer::close);
+    readApiServer = Optional.empty();
+}
 
     private static void log(String code, Throwable failure) {
         if (LOGGER.isLoggable(System.Logger.Level.WARNING)) {

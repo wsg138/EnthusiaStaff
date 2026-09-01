@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 final class ModerationReadApiServer implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(ModerationReadApiServer.class.getName());
     private static final String BIND_HOST = "127.0.0.1";
+    private static final String POST_METHOD = "POST";
     private static final int BIND_PORT = 8766;
     private static final int MAX_BODY_BYTES = 65_536;
     private static final int WORKER_THREADS = 2;
@@ -73,7 +74,7 @@ final class ModerationReadApiServer implements AutoCloseable {
                 respond(exchange, 429, new ModerationReadApiModel.ErrorResponse("rate_limited", "Too many read requests."));
                 return;
             }
-            if (!"POST".equals(exchange.getRequestMethod())) {
+            if (!POST_METHOD.equals(exchange.getRequestMethod())) {
                 respond(exchange, 405, new ModerationReadApiModel.ErrorResponse("method_not_allowed", "Method not allowed."));
                 return;
             }

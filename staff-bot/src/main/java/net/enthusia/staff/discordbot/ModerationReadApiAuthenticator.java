@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -75,12 +76,12 @@ final class ModerationReadApiAuthenticator {
         if (Duration.between(timestamp.instant(), now).abs().compareTo(MAX_SKEW) > 0) {
             return Result.EXPIRED;
         }
-        byte[] suppliedSignature = decodeSignature(signature);
-        if (suppliedSignature == null) {
+        Optional<byte[]> suppliedSignature = decodeSignature(signature);
+        if (suppliedSignature.isEmpty()) {
             return Result.MALFORMED;
         }
         byte[] expected = sign(canonical(method, path, body, timestamp.raw(), nonce));
-        if (!MessageDigest.isEqual(expected, suppliedSignature)) {
+        if (!MessageDigest.isEqual(expected, suppliedSignature.orElseThrow())) {
             return Result.INVALID_SIGNATURE;
         }
         return replayGuard.claim(nonce, now) ? Result.ACCEPTED : Result.REPLAYED;
@@ -126,14 +127,14 @@ final class ModerationReadApiAuthenticator {
         }
     }
 
-    private static byte[] decodeSignature(String signature) {
-        try {
-            byte[] decoded = Base64.getUrlDecoder().decode(signature);
-            return decoded.length == KEY_BYTES ? decoded : null;
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
+    private static Optional<byte[]> decodeSignature(String signature) {
+    try {
+        byte[] decoded = Base64.getUrlDecoder().decode(signature);
+        return decoded.length == KEY_BYTES ? Optional.of(decoded) : Optional.empty();
+    } catch (IllegalArgumentException exception) {
+        return Optional.empty();
     }
+}
 
     private byte[] sign(String canonical) {
         return signWithKey(key, canonical);

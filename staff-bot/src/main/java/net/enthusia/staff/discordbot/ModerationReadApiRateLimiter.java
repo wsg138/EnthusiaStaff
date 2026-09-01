@@ -7,6 +7,7 @@ import java.util.Objects;
 
 /** Small fixed-window fence protecting expensive Discord/database reads behind authenticated requests. */
 final class ModerationReadApiRateLimiter {
+    private final Object monitor = new Object();
     private final int capacity;
     private final Duration window;
     private final Clock clock;
@@ -27,7 +28,8 @@ final class ModerationReadApiRateLimiter {
         this.windowStart = clock.instant();
     }
 
-    synchronized boolean tryAcquire() {
+    boolean tryAcquire() {
+    synchronized (monitor) {
         Instant now = clock.instant();
         if (!now.isBefore(windowStart.plus(window))) {
             windowStart = now;
@@ -39,4 +41,5 @@ final class ModerationReadApiRateLimiter {
         used++;
         return true;
     }
+}
 }

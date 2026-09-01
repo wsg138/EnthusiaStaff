@@ -59,7 +59,7 @@ class ModerationPreviewWebResourcesTest {
         String adapter = resourceText(REAL_DATA_SCRIPT);
 
         assertTrue(adapter.contains("fetch('/api/bootstrap'"));
-        assertTrue(adapter.contains("fetch(`/api/messages?${params}`"));
+        assertTrue(adapter.contains("fetch('/api/messages', {method:'POST'"));
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));

@@ -62,19 +62,43 @@ async function readJsonResponse(response) {
   }
 }
 
+function asArray(value) {
+    return Array.isArray(value) ? value : [];
+}
+
+function firstText(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value.length > 0) return value;
+    }
+    return '';
+}
+
+function optionalText(value) {
+    return typeof value === 'string' ? value : '';
+}
+
+function nullableText(value) {
+    const text = optionalText(value);
+    return text.length > 0 ? text : null;
+}
+
 function applyLiveBootstrap(payload) {
-  liveModeration.bootstrap = payload;
-  liveModeration.cases = Array.isArray(payload.cases) ? payload.cases : [];
-  liveModeration.notes = Array.isArray(payload.notes) ? payload.notes : [];
-  liveModeration.sanctions = Array.isArray(payload.activeSanctions) ? payload.activeSanctions : [];
-  liveModeration.accounts = Array.isArray(payload.linkedAccounts) ? payload.linkedAccounts : [];
-  liveModeration.channels = Array.isArray(payload.channels) ? payload.channels : [];
-  applyIdentity(payload.identity || {});
-  applyRestrictionTargets();
-  state.history = (Array.isArray(payload.history) ? payload.history : []).map(mapHistoryRow);
-  replaceMessagePage(payload.messages || {});
-  state.contextId = payload.centeredMessageId || null;
-  renderAll();
+    liveModeration.bootstrap = payload;
+    applyLiveCollections(payload);
+    applyIdentity(payload.identity ?? {});
+    applyRestrictionTargets();
+    state.history = asArray(payload.history).map(mapHistoryRow);
+    replaceMessagePage(payload.messages ?? {});
+    state.contextId = nullableText(payload.centeredMessageId);
+    renderAll();
+}
+
+function applyLiveCollections(payload) {
+    liveModeration.cases = asArray(payload.cases);
+    liveModeration.notes = asArray(payload.notes);
+    liveModeration.sanctions = asArray(payload.activeSanctions);
+    liveModeration.accounts = asArray(payload.linkedAccounts);
+    liveModeration.channels = asArray(payload.channels);
 }
 
 function clearLiveData() {
@@ -95,32 +119,36 @@ function clearLiveData() {
 }
 
 function applyIdentity(source) {
-  const main = liveModeration.accounts.find((account) => account.main) || null;
-  const alts = liveModeration.accounts.filter((account) => !account.main).map((account) => ({
-    name: account.username || account.playerId,
-    platform: friendlyPlatform(account.platform),
-    status: 'Linked',
-    playerId: account.playerId
-  }));
-  Object.assign(identity, {
-    displayName: source.displayName || source.serverName || source.globalName || source.username || source.discordId || 'Unknown Discord user',
-    username: source.username || 'unknown',
-    discordId: source.discordId || 'Unavailable',
-    minecraft: source.minecraftMain || (main ? (main.username || main.playerId) : 'No linked Minecraft main'),
-    minecraftUuid: main?.playerId || 'Unavailable',
-    alts,
-    status: source.targetStatus || 'Unknown',
-    statusDetail: liveModeration.sanctions.length ? `${liveModeration.sanctions.length} active` : 'No active sanctions',
-    avatarUrl: source.avatarUrl || '',
-    linkState: source.linkState || 'Unknown',
-    globalName: source.globalName || '',
-    serverName: source.serverName || ''
-  });
+    const main = liveModeration.accounts.find((account) => account.main);
+    const alts = liveModeration.accounts.filter((account) => !account.main).map(mapLinkedAlt);
+    Object.assign(identity, {
+        displayName: firstText(source.displayName, source.serverName, source.globalName, source.username, source.discordId, 'Unknown Discord user'),
+        username: firstText(source.username, 'unknown'),
+        discordId: firstText(source.discordId, 'Unavailable'),
+        minecraft: firstText(source.minecraftMain, linkedAccountName(main), 'No linked Minecraft main'),
+        minecraftUuid: firstText(main?.playerId, 'Unavailable'), alts,
+        status: firstText(source.targetStatus, 'Unknown'), statusDetail: sanctionStatusDetail(),
+        avatarUrl: optionalText(source.avatarUrl), linkState: firstText(source.linkState, 'Unknown'),
+        globalName: optionalText(source.globalName), serverName: optionalText(source.serverName)
+    });
+}
+
+function mapLinkedAlt(account) {
+    return {name:firstText(account.username, account.playerId), platform:friendlyPlatform(account.platform), status:'Linked', playerId:account.playerId};
+}
+
+function linkedAccountName(account) {
+    return account ? firstText(account.username, account.playerId) : '';
+}
+
+function sanctionStatusDetail() {
+    const count = liveModeration.sanctions.length;
+    return count > 0 ? `${count} active` : 'No active sanctions';
 }
 
 function friendlyPlatform(value) {
   if (!value) return 'Unknown';
-  return String(value).replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return String(value).replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function applyRestrictionTargets() {
@@ -137,23 +165,6 @@ function applyRestrictionTargets() {
   for (const category of categories.values()) {
     RESTRICTION_TARGETS.push({id:category.id, type:'category', label:category.name, detail:`Category · ${category.count} channel${category.count === 1 ? '' : 's'}`});
   }
-}
-
-function mapHistoryRow(row) {
-  const occurred = row.occurredAt || new Date(0).toISOString();
-  return {
-    id: row.caseId || row.stableKey,
-    date: occurred.slice(0, 10),
-    key: row.exactReasonId || row.sanctionFamily || 'other',
-    offense: row.reason || row.exactReasonId || row.eventType || 'Moderation event',
-    action: row.punishmentType || row.eventType || 'Record',
-    duration: '—',
-    staff: row.actorName || 'System',
-    status: row.status || 'Recorded',
-    ladderRelevant: false,
-    exactReasonId: row.exactReasonId || null,
-    sanctionFamily: row.sanctionFamily || null
-  };
 }
 
 function replaceMessagePage(page) {
@@ -176,33 +187,25 @@ function appendMessagePage(page, direction) {
 }
 
 function mapMessage(message) {
-  const attachments = Array.isArray(message.attachments) ? message.attachments.map((attachment) => ({
-    name: attachment.fileName,
-    detail: [attachment.contentType || 'Attachment', formatBytes(attachment.size)].filter(Boolean).join(' · '),
-    url: attachment.url
-  })) : [];
-  return {
-    id: message.id,
-    author: message.author?.displayName || message.author?.username || message.author?.discordId || 'Unknown author',
-    username: message.author?.username || 'unknown',
-    initials: initials(message.author?.displayName || message.author?.username || '?'),
-    target: Boolean(message.targetAuthor),
-    channel: message.channelName || message.channelId,
-    channelId: message.channelId,
-    category: message.categoryName || '',
-    time: message.createdAt,
-    text: message.content || '',
-    edited: Boolean(message.editedAt),
-    editedAt: message.editedAt || null,
-    attachments,
-    replyTo: message.replyToMessageId || null,
-    deleted: Boolean(message.deletedKnown),
-    authorId: message.author?.discordId || ''
-  };
+    const author = message.author ?? {};
+    const authorName = firstText(author.displayName, author.username, author.discordId, 'Unknown author');
+    return {
+        id:message.id, author:authorName, username:firstText(author.username, 'unknown'), initials:initials(authorName),
+        target:Boolean(message.targetAuthor), channel:firstText(message.channelName, message.channelId), channelId:message.channelId,
+        category:optionalText(message.categoryName), time:message.createdAt, text:optionalText(message.content),
+        edited:Boolean(message.editedAt), editedAt:nullableText(message.editedAt), attachments:asArray(message.attachments).map(mapAttachment),
+        replyTo:nullableText(message.replyToMessageId), deleted:Boolean(message.deletedKnown), authorId:optionalText(author.discordId)
+    };
+}
+
+function mapAttachment(attachment) {
+    return {name:firstText(attachment.fileName, 'Attachment'), detail:[firstText(attachment.contentType, 'Attachment'), formatBytes(attachment.size)].filter(Boolean).join(' · '), url:optionalText(attachment.url)};
 }
 
 function initials(value) {
-  return String(value || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?';
+    const text = String(value ?? '').trim();
+    if (!text) return '?';
+    return text.split(/\s+/).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase();
 }
 
 function formatBytes(value) {
@@ -279,16 +282,17 @@ function overviewNode() {
 }
 
 function filtersNode() {
-  const search = element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search});
-  const author = element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author || ''});
-  const channel = element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'),
-    liveModeration.channels.map((item) => optionNode(item.id, `#${item.name}${item.categoryName ? ` · ${item.categoryName}` : ''}`, state.channel === item.id)));
-  const date = element('input', {id:'dateFilter', type:'date', value:state.date === 'all' ? '' : state.date});
-  const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly});
-  return element('section', {className:'card filters-card'}, element('div', {className:'filter-row'},
-    labeledControl('Search messages', search), labeledControl('Author', author), labeledControl('Channel', channel), labeledControl('Date', date),
-    element('label', {className:'checkbox-control'}, selected, ' Selected only')));
+    return element('section', {className:'card filters-card'}, element('div', {className:'filter-row'},
+        labeledControl('Search messages', searchFilterNode()), labeledControl('Author', authorFilterNode()),
+        labeledControl('Channel', channelFilterNode()), labeledControl('Date', dateFilterNode()), selectedFilterNode()));
 }
+
+function searchFilterNode() { return element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search}); }
+function authorFilterNode() { return element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author ?? ''}); }
+function channelFilterNode() { return element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'), liveModeration.channels.map(channelFilterOption)); }
+function channelFilterOption(item) { const category = item.categoryName ? ` · ${item.categoryName}` : ''; return optionNode(item.id, `#${item.name}${category}`, state.channel === item.id); }
+function dateFilterNode() { return element('input', {id:'dateFilter', type:'date', value:state.date === 'all' ? '' : state.date}); }
+function selectedFilterNode() { const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly}); return element('label', {className:'checkbox-control'}, selected, ' Selected only'); }
 
 function matchesChannel(message) {
   return state.channel === 'all' || message.channelId === state.channel;
@@ -355,7 +359,7 @@ async function loadMoreMessages(direction) {
 
 async function loadMessageRequest(params, mode) {
   try {
-    const response = await fetch(`/api/messages?${params}`, {headers:{Accept:'application/json'}});
+    const response = await fetch('/api/messages', {method:'POST', headers:{Accept:'application/json', 'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(params.entries()))});
     const page = await readJsonResponse(response);
     if (!response.ok) throw new Error(page.message || 'Discord messages unavailable');
     if (mode === 'replace') replaceMessagePage(page);

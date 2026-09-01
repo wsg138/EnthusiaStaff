@@ -5,11 +5,11 @@ const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 
-export async function proxyModerationRead(env, session, endpoint, browserUrl) {
+export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
   const keyHex = readSigningKey(env);
   if (!keyHex) return unavailable();
   const path = endpointPath(endpoint);
-  const body = JSON.stringify(readRequest(session, endpoint, browserUrl));
+  const body = JSON.stringify(readRequest(session, endpoint, browserInput));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomToken(24);
   const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
@@ -27,37 +27,39 @@ export async function proxyModerationRead(env, session, endpoint, browserUrl) {
   return sanitizedBackendResponse(response);
 }
 
-export function browserMessageQuery(url) {
-  const query = {};
-  copySnowflake(url, query, 'channelId', 'channel');
-  copySnowflake(url, query, 'beforeMessageId', 'before');
-  copySnowflake(url, query, 'afterMessageId', 'after');
-  copySnowflake(url, query, 'authorId', 'author');
-  const text = url.searchParams.get('text');
-  if (text !== null) {
-    if (text.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
-    query.text = text;
-  }
-  const date = url.searchParams.get('date');
-  if (date !== null) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('invalid date filter');
-    query.date = date;
-  }
-  const rawLimit = url.searchParams.get('limit');
-  query.limit = rawLimit === null ? 25 : boundedLimit(rawLimit);
-  if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
-  return query;
+const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
+
+export function browserMessageQuery(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid message filters');
+    for (const key of Object.keys(input)) {
+        if (!MESSAGE_FILTER_KEYS.has(key)) throw new Error('invalid message filter');
+    }
+    const query = {};
+    const channelId = snowflakeFilter(input.channel, 'channel');
+    const beforeMessageId = snowflakeFilter(input.before, 'before');
+    const afterMessageId = snowflakeFilter(input.after, 'after');
+    const authorId = snowflakeFilter(input.author, 'author');
+    if (channelId !== null) query.channelId = channelId;
+    if (beforeMessageId !== null) query.beforeMessageId = beforeMessageId;
+    if (afterMessageId !== null) query.afterMessageId = afterMessageId;
+    if (authorId !== null) query.authorId = authorId;
+    if (input.text !== undefined) {
+        if (typeof input.text !== 'string' || input.text.length > MAX_FILTER_TEXT) throw new Error('invalid message text filter');
+        query.text = input.text;
+    }
+    if (input.date !== undefined) {
+        if (typeof input.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('invalid date filter');
+        query.date = input.date;
+    }
+    query.limit = input.limit === undefined ? 25 : boundedLimit(String(input.limit));
+    if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
+    return query;
 }
 
-export function readRequest(session, endpoint, browserUrl) {
-  const request = {
-    actorId: session.actorId,
-    guildId: session.guildId,
-    targetKey: session.targetKey,
-    messages: null
-  };
-  if (endpoint === 'messages') request.messages = browserMessageQuery(browserUrl);
-  return request;
+export function readRequest(session, endpoint, browserInput = {}) {
+    const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
+    if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
+    return request;
 }
 
 function readSigningKey(env) {
@@ -65,11 +67,10 @@ function readSigningKey(env) {
   return /^[0-9a-fA-F]{64}$/.test(keyHex) ? keyHex : null;
 }
 
-function copySnowflake(url, target, field, parameter) {
-  const value = url.searchParams.get(parameter);
-  if (value === null) return;
-  if (!/^[1-9][0-9]{0,19}$/.test(value)) throw new Error(`invalid ${parameter} filter`);
-  target[field] = value;
+function snowflakeFilter(value, parameter) {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string' || !/^[1-9][0-9]{0,19}$/.test(value)) throw new Error(`invalid ${parameter} filter`);
+    return value;
 }
 
 function boundedLimit(raw) {

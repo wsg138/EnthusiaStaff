@@ -112,8 +112,8 @@ async function route(request, env) {
   if (url.pathname === '/health') return handleHealth(request);
   if (url.pathname === '/launch') return handleLaunch(request, env, url);
   if (url.pathname === '/api/session') return handleSession(request, env);
-  if (url.pathname === '/api/bootstrap') return handleRead(request, env, url, 'bootstrap');
-  if (url.pathname === '/api/messages') return handleRead(request, env, url, 'messages');
+  if (url.pathname === '/api/bootstrap') return handleRead(request, env, 'bootstrap');
+  if (url.pathname === '/api/messages') return handleRead(request, env, 'messages');
   if (url.pathname === '/api/simulate') return handleSimulation(request, env);
   if (url.pathname === '/' || url.pathname === '/moderation' || STATIC_PATHS.has(url.pathname)) {
     return serveProtectedAsset(request, env, url.pathname);
@@ -152,15 +152,28 @@ async function handleSession(request, env) {
   });
 }
 
-async function handleRead(request, env, url, endpoint) {
-  if (request.method !== 'GET') return methodNotAllowed();
-  const session = await currentSession(request, env);
-  if (!session) return textResponse('Session expired.', 401);
-  try {
-    return await proxyModerationRead(env, session, endpoint, url);
-  } catch {
-    return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
-  }
+async function handleRead(request, env, endpoint) {
+    const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
+    if (request.method !== expectedMethod) return methodNotAllowed();
+    const session = await currentSession(request, env);
+    if (!session) return textResponse('Session expired.', 401);
+    const parsed = endpoint === 'messages' ? await readMessagePayload(request) : {value: {}};
+    if (parsed.error) return parsed.error;
+    try {
+        return await proxyModerationRead(env, session, endpoint, parsed.value);
+    } catch {
+        return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
+    }
+}
+
+async function readMessagePayload(request) {
+    const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
+    if (!body) return {error: textResponse('Read request is too large.', 413)};
+    try {
+        return {value: JSON.parse(new TextDecoder().decode(body))};
+    } catch {
+        return {error: textResponse('Read request is invalid.', 400)};
+    }
 }
 
 async function handleSimulation(request, env) {

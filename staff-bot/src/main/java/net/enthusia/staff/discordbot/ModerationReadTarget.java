@@ -1,9 +1,16 @@
 package net.enthusia.staff.discordbot;
 
 import java.util.OptionalLong;
+import java.util.regex.Pattern;
 
 /** Strict target carried from a signed Discord launch into the read-only moderation session. */
 sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {
+    int DISCORD_PARTS = 2;
+    int MESSAGE_PARTS = 4;
+    String DISCORD_KIND = "discord";
+    String MESSAGE_KIND = "message";
+    Pattern SNOWFLAKE = Pattern.compile("[1-9][0-9]{0,19}");
+
     long userId();
 
     String key();
@@ -21,10 +28,10 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
             throw new IllegalArgumentException("moderation read target is invalid");
         }
         String[] parts = key.split(":", -1);
-        if (parts.length == 2 && "discord".equals(parts[0])) {
+        if (parts.length == DISCORD_PARTS && DISCORD_KIND.equals(parts[0])) {
             return new DiscordUser(snowflake(parts[1], "user"));
         }
-        if (parts.length == 4 && "message".equals(parts[0])) {
+        if (parts.length == MESSAGE_PARTS && MESSAGE_KIND.equals(parts[0])) {
             return new MessageContext(
                     snowflake(parts[1], "channel"),
                     snowflake(parts[2], "message"),
@@ -35,7 +42,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
     }
 
     private static long snowflake(String value, String label) {
-        if (value == null || !value.matches("[1-9][0-9]{0,19}")) {
+        if (value == null || !SNOWFLAKE.matcher(value).matches()) {
             throw new IllegalArgumentException(label + " snowflake is invalid");
         }
         try {
