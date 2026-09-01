@@ -149,7 +149,7 @@ Exact unblock: grant or replace the protected staging Cloudflare API token with 
 
 ## Latest completion
 
-`ES-D06 — Read-only staff moderation UX` is the latest completed Discord package. D07 and D13 are dependency-complete `READY`. This D06 worker stops without beginning either package.
+`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked on its external Cloudflare authority blocker, and D07 and D13 remain dependency-complete `READY`. This D16 worker stops without beginning either ready package.
 
 ## Selection
 
