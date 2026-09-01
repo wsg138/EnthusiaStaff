@@ -6,128 +6,103 @@ on:
     paths: [".github/workflows/es-d16-runtime-repair.yml"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  land:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
           ref: package/es-d16-moderation-read-bridge
           fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
 
-      - name: Apply previously validated source repair
+      - name: Apply final read-authorization and staging-workflow repair
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 <<'PY'
+          import re
           from pathlib import Path
-          import subprocess
-          import textwrap
 
-          driver = Path('.github/workflows/es-d16-codacy-diagnostics.yml').read_text(encoding='utf-8')
-          marker = "          python3 <<'PY'\n"
-          end_marker = "\n          PY\n          git diff --check"
-          if driver.count(marker) != 1 or driver.count(end_marker) != 1:
-              raise SystemExit('repair driver markers are ambiguous')
-          script = driver.split(marker, 1)[1].split(end_marker, 1)[0]
-          script = textwrap.dedent(script)
-          old = "text = once(text, 'readRequest(session, endpoint, browserUrl)', 'readRequest(session, endpoint, browserInput)', 'backend proxy body')"
-          new = "text = once(text, 'const body = JSON.stringify(readRequest(session, endpoint, browserUrl));', 'const body = JSON.stringify(readRequest(session, endpoint, browserInput));', 'backend proxy body')"
-          if script.count(old) != 1:
-              raise SystemExit(f'expected one ambiguous backend transform, found {script.count(old)}')
-          script = script.replace(old, new)
-          Path('/tmp/es-d16-repair.py').write_text(script, encoding='utf-8')
-          subprocess.run(['python3', '/tmp/es-d16-repair.py'], check=True)
+          reader_path = Path('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReader.java')
+          reader = reader_path.read_text(encoding='utf-8')
+          old_filter = '.filter(channel -> context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL))'
+          if reader.count(old_filter) != 1:
+              raise SystemExit(f'visible channel filter: expected one match, found {reader.count(old_filter)}')
+          reader = reader.replace(old_filter, '.filter(channel -> hasReadAccess(context, channel))')
+          old_check = 'if (channel == null || !context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL)) {'
+          if reader.count(old_check) != 1:
+              raise SystemExit(f'visible channel check: expected one match, found {reader.count(old_check)}')
+          reader = reader.replace(old_check, 'if (channel == null || !hasReadAccess(context, channel)) {')
+          marker = '    private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {'
+          helper = '''    static boolean hasReadPermissions(boolean canView, boolean canReadHistory) {
+              return canView && canReadHistory;
+          }
 
-          resource_test = Path('staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java')
-          test_text = resource_test.read_text(encoding='utf-8')
-          old_assert = '        assertTrue(adapter.contains("fetch(`/api/messages?${params}`"));'
-          new_assert = '        assertTrue(adapter.contains("fetch(\'/api/messages\', {method:\'POST\'"));'
-          if test_text.count(old_assert) != 1:
-              raise SystemExit(f'resource test assertion: expected one literal, found {test_text.count(old_assert)}')
-          resource_test.write_text(test_text.replace(old_assert, new_assert), encoding='utf-8')
+          private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
+              return hasReadPermissions(
+                      context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
+                      context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
+          }
+
+          '''
+          if reader.count(marker) != 1:
+              raise SystemExit('channel DTO marker is ambiguous')
+          reader = reader.replace(marker, helper + marker)
+          reader_path.write_text(reader, encoding='utf-8')
+
+          test_path = Path('staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReaderTest.java')
+          if test_path.exists():
+              raise SystemExit('message reader test already exists unexpectedly')
+          test_path.write_text('''package net.enthusia.staff.discordbot;
+
+          import static org.junit.jupiter.api.Assertions.assertFalse;
+          import static org.junit.jupiter.api.Assertions.assertTrue;
+
+          import org.junit.jupiter.api.Test;
+
+          class ModerationDiscordMessageReaderTest {
+              @Test
+              void messageReadsRequireChannelViewAndMessageHistory() {
+                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, false));
+                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, true));
+                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, false));
+                  assertTrue(ModerationDiscordMessageReader.hasReadPermissions(true, true));
+              }
+          }
+          ''', encoding='utf-8')
+
+          deploy_path = Path('.github/workflows/moderation-web-staging-deploy.yml')
+          deploy = deploy_path.read_text(encoding='utf-8')
+          old_body = "          body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|discord:846729778400460871|{now}|{now + 120}'"
+          new_body = "          test_actor_id = str(10**17 + secrets.randbelow(9 * 10**17))\n          body = f'v1|staging|{nonce}|{test_actor_id}|1410303324745371709|discord:{test_actor_id}|{now}|{now + 120}'"
+          if deploy.count(old_body) != 1:
+              raise SystemExit(f'synthetic actor replacement: expected one match, found {deploy.count(old_body)}')
+          deploy = deploy.replace(old_body, new_body)
+          pattern = r'\n      - name: Record sanitized Codacy issue metadata\n.*?(?=\n      - name: Require fixed private tunnel provisioning)'
+          deploy, count = re.subn(pattern, '', deploy, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'Codacy diagnostic removal: expected one match, found {count}')
+          deploy_path.write_text(deploy, encoding='utf-8')
           PY
-          git checkout -- .github/workflows/moderation-web-staging-deploy.yml
           git diff --check
 
-      - name: Create and fast-forward validated product commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_BRANCH: package/es-d16-moderation-read-bridge
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          python3 <<'PY'
-          import base64
-          import json
-          import os
-          from pathlib import Path
-          import subprocess
-          import urllib.error
-          import urllib.request
+      - name: Run clean Java 21 gate
+        run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
 
-          repo = os.environ['GITHUB_REPOSITORY']
-          token = os.environ['GH_TOKEN']
-          branch = os.environ['EXPECTED_BRANCH']
-          api = f'https://api.github.com/repos/{repo}'
-          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          base_tree = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip()
-          paths = [
-              'moderation-web/src/backend.js',
-              'moderation-web/src/index.js',
-              'moderation-web/test/backend.test.mjs',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaModerationUiPreviewListener.java',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticator.java',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiRateLimiter.java',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiServer.java',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadReplayGuard.java',
-              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadTarget.java',
-              'staff-bot/src/main/resources/moderation-preview/real-data.js',
-              'staff-bot/src/main/resources/moderation-preview/real-policy.js',
-              'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java',
-              'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticatorTest.java',
-          ]
-
-          def call(method, path, payload=None):
-              data = None if payload is None else json.dumps(payload).encode()
-              request = urllib.request.Request(
-                  api + path,
-                  data=data,
-                  method=method,
-                  headers={
-                      'Authorization': f'Bearer {token}',
-                      'Accept': 'application/vnd.github+json',
-                      'X-GitHub-Api-Version': '2022-11-28',
-                      'Content-Type': 'application/json',
-                  },
-              )
-              try:
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      return json.load(response)
-              except urllib.error.HTTPError as error:
-                  detail = error.read().decode('utf-8', errors='replace')
-                  raise SystemExit(f'GitHub API {method} {path} failed with HTTP {error.code}: {detail[:500]}') from error
-
-          ref_path = '/git/ref/heads/' + branch
-          current = call('GET', ref_path)
-          if current['object']['sha'] != head:
-              raise SystemExit('branch moved during validated landing; refusing non-fast-forward update')
-
-          entries = []
-          for path in paths:
-              content = base64.b64encode(Path(path).read_bytes()).decode('ascii')
-              blob = call('POST', '/git/blobs', {'content': content, 'encoding': 'base64'})
-              entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
-
-          tree = call('POST', '/git/trees', {'base_tree': base_tree, 'tree': entries})
-          commit = call('POST', '/git/commits', {
-              'message': 'ES-D16: resolve moderation bridge static findings',
-              'tree': tree['sha'],
-              'parents': [head],
-          })
-          call('PATCH', '/git/refs/heads/' + branch, {'sha': commit['sha'], 'force': False})
-          print('landed validated product commit', commit['sha'])
-          PY
+      - name: Upload validated final cleanup payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: es-d16-final-cleanup-payload
+          path: |
+            .github/workflows/moderation-web-staging-deploy.yml
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReader.java
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReaderTest.java
+          if-no-files-found: error
+          retention-days: 1
