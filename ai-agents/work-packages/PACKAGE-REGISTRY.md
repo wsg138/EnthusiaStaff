@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-08-26
+Last updated: 2026-09-01
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -29,6 +29,12 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`. Commend exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d` passed Java 21 Maven `clean verify`, 110 tests, PMD, Codacy, and resolved-review gates, then PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1`. Staff exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789` passed full Java 21/MariaDB/Testcontainers validation, Codacy zero-issue static analysis, Sentinel restart, and canonical Pi public/private staging, then PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14`. Both merge commits exactly contain their package heads. Post-merge standalone↔aggregate shared product Git objects are identical with only aggregate `COMPONENT-METADATA.md` extra; component metadata is `IN_SYNC`. Staff's temporary branch is gone. The residual standalone package branch is fully contained and safe to delete, but the connected mutation surface exposes no branch-delete action. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md`.
 
 `ES-X01 — RoseChat provider and communication integration` remains independently `BLOCKED` / `PARKED_BLOCKED` after its historical repository-resolution blocker changed. Supported `wsg138/Enthusia-RoseChat` is now verified at `master` head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`, but the checked-in provider license expressly excludes publication/(re)distribution rights required to place the standalone source tree in public `components/enthusia-rosechat/` and prove canonical parity. No implementation branch/PR or source import was created.
+
+### Dedicated Discord program checkpoint
+
+`ES-D16 — Moderation console real-data read bridge` is `BLOCKED` / `PARKED_BLOCKED` in the dedicated Discord-program lane. Implementation PR #187 remains open/draft and unmerged at frozen reviewed executable head `a009f4f5f857cf86a859be0d314264568d181670`. Every repository-controlled exact-head build/static/review gate is terminal green; required sanitized staging run `33530157844` / job `99930994457` failed only because the protected Cloudflare staging token receives HTTP 403 on the account-level named-tunnel API before any tunnel configuration or DNS mutation succeeds. Exact unblock: grant or replace that protected token with the owning account's required Cloudflare Tunnel read/edit authority, then rerun exact-head D16 staging and continue Bloom/live read acceptance. The dedicated `DISCORD-PROGRAM-REGISTRY.md` remains the routing authority for `ES-Dxx`; this parked package does not preempt unrelated dependency-complete universal work.
+
+Canonical D16 blocked handoff: `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md`.
 
 ## Canonical package index
 

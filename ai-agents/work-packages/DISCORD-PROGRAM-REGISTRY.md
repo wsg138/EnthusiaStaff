@@ -1,6 +1,6 @@
 # Discord moderation program registry
 
-Owner authorization: on 2026-08-23 the owner authorized continued implementation of the Discord moderation platform and explicitly authorized a sequential worker system to carry the project forward. This registry activates `ES-D02` through `ES-D15` as the dedicated Discord-program lane. It does **not** authorize production deployment, production data access, LiteBans cutover, Discord production configuration changes, or issue #43 acceptance; those remain separately gated by repository policy.
+Owner authorization: on 2026-08-23 the owner authorized continued implementation of the Discord moderation platform and explicitly authorized a sequential worker system to carry the project forward. This registry activates `ES-D02` through `ES-D16` as the dedicated Discord-program lane. It does **not** authorize production deployment, production data access, LiteBans cutover, Discord production configuration changes, or issue #43 acceptance; those remain separately gated by repository policy.
 
 The product authority is `docs/discord-moderation-platform.md`. The sequencing authority is this file plus the individual `ES-Dxx` package files. Live GitHub always overrides stale status text.
 
@@ -14,6 +14,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `COMPLETE` | 135 | `ES-D04`, `ES-D05` |
+| `ES-D16` | Moderation console real-data read bridge | `BLOCKED` | 135.5 | `ES-D03`, `ES-D05`, `ES-D06`, merged PR #186 |
 | `ES-D07` | Discord punishment enforcement | `READY` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
@@ -26,7 +27,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-No Discord implementation package remains active after D06 terminal publication. D04, D05, and D06 are complete. D07 and D13 are dependency-complete `READY`; a future Discord worker selects D07 first by priority unless live GitHub exposes a higher-priority actionable continuation. This D06 worker does not start either package.
+ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation and repository-controlled validation on frozen executable head `a009f4f5f857cf86a859be0d314264568d181670`. PR #187 remains open/draft and unmerged because the package's required sanitized live staging cannot pass until the protected Cloudflare token has account-level named-tunnel authority. D07 and D13 remain dependency-complete `READY`; while D16 remains parked, a future Discord worker skips it and may select D07 by priority. If the Cloudflare permission condition changes, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION` to resume before newly ready work.
 
 ## ES-D04 terminal record
 
@@ -131,6 +132,20 @@ PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3` with paren
 The implementation branch is absent. The temporary diagnostic-only workflow was removed from `diagnostic/es-d06-codacy-remaining-20260828`; comparison of that retained branch content against merged `main` has zero file differences. The branch has no unique work and is safe to delete when an authorized branch-delete mutation is available.
 
 No production deployment/configuration/data access, moderation mutation, secret access, LiteBans authority change, issue #43 acceptance, or cutover occurred.
+
+## ES-D16 parked record
+
+Status: `BLOCKED` / `PARKED_BLOCKED`.
+
+Implementation PR #187 remains open/draft and unmerged on `package/es-d16-moderation-read-bridge`. Frozen reviewed executable head: `a009f4f5f857cf86a859be0d314264568d181670`. Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md`.
+
+The product head implements the owner-approved real-data read bridge while retaining simulation-only punishment/deletion behavior: target-bound hosted launch tickets, authenticated loopback moderation read API, D03/D06 authorization/read reuse, explicit response DTO allowlists, replay/expiry/rate/request bounds, bounded JDA channel/message reads, Cloudflare Worker session/proxy flow, and real-data preview rendering. It performs no punishment mutation, message deletion, permission override application, production Discord change, LiteBans authority change, issue #43 acceptance, or production cutover.
+
+Exact-head repository-controlled gates are terminal green: Coverage/full Java 21 run `33529631291` / job `99929426510` (`BUILD SUCCESSFUL`, runtime inspection zero provider leaks, 51.70% line / 41.74% branch / 54.02% instruction coverage, validation artifact `9809522236` digest `sha256:00f970e5dc8a3d2823d4dae4d226be1cff8d71abcf601658f2405eb383aef1d6`); Moderation Web Validation `33529631190`; Staff Bot Configuration Cache `33529631174`; Staff Bot PR Artifact `33529631246`; Sentinel Restart Artifact `33529631254`; Codacy Static Code Analysis check `99929501999` with zero annotations; Codacy Diff Coverage `99932381673` at 33.57% with no configured gate; and exact-head CodeRabbit review `5080380849` bound to `a009f4f5f857cf86a859be0d314264568d181670` with zero new findings. All three earlier CodeRabbit correctness threads are resolved/confirmed addressed.
+
+Required staged Cloudflare run `33530157844` / job `99930994457` checked out exact `a009f4f5f857cf86a859be0d314264568d181670`. Worker build/deploy, fixed staging origin checks, first-use protected launch, authenticated session, and replay rejection passed. The first account-level Cloudflare Tunnel API GET returned HTTP 403, so no tunnel configuration or DNS mutation succeeded and the workflow correctly failed its hard `Require fixed private tunnel provisioning` gate. This failure is not a pass and cannot use the zero-execution infrastructure exception because a runner and product steps executed and D16 explicitly requires sanitized staged acceptance.
+
+Exact unblock: grant or replace the protected staging Cloudflare API token with the required Cloudflare Tunnel account read/edit authority for the owning account, rerun exact-head staging, then complete Bloom/live read acceptance (including the required staging Discord message-content state verification) before any normal merge/containment path resumes. Do not merge PR #187 while this blocker remains.
 
 ## Latest completion
 
