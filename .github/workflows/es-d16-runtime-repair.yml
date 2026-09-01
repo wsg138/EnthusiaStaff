@@ -6,10 +6,10 @@ on:
     paths: [".github/workflows/es-d16-runtime-repair.yml"]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  package:
+  land:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -53,23 +53,81 @@ jobs:
           git checkout -- .github/workflows/moderation-web-staging-deploy.yml
           git diff --check
 
-      - name: Upload validated repair payload
-        uses: actions/upload-artifact@v4
-        with:
-          name: es-d16-validated-repair-payload
-          path: |
-            moderation-web/src/backend.js
-            moderation-web/src/index.js
-            moderation-web/test/backend.test.mjs
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaModerationUiPreviewListener.java
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticator.java
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiRateLimiter.java
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiServer.java
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadReplayGuard.java
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadTarget.java
-            staff-bot/src/main/resources/moderation-preview/real-data.js
-            staff-bot/src/main/resources/moderation-preview/real-policy.js
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticatorTest.java
-          if-no-files-found: error
-          retention-days: 1
+      - name: Create and fast-forward validated product commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BRANCH: package/es-d16-moderation-read-bridge
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import urllib.error
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          branch = os.environ['EXPECTED_BRANCH']
+          api = f'https://api.github.com/repos/{repo}'
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          base_tree = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip()
+          paths = [
+              'moderation-web/src/backend.js',
+              'moderation-web/src/index.js',
+              'moderation-web/test/backend.test.mjs',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaModerationUiPreviewListener.java',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticator.java',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiRateLimiter.java',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadApiServer.java',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadReplayGuard.java',
+              'staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationReadTarget.java',
+              'staff-bot/src/main/resources/moderation-preview/real-data.js',
+              'staff-bot/src/main/resources/moderation-preview/real-policy.js',
+              'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationPreviewWebResourcesTest.java',
+              'staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationReadApiAuthenticatorTest.java',
+          ]
+
+          def call(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              request = urllib.request.Request(
+                  api + path,
+                  data=data,
+                  method=method,
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'Content-Type': 'application/json',
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode('utf-8', errors='replace')
+                  raise SystemExit(f'GitHub API {method} {path} failed with HTTP {error.code}: {detail[:500]}') from error
+
+          ref_path = '/git/ref/heads/' + branch
+          current = call('GET', ref_path)
+          if current['object']['sha'] != head:
+              raise SystemExit('branch moved during validated landing; refusing non-fast-forward update')
+
+          entries = []
+          for path in paths:
+              content = base64.b64encode(Path(path).read_bytes()).decode('ascii')
+              blob = call('POST', '/git/blobs', {'content': content, 'encoding': 'base64'})
+              entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
+
+          tree = call('POST', '/git/trees', {'base_tree': base_tree, 'tree': entries})
+          commit = call('POST', '/git/commits', {
+              'message': 'ES-D16: resolve moderation bridge static findings',
+              'tree': tree['sha'],
+              'parents': [head],
+          })
+          call('PATCH', '/git/refs/heads/' + branch, {'sha': commit['sha'], 'force': False})
+          print('landed validated product commit', commit['sha'])
+          PY
