@@ -23,7 +23,7 @@ test('message query allowlists bounded filters', () => {
 test('message query rejects retargeting-shaped and unbounded inputs', () => {
   for (const filters of [
     {channel:'0'}, {before:'1', after:'2'}, {author:'abc'}, {date:'August-31'},
-    {limit:'51'}, {limit:'01'}, {text:'x'.repeat(201)}, {target:'discord:999'}, {actor:'999'}, {guild:'999'}
+    {limit:'51'}, {limit:'01'}, {limit:1.5}, {text:'x'.repeat(201)}, {target:'discord:999'}, {actor:'999'}, {guild:'999'}
   ]) assert.throws(() => browserMessageQuery(filters));
 });
 
@@ -33,6 +33,27 @@ test('read request binds actor guild and target only from server session', () =>
     actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey,
     messages: {channelId: '1541286004298752091', limit: 25}
   });
+});
+
+test('signed message request serialization is canonical across browser key order', async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (_input, options) => {
+    bodies.push(options.body);
+    return new Response('{}', {headers: {'Content-Type': 'application/json'}});
+  };
+  try {
+    const {env, session} = readContext();
+    const channel = '1541286004298752091';
+    const author = '1049827163345127424';
+    await proxyModerationRead(env, session, 'messages', {text:'hello', channel, author});
+    await proxyModerationRead(env, session, 'messages', {author, channel, text:'hello'});
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0], bodies[1]);
+    assert.deepEqual(JSON.parse(bodies[0]), readRequest(session, 'messages', {channel, author, text:'hello'}));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('private read egress is pinned and rejects redirects', async () => {

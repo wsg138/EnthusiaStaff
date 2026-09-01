@@ -6,12 +6,17 @@ const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
+const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
+const JSON_ESCAPES = new Map([
+  ['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']
+]);
+const SOURCE_UNAVAILABLE_BODY = '{"code":"source_unavailable","message":"Moderation data is temporarily unavailable."}';
 
 export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
   const keyHex = readSigningKey(env);
   if (!keyHex) return unavailable();
   const path = endpointPath(endpoint);
-  const body = JSON.stringify(readRequest(session, endpoint, browserInput));
+  const body = signedRequestBody(readRequest(session, endpoint, browserInput));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomToken(24);
   try {
@@ -53,6 +58,36 @@ export function readRequest(session, endpoint, browserInput = {}) {
   const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
   if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
   return request;
+}
+
+function signedRequestBody(request) {
+  return `{"actorId":${jsonString(request.actorId)},"guildId":${jsonString(request.guildId)},"messages":${signedMessages(request.messages)},"targetKey":${jsonString(request.targetKey)}}`;
+}
+
+function signedMessages(messages) {
+  if (messages === null) return 'null';
+  const fields = [];
+  for (const key of SIGNED_MESSAGE_FIELDS) {
+    if (Object.hasOwn(messages, key)) fields.push(`${jsonString(key)}:${jsonScalar(messages[key])}`);
+  }
+  return `{${fields.join(',')}}`;
+}
+
+function jsonScalar(value) {
+  if (typeof value === 'string') return jsonString(value);
+  if (Number.isInteger(value)) return String(value);
+  throw new Error('invalid signed message value');
+}
+
+function jsonString(value) {
+  if (typeof value !== 'string') throw new Error('invalid signed string');
+  return `"${value.replace(/["\\\u0000-\u001f]/g, escapeJsonCharacter)}"`;
+}
+
+function escapeJsonCharacter(character) {
+  const escaped = JSON_ESCAPES.get(character);
+  if (escaped) return escaped;
+  return `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
 }
 
 function requireFilterObject(input) {
@@ -117,12 +152,22 @@ function asciiDigits(value) {
 }
 
 function boundedLimit(raw) {
-  const text = typeof raw === 'number' ? String(raw) : raw;
-  if (typeof text !== 'string' || text.length < 1 || text.length > 2) throw new Error('invalid limit');
-  if (text[0] === '0' || !asciiDigits(text)) throw new Error('invalid limit');
+  const text = limitText(raw);
+  if (!validLimitText(text)) throw new Error('invalid limit');
   const value = Number(text);
-  if (!Number.isInteger(value) || value > MAX_LIMIT) throw new Error('invalid limit');
+  if (value > MAX_LIMIT) throw new Error('invalid limit');
   return value;
+}
+
+function limitText(raw) {
+  return typeof raw === 'number' ? String(raw) : raw;
+}
+
+function validLimitText(text) {
+  if (typeof text !== 'string') return false;
+  if (text.length < 1 || text.length > 2) return false;
+  if (text[0] === '0') return false;
+  return asciiDigits(text);
 }
 
 function endpointPath(endpoint) {
@@ -152,7 +197,7 @@ async function sanitizedBackendResponse(response) {
 }
 
 function unavailable() {
-  return new Response(JSON.stringify({code: 'source_unavailable', message: 'Moderation data is temporarily unavailable.'}), {
+  return new Response(SOURCE_UNAVAILABLE_BODY, {
     status: 503,
     headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
   });
