@@ -65,8 +65,31 @@ jobs:
           npm ci --ignore-scripts
           npm run check
 
-      - name: Run clean Java 21 gate
-        run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
+      - name: Run clean Java 21 gate and capture diagnostics
+        id: gradle
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars 2>&1 | tee /tmp/es-d16-gradle.log
+          status=${PIPESTATUS[0]}
+          git diff -- moderation-web staff-bot > /tmp/es-d16-repair.patch
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload repair diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: es-d16-runtime-repair-diagnostics
+          path: |
+            /tmp/es-d16-gradle.log
+            /tmp/es-d16-repair.patch
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce clean Java 21 gate
+        if: steps.gradle.outputs.status != '0'
+        run: exit 1
 
       - name: Commit validated runtime repair
         shell: bash
