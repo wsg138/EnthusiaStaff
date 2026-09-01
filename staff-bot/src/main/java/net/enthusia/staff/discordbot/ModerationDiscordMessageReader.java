@@ -33,7 +33,7 @@ final class ModerationDiscordMessageReader {
         if (context.readTarget() instanceof ModerationReadTarget.MessageContext messageTarget) {
             return surrounding(context, messageTarget, DEFAULT_PAGE);
         }
-        return recentTarget(context, channels);
+        return recentTarget(context, channels, emptyQuery(), MAX_PAGE);
     }
 
     ModerationReadApiModel.MessagePageDto query(
@@ -42,11 +42,11 @@ final class ModerationDiscordMessageReader {
     ) {
         int limit = boundedLimit(query.limit());
         if (query.channelId().isEmpty()) {
-            return recentTarget(context, visibleChannels(context));
+            return recentTarget(context, visibleChannels(context), query, limit);
         }
         long channelId = ModerationReadRequestAuthorizer.snowflake(query.channelId().orElseThrow(), "channel");
         TextChannel channel = visibleChannel(context, channelId);
-        return mapper.page(context, ModerationMessageFilter.apply(page(channel, query, limit), query), limit);
+        return mapper.page(context, filterAndLimit(page(channel, query, limit), query, limit), limit);
     }
 
     private ModerationReadApiModel.MessagePageDto surrounding(
@@ -66,7 +66,9 @@ final class ModerationDiscordMessageReader {
 
     private ModerationReadApiModel.MessagePageDto recentTarget(
             ModerationReadContext context,
-            List<ModerationReadApiModel.ChannelDto> channels
+            List<ModerationReadApiModel.ChannelDto> channels,
+            ModerationReadApiModel.MessageQuery query,
+            int limit
     ) {
         List<Message> messages = new ArrayList<>();
         channels.stream().limit(MAX_RECENT_CHANNELS)
@@ -74,7 +76,15 @@ final class ModerationDiscordMessageReader {
                 .filter(java.util.Objects::nonNull)
                 .forEach(channel -> collectTargetMessages(channel, context.readTarget().userId(), messages));
         messages.sort(Comparator.comparing(Message::getTimeCreated).reversed());
-        return mapper.page(context, messages, MAX_PAGE);
+        return mapper.page(context, filterAndLimit(messages, query, limit), limit);
+    }
+
+    static List<Message> filterAndLimit(
+            List<Message> messages,
+            ModerationReadApiModel.MessageQuery query,
+            int limit
+    ) {
+        return ModerationMessageFilter.apply(messages, query).stream().limit(limit).toList();
     }
 
     private static void collectTargetMessages(TextChannel channel, long targetId, List<Message> target) {
@@ -106,14 +116,14 @@ final class ModerationDiscordMessageReader {
     }
 
     static boolean hasReadPermissions(boolean canView, boolean canReadHistory) {
-    return canView && canReadHistory;
-}
+        return canView && canReadHistory;
+    }
 
-private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
-    return hasReadPermissions(
-            context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
-            context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
-}
+    private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
+        return hasReadPermissions(
+                context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
+                context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
+    }
 
     private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {
         Category category = channel.getParentCategory();

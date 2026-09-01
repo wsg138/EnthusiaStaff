@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
@@ -50,6 +51,18 @@ class ModerationPreviewHostedLaunchIssuerTest {
                 "message:1541286004298752091:1541300000000000001:1049827163345127424",
                 fields[5]);
         assertSignedAndBounded(uri, fields);
+    }
+
+    @Test
+    void hostedMessageTicketRejectsInvalidTargetAuthorBeforeSerialization() throws Exception {
+        ModerationPreviewHostedLaunchIssuer issuer = issuer();
+
+        assertThrows(IllegalArgumentException.class, () -> issuer.issueMessageLaunchUri(
+                123456789012345678L, 1410303324745371709L,
+                1541286004298752091L, 1541300000000000001L, 0L));
+        assertThrows(IllegalArgumentException.class, () -> issuer.issueMessageLaunchUri(
+                123456789012345678L, 1410303324745371709L,
+                1541286004298752091L, 1541300000000000001L, -1L));
     }
 
     private static ModerationPreviewHostedLaunchIssuer issuer() throws Exception {
