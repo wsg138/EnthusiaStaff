@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -31,8 +31,13 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X04 Sentinel | Exact-head Sentinel workflow `32882926734` PASS; durable job `250` reached `PAPER_RESTART_OK`. |
 | X04 canonical Pi | Public run `32882924737` and correlated private run `32883859152` / job `97919562717` PASS on trusted `Lincoln-PI-4`, including exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup. |
 | X04 remaining work | No implementation, validation, synchronization, merge, or canonical-publication work remains. Only deletion of the fully contained standalone package branch is pending because the prior connected mutation surface did not expose branch deletion. |
-| Discord program live work | No Discord implementation package remains active after D06 terminal publication. `ES-D04`, `ES-D05`, and `ES-D06` are `COMPLETE`; `ES-D07` and `ES-D13` are dependency-complete `READY` and are not started in this run. |
+| Discord program live work | `ES-D16 — Moderation console real-data read bridge` is `BLOCKED` / `PARKED_BLOCKED`. PR #187 remains open/draft and unmerged at frozen reviewed executable head `a009f4f5f857cf86a859be0d314264568d181670`. All repository-controlled exact-head gates pass; required staging fails on protected Cloudflare Tunnel account authority (HTTP 403). D07/D13 remain `READY` and were not started by this worker. |
 | Discord latest completion | `ES-D06 — Read-only staff moderation UX` is the latest completed Discord package. |
+| D16 frozen product state | `a009f4f5f857cf86a859be0d314264568d181670` implements the owner-approved real-data moderation read bridge with explicit DTO allowlists, D03/D06 server-side authorization, actor/guild/target binding, signed short-lived service/session requests, replay resistance, bounded reads/rate/page/request sizes, bounded JDA REST reads, Worker proxy/session ingress, and simulation-only punishment/deletion behavior. |
+| D16 exact-head validation | Coverage `33529631291` / job `99929426510` PASS; Moderation Web Validation `33529631190` PASS; Staff Bot Configuration Cache `33529631174` PASS; Staff Bot PR Artifact `33529631246` PASS; Sentinel Restart Artifact `33529631254` PASS; Codacy static `99929501999` PASS with zero annotations; Codacy Diff Coverage `99932381673` PASS at 33.57% with no defined gate; exact-head CodeRabbit review `5080380849` has no new findings and all earlier threads are resolved. |
+| D16 staged acceptance | `BLOCKED`: workflow `33530157844` / job `99930994457` ran exact `a009f4f5f857cf86a859be0d314264568d181670`. Worker build/deploy, origin health/private fence, first-use launch, authenticated session, and replay rejection passed; the first account-level Cloudflare named-tunnel API GET returned HTTP 403, no tunnel/DNS mutation succeeded, and the hard tunnel-provisioning gate failed. |
+| D16 exact unblock | Grant or replace the protected staging Cloudflare API token with required Cloudflare Tunnel account read/edit authority for the owning account; rerun exact-head staging and complete Bloom/live read acceptance before merging PR #187. |
+| D16 implementation PR | PR #187 remains open/draft/unmerged. Its branch must stay preserved; the staging failure is not a pass and no production Discord/LiteBans/cutover authority is granted. |
 | D04 terminal state | `COMPLETE`. Final reviewed/validated head `da0371681f5a44c72a614c8d6637b85d9080291d`; Staff PR #151 merged normally as `4e7621b7a42e812cc7bf806a029f37a753cdd9f3`; exact product tree containment is proven and the temporary D04 branch is absent. |
 | D04 exact-head validation | Coverage `33029697612` / job `98379158884` PASS; Codacy static `98379478044` PASS with zero annotations; Codacy diff coverage `98380515790` PASS; Sentinel artifact `33029697604` / job `98379112319` PASS; all visible PR #151 inline review threads resolved. |
 | D04 Sentinel/canonical Pi | Durable Sentinel job `292` reached `PAPER_RESTART_OK`. Canonical public Pi `33029762105` and correlated private `33030278019` / job `98380970512` PASS on trusted `Lincoln-PI-4`, including exact bridge/artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, private/public cleanup, and terminal publication. |
@@ -53,7 +58,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Independently parked packages | `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED` on verified license/public-aggregate authorization. X03 is no longer parked on D04 serialization; it is a future universal `ACTIONABLE_CONTINUATION` and was not modified in this run. |
 | Production boundary | No production Discord configuration, reputation/player rows, bot-token value, private production data, PM data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
 | Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-26-es-x01-license-redistribution-blocked.md` |
-| Discord current handoff | `ai-agents/reports/package-handoffs/2026-08-28-es-d06-complete.md` |
+| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md` |
 
 ## X01 current parked record
 
