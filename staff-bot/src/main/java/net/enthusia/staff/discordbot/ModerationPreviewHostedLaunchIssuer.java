@@ -52,6 +52,7 @@ final class ModerationPreviewHostedLaunchIssuer {
     URI issueMessageLaunchUri(long actorId, long guildId, long channelId, long messageId, long targetUserId) {
         requireSnowflake(channelId, "channel");
         requireSnowflake(messageId, "message");
+        requireSnowflake(targetUserId, "target user");
         return issueLaunchUri(
                 actorId,
                 guildId,
