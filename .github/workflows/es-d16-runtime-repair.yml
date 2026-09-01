@@ -9,100 +9,42 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  codacy-diagnostics:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: package/es-d16-moderation-read-bridge
-          fetch-depth: 0
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Apply final read-authorization and staging-workflow repair
+      - name: Capture sanitized current Codacy findings
         shell: bash
         run: |
           set -Eeuo pipefail
-          python3 <<'PY'
-          import re
-          from pathlib import Path
+          endpoint='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues'
+          response=''
+          for attempt in $(seq 1 24); do
+            candidate="$(curl --fail-with-body --silent --show-error "$endpoint" || true)"
+            if [[ -n "$candidate" ]] && printf '%s' "$candidate" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
+              response="$candidate"
+              break
+            fi
+            sleep 5
+          done
+          [[ -n "$response" ]]
+          printf '%s' "$response" | jq '{
+            count: (.data | length),
+            issues: [.data[] | {
+              filePath: .commitIssue.filePath,
+              lineNumber: .commitIssue.lineNumber,
+              message: .commitIssue.message,
+              category: .commitIssue.category,
+              level: .commitIssue.level,
+              patternInfo: .commitIssue.patternInfo,
+              toolInfo: .commitIssue.toolInfo
+            }]
+          }' | tee codacy-current.json
 
-          reader_path = Path('staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReader.java')
-          reader = reader_path.read_text(encoding='utf-8')
-          old_filter = '.filter(channel -> context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL))'
-          if reader.count(old_filter) != 1:
-              raise SystemExit(f'visible channel filter: expected one match, found {reader.count(old_filter)}')
-          reader = reader.replace(old_filter, '.filter(channel -> hasReadAccess(context, channel))')
-          old_check = 'if (channel == null || !context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL)) {'
-          if reader.count(old_check) != 1:
-              raise SystemExit(f'visible channel check: expected one match, found {reader.count(old_check)}')
-          reader = reader.replace(old_check, 'if (channel == null || !hasReadAccess(context, channel)) {')
-          marker = '    private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {'
-          helper = '''    static boolean hasReadPermissions(boolean canView, boolean canReadHistory) {
-              return canView && canReadHistory;
-          }
-
-          private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
-              return hasReadPermissions(
-                      context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
-                      context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
-          }
-
-          '''
-          if reader.count(marker) != 1:
-              raise SystemExit('channel DTO marker is ambiguous')
-          reader = reader.replace(marker, helper + marker)
-          reader_path.write_text(reader, encoding='utf-8')
-
-          test_path = Path('staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReaderTest.java')
-          if test_path.exists():
-              raise SystemExit('message reader test already exists unexpectedly')
-          test_path.write_text('''package net.enthusia.staff.discordbot;
-
-          import static org.junit.jupiter.api.Assertions.assertFalse;
-          import static org.junit.jupiter.api.Assertions.assertTrue;
-
-          import org.junit.jupiter.api.Test;
-
-          class ModerationDiscordMessageReaderTest {
-              @Test
-              void messageReadsRequireChannelViewAndMessageHistory() {
-                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, false));
-                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, true));
-                  assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, false));
-                  assertTrue(ModerationDiscordMessageReader.hasReadPermissions(true, true));
-              }
-          }
-          ''', encoding='utf-8')
-
-          deploy_path = Path('.github/workflows/moderation-web-staging-deploy.yml')
-          deploy = deploy_path.read_text(encoding='utf-8')
-          old_body = "          body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|discord:846729778400460871|{now}|{now + 120}'"
-          new_body = "          test_actor_id = str(10**17 + secrets.randbelow(9 * 10**17))\n          body = f'v1|staging|{nonce}|{test_actor_id}|1410303324745371709|discord:{test_actor_id}|{now}|{now + 120}'"
-          if deploy.count(old_body) != 1:
-              raise SystemExit(f'synthetic actor replacement: expected one match, found {deploy.count(old_body)}')
-          deploy = deploy.replace(old_body, new_body)
-          pattern = r'\n      - name: Record sanitized Codacy issue metadata\n.*?(?=\n      - name: Require fixed private tunnel provisioning)'
-          deploy, count = re.subn(pattern, '', deploy, count=1, flags=re.S)
-          if count != 1:
-              raise SystemExit(f'Codacy diagnostic removal: expected one match, found {count}')
-          deploy_path.write_text(deploy, encoding='utf-8')
-          PY
-          git diff --check
-
-      - name: Run clean Java 21 gate
-        run: ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks clean test check runtimeJars
-
-      - name: Upload validated final cleanup payload
+      - name: Upload sanitized Codacy diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: es-d16-final-cleanup-payload
-          path: |
-            .github/workflows/moderation-web-staging-deploy.yml
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReader.java
-            staff-bot/src/test/java/net/enthusia/staff/discordbot/ModerationDiscordMessageReaderTest.java
+          name: es-d16-codacy-current
+          path: codacy-current.json
           if-no-files-found: error
           retention-days: 1
