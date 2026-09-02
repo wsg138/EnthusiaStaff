@@ -221,10 +221,11 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     static InetSocketAddress bindAddress(String host, int port) {
-        if (!"127.0.0.1".equals(host) && !"0.0.0.0".equals(host)) {
-            throw new IllegalArgumentException("authority bind host is unsupported");
-        }
-        return new InetSocketAddress(host, port);
+        return switch (host) {
+            case "127.0.0.1" -> new InetSocketAddress("127.0.0.1", port);
+            case "0.0.0.0" -> new InetSocketAddress("0.0.0.0", port);
+            default -> throw new IllegalArgumentException("authority bind host is unsupported");
+        };
     }
 
     static int parsePort(String raw) {

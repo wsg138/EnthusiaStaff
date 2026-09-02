@@ -66,7 +66,7 @@ final class PaperDatabaseConfiguration {
         if (present == 0) {
             return Optional.empty();
         }
-        if (present != 3) {
+        if (present != ALLOWED_PROPERTIES.size()) {
             throw new IllegalArgumentException("database environment configuration is incomplete");
         }
         return Optional.of(database(url, username, credential));

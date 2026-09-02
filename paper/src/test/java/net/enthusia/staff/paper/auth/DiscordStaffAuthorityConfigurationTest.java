@@ -14,6 +14,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 class DiscordStaffAuthorityConfigurationTest {
     private static final String SECRET = "a".repeat(40);
+    private static final String LOOPBACK_URL = "authority.url=http://127.0.0.1:8771/v1/staff-rank";
+    private static final String SECRET_PROPERTY = "authority.secret=";
 
     @TempDir
     Path tempDir;
@@ -27,8 +29,8 @@ class DiscordStaffAuthorityConfigurationTest {
     void panelFileProvidesSecretAndLoopbackPort() throws IOException {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
         Files.writeString(file, String.join("\n",
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
-                "authority.secret=" + SECRET,
+                LOOPBACK_URL,
+                SECRET_PROPERTY + SECRET,
                 ""));
 
         DiscordStaffAuthorityConfiguration.Value value =
@@ -46,7 +48,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Files.writeString(file, String.join("\n",
                 "authority.bind=bloom-private-split",
                 "authority.port=8771",
-                "authority.secret=" + SECRET,
+                SECRET_PROPERTY + SECRET,
                 ""));
 
         DiscordStaffAuthorityConfiguration.Value value =
@@ -60,13 +62,13 @@ class DiscordStaffAuthorityConfigurationTest {
     @Test
     void fileRejectsMissingWeakUnknownAndAmbiguousConfiguration() throws IOException {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
-        Files.writeString(file, "authority.url=http://127.0.0.1:8771/v1/staff-rank\n");
+        Files.writeString(file, LOOPBACK_URL + "\n");
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
 
         Files.writeString(file, String.join("\n",
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
-                "authority.secret=short",
+                LOOPBACK_URL,
+                SECRET_PROPERTY + "short",
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -74,15 +76,15 @@ class DiscordStaffAuthorityConfigurationTest {
         Files.writeString(file, String.join("\n",
                 "authority.bind=bloom-private-split",
                 "authority.port=8771",
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
-                "authority.secret=" + SECRET,
+                LOOPBACK_URL,
+                SECRET_PROPERTY + SECRET,
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
 
         Files.writeString(file, String.join("\n",
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
-                "authority.secret=" + SECRET,
+                LOOPBACK_URL,
+                SECRET_PROPERTY + SECRET,
                 "unsupported=value",
                 ""));
         assertThrows(IllegalArgumentException.class,
@@ -94,7 +96,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
         Files.writeString(file, String.join("\n",
                 "authority.url=http://10.0.0.2:8771/v1/staff-rank",
-                "authority.secret=" + SECRET,
+                SECRET_PROPERTY + SECRET,
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -102,7 +104,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Files.writeString(file, String.join("\n",
                 "authority.bind=public",
                 "authority.port=8771",
-                "authority.secret=" + SECRET,
+                SECRET_PROPERTY + SECRET,
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -126,8 +128,8 @@ class DiscordStaffAuthorityConfigurationTest {
     @Test
     void partialEnvironmentConfigurationFailsClosedInsteadOfFallingBackToFile() throws IOException {
         Files.writeString(tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME), String.join("\n",
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
-                "authority.secret=" + SECRET,
+                LOOPBACK_URL,
+                SECRET_PROPERTY + SECRET,
                 ""));
 
         assertThrows(IllegalArgumentException.class, () -> DiscordStaffAuthorityConfiguration.fromSources(

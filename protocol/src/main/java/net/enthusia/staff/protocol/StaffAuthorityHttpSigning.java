@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -62,12 +63,12 @@ public final class StaffAuthorityHttpSigning {
         if (Duration.between(timestamp, clock.instant()).abs().compareTo(MAX_SKEW) > 0) {
             return Verification.EXPIRED;
         }
-        byte[] supplied = decode(signature);
-        if (supplied == null) {
+        Optional<byte[]> supplied = decode(signature);
+        if (supplied.isEmpty()) {
             return Verification.MALFORMED;
         }
         byte[] expected = mac(credential, requestCanonical(method, target, rawTimestamp, nonce));
-        return MessageDigest.isEqual(expected, supplied)
+        return MessageDigest.isEqual(expected, supplied.orElseThrow())
                 ? Verification.ACCEPTED
                 : Verification.INVALID_SIGNATURE;
     }
@@ -89,12 +90,12 @@ public final class StaffAuthorityHttpSigning {
         if (!validNonce(nonce) || body == null || signature == null || !SIGNATURE.matcher(signature).matches()) {
             return false;
         }
-        byte[] supplied = decode(signature);
-        if (supplied == null) {
+        Optional<byte[]> supplied = decode(signature);
+        if (supplied.isEmpty()) {
             return false;
         }
         byte[] expected = mac(credential, responseCanonical(nonce, status, body));
-        return MessageDigest.isEqual(expected, supplied);
+        return MessageDigest.isEqual(expected, supplied.orElseThrow());
     }
 
     private static void validateInputs(
@@ -104,12 +105,19 @@ public final class StaffAuthorityHttpSigning {
             Instant timestamp,
             String nonce
     ) {
-        if (credential == null || credential.isBlank()
-                || method == null || method.isBlank()
-                || target == null || target.isBlank()
-                || timestamp == null || !validNonce(nonce)) {
+        if (!validCredentialAndTimestamp(credential, timestamp) || !validUnsignedRequest(method, target, nonce)) {
             throw new IllegalArgumentException("request signing inputs are invalid");
         }
+    }
+
+    private static boolean validCredentialAndTimestamp(String credential, Instant timestamp) {
+        return credential != null && !credential.isBlank() && timestamp != null;
+    }
+
+    private static boolean validUnsignedRequest(String method, String target, String nonce) {
+        return method != null && !method.isBlank()
+                && target != null && !target.isBlank()
+                && validNonce(nonce);
     }
 
     private static boolean validRequestText(String method, String target, String nonce, String signature) {
@@ -169,12 +177,12 @@ public final class StaffAuthorityHttpSigning {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
     }
 
-    private static byte[] decode(String value) {
+    private static Optional<byte[]> decode(String value) {
         try {
             byte[] decoded = Base64.getUrlDecoder().decode(value);
-            return decoded.length == 32 ? decoded : null;
+            return decoded.length == 32 ? Optional.of(decoded) : Optional.empty();
         } catch (IllegalArgumentException exception) {
-            return null;
+            return Optional.empty();
         }
     }
 

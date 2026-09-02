@@ -22,42 +22,45 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class CloudflaredStagingTunnelTest {
+    private static final String TOKEN_FILE_NAME = "cloudflared-token.txt";
+
     @TempDir
     Path tempDir;
 
     @Test
-    void startsExactTokenFileCommandWithoutReadingTokenContents() throws Exception {
+    void startsFixedTokenFileCommandWithoutReadingTokenContents() throws Exception {
         Path binary = executable("cloudflared");
-        Path token = Files.writeString(tempDir.resolve("cloudflared-token.txt"), "private-token-value");
+        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "private-token-value");
         FakeProcess process = new FakeProcess();
-        AtomicReference<List<String>> command = new AtomicReference<>();
+        AtomicReference<Path> directory = new AtomicReference<>();
         CloudflaredStagingTunnel tunnel = new CloudflaredStagingTunnel(
                 binary,
                 token,
                 value -> {
-                    command.set(value);
+                    directory.set(value);
                     return process;
                 }
         );
 
         tunnel.start(() -> { });
 
+        assertEquals(tempDir.toAbsolutePath().normalize(), directory.get());
         assertEquals(List.of(
-                binary.toAbsolutePath().normalize().toString(),
+                "./cloudflared",
                 "tunnel",
                 "--no-autoupdate",
                 "run",
                 "--token-file",
-                token.toAbsolutePath().normalize().toString()
-        ), command.get());
-        assertFalse(String.join(" ", command.get()).contains("private-token-value"));
+                TOKEN_FILE_NAME
+        ), tunnel.command());
+        assertFalse(String.join(" ", tunnel.command()).contains("private-token-value"));
         tunnel.close();
     }
 
     @Test
     void unexpectedExitInvokesFailureCallbackButNormalCloseDoesNot() throws Exception {
         Path binary = executable("cloudflared");
-        Path token = Files.writeString(tempDir.resolve("token.txt"), "token");
+        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "token");
         FakeProcess unexpected = new FakeProcess();
         AtomicBoolean failed = new AtomicBoolean();
         CloudflaredStagingTunnel tunnel = new CloudflaredStagingTunnel(binary, token, ignored -> unexpected);
@@ -76,13 +79,25 @@ class CloudflaredStagingTunnelTest {
     }
 
     @Test
-    void rejectsMissingFilesAndAlreadyExitedStartup() throws Exception {
+    void rejectsMissingWrongNamedSeparatedAndAlreadyExitedStartup() throws Exception {
         Path binary = executable("cloudflared");
-        Path token = Files.writeString(tempDir.resolve("token.txt"), "token");
+        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "token");
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(tempDir.resolve("missing"), token));
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(binary, tempDir.resolve("missing-token")));
+
+        Path wrongBinary = executable("cloudflared-other");
+        assertThrows(IllegalArgumentException.class,
+                () -> new CloudflaredStagingTunnel(wrongBinary, token));
+        Path wrongToken = Files.writeString(tempDir.resolve("token.txt"), "token");
+        assertThrows(IllegalArgumentException.class,
+                () -> new CloudflaredStagingTunnel(binary, wrongToken));
+
+        Path otherDirectory = Files.createDirectory(tempDir.resolve("other"));
+        Path separatedToken = Files.writeString(otherDirectory.resolve(TOKEN_FILE_NAME), "token");
+        assertThrows(IllegalArgumentException.class,
+                () -> new CloudflaredStagingTunnel(binary, separatedToken));
 
         FakeProcess exited = new FakeProcess();
         exited.completeExit(1);
