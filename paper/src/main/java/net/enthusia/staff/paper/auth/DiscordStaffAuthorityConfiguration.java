@@ -11,17 +11,28 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Resolves the loopback Discord staff authority from environment or a panel-uploaded secret file. */
+/** Resolves the Discord staff authority from environment or a panel-uploaded secret file. */
 final class DiscordStaffAuthorityConfiguration {
     static final String FILE_NAME = "discord-staff-authority.properties";
     static final String CREDENTIAL_PROPERTY = "authority.secret";
     static final String URL_PROPERTY = "authority.url";
+    static final String BIND_PROPERTY = "authority.bind";
+    static final String PORT_PROPERTY = "authority.port";
 
+    private static final Set<String> ALLOWED_PROPERTIES = Set.of(
+            CREDENTIAL_PROPERTY,
+            URL_PROPERTY,
+            BIND_PROPERTY,
+            PORT_PROPERTY
+    );
     private static final int MIN_SECRET_LENGTH = 32;
     private static final String SCHEME = "http";
-    private static final String HOST = "127.0.0.1";
+    private static final String LOOPBACK_HOST = "127.0.0.1";
+    private static final String PRIVATE_BIND_HOST = "0.0.0.0";
+    private static final String PRIVATE_BIND = "bloom-private-split";
     private static final String PATH = "/v1/staff-rank";
 
     private DiscordStaffAuthorityConfiguration() {
@@ -44,19 +55,40 @@ final class DiscordStaffAuthorityConfiguration {
     }
 
     private static Value fromEnvironment(Map<String, String> environment) {
-        String credential = required(
+        String credential = validateCredential(required(
                 environment.get(DiscordStaffAuthorityEndpoint.CREDENTIAL_ENV),
-                DiscordStaffAuthorityEndpoint.CREDENTIAL_ENV);
+                DiscordStaffAuthorityEndpoint.CREDENTIAL_ENV));
         int port = DiscordStaffAuthorityEndpoint.parsePort(
                 environment.get(DiscordStaffAuthorityEndpoint.PORT_ENV));
-        return new Value(validateCredential(credential), port);
+        return Value.loopback(credential, port);
     }
 
     private static Value fromFile(Path file) {
         Properties properties = load(file);
-        String credential = validateCredential(required(properties.getProperty(CREDENTIAL_PROPERTY), CREDENTIAL_PROPERTY));
+        rejectUnknown(properties);
+        String credential = validateCredential(required(
+                properties.getProperty(CREDENTIAL_PROPERTY), CREDENTIAL_PROPERTY));
+        String bind = properties.getProperty(BIND_PROPERTY);
+        if (configured(bind)) {
+            return privateSplitValue(properties, credential, bind.trim());
+        }
         URI uri = authorityUri(required(properties.getProperty(URL_PROPERTY), URL_PROPERTY));
-        return new Value(credential, uri.getPort());
+        if (configured(properties.getProperty(PORT_PROPERTY))) {
+            throw new IllegalArgumentException("authority.port requires authority.bind");
+        }
+        return Value.loopback(credential, uri.getPort());
+    }
+
+    private static Value privateSplitValue(Properties properties, String credential, String bind) {
+        if (!PRIVATE_BIND.equals(bind)) {
+            throw new IllegalArgumentException("authority.bind is unsupported");
+        }
+        if (configured(properties.getProperty(URL_PROPERTY))) {
+            throw new IllegalArgumentException("authority.url cannot be combined with private split binding");
+        }
+        int port = DiscordStaffAuthorityEndpoint.parsePort(
+                required(properties.getProperty(PORT_PROPERTY), PORT_PROPERTY));
+        return Value.privateSplit(credential, port);
     }
 
     private static Properties load(Path file) {
@@ -66,6 +98,12 @@ final class DiscordStaffAuthorityConfiguration {
             return properties;
         } catch (IOException exception) {
             throw new IllegalArgumentException("Discord staff authority config file is unavailable", exception);
+        }
+    }
+
+    private static void rejectUnknown(Properties properties) {
+        if (!ALLOWED_PROPERTIES.containsAll(properties.stringPropertyNames())) {
+            throw new IllegalArgumentException("Discord staff authority config contains unsupported properties");
         }
     }
 
@@ -87,7 +125,7 @@ final class DiscordStaffAuthorityConfiguration {
 
     private static boolean validNetwork(URI uri) {
         return SCHEME.equalsIgnoreCase(uri.getScheme())
-                && HOST.equals(uri.getHost())
+                && LOOPBACK_HOST.equals(uri.getHost())
                 && uri.getPort() >= 1
                 && uri.getPort() <= 65_535;
     }
@@ -117,6 +155,13 @@ final class DiscordStaffAuthorityConfiguration {
         return value != null && !value.isBlank();
     }
 
-    record Value(String secret, int port) {
+    record Value(String secret, String bindHost, int port, boolean privateSplit) {
+        private static Value loopback(String secret, int port) {
+            return new Value(secret, LOOPBACK_HOST, port, false);
+        }
+
+        private static Value privateSplit(String secret, int port) {
+            return new Value(secret, PRIVATE_BIND_HOST, port, true);
+        }
     }
 }

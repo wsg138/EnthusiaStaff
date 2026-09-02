@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,11 +35,30 @@ class DiscordStaffAuthorityConfigurationTest {
                 DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()).orElseThrow();
 
         assertEquals(SECRET, value.secret());
+        assertEquals("127.0.0.1", value.bindHost());
         assertEquals(8771, value.port());
+        assertFalse(value.privateSplit());
     }
 
     @Test
-    void fileRejectsMissingWeakAndNonLoopbackAuthorityConfiguration() throws IOException {
+    void panelFileCanOptIntoAuthenticatedBloomPrivateSplitBinding() throws IOException {
+        Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
+        Files.writeString(file, String.join("\n",
+                "authority.bind=bloom-private-split",
+                "authority.port=8771",
+                "authority.secret=" + SECRET,
+                ""));
+
+        DiscordStaffAuthorityConfiguration.Value value =
+                DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()).orElseThrow();
+
+        assertEquals("0.0.0.0", value.bindHost());
+        assertEquals(8771, value.port());
+        assertTrue(value.privateSplit());
+    }
+
+    @Test
+    void fileRejectsMissingWeakUnknownAndAmbiguousConfiguration() throws IOException {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
         Files.writeString(file, "authority.url=http://127.0.0.1:8771/v1/staff-rank\n");
         assertThrows(IllegalArgumentException.class,
@@ -52,7 +72,36 @@ class DiscordStaffAuthorityConfigurationTest {
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
 
         Files.writeString(file, String.join("\n",
+                "authority.bind=bloom-private-split",
+                "authority.port=8771",
+                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
+                "authority.secret=" + SECRET,
+                ""));
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
+
+        Files.writeString(file, String.join("\n",
+                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
+                "authority.secret=" + SECRET,
+                "unsupported=value",
+                ""));
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
+    }
+
+    @Test
+    void fileRejectsNonLoopbackLegacyUrlAndUnsupportedPrivateBind() throws IOException {
+        Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
+        Files.writeString(file, String.join("\n",
                 "authority.url=http://10.0.0.2:8771/v1/staff-rank",
+                "authority.secret=" + SECRET,
+                ""));
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
+
+        Files.writeString(file, String.join("\n",
+                "authority.bind=public",
+                "authority.port=8771",
                 "authority.secret=" + SECRET,
                 ""));
         assertThrows(IllegalArgumentException.class,
@@ -60,7 +109,7 @@ class DiscordStaffAuthorityConfigurationTest {
     }
 
     @Test
-    void existingEnvironmentConfigurationRemainsSupported() {
+    void existingEnvironmentConfigurationRemainsLoopbackOnly() {
         DiscordStaffAuthorityConfiguration.Value value = DiscordStaffAuthorityConfiguration.fromSources(
                 tempDir,
                 Map.of(
@@ -69,7 +118,9 @@ class DiscordStaffAuthorityConfigurationTest {
                 )).orElseThrow();
 
         assertEquals(SECRET, value.secret());
+        assertEquals("127.0.0.1", value.bindHost());
         assertEquals(8772, value.port());
+        assertFalse(value.privateSplit());
     }
 
     @Test
