@@ -67,6 +67,24 @@ class StaffBotRuntimeTest {
     }
 
     @Test
+    void stagingTunnelExitDuringStartupPreventsGatewayStart() {
+        Fixture fixture = new Fixture(true, true);
+        FakeTunnel tunnel = new FakeTunnel(false, true);
+        StaffBotRuntime runtime = fixture.runtime(tunnel);
+
+        assertThrows(IOException.class, runtime::start);
+        assertTrue(tunnel.started);
+        assertFalse(fixture.gateway.started);
+        assertTrue(runtime.health().failedEver());
+        assertEquals("staging_tunnel_exited", runtime.health().snapshot().reason());
+        assertTrue(fixture.gateway.shutdownNowRequested);
+
+        runtime.close();
+        assertTrue(tunnel.closed);
+        assertFalse(fixture.gateway.shutdownRequested);
+    }
+
+    @Test
     void stagingTunnelStartupFailurePreventsGatewayAndRollsBack() {
         Fixture fixture = new Fixture(true, true);
         FakeTunnel tunnel = new FakeTunnel(true);
@@ -183,12 +201,18 @@ class StaffBotRuntimeTest {
 
     private static final class FakeTunnel implements StagingTunnel {
         private final boolean failStartup;
+        private final boolean exitDuringStartup;
         private boolean started;
         private boolean closed;
         private Runnable unexpectedExit;
 
         private FakeTunnel(boolean failStartup) {
+            this(failStartup, false);
+        }
+
+        private FakeTunnel(boolean failStartup, boolean exitDuringStartup) {
             this.failStartup = failStartup;
+            this.exitDuringStartup = exitDuringStartup;
         }
 
         @Override
@@ -197,6 +221,9 @@ class StaffBotRuntimeTest {
             unexpectedExit = callback;
             if (failStartup) {
                 throw new IOException("test startup failure");
+            }
+            if (exitDuringStartup) {
+                callback.run();
             }
         }
 

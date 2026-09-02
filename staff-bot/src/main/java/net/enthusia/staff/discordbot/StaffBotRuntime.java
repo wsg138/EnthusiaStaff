@@ -145,6 +145,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         healthEndpoint.start();
         startTunnel();
+        requireStartupHealthy();
         health.transition(StaffBotHealth.Phase.CONNECTING, "gateway_connecting");
         logIfEnabled(System.Logger.Level.INFO, "staff_bot_start environment={0}", configuration.environment().label());
         try {
@@ -219,6 +220,12 @@ public final class StaffBotRuntime implements AutoCloseable {
         } catch (IOException | RuntimeException exception) {
             failClosed("staging_tunnel_start_failed");
             throw exception;
+        }
+    }
+
+    private void requireStartupHealthy() throws IOException {
+        if (health.failedEver()) {
+            throw new IOException("staff bot runtime failed during tunnel startup");
         }
     }
 
