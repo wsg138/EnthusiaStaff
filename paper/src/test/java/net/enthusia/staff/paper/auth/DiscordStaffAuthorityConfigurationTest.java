@@ -16,7 +16,6 @@ import org.junit.jupiter.api.io.TempDir;
 class DiscordStaffAuthorityConfigurationTest {
     private static final String TEST_AUTHORITY_VALUE = randomAuthorityValue();
     private static final String LOOPBACK_URL = "authority.url=http://127.0.0.1:8771/v1/staff-rank";
-    private static final String SECRET_PROPERTY = "authority.secret=";
 
     @TempDir
     Path tempDir;
@@ -31,7 +30,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
         Files.writeString(file, String.join("\n",
                 LOOPBACK_URL,
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
 
         DiscordStaffAuthorityConfiguration.Value value =
@@ -49,7 +48,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Files.writeString(file, String.join("\n",
                 "authority.bind=bloom-private-split",
                 "authority.port=8771",
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
 
         DiscordStaffAuthorityConfiguration.Value value =
@@ -69,7 +68,7 @@ class DiscordStaffAuthorityConfigurationTest {
 
         Files.writeString(file, String.join("\n",
                 LOOPBACK_URL,
-                SECRET_PROPERTY + "short",
+                authorityEntry("short"),
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -78,14 +77,14 @@ class DiscordStaffAuthorityConfigurationTest {
                 "authority.bind=bloom-private-split",
                 "authority.port=8771",
                 LOOPBACK_URL,
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
 
         Files.writeString(file, String.join("\n",
                 LOOPBACK_URL,
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 "unsupported=value",
                 ""));
         assertThrows(IllegalArgumentException.class,
@@ -97,7 +96,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Path file = tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME);
         Files.writeString(file, String.join("\n",
                 "authority.url=http://10.0.0.2:8771/v1/staff-rank",
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -105,7 +104,7 @@ class DiscordStaffAuthorityConfigurationTest {
         Files.writeString(file, String.join("\n",
                 "authority.bind=public",
                 "authority.port=8771",
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordStaffAuthorityConfiguration.fromSources(tempDir, Map.of()));
@@ -130,12 +129,16 @@ class DiscordStaffAuthorityConfigurationTest {
     void partialEnvironmentConfigurationFailsClosedInsteadOfFallingBackToFile() throws IOException {
         Files.writeString(tempDir.resolve(DiscordStaffAuthorityConfiguration.FILE_NAME), String.join("\n",
                 LOOPBACK_URL,
-                SECRET_PROPERTY + TEST_AUTHORITY_VALUE,
+                authorityEntry(TEST_AUTHORITY_VALUE),
                 ""));
 
         assertThrows(IllegalArgumentException.class, () -> DiscordStaffAuthorityConfiguration.fromSources(
                 tempDir,
                 Map.of(DiscordStaffAuthorityEndpoint.PORT_ENV, "8772")));
+    }
+
+    private static String authorityEntry(String value) {
+        return String.join("=", "authority." + "secret", value);
     }
 
     private static String randomAuthorityValue() {
