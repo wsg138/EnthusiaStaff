@@ -24,6 +24,7 @@ public final class StaffBotRuntime implements AutoCloseable {
     private final DiscordGateway gateway;
     private final Optional<StaffModerationRuntime> moderationRuntime;
     private final Optional<StagingTunnel> stagingTunnel;
+    private final Object startupGate = new Object();
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean gatewayStarted = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -145,16 +146,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         healthEndpoint.start();
         startTunnel();
-        requireStartupHealthy();
-        health.transition(StaffBotHealth.Phase.CONNECTING, "gateway_connecting");
-        logIfEnabled(System.Logger.Level.INFO, "staff_bot_start environment={0}", configuration.environment().label());
-        try {
-            gateway.start(new RuntimeGatewayObserver());
-            gatewayStarted.set(true);
-        } catch (RuntimeException exception) {
-            failClosed("gateway_start_failed");
-            throw exception;
-        }
+        startGateway();
     }
 
     public boolean awaitReady(Duration timeout) throws InterruptedException {
@@ -223,15 +215,29 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
     }
 
-    private void requireStartupHealthy() throws IOException {
-        if (health.failedEver()) {
-            throw new IOException("staff bot runtime failed during tunnel startup");
+    private void startGateway() throws IOException {
+        synchronized (startupGate) {
+            if (health.failedEver()) {
+                throw new IOException("staff bot runtime failed during tunnel startup");
+            }
+            health.transition(StaffBotHealth.Phase.CONNECTING, "gateway_connecting");
+            logIfEnabled(System.Logger.Level.INFO,
+                    "staff_bot_start environment={0}", configuration.environment().label());
+            try {
+                gateway.start(new RuntimeGatewayObserver());
+                gatewayStarted.set(true);
+            } catch (RuntimeException exception) {
+                failClosed("gateway_start_failed");
+                throw exception;
+            }
         }
     }
 
     private void tunnelExitedUnexpectedly() {
-        if (!closed.get() && !health.failedEver()) {
-            failClosed("staging_tunnel_exited");
+        synchronized (startupGate) {
+            if (!closed.get() && !health.failedEver()) {
+                failClosed("staging_tunnel_exited");
+            }
         }
     }
 
