@@ -23,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CloudflaredStagingTunnelTest {
     private static final String TOKEN_FILE_NAME = "cloudflared-token.txt";
+    private static final String FIXTURE_CONTENT = Character.toString('x').repeat(5);
 
     @TempDir
     Path tempDir;
@@ -60,7 +61,7 @@ class CloudflaredStagingTunnelTest {
     @Test
     void unexpectedExitInvokesFailureCallbackButNormalCloseDoesNot() throws Exception {
         Path binary = executable("cloudflared");
-        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "token");
+        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), FIXTURE_CONTENT);
         FakeProcess unexpected = new FakeProcess();
         AtomicBoolean failed = new AtomicBoolean();
         CloudflaredStagingTunnel tunnel = new CloudflaredStagingTunnel(binary, token, ignored -> unexpected);
@@ -81,7 +82,7 @@ class CloudflaredStagingTunnelTest {
     @Test
     void rejectsMissingWrongNamedSeparatedAndAlreadyExitedStartup() throws Exception {
         Path binary = executable("cloudflared");
-        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "token");
+        Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), FIXTURE_CONTENT);
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(tempDir.resolve("missing"), token));
         assertThrows(IllegalArgumentException.class,
@@ -90,12 +91,12 @@ class CloudflaredStagingTunnelTest {
         Path wrongBinary = executable("cloudflared-other");
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(wrongBinary, token));
-        Path wrongToken = Files.writeString(tempDir.resolve("token.txt"), "token");
+        Path wrongToken = Files.writeString(tempDir.resolve("token.txt"), FIXTURE_CONTENT);
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(binary, wrongToken));
 
         Path otherDirectory = Files.createDirectory(tempDir.resolve("other"));
-        Path separatedToken = Files.writeString(otherDirectory.resolve(TOKEN_FILE_NAME), "token");
+        Path separatedToken = Files.writeString(otherDirectory.resolve(TOKEN_FILE_NAME), FIXTURE_CONTENT);
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudflaredStagingTunnel(binary, separatedToken));
 
