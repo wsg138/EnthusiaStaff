@@ -18,7 +18,24 @@ public final class MariaDb {
         return new HikariDataSource(configuration(database));
     }
 
+    public static HikariDataSource openReadOnly(DatabaseConfig database) {
+        return new HikariDataSource(readOnlyConfiguration(database));
+    }
+
     static HikariConfig configuration(DatabaseConfig database) {
+        HikariConfig config = baseConfiguration(database);
+        config.setPoolName("EnthusiaStaff-MariaDB");
+        return config;
+    }
+
+    static HikariConfig readOnlyConfiguration(DatabaseConfig database) {
+        HikariConfig config = baseConfiguration(database);
+        config.setReadOnly(true);
+        config.setPoolName("EnthusiaStaff-MariaDB-ReadOnly");
+        return config;
+    }
+
+    private static HikariConfig baseConfiguration(DatabaseConfig database) {
         HikariConfig config = new HikariConfig();
         config.setDriverClassName("org.mariadb.jdbc.Driver");
         config.setJdbcUrl(database.jdbcUrl());
@@ -28,7 +45,6 @@ public final class MariaDb {
         config.setMinimumIdle(1);
         config.setConnectionTimeout(database.connectionTimeoutMillis());
         config.setValidationTimeout(Math.min(database.connectionTimeoutMillis(), 5_000));
-        config.setPoolName("EnthusiaStaff-MariaDB");
         config.setAutoCommit(true);
         config.setTransactionIsolation("TRANSACTION_READ_COMMITTED");
         return config;

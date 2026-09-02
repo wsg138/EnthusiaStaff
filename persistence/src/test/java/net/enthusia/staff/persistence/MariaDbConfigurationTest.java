@@ -1,6 +1,7 @@
 package net.enthusia.staff.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -22,6 +23,17 @@ class MariaDbConfigurationTest {
         assertEquals(10_000, config.getConnectionTimeout());
         assertEquals(5_000, config.getValidationTimeout());
         assertEquals("EnthusiaStaff-MariaDB", config.getPoolName());
+        assertTrue(config.isAutoCommit());
+        assertFalse(config.isReadOnly());
+        assertEquals("TRANSACTION_READ_COMMITTED", config.getTransactionIsolation());
+    }
+
+    @Test
+    void readOnlyConfigurationAddsAnExplicitJdbcFence() {
+        HikariConfig config = MariaDb.readOnlyConfiguration(database(4, 3_000));
+
+        assertTrue(config.isReadOnly());
+        assertEquals("EnthusiaStaff-MariaDB-ReadOnly", config.getPoolName());
         assertTrue(config.isAutoCommit());
         assertEquals("TRANSACTION_READ_COMMITTED", config.getTransactionIsolation());
     }

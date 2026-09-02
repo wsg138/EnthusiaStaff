@@ -27,8 +27,9 @@ import net.enthusia.staff.domain.sanction.SanctionType;
  * Narrow read-only database runtime for the isolated staff bot.
  *
  * <p>This deliberately opens the configured MariaDB pool without invoking Flyway. The bot therefore
- * cannot create or upgrade schema as a side effect of a read-only moderation interaction. Deployment
- * should use a database principal whose grants are read-only.</p>
+ * cannot create or upgrade schema as a side effect of a read-only moderation interaction. The pool
+ * is also marked JDBC read-only; deployments should still prefer a database principal whose grants
+ * are read-only when the hosting provider permits one.</p>
  */
 public final class DiscordStaffReadRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
@@ -56,7 +57,7 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         if (database == null || clock == null) {
             throw new IllegalArgumentException("database and clock must be present");
         }
-        HikariDataSource dataSource = MariaDb.open(database);
+        HikariDataSource dataSource = MariaDb.openReadOnly(database);
         return new DiscordStaffReadRuntime(dataSource, clock);
     }
 
