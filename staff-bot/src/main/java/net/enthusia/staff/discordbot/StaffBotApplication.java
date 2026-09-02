@@ -46,15 +46,18 @@ public final class StaffBotApplication {
         return runRuntime(
                 configuration,
                 commandLine.smokeTest(),
-                commandLine.moderationConfigFile());
+                commandLine.moderationConfigFile(),
+                commandLine.tunnelFiles());
     }
 
     private static int runRuntime(
             StaffBotConfiguration configuration,
             boolean smokeTest,
-            Optional<Path> moderationConfigFile
+            Optional<Path> moderationConfigFile,
+            Optional<StaffBotCommandLine.TunnelFiles> tunnelFiles
     ) {
-        try (StaffBotRuntime runtime = StaffBotRuntime.create(configuration, moderationConfigFile)) {
+        try (StaffBotRuntime runtime = StaffBotRuntime.create(
+                configuration, moderationConfigFile, tunnelFiles)) {
             Runtime.getRuntime().addShutdownHook(
                     Thread.ofPlatform().name("staff-bot-shutdown").unstarted(runtime::close));
             runtime.start();

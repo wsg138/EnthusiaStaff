@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -44,6 +46,40 @@ class StaffBotRuntimeTest {
             assertFalse(runtime.health().isReady());
             assertTrue(configuration.uiPreviewEnabled());
         }
+    }
+
+    @Test
+    void stagingTunnelUnexpectedExitFailsClosed() throws Exception {
+        Fixture fixture = new Fixture(true, true);
+        FakeTunnel tunnel = new FakeTunnel(false);
+        try (StaffBotRuntime runtime = fixture.runtime(tunnel)) {
+            runtime.start();
+            assertTrue(tunnel.started);
+            assertTrue(fixture.gateway.started);
+
+            tunnel.exitUnexpectedly();
+
+            assertTrue(runtime.health().failedEver());
+            assertEquals("staging_tunnel_exited", runtime.health().snapshot().reason());
+            assertTrue(fixture.gateway.shutdownNowRequested);
+        }
+        assertTrue(tunnel.closed);
+    }
+
+    @Test
+    void stagingTunnelStartupFailurePreventsGatewayAndRollsBack() {
+        Fixture fixture = new Fixture(true, true);
+        FakeTunnel tunnel = new FakeTunnel(true);
+        StaffBotRuntime runtime = fixture.runtime(tunnel);
+
+        assertThrows(IOException.class, runtime::start);
+        assertFalse(fixture.gateway.started);
+        assertTrue(runtime.health().failedEver());
+        assertEquals("staging_tunnel_start_failed", runtime.health().snapshot().reason());
+
+        runtime.close();
+        assertTrue(tunnel.closed);
+        assertFalse(fixture.gateway.shutdownRequested);
     }
 
     @Test
@@ -120,6 +156,10 @@ class StaffBotRuntimeTest {
         }
 
         private StaffBotRuntime runtime() {
+            return runtime(null);
+        }
+
+        private StaffBotRuntime runtime(FakeTunnel tunnel) {
             StaffBotConfiguration configuration = new StaffBotConfiguration(
                     StaffBotEnvironment.STAGING,
                     "test-only-token",
@@ -135,7 +175,38 @@ class StaffBotRuntimeTest {
                     workers,
                     new InteractionReplayGuard(16, Duration.ofMinutes(1)),
                     endpoint,
-                    gateway);
+                    gateway,
+                    Optional.empty(),
+                    Optional.ofNullable(tunnel));
+        }
+    }
+
+    private static final class FakeTunnel implements StagingTunnel {
+        private final boolean failStartup;
+        private boolean started;
+        private boolean closed;
+        private Runnable unexpectedExit;
+
+        private FakeTunnel(boolean failStartup) {
+            this.failStartup = failStartup;
+        }
+
+        @Override
+        public void start(Runnable callback) throws IOException {
+            started = true;
+            unexpectedExit = callback;
+            if (failStartup) {
+                throw new IOException("test startup failure");
+            }
+        }
+
+        private void exitUnexpectedly() {
+            unexpectedExit.run();
+        }
+
+        @Override
+        public void close() {
+            closed = true;
         }
     }
 
@@ -157,6 +228,7 @@ class StaffBotRuntimeTest {
         private final boolean gracefulShutdown;
         private final boolean forcedShutdown;
         private DiscordGatewayObserver observer;
+        private boolean started;
         private boolean shutdownRequested;
         private boolean shutdownNowRequested;
 
@@ -168,6 +240,7 @@ class StaffBotRuntimeTest {
         @Override
         public void start(DiscordGatewayObserver observer) {
             this.observer = observer;
+            started = true;
         }
 
         @Override
