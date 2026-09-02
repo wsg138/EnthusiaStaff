@@ -18,6 +18,7 @@ final class StaffModerationConfigFile {
     static final String DB_CREDENTIAL_PROPERTY = "db.password";
     static final String AUTHORITY_URL_PROPERTY = "authority.url";
     static final String AUTHORITY_CREDENTIAL_PROPERTY = "authority.secret";
+    static final String AUTHORITY_TRANSPORT_PROPERTY = "authority.transport";
     static final String COMPONENT_CREDENTIAL_PROPERTY = "component.secret";
     static final String DB_POOL_SIZE_PROPERTY = "db.pool-size";
     static final String DB_TIMEOUT_MILLIS_PROPERTY = "db.timeout-millis";
@@ -28,6 +29,7 @@ final class StaffModerationConfigFile {
             DB_CREDENTIAL_PROPERTY, StaffModerationConfiguration.DB_CREDENTIAL_ENV,
             AUTHORITY_URL_PROPERTY, StaffModerationConfiguration.AUTHORITY_URL_ENV,
             AUTHORITY_CREDENTIAL_PROPERTY, StaffModerationConfiguration.AUTHORITY_CREDENTIAL_ENV,
+            AUTHORITY_TRANSPORT_PROPERTY, StaffModerationConfiguration.AUTHORITY_TRANSPORT_ENV,
             COMPONENT_CREDENTIAL_PROPERTY, StaffModerationConfiguration.COMPONENT_SIGNING_ENV,
             DB_POOL_SIZE_PROPERTY, StaffModerationConfiguration.DB_POOL_SIZE_ENV,
             DB_TIMEOUT_MILLIS_PROPERTY, StaffModerationConfiguration.DB_TIMEOUT_MILLIS_ENV

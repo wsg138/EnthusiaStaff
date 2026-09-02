@@ -34,25 +34,30 @@ class StaffModerationConfigurationTest {
     }
 
     @Test
-    void acceptsOnlyCompleteLoopbackAuthorityConfigurationAndRedactsSecrets() {
+    void defaultTransportAcceptsOnlyLoopbackAuthorityAndRedactsSecrets() {
         Map<String, String> values = complete();
         StaffModerationConfiguration configuration = StaffModerationConfiguration.fromEnvironment(values).orElseThrow();
 
+        assertEquals(
+                StaffModerationConfiguration.AuthorityTransport.LOOPBACK,
+                configuration.authorityTransport());
         assertTrue(configuration.authorityUri().toString().startsWith("http://127.0.0.1:"));
         assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
         assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
         assertFalse(configuration.toString().contains(COMPONENT_SECRET));
+        assertFalse(configuration.toString().contains("127.0.0.1"));
     }
 
     @Test
-    void panelPropertiesFileLoadsSameValidatedConfiguration() throws IOException {
+    void panelPropertiesFileCanSelectBloomPrivateSplitAuthority() throws IOException {
         Path file = tempDir.resolve("staff-bot-runtime.properties");
         Files.writeString(file, String.join("\n",
                 "db.jdbc-url=jdbc:mariadb://localhost/enthusia",
                 "db.username=readonly",
                 "db.password=" + DATABASE_PASSWORD,
-                "authority.url=http://127.0.0.1:8771/v1/staff-rank",
+                "authority.url=http://paper-split.internal:8771/v1/staff-rank",
                 "authority.secret=" + AUTHORITY_SECRET,
+                "authority.transport=bloom-private-split",
                 "component.secret=" + COMPONENT_SECRET,
                 "db.pool-size=3",
                 "db.timeout-millis=2500",
@@ -60,10 +65,14 @@ class StaffModerationConfigurationTest {
 
         StaffModerationConfiguration configuration = StaffModerationConfiguration.fromFile(file);
 
-        assertEquals("http://127.0.0.1:8771/v1/staff-rank", configuration.authorityUri().toString());
-        assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
+        assertEquals(
+                StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT,
+                configuration.authorityTransport());
+        assertEquals(
+                "http://paper-split.internal:8771/v1/staff-rank",
+                configuration.authorityUri().toString());
+        assertFalse(configuration.toString().contains("paper-split.internal"));
         assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
-        assertFalse(configuration.toString().contains(COMPONENT_SECRET));
     }
 
     @Test
@@ -81,7 +90,7 @@ class StaffModerationConfigurationTest {
     }
 
     @Test
-    void rejectsNonLoopbackAuthorityEndpointAndWeakCryptoSecret() {
+    void loopbackTransportRejectsNonLoopbackEndpointAndWeakCryptoSecret() {
         Map<String, String> nonLoopback = complete();
         nonLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_ENV, "http://10.0.0.2:8771/v1/staff-rank");
         assertThrows(IllegalArgumentException.class,
@@ -106,15 +115,19 @@ class StaffModerationConfigurationTest {
     }
 
     @Test
-    void rejectsOutOfRangeAuthorityPort() {
+    void rejectsOutOfRangeAuthorityPortAndUnknownTransport() {
         Map<String, String> invalidPort = complete();
         invalidPort.put(
                 StaffModerationConfiguration.AUTHORITY_URL_ENV,
                 "http://127.0.0.1:70000/v1/staff-rank"
         );
-
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(invalidPort));
+
+        Map<String, String> invalidTransport = complete();
+        invalidTransport.put(StaffModerationConfiguration.AUTHORITY_TRANSPORT_ENV, "public");
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffModerationConfiguration.fromEnvironment(invalidTransport));
     }
 
     private static Map<String, String> complete() {

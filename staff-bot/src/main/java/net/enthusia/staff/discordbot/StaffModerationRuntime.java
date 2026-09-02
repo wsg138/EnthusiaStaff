@@ -50,7 +50,9 @@ final class StaffModerationRuntime implements AutoCloseable {
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
             StaffAuthorityClient authority = new HttpStaffAuthorityClient(
-                    configuration.authorityUri(), configuration.authoritySecret());
+                    configuration.authorityUri(),
+                    configuration.authoritySecret(),
+                    configuration.authorityTransport());
             InteractionReplayGuard componentReplay = new InteractionReplayGuard(interactionCapacity, interactionTtl);
             SignedComponentCodec components = new SignedComponentCodec(
                     clock,
