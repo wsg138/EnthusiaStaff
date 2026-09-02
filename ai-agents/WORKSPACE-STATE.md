@@ -58,7 +58,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | Independently parked packages | `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED` on verified license/public-aggregate authorization. X03 is no longer parked on D04 serialization; it is a future universal `ACTIONABLE_CONTINUATION` and was not modified in this run. |
 | Production boundary | No production Discord configuration, reputation/player rows, bot-token value, private production data, PM data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
 | Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-26-es-x01-license-redistribution-blocked.md` |
-| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md` |
+| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md` |
 
 ## X01 current parked record
 
