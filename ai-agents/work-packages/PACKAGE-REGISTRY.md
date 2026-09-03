@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -32,9 +32,9 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ### Dedicated Discord program checkpoint
 
-`ES-D16 — Moderation console real-data read bridge` is `BLOCKED` / `PARKED_BLOCKED` in the dedicated Discord-program lane. Implementation PR #187 remains open/draft and unmerged at frozen reviewed executable head `a009f4f5f857cf86a859be0d314264568d181670`. Every repository-controlled exact-head build/static/review gate is terminal green; required staging run `33530157844` / job `99930994457`, which must be sanitized, failed only because the protected Cloudflare staging token receives HTTP 403 on the account-level named-tunnel API before any tunnel configuration or DNS mutation succeeds. Exact unblock: grant or replace that protected token with the owning account's required Cloudflare Tunnel read/edit authority, then rerun exact-head D16 staging and continue Bloom/live read acceptance. The dedicated `DISCORD-PROGRAM-REGISTRY.md` remains the routing authority for `ES-Dxx`; this parked package does not preempt unrelated dependency-complete universal work.
+`ES-D16 — Moderation console real-data read bridge` is `BLOCKED` / `PARKED_BLOCKED` in the dedicated Discord lane. PR #187 remains open/draft/unmerged at frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. Every exact-head repository gate is green, and protected Cloudflare staging `33688133318` / `100440387112` passed fixed tunnel/DNS, Worker deployment, private-origin/session/replay checks, and simulation-only fencing. The historical HTTP-403 staging failure remains non-passing history only. Current blocker: no authenticated Bloom/DuckPanel mutation surface is available, so the owner must deploy the exact validated Staff Bot/Paper artifacts and runtime-only private-split/tunnel configuration to authorized non-production Bloom staging and complete sanitized live real-data acceptance. This parked Discord package does not preempt unrelated dependency-complete universal work.
 
-Canonical D16 blocked handoff: `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md`.
+Canonical D16 blocked handoff: `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md`.
 
 ## Canonical package index
 

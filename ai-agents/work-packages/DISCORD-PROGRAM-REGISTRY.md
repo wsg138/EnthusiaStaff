@@ -27,7 +27,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation and repository-controlled validation on frozen executable head `a009f4f5f857cf86a859be0d314264568d181670`. PR #187 remains open/draft and unmerged because the package's required live staging, which must be sanitized, cannot pass until the protected Cloudflare token has account-level named-tunnel authority. D07 and D13 remain dependency-complete `READY`; while D16 remains parked, a future Discord worker skips it and may select D07 by priority. If the Cloudflare permission condition changes, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION` to resume before newly ready work.
+ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation, exact-head repository validation, and successful protected Cloudflare staging on `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. PR #187 remains open/draft/unmerged because final sanitized live acceptance requires owner-operated deployment to authorized non-production Bloom staging, and no authenticated Bloom/DuckPanel mutation surface is available to the worker. D07 and D13 remain dependency-complete `READY`; while this external condition is unchanged, future Discord workers skip D16. Once Bloom staging is deployed, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION`.
 
 ## ES-D04 terminal record
 
@@ -137,19 +137,15 @@ No production deployment/configuration/data access, moderation mutation, secret 
 
 Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-Implementation PR #187 remains open/draft and unmerged on `package/es-d16-moderation-read-bridge`. Frozen reviewed executable head: `a009f4f5f857cf86a859be0d314264568d181670`. Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-01-es-d16-cloudflare-tunnel-blocked.md`.
+PR #187 remains open/draft/unmerged on `package/es-d16-moderation-read-bridge`; frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md`.
 
-The product head implements the owner-approved real-data read bridge while retaining simulation-only punishment/deletion behavior: target-bound hosted launch tickets, authenticated loopback moderation read API, D03/D06 authorization/read reuse, explicit response DTO allowlists, replay/expiry/rate/request bounds, bounded JDA channel/message reads, Cloudflare Worker session/proxy flow, and real-data preview rendering. It performs no punishment mutation, message deletion, permission override application, production Discord change, LiteBans authority change, issue #43 acceptance, or production cutover.
+All exact-head repository gates pass. Protected Cloudflare staging run `33688133318` / job `100440387112` also passes on `066b97f4344ab83d3e226b3f4ff3ab614dee6430`: fixed tunnel/DNS, 14 web tests/Wrangler, Worker `5fb4931b-65a7-4df7-9444-ad354323e228`, private-origin/session/replay checks, and simulation-only mode. Historical HTTP-403 staging is non-passing history only. Message Content entitlement is verified present without subscribing to that Gateway intent.
 
-Exact-head repository-controlled gates are terminal green: Coverage/full Java 21 run `33529631291` / job `99929426510` (`BUILD SUCCESSFUL`, runtime inspection zero provider leaks, 51.70% line / 41.74% branch / 54.02% instruction coverage, validation artifact `9809522236` digest `sha256:00f970e5dc8a3d2823d4dae4d226be1cff8d71abcf601658f2405eb383aef1d6`); Moderation Web Validation `33529631190`; Staff Bot Configuration Cache `33529631174`; Staff Bot PR Artifact `33529631246`; Sentinel Restart Artifact `33529631254`; Codacy Static Code Analysis check `99929501999` with zero annotations; Codacy Diff Coverage `99932381673` at 33.57% with no configured gate; and exact-head CodeRabbit review `5080380849` bound to `a009f4f5f857cf86a859be0d314264568d181670` with zero new findings. All three earlier CodeRabbit correctness threads are resolved/confirmed addressed.
-
-Required Cloudflare staging run `33530157844` / job `99930994457` checked out exact `a009f4f5f857cf86a859be0d314264568d181670`. Worker build/deploy, fixed staging origin checks, first-use protected launch, authenticated session, and replay rejection passed. The first account-level Cloudflare Tunnel API GET returned HTTP 403, so no tunnel configuration or DNS mutation succeeded and the workflow correctly failed its hard `Require fixed private tunnel provisioning` gate. This failure is not a pass and cannot use the zero-execution infrastructure exception because a runner and product steps executed and D16 explicitly requires sanitized staged acceptance.
-
-Exact unblock: grant or replace the protected staging Cloudflare API token with the required Cloudflare Tunnel account read/edit authority for the owning account, rerun exact-head staging, then complete Bloom/live read acceptance (including the required staging Discord message-content state verification) before any normal merge/containment path resumes. Do not merge PR #187 while this blocker remains.
+Current blocker is owner-operated Bloom staging deployment/live acceptance. Exact unblock: deploy the exact validated Staff Bot/Paper artifacts and runtime-only database/private-authority/tunnel files to authorized non-production Bloom staging, keep 8766/8771 non-public, start Paper then Staff Bot, and prove sanitized private-authority plus bounded real D06/Discord reads. Do not merge PR #187 until that passes.
 
 ## Latest completion
 
-`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked on its external Cloudflare authority blocker, and D07 and D13 remain dependency-complete `READY`. This D16 worker stops without beginning either ready package.
+`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked only on owner-operated Bloom staging deployment/live acceptance; protected Cloudflare staging now passes. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
 
 ## Selection
 
