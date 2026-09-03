@@ -19,7 +19,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: 69c2258aa90b687733437f336f103fc9a5da745c
+          EXPECTED_HEAD: 8abbf6763f9208983ccb2df5a0285150efe5d795
           EXPECTED_MAIN: 9d0413ec17c73977fc5dc00bb93f3339c473fcb0
         run: |
           set -Eeuo pipefail
