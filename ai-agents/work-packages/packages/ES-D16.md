@@ -1,14 +1,27 @@
 # ES-D16 — Moderation console real-data read bridge
 
-Status: `BLOCKED` / `PARKED_BLOCKED`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
+Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
 
 Run ref: `ES-D16-20260831-real-data-read-bridge`.
 
 ## Objective
 Connect the owner-approved Cloudflare moderation console to real, read-only Enthusia Discord/Minecraft/moderation data while preserving simulation-only punishment/deletion behavior and the existing D03 authority model.
 
-## Delivered implementation
-Frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` on `package/es-d16-moderation-read-bridge` / PR #187 implements the full read bridge plus panel-only Bloom staging transport:
+## Owner production-acceptance authorization
+On 2026-09-02, after D16 had been parked on non-production Bloom live acceptance, the owner explicitly authorized using the live Enthusia Paper server for the remaining temporary D16 authority/real-data acceptance. This is the separate explicit owner authorization required by `ai-agents/AGENTS.md` section 7 and the Discord worker prompt production boundary.
+
+The authorization is deliberately narrowed for safety:
+
+- do **not** deploy the full `EnthusiaStaff-Paper.jar` solely for D16 acceptance;
+- instead use the dedicated `paper-authority-bridge` artifact introduced on PR #187;
+- the bridge has no commands, no Bukkit event listeners, no database connection, no punishment/mutation adapters, no LiteBans authority change, and no player-facing behavior;
+- the bridge reads only current LuckPerms rank permissions and serves the signed D16 staff-rank lookup;
+- port `8771` must have no public Bloom allocation; requests are accepted only from private/loopback peers and require short-lived HMAC signatures plus replay protection; responses are signed;
+- the staging Discord bot and Cloudflare moderation workspace remain staging/simulation-only; no destructive Discord or Minecraft action is authorized;
+- production-derived private values, player data, credentials, raw messages, or reconstructable evidence must not be copied into GitHub, ChatGPT, CI artifacts, or public logs.
+
+## Delivered implementation before the production exception
+Reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` on `package/es-d16-moderation-read-bridge` / PR #187 implemented the full read bridge plus panel-only Bloom staging transport:
 
 - real selected-target identity, linked-account, sanction/history, case/note, channel/category, and bounded Discord-message reads through existing D06/domain authority;
 - loopback-only moderation read API `127.0.0.1:8766` with explicit DTO allowlists, D03 authorization, actor/guild/target binding, HMAC authentication, expiry/replay resistance, and bounded body/page/rate controls;
@@ -19,42 +32,40 @@ Frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` on `p
 - Staff Bot supervision of panel-uploaded `cloudflared` using a tunnel-token file while the read origin remains loopback-only;
 - simulation-only punishment, deletion, and permission-override controls.
 
-## Explicit exclusions
-D16 performs no warn/mute/kick/ban/restrict/unmute/unban/unrestrict mutation, Discord message deletion, LiteBans authority change, moderation-database mutation, permission-override application, production Discord/Minecraft configuration or data access, issue #43 acceptance, or cutover.
+## Live-server safety bridge checkpoint
+After normal reconciliation with canonical `main` `9d0413ec17c73977fc5dc00bb93f3339c473fcb0`, PR #187 advanced to checkpoint `f7a7159610718b0de161308d24f3303b472cb340`.
 
-## Frozen exact-head validation — PASS
-Exact executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` is frozen:
+That checkpoint adds `paper-authority-bridge`, a separate deployable Paper plugin whose descriptor declares only a hard LuckPerms dependency and **zero commands/permissions**. Runtime code consists only of runtime-file validation, private-peer signed/replay-resistant HTTP authentication, LuckPerms rank resolution, a bounded two-thread HTTP endpoint, and clean shutdown. It contains no database/runtime moderation integration and does not register listeners.
 
-- Coverage/full Java 21 `33683792916` / job `100426714267`: PASS; full clean build/integration tests, 27 provider API source types / zero runtime leaks, JaCoCo 52.08% lines / 42.18% branches / 54.38% instructions; validation artifact `9867619687`, digest `sha256:c52610d6913e85d80f8397fc898344f0b530e979adb42f7439346168687e34fb`.
-- Moderation Web Validation `33683792884`: PASS.
-- Staff Bot Configuration Cache `33683792893`: PASS.
-- Staff Bot PR Artifact `33683792982` / job `100426291034`: PASS; artifact `9867301625`; JAR SHA-256 `f546bbb418e4d38b3f1a1eea3f4621739bd6d1e75351c9cd73f0ce39e1056b60`.
-- Sentinel Restart Artifact `33683792967` / job `100426290606`: PASS; artifact `9867310817`; Paper JAR SHA-256 `0bc62c09742fe0eae96a1725e52a64756a761bf134023da5ce71438de6627944`.
-- Codacy Static Code Analysis: PASS, zero annotations/no new valid findings.
-- Exact-head CodeRabbit: no actionable findings; all historical correctness threads remain resolved.
+The Sentinel artifact workflow now publishes this bridge separately as `enthusiastaff-authority-bridge` while preserving the existing full Paper artifact. Preliminary exact-head Sentinel artifact run `33712473412` passed and published bridge artifact `9877393964` on exact `f7a7159610718b0de161308d24f3303b472cb340`. Full exact-head validation/review is still in progress and this checkpoint must not be deployed until the final head is frozen and all applicable gates are green.
 
-## Protected Cloudflare staging — PASS
-Guarded dispatcher `33688117871` verified `main` `44f284606813d133b6b2813cdc6cbe8924c5d7af` and exact D16 head `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. Permanent staging run `33688133318` / job `100440387112` then passed on exact `066b97f4344ab83d3e226b3f4ff3ab614dee6430`:
+## Historical exact-head validation — PASS
+The pre-exception executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` passed:
 
-- tunnel `enthusia-moderation-read-staging` and protected CNAME configured;
-- ingress remains `moderation-read-staging.enthusia.info` → `http://127.0.0.1:8766` with fail-closed 404 fallback;
-- 14 moderation-web tests and Wrangler dry-run passed;
-- Worker version `5fb4931b-65a7-4df7-9444-ad354323e228` deployed;
-- origin health/private fence, first-use launch, authenticated session, and replay rejection passed;
-- runtime remained staging simulation-only and the raw Discord bot token was not uploaded to Cloudflare.
+- Coverage/full Java 21 `33683792916` / job `100426714267`: full clean build/integration tests, 27 provider API source types / zero runtime leaks, JaCoCo 52.08% lines / 42.18% branches / 54.38% instructions; validation artifact `9867619687`, digest `sha256:c52610d6913e85d80f8397fc898344f0b530e979adb42f7439346168687e34fb`.
+- Moderation Web Validation `33683792884`.
+- Staff Bot Configuration Cache `33683792893`.
+- Staff Bot PR Artifact `33683792982` / job `100426291034`; artifact `9867301625`; JAR SHA-256 `f546bbb418e4d38b3f1a1eea3f4621739bd6d1e75351c9cd73f0ce39e1056b60`.
+- Sentinel Restart Artifact `33683792967` / job `100426290606`; Paper JAR SHA-256 `0bc62c09742fe0eae96a1725e52a64756a761bf134023da5ce71438de6627944`.
+- Codacy Static Code Analysis with zero annotations/no new valid findings.
+- Exact-head CodeRabbit with no actionable findings and all historical correctness threads resolved.
 
-The workflow's `Require fixed private tunnel provisioning` step is failure-only and was correctly skipped because provisioning succeeded. Historical run `33530157844` remains truthful non-passing HTTP-403 history but is no longer the blocker. Staging Discord Message Content entitlement is verified present; D16 still does not subscribe to the Message Content Gateway intent.
+## Historical protected Cloudflare staging — PASS
+Guarded dispatcher `33688117871` verified `main` `44f284606813d133b6b2813cdc6cbe8924c5d7af` and exact D16 head `066b97f...`. Permanent staging run `33688133318` / job `100440387112` passed tunnel/DNS provisioning, 14 moderation-web tests/Wrangler validation, Worker deployment `5fb4931b-65a7-4df7-9444-ad354323e228`, origin/session/replay fences, and simulation-only mode. Raw Discord bot credentials were not uploaded to Cloudflare.
 
-## Current blocker — owner-operated Bloom live acceptance
-No authenticated Bloom/DuckPanel mutation surface is available to this worker. Exact unblock:
+This evidence remains historical after the bridge/code head changed. Any executable change that affects applicable staging behavior requires fresh exact-head evidence under the normal validation policy.
 
-1. deploy the exact validated Staff Bot and Paper artifacts to the authorized non-production Bloom staging splits;
-2. configure runtime-only database/private-authority/component/token/tunnel files per `docs/staff-bot-staging-ui-preview.md`;
-3. keep ports `8766` and `8771` non-public and keep both splits in the same private split group;
-4. start/restart staging Paper first, then Staff Bot;
-5. complete sanitized live acceptance proving private authority connectivity, actor/guild/target authorization, real D06 identity/link/sanction/history reads, bounded Discord message/channel reads, and truthful outage behavior without exposing private values;
-6. if acceptance passes, reconcile moving `main`, rerun invalidated gates if executable state changed, merge PR #187 normally, prove containment/cleanup, and publish `COMPLETE`.
+## Remaining acceptance
+Before any live-server deployment:
 
-Until that condition changes, preserve PR #187 and its implementation branch unmerged. Do not begin D07 as part of this D16 worker.
+1. finish exact-head Java/Codacy/CodeRabbit/artifact validation for the authority-bridge head;
+2. verify the bridge artifact source/checksum and descriptor contains no commands or listeners;
+3. configure only runtime secret/port files on the live Paper server and keep port `8771` non-public;
+4. configure the staging Staff Bot to use the live Paper server's Bloom-private hostname with `authority.transport=bloom-private-split` and the matching authority authentication value;
+5. start/reload the bridge and staging Staff Bot in a controlled window;
+6. perform sanitized acceptance proving private authority connectivity, actor/guild/target authorization, real identity/link/sanction/history reads, bounded Discord message/channel reads, truthful outage behavior, and no destructive moderation action;
+7. remove/disable the temporary bridge after acceptance if it is no longer needed;
+8. reconcile moving `main`, rerun any invalidated gates, merge PR #187 normally only after acceptance, prove containment/cleanup, and publish `COMPLETE`.
 
-Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md`.
+## Explicit exclusions still in force
+The owner production exception does **not** authorize warn/mute/kick/ban/restrict/unmute/unban/unrestrict mutation, Discord message deletion, permission-override application, LiteBans authority change, issue #43 acceptance, cutover, broad production data export, secret disclosure, or player-facing experimentation. ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched. Do not begin D07 as part of this D16 worker.
