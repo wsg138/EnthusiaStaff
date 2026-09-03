@@ -89,17 +89,15 @@ On first controlled startup, Paper creates the plugin data directory. The requir
 plugins/EnthusiaStaffAuthorityBridge/authority.properties
 ```
 
-Its allowlisted content is:
+For this acceptance, use the fixed default authority port `8771` and do not set `authority.port`. The required allowlisted content is therefore:
 
 ```properties
 authority.secret=<the-same-authority.secret-used-by-the-staff-bot>
-# Optional; defaults to 8771:
-# authority.port=8771
 ```
 
-`authority.secret` must contain at least 32 characters. Unknown properties, a missing/weak value, an unreadable file, or an invalid port fail closed.
+`authority.secret` must contain at least 32 characters. Unknown properties, a missing/weak value, or an unreadable file fail closed. The implementation supports an optional bounded `authority.port` for other controlled deployments, but the current acceptance contract deliberately pins `8771`; if a future deployment uses another configured authority port, that configured port must also have **no public Bloom allocation**.
 
-Do **not** create a public Bloom allocation for port `8771`. The staging staff-bot must reach the live Paper process through Bloom-private networking, and `staff-bot-runtime.properties` must use that private Paper hostname/server ID in `authority.url`.
+Do **not** create a public Bloom allocation for the authority listener. For the current acceptance that means port `8771` must remain unallocated publicly. The staging staff-bot must reach the live Paper process through Bloom-private networking, and `staff-bot-runtime.properties` must use that private Paper hostname/server ID in `authority.url`.
 
 The bridge has a hard dependency on LuckPerms and resolves the existing EnthusiaStaff staff-rank permission contract from current LuckPerms state. It registers no commands, declares no permissions, registers no Bukkit listeners, opens no database connection, and has no punishment or player-mutation adapter. Stop/remove the bridge after acceptance if it is no longer needed.
 
@@ -108,7 +106,7 @@ The bridge has a hard dependency on LuckPerms and resolves the existing Enthusia
 1. Stop the live Paper server cleanly.
 2. Upload the exact validated `EnthusiaStaff-AuthorityBridge.jar` to `plugins/`.
 3. Ensure `plugins/EnthusiaStaffAuthorityBridge/authority.properties` contains the matching authority value before the acceptance start. If the directory does not yet exist, it may be created manually in DuckPanel; a failed first start caused only by the missing file is not required.
-4. Confirm port `8771` has no public Bloom allocation.
+4. Confirm the configured authority listener has no public Bloom allocation; for this acceptance confirm port `8771` is not publicly allocated.
 5. Start live Paper and verify the bridge reports a successful, sanitized startup without exposing the authority value.
 6. Only after Paper is healthy, start/restart the staging Staff Bot with its validated JAR/config/tunnel files.
 7. Run sanitized D16 acceptance. No destructive moderation action or player mutation is permitted.
