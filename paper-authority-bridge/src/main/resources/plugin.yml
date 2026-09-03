@@ -1,0 +1,9 @@
+name: EnthusiaStaffAuthorityBridge
+version: '${version}'
+main: net.enthusia.staff.authoritybridge.EnthusiaStaffAuthorityBridgePlugin
+api-version: '1.21'
+author: P2wn
+description: Owner-authorized read-only LuckPerms authority bridge for ES-D16 acceptance
+load: POSTWORLD
+depend:
+  - LuckPerms
