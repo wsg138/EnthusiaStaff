@@ -2,12 +2,18 @@ plugins {
     id("com.gradleup.shadow")
 }
 
+val paperApiCoordinate = listOf(
+    "io.papermc.paper",
+    "paper-api",
+    "1.21.11-R0.1-SNAPSHOT"
+).joinToString(":")
+
 dependencies {
     implementation(project(":domain"))
     implementation(project(":protocol"))
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly(paperApiCoordinate)
     compileOnly("net.luckperms:api:5.4")
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    testImplementation(paperApiCoordinate)
     testImplementation("net.luckperms:api:5.4")
 }
 

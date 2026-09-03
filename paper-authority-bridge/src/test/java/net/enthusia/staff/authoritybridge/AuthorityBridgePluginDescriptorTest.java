@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test;
 class AuthorityBridgePluginDescriptorTest {
     @Test
     void descriptorHasNoPlayerFacingCommandsOrPermissions() throws IOException {
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream("plugin.yml")) {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        assertNotNull(loader);
+        try (InputStream input = loader.getResourceAsStream("plugin.yml")) {
             assertNotNull(input);
             String descriptor = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             assertFalse(descriptor.contains("commands:"));

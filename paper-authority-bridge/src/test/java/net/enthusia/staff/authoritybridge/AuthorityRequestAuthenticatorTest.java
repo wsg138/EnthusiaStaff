@@ -15,6 +15,7 @@ import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 import org.junit.jupiter.api.Test;
 
 class AuthorityRequestAuthenticatorTest {
+    private static final String GET_METHOD = "GET";
     private static final Instant NOW = Instant.parse("2026-09-03T03:45:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final String TARGET =
@@ -31,7 +32,7 @@ class AuthorityRequestAuthenticatorTest {
         );
         StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signRequest(
                 keyMaterial,
-                "GET",
+                GET_METHOD,
                 TARGET,
                 NOW,
                 NONCE
@@ -39,7 +40,7 @@ class AuthorityRequestAuthenticatorTest {
 
         AuthorityRequestAuthenticator.Result result = authenticator.authenticate(
                 InetAddress.getByName("172.18.0.2"),
-                "GET",
+                GET_METHOD,
                 TARGET,
                 proof.timestamp(),
                 proof.nonce(),
@@ -68,7 +69,7 @@ class AuthorityRequestAuthenticatorTest {
         );
         StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signRequest(
                 keyMaterial,
-                "GET",
+                GET_METHOD,
                 TARGET,
                 NOW,
                 NONCE
@@ -76,7 +77,7 @@ class AuthorityRequestAuthenticatorTest {
 
         assertFalse(authenticator.authenticate(
                 InetAddress.getByName("8.8.8.8"),
-                "GET",
+                GET_METHOD,
                 TARGET,
                 proof.timestamp(),
                 proof.nonce(),
@@ -85,7 +86,7 @@ class AuthorityRequestAuthenticatorTest {
 
         assertTrue(authenticator.authenticate(
                 InetAddress.getByName("10.0.0.2"),
-                "GET",
+                GET_METHOD,
                 TARGET,
                 proof.timestamp(),
                 proof.nonce(),
@@ -94,7 +95,7 @@ class AuthorityRequestAuthenticatorTest {
 
         assertFalse(authenticator.authenticate(
                 InetAddress.getByName("10.0.0.2"),
-                "GET",
+                GET_METHOD,
                 TARGET,
                 proof.timestamp(),
                 proof.nonce(),

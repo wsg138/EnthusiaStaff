@@ -36,7 +36,6 @@ public final class EnthusiaStaffAuthorityBridgePlugin extends JavaPlugin {
     public void onDisable() {
         if (endpoint != null) {
             endpoint.close();
-            endpoint = null;
         }
     }
 }
