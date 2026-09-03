@@ -31,17 +31,23 @@ ES-A01 + all applicable completed-or-owner-accepted-deferred packages -> ES-QA01
 
 `ES-R01` is the independent validation-infrastructure recovery package created by the 2026-08-08 owner-directed deadlock recovery. It did not replace or relax any product dependency. It repaired the canonical public→private Pi route while preserving ordinary hosted build and private self-hosted runtime acceptance. ES-P02 and ES-P05 later passed their own exact-head gates through that route and are now `COMPLETE`; ES-R01 proof was never substituted for either package's acceptance.
 
-`ES-V01` remains independently deferred until a private local/Codex environment and representative database are available. It does not grant production authority and does not change the implementation dependency chain.
+`ES-V01` is `COMPLETE` after representative private LiteBans verification and the UUID-only compatibility repair merged through PR #110. It grants no production authority; LiteBans remains authoritative until the later acceptance/cutover packages and explicit owner authorization are complete.
 
 ## Current sequential routing snapshot
 
-After ES-P05 completion, there is no active package. Dependency-derived `READY` packages are:
+Live GitHub and `PACKAGE-REGISTRY.md` remain authoritative; this section is a convenience snapshot, not an independent routing authority.
 
-1. `ES-P07` — priority 45; exact next normal sequential selection absent a newly discovered actionable continuation.
-2. `ES-P06` — priority 60; newly ready because ES-P05 is complete.
-3. `ES-X01` — priority 100; newly ready because ES-P03, ES-P04 and ES-P05 are complete.
+As of 2026-08-12:
 
-A terminal package worker must not activate any of those packages merely because it updated their derived status. Every new worker must reconcile live GitHub and reclassify incomplete packages before selecting work.
+1. `ES-P07` and `ES-P06` are `COMPLETE`.
+2. `ES-P08 — Item confiscation and restoration` has implementation work in PR #128 and is the current package lineage to finish before provider destruction work.
+3. After ES-P08 is canonically `COMPLETE`, `ES-X02 — EnthusiaCurrency destructive provider` is the next dependency-complete implementation candidate unless live reconciliation finds a higher-precedence actionable continuation.
+4. `ES-X01 — RoseChat provider and communication integration` remains `BLOCKED` / `PARKED_BLOCKED` because the supported RoseChat standalone repository/default branch/source/AGENTS contract is still unresolved. Do not invent that provider API or let this parked package block unrelated dependency-complete work.
+5. `ES-X03`, `ES-X04`, `ES-V02`, `ES-V03`, `ES-A01`, and `ES-QA01` remain dependency- or authorization-gated as recorded in the registry.
+
+A parked package never stops selection of an unrelated dependency-complete `READY` package. A dependency itself still must be `COMPLETE` before its downstream package becomes ready; do not create stacked implementation work merely to route around an incomplete dependency.
+
+A terminal package worker must not activate the next package merely because it updated derived status. Every new worker must reconcile live GitHub and reclassify incomplete packages before selecting work.
 
 ## Parallel safety
 

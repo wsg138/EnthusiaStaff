@@ -3,9 +3,19 @@ name: Coverage
 on:
   workflow_dispatch:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "ai-agents/**"
+      - "reports/**"
+      - "**/*.md"
   push:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "ai-agents/**"
+      - "reports/**"
+      - "**/*.md"
 
 permissions:
   contents: read

@@ -51,6 +51,18 @@ class JdbcSqlErrorsTest {
     }
 
     @Test
+    void classifiesMariaDbRecordChangedAsRetryableTransactionConflict() {
+        SQLException recordChanged = new SQLException(
+                "Record has changed since last read",
+                "HY000",
+                1020
+        );
+
+        assertTrue(JdbcSqlErrors.isRetryableTransactionConflict(recordChanged));
+        assertFalse(JdbcSqlErrors.isDeadlock(recordChanged));
+    }
+
+    @Test
     void selfReferencingAndRepeatedChainsRemainBounded() {
         LoopingSQLException first = new LoopingSQLException("first", "HY000", 0);
         LoopingSQLException second = new LoopingSQLException("duplicate", "23000", 1062);
@@ -73,6 +85,7 @@ class JdbcSqlErrorsTest {
 
         assertFalse(JdbcSqlErrors.isDuplicateKey(root));
         assertFalse(JdbcSqlErrors.isDeadlock(root));
+        assertFalse(JdbcSqlErrors.isRetryableTransactionConflict(root));
     }
 
     private static class LoopingSQLException extends SQLException {

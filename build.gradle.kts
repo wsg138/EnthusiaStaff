@@ -86,6 +86,6 @@ tasks.register<JacocoReport>("jacocoAggregateReport") {
 
 tasks.register("runtimeJars") {
     group = "build"
-    description = "Builds the only two deployable Minecraft plugin jars."
-    dependsOn(":paper:shadowJar", ":velocity:shadowJar")
+    description = "Builds the deployable Paper, Velocity, and staff-bot runtime jars."
+    dependsOn(":paper:shadowJar", ":velocity:shadowJar", ":staff-bot:shadowJar")
 }

@@ -4,11 +4,34 @@
 
 Harshly review the complete final diff in every required PR for scope, architecture, lifecycle, thread safety, transactions, concurrency, idempotency, rollback, restart recovery, bounds, indexes, permissions, stale GUI state, Bedrock fallback, configuration, sensitive data, provider mismatch, tests that do not prove claims, and documentation. Resolve every valid human, CodeRabbit, Codacy, or CI finding. Require zero valid unresolved review threads.
 
+## Gate applicability and package-contract integrity
+
+Required acceptance gates come from the selected package contract as it existed on canonical `main` when the package was claimed, this validation policy, repository-configured checks that are actually applicable to the changed scope, and any later explicit owner instruction.
+
+A worker may discover a real defect or a newly applicable existing gate while implementing the package and must address it. A worker must **not** create a new blocking acceptance requirement merely by editing its package file, registry entry, handoff, PR description, or other tracking text after selection. In particular, an optional or diagnostic external test does not become a merge blocker solely because a worker added it to later tracking records.
+
+If changed executable scope genuinely triggers an existing policy requirement, that gate still applies. If the owner explicitly adds a new package gate, record the approval and apply it. If live reconciliation proves that a worker accidentally promoted a non-required diagnostic gate into a blocker, correct the package/routing records, retain every failed or incomplete diagnostic result truthfully as non-passing history, and evaluate completion against the authoritative original contract plus current policy. Never relabel the diagnostic run as a pass.
+
 ## Exact-head validation
 
 Freeze tracked content before final validation. Evidence must apply to each exact reviewed PR head. Run every applicable repository-configured gate, including Java 21 clean build/tests, warnings-as-errors, MariaDB/Testcontainers, clean-install/upgrade/checksum migration tests, static analysis, coverage, runtime JAR creation/integrity, provider-leak checks, Wiki/Markdown/link validation, and safe Pi boot/restart when configured and applicable.
 
 Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not passing evidence. Documentation-only changes may omit runtime/Pi checks only when they are genuinely non-applicable and that reason is recorded.
+
+### Frozen product head with a state-only follow-up delta
+
+A package may preserve executable validation from an already validated frozen product head when a later head changes **only** package-state/documentation records needed to correct or finalize orchestration. This is a narrow exception to avoid rerunning expensive executable gates for a non-executable tracking correction; it is not permission to reuse evidence across code changes.
+
+All of the following must be true:
+
+1. The earlier frozen product head passed every executable gate actually required for that package and its changed product scope.
+2. The exact compare from that frozen product head to the later merge candidate contains only canonical package/routing/handoff/documentation files. No product source, product test, migration, workflow, build configuration, runtime configuration, dependency, artifact contract, Sentinel manifest, or other executable input may change.
+3. The worker records the frozen product head and proves the later delta is state/documentation-only by exact file comparison.
+4. Applicable Markdown/Wiki/package validation, static/document analysis, and review of the state-only delta pass on the later head, with zero valid unresolved review threads.
+5. Every executable result remains attributed to the frozen product head; the later head is never described as having executed a gate it did not execute.
+6. Any executable or test change, however small, invalidates this allowance and requires new exact-head executable validation.
+
+This rule may be used to remove or correct a mistakenly self-added tracking gate when the authoritative package contract never required that gate and the product tree remains unchanged. It may not be used to excuse a real required failure.
 
 ## Sentinel and canonical staging
 

@@ -1,6 +1,6 @@
 # Integrations, Migration, and Release Readiness
 
-This hub covers provider boundaries, durable external delivery, the private punishment/appeal site, LiteBans migration and shadow comparison, cutover, distributed client/runtime acceptance, failure testing, and the evidence required before production authority can move.
+This hub covers provider boundaries, Discord/web external surfaces, the private punishment/appeal site, LiteBans migration and shadow comparison, cutover, distributed client/runtime acceptance, failure testing, and the evidence required before production authority can move.
 
 For operator procedure, use [[Installation]], [[LiteBans Migration]], [[Shadow Mode and Cutover]], or [[Recovery and Troubleshooting]]. For provider behavior use [[Integrations]]. For source tracing and review use [[Developer Code Guide]] and [[Code Review Guide]].
 
@@ -8,7 +8,8 @@ For operator procedure, use [[Installation]], [[LiteBans Migration]], [[Shadow M
 
 | Area | Merged-main state | Main limitation |
 | --- | --- | --- |
-| Durable Discord delivery | **Partial** | Complete event routing/privacy/dead-letter/outage/operator acceptance remains. |
+| Legacy Discord webhook delivery | **Partial / available with limits** | Real outage/route/dead-letter/operator acceptance remains; it is not the interactive staff bot. |
+| Discord moderation identity/persistence/authorization | **Implemented foundations** | Account-link runtime, interactive bot, external Discord effects/reconciliation and staging remain. |
 | Restricted website bridge | **Implemented, not staging-verified** | Private deployment/security/overload/secret-rotation/runtime acceptance remains. |
 | Punishment/appeal website workflow | **Implemented, not staging-verified** | Aggregate source is present; private deployment/provider/public-launch acceptance remains. |
 | Enthusia-owned provider contracts | **Partial / provider-dependent** | Several provider-side APIs/implementations are incomplete or unavailable. |
@@ -18,20 +19,38 @@ For operator procedure, use [[Installation]], [[LiteBans Migration]], [[Shadow M
 | Cutover/recovery coordination | **Implemented foundations; acceptance blocked** | Real final-import/writer-fence/restart/rollback/emergency-recovery acceptance remains. |
 | Java/Bedrock/Folia/provider topology | **Not staging-verified as a complete candidate** | One exact release candidate still needs representative distributed acceptance. |
 | Load/saturation/process-kill | **Incomplete** | High-risk workflows still need representative queue/load/kill/recovery evidence. |
-| Production cutover/release | **Blocked pending acceptance** | LiteBans remains authoritative until all required evidence and owner authorization exist. |
+| Production cutover/release | **Blocked pending acceptance** | Existing production authority remains until all required evidence and owner authorization exist. |
 
-## Durable Discord delivery
+## Current Discord boundaries
 
-A committed moderation operation may write a sanitized Discord event to a durable outbox in the same transaction. Velocity leases and sends due events with bounded retry. Discord failure must not roll back a valid moderation commit or silently make a durable moderation action disappear.
+There are two distinct Discord-related areas on merged `main`.
+
+### Legacy webhook notifications
+
+A committed moderation operation may write a Discord event to a durable outbox in the same transaction. Velocity leases due rows, uses `DiscordEventRenderer` to create an allowlisted bounded projection, then sends it to an approved HTTPS webhook route.
 
 Primary paths:
 
-- [Discord domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/discord)
+- [Discord delivery domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/discord)
 - [JdbcDiscordOutboxStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordOutboxStore.java)
 - [DiscordOutboxWorker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
 - [VelocityConfiguration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
 
-Review producer-side privacy, lease/fence behavior, bounded backoff, terminal/dead-letter handling, manual recovery and outage behavior. The worker should not be relied on as a universal late-stage privacy scrubber.
+Discord notification failure must not roll back a valid moderation commit. The external boundary is at-least-once and may duplicate after a remote success/local crash window.
+
+Privacy is enforced both by producer discipline and the final renderer projection; raw stored `payload_json` must not be blindly posted. See [[Discord Delivery]].
+
+### Discord moderation foundation
+
+Merged `main` now also contains the platform foundation for a future interactive Discord moderation system:
+
+- moderation-subject, Minecraft/Discord identity and explicit enforcement-scope domain types;
+- V19 durable subject/link/main-account/enforcement-target/evidence-metadata/security-lock/reconciliation/maintenance state plus JDBC support;
+- central Discord-origin authorization policy, including runtime limits, self/hierarchy protection, external preconditions and cross-platform reauthorization.
+
+Those foundations do **not** provide the finished account-link command/runtime, DiscordSRV migration execution, staff-bot runtime, Discord punishments/restrictions, AutoMod, role sync, public bot or final native-ban cutover.
+
+See [[Discord Moderation Platform]] and [[Roles and Permissions|Rank-Authority]].
 
 ## Restricted website bridge
 
@@ -50,7 +69,7 @@ Requests must remain authenticated, bounded and replay-resistant. Only sanitized
 
 ## Punishment and appeal website workflow
 
-The aggregate repository now contains scoped website/appeal component work; the old statement that the private site is absent is no longer accurate.
+The aggregate repository contains scoped website/appeal component work; the old statement that the private site is absent is no longer accurate.
 
 Current bridge/persistence paths include:
 
@@ -73,7 +92,7 @@ Provider plugins remain authoritative for their own state. EnthusiaStaff should 
 | EnthusiaCurrency | exact balance plan/apply/verify/restore under an external operation | provider-side completion/acceptance still required |
 | EnthusiaCommend | persistent reputation blacklist/enforcement | provider-side completion/acceptance still required |
 | EnthusiaAutoClicker | versioned bounded client evidence | provider contract/runtime acceptance incomplete |
-| Enthusia-RoseChat | staff/chat/mute/freeze/PM-evidence/automod/visibility integration | The supported API required for all intended paths remains incomplete or unavailable. |
+| Enthusia-RoseChat | staff/chat/mute/freeze/PM-evidence/automod/visibility integration | supported API needed for all intended paths remains incomplete or unavailable |
 | EnthusiaMarket | supported stall moderation/review/restoration | provider-side completion/acceptance still required |
 
 Primary paths:
@@ -87,7 +106,7 @@ See [[Integrations]] for operator-facing degradation behavior.
 
 ## Optional third-party integrations
 
-Current integration points include capabilities such as Simple Voice Chat, ViaVersion/ViaBackwards, Floodgate/Geyser, CombatLogX, ProtocolLib, Polar, Discord-related delivery and permission/provider surfaces.
+Current integration points include Simple Voice Chat, ViaVersion/ViaBackwards, Floodgate/Geyser, CombatLogX, ProtocolLib, Polar, Discord-related delivery and permission/provider surfaces.
 
 Review every provider in at least these states:
 
@@ -97,11 +116,11 @@ Review every provider in at least these states:
 - failing during use;
 - restart/reload boundary where applicable.
 
-A missing optional provider should disable only the dependent behavior when that can be done safely and should surface a clear health/verification state.
+A missing optional provider should disable only dependent behavior when safe and should surface a clear health/verification state.
 
 ### Java and Bedrock identity
 
-Merged identity persistence now uses supported Floodgate evidence rather than username shape:
+Merged identity persistence uses supported Floodgate evidence rather than username shape:
 
 - UUID remains authoritative;
 - verified Floodgate evidence may establish Java/Bedrock platform;
@@ -109,7 +128,7 @@ Merged identity persistence now uses supported Floodgate evidence rather than us
 - unverified proxy observations cannot downgrade a verified platform record;
 - `*` current/historical names remain lookup aliases, not platform proof.
 
-Representative Geyser/Floodgate client behavior is still a staging requirement.
+Representative Geyser/Floodgate client behavior remains a staging requirement.
 
 ### Polar
 
@@ -149,7 +168,7 @@ At minimum compare:
 
 A “close” count is not acceptable parity. Every mismatch needs an explanation or fix.
 
-The final production acceptance requires the policy-defined **168 continuous hours** of accepted non-enforcing observation; automated shadow tests or historical synthetic runs do not satisfy that gate.
+Final production acceptance requires the policy-defined **168 continuous hours** of accepted non-enforcing observation; automated shadow tests or historical synthetic runs do not satisfy that gate.
 
 Runbook: [[Shadow Mode and Cutover]].
 
@@ -171,6 +190,8 @@ Before production authority moves, the exact candidate must prove:
 
 After activation, an unsafe outcome enters `READ_ONLY_FAILURE`; do not automatically fail back to LiteBans while post-cutover actions may exist only in EnthusiaStaff.
 
+Discord enforcement has its own future migration/reconciliation/cutover gate; the presence of V19 foundation tables does not move native Discord authority.
+
 ## Distributed runtime and client acceptance
 
 A full release candidate needs representative testing of the real topology rather than one plugin in isolation:
@@ -188,18 +209,20 @@ The acceptance set should include:
 - backend reconnect/outage;
 - distinct backend/player-data scopes;
 - Paper/Velocity/provider startup and shutdown;
-- staff, punishment, report and recovery workflows;
+- staff, Cheat Tester, punishment, report and recovery workflows;
 - supported Java clients;
 - Bedrock/Geyser/Floodgate identity and UI fallback;
 - vanish/packet/client behavior;
 - Folia-compatible owner/scheduler behavior where supported;
 - provider present/missing/failure cases.
 
+Any future Discord runtime must add its own representative external API, hierarchy, reconnect/rate-limit/reconciliation and cross-platform partial-failure acceptance.
+
 Historical standalone Paper boot/restart evidence is useful only for the exact recorded Paper scenario and SHA. It is not complete distributed staging.
 
 ## Load, saturation and process-kill evidence
 
-Release confidence also requires the workflows with destructive or distributed state to behave safely under resource pressure and abrupt interruption.
+Release confidence also requires destructive/distributed workflows to behave safely under resource pressure and abrupt interruption.
 
 Exercise, as relevant:
 
@@ -211,7 +234,7 @@ Exercise, as relevant:
 - process termination between durable intent, side effect, verification and terminal commit;
 - restart recovery and duplicate replay;
 - stale lease/fence owners;
-- inventory/economy/confiscation ambiguity and quarantine.
+- inventory/economy/confiscation/tester ambiguity and quarantine/recovery.
 
 A unit test that injects one exception is not a general process-kill/load acceptance result.
 
@@ -231,11 +254,13 @@ A release decision should bind one exact candidate:
 - rollback/recovery plan;
 - explicit operational/owner approval.
 
-Changing relevant source, migration, configuration or provider contracts after an acceptance run invalidates the affected evidence until it is rerun.
+Changing relevant source, migration, configuration or provider contracts after an acceptance run invalidates affected evidence until it is rerun.
 
 ## Go deeper
 
 - [[Integrations]] — provider/operator behavior.
+- [[Discord Delivery]] — current webhook subsystem.
+- [[Discord Moderation Platform]] — merged Discord foundations and remaining runtime work.
 - [[Installation]] — installation/staging entry point.
 - [[LiteBans Migration]] — migration procedure.
 - [[Shadow Mode and Cutover]] — authority transition procedure.

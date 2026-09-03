@@ -1,0 +1,38 @@
+name: Pi Staging Supersession
+
+on:
+  pull_request_target:
+    types:
+      - synchronize
+      - closed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pi-staging-supersede-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  supersede:
+    name: Cancel obsolete Pi staging safely
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Check out trusted default-branch controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Supersede stale public and private staging
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGING_TOKEN: ${{ secrets.ENTHUSIASTAFF_STAGING_TOKEN }}
+        run: python3 scripts/staging/supersede_pi_staging.py advance

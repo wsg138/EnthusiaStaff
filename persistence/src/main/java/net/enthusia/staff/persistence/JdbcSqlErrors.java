@@ -8,7 +8,9 @@ import java.util.Set;
 
 final class JdbcSqlErrors {
     private static final int MARIA_DB_DUPLICATE_KEY = 1062;
+    private static final int MARIA_DB_RECORD_CHANGED = 1020;
     private static final int MARIA_DB_DEADLOCK = 1213;
+    private static final String GENERAL_ERROR = "HY000";
     private static final String INTEGRITY_CONSTRAINT_VIOLATION = "23000";
     private static final String TRANSACTION_ROLLBACK = "40001";
 
@@ -24,6 +26,14 @@ final class JdbcSqlErrors {
         // is intentionally surfaced: unlike SQLState 40001, it is not a portable transaction
         // rollback signal, and blindly retrying it can amplify sustained lock contention.
         return containsSqlError(failure, MARIA_DB_DEADLOCK, TRANSACTION_ROLLBACK);
+    }
+
+    static boolean isRetryableTransactionConflict(Throwable failure) {
+        // ER_CHECKREAD means the transaction's read view lost a race with another writer.
+        // Retrying the complete transaction obtains a fresh read view. Lock-wait timeout
+        // 1205/HY000 remains excluded so sustained contention is surfaced rather than amplified.
+        return isDeadlock(failure)
+                || containsSqlError(failure, MARIA_DB_RECORD_CHANGED, GENERAL_ERROR);
     }
 
     private static boolean containsSqlError(Throwable failure, int errorCode, String sqlState) {

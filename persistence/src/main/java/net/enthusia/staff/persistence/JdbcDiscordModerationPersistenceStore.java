@@ -1,0 +1,324 @@
+package net.enthusia.staff.persistence;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import javax.sql.DataSource;
+import net.enthusia.staff.domain.moderation.AccountLinkAudit;
+import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.EnforcementTarget;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
+import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
+
+public final class JdbcDiscordModerationPersistenceStore implements DiscordModerationPersistenceStore {
+    private final JdbcDiscordIdentityRepository identities;
+    private final JdbcDiscordLinkRepository links;
+    private final JdbcDiscordMainAccountRepository mainAccounts;
+    private final JdbcDiscordOperationalRepository operations;
+    private final JdbcDiscordReplayGuard replayGuard;
+
+    public JdbcDiscordModerationPersistenceStore(DataSource dataSource) {
+        if (dataSource == null) {
+            throw new IllegalArgumentException("dataSource must be present");
+        }
+        this.identities = new JdbcDiscordIdentityRepository(dataSource);
+        this.links = new JdbcDiscordLinkRepository(dataSource);
+        this.mainAccounts = new JdbcDiscordMainAccountRepository(dataSource, identities);
+        this.operations = new JdbcDiscordOperationalRepository(dataSource);
+        this.replayGuard = new JdbcDiscordReplayGuard(dataSource);
+    }
+
+    @Override
+    public VersionedSubject ensureMinecraftSubject(UUID playerId, Instant now) {
+        return identities.ensureMinecraftSubject(playerId, now);
+    }
+
+    @Override
+    public VersionedSubject ensureDiscordSubject(DiscordUserId userId, Instant now) {
+        return identities.ensureDiscordSubject(userId, now);
+    }
+
+    @Override
+    public Optional<VersionedSubject> subjectForMinecraft(UUID playerId) {
+        return identities.subjectForMinecraft(playerId);
+    }
+
+    @Override
+    public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
+        return identities.subjectForDiscord(userId);
+    }
+
+    @Override
+    public Optional<VersionedLink> currentLink(UUID playerId) {
+        return identities.currentLink(playerId);
+    }
+
+    @Override
+    public VersionedLink link(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt
+    ) {
+        return links.link(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+    }
+
+    @Override
+    public VersionedLink linkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            DiscordMinecraftLinkSource source,
+            String operationKey,
+            Instant linkedAt,
+            AccountLinkAudit audit
+    ) {
+        return links.linkWithAudit(discordUserId, minecraftPlayerId, source, operationKey, linkedAt, audit);
+    }
+
+    @Override
+    public VersionedLink unlink(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt
+    ) {
+        VersionedLink stored = links.unlink(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                replacementMain,
+                operationKey,
+                unlinkedAt
+        );
+        verifyUnlinkReplay(stored, discordUserId, minecraftPlayerId, expectedRevision, operationKey);
+        return stored;
+    }
+
+    @Override
+    public VersionedLink unlinkWithAudit(
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            Optional<MainMinecraftAccount> replacementMain,
+            String operationKey,
+            Instant unlinkedAt,
+            AccountLinkAudit audit
+    ) {
+        VersionedLink stored = links.unlinkWithAudit(
+                discordUserId,
+                minecraftPlayerId,
+                expectedRevision,
+                replacementMain,
+                operationKey,
+                unlinkedAt,
+                audit
+        );
+        verifyUnlinkReplay(stored, discordUserId, minecraftPlayerId, expectedRevision, operationKey);
+        return stored;
+    }
+
+    @Override
+    public VersionedLink reassign(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt
+    ) {
+        return links.reassign(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt
+        );
+    }
+
+    @Override
+    public VersionedLink reassignWithAudit(
+            DiscordUserId newDiscordUserId,
+            UUID minecraftPlayerId,
+            Optional<MainMinecraftAccount> previousSubjectReplacementMain,
+            String operationKey,
+            Instant changedAt,
+            AccountLinkAudit audit
+    ) {
+        return links.reassignWithAudit(
+                newDiscordUserId,
+                minecraftPlayerId,
+                previousSubjectReplacementMain,
+                operationKey,
+                changedAt,
+                audit
+        );
+    }
+
+    @Override
+    public VersionedSubject setMainMinecraftAccount(
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount mainAccount,
+            long expectedSubjectRevision,
+            Instant selectedAt
+    ) {
+        return mainAccounts.setMainMinecraftAccount(
+                subjectId,
+                mainAccount,
+                expectedSubjectRevision,
+                selectedAt
+        );
+    }
+
+    @Override
+    public boolean setMainMinecraftAccountWithAudit(
+            ModerationSubjectId subjectId,
+            MainMinecraftAccount mainAccount,
+            long expectedSubjectRevision,
+            Instant selectedAt,
+            AccountLinkAudit audit
+    ) {
+        return mainAccounts.setMainMinecraftAccountWithAudit(
+                subjectId,
+                mainAccount,
+                expectedSubjectRevision,
+                selectedAt,
+                audit
+        );
+    }
+
+    @Override
+    public StoredEnforcementTarget recordEnforcementTarget(
+            ModerationSubjectId subjectId,
+            EnforcementTarget target,
+            String operationKey,
+            Instant now
+    ) {
+        StoredEnforcementTarget stored = operations.recordEnforcementTarget(
+                subjectId,
+                target,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifyEnforcementReplay(stored, subjectId, target, operationKey);
+        }
+        return stored;
+    }
+
+    @Override
+    public StoredEvidence recordEvidence(EvidenceMetadata metadata) {
+        StoredEvidence stored = operations.recordEvidence(metadata);
+        if (stored.replayed()) {
+            replayGuard.verifyEvidenceReplay(metadata, stored);
+        }
+        return stored;
+    }
+
+    @Override
+    public SecurityLock activateSecurityLock(
+            ModerationSubjectId subjectId,
+            DiscordUserId discordUserId,
+            String reasonCode,
+            String operationKey,
+            Instant now
+    ) {
+        SecurityLock stored = operations.activateSecurityLock(
+                subjectId,
+                discordUserId,
+                reasonCode,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifySecurityActivationReplay(
+                    stored,
+                    subjectId,
+                    discordUserId,
+                    reasonCode,
+                    operationKey
+            );
+        }
+        return stored;
+    }
+
+    @Override
+    public SecurityLock releaseSecurityLock(
+            UUID lockId,
+            long expectedRevision,
+            String operationKey,
+            Instant now
+    ) {
+        SecurityLock stored = operations.releaseSecurityLock(
+                lockId,
+                expectedRevision,
+                operationKey,
+                now
+        );
+        if (stored.replayed()) {
+            replayGuard.verifySecurityReleaseReplay(stored, lockId, expectedRevision, operationKey);
+        }
+        return stored;
+    }
+
+    @Override
+    public ReconciliationState saveReconciliation(
+            ReconciliationState state,
+            long expectedRevision,
+            Instant now
+    ) {
+        return operations.saveReconciliation(state, expectedRevision, now);
+    }
+
+    @Override
+    public MaintenanceWork enqueueMaintenance(
+            String workType,
+            String resourceKey,
+            Instant dueAt,
+            Instant now
+    ) {
+        return operations.enqueueMaintenance(workType, resourceKey, dueAt, now);
+    }
+
+    @Override
+    public List<MaintenanceWork> claimDueMaintenance(
+            Instant now,
+            int limit,
+            String leaseOwner,
+            Instant leaseUntil
+    ) {
+        return operations.claimDueMaintenance(now, limit, leaseOwner, leaseUntil);
+    }
+
+    @Override
+    public boolean completeMaintenance(
+            UUID workId,
+            long expectedRevision,
+            String leaseOwner,
+            Instant now
+    ) {
+        return operations.completeMaintenance(workId, expectedRevision, leaseOwner, now);
+    }
+
+    private void verifyUnlinkReplay(
+            VersionedLink stored,
+            DiscordUserId discordUserId,
+            UUID minecraftPlayerId,
+            long expectedRevision,
+            String operationKey
+    ) {
+        if (stored.replayed()) {
+            replayGuard.verifyUnlinkReplay(
+                    stored,
+                    discordUserId,
+                    minecraftPlayerId,
+                    expectedRevision,
+                    operationKey
+            );
+        }
+    }
+}

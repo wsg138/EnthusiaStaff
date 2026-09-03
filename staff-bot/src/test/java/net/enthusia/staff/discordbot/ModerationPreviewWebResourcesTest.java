@@ -1,0 +1,130 @@
+package net.enthusia.staff.discordbot;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class ModerationPreviewWebResourcesTest {
+    private static final String MODEL_SCRIPT = "/moderation-preview/model.js";
+    private static final String APP_SCRIPT = "/moderation-preview/app.js";
+    private static final String WORKFLOW_SCRIPT = "/moderation-preview/workflow.js";
+    private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
+    private static final List<String> RESOURCES = List.of(
+            "/moderation-preview/index.html",
+            "/moderation-preview/app.css",
+            MODEL_SCRIPT,
+            APP_SCRIPT,
+            WORKFLOW_SCRIPT,
+            REVIEW_SCRIPT);
+    private static final List<String> SCRIPTS = List.of(MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT);
+
+    @Test
+    void everyModerationWorkspaceResourceIsPackaged() {
+        for (String resource : RESOURCES) {
+            assertNotNull(getClass().getResource(resource), resource);
+        }
+    }
+
+    @Test
+    void pageLoadsSplitScriptsInDependencyOrderAndUsesOneStagingIndicator() throws IOException {
+        String html = resourceText("/moderation-preview/index.html");
+
+        assertOrdered(html, "/assets/model.js", "/assets/app.js", "/assets/workflow.js", "/assets/review.js");
+        assertEquals(1, occurrences(html, "STAGING PREVIEW"));
+        assertTrue(html.contains("Sample case"));
+        assertFalse(html.contains("Preview scenario"));
+    }
+
+    @Test
+    void workspaceContainsRequiredEvidenceRestrictionAndReviewConcepts() throws IOException {
+        String workspace = resourceText(APP_SCRIPT);
+        String workflow = resourceText(WORKFLOW_SCRIPT);
+        String review = resourceText(REVIEW_SCRIPT);
+
+        assertTrue(workspace.contains("Add to Evidence"));
+        assertTrue(workspace.contains("Delete on Confirm"));
+        assertTrue(workflow.contains("Read only"));
+        assertTrue(workflow.contains("No access"));
+        assertTrue(workflow.contains("Custom override"));
+        assertTrue(workflow.contains("Relevant history"));
+        assertTrue(review.contains("Messages to delete"));
+        assertTrue(review.contains("Simulation complete"));
+        assertTrue(review.contains("No live moderation action was performed."));
+    }
+
+    @Test
+    void generatedUiUsesDomConstructionWithoutRawHtmlParsingSinks() throws IOException {
+        for (String script : SCRIPTS) {
+            String source = resourceText(script);
+            assertFalse(source.contains(".innerHTML"), script);
+            assertFalse(source.contains("DOMParser"), script);
+            assertFalse(source.contains("insertAdjacentHTML"), script);
+            assertFalse(source.contains("createContextualFragment"), script);
+        }
+        assertTrue(resourceText(MODEL_SCRIPT).contains("document.createElement"));
+    }
+
+    @Test
+    void surroundingMessageContextRemainsAvailableWithoutDesktopOnlyClass() throws IOException {
+        String workspace = resourceText(APP_SCRIPT);
+
+        assertTrue(workspace.contains("contextMessage"));
+        assertFalse(workspace.contains("context-button"));
+        assertFalse(workspace.contains("Authority context"));
+    }
+
+    @Test
+    void recommendationPathDoesNotSilentlyBecomeScenarioOverride() throws IOException {
+        String workflow = resourceText(WORKFLOW_SCRIPT);
+        int start = workflow.indexOf("function useRecommendation(custom)");
+        int end = workflow.indexOf("function seedCustomScenario", start);
+
+        assertTrue(start >= 0 && end > start);
+        String recommendationPath = workflow.substring(start, end);
+        assertTrue(recommendationPath.contains("if (custom) seedCustomScenario(w);"));
+        assertFalse(recommendationPath.contains("state.scenario === 'restrict-one'"));
+        assertFalse(recommendationPath.contains("state.scenario === 'custom'"));
+    }
+
+    @Test
+    void exactTimestampsAndDateHeadingsUseOneExplicitTimeZone() throws IOException {
+        String review = resourceText(REVIEW_SCRIPT);
+
+        assertTrue(review.contains("DISPLAY_TIME_ZONE"));
+        assertTrue(review.contains("displayDateKey(iso)"));
+        assertTrue(review.contains("timeZone: DISPLAY_TIME_ZONE"));
+    }
+
+    private String resourceText(String resource) throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(resource)) {
+            assertNotNull(input, resource);
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void assertOrdered(String text, String... values) {
+        int previous = -1;
+        for (String value : values) {
+            int current = text.indexOf(value);
+            assertTrue(current > previous, () -> value + " must appear in dependency order");
+            previous = current;
+        }
+    }
+
+    private static int occurrences(String text, String value) {
+        int count = 0;
+        int position = text.indexOf(value);
+        while (position >= 0) {
+            count++;
+            position = text.indexOf(value, position + value.length());
+        }
+        return count;
+    }
+}

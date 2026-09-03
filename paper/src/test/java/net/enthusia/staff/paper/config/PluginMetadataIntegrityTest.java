@@ -51,7 +51,7 @@ class PluginMetadataIntegrityTest {
             }
         });
 
-        assertEquals(Set.of("estaff", "report", "case"), withoutOuterPermission);
+        assertEquals(Set.of("estaff", "report", "case", "link", "unlink"), withoutOuterPermission);
     }
 
     @Test

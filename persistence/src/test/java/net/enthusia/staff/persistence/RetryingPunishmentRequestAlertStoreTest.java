@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.reflect.Proxy;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
@@ -139,6 +140,50 @@ class RetryingPunishmentRequestAlertStoreTest {
         assertSame(failure, thrown);
     }
 
+    @Test
+    void recordChangedConflictRetriesPrimaryClaimBeforeFallback() {
+        AtomicInteger attempts = new AtomicInteger();
+        AtomicInteger fallbacks = new AtomicInteger();
+        PunishmentRequestAlertStore delegate = (PunishmentRequestAlertStore) Proxy.newProxyInstance(
+                Thread.currentThread().getContextClassLoader(),
+                new Class<?>[]{PunishmentRequestAlertStore.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("claimAudience")) {
+                        if (attempts.getAndIncrement() == 0) {
+                            throw new ModerationPersistenceException(
+                                    "claim conflict",
+                                    new SQLException(
+                                            "Record has changed since last read",
+                                            "HY000",
+                                            1020
+                                    )
+                            );
+                        }
+                        return Collections.singletonList(null);
+                    }
+                    return defaultValue(method.getReturnType());
+                }
+        );
+        RetryingPunishmentRequestAlertStore store = new RetryingPunishmentRequestAlertStore(
+                delegate,
+                Duration.ofSeconds(1),
+                (audience, recipientId, rank, owner, limit, lease, now) -> {
+                    fallbacks.incrementAndGet();
+                    return List.of();
+                },
+                ignored -> { }
+        );
+
+        assertEquals(1, claim(
+                store,
+                PunishmentRequestAlertAudience.ELIGIBLE_REVIEWERS,
+                RECIPIENT,
+                NOW
+        ).size());
+        assertEquals(2, attempts.get());
+        assertEquals(0, fallbacks.get());
+    }
+
     private static List<PunishmentRequestAlertClaim> claim(
             RetryingPunishmentRequestAlertStore store,
             PunishmentRequestAlertAudience audience,
@@ -167,18 +212,21 @@ class RetryingPunishmentRequestAlertStoreTest {
                     if (method.getName().equals("claimAudience")) {
                         return primary.get();
                     }
-                    Class<?> type = method.getReturnType();
-                    if (type == boolean.class) {
-                        return false;
-                    }
-                    if (type == int.class) {
-                        return 0;
-                    }
-                    if (List.class.isAssignableFrom(type)) {
-                        return List.of();
-                    }
-                    return null;
+                    return defaultValue(method.getReturnType());
                 }
         );
+    }
+
+    private static Object defaultValue(Class<?> type) {
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (List.class.isAssignableFrom(type)) {
+            return List.of();
+        }
+        return null;
     }
 }

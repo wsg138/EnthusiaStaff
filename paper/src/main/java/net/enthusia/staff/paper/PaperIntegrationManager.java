@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.paper.auth.DiscordStaffAuthorityEndpoint;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
@@ -28,6 +29,7 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.integration.ReputationRestrictionSynchronizer;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
@@ -55,6 +57,8 @@ final class PaperIntegrationManager {
     private RoseChatIntegration roseChat;
     private MarketIntegration market;
     private ReputationIntegration reputation;
+    private ReputationRestrictionSynchronizer reputationRestrictions;
+    private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
         this.dependencies = dependencies;
@@ -93,6 +97,22 @@ final class PaperIntegrationManager {
         );
         recordProviderIssue(MARKET, market.availability(), market.issue());
         recordProviderIssue(REPUTATION, reputation.availability(), reputation.issue());
+        if (reputation.availability() == IntegrationAvailability.AVAILABLE) {
+            reputationRestrictions = new ReputationRestrictionSynchronizer(
+                    plugin(),
+                    clock(),
+                    reputation,
+                    dependencies.stores().punishmentService(),
+                    () -> {
+                        PunishmentService service = dependencies.stores().punishmentService().get();
+                        return service == null ? null : service::activeSanctions;
+                    },
+                    workers()
+            );
+            reputationRestrictions.start();
+        }
+        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin())
+                .ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
     void initializeAutomod() {
@@ -161,6 +181,12 @@ final class PaperIntegrationManager {
 
     void closeChatBridge() {
         resources.close("RoseChat bridge", roseChat);
+        closeModerationProviders();
+    }
+
+    void closeModerationProviders() {
+        resources.close("Discord staff authority endpoint", discordStaffAuthority);
+        resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
 
     void closeEconomyResources() {
@@ -212,7 +238,7 @@ final class PaperIntegrationManager {
             return matcher;
         } catch (IllegalArgumentException exception) {
             issue(AUTOMOD, "Exact-variant configuration is invalid; enforcement is disabled");
-            plugin().getLogger().log(Level.SEVERE, "Automod configuration validation failed", exception);
+            plugin().getLogger().log(Level.SEVERE, "Automod integration configuration failed", exception);
             return null;
         }
     }

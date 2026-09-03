@@ -11,17 +11,17 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 
 final class RetryingModerationStore implements ModerationStore {
     private final ModerationStore delegate;
-    private final JdbcDeadlockRetry retry;
+    private final JdbcTransactionRetry retry;
 
     RetryingModerationStore(ModerationStore delegate) {
-        this(delegate, new JdbcDeadlockRetry());
+        this(delegate, new JdbcTransactionRetry());
     }
 
     RetryingModerationStore(ModerationStore delegate, IntConsumer retryPause) {
-        this(delegate, new JdbcDeadlockRetry(3, retryPause));
+        this(delegate, new JdbcTransactionRetry(3, retryPause));
     }
 
-    private RetryingModerationStore(ModerationStore delegate, JdbcDeadlockRetry retry) {
+    private RetryingModerationStore(ModerationStore delegate, JdbcTransactionRetry retry) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.retry = Objects.requireNonNull(retry, "retry");
     }

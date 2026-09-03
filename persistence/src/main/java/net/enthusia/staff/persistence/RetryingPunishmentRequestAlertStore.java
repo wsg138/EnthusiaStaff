@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.IntConsumer;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertAudience;
 import net.enthusia.staff.domain.application.PunishmentRequestAlertBacklog;
@@ -38,10 +39,12 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAlertStore {
     private static final Duration FALLBACK_INTERVAL = Duration.ofSeconds(1);
     private static final int MAX_FALLBACK_GATES = 4096;
+    private static final String INTERRUPTED = "Alert claim transaction retry was interrupted";
 
     private final PunishmentRequestAlertStore delegate;
     private final Duration fallbackInterval;
     private final FallbackClaimer fallbackClaimer;
+    private final JdbcTransactionRetry retry;
     private final Map<FallbackKey, Instant> nextFallbackByRecipient =
             new LinkedHashMap<>(128, 0.75F, true);
 
@@ -78,13 +81,32 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
             Duration fallbackInterval,
             FallbackClaimer fallbackClaimer
     ) {
+        this(delegate, fallbackInterval, fallbackClaimer, new JdbcTransactionRetry());
+    }
+
+    RetryingPunishmentRequestAlertStore(
+            PunishmentRequestAlertStore delegate,
+            Duration fallbackInterval,
+            FallbackClaimer fallbackClaimer,
+            IntConsumer retryPause
+    ) {
+        this(delegate, fallbackInterval, fallbackClaimer, new JdbcTransactionRetry(3, retryPause));
+    }
+
+    private RetryingPunishmentRequestAlertStore(
+            PunishmentRequestAlertStore delegate,
+            Duration fallbackInterval,
+            FallbackClaimer fallbackClaimer,
+            JdbcTransactionRetry retry
+    ) {
         if (delegate == null || fallbackInterval == null || fallbackInterval.isNegative()
-                || fallbackInterval.isZero() || fallbackClaimer == null) {
+                || fallbackInterval.isZero() || fallbackClaimer == null || retry == null) {
             throw new IllegalArgumentException("retrying alert store dependencies must be present");
         }
         this.delegate = delegate;
         this.fallbackInterval = fallbackInterval;
         this.fallbackClaimer = fallbackClaimer;
+        this.retry = retry;
     }
 
     @Override
@@ -100,7 +122,10 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
             Duration lease,
             Instant now
     ) {
-        return delegate.claimDirect(recipientId, owner, limit, lease, now);
+        return retry.execute(
+                INTERRUPTED,
+                () -> delegate.claimDirect(recipientId, owner, limit, lease, now)
+        );
     }
 
     @Override
@@ -113,8 +138,11 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
             Duration lease,
             Instant now
     ) {
-        List<PunishmentRequestAlertClaim> claims = delegate.claimAudience(
-                audience, recipientId, recipientRank, owner, limit, lease, now);
+        List<PunishmentRequestAlertClaim> claims = retry.execute(
+                INTERRUPTED,
+                () -> delegate.claimAudience(
+                        audience, recipientId, recipientRank, owner, limit, lease, now)
+        );
         if (!claims.isEmpty()) {
             releaseFallback(audience, recipientId);
             return claims;
@@ -122,14 +150,17 @@ final class RetryingPunishmentRequestAlertStore implements PunishmentRequestAler
         if (!reserveFallback(audience, recipientId, now)) {
             return List.of();
         }
-        return fallbackClaimer.claim(
-                audience,
-                recipientId,
-                recipientRank,
-                owner,
-                limit,
-                lease,
-                now
+        return retry.execute(
+                INTERRUPTED,
+                () -> fallbackClaimer.claim(
+                        audience,
+                        recipientId,
+                        recipientRank,
+                        owner,
+                        limit,
+                        lease,
+                        now
+                )
         );
     }
 

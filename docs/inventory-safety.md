@@ -6,8 +6,9 @@ therefore treats the inventory profile, operation, patch, snapshot, lease, and
 quarantine record as one recovery boundary.
 
 The feature remains pre-release. Automated MariaDB coverage exercises normal,
-replay, fencing, divergence, quarantine, and restoration paths, but live
-multi-backend Paper failure staging is still required before production use.
+replay, fencing, divergence, quarantine, restoration, and privileged retry
+paths, but live multi-backend destructive acceptance is still assigned to
+`ES-V03` before production use.
 
 ## Durable transition model
 
@@ -58,7 +59,7 @@ An older worker cannot commit after another worker acquires a newer token.
 Terminal retries replay the stored result and append no duplicate commit audit.
 Fencing-token exhaustion fails the transaction instead of wrapping.
 
-## Quarantine
+## Quarantine and privileged retry
 
 Checksum mismatch, revision drift, or another ambiguous recovery condition
 moves both journal rows to `QUARANTINED`, records the bounded reason in
@@ -66,11 +67,39 @@ moves both journal rows to `QUARANTINED`, records the bounded reason in
 not make the resource safe for another destructive operation. A pending,
 applying, or quarantined patch keeps the player and scope locked.
 
-Current pre-release builds intentionally have no automatic quarantine-clear
-path. Until a privileged resolution workflow is implemented and tested, a
-quarantined resource remains blocked for developer or administrator recovery.
-Do not delete journal rows, mark a patch applied, or change fencing tokens
-manually to restore service.
+There is no automatic quarantine-clear path. For case-linked item confiscation
+and restoration only, a Founder with `enthusiastaff.owner.recovery` may run:
+
+```text
+/case recoveritems <case-id>
+```
+
+This command does **not** edit the player's inventory, mark the patch applied,
+or bypass checksum/revision validation. It performs one bounded MariaDB
+transaction that:
+
+1. locks the unresolved case-linked item quarantine and its paired patch and
+   operation;
+2. rejects multiple matching quarantines, a divergent pair, a profile/fence
+   mismatch, a non-item operation, or a live competing resource lease;
+3. moves the exact coherent pair from `QUARANTINED` back to `PENDING`;
+4. records `resolved_at`, the Founder actor, and bounded resolution metadata on
+   the quarantine row; and
+5. appends an idempotent `INVENTORY_QUARANTINE_REQUEUED` audit event containing
+   identifiers and fencing evidence but no inventory contents.
+
+Normal recovery must then acquire a newer fence and prove either the expected
+before image or the exact already-replaced image before committing. If the
+retry still cannot prove a safe state, it quarantines again. Re-quarantine
+clears the prior resolution fields so the new ambiguity is visibly unresolved;
+the previous Founder authorization remains preserved in append-only audit.
+Repeated recovery authorization for the same retry fence returns the recorded
+result and does not write another audit event.
+
+Do not delete journal rows, mark a patch applied, edit checksums/revisions, or
+change fencing tokens manually to restore service. General inventory-edit
+quarantines are intentionally outside `/case recoveritems` and remain fail
+closed for a separate recovery procedure.
 
 ## Case-linked confiscation
 
@@ -116,9 +145,14 @@ For an incomplete or quarantined inventory operation:
 3. Inspect both journal states and fencing tokens, the current lease, expected
    and replacement checksums, durable profile revision, before snapshot, audit
    event, and quarantine record.
-4. Compare the live inventory only through an approved recovery workflow.
-5. Replay only an idempotent stage whose stored evidence proves the outcome.
-6. Preserve all evidence and escalate any ambiguity.
+4. For a single coherent case-linked confiscation/restoration quarantine, a
+   Founder may authorize `/case recoveritems <case-id>`; the target may be
+   offline because authorization only requeues durable state.
+5. Let normal checksum-verified recovery decide whether the replacement can be
+   applied/finalized or must quarantine again.
+6. Preserve all evidence and escalate any ambiguity. If the command reports
+   multiple candidates, a live lease, or persistence failure, do not manipulate
+   the rows manually.
 
 Never delete an unknown lease, overwrite a newer profile revision, copy
 confiscated contents from an unbound snapshot, or resolve a quarantine solely

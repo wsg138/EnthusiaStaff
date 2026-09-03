@@ -23,10 +23,12 @@ For the overall product picture use [[Implementation Status]]. For detailed sour
 
 ## Runtime artifacts and module boundaries
 
-EnthusiaStaff is designed around exactly two Java 21 Minecraft runtime artifacts:
+Current merged `main` builds two Java 21 Minecraft runtime artifacts:
 
 - `EnthusiaStaff-Paper-<version>.jar`
 - `EnthusiaStaff-Velocity-<version>.jar`
+
+The planned interactive Discord staff bot is a separate runtime/application boundary and is not part of the current merged module set.
 
 Primary paths:
 
@@ -48,13 +50,13 @@ velocity               proxy/runtime adapters
 integration-tests      validation only; never deployed
 ```
 
-`integration-contracts` is a first-class compile-time provider boundary. It does not own moderation policy; provider adapters use it to reach supported provider contracts while application policy remains in `domain`.
+`integration-contracts` is a compile-time provider boundary. It does not own moderation policy; provider adapters use it to reach supported provider contracts while application policy remains in `domain`.
 
-The actual dependency graph is described in [[Architecture]]. Reviewer rule: policy belongs in `domain`; commands, GUIs, HTTP handlers and provider adapters should not become alternate business-rule implementations.
+The actual dependency graph is described in [[Architecture]]. Reviewer rule: policy belongs in `domain`; commands, GUIs, HTTP/Discord handlers and provider adapters should not become alternate business-rule implementations.
 
 ## Paper lifecycle
 
-Paper composition and lifecycle are split across focused collaborators rather than one giant main class:
+Paper composition and lifecycle are split across focused collaborators:
 
 - [Paper plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
 - [runtime lifecycle](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeLifecycle.java)
@@ -68,7 +70,7 @@ Database/provider/network work belongs off the game/entity thread. Player/entity
 
 ## Velocity lifecycle
 
-Velocity owns network-facing authority and workers, including login/server-switch enforcement, protected network identity, the persistent backend transport server, network/Discord workers, migration coordination, and the restricted website bridge.
+Velocity owns network-facing authority and workers, including login/server-switch enforcement, protected network identity, persistent backend transport, network/legacy Discord webhook delivery workers, migration coordination, and the restricted website bridge.
 
 Primary paths:
 
@@ -76,9 +78,9 @@ Primary paths:
 - [Velocity package](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity)
 - [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
 - [network worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/NetworkOutboxWorker.java)
-- [Discord worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
+- [Discord webhook worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
 
-Velocity event threads must not wait on JDBC, HTTP, filesystem or socket I/O. Do not treat classes or tests present only on an active unmerged branch as current `main` behavior.
+Velocity event threads must not wait on JDBC, HTTP, filesystem or socket I/O. Do not treat classes/tests present only on an active unmerged branch as current `main` behavior.
 
 ## MariaDB and Flyway
 
@@ -89,7 +91,7 @@ MariaDB is the durable authority for core moderation/recovery state. The persist
 - [persistence package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 - [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
 
-Current merged `main` includes **V17** (`V17__website_appeal_workflow.sql`). V1-V17 are immutable forward history. Future schema changes add a new migration; do not edit applied migrations or rely on repair to hide a checksum change.
+Current merged `main` includes migrations through **`V19__discord_moderation_persistence.sql`**. V18 owns the Cheat Tester session journal; V19 owns the Discord moderation identity/link/operational persistence foundation. V1-V19 are immutable forward history. Future schema work must reconcile the live migration ceiling first and then add a new migration; do not edit applied migrations or use repair to hide a checksum change.
 
 MariaDB/Testcontainers is strong evidence for SQL/transaction/migration scenarios actually exercised. It does not establish production volume, process-kill timing, multi-server contention, or production acceptance.
 
@@ -107,7 +109,7 @@ Destructive flows use combinations of:
 - bounded retry/backoff;
 - recovery/quarantine when external outcome is ambiguous.
 
-The exact mechanism depends on the workflow. The central review requirement is that a timeout, stale callback, duplicate delivery, restart, or partial external failure cannot silently create a second effect or overwrite newer state.
+The exact mechanism depends on the workflow. The central review requirement is that timeout, stale callback, duplicate delivery, restart, or partial external failure cannot silently create a second effect or overwrite newer state.
 
 See [[Code Review Guide]] and [[Recovery and Troubleshooting]].
 
@@ -136,13 +138,13 @@ The target/runtime modes are:
 - `MAINTENANCE`
 - `READ_ONLY_FAILURE`
 
-A mode is an authority/safety boundary, not a cosmetic status string. Missing MariaDB, Velocity, providers, schema health or cutover evidence must block only the unsafe actions whose correctness cannot be proved.
+A mode is an authority/safety boundary, not a cosmetic status string. Missing MariaDB, Velocity, providers, schema health or cutover evidence must block only unsafe actions whose correctness cannot be proved.
 
 Do not switch modes merely to work around an error. See [[Recovery and Troubleshooting]] and [[Shadow Mode and Cutover]].
 
 ## Configuration and reload
 
-Current merged configuration includes reason policy, report policy/GUI settings, Paper runtime settings including staff-tool controls, and Velocity-owned settings. The full modular target in the goals is broader than current merged implementation.
+Current merged configuration includes reason policy, report policy/GUI settings, Paper runtime settings including staff-tool/Cheat Tester controls, and Velocity-owned settings. The full modular target in the goals is broader than current merged implementation.
 
 Important paths:
 
@@ -197,6 +199,8 @@ Use [[Build and Testing]] for exact commands and evidence interpretation.
 - [[Developer Code Guide]] — complete source/feature traces.
 - [[Code Review Guide]] — cross-cutting review checklist.
 - [[Protocol and Network Traffic]] — network internals.
+- [[Discord Moderation Platform]] — merged Discord foundations versus future runtime.
+- [[Cheat Tester]] — V18-backed tester/recovery internals.
 - [[Configuration]] — operator-facing settings/reload behavior.
 - [[Recovery and Troubleshooting]] — failure/recovery procedure.
 - [[Implementation Status]] — overall merged-main product status.

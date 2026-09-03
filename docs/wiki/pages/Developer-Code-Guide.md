@@ -20,32 +20,32 @@ This is the detailed source map for EnthusiaStaff. Use [[Developer Guide Index]]
 | `docs/` | architecture, security, migration and operational reference | documentation |
 | `docs/wiki/pages/` | repository-managed GitHub Wiki source | documentation |
 
-Exactly two Minecraft runtime plugins are intended: Paper and Velocity.
+Current merged `main` has exactly two Minecraft runtime plugins: Paper and Velocity. Do not infer the planned Discord staff-bot runtime from domain/schema foundations or from the existing webhook worker.
 
 ## Read these before source diving
 
 1. [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) — intended finished behavior.
 2. [[Implementation Status]] — merged-main product state and evidence class.
 3. [[Architecture]] — dependency direction and runtime ownership.
-4. [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate PR/runtime evidence — requirement-level proof/blockers. Reconcile with live `main` after recent merges.
+4. [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate PR/runtime evidence — requirement-level proof/blockers. Reconcile it with live `main` after recent merges.
 5. [[Code Review Guide]] — cross-cutting invariants and failure modes.
 
 ## Dependency direction
 
 ```text
-Paper / Velocity / website / provider adapters
-                    |
-                    v
-         domain application services
-                    |
-                    v
-             domain ports/models
-                    ^
-                    |
-       persistence / protocol adapters
+Paper / Velocity / website / future Discord / provider adapters
+                              |
+                              v
+                   domain application services
+                              |
+                              v
+                       domain ports/models
+                              ^
+                              |
+                 persistence / protocol adapters
 ```
 
-`domain` must not depend on Bukkit, Velocity, JDBC, Discord, or a web framework. Commands, GUIs, listeners, HTTP routes and provider adapters should translate runtime input/output; they should not own a second copy of moderation policy.
+`domain` must not depend on Bukkit, Velocity, JDBC, JDA/Discord SDKs, or a web framework. Commands, GUIs, listeners, HTTP routes and provider adapters translate runtime input/output; they should not own a second copy of moderation policy.
 
 ## Paper composition roots
 
@@ -66,7 +66,7 @@ paper/src/main/java/net/enthusia/staff/paper/
 | `PaperResourceCloser.java` | owned resource shutdown |
 | `RuntimeHealth.java` | operational health/degraded state |
 
-Start here when a change affects startup, shutdown, service ownership, feature publication, scheduler ownership, or integration lifecycle. Business rules should normally lead you from these files into a domain service rather than stay in composition code.
+Start here when a change affects startup, shutdown, service ownership, feature publication, scheduler ownership, or integration lifecycle. Business rules should normally lead from these files into a domain service rather than remain in composition code.
 
 ## Paper commands and presentation
 
@@ -93,11 +93,12 @@ Important entry points include:
 | inventory/Ender | `InventoryCommand` plus `paper/inventory/` |
 | inspect/client | `InspectCommand`, `ClientCommand`, `paper/client/` |
 | staff tools | `StaffToolsCommand`, `paper/staff/StaffToolDispatcher.java` |
+| Cheat Tester | `CheatTesterCommand`, `paper/cheattester/` |
 | staff chat | `StaffChatCommand` and chat integration adapter |
 
 For any write, trace past the command into the domain/coordinator/store. Permission checks at the command surface are not the final authority boundary.
 
-## Staff-mode operational tool source map
+## Staff mode and operational tools
 
 Current merged staff-tool behavior is split rather than living in the command:
 
@@ -113,9 +114,37 @@ Current merged staff-tool behavior is split rather than living in the command:
 | `paper/staff/StaffModeWorldInteractionListener.java` | staff-profile world/item interaction protections |
 | `persistence/JdbcStaffSessionStore.java` | durable staff-session state |
 
-The dispatcher is a routing surface. Inspect/freeze/reports/vanish/staff-chat actions should continue through the existing command/service boundary rather than gain a second authority implementation.
+The dispatcher is a routing surface. Inspect/freeze/reports/Cheat Tester/spectate/vanish/staff-chat actions should continue through their existing command/service boundary rather than gain a second authority implementation.
 
 See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] for staff-facing behavior.
+
+## Cheat Tester source map
+
+The merged evidence-only tester is spread across Paper mechanics, domain state and durable recovery:
+
+```text
+paper/src/main/java/net/enthusia/staff/paper/cheattester/
+paper/src/main/java/net/enthusia/staff/paper/command/CheatTesterCommand.java
+domain/src/main/java/net/enthusia/staff/domain/cheattester/
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcCheatTesterSessionStore.java
+persistence/src/main/resources/db/migration/V18__cheat_tester_session_journal.sql
+```
+
+Trace state-changing testers as:
+
+```text
+staff action
+  -> CheatTesterCommand / StaffToolDispatcher
+  -> tester policy/runtime
+  -> durable V18 session journal before temporary mutation
+  -> target-owned scheduler mutation/sampling
+  -> exact cleanup/restoration verification
+  -> terminal journal state only after verification
+```
+
+The fake-entity path additionally crosses the optional ProtocolLib adapter. Fake-base behavior is client-side virtual block rendering and coordinate-free audit rather than a real world-block transaction.
+
+Key review hazards are stale player callbacks, disconnect/reconnect, plugin disable, fake-entity cleanup, inventory-lock overlap, ProtocolLib degradation and falsely marking a test terminal before restoration can be proved. See [[Cheat Tester]].
 
 ## Vanish source map
 
@@ -146,7 +175,7 @@ Start with `EnthusiaStaffVelocityPlugin.java`. Current responsibilities around i
 - player/server presence updates;
 - protected network identity observation;
 - persistent backend transport server;
-- network and Discord outbox workers;
+- network and legacy Discord webhook outbox workers;
 - LiteBans migration/shadow/cutover services;
 - restricted website moderation/appeal API;
 - orderly task/socket/database shutdown.
@@ -165,7 +194,7 @@ Important nearby files:
 | `WebsiteApiRouter.java` | route ownership |
 | `WebsiteAppealEndpoint.java` / `WebsiteAppealWorkflowEndpoint.java` | appeal-facing bridge operations |
 
-Do not describe bootstrap/reload classes that exist only on an unmerged branch as current `main` behavior.
+Do not describe a staff-bot module, account-link runtime or other composition classes that exist only on an unmerged branch as current `main` behavior.
 
 ## Domain source map
 
@@ -178,7 +207,8 @@ domain/src/main/java/net/enthusia/staff/domain/
 | Area | Owns |
 | --- | --- |
 | `application/` | punishment creation/drafts/requests and sanction-change use cases |
-| `auth/` | rank/action authority; `DefaultAuthorizationPolicy` is a key boundary |
+| `auth/` | rank/action authority, including merged Discord-origin authorization policy |
+| `moderation/` | moderation subjects, Minecraft/Discord identities and explicit enforcement scopes |
 | `casefile/` | cases, visibility and review projections |
 | `sanction/` | sanction state and exact change requests/results |
 | `history/` | moderation timeline projections |
@@ -187,15 +217,65 @@ domain/src/main/java/net/enthusia/staff/domain/
 | `inventory/` | inventory revisions, paths, patches, leases, confiscation/restoration models |
 | `economy/` | economy moderation plans and operation/recovery state |
 | `staff/` | durable staff-session records/snapshots |
+| `cheattester/` | tester types, sessions/evidence and recovery contracts |
 | `freeze/` | durable freeze policy/state |
 | `alt/` | relationship/evidence/confidence/inheritance policy |
 | `migration/` | import, shadow, cutover and reconciliation policy |
-| `discord/` | durable delivery models |
+| `discord/` | legacy webhook delivery models |
 | `website/` | sanitized projections and website actor/appeal models |
 | `runtime/` | operational mode/state |
 | `ports/` | interfaces implemented by storage/platform/provider adapters |
 
 When the same business decision appears in both domain and a platform adapter, treat that duplication as a review smell.
+
+## Discord moderation foundation source map
+
+The current Discord expansion has three merged layers and a separate legacy webhook subsystem.
+
+### Identity and scope domain
+
+Primary source:
+
+```text
+domain/src/main/java/net/enthusia/staff/domain/moderation/
+domain/src/main/java/net/enthusia/staff/domain/ports/DiscordModerationPersistenceStore.java
+```
+
+This layer models moderation subjects, Discord/Minecraft identity membership, link history/main-account semantics and platform-matched enforcement scopes. It does not call Discord.
+
+### V19 persistence
+
+Primary source:
+
+```text
+persistence/src/main/resources/db/migration/V19__discord_moderation_persistence.sql
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordModerationPersistenceStore.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordIdentityRepository.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordLinkRepository.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordMainAccountRepository.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordOperationalRepository.java
+persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordReplayGuard.java
+```
+
+V19 owns durable subject/link/main-account/enforcement-target/evidence-metadata/security-lock/reconciliation/maintenance foundations. `integration-tests/.../DiscordPersistenceSafetyIntegrationTest.java` is a key MariaDB test entry point.
+
+### Discord-origin authorization
+
+Primary source:
+
+```text
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordModerationAuthorizationService.java
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordAuthorization*.java
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordOperationPolicy.java
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordConsequencePolicy.java
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordPreconditionPolicy.java
+domain/src/main/java/net/enthusia/staff/domain/auth/DiscordMinecraftAuthorization.java
+docs/discord-authorization.md
+```
+
+Tests include authorization request/snapshot, target protection, consequence/operation matrix and cross-platform revalidation cases under `domain/src/test/java/net/enthusia/staff/domain/auth/`.
+
+This layer defines policy; it is not proof that an interactive Discord command/runtime exists. See [[Discord Moderation Platform]].
 
 ## Persistence source map
 
@@ -211,7 +291,7 @@ Runtime/database entry points:
 - `MariaDbRuntime.java`
 - `persistence/src/main/resources/db/migration/`
 
-Current merged Flyway history runs through `V17__website_appeal_workflow.sql`. Earlier migrations are immutable; future schema work adds a new migration.
+Current merged Flyway history runs through **`V19__discord_moderation_persistence.sql`**. Applied V1–V19 migrations are immutable history; new schema work must first reconcile the live ceiling and add a forward migration.
 
 Important stores include:
 
@@ -228,11 +308,13 @@ Important stores include:
 | `JdbcInventoryPatchTransitions` | coherent queued-patch transitions |
 | `JdbcEconomyJournalStore` | economy moderation operation journal |
 | `JdbcStaffSessionStore` | durable staff mode/recovery state |
+| `JdbcCheatTesterSessionStore` | V18-backed tester mutation/recovery journal |
 | `JdbcVanishStore` | durable vanish intent |
 | `JdbcFreezeStore` | durable freeze state |
 | `JdbcNetworkIdentityStore` | protected network identity/alt data |
 | `JdbcNetworkOutboxStore` | durable Paper-Velocity queue |
-| `JdbcDiscordOutboxStore` | durable Discord queue |
+| `JdbcDiscordOutboxStore` | durable legacy Discord webhook queue |
+| `JdbcDiscordModerationPersistenceStore` and related `JdbcDiscord*Repository` classes | V19 Discord moderation identity/link/operational foundation |
 | `JdbcWebsiteModerationStore` | sanitized website moderation projections/actions |
 | `JdbcWebsiteAppealWorkflowStore` | V17-backed appeal workflow state |
 
@@ -256,7 +338,7 @@ Key files:
 - `FrameTransport.java`
 - `EnvelopeCodec.java`
 
-Read these together with `JdbcNetworkOutboxStore`, the consumer inbox/receipt handling, and `velocity/NetworkOutboxWorker.java`. The transport is at-least-once; durable idempotency and inbox/outbox semantics make duplicate delivery safe.
+Read these together with `JdbcNetworkOutboxStore`, consumer inbox/receipt handling, and `velocity/NetworkOutboxWorker.java`. The transport is at-least-once; durable idempotency and inbox/outbox semantics make retries safe.
 
 Deep dive: [[Protocol and Network Traffic]].
 
@@ -355,7 +437,7 @@ case-linked action
 
 Provider balance storage remains provider-owned; direct raw SQL is outside this boundary.
 
-### Staff mode, tools, vanish and freeze
+### Staff mode, Cheat Tester, vanish and freeze
 
 ```text
 /staff
@@ -367,7 +449,12 @@ Provider balance storage remains provider-owned; direct raw SQL is outside this 
 staff hotbar or /stafftools
   -> StaffToolDispatcher / StaffToolsCommand
   -> canonical token/slot/material/rank validation
-  -> existing inspect/freeze/reports/spectate/vanish/staffchat routes
+  -> existing action routes
+
+/cheattester
+  -> CheatTesterCommand / tester runtime
+  -> JdbcCheatTesterSessionStore when temporary state is owned
+  -> scheduler-owned probe / verified recovery
 
 /vanish
   -> VanishManager / visibility service
@@ -378,17 +465,11 @@ staff hotbar or /stafftools
   -> JdbcFreezeStore
 ```
 
-The operational tools merged after older Wiki source maps were written; review their owner/session token fencing and Folia entity-scheduler sampling in addition to the existing staff-session contract.
+Review owner/session-token fencing, Folia entity-scheduler ownership and durable-before-mutation ordering in addition to the nominal command path.
 
 ### Java/Bedrock identity
 
-Relevant paths:
-
-- `paper/client/FloodgateIntegration.java`
-- player/platform identity domain types
-- `persistence/JdbcPlayerDirectory.java`
-- Velocity presence/network identity observation paths
-- punishment/report presentation and lookup code.
+Relevant paths include `paper/client/FloodgateIntegration.java`, player/platform identity domain types, `JdbcPlayerDirectory.java`, Velocity presence/network identity observations and punishment/report presentation/lookup code.
 
 Supported Floodgate evidence can persist a verified platform. Missing/incompatible evidence remains `UNKNOWN`; proxy presence is unverified for platform and must not downgrade a verified record. `*` names are aliases, not proof of Bedrock.
 
@@ -404,21 +485,33 @@ Relevant paths:
 
 Protect raw addresses from ordinary logs, Discord, public/site output and staff-facing equality workflows.
 
-### Discord
+### Legacy Discord webhook delivery
 
 ```text
 committed producer transaction
   -> discord_outbox
   -> JdbcDiscordOutboxStore
+  -> DiscordEventRenderer bounded/privacy projection
   -> Velocity DiscordOutboxWorker
-  -> configured webhook
+  -> approved webhook route
 ```
 
-Producer-side sanitization matters: the worker is not a universal privacy scrubber.
+The renderer is an explicit final projection boundary; the worker must not blindly post raw stored payload JSON. Producers should still avoid storing unnecessary sensitive notification data. See [[Discord Delivery]].
+
+### Discord moderation expansion
+
+```text
+moderation subject / identity / scope domain
+  -> Discord moderation persistence ports/JDBC + V19
+  -> Discord-origin authorization service
+  -> future runtime adapters only after separately merged/validated
+```
+
+The first three foundation layers are merged. The finished linking command flow, interactive staff bot and Discord side effects are not implied by those layers. See [[Discord Moderation Platform]].
 
 ### Website and appeals
 
-Current aggregate source includes both the Velocity bridge and the scoped site component work.
+Current aggregate source includes both the Velocity bridge and scoped site component work.
 
 Bridge paths include:
 
@@ -433,7 +526,7 @@ Bridge paths include:
 - `WebsiteAppealWorkflowEndpoint.java`
 - `integration-tests/.../WebsiteAppealWorkflowIntegrationTest.java`
 
-Site/component code lives under `components/` when present. Review authentication/authorization, exact-sanction appeal binding, privacy projection, replay/rate/body bounds, and aggregate/standalone parity separately from the private deployment acceptance claim.
+Site/component code lives under `components/` when present. Review authentication/authorization, exact-sanction appeal binding, privacy projection, replay/rate/body bounds, and aggregate/standalone parity separately from private deployment acceptance.
 
 ### LiteBans migration/shadow/cutover
 
@@ -457,7 +550,7 @@ Current configuration is still evolving toward the full modular goals.
 
 | Location | Owns |
 | --- | --- |
-| `paper/src/main/resources/config.yml` | current Paper runtime settings, including merged staff-tool settings |
+| `paper/src/main/resources/config.yml` | current Paper runtime settings, including staff-tool/Cheat Tester settings |
 | `paper/src/main/resources/reason-policies.yml` | punishment reason/escalation source |
 | `paper/src/main/resources/reports.yml` | report policy |
 | `paper/src/main/resources/gui/reports.yml` | report inventory presentation |
@@ -467,7 +560,7 @@ Current configuration is still evolving toward the full modular goals.
 | `domain/.../ports/AtomicReasonPolicyRepository.java` | atomic policy publication boundary |
 | `velocity/.../VelocityConfiguration.java` | proxy-owned settings and secret references |
 
-Do not assume `/estaff reload` applies every setting. Focused pages such as [[Configuration]] and [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] state restart-only boundaries where applicable.
+Do not assume `/estaff reload` applies every setting. Focused pages such as [[Configuration]], [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] and [[Cheat Tester]] state restart-only boundaries where applicable.
 
 ## Finding tests
 
@@ -475,14 +568,15 @@ Unit tests normally live beside each module under `src/test/java`; MariaDB and c
 
 Useful search anchors by change type:
 
-- authorization: `DefaultAuthorizationPolicy`, approval and hierarchy tests;
+- authorization: `DefaultAuthorizationPolicy`, approval/hierarchy tests, `DiscordModerationAuthorizationService` and its operation/target/cross-platform tests;
 - sanctions: `SanctionChange`, history and exact-mutation tests;
 - reports: report submission/state/GUI/configuration/evidence maintenance tests;
-- identity: Floodgate/platform/player-directory tests;
+- identity: Floodgate/platform/player-directory plus moderation-subject/link tests;
 - staff tools: `StaffToolDispatcher`, staff-session/recovery/scheduler tests;
+- Cheat Tester: tester domain/runtime/recovery/fake-base tests plus V18 persistence integration;
 - vanish: visibility/rank/session-fence/ProtocolLib tests;
 - protocol: `PersistentChannelTransportTest`, `EnvelopeAuthenticatorTest`, `ReplayGuardTest`;
-- persistence: MariaDB integration tests around the exact store/migration;
+- persistence: MariaDB integration tests around the exact store/migration, including `DiscordPersistenceSafetyIntegrationTest` for V19 foundations;
 - website: appeal workflow/auth/privacy/component tests;
 - migration: import/shadow/cutover/recovery integration tests.
 
@@ -493,6 +587,9 @@ See [[Build and Testing]] for what each test category proves and [[Code Review G
 - [[Architecture]] — system/module ownership.
 - [[Code Review Guide]] — cross-cutting review discipline.
 - [[Protocol and Network Traffic]] — authenticated distributed transport.
+- [[Discord Moderation Platform]] — merged Discord foundations versus future runtime.
+- [[Discord Delivery]] — current webhook delivery subsystem.
+- [[Cheat Tester]] — tester/fake-entity/fake-base behavior and recovery.
 - [[Vanish Internals]] — visibility/scheduler/packet details.
 - [[Inventory and Confiscation Safety]] — destructive player-state invariants.
 - [[Recovery and Troubleshooting]] — runtime failure/recovery model.

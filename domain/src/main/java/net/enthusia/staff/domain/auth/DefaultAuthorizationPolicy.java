@@ -23,7 +23,7 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
                         USE_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
                         REQUEST_FULL_OVERTURN, APPROVE_OVERTURN, ACCEPT_APPEAL,
                         APPLY_CASE_CONFISCATION, MODIFY_MARKET_RESTRICTION,
-                        MODIFY_REPUTATION_RESTRICTION -> true;
+                        MODIFY_REPUTATION_RESTRICTION, MANAGE_ACCOUNT_LINKS -> true;
                 default -> false;
             };
             case FOUNDER -> true;

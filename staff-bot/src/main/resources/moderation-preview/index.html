@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Enthusia Staff · Moderation Workspace</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup" aria-label="Enthusia Staff moderation workspace">
+        <div class="brand-mark" aria-hidden="true">E</div>
+        <div>
+          <div class="brand-name">Enthusia Staff</div>
+          <div class="brand-product">Moderation Workspace</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="scenario-control" for="scenarioSelect">
+          <span>Sample case</span>
+          <select id="scenarioSelect"></select>
+        </label>
+        <span class="staging-badge">STAGING PREVIEW</span>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Player moderation navigation">
+      <nav id="primaryNav" class="nav-list"></nav>
+      <div class="sidebar-footer">
+        <div class="staff-avatar" aria-hidden="true">LS</div>
+        <div>
+          <div class="staff-name">Staff session</div>
+          <div id="actorMeta" class="muted tiny">Loading…</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section id="targetHeader" class="target-header" aria-labelledby="targetName"></section>
+      <section id="workspaceContent" class="workspace-content" aria-live="polite"></section>
+    </main>
+
+    <aside id="contextPanel" class="context-panel" aria-label="Player context"></aside>
+  </div>
+
+  <div id="selectionBar" class="selection-bar" hidden></div>
+
+  <dialog id="punishmentDialog" class="punishment-dialog" aria-labelledby="workflowTitle">
+    <div class="dialog-frame">
+      <header class="dialog-header">
+        <div>
+          <div class="eyebrow">Issue punishment</div>
+          <h2 id="workflowTitle">Choose offense</h2>
+        </div>
+        <button id="closeWorkflow" class="icon-button" type="button" aria-label="Close punishment workflow">×</button>
+      </header>
+      <div id="workflowSteps" class="workflow-steps" aria-label="Punishment workflow steps"></div>
+      <div id="workflowBody" class="dialog-body"></div>
+      <footer id="workflowFooter" class="dialog-footer"></footer>
+    </div>
+  </dialog>
+
+  <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script src="/assets/model.js" defer></script>
+  <script src="/assets/app.js" defer></script>
+  <script src="/assets/workflow.js" defer></script>
+  <script src="/assets/review.js" defer></script>
+</body>
+</html>

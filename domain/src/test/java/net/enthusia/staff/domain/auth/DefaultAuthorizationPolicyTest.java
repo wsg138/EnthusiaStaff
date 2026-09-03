@@ -48,7 +48,8 @@ class DefaultAuthorizationPolicyTest {
                 ModerationAction.ACCEPT_APPEAL,
                 ModerationAction.APPLY_CASE_CONFISCATION,
                 ModerationAction.MODIFY_MARKET_RESTRICTION,
-                ModerationAction.MODIFY_REPUTATION_RESTRICTION
+                ModerationAction.MODIFY_REPUTATION_RESTRICTION,
+                ModerationAction.MANAGE_ACCOUNT_LINKS
         ));
         assertPermissions(StaffRank.FOUNDER, EnumSet.allOf(ModerationAction.class));
     }

@@ -358,7 +358,8 @@ final class JdbcInventoryPatchTransitions {
                     reason_code, detail_json, quarantined_at
                 ) VALUES (?, 'INVENTORY', ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE reason_code = VALUES(reason_code),
-                    detail_json = VALUES(detail_json), quarantined_at = VALUES(quarantined_at)
+                    detail_json = VALUES(detail_json), quarantined_at = VALUES(quarantined_at),
+                    resolved_at = NULL, resolved_by = NULL, resolution_json = NULL
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             statement.setBytes(2, UuidBytes.toBytes(patch.operationId()));

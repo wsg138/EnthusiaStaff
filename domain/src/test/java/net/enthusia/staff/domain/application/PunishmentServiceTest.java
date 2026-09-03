@@ -106,6 +106,23 @@ class PunishmentServiceTest {
     }
 
     @Test
+    void postCommitObserverFailureCannotChangeDurableSuccess() {
+        CapturingStore store = new CapturingStore(List.of());
+        AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
+                "v1", List.of(policy(StaffRank.MOD, standardSteps()))
+        );
+        PunishmentService service = service(policies, store);
+        service.setCommittedObserver(ignored -> {
+            throw new IllegalStateException("simulated notification failure");
+        });
+
+        PunishmentResult result = service.create(request(StaffRank.MOD, List.of()), OperationalMode.ACTIVE);
+
+        assertInstanceOf(PunishmentResult.Accepted.class, result);
+        assertEquals(1, store.plans.size());
+    }
+
+    @Test
     void modMayLowerButCannotRaiseConfiguredStep() {
         List<PunishmentStep> steps = standardSteps();
         CapturingStore recentHistory = new CapturingStore(List.of(

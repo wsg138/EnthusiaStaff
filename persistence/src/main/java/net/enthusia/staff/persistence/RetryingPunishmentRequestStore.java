@@ -17,17 +17,17 @@ final class RetryingPunishmentRequestStore implements PunishmentRequestStore {
     private static final String INTERRUPTED = "Punishment request transaction retry was interrupted";
 
     private final PunishmentRequestStore delegate;
-    private final JdbcDeadlockRetry retry;
+    private final JdbcTransactionRetry retry;
 
     RetryingPunishmentRequestStore(PunishmentRequestStore delegate) {
-        this(delegate, new JdbcDeadlockRetry());
+        this(delegate, new JdbcTransactionRetry());
     }
 
     RetryingPunishmentRequestStore(PunishmentRequestStore delegate, IntConsumer retryPause) {
-        this(delegate, new JdbcDeadlockRetry(3, retryPause));
+        this(delegate, new JdbcTransactionRetry(3, retryPause));
     }
 
-    private RetryingPunishmentRequestStore(PunishmentRequestStore delegate, JdbcDeadlockRetry retry) {
+    private RetryingPunishmentRequestStore(PunishmentRequestStore delegate, JdbcTransactionRetry retry) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.retry = Objects.requireNonNull(retry, "retry");
     }

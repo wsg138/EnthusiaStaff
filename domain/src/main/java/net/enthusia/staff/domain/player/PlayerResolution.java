@@ -3,6 +3,9 @@ package net.enthusia.staff.domain.player;
 import java.util.List;
 
 public sealed interface PlayerResolution {
+    int MIN_AMBIGUOUS_MATCHES = 2;
+    int MAX_AMBIGUOUS_MATCHES = 25;
+
     record Resolved(PlayerIdentity identity, MatchKind matchKind) implements PlayerResolution {
         public Resolved {
             if (identity == null || matchKind == null) {
@@ -12,11 +15,12 @@ public sealed interface PlayerResolution {
     }
 
     record Ambiguous(List<PlayerIdentity> matches, boolean truncated) implements PlayerResolution {
-        public Ambiguous {
-            if (matches == null || matches.size() < 2) {
+        public Ambiguous(List<PlayerIdentity> matches, boolean truncated) {
+            if (matches == null || matches.size() < MIN_AMBIGUOUS_MATCHES) {
                 throw new IllegalArgumentException("ambiguous resolution requires at least two matches");
             }
-            matches = List.copyOf(matches);
+            this.truncated = truncated || matches.size() > MAX_AMBIGUOUS_MATCHES;
+            this.matches = List.copyOf(matches.subList(0, Math.min(matches.size(), MAX_AMBIGUOUS_MATCHES)));
         }
 
         public Ambiguous(List<PlayerIdentity> matches) {
