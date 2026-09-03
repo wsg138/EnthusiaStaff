@@ -75,7 +75,28 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         long generation = registrationCallbacks.beginResolution();
         enabled.set(false);
         Guild guild = jda.getGuildById(guildId);
-        if (guild == null || !messageContentEntitled(jda) || !startReadApi(jda)) {
+        if (guild == null) {
+            return;
+        }
+        resolveMessageContentEntitlement(jda, guild, generation);
+    }
+
+    private void resolveMessageContentEntitlement(JDA jda, Guild guild, long generation) {
+        jda.retrieveApplicationInfo().queue(
+                applicationInfo -> registrationCallbacks.runIfCurrent(
+                        generation,
+                        () -> continueEnable(jda, guild, generation, applicationInfo.getFlags())),
+                failure -> registrationCallbacks.runIfCurrent(
+                        generation,
+                        () -> entitlementCheckFailed(failure)));
+    }
+
+    private void continueEnable(JDA jda, Guild guild, long generation, Set<ApplicationInfo.Flag> flags) {
+        if (!hasMessageContentEntitlement(flags)) {
+            log("discord_ui_preview_message_content_intent_unavailable", null);
+            return;
+        }
+        if (!startReadApi(jda)) {
             return;
         }
         guild.updateCommands().addCommands(commands()).queue(
@@ -83,6 +104,11 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
                         generation, () -> commandsRegistered(registered)),
                 failure -> registrationCallbacks.runIfCurrent(
                         generation, () -> commandRegistrationFailed(failure)));
+    }
+
+    private void entitlementCheckFailed(Throwable failure) {
+        enabled.set(false);
+        log("discord_ui_preview_message_content_intent_check_failed", failure);
     }
 
     void disable() {
@@ -133,45 +159,31 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     private boolean startReadApi(JDA jda) {
-    if (readApiServer.isPresent()) {
-        return true;
-    }
-    if (moderation.isEmpty()) {
-        return false;
-    }
-    try {
-        readApiServer = Optional.of(createStartedReadApi(jda));
-        return true;
-    } catch (java.io.IOException | RuntimeException exception) {
-        log("moderation_read_api_start_failed", exception);
-        closeReadApi();
-        return false;
-    }
-}
-
-private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOException {
-    ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
-    ModerationReadApiServer candidate = new ModerationReadApiServer(discordBotToken, service);
-    try {
-        candidate.start();
-        return candidate;
-    } catch (RuntimeException exception) {
-        candidate.close();
-        throw exception;
-    }
-}
-
-    private static boolean messageContentEntitled(JDA jda) {
-        try {
-            Set<ApplicationInfo.Flag> flags = jda.retrieveApplicationInfo().complete().getFlags();
-            boolean entitled = hasMessageContentEntitlement(flags);
-            if (!entitled) {
-                log("discord_ui_preview_message_content_intent_unavailable", null);
-            }
-            return entitled;
-        } catch (RuntimeException exception) {
-            log("discord_ui_preview_message_content_intent_check_failed", exception);
+        if (readApiServer.isPresent()) {
+            return true;
+        }
+        if (moderation.isEmpty()) {
             return false;
+        }
+        try {
+            readApiServer = Optional.of(createStartedReadApi(jda));
+            return true;
+        } catch (java.io.IOException | RuntimeException exception) {
+            log("moderation_read_api_start_failed", exception);
+            closeReadApi();
+            return false;
+        }
+    }
+
+    private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOException {
+        ModerationReadApiService service = new ModerationReadApiService(guildId, moderation.orElseThrow(), jda);
+        ModerationReadApiServer candidate = new ModerationReadApiServer(discordBotToken, service);
+        try {
+            candidate.start();
+            return candidate;
+        } catch (RuntimeException exception) {
+            candidate.close();
+            throw exception;
         }
     }
 
@@ -239,9 +251,9 @@ private ModerationReadApiServer createStartedReadApi(JDA jda) throws java.io.IOE
     }
 
     private void closeReadApi() {
-    readApiServer.ifPresent(ModerationReadApiServer::close);
-    readApiServer = Optional.empty();
-}
+        readApiServer.ifPresent(ModerationReadApiServer::close);
+        readApiServer = Optional.empty();
+    }
 
     private static void log(String code, Throwable failure) {
         if (LOGGER.isLoggable(System.Logger.Level.WARNING)) {
