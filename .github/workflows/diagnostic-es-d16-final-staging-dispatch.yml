@@ -1,0 +1,41 @@
+name: Diagnostic ES-D16 Final Staging Dispatch
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-final-staging-dispatch-20260903
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Guard exact refs, dispatch, and recheck
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: 69c2258aa90b687733437f336f103fc9a5da745c
+          EXPECTED_MAIN: 9d0413ec17c73977fc5dc00bb93f3339c473fcb0
+        run: |
+          set -Eeuo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+
+          check_refs() {
+            live_head="$(curl -fsSL "${auth[@]}" "${api}/pulls/187" | jq -r '.head.sha')"
+            live_main="$(curl -fsSL "${auth[@]}" "${api}/branches/main" | jq -r '.commit.sha')"
+            [[ "${live_head}" == "${EXPECTED_HEAD}" ]] || { echo 'PR head moved; refusing dispatch.' >&2; exit 1; }
+            [[ "${live_main}" == "${EXPECTED_MAIN}" ]] || { echo 'main moved; refusing dispatch.' >&2; exit 1; }
+          }
+
+          check_refs
+          curl -fsSL -X POST "${auth[@]}" \
+            "${api}/actions/workflows/moderation-web-staging-deploy.yml/dispatches" \
+            -d '{"ref":"package/es-d16-moderation-read-bridge"}'
+          check_refs
+          echo "Dispatched protected staging for exact D16 head ${EXPECTED_HEAD}."
