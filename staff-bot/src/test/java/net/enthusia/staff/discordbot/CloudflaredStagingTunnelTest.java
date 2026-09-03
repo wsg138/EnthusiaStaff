@@ -29,7 +29,7 @@ class CloudflaredStagingTunnelTest {
     Path tempDir;
 
     @Test
-    void startsFixedTokenFileCommandWithoutReadingTokenContents() throws Exception {
+    void startsFixedHttp2TokenFileCommandWithoutReadingTokenContents() throws Exception {
         Path binary = executable("cloudflared");
         Path token = Files.writeString(tempDir.resolve(TOKEN_FILE_NAME), "private-token-value");
         FakeProcess process = new FakeProcess();
@@ -49,6 +49,8 @@ class CloudflaredStagingTunnelTest {
         assertEquals(List.of(
                 "./cloudflared",
                 "tunnel",
+                "--protocol",
+                "http2",
                 "--no-autoupdate",
                 "run",
                 "--token-file",
