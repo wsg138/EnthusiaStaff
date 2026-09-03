@@ -15,6 +15,7 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
     private static final Duration FORCE_TIMEOUT = Duration.ofSeconds(2);
     private static final String BINARY_NAME = "cloudflared";
     private static final String TOKEN_FILE_NAME = "cloudflared-token.txt";
+    private static final String TRANSPORT_PROTOCOL = "http2";
 
     private final Path runtimeDirectory;
     private final ProcessStarter processStarter;
@@ -59,6 +60,8 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
         return List.of(
                 "./cloudflared",
                 "tunnel",
+                "--protocol",
+                TRANSPORT_PROTOCOL,
                 "--no-autoupdate",
                 "run",
                 "--token-file",
@@ -109,6 +112,8 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
         return new ProcessBuilder(
                 "./cloudflared",
                 "tunnel",
+                "--protocol",
+                TRANSPORT_PROTOCOL,
                 "--no-autoupdate",
                 "run",
                 "--token-file",
