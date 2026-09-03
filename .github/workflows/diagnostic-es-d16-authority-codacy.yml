@@ -1,0 +1,40 @@
+name: Diagnostic ES-D16 Authority Codacy Findings
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-authority-codacy-20260903
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+jobs:
+  findings:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard exact D16 head and print sanitized annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: 71835dd8ec22454932eaf375ddb6b5fe687d2d16
+          CHECK_RUN_ID: "100515385451"
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          live_head="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/pulls/187" | jq -r '.head.sha')"
+          [[ "${live_head}" == "${EXPECTED_HEAD}" ]] || {
+            echo "Refusing diagnostic: PR #187 head moved." >&2
+            exit 1
+          }
+          check_head="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "${api}/check-runs/${CHECK_RUN_ID}" | jq -r '.head_sha')"
+          [[ "${check_head}" == "${EXPECTED_HEAD}" ]] || {
+            echo "Refusing diagnostic: Codacy check is not exact-head." >&2
+            exit 1
+          }
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "${api}/check-runs/${CHECK_RUN_ID}/annotations?per_page=100" \
+            | jq -r '.[] | [(.path // ""), ((.start_line // 0)|tostring), (.annotation_level // ""), (.title // ""), (.message // "")] | @tsv'
