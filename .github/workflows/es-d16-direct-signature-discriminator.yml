@@ -1,0 +1,93 @@
+name: ES-D16 Direct Signature Discriminator
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-runtime-probe-20260904
+    paths:
+      - ".github/workflows/es-d16-direct-signature-discriminator.yml"
+
+permissions:
+  contents: read
+
+env:
+  READ_HOST: moderation-read-staging.enthusia.info
+  PANEL_ORIGIN: https://staff-staging.enthusia.info
+  GUILD_ID: "1410303324745371709"
+
+jobs:
+  discriminate:
+    name: Compare GitHub secret directly with Staff Bot verifier
+    runs-on: ubuntu-latest
+    environment: cloudflare-staging
+    timeout-minutes: 3
+    steps:
+      - name: Send one synthetic directly signed read
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          body_file="$(mktemp)"
+          meta_file="$(mktemp)"
+          response_file="$(mktemp)"
+          trap 'rm -f "$body_file" "$meta_file" "$response_file"' EXIT
+          chmod 600 "$body_file" "$meta_file"
+
+          python3 - "$body_file" "$meta_file" "$GUILD_ID" <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          import secrets
+          import sys
+          import time
+
+          body_path, meta_path, guild_id = sys.argv[1:]
+          token = os.environ['BOT_TOKEN'].strip()
+          if not token or any(ch.isspace() for ch in token):
+              raise SystemExit('protected bot token is empty or malformed')
+
+          actor = str(10**17 + secrets.randbelow(9 * 10**17))
+          body = '{"actorId":"' + actor + '","guildId":"' + guild_id + '","messages":null,"targetKey":"discord:' + actor + '"}'
+          timestamp = str(int(time.time()))
+          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
+          key = hashlib.sha256(b'enthusia-staff-moderation-read-api-v1\0' + token.encode('utf-8')).digest()
+          body_digest = hashlib.sha256(body.encode('utf-8')).hexdigest()
+          canonical = 'v1\nPOST\n/v1/moderation/bootstrap\n' + timestamp + '\n' + nonce + '\n' + body_digest
+          signature = base64.urlsafe_b64encode(hmac.new(key, canonical.encode('utf-8'), hashlib.sha256).digest()).rstrip(b'=').decode('ascii')
+
+          with open(body_path, 'w', encoding='utf-8') as handle:
+              handle.write(body)
+          with open(meta_path, 'w', encoding='utf-8') as handle:
+              json.dump({'timestamp': timestamp, 'nonce': nonce, 'signature': signature}, handle)
+          PY
+          unset BOT_TOKEN
+
+          timestamp="$(jq -r '.timestamp' "$meta_file")"
+          nonce="$(jq -r '.nonce' "$meta_file")"
+          signature="$(jq -r '.signature' "$meta_file")"
+          status="$(curl --silent --show-error -X POST \
+            -H "Origin: ${PANEL_ORIGIN}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "X-Enthusia-Read-Timestamp: $timestamp" \
+            -H "X-Enthusia-Read-Nonce: $nonce" \
+            -H "X-Enthusia-Read-Signature: $signature" \
+            --data-binary @"$body_file" \
+            --output "$response_file" --write-out '%{http_code}' --max-time 20 \
+            "https://${READ_HOST}/v1/moderation/bootstrap" || true)"
+          code="$(jq -r '.code // "missing"' "$response_file" 2>/dev/null || printf 'non_json')"
+          echo "diagnostic_direct_secret status=${status:-curl_error} code=${code}"
+
+          if [[ "$status" == '403' && "$code" == 'forbidden' ]]; then
+            echo 'diagnostic_direct_secret_match=yes'
+            exit 0
+          fi
+          if [[ "$status" == '401' && "$code" == 'unauthorized' ]]; then
+            echo 'diagnostic_direct_secret_match=no'
+            exit 1
+          fi
+          echo 'diagnostic_direct_secret_match=indeterminate'
+          exit 1
