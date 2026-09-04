@@ -14,6 +14,7 @@ const STATIC_PATHS = new Set([
   '/assets/review.js',
   '/assets/real-data.js',
   '/assets/direct-read.js',
+  '/assets/live-loading.js',
   '/assets/real-policy.js'
 ]);
 const encoder = new TextEncoder();
