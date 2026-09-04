@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - main
-      - owner/staging-web-moderation-console
+      - package/es-d16-moderation-read-bridge
     paths:
       - "moderation-web/**"
+      - "staff-bot/src/main/resources/moderation-preview/**"
       - ".github/workflows/moderation-web-staging-deploy.yml"
   workflow_dispatch:
 
@@ -16,6 +17,9 @@ permissions:
 env:
   EXPECTED_HOST: staff-staging.enthusia.info
   EXPECTED_ZONE: enthusia.info
+  READ_BACKEND_HOST: moderation-read-staging.enthusia.info
+  READ_TUNNEL_NAME: enthusia-moderation-read-staging
+  LEGACY_RELAY_NAME: enthusia-moderation-read-relay-staging
 
 jobs:
   deploy:
@@ -38,7 +42,7 @@ jobs:
           test -n "$SOURCE_SHA"
           echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
 
-      - name: Assert required secrets
+      - name: Assert required protected configuration
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -47,6 +51,9 @@ jobs:
           set -Eeuo pipefail
           [[ -n "$CLOUDFLARE_API_TOKEN" ]]
           [[ -n "$BOT_TOKEN" ]]
+          [[ "$READ_BACKEND_HOST" == 'moderation-read-staging.enthusia.info' ]]
+          [[ "$READ_TUNNEL_NAME" == 'enthusia-moderation-read-staging' ]]
+          [[ "$LEGACY_RELAY_NAME" == 'enthusia-moderation-read-relay-staging' ]]
 
       - name: Resolve Cloudflare zone account
         shell: bash
@@ -62,9 +69,117 @@ jobs:
           count="$(printf '%s' "$response" | jq '[.result[] | select(.name == env.EXPECTED_ZONE)] | length')"
           [[ "$count" == '1' ]]
           account_id="$(printf '%s' "$response" | jq -r '.result[] | select(.name == env.EXPECTED_ZONE) | .account.id')"
+          zone_id="$(printf '%s' "$response" | jq -r '.result[] | select(.name == env.EXPECTED_ZONE) | .id')"
           [[ "$account_id" =~ ^[0-9a-f]{32}$ ]]
+          [[ "$zone_id" =~ ^[0-9a-f]{32}$ ]]
           echo "CLOUDFLARE_ACCOUNT_ID=$account_id" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_ZONE_ID=$zone_id" >> "$GITHUB_ENV"
           echo "Resolved ${EXPECTED_ZONE} to its owning Cloudflare account." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Provision fixed moderation read tunnel and hostname
+        id: provision_read_tunnel
+        continue-on-error: true
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          api_base='https://api.cloudflare.com/client/v4'
+          auth_header="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+          tunnels="$(curl --fail-with-body --silent --show-error --get \
+            -H "$auth_header" -H 'Content-Type: application/json' \
+            --data-urlencode "name=${READ_TUNNEL_NAME}" \
+            --data-urlencode 'is_deleted=false' \
+            --data-urlencode 'per_page=100' \
+            "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel")"
+          printf '%s' "$tunnels" | jq -e '.success == true' >/dev/null
+          tunnel_count="$(printf '%s' "$tunnels" | jq --arg name "$READ_TUNNEL_NAME" '[.result[] | select(.name == $name and .deleted_at == null)] | length')"
+
+          if [[ "$tunnel_count" == '0' ]]; then
+            payload="$(jq -cn --arg name "$READ_TUNNEL_NAME" '{name:$name, config_src:"cloudflare"}')"
+            created="$(curl --fail-with-body --silent --show-error \
+              -X POST -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$payload" \
+              "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel")"
+            printf '%s' "$created" | jq -e '.success == true and .result.config_src == "cloudflare"' >/dev/null
+            tunnel_id="$(printf '%s' "$created" | jq -r '.result.id')"
+            tunnel_created='yes'
+          elif [[ "$tunnel_count" == '1' ]]; then
+            tunnel_id="$(printf '%s' "$tunnels" | jq -r --arg name "$READ_TUNNEL_NAME" '.result[] | select(.name == $name and .deleted_at == null) | .id')"
+            config_src="$(printf '%s' "$tunnels" | jq -r --arg name "$READ_TUNNEL_NAME" '.result[] | select(.name == $name and .deleted_at == null) | .config_src')"
+            [[ "$config_src" == 'cloudflare' ]] || {
+              echo '::error::Existing moderation read tunnel is not remotely managed; refusing to repurpose it.'
+              exit 1
+            }
+            tunnel_created='no'
+          else
+            echo '::error::Multiple active moderation read tunnels share the protected staging name.'
+            exit 1
+          fi
+          [[ "$tunnel_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+
+          ingress="$(jq -cn --arg host "$READ_BACKEND_HOST" '{config:{ingress:[{hostname:$host,service:"http://127.0.0.1:8766"},{service:"http_status:404"}]}}')"
+          configured="$(curl --fail-with-body --silent --show-error \
+            -X PUT -H "$auth_header" -H 'Content-Type: application/json' \
+            --data "$ingress" \
+            "${api_base}/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel/${tunnel_id}/configurations")"
+          printf '%s' "$configured" | jq -e --arg host "$READ_BACKEND_HOST" '
+            .success == true
+            and .result.config.ingress[0].hostname == $host
+            and .result.config.ingress[0].service == "http://127.0.0.1:8766"
+            and .result.config.ingress[1].service == "http_status:404"' >/dev/null
+
+          records="$(curl --fail-with-body --silent --show-error --get \
+            -H "$auth_header" -H 'Content-Type: application/json' \
+            --data-urlencode "name=${READ_BACKEND_HOST}" \
+            --data-urlencode 'per_page=100' \
+            "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
+          printf '%s' "$records" | jq -e '.success == true' >/dev/null
+          record_count="$(printf '%s' "$records" | jq --arg name "$READ_BACKEND_HOST" '[.result[] | select(.name == $name)] | length')"
+          cname_target="${tunnel_id}.cfargotunnel.com"
+          dns_payload="$(jq -cn \
+            --arg name "$READ_BACKEND_HOST" \
+            --arg content "$cname_target" \
+            '{type:"CNAME",name:$name,content:$content,ttl:1,proxied:true,comment:"ES-D16 staging moderation read bridge"}')"
+
+          if [[ "$record_count" == '0' ]]; then
+            dns_result="$(curl --fail-with-body --silent --show-error \
+              -X POST -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$dns_payload" \
+              "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records")"
+          elif [[ "$record_count" == '1' ]]; then
+            record_type="$(printf '%s' "$records" | jq -r --arg name "$READ_BACKEND_HOST" '.result[] | select(.name == $name) | .type')"
+            [[ "$record_type" == 'CNAME' ]] || {
+              echo '::error::Protected moderation backend hostname is occupied by a non-CNAME record; refusing to overwrite it.'
+              exit 1
+            }
+            record_id="$(printf '%s' "$records" | jq -r --arg name "$READ_BACKEND_HOST" '.result[] | select(.name == $name) | .id')"
+            [[ "$record_id" =~ ^[0-9a-f]{32}$ ]]
+            dns_result="$(curl --fail-with-body --silent --show-error \
+              -X PATCH -H "$auth_header" -H 'Content-Type: application/json' \
+              --data "$dns_payload" \
+              "${api_base}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record_id}")"
+          else
+            echo '::error::Protected moderation backend hostname has multiple DNS records; refusing ambiguous replacement.'
+            exit 1
+          fi
+          printf '%s' "$dns_result" | jq -e --arg name "$READ_BACKEND_HOST" --arg content "$cname_target" '
+            .success == true
+            and .result.type == "CNAME"
+            and .result.name == $name
+            and .result.content == $content
+            and .result.proxied == true' >/dev/null
+
+          echo "READ_TUNNEL_ID=$tunnel_id" >> "$GITHUB_ENV"
+          {
+            echo '### Private moderation read transport'
+            echo
+            echo "- tunnel: \`${READ_TUNNEL_NAME}\` (created this run: ${tunnel_created})"
+            echo "- hostname: \`https://${READ_BACKEND_HOST}\`"
+            echo '- origin ingress: `http://127.0.0.1:8766`'
+            echo '- direct public origin port: **not configured**'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v5
@@ -80,7 +195,7 @@ jobs:
           npm run check
           [[ "$SOURCE_SHA" == "$(git -C .. rev-parse HEAD)" ]]
 
-      - name: Deploy Worker with derived launch-signing secret
+      - name: Deploy Worker with derived staging bridge secrets
         working-directory: moderation-web
         shell: bash
         env:
@@ -102,11 +217,17 @@ jobs:
           token = os.environ['BOT_TOKEN'].strip()
           if not token or any(ch.isspace() for ch in token):
               raise SystemExit('protected bot token is empty or malformed')
-          key_hex = hashlib.sha256(
+          launch_key_hex = hashlib.sha256(
               b'enthusia-staff-moderation-launch-v1\0' + token.encode('utf-8')
           ).hexdigest()
+          read_key_hex = hashlib.sha256(
+              b'enthusia-staff-moderation-read-api-v1\0' + token.encode('utf-8')
+          ).hexdigest()
           with open(sys.argv[1], 'w', encoding='utf-8') as handle:
-              json.dump({'LAUNCH_SIGNING_KEY_HEX': key_hex}, handle)
+              json.dump({
+                  'LAUNCH_SIGNING_KEY_HEX': launch_key_hex,
+                  'READ_API_SIGNING_KEY_HEX': read_key_hex,
+              }, handle)
           PY
           unset BOT_TOKEN
 
@@ -137,7 +258,7 @@ jobs:
           grep -Fqx 'Open this panel from Discord.' root.out
           rm -f root.out
 
-      - name: Verify live launch, session and replay contract
+      - name: Verify live launch, direct read CORS and replay contract
         shell: bash
         env:
           BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
@@ -148,13 +269,23 @@ jobs:
           launch_headers="$(mktemp)"
           launch_body="$(mktemp)"
           panel_body="$(mktemp)"
+          session_body="$(mktemp)"
+          proof_body="$(mktemp)"
+          signed_body="$(mktemp)"
+          preflight_headers="$(mktemp)"
+          direct_headers="$(mktemp)"
+          direct_body="$(mktemp)"
+          direct_replay_headers="$(mktemp)"
+          direct_replay_body="$(mktemp)"
           replay_body="$(mktemp)"
           cleanup() {
             rm -f "$ticket_file" "$cookie_jar" "$launch_headers" "$launch_body" \
-              "$panel_body" "$replay_body"
+              "$panel_body" "$session_body" "$proof_body" "$signed_body" \
+              "$preflight_headers" "$direct_headers" "$direct_body" \
+              "$direct_replay_headers" "$direct_replay_body" "$replay_body"
           }
           trap cleanup EXIT
-          chmod 600 "$ticket_file" "$cookie_jar"
+          chmod 600 "$ticket_file" "$cookie_jar" "$proof_body" "$signed_body"
 
           python3 - "$ticket_file" "$EXPECTED_HOST" <<'PY'
           import base64
@@ -173,7 +304,8 @@ jobs:
           key = hashlib.sha256(b'enthusia-staff-moderation-launch-v1\0' + bot_token.encode('utf-8')).digest()
           now = int(time.time())
           nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
-          body = f'v1|staging|{nonce}|846729778400460871|1410303324745371709|sample-river-ash|{now}|{now + 120}'
+          test_actor_id = str(10**17 + secrets.randbelow(9 * 10**17))
+          body = f'v1|staging|{nonce}|{test_actor_id}|1410303324745371709|discord:{test_actor_id}|{now}|{now + 120}'
           encoded = base64.urlsafe_b64encode(body.encode('utf-8')).rstrip(b'=').decode('ascii')
           signature = base64.urlsafe_b64encode(hmac.new(key, encoded.encode('ascii'), hashlib.sha256).digest()).rstrip(b'=').decode('ascii')
           token = f'{encoded}.{signature}'
@@ -189,17 +321,16 @@ jobs:
             --write-out '%{http_code}' \
             --max-time 20 \
             "$(cat "$ticket_file")")"
-          if [[ "$first_status" != '303' ]]; then
+          [[ "$first_status" == '303' ]] || {
             echo "Live first-use launch returned HTTP ${first_status}; expected 303." >&2
-            cat "$launch_body" >&2
             exit 1
-          fi
+          }
 
           location="$(awk 'BEGIN { IGNORECASE=1 } /^location:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$launch_headers")"
-          if [[ "$location" != '/moderation' ]]; then
+          [[ "$location" == '/moderation' ]] || {
             echo "Live launch redirect target was unexpected: ${location:-<missing>}" >&2
             exit 1
-          fi
+          }
 
           panel_status="$(curl --silent --show-error \
             --cookie "$cookie_jar" \
@@ -207,21 +338,109 @@ jobs:
             --write-out '%{http_code}' \
             --max-time 20 \
             "https://${EXPECTED_HOST}/moderation")"
-          if [[ "$panel_status" != '200' ]]; then
+          [[ "$panel_status" == '200' ]] || {
             echo "Authenticated moderation panel returned HTTP ${panel_status}; expected 200." >&2
-            cat "$panel_body" >&2
             exit 1
-          fi
+          }
+
+          session_status="$(curl --silent --show-error \
+            --cookie "$cookie_jar" \
+            --output "$session_body" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${EXPECTED_HOST}/api/session")"
+          [[ "$session_status" == '200' ]]
+          jq -e '
+            (.actorId | type == "string" and test("^[1-9][0-9]{0,19}$"))
+            and .guildId == "1410303324745371709"
+            and (.targetKey | type == "string" and test("^discord:[1-9][0-9]{0,19}$"))
+            and .staging == true' "$session_body" >/dev/null
+
+          proof_status="$(curl --silent --show-error \
+            --cookie "$cookie_jar" \
+            --output "$proof_body" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${EXPECTED_HOST}/api/bootstrap")"
+          [[ "$proof_status" == '200' ]]
+          jq -e --arg origin "https://${READ_BACKEND_HOST}" '
+            .origin == $origin
+            and .path == "/v1/moderation/bootstrap"
+            and .method == "POST"
+            and (.body | type == "string" and length > 0 and length <= 65536)
+            and (.timestamp | type == "string" and test("^[0-9]{1,12}$"))
+            and (.nonce | type == "string" and test("^[A-Za-z0-9_-]{32,64}$"))
+            and (.signature | type == "string" and test("^[A-Za-z0-9_-]{43,44}$"))' "$proof_body" >/dev/null
+
+          # Preserve the exact HMAC-bound JSON bytes; jq -r would append a newline.
+          jq -j '.body' "$proof_body" > "$signed_body"
+          actor_id="$(jq -r '.actorId' "$session_body")"
+          guild_id="$(jq -r '.guildId' "$session_body")"
+          target_key="$(jq -r '.targetKey' "$session_body")"
+          jq -e --arg actor "$actor_id" --arg guild "$guild_id" --arg target "$target_key" '
+            .actorId == $actor and .guildId == $guild and .targetKey == $target and .messages == null' "$signed_body" >/dev/null
+
+          preflight_status="$(curl --silent --show-error \
+            -X OPTIONS \
+            -H "Origin: https://${EXPECTED_HOST}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,x-enthusia-read-timestamp,x-enthusia-read-nonce,x-enthusia-read-signature' \
+            --dump-header "$preflight_headers" \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${READ_BACKEND_HOST}/v1/moderation/bootstrap")"
+          [[ "$preflight_status" == '204' ]]
+          preflight_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$preflight_headers")"
+          [[ "$preflight_origin" == "https://${EXPECTED_HOST}" ]]
+
+          timestamp="$(jq -r '.timestamp' "$proof_body")"
+          nonce="$(jq -r '.nonce' "$proof_body")"
+          signature="$(jq -r '.signature' "$proof_body")"
+          direct_status="$(curl --silent --show-error \
+            -X POST \
+            -H "Origin: https://${EXPECTED_HOST}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "X-Enthusia-Read-Timestamp: $timestamp" \
+            -H "X-Enthusia-Read-Nonce: $nonce" \
+            -H "X-Enthusia-Read-Signature: $signature" \
+            --data-binary @"$signed_body" \
+            --dump-header "$direct_headers" \
+            --output "$direct_body" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${READ_BACKEND_HOST}/v1/moderation/bootstrap")"
+          [[ "$direct_status" == '403' ]]
+          jq -e '.code == "forbidden" and .message == "Access denied."' "$direct_body" >/dev/null
+          direct_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$direct_headers")"
+          [[ "$direct_origin" == "https://${EXPECTED_HOST}" ]]
+
+          direct_replay_status="$(curl --silent --show-error \
+            -X POST \
+            -H "Origin: https://${EXPECTED_HOST}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "X-Enthusia-Read-Timestamp: $timestamp" \
+            -H "X-Enthusia-Read-Nonce: $nonce" \
+            -H "X-Enthusia-Read-Signature: $signature" \
+            --data-binary @"$signed_body" \
+            --dump-header "$direct_replay_headers" \
+            --output "$direct_replay_body" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://${READ_BACKEND_HOST}/v1/moderation/bootstrap")"
+          [[ "$direct_replay_status" == '401' ]]
+          jq -e '.code == "unauthorized" and .message == "Request rejected."' "$direct_replay_body" >/dev/null
+          replay_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$direct_replay_headers")"
+          [[ "$replay_origin" == "https://${EXPECTED_HOST}" ]]
 
           replay_status="$(curl --silent --show-error \
             --output "$replay_body" \
             --write-out '%{http_code}' \
             --max-time 20 \
             "$(cat "$ticket_file")")"
-          if [[ "$replay_status" != '401' ]]; then
-            echo "Launch replay returned HTTP ${replay_status}; expected 401." >&2
-            exit 1
-          fi
+          [[ "$replay_status" == '401' ]]
           grep -Fqx 'This moderation link is invalid, expired, or already used.' "$replay_body"
 
           cleanup
@@ -234,11 +453,52 @@ jobs:
             echo "- host: \`https://${EXPECTED_HOST}\`"
             echo '- Worker + protected assets: **PASS**'
             echo '- Durable Object/session configuration: **deployed**'
+            echo '- fixed private read hostname/tunnel configuration: **attempted separately**'
             echo '- DNS/TLS propagation: **PASS**'
             echo '- unauthenticated workspace rejection: **PASS**'
             echo '- protected-secret launch ticket first use: **PASS**'
             echo '- authenticated browser session: **PASS**'
+            echo '- session-bound direct-read envelope: **PASS**'
+            echo '- exact staging-origin CORS preflight: **PASS**'
+            echo '- signed synthetic unauthorized read reached Bloom API: **403 forbidden**'
+            echo '- signed direct-read replay rejection: **PASS**'
             echo '- one-time launch replay rejection: **PASS**'
+            echo '- real player/message data queried by synthetic probe: **NO**'
             echo '- runtime mode: **staging simulation only**'
             echo '- Discord bot token uploaded to Cloudflare: **NO**'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove obsolete Worker relay after direct path passes
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          status="$(curl --silent --show-error \
+            -X DELETE \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --max-time 20 \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${LEGACY_RELAY_NAME}")"
+          if [[ "$status" == '200' ]]; then
+            jq -e '.success == true' "$response_file" >/dev/null
+            echo '- obsolete workers.dev relay: **removed**' >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$status" == '404' ]]; then
+            echo '- obsolete workers.dev relay: **already absent**' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Failed to remove obsolete staging relay (HTTP ${status})."
+            exit 1
+          fi
+          rm -f "$response_file"
+          trap - EXIT
+
+      - name: Require fixed private tunnel provisioning
+        if: always() && steps.provision_read_tunnel.outcome != 'success'
+        shell: bash
+        run: |
+          echo '::error::The protected Cloudflare token cannot provision the fixed moderation read tunnel/hostname. This remains a hard ES-D16 staging gate.'
+          exit 1

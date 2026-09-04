@@ -11,10 +11,10 @@ const EXPECTED_SIGNATURE_BYTES = 32;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-export async function inspectLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds = Math.floor(Date.now() / 1000)) {
+export async function inspectLaunchToken(token, keyHex, expectedGuildId, nowSeconds = Math.floor(Date.now() / 1000)) {
   const parsed = parseLaunchToken(token);
   if (!parsed) return { claims: null, reason: 'malformed' };
-  if (!claimsAllowed(parsed.claims, expectedGuildId, expectedTargetKey, nowSeconds)) {
+  if (!claimsAllowed(parsed.claims, expectedGuildId, nowSeconds)) {
     return { claims: null, reason: 'claims' };
   }
   const keyBytes = hexToBytes(keyHex);
@@ -24,8 +24,8 @@ export async function inspectLaunchToken(token, keyHex, expectedGuildId, expecte
   return valid ? { claims: parsed.claims, reason: null } : { claims: null, reason: 'signature' };
 }
 
-export async function verifyLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds = Math.floor(Date.now() / 1000)) {
-  return (await inspectLaunchToken(token, keyHex, expectedGuildId, expectedTargetKey, nowSeconds)).claims;
+export async function verifyLaunchToken(token, keyHex, expectedGuildId, nowSeconds = Math.floor(Date.now() / 1000)) {
+  return (await inspectLaunchToken(token, keyHex, expectedGuildId, nowSeconds)).claims;
 }
 
 export function parseLaunchToken(token) {
@@ -39,13 +39,9 @@ export function parseLaunchToken(token) {
 }
 
 function tokenParts(token) {
-  if (typeof token !== 'string') return null;
-  if (token.length === 0) return null;
-  if (token.length > MAX_TOKEN_LENGTH) return null;
+  if (typeof token !== 'string' || token.length === 0 || token.length > MAX_TOKEN_LENGTH) return null;
   const pieces = token.split('.');
-  if (pieces.length !== EXPECTED_TOKEN_PARTS) return null;
-  if (!pieces[0]) return null;
-  if (!pieces[1]) return null;
+  if (pieces.length !== EXPECTED_TOKEN_PARTS || !pieces[0] || !pieces[1]) return null;
   return { encodedBody: pieces[0], encodedSignature: pieces[1] };
 }
 
@@ -75,8 +71,14 @@ function validClaimText(version, environment, nonce, actorId, guildId, targetKey
     /^[A-Za-z0-9_-]{32,64}$/.test(nonce),
     /^[1-9][0-9]{0,19}$/.test(actorId),
     /^[1-9][0-9]{0,19}$/.test(guildId),
-    /^[A-Za-z0-9:_-]{1,64}$/.test(targetKey)
+    validTargetKey(targetKey)
   ].every(Boolean);
+}
+
+function validTargetKey(targetKey) {
+  if (typeof targetKey !== 'string' || !/^[A-Za-z0-9:_-]{1,96}$/.test(targetKey)) return false;
+  if (/^discord:[1-9][0-9]{0,19}$/.test(targetKey)) return true;
+  return /^message:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}$/.test(targetKey);
 }
 
 function parseClaimTimes(issuedRaw, expiresRaw) {
@@ -87,8 +89,8 @@ function parseClaimTimes(issuedRaw, expiresRaw) {
   return { issuedAt, expiresAt };
 }
 
-function claimsAllowed(claims, expectedGuildId, expectedTargetKey, nowSeconds) {
-  if (claims.guildId !== String(expectedGuildId) || claims.targetKey !== String(expectedTargetKey)) return false;
+function claimsAllowed(claims, expectedGuildId, nowSeconds) {
+  if (claims.guildId !== String(expectedGuildId)) return false;
   if (claims.expiresAt <= claims.issuedAt || claims.expiresAt - claims.issuedAt > MAX_TTL_SECONDS) return false;
   if (claims.issuedAt > nowSeconds + CLOCK_SKEW_SECONDS) return false;
   return nowSeconds < claims.expiresAt;

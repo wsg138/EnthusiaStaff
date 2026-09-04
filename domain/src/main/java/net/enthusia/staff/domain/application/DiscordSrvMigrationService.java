@@ -1,6 +1,7 @@
 package net.enthusia.staff.domain.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -11,13 +12,18 @@ import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
+import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
 
 /** Provider-neutral DiscordSRV migration logic. Calling importSnapshot is intentionally explicit. */
 public final class DiscordSrvMigrationService {
     private final Clock clock;
-    private final DiscordModerationPersistenceStore identities;
+    private final ImportStore identities;
 
     public DiscordSrvMigrationService(Clock clock, DiscordModerationPersistenceStore identities) {
+        this(clock, new PersistenceImportStore(require(identities, "identities")));
+    }
+
+    public DiscordSrvMigrationService(Clock clock, ImportStore identities) {
         this.clock = require(clock, "clock");
         this.identities = require(identities, "identities");
     }
@@ -89,6 +95,21 @@ public final class DiscordSrvMigrationService {
         return syncCurrentMain(discordUserId, provider);
     }
 
+    /** Narrow persistence surface needed by a one-way DiscordSRV import. */
+    public interface ImportStore {
+        Optional<VersionedLink> currentLink(UUID minecraftPlayerId);
+
+        VersionedLink link(
+                DiscordUserId discordUserId,
+                UUID minecraftPlayerId,
+                DiscordMinecraftLinkSource source,
+                String operationKey,
+                Instant linkedAt
+        );
+
+        Optional<VersionedSubject> subjectForDiscord(DiscordUserId discordUserId);
+    }
+
     public interface DiscordSrvLinkProvider {
         Map<String, UUID> snapshotLinks();
 
@@ -113,6 +134,29 @@ public final class DiscordSrvMigrationService {
     public record ImportReport(int imported, int unchanged, List<ImportConflict> conflicts) {
         public ImportReport {
             conflicts = conflicts == null ? List.of() : List.copyOf(conflicts);
+        }
+    }
+
+    private record PersistenceImportStore(DiscordModerationPersistenceStore delegate) implements ImportStore {
+        @Override
+        public Optional<VersionedLink> currentLink(UUID minecraftPlayerId) {
+            return delegate.currentLink(minecraftPlayerId);
+        }
+
+        @Override
+        public VersionedLink link(
+                DiscordUserId discordUserId,
+                UUID minecraftPlayerId,
+                DiscordMinecraftLinkSource source,
+                String operationKey,
+                Instant linkedAt
+        ) {
+            return delegate.link(discordUserId, minecraftPlayerId, source, operationKey, linkedAt);
+        }
+
+        @Override
+        public Optional<VersionedSubject> subjectForDiscord(DiscordUserId discordUserId) {
+            return delegate.subjectForDiscord(discordUserId);
         }
     }
 

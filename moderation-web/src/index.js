@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { inspectLaunchToken } from './security.js';
 import { readBoundedBody } from './request-body.js';
+import { prepareModerationRead } from './backend.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -10,7 +11,11 @@ const STATIC_PATHS = new Set([
   '/assets/model.js',
   '/assets/app.js',
   '/assets/workflow.js',
-  '/assets/review.js'
+  '/assets/review.js',
+  '/assets/real-data.js',
+  '/assets/direct-read.js',
+  '/assets/live-loading.js',
+  '/assets/real-policy.js'
 ]);
 const encoder = new TextEncoder();
 
@@ -109,6 +114,8 @@ async function route(request, env) {
   if (url.pathname === '/health') return handleHealth(request);
   if (url.pathname === '/launch') return handleLaunch(request, env, url);
   if (url.pathname === '/api/session') return handleSession(request, env);
+  if (url.pathname === '/api/bootstrap') return handleRead(request, env, 'bootstrap');
+  if (url.pathname === '/api/messages') return handleRead(request, env, 'messages');
   if (url.pathname === '/api/simulate') return handleSimulation(request, env);
   if (url.pathname === '/' || url.pathname === '/moderation' || STATIC_PATHS.has(url.pathname)) {
     return serveProtectedAsset(request, env, url.pathname);
@@ -124,12 +131,7 @@ function handleHealth(request) {
 async function handleLaunch(request, env, url) {
   if (request.method !== 'GET') return methodNotAllowed();
   const token = url.searchParams.get('t') || '';
-  const inspection = await inspectLaunchToken(
-    token,
-    env.LAUNCH_SIGNING_KEY_HEX,
-    env.EXPECTED_GUILD_ID,
-    env.EXPECTED_TARGET_KEY
-  );
+  const inspection = await inspectLaunchToken(token, env.LAUNCH_SIGNING_KEY_HEX, env.EXPECTED_GUILD_ID);
   if (!inspection.claims) return unauthorizedLaunch();
   const result = await store(env).consumeLaunch(inspection.claims);
   if (!result || result.status !== 'accepted') return unauthorizedLaunch();
@@ -150,6 +152,30 @@ async function handleSession(request, env) {
     expiresAt: new Date(session.expiresAt * 1000).toISOString(),
     staging: true
   });
+}
+
+async function handleRead(request, env, endpoint) {
+  const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
+  if (request.method !== expectedMethod) return methodNotAllowed();
+  const session = await currentSession(request, env);
+  if (!session) return textResponse('Session expired.', 401);
+  const parsed = endpoint === 'messages' ? await readMessagePayload(request) : {value: {}};
+  if (parsed.error) return parsed.error;
+  try {
+    return await prepareModerationRead(env, session, endpoint, parsed.value);
+  } catch {
+    return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
+  }
+}
+
+async function readMessagePayload(request) {
+  const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
+  if (!body) return {error: textResponse('Read request is too large.', 413)};
+  try {
+    return {value: JSON.parse(new TextDecoder().decode(body))};
+  } catch {
+    return {error: textResponse('Read request is invalid.', 400)};
+  }
 }
 
 async function handleSimulation(request, env) {
@@ -202,12 +228,9 @@ function store(env) {
 }
 
 function validSimulation(payload, session) {
-  if (!payload) return false;
-  if (typeof payload !== 'object') return false;
-  if (Array.isArray(payload)) return false;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   if (payload.target !== session.targetKey) return false;
-  if (!boundedString(payload.offense, 64)) return false;
-  if (!boundedString(payload.action, 32)) return false;
+  if (!boundedString(payload.offense, 64) || !boundedString(payload.action, 32)) return false;
   return idList(payload.evidence) && idList(payload.delete);
 }
 
@@ -252,12 +275,11 @@ function jsonResponse(value, status = 200) {
 function secure(response) {
   const secured = new Response(response.body, response);
   const headers = secured.headers;
-  headers.set('Cache-Control', 'no-store');
+  headers.set('Cache-Control', 'private, no-store');
   headers.set('Pragma', 'no-cache');
-  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; style-src 'self'; script-src 'self'; connect-src 'self' https://moderation-read-staging.enthusia.info; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
-  // The value is a fixed DENY literal and cannot be influenced by request input.
   headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('Cross-Origin-Opener-Policy', 'same-origin');

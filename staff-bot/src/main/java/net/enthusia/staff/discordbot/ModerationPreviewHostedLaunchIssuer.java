@@ -16,10 +16,9 @@ import javax.crypto.spec.SecretKeySpec;
 
 /** Issues short-lived stateless launch tickets for the externally hosted staging moderation site. */
 final class ModerationPreviewHostedLaunchIssuer {
-    static final String SAMPLE_TARGET = "sample-river-ash";
     private static final String HMAC = "HmacSHA256";
     private static final String DIGEST = "SHA-256";
-    private static final String TARGET_KEY_PATTERN = "[A-Za-z0-9:_-]{1,64}";
+    private static final String TARGET_KEY_PATTERN = "[A-Za-z0-9:_-]{1,96}";
     private static final byte[] DOMAIN_SEPARATOR = "enthusia-staff-moderation-launch-v1\0"
             .getBytes(StandardCharsets.UTF_8);
     private static final Duration TICKET_TTL = Duration.ofMinutes(2);
@@ -46,8 +45,24 @@ final class ModerationPreviewHostedLaunchIssuer {
         }
     }
 
-    URI issueLaunchUri(long actorId, long guildId) {
-        String token = issueToken(actorId, guildId, SAMPLE_TARGET);
+    URI issueUserLaunchUri(long actorId, long guildId, long targetUserId) {
+        return issueLaunchUri(actorId, guildId, userTarget(targetUserId));
+    }
+
+    URI issueMessageLaunchUri(long actorId, long guildId, long channelId, long messageId, long targetUserId) {
+        requireSnowflake(channelId, "channel");
+        requireSnowflake(messageId, "message");
+        requireSnowflake(targetUserId, "target user");
+        return issueLaunchUri(
+                actorId,
+                guildId,
+                "message:" + Long.toUnsignedString(channelId)
+                        + ":" + Long.toUnsignedString(messageId)
+                        + ":" + Long.toUnsignedString(targetUserId));
+    }
+
+    private URI issueLaunchUri(long actorId, long guildId, String targetKey) {
+        String token = issueToken(actorId, guildId, targetKey);
         return URI.create(publicBaseUri + "/launch?t=" + URLEncoder.encode(token, StandardCharsets.UTF_8));
     }
 
@@ -67,11 +82,19 @@ final class ModerationPreviewHostedLaunchIssuer {
         return encodedBody + "." + encode(sign(encodedBody));
     }
 
-    private static boolean validClaims(long actorId, long guildId, String targetKey) {
-        if (actorId < MIN_DISCORD_ID) {
-            return false;
+    private static String userTarget(long targetUserId) {
+        requireSnowflake(targetUserId, "target user");
+        return "discord:" + Long.toUnsignedString(targetUserId);
+    }
+
+    private static void requireSnowflake(long value, String label) {
+        if (value < MIN_DISCORD_ID) {
+            throw new IllegalArgumentException(label + " ID is invalid");
         }
-        if (guildId < MIN_DISCORD_ID) {
+    }
+
+    private static boolean validClaims(long actorId, long guildId, String targetKey) {
+        if (actorId < MIN_DISCORD_ID || guildId < MIN_DISCORD_ID) {
             return false;
         }
         return targetKey != null && targetKey.matches(TARGET_KEY_PATTERN);

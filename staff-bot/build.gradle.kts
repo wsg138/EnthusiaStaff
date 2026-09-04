@@ -162,15 +162,17 @@ abstract class VerifyStaffBotRuntime : DefaultTask() {
 
 dependencies {
     implementation(project(":persistence"))
+    implementation(project(":protocol"))
     implementation("net.dv8tion:JDA:6.5.0") {
         exclude(module = "opus-java")
         exclude(module = "tink")
     }
 
     // JDA 6.5.0 publishes Jackson 2.22.0. CVE-2026-59889 is fixed in 2.22.1.
-    // Keep both Jackson core components aligned on the patched release.
-    runtimeOnly("com.fasterxml.jackson.core:jackson-core:2.22.1")
-    runtimeOnly("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    // D16 also uses Jackson for strict private read-API DTO serialization.
+    implementation("com.fasterxml.jackson.core:jackson-core:2.22.1")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.1")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.1")
     runtimeOnly("org.slf4j:slf4j-jdk14:2.0.18")
 }
 

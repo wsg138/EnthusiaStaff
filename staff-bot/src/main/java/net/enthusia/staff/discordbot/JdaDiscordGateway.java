@@ -52,11 +52,8 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private void validateInteractionResources() {
-        if (configuration.uiPreviewEnabled() && moderation.isPresent()) {
-            throw new IllegalArgumentException("UI preview cannot share a live moderation runtime");
-        }
         if (moderation.isPresent() && (workers == null || interactions == null)) {
-            throw new IllegalArgumentException("moderation listener requires bounded runtime resources");
+            throw new IllegalArgumentException("moderation runtime requires bounded runtime resources");
         }
         if (configuration.uiPreviewEnabled() && interactions == null) {
             throw new IllegalArgumentException("UI preview requires replay protection");
@@ -70,10 +67,7 @@ final class JdaDiscordGateway implements DiscordGateway {
                 throw new IllegalStateException("Discord gateway already started");
             }
             SessionListener listener = new SessionListener(
-                    configuration.environment(),
-                    observer,
-                    this::disableInteractions
-            );
+                    configuration.environment(), observer, this::disableInteractions);
             JDABuilder builder = baseBuilder(listener);
             addInteractionListener(builder);
             jda = builder.build();
@@ -81,6 +75,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
+        // D16 uses bounded on-demand Discord REST reads. No message Gateway event subscription is required.
         return JDABuilder.createLight(configuration.discordToken(), Set.of())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
@@ -98,7 +93,8 @@ final class JdaDiscordGateway implements DiscordGateway {
                     interactions,
                     configuration.interactionCapacity(),
                     configuration.previewWebConfig(),
-                    configuration.discordToken()
+                    configuration.discordToken(),
+                    moderation
             );
             previewListener.startWeb();
             builder.addEventListeners(previewListener);
@@ -106,11 +102,7 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
         moderation.ifPresent(runtime -> {
             moderationListener = new JdaStaffModerationListener(
-                    configuration.environment().guildId(),
-                    workers,
-                    interactions,
-                    runtime
-            );
+                    configuration.environment().guildId(), workers, interactions, runtime);
             builder.addEventListeners(moderationListener);
         });
     }
@@ -263,11 +255,9 @@ final class JdaDiscordGateway implements DiscordGateway {
             long generation = identityCallbacks.beginResolution();
             api.retrieveApplicationInfo().queue(
                     applicationInfo -> identityCallbacks.runIfCurrent(
-                            generation,
-                            () -> observer.onIdentityResolved(snapshot(api, applicationInfo))),
+                            generation, () -> observer.onIdentityResolved(snapshot(api, applicationInfo))),
                     failure -> identityCallbacks.runIfCurrent(
-                            generation,
-                            () -> observer.onFatal("application_info_request_failed")));
+                            generation, () -> observer.onFatal("application_info_request_failed")));
         }
 
         private DiscordRuntimeIdentity snapshot(JDA api, ApplicationInfo applicationInfo) {
@@ -283,18 +273,13 @@ final class JdaDiscordGateway implements DiscordGateway {
                 channelPresent = channel != null && channel.getGuild().getIdLong() == environment.guildId();
                 if (channelPresent) {
                     channelOperational = channel.getGuild().getSelfMember().hasPermission(
-                            channel,
-                            Permission.VIEW_CHANNEL,
-                            Permission.MESSAGE_SEND);
+                            channel, Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND);
                 }
             }
 
             return new DiscordRuntimeIdentity(
-                    applicationInfo.getIdLong(),
-                    applicationInfo.isBotPublic(),
-                    guildIds,
-                    channelPresent,
-                    channelOperational);
+                    applicationInfo.getIdLong(), applicationInfo.isBotPublic(), guildIds,
+                    channelPresent, channelOperational);
         }
     }
 }
