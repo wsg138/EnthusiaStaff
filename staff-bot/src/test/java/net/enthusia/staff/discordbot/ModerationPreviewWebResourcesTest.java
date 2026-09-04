@@ -17,6 +17,7 @@ class ModerationPreviewWebResourcesTest {
     private static final String WORKFLOW_SCRIPT = "/moderation-preview/workflow.js";
     private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
     private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
+    private static final String DIRECT_READ_SCRIPT = "/moderation-preview/direct-read.js";
     private static final String REAL_POLICY_SCRIPT = "/moderation-preview/real-policy.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
@@ -26,9 +27,11 @@ class ModerationPreviewWebResourcesTest {
             WORKFLOW_SCRIPT,
             REVIEW_SCRIPT,
             REAL_DATA_SCRIPT,
+            DIRECT_READ_SCRIPT,
             REAL_POLICY_SCRIPT);
     private static final List<String> SCRIPTS = List.of(
-            MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT, REAL_DATA_SCRIPT, REAL_POLICY_SCRIPT);
+            MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT,
+            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, REAL_POLICY_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -47,6 +50,8 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/workflow.js",
                 "/assets/review.js",
                 "/assets/real-data.js",
+                "/assets/direct-read.js",
+                "/assets/live-loading.js",
                 "/assets/real-policy.js");
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
         assertTrue(html.contains("Live data"));
@@ -63,6 +68,22 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));
+    }
+
+    @Test
+    void directReadAdapterUsesOnlyMintedOneUseProofsAndPinnedTunnelOrigin() throws IOException {
+        String adapter = resourceText(DIRECT_READ_SCRIPT);
+
+        assertTrue(adapter.contains("https://moderation-read-staging.enthusia.info"));
+        assertTrue(adapter.contains("fetch('/api/bootstrap'"));
+        assertTrue(adapter.contains("fetch('/api/messages'"));
+        assertTrue(adapter.contains("X-Enthusia-Read-Timestamp"));
+        assertTrue(adapter.contains("X-Enthusia-Read-Nonce"));
+        assertTrue(adapter.contains("X-Enthusia-Read-Signature"));
+        assertTrue(adapter.contains("credentials:'omit'"));
+        assertFalse(adapter.contains("READ_API_SIGNING_KEY_HEX"));
+        assertFalse(adapter.contains("ENTHUSIA_STAFF_BOT_TOKEN"));
+        assertFalse(adapter.contains("workers.dev"));
     }
 
     @Test
