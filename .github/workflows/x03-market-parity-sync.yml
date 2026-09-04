@@ -1,0 +1,113 @@
+name: ES-X03 temporary Market parity sync
+
+on:
+  push:
+    branches:
+      - diagnostic/es-x03-codacy-20260904
+
+permissions:
+  contents: write
+
+jobs:
+  sync-market:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact Staff product branch
+        uses: actions/checkout@v4
+        with:
+          ref: package/es-x03-market-provider
+          fetch-depth: 0
+          path: staff
+
+      - name: Verify frozen Staff head
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C staff rev-parse HEAD)"
+          expected="2f4678db255ef4df74b0cc497538a35c4afa6a03"
+          test "$actual" = "$expected" || {
+            echo "Staff product head moved: expected $expected, got $actual" >&2
+            exit 1
+          }
+
+      - name: Check out exact standalone Market product
+        uses: actions/checkout@v4
+        with:
+          repository: wsg138/EnthusiaMarket
+          ref: cc19fa966dcb155fa1743f5076fb5152e74bdf8f
+          path: market
+          persist-credentials: false
+
+      - name: Sync only the proven divergent PR 5 paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths=(
+            'src/main/kotlin/net/badgersmc/em/application/AuctionLifecycleService.kt'
+            'src/main/kotlin/net/badgersmc/em/application/SellOfferService.kt'
+            'src/main/kotlin/net/badgersmc/em/application/StallBuyoutService.kt'
+            'src/main/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStore.kt'
+            'src/main/kotlin/net/badgersmc/em/infrastructure/moderation/MarketModerationProvider.kt'
+            'src/main/resources/migrations/V028__market_moderation_provider.sql'
+            'src/test/kotlin/net/badgersmc/em/application/AuctionLifecycleServiceTest.kt'
+            'src/test/kotlin/net/badgersmc/em/application/SellOfferServiceTest.kt'
+            'src/test/kotlin/net/badgersmc/em/application/StallBuyoutServiceTest.kt'
+            'src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStoreTest.kt'
+          )
+          for path in "${paths[@]}"; do
+            mkdir -p "staff/components/enthusia-market/$(dirname "$path")"
+            cp "market/$path" "staff/components/enthusia-market/$path"
+          done
+
+      - name: Prove full standalone-to-aggregate parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mismatch=0
+          while IFS= read -r -d '' path; do
+            target="staff/components/enthusia-market/$path"
+            if [[ ! -f "$target" ]] || ! cmp -s "market/$path" "$target"; then
+              echo "PARITY_MISMATCH $path" >&2
+              mismatch=1
+            fi
+          done < <(git -C market ls-files -z)
+          while IFS= read -r -d '' aggregate_path; do
+            path="${aggregate_path#components/enthusia-market/}"
+            [[ "$path" == 'COMPONENT-METADATA.md' ]] && continue
+            if ! git -C market ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              echo "AGGREGATE_ONLY_PATH $path" >&2
+              mismatch=1
+            fi
+          done < <(git -C staff ls-files -z 'components/enthusia-market/**')
+          test "$mismatch" -eq 0
+
+      - name: Verify bounded diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C staff diff --check
+          git -C staff diff --name-only -- components/enthusia-market | sort > /tmp/actual
+          cat > /tmp/expected <<'EOF'
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/AuctionLifecycleService.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/SellOfferService.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/StallBuyoutService.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStore.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/moderation/MarketModerationProvider.kt
+          components/enthusia-market/src/main/resources/migrations/V028__market_moderation_provider.sql
+          components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/AuctionLifecycleServiceTest.kt
+          components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/SellOfferServiceTest.kt
+          components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/StallBuyoutServiceTest.kt
+          components/enthusia-market/src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStoreTest.kt
+          EOF
+          sort -o /tmp/expected /tmp/expected
+          diff -u /tmp/expected /tmp/actual
+
+      - name: Commit and fast-forward product branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C staff config user.name 'github-actions[bot]'
+          git -C staff config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C staff add components/enthusia-market
+          git -C staff commit -m 'ES-X03: sync current Market hardening'
+          git -C staff push origin HEAD:refs/heads/package/es-x03-market-provider
