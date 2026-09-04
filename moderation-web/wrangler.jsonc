@@ -3,9 +3,6 @@
   "name": "enthusia-staff-moderation-staging",
   "main": "src/index.js",
   "compatibility_date": "2026-08-30",
-  "compatibility_flags": [
-    "global_fetch_strictly_public"
-  ],
   "workers_dev": false,
   "routes": [
     {
