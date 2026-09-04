@@ -11,14 +11,15 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class TransitionSnapshotPlannerTest {
-    private static final String DISCORD_USER_ID = "123456789012345678";
+    private static final String DISCORD_USER_ID = "42";
+    private static final String OTHER_DISCORD_USER_ID = "84";
 
     @Test
     void onlyObservedPlayersBecomeImportableDiscordSrvLinks() {
         UUID observed = UUID.randomUUID();
         UUID missing = UUID.randomUUID();
         TransitionSnapshotPlanner.Plan plan = TransitionSnapshotPlanner.plan(
-                Map.of(DISCORD_USER_ID, observed, "223456789012345678", missing),
+                Map.of(DISCORD_USER_ID, observed, OTHER_DISCORD_USER_ID, missing),
                 List.of(new TransitionSnapshotPlanner.Observation(
                         observed, "ObservedPlayer", Instant.parse("2026-09-04T04:00:00Z"), true)));
 
