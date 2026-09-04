@@ -77,7 +77,11 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(adapter.contains("https://moderation-read-staging.enthusia.info"));
         assertTrue(adapter.contains("DIRECT_PROOF_PATHS = new Set(['/api/bootstrap', '/api/messages'])"));
         assertTrue(adapter.contains("if (!DIRECT_PROOF_PATHS.has(proofPath))"));
-        assertTrue(adapter.contains("fetch(proofPath, {...requestInit, cache:'no-store'})"));
+        assertTrue(adapter.contains("fetch('/api/bootstrap'"));
+        assertTrue(adapter.contains("fetch('/api/messages'"));
+        assertTrue(adapter.contains("fetch('https://moderation-read-staging.enthusia.info/v1/moderation/bootstrap'"));
+        assertTrue(adapter.contains("fetch('https://moderation-read-staging.enthusia.info/v1/moderation/messages'"));
+        assertFalse(adapter.contains("fetch(`${DIRECT_READ_ORIGIN}${proof.path}`"));
         assertTrue(adapter.contains("X-Enthusia-Read-Timestamp"));
         assertTrue(adapter.contains("X-Enthusia-Read-Nonce"));
         assertTrue(adapter.contains("X-Enthusia-Read-Signature"));

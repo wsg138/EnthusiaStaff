@@ -11,6 +11,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 class ModerationReadApiServerBindingTest {
@@ -44,10 +45,10 @@ class ModerationReadApiServerBindingTest {
                 ModerationReadApiAuthenticator.NONCE_HEADER,
                 ModerationReadApiAuthenticator.SIGNATURE_HEADER);
         String lowercaseReordered = String.join(",",
-                ModerationReadApiAuthenticator.SIGNATURE_HEADER.toLowerCase(),
+                ModerationReadApiAuthenticator.SIGNATURE_HEADER.toLowerCase(Locale.ROOT),
                 "content-type",
-                ModerationReadApiAuthenticator.NONCE_HEADER.toLowerCase(),
-                ModerationReadApiAuthenticator.TIMESTAMP_HEADER.toLowerCase());
+                ModerationReadApiAuthenticator.NONCE_HEADER.toLowerCase(Locale.ROOT),
+                ModerationReadApiAuthenticator.TIMESTAMP_HEADER.toLowerCase(Locale.ROOT));
 
         assertTrue(ModerationReadApiServer.validPreflightHeaders(exact));
         assertTrue(ModerationReadApiServer.validPreflightHeaders(lowercaseReordered));
