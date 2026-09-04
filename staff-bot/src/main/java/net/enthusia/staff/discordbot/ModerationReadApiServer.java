@@ -9,7 +9,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,6 +22,21 @@ final class ModerationReadApiServer implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(ModerationReadApiServer.class.getName());
     private static final String BIND_HOST = "127.0.0.1";
     private static final String POST_METHOD = "POST";
+    private static final String OPTIONS_METHOD = "OPTIONS";
+    static final String PREVIEW_ORIGIN = "https://staff-staging.enthusia.info";
+    private static final String ORIGIN_HEADER = "Origin";
+    private static final String REQUEST_METHOD_HEADER = "Access-Control-Request-Method";
+    private static final String REQUEST_HEADERS_HEADER = "Access-Control-Request-Headers";
+    private static final String ALLOW_HEADERS = String.join(", ",
+            "Content-Type",
+            ModerationReadApiAuthenticator.TIMESTAMP_HEADER,
+            ModerationReadApiAuthenticator.NONCE_HEADER,
+            ModerationReadApiAuthenticator.SIGNATURE_HEADER);
+    private static final Set<String> PREFLIGHT_HEADERS = Set.of(
+            "content-type",
+            ModerationReadApiAuthenticator.TIMESTAMP_HEADER.toLowerCase(Locale.ROOT),
+            ModerationReadApiAuthenticator.NONCE_HEADER.toLowerCase(Locale.ROOT),
+            ModerationReadApiAuthenticator.SIGNATURE_HEADER.toLowerCase(Locale.ROOT));
     private static final int BIND_PORT = 8766;
     private static final int MAX_BODY_BYTES = 65_536;
     private static final int WORKER_THREADS = 2;
@@ -61,6 +80,18 @@ final class ModerationReadApiServer implements AutoCloseable {
 
     private void handle(HttpExchange exchange, boolean bootstrap) throws IOException {
         try (exchange) {
+            if (OPTIONS_METHOD.equals(exchange.getRequestMethod())) {
+                handlePreflight(exchange);
+                return;
+            }
+            if (!originAllowed(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
+                respond(exchange, 403, new ModerationReadApiModel.ErrorResponse("forbidden", "Access denied."));
+                return;
+            }
+            if (!POST_METHOD.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, new ModerationReadApiModel.ErrorResponse("method_not_allowed", "Method not allowed."));
+                return;
+            }
             byte[] body = readBody(exchange);
             if (body == null) {
                 respond(exchange, 413, new ModerationReadApiModel.ErrorResponse("request_too_large", "Request rejected."));
@@ -75,12 +106,24 @@ final class ModerationReadApiServer implements AutoCloseable {
                 respond(exchange, 429, new ModerationReadApiModel.ErrorResponse("rate_limited", "Too many read requests."));
                 return;
             }
-            if (!POST_METHOD.equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, new ModerationReadApiModel.ErrorResponse("method_not_allowed", "Method not allowed."));
-                return;
-            }
             execute(exchange, body, bootstrap);
         }
+    }
+
+    private void handlePreflight(HttpExchange exchange) throws IOException {
+        if (!browserOrigin(exchange.getRequestHeaders().get(ORIGIN_HEADER))
+                || !POST_METHOD.equals(exchange.getRequestHeaders().getFirst(REQUEST_METHOD_HEADER))
+                || !validPreflightHeaders(exchange.getRequestHeaders().getFirst(REQUEST_HEADERS_HEADER))) {
+            respond(exchange, 403, new ModerationReadApiModel.ErrorResponse("forbidden", "Access denied."));
+            return;
+        }
+        applyCorsHeaders(exchange);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", POST_METHOD);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", ALLOW_HEADERS);
+        exchange.getResponseHeaders().set("Access-Control-Max-Age", "600");
+        exchange.getResponseHeaders().set("Cache-Control", "private, no-store");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.sendResponseHeaders(204, -1);
     }
 
     private void execute(HttpExchange exchange, byte[] body, boolean bootstrap) throws IOException {
@@ -111,6 +154,29 @@ final class ModerationReadApiServer implements AutoCloseable {
         }
     }
 
+    static boolean originAllowed(List<String> origins) {
+        return origins == null || origins.isEmpty() || browserOrigin(origins);
+    }
+
+    static boolean browserOrigin(List<String> origins) {
+        return origins != null && origins.size() == 1 && PREVIEW_ORIGIN.equals(origins.getFirst());
+    }
+
+    static boolean validPreflightHeaders(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return false;
+        }
+        Set<String> requested = new HashSet<>();
+        for (String part : raw.split(",")) {
+            String header = part.trim().toLowerCase(Locale.ROOT);
+            if (header.isEmpty() || !PREFLIGHT_HEADERS.contains(header)) {
+                return false;
+            }
+            requested.add(header);
+        }
+        return requested.equals(PREFLIGHT_HEADERS);
+    }
+
     private ModerationReadApiAuthenticator.Result authenticate(HttpExchange exchange, byte[] body) {
         String path = exchange.getRequestURI().getPath();
         return authenticator.verify(
@@ -130,12 +196,21 @@ final class ModerationReadApiServer implements AutoCloseable {
 
     private void respond(HttpExchange exchange, int status, Object value) throws IOException {
         byte[] bytes = json.writeValueAsBytes(value);
+        applyCorsHeaders(exchange);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.getResponseHeaders().set("Cache-Control", "private, no-store");
         exchange.getResponseHeaders().set("Pragma", "no-cache");
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
+    }
+
+    private static void applyCorsHeaders(HttpExchange exchange) {
+        if (!browserOrigin(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
+            return;
+        }
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", PREVIEW_ORIGIN);
+        exchange.getResponseHeaders().add("Vary", ORIGIN_HEADER);
     }
 
     private static void log(String code, Throwable failure) {
