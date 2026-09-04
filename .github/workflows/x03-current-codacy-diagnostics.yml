@@ -1,0 +1,58 @@
+name: X03 current Codacy diagnostics
+
+on:
+  push:
+    branches:
+      - "diagnostic/es-x03-codacy-20260904"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Export current PR Codacy findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact diagnostic head
+        uses: actions/checkout@v6
+
+      - name: Fetch all current public Codacy PR issues
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/139/issues?limit=1000'
+          curl --fail --silent --show-error \
+            -H 'Accept: application/json' \
+            "$url" \
+            -o /tmp/codacy-pr-issues.json
+          echo "Codacy returned $(jq '.pagination.total // (.data | length)' /tmp/codacy-pr-issues.json) issue record(s)."
+          echo '=== Added findings: file, line, pattern, level, category, tool, message ==='
+          jq -r '
+            .data[]
+            | select(.deltaType == "Added")
+            | [
+                .commitIssue.filePath,
+                (.commitIssue.lineNumber // 0 | tostring),
+                (.commitIssue.patternInfo.id // ""),
+                (.commitIssue.patternInfo.level // ""),
+                (.commitIssue.patternInfo.category // ""),
+                (.commitIssue.toolInfo.name // .commitIssue.toolInfo.uuid // ""),
+                (.commitIssue.message // "" | gsub("[\\r\\n\\t]"; " "))
+              ]
+            | @tsv
+          ' /tmp/codacy-pr-issues.json | tee /tmp/codacy-added.tsv
+          echo '=== Added finding counts by pattern ==='
+          cut -f3 /tmp/codacy-added.tsv | sort | uniq -c | sort -nr
+          echo '=== Added finding counts by file ==='
+          cut -f1 /tmp/codacy-added.tsv | sort | uniq -c | sort -nr
+
+      - name: Upload exact finding export
+        uses: actions/upload-artifact@v6
+        with:
+          name: x03-codacy-pr139-findings
+          path: |
+            /tmp/codacy-pr-issues.json
+            /tmp/codacy-added.tsv
+          if-no-files-found: error
+          retention-days: 7
