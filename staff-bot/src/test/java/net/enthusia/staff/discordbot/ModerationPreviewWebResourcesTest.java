@@ -95,6 +95,22 @@ class ModerationPreviewWebResourcesTest {
     }
 
     @Test
+    void directReadFailureStateIsSanitizedAndPersistent() throws IOException {
+        String adapter = resourceText(DIRECT_READ_SCRIPT);
+
+        assertTrue(adapter.contains("response.status === 403"));
+        assertTrue(adapter.contains("response.status === 503"));
+        assertTrue(adapter.contains("Access denied · staff authority not verified"));
+        assertTrue(adapter.contains("Backend unavailable · read source failed"));
+        assertTrue(adapter.contains("Read transport unavailable"));
+        assertTrue(adapter.contains("identity, {status:failure.status"));
+        assertFalse(adapter.contains("db.password"));
+        assertFalse(adapter.contains("authority.secret"));
+        assertFalse(adapter.contains("BOT_TOKEN"));
+        assertFalse(adapter.contains("console.log"));
+    }
+
+    @Test
     void relevantHistoryUsesOnlyAuthoritativeSanctionFamily() throws IOException {
         String policy = resourceText(REAL_POLICY_SCRIPT);
 
