@@ -3,6 +3,7 @@ package net.enthusia.staff.persistence;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.ImportStore;
@@ -15,6 +16,11 @@ import org.flywaydb.core.Flyway;
 
 /** Narrow write-capable runtime used only to seed transition observation data. */
 public final class TransitionDataRuntime implements AutoCloseable {
+    private static final List<String> REQUIRED_MIGRATION_RESOURCES = List.of(
+            "db/migration/V1__initial_schema.sql",
+            "db/migration/V19__discord_moderation_persistence.sql",
+            "db/migration/V20__discord_account_linking.sql");
+
     private final HikariDataSource dataSource;
     private final PlayerDirectory players;
     private final ImportStore discordSrvImports;
@@ -64,13 +70,30 @@ public final class TransitionDataRuntime implements AutoCloseable {
     }
 
     private static void migrate(HikariDataSource dataSource) {
-        Flyway.configure()
+        ClassLoader classLoader = migrationClassLoader();
+        requireMigrationResources(classLoader);
+        Flyway.configure(classLoader)
                 .dataSource(dataSource)
                 .locations("classpath:db/migration")
                 .validateMigrationNaming(true)
                 .cleanDisabled(true)
                 .load()
                 .migrate();
+    }
+
+    static ClassLoader migrationClassLoader() {
+        return TransitionDataRuntime.class.getClassLoader();
+    }
+
+    static void requireMigrationResources(ClassLoader classLoader) {
+        if (classLoader == null) {
+            throw new IllegalStateException("transition migration classloader is unavailable");
+        }
+        for (String resource : REQUIRED_MIGRATION_RESOURCES) {
+            if (classLoader.getResource(resource) == null) {
+                throw new IllegalStateException("transition migration resources are unavailable");
+            }
+        }
     }
 
     @Override
