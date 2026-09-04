@@ -10,6 +10,8 @@ import net.enthusia.staff.domain.moderation.ModerationPlatform;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 
 /** Resolves and authorizes the immutable actor/guild/target binding for a private read. */
 final class ModerationReadRequestAuthorizer {
@@ -30,7 +32,7 @@ final class ModerationReadRequestAuthorizer {
         long actorId = snowflake(request.actorId(), "actor");
         ModerationReadTarget readTarget = ModerationReadTarget.parse(request.targetKey());
         Guild guild = requireGuild();
-        Member actorMember = guild.retrieveMemberById(actorId).complete();
+        Member actorMember = requireActorMember(guild, actorId);
         Actor actor = moderation.actors().invoker(
                 new DiscordUserId(Long.toUnsignedString(actorId)), actorMember.getEffectiveName());
         StaffModerationReadService.Target target = moderation.reads().discordTarget(
@@ -43,6 +45,21 @@ final class ModerationReadRequestAuthorizer {
         if (request == null || !Long.toUnsignedString(guildId).equals(request.guildId())) {
             throw new StaffReadAuthorization.DeniedException();
         }
+    }
+
+    private static Member requireActorMember(Guild guild, long actorId) {
+        try {
+            return guild.retrieveMemberById(actorId).complete();
+        } catch (ErrorResponseException exception) {
+            if (missingActor(exception.getErrorResponse())) {
+                throw new StaffReadAuthorization.DeniedException();
+            }
+            throw exception;
+        }
+    }
+
+    static boolean missingActor(ErrorResponse response) {
+        return response == ErrorResponse.UNKNOWN_MEMBER || response == ErrorResponse.UNKNOWN_USER;
     }
 
     private void requireReadAuthority(Actor actor, StaffModerationReadService.Target target) {
