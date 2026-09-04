@@ -9,6 +9,7 @@ const DIRECT_READ_TIMESTAMP = /^[0-9]{1,12}$/;
 /**
  * Requests a session-bound one-use proof from the protected Worker and sends the
  * exact signed request directly through the staging Cloudflare Tunnel.
+ * Keep both fetch destinations as literals so neither proof data nor caller input can select a URL.
  */
 async function requestDirectModerationRead(proofPath, requestInit = {}) {
   if (!DIRECT_PROOF_PATHS.has(proofPath)) throw new Error('Moderation read proof is unavailable.');
