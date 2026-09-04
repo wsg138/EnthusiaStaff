@@ -40,7 +40,8 @@ class CommandPermissionConfigurationTest {
             Map.entry("client", "enthusiastaff.client"),
             Map.entry("invsee", INVENTORY_VIEW_PERMISSION),
             Map.entry("endersee", INVENTORY_VIEW_PERMISSION),
-            Map.entry("inspect", "enthusiastaff.inspect")
+            Map.entry("inspect", "enthusiastaff.inspect"),
+            Map.entry("marketcase", "enthusiastaff.market.restrict")
     );
 
     @Test
@@ -103,6 +104,21 @@ class CommandPermissionConfigurationTest {
     @Test
     void playerReportCommandRemainsIntentionallyPublic() throws IOException {
         assertTrue(pluginMetadata().path("commands").path("report").path("permission").isMissingNode());
+    }
+
+    @Test
+    void marketRestoreRemainsFounderOnly() throws IOException {
+        JsonNode permissions = pluginMetadata().path("permissions");
+
+        assertFalse(permissions.path("enthusiastaff.market.restore").path("default").asBoolean());
+        assertTrue(permissions.path("enthusiastaff.rank.founder")
+                .path("children")
+                .path("enthusiastaff.market.restore")
+                .asBoolean());
+        assertTrue(permissions.path("enthusiastaff.rank.admin")
+                .path("children")
+                .path("enthusiastaff.market.restore")
+                .isMissingNode());
     }
 
     private static JsonNode pluginMetadata() throws IOException {

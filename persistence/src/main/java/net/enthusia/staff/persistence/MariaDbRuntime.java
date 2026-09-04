@@ -26,6 +26,7 @@ import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
+import net.enthusia.staff.domain.ports.MarketComplianceStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
@@ -80,6 +81,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final InventoryJournalStore inventoryJournalStore;
     private final InventoryRecoveryStore inventoryRecoveryStore;
     private final EconomyJournalStore economyJournalStore;
+    private final MarketComplianceStore marketComplianceStore;
     private final ClientEvidenceStore clientEvidenceStore;
     private final PunishmentDraftStore punishmentDraftStore;
     private final CheatTesterJournalStore cheatTesterJournalStore;
@@ -142,6 +144,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.inventoryRecoveryStore = new JdbcInventoryRecoveryStore(dataSource, json);
         this.cheatTesterJournalStore = assetJournal;
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
+        this.marketComplianceStore = new JdbcMarketComplianceStore(dataSource, json);
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
         this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, json);
         this.discordModerationPersistenceStore = new JdbcDiscordModerationPersistenceStore(dataSource);
@@ -169,6 +172,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public InventoryJournalStore inventoryJournalStore() { return inventoryJournalStore; }
     public InventoryRecoveryStore inventoryRecoveryStore() { return inventoryRecoveryStore; }
     public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
+    public MarketComplianceStore marketComplianceStore() { return marketComplianceStore; }
     public ClientEvidenceStore clientEvidenceStore() { return clientEvidenceStore; }
     public PunishmentDraftStore punishmentDraftStore() { return punishmentDraftStore; }
     public CheatTesterJournalStore cheatTesterJournalStore() { return cheatTesterJournalStore; }
