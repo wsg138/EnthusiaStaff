@@ -372,7 +372,8 @@ jobs:
             and (.nonce | type == "string" and test("^[A-Za-z0-9_-]{32,64}$"))
             and (.signature | type == "string" and test("^[A-Za-z0-9_-]{43,44}$"))' "$proof_body" >/dev/null
 
-          jq -r '.body' "$proof_body" > "$signed_body"
+          # Preserve the exact HMAC-bound JSON bytes; jq -r would append a newline.
+          jq -j '.body' "$proof_body" > "$signed_body"
           actor_id="$(jq -r '.actorId' "$session_body")"
           guild_id="$(jq -r '.guildId' "$session_body")"
           target_key="$(jq -r '.targetKey' "$session_body")"
