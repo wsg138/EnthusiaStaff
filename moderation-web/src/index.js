@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { inspectLaunchToken } from './security.js';
 import { readBoundedBody } from './request-body.js';
-import { proxyModerationRead } from './backend.js';
+import { prepareModerationRead } from './backend.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -13,6 +13,7 @@ const STATIC_PATHS = new Set([
   '/assets/workflow.js',
   '/assets/review.js',
   '/assets/real-data.js',
+  '/assets/direct-read.js',
   '/assets/real-policy.js'
 ]);
 const encoder = new TextEncoder();
@@ -153,27 +154,27 @@ async function handleSession(request, env) {
 }
 
 async function handleRead(request, env, endpoint) {
-    const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
-    if (request.method !== expectedMethod) return methodNotAllowed();
-    const session = await currentSession(request, env);
-    if (!session) return textResponse('Session expired.', 401);
-    const parsed = endpoint === 'messages' ? await readMessagePayload(request) : {value: {}};
-    if (parsed.error) return parsed.error;
-    try {
-        return await proxyModerationRead(env, session, endpoint, parsed.value);
-    } catch {
-        return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
-    }
+  const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
+  if (request.method !== expectedMethod) return methodNotAllowed();
+  const session = await currentSession(request, env);
+  if (!session) return textResponse('Session expired.', 401);
+  const parsed = endpoint === 'messages' ? await readMessagePayload(request) : {value: {}};
+  if (parsed.error) return parsed.error;
+  try {
+    return await prepareModerationRead(env, session, endpoint, parsed.value);
+  } catch {
+    return jsonResponse({code: 'invalid_request', message: 'Read request is invalid.'}, 400);
+  }
 }
 
 async function readMessagePayload(request) {
-    const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
-    if (!body) return {error: textResponse('Read request is too large.', 413)};
-    try {
-        return {value: JSON.parse(new TextDecoder().decode(body))};
-    } catch {
-        return {error: textResponse('Read request is invalid.', 400)};
-    }
+  const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
+  if (!body) return {error: textResponse('Read request is too large.', 413)};
+  try {
+    return {value: JSON.parse(new TextDecoder().decode(body))};
+  } catch {
+    return {error: textResponse('Read request is invalid.', 400)};
+  }
 }
 
 async function handleSimulation(request, env) {
@@ -275,7 +276,7 @@ function secure(response) {
   const headers = secured.headers;
   headers.set('Cache-Control', 'private, no-store');
   headers.set('Pragma', 'no-cache');
-  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; style-src 'self'; script-src 'self'; connect-src 'self' https://moderation-read-staging.enthusia.info; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration
