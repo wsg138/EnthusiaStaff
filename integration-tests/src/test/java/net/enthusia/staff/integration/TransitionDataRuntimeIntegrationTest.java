@@ -38,16 +38,19 @@ class TransitionDataRuntimeIntegrationTest {
         try (TransitionDataRuntime runtime = TransitionDataRuntime.open(database)) {
             runtime.players().recordSeen(player, "TransitionUser", PlayerPlatform.UNKNOWN, "SMP", NOW);
             DiscordSrvMigrationService migration = new DiscordSrvMigrationService(
-                    Clock.fixed(NOW.plusSeconds(1), ZoneOffset.UTC), runtime.identities());
+                    Clock.fixed(NOW.plusSeconds(1), ZoneOffset.UTC), runtime.discordSrvImports());
             var report = migration.importSnapshot(new SnapshotProvider(Map.of(discord.value(), player)));
             assertEquals(1, report.imported());
             assertTrue(report.conflicts().isEmpty());
         }
 
         try (TransitionDataRuntime restarted = TransitionDataRuntime.open(database)) {
-            assertEquals(discord, restarted.identities().currentLink(player).orElseThrow().link().discordUserId());
-            assertTrue(restarted.identities().subjectForDiscord(discord).orElseThrow()
-                    .subject().minecraftAccountIds().contains(player));
+            DiscordSrvMigrationService migration = new DiscordSrvMigrationService(
+                    Clock.fixed(NOW.plusSeconds(2), ZoneOffset.UTC), restarted.discordSrvImports());
+            var report = migration.importSnapshot(new SnapshotProvider(Map.of(discord.value(), player)));
+            assertEquals(0, report.imported());
+            assertEquals(1, report.unchanged());
+            assertTrue(report.conflicts().isEmpty());
         }
     }
 

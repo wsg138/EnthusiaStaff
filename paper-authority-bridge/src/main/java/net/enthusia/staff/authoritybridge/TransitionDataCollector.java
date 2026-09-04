@@ -53,7 +53,7 @@ final class TransitionDataCollector implements AutoCloseable {
         this.data = data;
         this.discordSrv = discordSrv;
         this.clock = clock;
-        this.migration = new DiscordSrvMigrationService(clock, data.identities());
+        this.migration = new DiscordSrvMigrationService(clock, data.discordSrvImports());
         this.worker = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1),
                 runnable -> Thread.ofPlatform().daemon(true).name("enthusia-transition-collector").unstarted(runnable),
