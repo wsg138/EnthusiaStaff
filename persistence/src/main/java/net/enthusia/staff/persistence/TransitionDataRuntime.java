@@ -81,7 +81,10 @@ public final class TransitionDataRuntime implements AutoCloseable {
                 .migrate();
     }
 
+    @SuppressWarnings("PMD.UseProperClassLoader")
     static ClassLoader migrationClassLoader() {
+        // Paper's thread context loader belongs to the host and cannot see resources shaded into this plugin.
+        // The owning loader is intentionally required here; live acceptance proved the context loader finds 0 migrations.
         return TransitionDataRuntime.class.getClassLoader();
     }
 
