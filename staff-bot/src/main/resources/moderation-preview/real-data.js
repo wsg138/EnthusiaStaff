@@ -41,7 +41,7 @@ async function loadSession() {
     const sessionResponse = await fetch('/api/session', {headers:{Accept:'application/json'}});
     if (!sessionResponse.ok) throw new Error('Session unavailable');
     state.session = await sessionResponse.json();
-    const bootstrapResponse = await fetch('/api/bootstrap', {headers:{Accept:'application/json'}});
+    const bootstrapResponse = await requestDirectModerationRead('/api/bootstrap', {headers:{Accept:'application/json'}});
     const payload = await readJsonResponse(bootstrapResponse);
     if (!bootstrapResponse.ok) throw new Error(payload.message || 'Moderation data unavailable');
     applyLiveBootstrap(payload);
@@ -289,7 +289,7 @@ function filtersNode() {
 
 function searchFilterNode() { return element('input', {id:'messageSearch', type:'search', placeholder:'Search loaded message text', value:state.search}); }
 function authorFilterNode() { return element('input', {id:'authorFilter', type:'search', placeholder:'Author ID or name', value:state.author ?? ''}); }
-function channelFilterNode() { return element('select', {id:'channelFilter'}, optionNode('all','All loaded channels',state.channel === 'all'), liveModeration.channels.map(channelFilterOption)); }
+function channelFilterNode() { return element('select', {id:'channelFilter'}, optionNode('all','All readable channels',state.channel === 'all'), liveModeration.channels.map(channelFilterOption)); }
 function channelFilterOption(item) { const category = item.categoryName ? ` · ${item.categoryName}` : ''; return optionNode(item.id, `#${item.name}${category}`, state.channel === item.id); }
 function dateFilterNode() { return element('input', {id:'dateFilter', type:'date', value:state.date === 'all' ? '' : state.date}); }
 function selectedFilterNode() { const selected = element('input', {id:'selectedFilter', type:'checkbox', checked:state.selectedOnly}); return element('label', {className:'checkbox-control'}, selected, ' Selected only'); }
@@ -359,7 +359,11 @@ async function loadMoreMessages(direction) {
 
 async function loadMessageRequest(params, mode) {
   try {
-    const response = await fetch('/api/messages', {method:'POST', headers:{Accept:'application/json', 'Content-Type':'application/json'}, body:JSON.stringify(Object.fromEntries(params.entries()))});
+    const response = await requestDirectModerationRead('/api/messages', {
+      method:'POST',
+      headers:{Accept:'application/json', 'Content-Type':'application/json'},
+      body:JSON.stringify(Object.fromEntries(params.entries()))
+    });
     const page = await readJsonResponse(response);
     if (!response.ok) throw new Error(page.message || 'Discord messages unavailable');
     if (mode === 'replace') replaceMessagePage(page);
