@@ -73,7 +73,6 @@ async function executeDirectRead(proof) {
     method:'POST',
     mode:'cors',
     credentials:'omit',
-    cache:'no-store',
     referrerPolicy:'no-referrer',
     redirect:'error',
     headers:{
