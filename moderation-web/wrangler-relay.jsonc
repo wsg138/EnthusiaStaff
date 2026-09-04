@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "enthusia-moderation-read-relay-staging",
+  "main": "src/relay.js",
+  "compatibility_date": "2026-08-30",
+  "workers_dev": true,
+  "preview_urls": false,
+  "secrets": {
+    "required": [
+      "READ_API_SIGNING_KEY_HEX"
+    ]
+  }
+}
