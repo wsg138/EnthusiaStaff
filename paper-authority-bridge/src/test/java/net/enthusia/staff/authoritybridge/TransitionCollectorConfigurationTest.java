@@ -53,7 +53,7 @@ class TransitionCollectorConfigurationTest {
         return String.join("\n",
                 "db.jdbc-url=jdbc:mariadb://db.example:3306/enthusia",
                 "db.username=collector",
-                "db.password=collector-password",
+                "db.credential=collector-password",
                 "");
     }
 }

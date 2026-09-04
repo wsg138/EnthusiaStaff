@@ -109,7 +109,7 @@ Use the same logical EnthusiaStaff database as the Staff Bot `m` file. The colle
 ```properties
 db.jdbc-url=jdbc:mariadb://<same-database-host>:3306/<same-database-name>
 db.username=<write-capable-transition-user>
-db.password=<database-password>
+db.credential=<database-credential>
 # Optional bounded settings:
 # db.pool-size=2
 # db.timeout-millis=3000

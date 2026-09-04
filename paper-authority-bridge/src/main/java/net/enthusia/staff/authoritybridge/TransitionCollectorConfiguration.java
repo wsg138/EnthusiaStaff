@@ -17,13 +17,13 @@ final class TransitionCollectorConfiguration {
     static final String FILE_NAME = "collector.properties";
     private static final String JDBC_URL = "db.jdbc-url";
     private static final String DB_USERNAME = "db.username";
-    private static final String DB_PASSWORD = "db." + "password";
+    private static final String DB_CREDENTIAL = "db.credential";
     private static final String DB_POOL_SIZE = "db.pool-size";
     private static final String DB_TIMEOUT = "db.timeout-millis";
     private static final String SERVER_ID = "collector.server-id";
     private static final String INTERVAL_SECONDS = "collector.interval-seconds";
     private static final Set<String> ALLOWED = Set.of(
-            JDBC_URL, DB_USERNAME, DB_PASSWORD, DB_POOL_SIZE, DB_TIMEOUT, SERVER_ID, INTERVAL_SECONDS);
+            JDBC_URL, DB_USERNAME, DB_CREDENTIAL, DB_POOL_SIZE, DB_TIMEOUT, SERVER_ID, INTERVAL_SECONDS);
     private static final Pattern SAFE_SERVER_ID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
     private static final int DEFAULT_POOL_SIZE = 2;
     private static final int DEFAULT_TIMEOUT_MILLIS = 3_000;
@@ -45,7 +45,7 @@ final class TransitionCollectorConfiguration {
         DatabaseConfig database = new DatabaseConfig(
                 required(properties, JDBC_URL),
                 required(properties, DB_USERNAME),
-                required(properties, DB_PASSWORD),
+                required(properties, DB_CREDENTIAL),
                 boundedInt(properties, DB_POOL_SIZE, DEFAULT_POOL_SIZE, 2, 8),
                 boundedInt(properties, DB_TIMEOUT, DEFAULT_TIMEOUT_MILLIS, 250, 60_000));
         String serverId = properties.getProperty(SERVER_ID, "SMP").trim();
