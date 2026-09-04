@@ -38,21 +38,32 @@ jobs:
           path: market
           persist-credentials: false
 
-      - name: Sync only the proven divergent PR 5 paths
+      - name: Sync only proven divergent product paths
         shell: bash
         run: |
           set -euo pipefail
           paths=(
+            '.github/workflows/build.yml'
+            'docs/db-schema.md'
+            'docs/moderation-provider.md'
+            'docs/requirements.md'
             'src/main/kotlin/net/badgersmc/em/application/AuctionLifecycleService.kt'
             'src/main/kotlin/net/badgersmc/em/application/SellOfferService.kt'
             'src/main/kotlin/net/badgersmc/em/application/StallBuyoutService.kt'
             'src/main/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStore.kt'
             'src/main/kotlin/net/badgersmc/em/infrastructure/moderation/MarketModerationProvider.kt'
+            'src/main/kotlin/net/badgersmc/em/infrastructure/persistence/ShopModerationFenceQueries.kt'
+            'src/main/kotlin/net/badgersmc/em/infrastructure/persistence/ShopRepositorySql.kt'
+            'src/main/resources/migrations/V025__auction_duration.sql'
+            'src/main/resources/migrations/V026__maintenance_freeze.sql'
+            'src/main/resources/migrations/V027__unfreeze_owned_stalls.sql'
             'src/main/resources/migrations/V028__market_moderation_provider.sql'
             'src/test/kotlin/net/badgersmc/em/application/AuctionLifecycleServiceTest.kt'
             'src/test/kotlin/net/badgersmc/em/application/SellOfferServiceTest.kt'
             'src/test/kotlin/net/badgersmc/em/application/StallBuyoutServiceTest.kt'
+            'src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationMariaDbTest.kt'
             'src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStoreTest.kt'
+            'wiki/docs/admins/troubleshooting.md'
           )
           for path in "${paths[@]}"; do
             mkdir -p "staff/components/enthusia-market/$(dirname "$path")"
@@ -88,16 +99,27 @@ jobs:
           git -C staff diff --check
           git -C staff diff --name-only -- components/enthusia-market | sort > /tmp/actual
           cat > /tmp/expected <<'EOF'
+          components/enthusia-market/.github/workflows/build.yml
+          components/enthusia-market/docs/db-schema.md
+          components/enthusia-market/docs/moderation-provider.md
+          components/enthusia-market/docs/requirements.md
           components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/AuctionLifecycleService.kt
           components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/SellOfferService.kt
           components/enthusia-market/src/main/kotlin/net/badgersmc/em/application/StallBuyoutService.kt
           components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStore.kt
           components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/moderation/MarketModerationProvider.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/persistence/ShopModerationFenceQueries.kt
+          components/enthusia-market/src/main/kotlin/net/badgersmc/em/infrastructure/persistence/ShopRepositorySql.kt
+          components/enthusia-market/src/main/resources/migrations/V025__auction_duration.sql
+          components/enthusia-market/src/main/resources/migrations/V026__maintenance_freeze.sql
+          components/enthusia-market/src/main/resources/migrations/V027__unfreeze_owned_stalls.sql
           components/enthusia-market/src/main/resources/migrations/V028__market_moderation_provider.sql
           components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/AuctionLifecycleServiceTest.kt
           components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/SellOfferServiceTest.kt
           components/enthusia-market/src/test/kotlin/net/badgersmc/em/application/StallBuyoutServiceTest.kt
+          components/enthusia-market/src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationMariaDbTest.kt
           components/enthusia-market/src/test/kotlin/net/badgersmc/em/infrastructure/moderation/JdbcMarketModerationStoreTest.kt
+          components/enthusia-market/wiki/docs/admins/troubleshooting.md
           EOF
           sort -o /tmp/expected /tmp/expected
           diff -u /tmp/expected /tmp/actual
