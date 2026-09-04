@@ -20,7 +20,7 @@ softdepend:
   - EnthusiaMarket
   - EnthusiaCommend
   - EnthusiaTeleport
-  - PlayTimePlugin
+  - EnthusiaPlaytime
   - InventoryRollbackPlus
   - EnthusiaServerAutoClicker
 commands:
@@ -129,10 +129,13 @@ commands:
   case:
     description: View case detail or perform case-linked recovery actions
     usage: /case [view] <case-id> | /case restoreitems <case-id> | /case recoveritems <case-id>
-  marketcase:
-    description: Run confirmed case-linked EnthusiaMarket moderation operations
-    usage: /marketcase <prepare|approve|release|restore|blacklist|unblacklist|status> ...
-    permission: enthusiastaff.market.restrict
+  link:
+    description: Link this online Minecraft account to Discord with a one-use code
+    usage: /link [code]
+    aliases: [discordlink]
+  unlink:
+    description: Remove this Minecraft account's current Discord link after confirmation
+    usage: /unlink CONFIRM
 permissions:
   enthusiastaff.status:
     default: false
@@ -244,8 +247,6 @@ permissions:
     default: false
   enthusiastaff.market.restrict:
     default: false
-  enthusiastaff.market.restore:
-    default: false
   enthusiastaff.reputation.restrict:
     default: false
   enthusiastaff.owner.recovery:
@@ -347,5 +348,4 @@ permissions:
       enthusiastaff.punish.custom-combination: true
       enthusiastaff.sanction.bypass-hierarchy: true
       enthusiastaff.case.restoreitems: true
-      enthusiastaff.market.restore: true
       enthusiastaff.owner.recovery: true

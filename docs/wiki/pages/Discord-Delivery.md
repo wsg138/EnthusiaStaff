@@ -1,6 +1,8 @@
 # Discord Delivery
 
-EnthusiaStaff writes Discord notification intent to MariaDB in the same durable workflow as the originating action. Velocity leases due rows, renders a bounded staff-facing projection, sends to an approved HTTPS route, and then records delivery or retry/dead-letter state. Discord failure never rolls back a valid moderation/report/staff action.
+EnthusiaStaff writes Discord notification intent to MariaDB in the same durable workflow as the originating action. Velocity leases due rows, renders a bounded staff-facing projection, sends it to an approved HTTPS route, and records delivery or retry/dead-letter state. Discord notification failure never rolls back a valid moderation/report/staff action.
+
+> This page describes the **current webhook-notification subsystem only**. Merged `main` also contains Discord moderation identity/scope, V19 persistence, and authorization foundations, but the finished account-link runtime, interactive staff bot, Discord punishment execution, AutoMod, native-ban migration and public bot are not provided by this worker. See [[Discord Moderation Platform]].
 
 For the source-oriented contract and full event matrix, see [`docs/discord-delivery.md`](../../../docs/discord-delivery.md).
 
@@ -15,7 +17,7 @@ For the source-oriented contract and full event matrix, see [`docs/discord-deliv
 - Redirects are never followed; a 3xx becomes `HTTP_REDIRECT_REJECTED` so the webhook credential is not forwarded.
 - Route authorization is process-scoped. Changing route environment/approved hosts/webhook environment values requires restart rather than `/estaff reload`.
 
-ES-P06 validation uses isolated non-production delivery only. Production Discord contact is not an acceptance shortcut.
+Validation of this subsystem must use approved isolated/non-production routes. Production Discord contact is not an acceptance shortcut.
 
 ## Privacy boundary
 
@@ -29,7 +31,7 @@ Important examples:
 - malformed/non-object/oversized payloads fail closed as `PAYLOAD_REJECTED`;
 - Discord mention parsing is disabled with an empty `allowed_mentions.parse` list.
 
-Adding a new outbox producer does not automatically expose its fields. Review and deliberately extend the renderer when a new field is actually required.
+Adding a new outbox producer does not automatically expose new payload fields. Review and deliberately extend the renderer when a new field is actually required.
 
 ## Delivery semantics
 
@@ -68,3 +70,11 @@ A failed attempt receives bounded exponential backoff. Repeated destination fail
 - `reports`: report creation and report state lifecycle.
 - `logs-staffmode`: freeze/unfreeze, vanish, staff-mode enter/exit.
 - `alerts`: reserved approved webhook route; Discord channel-health failures themselves remain internal staff alerts rather than recursively enqueueing another Discord notification.
+
+## Go deeper
+
+- [[Discord Moderation Platform]] — current moderation foundations versus future bot/link/enforcement runtime.
+- [[Protocol and Network Traffic]] — network boundaries and at-least-once semantics.
+- [[Privacy and Data Handling]] — sensitive-data rules.
+- [[Developer Code Guide]] — exact producer/store/renderer/worker trace.
+- [[Code Review Guide]] — privacy, retry, idempotency and external-side-effect review.

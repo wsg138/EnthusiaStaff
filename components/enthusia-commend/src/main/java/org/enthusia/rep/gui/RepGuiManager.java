@@ -1,0 +1,1495 @@
+package org.enthusia.rep.gui;
+
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
+import net.md_5.bungee.api.chat.HoverEvent;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.PrepareAnvilEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerEditBookEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.inventory.AnvilInventory;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BookMeta;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.view.AnvilView;
+import org.bukkit.persistence.PersistentDataType;
+import org.enthusia.rep.CommendPlugin;
+import org.enthusia.rep.effects.RepAppliedEffects;
+import org.enthusia.rep.effects.RepEffectManager;
+import org.enthusia.rep.rep.Commendation;
+import org.enthusia.rep.rep.RepCategory;
+import org.enthusia.rep.rep.RepService;
+import org.enthusia.rep.util.RepDateFormats;
+
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+public final class RepGuiManager implements Listener {
+
+    private static final List<Integer> REVIEW_SLOTS = List.of(
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34,
+            37, 38, 39, 40, 41, 42, 43
+    );
+    private static final String CATEGORY_LABEL = "Category: ";
+    private static final int PREVIOUS_PAGE_SLOT = 45;
+    private static final int NEXT_PAGE_SLOT = 53;
+    private static final int POSITIVE_REP_SLOT = 48;
+    private static final int EFFECTS_OR_REMOVE_SLOT = 49;
+    private static final int NEGATIVE_REP_SLOT = 50;
+    private static final int POSITIVE_FILTER_SLOT = 2;
+    private static final int NEGATIVE_FILTER_SLOT = 6;
+    private static final int FILTER_BACK_SLOT = 22;
+    private static final int[] FILTER_OPTION_SLOTS = {10, 11, 12, 14, 15, 16};
+
+    private final CommendPlugin plugin;
+    private final RepService repService;
+    private final RepEffectManager effectManager;
+    private final DateTimeFormatter dateFormatter = RepDateFormats.dateTimeMinute();
+    private final NamespacedKey anvilGuiItemKey;
+
+    private final Map<UUID, PendingTextInput> pendingChatInputs = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> pendingChatTimeoutTasks = new ConcurrentHashMap<>();
+    private final Map<UUID, AnvilSession> pendingAnvils = new ConcurrentHashMap<>();
+    private final Map<UUID, DraftReason> pendingDrafts = new ConcurrentHashMap<>();
+    private final Map<UUID, ProfileContext> returnFromBook = new ConcurrentHashMap<>();
+    private final Map<UUID, String> liveAnvilText = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> transitioningAnvil = new java.util.HashSet<>();
+    private final Map<ProfileSelectionKey, RepProfileFilter> profileSelections = new ConcurrentHashMap<>();
+
+    public RepGuiManager(CommendPlugin plugin, RepService repService, RepEffectManager effectManager) {
+        this.plugin = plugin;
+        this.repService = repService;
+        this.effectManager = effectManager;
+        this.anvilGuiItemKey = new NamespacedKey(plugin, "rep-anvil-gui-item");
+    }
+
+    public void shutdown() {
+        cancelOpenAnvilSessions(null);
+        for (Integer taskId : pendingChatTimeoutTasks.values()) {
+            Bukkit.getScheduler().cancelTask(taskId);
+        }
+        pendingChatInputs.clear();
+        pendingChatTimeoutTasks.clear();
+        pendingAnvils.clear();
+        pendingDrafts.clear();
+        returnFromBook.clear();
+        liveAnvilText.clear();
+        transitioningAnvil.clear();
+        profileSelections.clear();
+    }
+
+    public void cancelOpenAnvilSessions(String message) {
+        List<UUID> playerIds = new ArrayList<>(pendingAnvils.keySet());
+        for (UUID playerId : playerIds) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                if (message != null && !message.isBlank()) {
+                    player.sendMessage(message);
+                }
+                if (isActiveAnvilSession(player, player.getOpenInventory())) {
+                    player.closeInventory();
+                }
+            }
+            pendingAnvils.remove(playerId);
+            liveAnvilText.remove(playerId);
+            transitioningAnvil.remove(playerId);
+        }
+    }
+
+    public void openProfile(Player viewer, OfflinePlayer target) {
+        profileSelections.remove(new ProfileSelectionKey(viewer.getUniqueId(), target.getUniqueId()));
+        openProfile(viewer, target, 0);
+    }
+
+    public void openProfile(Player viewer, OfflinePlayer target, RepCategory selectedCategory) {
+        setProfileFilter(viewer, target.getUniqueId(), RepProfileFilter.category(selectedCategory));
+        openProfile(viewer, target, 0);
+    }
+
+    public void openProfile(Player viewer, OfflinePlayer target, int page) {
+        Bukkit.getPluginManager().callEvent(new org.enthusia.rep.events.CommendationProfileViewedEvent(viewer.getUniqueId(), target.getUniqueId()));
+        UUID targetId = target.getUniqueId();
+        RepProfileFilter selected = profileSelections.getOrDefault(
+                new ProfileSelectionKey(viewer.getUniqueId(), targetId), RepProfileFilter.overall());
+        int overallScore = repService.getScore(targetId);
+        ChatColor scoreColor = plugin.getRepConfig().colorForScore(overallScore);
+        List<Commendation> allReviews = repService.getCommendationsAbout(targetId).stream()
+                .sorted(Comparator.comparingLong(Commendation::getCreatedAt).reversed())
+                .toList();
+        List<Commendation> reviews = selected.apply(allReviews);
+        int viewTotal = profileFilterTotal(targetId, selected, overallScore);
+        long positives = allReviews.stream().filter(Commendation::isPositive).count();
+        long negatives = allReviews.size() - positives;
+        int maxPage = Math.max(0, (reviews.size() - 1) / REVIEW_SLOTS.size());
+        int resolvedPage = Math.max(0, Math.min(page, maxPage));
+        int start = resolvedPage * REVIEW_SLOTS.size();
+        List<Commendation> visibleReviews = reviews.stream()
+                .skip(start)
+                .limit(REVIEW_SLOTS.size())
+                .map(Commendation::snapshot)
+                .toList();
+
+        Inventory inventory = Bukkit.createInventory(
+                new ProfileHolder(targetId, selected, resolvedPage, visibleReviews), 54,
+                ChatColor.DARK_GREEN + "Rep: " + ChatColor.RESET + safeName(target) + ChatColor.GRAY
+                        + " [" + (resolvedPage + 1) + "/" + (maxPage + 1) + "]");
+        fillBackground(inventory, viewer);
+
+        ItemStack head = HeadUtil.createPlayerHead(plugin, targetId, scoreColor + safeName(target));
+        ItemMeta headMeta = head.getItemMeta();
+        if (headMeta != null) {
+            List<String> profileLore = new ArrayList<>();
+            profileLore.add(ChatColor.GRAY + "Total reputation: " + plugin.getRepConfig().formatColoredScore(overallScore));
+            profileLore.add(ChatColor.GRAY + "Positive reps: " + ChatColor.GREEN + positives);
+            profileLore.add(ChatColor.GRAY + "Negative reps: " + ChatColor.RED + negatives);
+            if (!selected.isOverall()) {
+                profileLore.add(ChatColor.DARK_GRAY + "----------------");
+                profileLore.add(ChatColor.GRAY + "Viewing: " + ChatColor.GOLD + selected.displayName());
+                profileLore.add(ChatColor.GRAY + "Filtered score: " + RepCategoryGuiSupport.coloredValue(viewTotal));
+                profileLore.add(ChatColor.GRAY + "Entries shown: " + ChatColor.WHITE + reviews.size());
+            }
+            headMeta.setLore(profileLore);
+            head.setItemMeta(headMeta);
+        }
+        inventory.setItem(4, head);
+        inventory.setItem(POSITIVE_FILTER_SLOT, profileFilterButton(true, selected, allReviews, targetId));
+        inventory.setItem(NEGATIVE_FILTER_SLOT, profileFilterButton(false, selected, allReviews, targetId));
+
+        for (int i = 0; i < visibleReviews.size(); i++) {
+            inventory.setItem(REVIEW_SLOTS.get(i),
+                    reviewItem(visibleReviews.get(i), viewer.hasPermission("enthusiacommend.rep.admin")));
+        }
+        if (visibleReviews.isEmpty()) {
+            inventory.setItem(22, simpleButton(Material.PAPER, ChatColor.GRAY + "No reputation entries",
+                    List.of(ChatColor.DARK_GRAY + "Nothing matches this filter.")));
+        }
+        if (resolvedPage > 0) inventory.setItem(PREVIOUS_PAGE_SLOT, simpleButton(Material.ARROW, ChatColor.YELLOW + "Prev", List.of()));
+        if (resolvedPage < maxPage) inventory.setItem(NEXT_PAGE_SLOT, simpleButton(Material.ARROW, ChatColor.YELLOW + "Next", List.of()));
+
+        if (viewer.getUniqueId().equals(targetId)) {
+            RepAppliedEffects effects = effectManager.getCurrentEffects(targetId);
+            inventory.setItem(EFFECTS_OR_REMOVE_SLOT, simpleButton(Material.BOOK, ChatColor.AQUA + "Your Rep Effects", buildCurrentEffectsLore(effects)));
+        } else {
+            Commendation existing = repService.getCommendation(viewer.getUniqueId(), targetId);
+            long remaining = cooldownRemaining(viewer.getUniqueId(), targetId, existing);
+            if (remaining > 0L) {
+                inventory.setItem(POSITIVE_REP_SLOT, simpleButton(Material.BARRIER, ChatColor.RED + "On cooldown", buildGiveLore(existing, true, remaining)));
+                inventory.setItem(NEGATIVE_REP_SLOT, simpleButton(Material.BARRIER, ChatColor.RED + "On cooldown", buildGiveLore(existing, false, remaining)));
+            } else {
+                inventory.setItem(POSITIVE_REP_SLOT, simpleButton(Material.LIME_WOOL, ChatColor.GREEN + "Leave Positive", buildGiveLore(existing, true, 0L)));
+                inventory.setItem(NEGATIVE_REP_SLOT, simpleButton(Material.RED_WOOL, ChatColor.RED + "Leave Negative", buildGiveLore(existing, false, 0L)));
+            }
+            if (existing != null) {
+                inventory.setItem(EFFECTS_OR_REMOVE_SLOT, simpleButton(Material.PAPER, ChatColor.YELLOW + "Remove my rep",
+                        List.of(ChatColor.GRAY + "Click to remove your commendation", ChatColor.GRAY + "(applies cooldown)")));
+            }
+        }
+        viewer.openInventory(inventory);
+    }
+
+    public void openRemovedLog(Player admin, int page) {
+        List<RepService.RemovedRep> removed = repService.getRemovedLog().stream()
+                .sorted(Comparator.comparingLong(RepService.RemovedRep::removedAt).reversed())
+                .toList();
+        int maxPage = Math.max(0, (removed.size() - 1) / REVIEW_SLOTS.size());
+        int resolvedPage = Math.max(0, Math.min(page, maxPage));
+        Inventory inventory = Bukkit.createInventory(new RemovedLogHolder(resolvedPage), 54,
+                ChatColor.DARK_RED + "Removed Reps [" + (resolvedPage + 1) + "/" + (maxPage + 1) + "]");
+        fillBackground(inventory, admin);
+
+        int start = resolvedPage * REVIEW_SLOTS.size();
+        for (int i = 0; i < REVIEW_SLOTS.size(); i++) {
+            int index = start + i;
+            if (index >= removed.size()) {
+                break;
+            }
+            inventory.setItem(REVIEW_SLOTS.get(i), removedLogItem(removed.get(index)));
+        }
+
+        if (resolvedPage > 0) inventory.setItem(45, simpleButton(Material.ARROW, ChatColor.YELLOW + "Prev", List.of()));
+        if (resolvedPage < maxPage) inventory.setItem(53, simpleButton(Material.ARROW, ChatColor.YELLOW + "Next", List.of()));
+        admin.openInventory(inventory);
+    }
+
+    public void openActiveReports(Player admin, int page) {
+        List<RepService.SuspiciousRepCase> cases = repService.getSuspiciousCases().stream()
+                .filter(caseData -> !caseData.isResolved())
+                .sorted(Comparator.comparingLong(RepService.SuspiciousRepCase::getCreatedAt).reversed())
+                .toList();
+
+        int maxPage = Math.max(0, (cases.size() - 1) / REVIEW_SLOTS.size());
+        int resolvedPage = Math.max(0, Math.min(page, maxPage));
+        int start = resolvedPage * REVIEW_SLOTS.size();
+        List<RepService.SuspiciousRepCase> visibleCases = cases.stream()
+                .skip(start)
+                .limit(REVIEW_SLOTS.size())
+                .map(RepService.SuspiciousRepCase::copy)
+                .toList();
+        Inventory inventory = Bukkit.createInventory(new ActiveReportsHolder(resolvedPage, visibleCases), 54,
+                ChatColor.DARK_RED + "Active Rep Reports [" + (resolvedPage + 1) + "/" + (maxPage + 1) + "]");
+        fillBackground(inventory, admin);
+
+        if (cases.isEmpty()) {
+            inventory.setItem(22, simpleButton(Material.PAPER, ChatColor.GRAY + "No active reports", List.of()));
+            admin.openInventory(inventory);
+            return;
+        }
+
+        for (int i = 0; i < visibleCases.size(); i++) {
+            inventory.setItem(REVIEW_SLOTS.get(i), activeReportItem(visibleCases.get(i)));
+        }
+
+        if (resolvedPage > 0) inventory.setItem(45, simpleButton(Material.ARROW, ChatColor.YELLOW + "Prev", List.of()));
+        if (resolvedPage < maxPage) inventory.setItem(53, simpleButton(Material.ARROW, ChatColor.YELLOW + "Next", List.of()));
+        admin.openInventory(inventory);
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        Inventory topInventory = event.getView().getTopInventory();
+        if (topInventory == null || topInventory.getHolder() == null) {
+            handleAnvilClickIfNeeded(player, event);
+            return;
+        }
+        InventoryHolder holder = topInventory.getHolder();
+        if (!(holder instanceof HolderMarker)) {
+            handleAnvilClickIfNeeded(player, event);
+            return;
+        }
+
+        denyInventoryClick(event);
+
+        if (!isGuiButtonClick(event.getClick())) {
+            Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+            return;
+        }
+
+        if (holder instanceof ProfileHolder profile) {
+            handleProfileClick(player, profile, event);
+        } else if (holder instanceof ProfileFilterHolder filter) {
+            handleProfileFilterClick(player, filter, event.getRawSlot());
+        } else if (holder instanceof ReasonHolder reason) {
+            handleReasonClick(player, reason, event.getRawSlot());
+        } else if (holder instanceof InputChoiceHolder inputChoice) {
+            handleInputChoiceClick(player, inputChoice, event.getRawSlot());
+        } else if (holder instanceof ConfirmReasonHolder confirmReason) {
+            handleConfirmReasonClick(player, confirmReason, event.getRawSlot());
+        } else if (holder instanceof ConfirmRemovalHolder removal) {
+            handleRemovalClick(player, removal, event.getRawSlot());
+        } else if (holder instanceof RemovedLogHolder removed) {
+            handleRemovedLogClick(player, removed, event.getRawSlot(), event.getCurrentItem());
+        } else if (holder instanceof ActiveReportsHolder reports) {
+            handleReportsClick(player, reports, event.getRawSlot());
+        } else if (holder instanceof ConfirmRestoreHolder restore) {
+            handleRestoreClick(player, restore, event.getRawSlot());
+        }
+    }
+
+    private void handleAnvilClickIfNeeded(Player player, InventoryClickEvent event) {
+        if (!isActiveAnvilSession(player, event.getView())) {
+            return;
+        }
+        denyInventoryClick(event);
+        scheduleAnvilCleanup(player);
+        if (!isGuiButtonClick(event.getClick())) {
+            Bukkit.getScheduler().runTask(plugin, player::updateInventory);
+            return;
+        }
+        handleAnvilResultClick(player, event);
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getView().getTopInventory().getHolder() instanceof HolderMarker
+                || (event.getWhoClicked() instanceof Player player && isActiveAnvilSession(player, event.getView()))) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player player) {
+                scheduleAnvilCleanup(player);
+            }
+        }
+    }
+
+    private void denyInventoryClick(InventoryClickEvent event) {
+        event.setCancelled(true);
+        event.setResult(Event.Result.DENY);
+    }
+
+    private boolean isGuiButtonClick(ClickType clickType) {
+        return clickType == ClickType.LEFT || clickType == ClickType.RIGHT;
+    }
+
+    @EventHandler
+    public void onPrepareAnvil(PrepareAnvilEvent event) {
+        if (!(event.getView().getPlayer() instanceof Player player)) {
+            return;
+        }
+        AnvilSession session = pendingAnvils.get(player.getUniqueId());
+        if (session == null || event.getInventory().getType() != org.bukkit.event.inventory.InventoryType.ANVIL) {
+            return;
+        }
+        String text = event.getView() instanceof AnvilView anvilView ? anvilView.getRenameText() : event.getInventory().getRenameText();
+        liveAnvilText.put(player.getUniqueId(), text == null ? "" : text);
+        resetAnvilCosts(event.getInventory());
+        String normalized = normalizeReason(text);
+        if (normalized.isEmpty()) {
+            event.setResult(null);
+            return;
+        }
+        event.setResult(anvilGuiItem(materialFor(session.category().isPositive()), ChatColor.YELLOW + normalized, List.of(ChatColor.GRAY + "Click to continue")));
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) {
+            return;
+        }
+        if (pendingAnvils.containsKey(player.getUniqueId()) && event.getInventory().getType() == org.bukkit.event.inventory.InventoryType.ANVIL) {
+            UUID playerId = player.getUniqueId();
+            if (transitioningAnvil.remove(playerId)) {
+                purgeAnvilGuiItems(player);
+                return;
+            }
+            pendingAnvils.remove(playerId);
+            liveAnvilText.remove(playerId);
+            Bukkit.getScheduler().runTask(plugin, () -> purgeAnvilGuiItems(player));
+        }
+    }
+
+    @EventHandler
+    public void onChat(AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+        PendingTextInput pending = pendingChatInputs.remove(player.getUniqueId());
+        if (pending == null) {
+            return;
+        }
+
+        event.setCancelled(true);
+        cancelChatTimeout(player.getUniqueId());
+
+        String message = event.getMessage().trim();
+        if (message.equalsIgnoreCase("cancel") || message.equalsIgnoreCase("stop")) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                player.sendMessage(ChatColor.YELLOW + "Rep message entry cancelled.");
+                openProfile(player, Bukkit.getOfflinePlayer(pending.targetId()), pending.returnPage());
+            });
+            return;
+        }
+
+        String normalized = normalizeReason(message);
+        if (normalized.isEmpty()) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                player.sendMessage(ChatColor.RED + "Your message was empty. Type it again or type cancel.");
+                beginChatInput(player, pending.targetId(), pending.category(), pending.returnPage());
+            });
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> openConfirmReason(player, pending.targetId(), pending.category(), pending.returnPage(), normalized));
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        pendingChatInputs.remove(playerId);
+        cancelChatTimeout(playerId);
+        pendingAnvils.remove(playerId);
+        pendingDrafts.remove(playerId);
+        returnFromBook.remove(playerId);
+        liveAnvilText.remove(playerId);
+        transitioningAnvil.remove(playerId);
+        profileSelections.keySet().removeIf(key -> key.viewerId().equals(playerId));
+    }
+
+    @EventHandler
+    public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
+        if (pendingChatInputs.containsKey(event.getPlayer().getUniqueId())) {
+            event.getPlayer().sendMessage(ChatColor.RED + "Finish your rep message first, or type cancel.");
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onDrop(PlayerDropItemEvent event) {
+        if (pendingAnvils.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            scheduleAnvilCleanup(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onSwap(PlayerSwapHandItemsEvent event) {
+        if (pendingAnvils.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            scheduleAnvilCleanup(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onHeldSlotChange(PlayerItemHeldEvent event) {
+        if (pendingAnvils.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            scheduleAnvilCleanup(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onBookEdit(PlayerEditBookEvent event) {
+        if (pendingAnvils.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof Player player) {
+            ProfileContext context = returnFromBook.remove(player.getUniqueId());
+            if (context != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> openProfile(player, Bukkit.getOfflinePlayer(context.targetId()), context.page()));
+            }
+        }
+    }
+
+    private void handleProfileClick(Player player, ProfileHolder profile, InventoryClickEvent event) {
+        int slot = event.getRawSlot();
+        if (slot == POSITIVE_FILTER_SLOT) {
+            openProfileFilterMenu(player, profile.targetId(), true, profile.page(), profile.filter());
+            return;
+        }
+        if (slot == NEGATIVE_FILTER_SLOT) {
+            openProfileFilterMenu(player, profile.targetId(), false, profile.page(), profile.filter());
+            return;
+        }
+        if (slot == PREVIOUS_PAGE_SLOT) {
+            openProfile(player, Bukkit.getOfflinePlayer(profile.targetId()), profile.page() - 1);
+            return;
+        }
+        if (slot == NEXT_PAGE_SLOT) {
+            openProfile(player, Bukkit.getOfflinePlayer(profile.targetId()), profile.page() + 1);
+            return;
+        }
+        if (isRepButton(slot) && !player.getUniqueId().equals(profile.targetId())) {
+            handleProfileRepButton(player, profile, slot);
+            return;
+        }
+        if (slot == EFFECTS_OR_REMOVE_SLOT && !player.getUniqueId().equals(profile.targetId())) {
+            handleOwnRepRemovalButton(player, profile);
+            return;
+        }
+
+        int reviewIndex = REVIEW_SLOTS.indexOf(slot);
+        Commendation selected = GuiSnapshotTargets.at(profile.visibleReviews(), reviewIndex);
+        if (selected == null) {
+            return;
+        }
+        if (player.hasPermission("enthusiacommend.rep.admin") && event.isRightClick()) {
+            Commendation current = repService.getCommendation(selected.getGiver(), selected.getTarget());
+            if (!GuiSnapshotTargets.sameCommendationRevision(selected, current)) {
+                player.sendMessage(ChatColor.YELLOW + "That reputation entry changed while the GUI was open. Review it again.");
+                openProfile(player, Bukkit.getOfflinePlayer(profile.targetId()), profile.page());
+                return;
+            }
+            openRemovalConfirm(player, current, profile.page(), false, true);
+            return;
+        }
+        returnFromBook.put(player.getUniqueId(), new ProfileContext(profile.targetId(), profile.page()));
+        openReviewBook(player, selected);
+    }
+
+    private void handleProfileFilterClick(Player player, ProfileFilterHolder holder, int slot) {
+        if (slot == FILTER_BACK_SLOT) {
+            openProfileWithFilter(player, holder.targetId(), holder.returnFilter(), holder.returnPage());
+            return;
+        }
+        int optionIndex = indexOf(FILTER_OPTION_SLOTS, slot);
+        if (optionIndex < 0) {
+            return;
+        }
+        if (optionIndex == 0) {
+            openProfileWithFilter(player, holder.targetId(), RepProfileFilter.polarity(holder.positive()), 0);
+            return;
+        }
+        List<RepCategory> categories = categories(holder.positive());
+        int categoryIndex = optionIndex - 1;
+        if (categoryIndex < categories.size()) {
+            openProfileWithFilter(player, holder.targetId(), RepProfileFilter.category(categories.get(categoryIndex)), 0);
+        }
+    }
+
+    private boolean isRepButton(int slot) {
+        return slot == POSITIVE_REP_SLOT || slot == NEGATIVE_REP_SLOT;
+    }
+
+    private void handleProfileRepButton(Player player, ProfileHolder profile, int slot) {
+        if (!canStartRep(player, profile.targetId())) {
+            return;
+        }
+        openReasonMenu(player, profile.targetId(), slot == POSITIVE_REP_SLOT, profile.page());
+    }
+
+    private void handleOwnRepRemovalButton(Player player, ProfileHolder profile) {
+        Commendation existing = repService.getCommendation(player.getUniqueId(), profile.targetId());
+        if (existing != null) {
+            openRemovalConfirm(player, existing, profile.page(), true, false);
+        }
+    }
+
+    private void handleReasonClick(Player player, ReasonHolder reason, int slot) {
+        List<RepCategory> categories = reason.positive() ? positiveCategories() : negativeCategories();
+        int[] slots = {10, 11, 12, 14, 15, 16};
+        for (int i = 0; i < categories.size() && i < slots.length; i++) {
+            if (slot == slots[i]) {
+                openInputChoice(player, reason.targetId(), categories.get(i), reason.returnPage());
+                return;
+            }
+        }
+    }
+
+    private void handleInputChoiceClick(Player player, InputChoiceHolder inputChoice, int slot) {
+        if (slot == 11) {
+            player.closeInventory();
+            beginChatInput(player, inputChoice.targetId(), inputChoice.category(), inputChoice.returnPage());
+        } else if (slot == 15) {
+            openAnvilInput(player, inputChoice.targetId(), inputChoice.category(), inputChoice.returnPage());
+        } else if (slot == 22) {
+            openReasonMenu(player, inputChoice.targetId(), inputChoice.category().isPositive(), inputChoice.returnPage());
+        }
+    }
+
+    private void handleConfirmReasonClick(Player player, ConfirmReasonHolder confirmReason, int slot) {
+        if (slot == 11) {
+            submitReason(player, confirmReason.targetId(), confirmReason.category(), confirmReason.reason(), confirmReason.returnPage());
+        } else if (slot == 13) {
+            openInputChoice(player, confirmReason.targetId(), confirmReason.category(), confirmReason.returnPage());
+        } else if (slot == 15) {
+            pendingDrafts.remove(player.getUniqueId());
+            openProfile(player, Bukkit.getOfflinePlayer(confirmReason.targetId()), confirmReason.returnPage());
+        }
+    }
+
+    private void handleRemovalClick(Player player, ConfirmRemovalHolder removal, int slot) {
+        Commendation expected = removal.expected();
+        if (slot == 11) {
+            Commendation current = repService.getCommendation(expected.getGiver(), expected.getTarget());
+            if (!GuiSnapshotTargets.sameCommendationRevision(expected, current)) {
+                player.sendMessage(ChatColor.YELLOW + "That reputation entry changed before confirmation. Nothing was removed.");
+                openProfile(player, Bukkit.getOfflinePlayer(expected.getTarget()), removal.returnPage());
+                return;
+            }
+            if (removal.logRemoval()) {
+                repService.removeCommendationLogged(player.getUniqueId(), expected.getGiver(), expected.getTarget(), removal.applyCooldown());
+            } else if (removal.applyCooldown()) {
+                repService.removeCommendationWithCooldown(expected.getGiver(), expected.getTarget());
+            } else {
+                repService.removeCommendation(expected.getGiver(), expected.getTarget());
+            }
+            openProfile(player, Bukkit.getOfflinePlayer(expected.getTarget()), removal.returnPage());
+        } else if (slot == 15) {
+            openProfile(player, Bukkit.getOfflinePlayer(expected.getTarget()), removal.returnPage());
+        }
+    }
+
+    private void handleRemovedLogClick(Player player, RemovedLogHolder holder, int slot, ItemStack clicked) {
+        if (slot == PREVIOUS_PAGE_SLOT) {
+            openRemovedLog(player, holder.page() - 1);
+            return;
+        }
+        if (slot == NEXT_PAGE_SLOT) {
+            openRemovedLog(player, holder.page() + 1);
+            return;
+        }
+        if (clicked == null || !clicked.hasItemMeta()) {
+            return;
+        }
+        String removalId = clicked.getItemMeta().getPersistentDataContainer()
+                .get(new NamespacedKey(plugin, "rep-removed-id"), PersistentDataType.STRING);
+        if (removalId != null) {
+            openRestoreConfirm(player, removalId, holder.page());
+        }
+    }
+
+    private void handleReportsClick(Player player, ActiveReportsHolder holder, int slot) {
+        if (slot == 45) {
+            openActiveReports(player, holder.page() - 1);
+            return;
+        }
+        if (slot == 53) {
+            openActiveReports(player, holder.page() + 1);
+            return;
+        }
+        int reviewIndex = REVIEW_SLOTS.indexOf(slot);
+        RepService.SuspiciousRepCase selected = GuiSnapshotTargets.at(holder.visibleCases(), reviewIndex);
+        if (selected != null) {
+            sendReportDetails(player, selected);
+        }
+    }
+
+    private void handleRestoreClick(Player player, ConfirmRestoreHolder restore, int slot) {
+        if (slot == 11) {
+            if (repService.restoreRemoved(restore.removalId(), player)) {
+                player.sendMessage(ChatColor.GREEN + "Restored rep entry " + restore.removalId() + ".");
+            } else {
+                player.sendMessage(ChatColor.RED + "Could not restore that rep entry.");
+            }
+            openRemovedLog(player, restore.returnPage());
+        } else if (slot == 15) {
+            openRemovedLog(player, restore.returnPage());
+        }
+    }
+
+    private void handleAnvilResultClick(Player player, InventoryClickEvent event) {
+        if (event.getRawSlot() != 2) {
+            return;
+        }
+        AnvilSession anvil = pendingAnvils.get(player.getUniqueId());
+        if (anvil == null) {
+            return;
+        }
+        String text = resolveAnvilReasonText(player, event);
+        if (text.isEmpty()) {
+            Bukkit.getScheduler().runTask(plugin, () -> retryAnvilResultClick(player));
+            return;
+        }
+        completeAnvilReasonEntry(player, anvil, text);
+    }
+
+    private void retryAnvilResultClick(Player player) {
+        AnvilSession anvil = pendingAnvils.get(player.getUniqueId());
+        if (anvil == null || !isActiveAnvilSession(player, player.getOpenInventory())) {
+            return;
+        }
+        String text = resolveAnvilReasonText(player, player.getOpenInventory());
+        if (text.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "Type a message in the anvil first.");
+            return;
+        }
+        completeAnvilReasonEntry(player, anvil, text);
+    }
+
+    private void completeAnvilReasonEntry(Player player, AnvilSession anvil, String text) {
+        transitioningAnvil.add(player.getUniqueId());
+        pendingAnvils.remove(player.getUniqueId());
+        liveAnvilText.remove(player.getUniqueId());
+        player.closeInventory();
+        Bukkit.getScheduler().runTask(plugin, () -> purgeAnvilGuiItems(player));
+        Bukkit.getScheduler().runTask(plugin,
+                () -> openConfirmReason(player, anvil.targetId(), anvil.category(), anvil.returnPage(), text));
+    }
+
+    private void openProfileFilterMenu(Player viewer, UUID targetId, boolean positive, int returnPage,
+                                       RepProfileFilter returnFilter) {
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetId);
+        List<Commendation> allReviews = repService.getCommendationsAbout(targetId);
+        List<RepCategory> categories = categories(positive);
+        Inventory inventory = Bukkit.createInventory(
+                new ProfileFilterHolder(targetId, positive, returnPage, returnFilter), 27,
+                positive ? ChatColor.GREEN + "Positive Rep Filters" : ChatColor.RED + "Negative Rep Filters");
+        fillBackground(inventory, viewer);
+
+        int overallScore = repService.getScore(targetId);
+        ItemStack head = HeadUtil.createPlayerHead(plugin, targetId,
+                plugin.getRepConfig().colorForScore(overallScore) + safeName(target));
+        ItemMeta headMeta = head.getItemMeta();
+        if (headMeta != null) {
+            long positiveCount = allReviews.stream().filter(Commendation::isPositive).count();
+            long negativeCount = allReviews.size() - positiveCount;
+            headMeta.setLore(List.of(
+                    ChatColor.GRAY + "Total reputation: " + plugin.getRepConfig().formatColoredScore(overallScore),
+                    ChatColor.GRAY + "Positive reps: " + ChatColor.GREEN + positiveCount,
+                    ChatColor.GRAY + "Negative reps: " + ChatColor.RED + negativeCount
+            ));
+            head.setItemMeta(headMeta);
+        }
+        inventory.setItem(4, head);
+
+        RepProfileFilter polarity = RepProfileFilter.polarity(positive);
+        inventory.setItem(FILTER_OPTION_SLOTS[0], profileFilterChoice(
+                positive ? Material.LIME_CONCRETE : Material.RED_CONCRETE,
+                polarity, returnFilter, allReviews,
+                positive ? "Every positive reputation entry." : "Every negative reputation entry."));
+        for (int index = 0; index < categories.size() && index + 1 < FILTER_OPTION_SLOTS.length; index++) {
+            RepCategory category = categories.get(index);
+            RepProfileFilter option = RepProfileFilter.category(category);
+            inventory.setItem(FILTER_OPTION_SLOTS[index + 1], profileFilterChoice(
+                    category.icon(), option, returnFilter, allReviews, category.description()));
+        }
+        inventory.setItem(FILTER_BACK_SLOT, simpleButton(Material.ARROW, ChatColor.YELLOW + "Back to Profile",
+                List.of(ChatColor.GRAY + "Return without changing the filter.")));
+        viewer.openInventory(inventory);
+    }
+
+    private void openReasonMenu(Player viewer, UUID targetId, boolean positive, int returnPage) {
+        Inventory inventory = Bukkit.createInventory(new ReasonHolder(targetId, positive, returnPage), 27,
+                positive ? ChatColor.GREEN + "Choose Positive Reason" : ChatColor.RED + "Choose Negative Reason");
+        fillBackground(inventory, viewer);
+        List<RepCategory> categories = positive ? positiveCategories() : negativeCategories();
+        int[] slots = {10, 11, 12, 14, 15, 16};
+        for (int i = 0; i < categories.size() && i < slots.length; i++) {
+            inventory.setItem(slots[i], simpleButton(materialFor(positive), (positive ? ChatColor.GREEN : ChatColor.RED) + displayName(categories.get(i)),
+                    List.of(ChatColor.GRAY + "Click to continue")));
+        }
+        viewer.openInventory(inventory);
+    }
+
+    private void openInputChoice(Player viewer, UUID targetId, RepCategory category, int returnPage) {
+        Inventory inventory = Bukkit.createInventory(new InputChoiceHolder(targetId, category, returnPage), 27,
+                ChatColor.GOLD + "How do you want to type it?");
+        fillBackground(inventory, viewer);
+        inventory.setItem(11, simpleButton(Material.PAPER, ChatColor.YELLOW + "Type In Chat",
+                List.of(ChatColor.GRAY + "Type your reason in chat", ChatColor.GRAY + "Then confirm or retry")));
+        inventory.setItem(15, simpleButton(Material.ANVIL, ChatColor.YELLOW + "Type In Anvil",
+                List.of(ChatColor.GRAY + "Rename the item in an anvil", ChatColor.GRAY + "Then confirm or retry")));
+        inventory.setItem(22, simpleButton(Material.ARROW, ChatColor.RED + "Back", List.of()));
+        viewer.openInventory(inventory);
+    }
+
+    private void beginChatInput(Player player, UUID targetId, RepCategory category, int returnPage) {
+        UUID playerId = player.getUniqueId();
+        cancelChatTimeout(playerId);
+        pendingChatInputs.put(playerId, new PendingTextInput(targetId, category, returnPage));
+        player.sendMessage(ChatColor.GOLD + "Type your rep reason in chat.");
+        player.sendMessage(ChatColor.GRAY + "Type " + ChatColor.YELLOW + "cancel" + ChatColor.GRAY + " or " + ChatColor.YELLOW + "stop" + ChatColor.GRAY + " to cancel.");
+        int taskId = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (pendingChatInputs.remove(playerId) != null) {
+                pendingChatTimeoutTasks.remove(playerId);
+                Player online = Bukkit.getPlayer(playerId);
+                if (online != null) {
+                    online.sendMessage(ChatColor.RED + "Rep message entry timed out.");
+                    openProfile(online, Bukkit.getOfflinePlayer(targetId), returnPage);
+                }
+            }
+        }, Math.max(20L, plugin.getRepConfig().getInputTimeoutMillis() / 50L)).getTaskId();
+        pendingChatTimeoutTasks.put(playerId, taskId);
+    }
+
+    private void cancelChatTimeout(UUID playerId) {
+        Integer taskId = pendingChatTimeoutTasks.remove(playerId);
+        if (taskId != null) {
+            Bukkit.getScheduler().cancelTask(taskId);
+        }
+    }
+
+    private void openAnvilInput(Player player, UUID targetId, RepCategory category, int returnPage) {
+        pendingAnvils.put(player.getUniqueId(), new AnvilSession(targetId, category, returnPage));
+        liveAnvilText.put(player.getUniqueId(), "");
+        org.bukkit.inventory.InventoryView view = player.openAnvil(null, true);
+        if (view instanceof AnvilView anvilView) {
+            resetAnvilView(anvilView);
+        }
+        Inventory inventory = view.getTopInventory();
+        inventory.setItem(0, anvilGuiItem(materialFor(category.isPositive()), ChatColor.WHITE + "Type here", List.of()));
+        if (inventory instanceof AnvilInventory anvilInventory) {
+            resetAnvilCosts(anvilInventory);
+        }
+    }
+
+    private String resolveAnvilReasonText(Player player, InventoryClickEvent event) {
+        String text = resolveAnvilReasonText(player, event.getView());
+        if (!text.isEmpty()) {
+            return text;
+        }
+        return resolveAnvilTextFromItem(player, event.getCurrentItem());
+    }
+
+    private String resolveAnvilReasonText(Player player, org.bukkit.inventory.InventoryView view) {
+        String text = normalizeReason(liveAnvilText.get(player.getUniqueId()));
+        if (!text.isEmpty()) {
+            return text;
+        }
+        if (view instanceof AnvilView anvilView) {
+            text = normalizeReason(anvilView.getRenameText());
+            if (!text.isEmpty()) {
+                liveAnvilText.put(player.getUniqueId(), text);
+                return text;
+            }
+        }
+        Inventory top = view.getTopInventory();
+        if (top != null) {
+            text = resolveAnvilTextFromItem(player, top.getItem(2));
+            if (!text.isEmpty()) {
+                return text;
+            }
+            return resolveAnvilTextFromItem(player, top.getItem(0));
+        }
+        return "";
+    }
+
+    private String resolveAnvilTextFromItem(Player player, ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return "";
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) {
+            return "";
+        }
+        String text = normalizeReason(ChatColor.stripColor(meta.getDisplayName()));
+        if (text.isEmpty() || "Type here".equalsIgnoreCase(text)) {
+            return "";
+        }
+        liveAnvilText.put(player.getUniqueId(), text);
+        return text;
+    }
+
+    private void openConfirmReason(Player player, UUID targetId, RepCategory category, int returnPage, String reason) {
+        DraftReason draft = new DraftReason(targetId, category, returnPage, reason);
+        pendingDrafts.put(player.getUniqueId(), draft);
+        Inventory inventory = Bukkit.createInventory(new ConfirmReasonHolder(targetId, category, returnPage, reason), 27,
+                ChatColor.GOLD + "Confirm Rep Message");
+        fillBackground(inventory, player);
+        inventory.setItem(11, simpleButton(Material.LIME_CONCRETE, ChatColor.GREEN + "Confirm", List.of(ChatColor.GRAY + "Apply this rep entry")));
+        inventory.setItem(13, simpleButton(Material.PAPER, ChatColor.YELLOW + "Retry", wrapLore(reason, 36, ChatColor.WHITE)));
+        inventory.setItem(15, simpleButton(Material.RED_CONCRETE, ChatColor.RED + "Cancel", List.of(ChatColor.GRAY + "Do not apply this rep entry")));
+        player.openInventory(inventory);
+    }
+
+    private void openRemovalConfirm(Player admin, Commendation commendation, int returnPage, boolean applyCooldown, boolean logRemoval) {
+        Inventory inventory = Bukkit.createInventory(
+                new ConfirmRemovalHolder(commendation.snapshot(), returnPage, applyCooldown, logRemoval),
+                27, ChatColor.RED + "Confirm removal");
+        fillBackground(inventory, admin);
+        inventory.setItem(11, simpleButton(Material.LIME_CONCRETE, ChatColor.GREEN + "Confirm removal", List.of(ChatColor.GRAY + "Delete this rep entry")));
+        inventory.setItem(13, simpleButton(Material.PAPER, ChatColor.YELLOW + "Rep from " + repService.nameOf(commendation.getGiver()),
+                List.of(
+                        ChatColor.GRAY + "Target: " + ChatColor.WHITE + repService.nameOf(commendation.getTarget()),
+                        ChatColor.GRAY + CATEGORY_LABEL + ChatColor.WHITE + displayName(commendation.getCategory()),
+                        ChatColor.GRAY + "Value: " + coloredValue(commendation.getScoreValue())
+                )));
+        inventory.setItem(15, simpleButton(Material.RED_CONCRETE, ChatColor.RED + "Cancel", List.of()));
+        admin.openInventory(inventory);
+    }
+
+    private void openRestoreConfirm(Player admin, String removalId, int returnPage) {
+        Inventory inventory = Bukkit.createInventory(new ConfirmRestoreHolder(removalId, returnPage), 27,
+                ChatColor.GREEN + "Restore rep?");
+        fillBackground(inventory, admin);
+        inventory.setItem(11, simpleButton(Material.LIME_CONCRETE, ChatColor.GREEN + "Restore", List.of(ChatColor.GRAY + "Re-add this rep entry")));
+        inventory.setItem(15, simpleButton(Material.RED_CONCRETE, ChatColor.RED + "Cancel", List.of(ChatColor.GRAY + "Back to log")));
+        admin.openInventory(inventory);
+    }
+
+    private void submitReason(Player player, UUID targetId, RepCategory category, String reason, int returnPage) {
+        if (!canStartRep(player, targetId)) {
+            return;
+        }
+        String ipHash = repService.hashIp(player.getAddress() != null && player.getAddress().getAddress() != null
+                ? player.getAddress().getAddress().getHostAddress()
+                : null);
+        RepService.CommendationResult result = repService.addOrUpdateCommendation(
+                player.getUniqueId(),
+                targetId,
+                category.isPositive(),
+                category,
+                reason,
+                ipHash
+        );
+
+        if (!result.success()) {
+            if (result.failure() == RepService.CommendationResult.Failure.INVALID_CATEGORY) {
+                player.sendMessage(plugin.getMessages().get("rep.category-invalid", Map.of(
+                        "list", RepCategory.selectableValues().stream()
+                                .map(RepCategory::displayName)
+                                .collect(Collectors.joining(", ")))));
+            } else if (result.failure() == RepService.CommendationResult.Failure.REPUTATION_BLACKLISTED) {
+                player.sendMessage(plugin.getMessages().get("rep.blacklisted-giver"));
+            } else {
+                long hoursLeft = (long) Math.ceil(result.cooldownRemainingMillis() / 1000.0D / 3600.0D);
+                player.sendMessage(plugin.getMessages().get("rep.cooldown", Map.of(
+                        "hours", String.valueOf(Math.max(1L, hoursLeft)))));
+            }
+            openProfile(player, Bukkit.getOfflinePlayer(targetId), returnPage);
+            return;
+        }
+
+        pendingDrafts.remove(player.getUniqueId());
+        Commendation commendation = result.commendation();
+        String formattedScore = plugin.getRepConfig().formatColoredScore(repService.getScore(targetId));
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetId);
+        player.sendMessage(plugin.getMessages().get("rep.give-success", Map.of(
+                "amount", coloredValue(commendation.getScoreValue()),
+                "target", safeName(target),
+                "category", displayName(commendation.getCategory()),
+                "rep", formattedScore
+        )));
+
+        Player onlineTarget = target.getPlayer();
+        if (onlineTarget != null) {
+            onlineTarget.sendMessage(plugin.getMessages().get("rep.receive", Map.of(
+                    "giver", player.getName(),
+                    "amount", coloredValue(commendation.getScoreValue()),
+                    "category", displayName(commendation.getCategory()),
+                    "rep", formattedScore
+            )));
+        }
+
+        openProfile(player, target, returnPage);
+    }
+
+    private boolean canStartRep(Player giver, UUID targetId) {
+        if (giver.getUniqueId().equals(targetId)) {
+            giver.sendMessage(plugin.getMessages().get("rep.self"));
+            return false;
+        }
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetId);
+        if (!target.isOnline() && !target.hasPlayedBefore()) {
+            giver.sendMessage(plugin.getMessages().get("rep.not-found", Map.of("name", targetId.toString())));
+            return false;
+        }
+        if (!plugin.getPlaytimeService().isAvailable()) {
+            giver.sendMessage(ChatColor.RED + "Active playtime tracking is unavailable. Rep is temporarily disabled.");
+            return false;
+        }
+        double hours = plugin.getPlaytimeService().getActiveHours(giver);
+        if (hours < plugin.getRepConfig().getMinActivePlaytimeHours()) {
+            giver.sendMessage(plugin.getMessages().get("rep.playtime-short", Map.of(
+                    "hours_required", String.valueOf(plugin.getRepConfig().getMinActivePlaytimeHours()),
+                    "hours_have", String.format(Locale.US, "%.1f", hours)
+            )));
+            return false;
+        }
+        Commendation existing = repService.getCommendation(giver.getUniqueId(), targetId);
+        long remaining = cooldownRemaining(giver.getUniqueId(), targetId, existing);
+        if (remaining > 0L || !repService.canEdit(giver.getUniqueId(), targetId)) {
+            long hoursLeft = (long) Math.ceil(remaining / 1000.0D / 3600.0D);
+            giver.sendMessage(plugin.getMessages().get("rep.cooldown", Map.of("hours", String.valueOf(Math.max(1L, hoursLeft)))));
+            return false;
+        }
+        return true;
+    }
+
+    private long cooldownRemaining(UUID giverId, UUID targetId, Commendation existing) {
+        long remaining = repService.getRemovalCooldownMillis(giverId, targetId);
+        if (existing != null) {
+            long editRemaining = Math.max(0L, plugin.getRepConfig().getEditCooldownMillis() - (System.currentTimeMillis() - existing.getLastEditedAt()));
+            remaining = Math.max(remaining, editRemaining);
+        }
+        return remaining;
+    }
+
+    private ItemStack reviewItem(Commendation commendation, boolean adminView) {
+        ItemStack head = HeadUtil.createPlayerHead(plugin, commendation.getGiver(),
+                (commendation.isPositive() ? ChatColor.GREEN : ChatColor.RED) + repService.nameOf(commendation.getGiver()));
+        ItemMeta meta = head.getItemMeta();
+        if (meta != null) {
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Category: " + ChatColor.YELLOW + displayName(commendation.getCategory()));
+            lore.add(ChatColor.GRAY + "Date: " + ChatColor.WHITE + dateFormatter.format(Instant.ofEpochMilli(commendation.getCreatedAt())));
+            lore.add(ChatColor.DARK_GRAY + "----------------");
+            lore.addAll(wrapLore(commendation.getReasonText(), 34, ChatColor.WHITE));
+            lore.add(ChatColor.YELLOW + "Click: view full text");
+            if (adminView) {
+                lore.add(ChatColor.RED + "Right-click: delete rep (admin)");
+            }
+            meta.setLore(lore);
+            head.setItemMeta(meta);
+        }
+        return head;
+    }
+
+    private ItemStack removedLogItem(RepService.RemovedRep removed) {
+        Commendation commendation = removed.commendation();
+        ItemStack item = removed.removedBy() != null
+                ? HeadUtil.createPlayerHead(plugin, removed.removedBy(), ChatColor.YELLOW + removed.id())
+                : new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.YELLOW + removed.id() + ChatColor.GRAY + " - " + repService.nameOf(commendation.getGiver()));
+            meta.setLore(List.of(
+                    ChatColor.GRAY + "Target: " + ChatColor.WHITE + repService.nameOf(commendation.getTarget()),
+                    ChatColor.GRAY + "Value: " + coloredValue(commendation.getScoreValue()),
+                    ChatColor.GRAY + "Category: " + ChatColor.WHITE + displayName(commendation.getCategory()),
+                    ChatColor.GRAY + "Removed: " + ChatColor.WHITE + dateFormatter.format(Instant.ofEpochMilli(removed.removedAt())),
+                    ChatColor.GRAY + "By: " + ChatColor.WHITE + (removed.removedBy() != null ? repService.nameOf(removed.removedBy()) : "unknown"),
+                    ChatColor.YELLOW + "Click to restore this rep."
+            ));
+            meta.getPersistentDataContainer().set(new NamespacedKey(plugin, "rep-removed-id"), PersistentDataType.STRING, removed.id());
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack activeReportItem(RepService.SuspiciousRepCase caseData) {
+        ItemStack item = HeadUtil.createPlayerHead(plugin, caseData.getTarget(), ChatColor.YELLOW + repService.nameOf(caseData.getTarget()));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.YELLOW + repService.nameOf(caseData.getTarget()));
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Type: " + ChatColor.WHITE + caseData.type());
+            lore.add(ChatColor.GRAY + "Key: " + ChatColor.WHITE + caseData.key());
+            lore.add(ChatColor.GRAY + "Accounts: " + ChatColor.WHITE + formatNames(caseData.givers()));
+            lore.add(ChatColor.GRAY + "Created: " + ChatColor.WHITE
+                    + dateFormatter.format(Instant.ofEpochMilli(caseData.getCreatedAt())));
+            if (!caseData.detail().isBlank()) {
+                lore.add(ChatColor.GRAY + "Details:");
+                lore.addAll(wrapLore(caseData.detail(), 34, ChatColor.WHITE));
+            }
+            lore.add(ChatColor.YELLOW + "Click to post details in chat.");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void sendReportDetails(Player admin, RepService.SuspiciousRepCase caseData) {
+        String targetArg = resolveTargetArgument(caseData.getTarget());
+        admin.sendMessage(ChatColor.GOLD + "REP REPORT: " + ChatColor.YELLOW + repService.nameOf(caseData.getTarget()));
+        admin.sendMessage(ChatColor.GRAY + "Type: " + ChatColor.WHITE + caseData.type()
+                + ChatColor.GRAY + " | Key: " + ChatColor.WHITE + caseData.key());
+        admin.sendMessage(ChatColor.GRAY + "Accounts: " + ChatColor.WHITE + formatNames(caseData.givers()));
+        admin.sendMessage(ChatColor.GRAY + "Created: " + ChatColor.WHITE
+                + dateFormatter.format(Instant.ofEpochMilli(caseData.getCreatedAt())));
+        if (!caseData.detail().isBlank()) {
+            admin.sendMessage(ChatColor.GRAY + "Details: " + ChatColor.WHITE + caseData.detail());
+        }
+        admin.spigot().sendMessage(new ComponentBuilder(ChatColor.YELLOW + "Inspect report")
+                .event(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/rep admin inspect " + targetArg + " " + caseData.ipHash()))
+                .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(ChatColor.GRAY + "Click to inspect this report").create()))
+                .append(ChatColor.GRAY + " | ")
+                .event((ClickEvent) null)
+                .event((HoverEvent) null)
+                .append(ChatColor.RED + "Resolve report")
+                .event(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/rep admin resolve " + targetArg + " " + caseData.ipHash()))
+                .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ComponentBuilder(ChatColor.GRAY + "Mark this report as resolved").create()))
+                .create());
+    }
+
+    private void openReviewBook(Player viewer, Commendation commendation) {
+        ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
+        BookMeta meta = (BookMeta) book.getItemMeta();
+        if (meta != null) {
+            meta.setTitle("Rep from " + repService.nameOf(commendation.getGiver()));
+            meta.setAuthor(repService.nameOf(commendation.getGiver()));
+            meta.setPages(wrapLore(commendation.getReasonText(), 220, ChatColor.BLACK));
+            book.setItemMeta(meta);
+        }
+        viewer.openBook(book);
+    }
+
+    private void fillBackground(Inventory inventory, Player viewer) {
+        if (viewer.getName().startsWith("*")) {
+            return;
+        }
+        ItemStack filler = simpleButton(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
+        for (int i = 0; i < inventory.getSize(); i++) {
+            inventory.setItem(i, filler);
+        }
+    }
+
+    private ItemStack simpleButton(Material material, String displayName, List<String> lore) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(displayName);
+            meta.setLore(lore);
+            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack profileFilterButton(boolean positive, RepProfileFilter selected,
+                                          List<Commendation> allReviews, UUID targetId) {
+        RepProfileFilter polarity = RepProfileFilter.polarity(positive);
+        boolean active = selected.positive() != null && selected.positive() == positive;
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Entries: " + ChatColor.WHITE + polarity.count(allReviews));
+        lore.add(ChatColor.GRAY + "Score: " + RepCategoryGuiSupport.coloredValue(profileFilterTotal(
+                targetId, polarity, repService.getScore(targetId))));
+        lore.add(ChatColor.GRAY + "Choose all " + (positive ? "positive" : "negative") + " reps");
+        lore.add(ChatColor.GRAY + "or one specific category.");
+        lore.add(active ? ChatColor.GREEN + "This side is currently selected."
+                : ChatColor.YELLOW + "Click to choose a filter.");
+        return simpleButton(positive ? Material.LIME_CONCRETE : Material.RED_CONCRETE,
+                (active ? ChatColor.YELLOW + "Viewing " : positive ? ChatColor.GREEN : ChatColor.RED)
+                        + (positive ? "Positive Reps" : "Negative Reps"), lore);
+    }
+
+    private ItemStack profileFilterChoice(Material material, RepProfileFilter option,
+                                          RepProfileFilter selected, List<Commendation> allReviews,
+                                          String description) {
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + description);
+        lore.add(ChatColor.GRAY + "Entries: " + ChatColor.WHITE + option.count(allReviews));
+        lore.add(ChatColor.GRAY + "Score: " + RepCategoryGuiSupport.coloredValue(option.score(allReviews)));
+        lore.add(option.equals(selected) ? ChatColor.GREEN + "Currently selected"
+                : ChatColor.YELLOW + "Click to view");
+        return simpleButton(material,
+                (option.equals(selected) ? ChatColor.GREEN + "Selected: " : ChatColor.GOLD)
+                        + option.displayName(), lore);
+    }
+
+    private ItemStack anvilGuiItem(Material material, String displayName, List<String> lore) {
+        ItemStack item = simpleButton(material, displayName, lore);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(anvilGuiItemKey, PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private boolean isAnvilGuiItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR || !item.hasItemMeta()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && meta.getPersistentDataContainer().has(anvilGuiItemKey, PersistentDataType.BYTE);
+    }
+
+    private void scheduleAnvilCleanup(Player player) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            purgeAnvilGuiItems(player);
+            restoreAnvilInput(player);
+            player.updateInventory();
+        });
+    }
+
+    private void restoreAnvilInput(Player player) {
+        AnvilSession session = pendingAnvils.get(player.getUniqueId());
+        if (session == null || !isActiveAnvilSession(player, player.getOpenInventory())) {
+            return;
+        }
+        Inventory inventory = player.getOpenInventory().getTopInventory();
+        if (!isAnvilGuiItem(inventory.getItem(0))) {
+            inventory.setItem(0, anvilGuiItem(materialFor(session.category().isPositive()), ChatColor.WHITE + "Type here", List.of()));
+        }
+        if (inventory instanceof AnvilInventory anvilInventory) {
+            resetAnvilCosts(anvilInventory);
+        }
+    }
+
+    private void purgeAnvilGuiItems(Player player) {
+        if (isAnvilGuiItem(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+        }
+        Inventory inventory = player.getInventory();
+        for (int i = 0; i < inventory.getSize(); i++) {
+            if (isAnvilGuiItem(inventory.getItem(i))) {
+                inventory.clear(i);
+            }
+        }
+    }
+
+    private List<String> buildGiveLore(Commendation existing, boolean positiveButton, long cooldownMillis) {
+        List<String> lore = new ArrayList<>();
+        if (existing == null) {
+            lore.add(ChatColor.GRAY + "Leave a " + (positiveButton ? "positive" : "negative") + " commendation.");
+        } else {
+            lore.add(ChatColor.GRAY + "You already left " + coloredValue(existing.getScoreValue()) + ChatColor.GRAY + ".");
+            lore.add(ChatColor.GRAY + CATEGORY_LABEL + ChatColor.YELLOW + displayName(existing.getCategory()));
+        }
+        if (cooldownMillis > 0L) {
+            long hours = (long) Math.ceil(cooldownMillis / 1000.0D / 3600.0D);
+            lore.add(ChatColor.RED + "Edit available in " + hours + "h.");
+        } else {
+            lore.add(ChatColor.YELLOW + "Click to continue.");
+        }
+        return lore;
+    }
+
+    private List<String> buildCurrentEffectsLore(RepAppliedEffects effects) {
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Active effects:");
+        addPercentEffect(lore, "Movement speed", effects.movementSpeedPercent());
+        addPercentEffect(lore, "Potion duration", effects.potionDurationPercent());
+        addPercentEffect(lore, "Rocket flight duration", effects.fireworkDurationPercent());
+        addCooldownEffect(lore, "Ender pearl cooldown", effects.pearlCooldownSeconds());
+        addCooldownEffect(lore, "Wind charge cooldown", effects.windCooldownSeconds());
+        addBooleanEffects(lore, effects);
+        if (lore.size() == 1) {
+            lore.add(ChatColor.GRAY + "You currently have no rep-based buffs or penalties.");
+        }
+        return lore;
+    }
+
+    private void addPercentEffect(List<String> lore, String label, int percentValue) {
+        if (percentValue != 0) {
+            lore.add(ChatColor.WHITE + label + ": " + ChatColor.YELLOW + percent(percentValue));
+        }
+    }
+
+    private void addCooldownEffect(List<String> lore, String label, int seconds) {
+        if (seconds > 0) {
+            lore.add(ChatColor.WHITE + label + ": " + ChatColor.YELLOW + seconds + "s");
+        }
+    }
+
+    private void addBooleanEffects(List<String> lore, RepAppliedEffects effects) {
+        if (effects.glow()) {
+            lore.add(ChatColor.WHITE + "Glow: " + ChatColor.YELLOW
+                    + (effects.glowColor() != null ? effects.glowColor().name() : "WHITE"));
+        }
+        if (effects.stalkable()) {
+            lore.add(ChatColor.WHITE + "Stalkable in warzone");
+        }
+        if (effects.cashbackPercent() > 0) {
+            lore.add(ChatColor.WHITE + "Cashback: " + ChatColor.YELLOW + effects.cashbackPercent() + "%");
+        }
+    }
+
+    private List<RepCategory> positiveCategories() {
+        return categories(true);
+    }
+
+    private List<RepCategory> negativeCategories() {
+        return categories(false);
+    }
+
+    private List<RepCategory> categories(boolean positive) {
+        return RepCategory.selectableValues().stream()
+                .filter(category -> category.isPositive() == positive)
+                .toList();
+    }
+
+    private void setProfileFilter(Player viewer, UUID targetId, RepProfileFilter filter) {
+        ProfileSelectionKey key = new ProfileSelectionKey(viewer.getUniqueId(), targetId);
+        if (filter == null || filter.isOverall()) {
+            profileSelections.remove(key);
+        } else {
+            profileSelections.put(key, filter);
+        }
+    }
+
+    private void openProfileWithFilter(Player viewer, UUID targetId, RepProfileFilter filter, int page) {
+        setProfileFilter(viewer, targetId, filter);
+        openProfile(viewer, Bukkit.getOfflinePlayer(targetId), page);
+    }
+
+    private int profileFilterTotal(UUID targetId, RepProfileFilter filter, int overallScore) {
+        if (filter == null || filter.isOverall()) {
+            return overallScore;
+        }
+        if (filter.category() != null) {
+            return repService.getCategoryScore(targetId, filter.category());
+        }
+        return RepCategory.selectableValues().stream()
+                .filter(category -> category.isPositive() == filter.positive())
+                .mapToInt(category -> repService.getCategoryScore(targetId, category))
+                .sum();
+    }
+
+    private int indexOf(int[] values, int value) {
+        for (int index = 0; index < values.length; index++) {
+            if (values[index] == value) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private String displayName(RepCategory category) {
+        return category == null ? "Reputation" : category.migratedCategory().displayName();
+    }
+
+    private List<String> wrapLore(String text, int width, ChatColor color) {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isBlank()) {
+            return List.of(color + "(no message)");
+        }
+        StringBuilder current = new StringBuilder();
+        for (String word : text.split("\\s+")) {
+            if (current.length() + word.length() + 1 > width && current.length() > 0) {
+                lines.add(color + current.toString());
+                current.setLength(0);
+            }
+            if (current.length() > 0) {
+                current.append(' ');
+            }
+            current.append(word);
+        }
+        if (current.length() > 0) {
+            lines.add(color + current.toString());
+        }
+        return lines;
+    }
+
+    private String coloredValue(int value) {
+        return (value > 0 ? ChatColor.GREEN : value < 0 ? ChatColor.RED : ChatColor.YELLOW)
+                + (value > 0 ? "+" + value : String.valueOf(value));
+    }
+
+    private String percent(int value) {
+        return value > 0 ? "+" + value + "%" : value + "%";
+    }
+
+    private String normalizeReason(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (trimmed.length() > plugin.getRepConfig().getMaxReasonLength()) {
+            trimmed = trimmed.substring(0, plugin.getRepConfig().getMaxReasonLength());
+        }
+        return trimmed;
+    }
+
+    private void resetAnvilCosts(AnvilInventory inventory) {
+        try {
+            inventory.setRepairCost(0);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            inventory.setRepairCostAmount(0);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            inventory.setMaximumRepairCost(0);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void resetAnvilView(AnvilView anvilView) {
+        try {
+            anvilView.setRepairCost(0);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            anvilView.setRepairItemCountCost(0);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            anvilView.setMaximumRepairCost(0);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            anvilView.bypassEnchantmentLevelRestriction(true);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private boolean isActiveAnvilSession(Player player, org.bukkit.inventory.InventoryView view) {
+        return pendingAnvils.containsKey(player.getUniqueId())
+                && view != null
+                && view.getTopInventory() != null
+                && view.getTopInventory().getType() == org.bukkit.event.inventory.InventoryType.ANVIL;
+    }
+
+    private Material materialFor(boolean positive) {
+        return positive ? Material.LIME_DYE : Material.RED_DYE;
+    }
+
+    private String safeName(OfflinePlayer player) {
+        return player.getName() != null ? player.getName() : player.getUniqueId().toString().substring(0, 8);
+    }
+
+    private String resolveTargetArgument(UUID targetId) {
+        OfflinePlayer player = Bukkit.getOfflinePlayer(targetId);
+        return player.getName() != null ? player.getName() : targetId.toString();
+    }
+
+    private String formatNames(Collection<UUID> ids) {
+        return ids.stream().map(repService::nameOf).collect(Collectors.joining(", "));
+    }
+
+    private sealed interface HolderMarker permits ProfileHolder, ProfileFilterHolder, ReasonHolder, InputChoiceHolder, ConfirmReasonHolder, ConfirmRemovalHolder, RemovedLogHolder, ActiveReportsHolder, ConfirmRestoreHolder {
+    }
+
+    private record ProfileHolder(UUID targetId, RepProfileFilter filter, int page,
+                                 List<Commendation> visibleReviews) implements InventoryHolder, HolderMarker {
+        private ProfileHolder {
+            filter = filter == null ? RepProfileFilter.overall() : filter;
+            visibleReviews = visibleReviews == null ? List.of()
+                    : visibleReviews.stream().map(Commendation::snapshot).toList();
+        }
+
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ProfileFilterHolder(UUID targetId, boolean positive, int returnPage,
+                                       RepProfileFilter returnFilter) implements InventoryHolder, HolderMarker {
+        private ProfileFilterHolder {
+            returnFilter = returnFilter == null ? RepProfileFilter.overall() : returnFilter;
+        }
+
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ReasonHolder(UUID targetId, boolean positive, int returnPage) implements InventoryHolder, HolderMarker {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record InputChoiceHolder(UUID targetId, RepCategory category, int returnPage) implements InventoryHolder, HolderMarker {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ConfirmReasonHolder(UUID targetId, RepCategory category, int returnPage, String reason) implements InventoryHolder, HolderMarker {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ConfirmRemovalHolder(Commendation expected, int returnPage,
+                                        boolean applyCooldown, boolean logRemoval) implements InventoryHolder, HolderMarker {
+        private ConfirmRemovalHolder {
+            expected = expected.snapshot();
+        }
+
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record RemovedLogHolder(int page) implements InventoryHolder, HolderMarker {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ActiveReportsHolder(int page, List<RepService.SuspiciousRepCase> visibleCases)
+            implements InventoryHolder, HolderMarker {
+        private ActiveReportsHolder {
+            visibleCases = visibleCases == null ? List.of()
+                    : visibleCases.stream().map(RepService.SuspiciousRepCase::copy).toList();
+        }
+
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ConfirmRestoreHolder(String removalId, int returnPage) implements InventoryHolder, HolderMarker {
+        @Override public Inventory getInventory() { return null; }
+    }
+
+    private record ProfileSelectionKey(UUID viewerId, UUID targetId) { }
+
+    private record PendingTextInput(UUID targetId, RepCategory category, int returnPage) {
+    }
+
+    private record DraftReason(UUID targetId, RepCategory category, int returnPage, String reason) {
+    }
+
+    private record ProfileContext(UUID targetId, int page) {
+    }
+
+    private record AnvilSession(UUID targetId, RepCategory category, int returnPage) {
+    }
+}

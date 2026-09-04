@@ -44,7 +44,8 @@ class CheatTesterJournalIntegrationTest {
         createActiveSessionAndCheckpointEvidence();
         recoverCompleteAndReuseTarget();
         assertEquals(4, testerAuditCount());
-        assertEquals(20, latestMigrationVersion());
+        assertTrue(latestMigrationVersion() >= 18,
+                "the V18 cheat-tester journal migration must remain applied as later migrations are added");
     }
 
     private static void createActiveSessionAndCheckpointEvidence() throws Exception {

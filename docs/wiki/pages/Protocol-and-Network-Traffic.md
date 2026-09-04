@@ -1,32 +1,16 @@
 # Protocol and Network Traffic
 
-This page explains what the `protocol` module does, why `ReplayGuard` exists, and
-where EnthusiaStaff sends network traffic.
+This page explains the persistent Paper–Velocity protocol, replay/acknowledgement model, and the external network boundaries reviewers should inspect.
 
-## Quick navigation
+For the overall architecture use [[Architecture]]. For webhook-specific behavior use [[Discord Delivery]]. For review discipline use [[Code Review Guide]].
 
-- [[Purpose of the protocol|Protocol-and-Network-Traffic#purpose-of-the-protocol]]
-- [[Connection topology|Protocol-and-Network-Traffic#connection-topology]]
-- [[Message envelope|Protocol-and-Network-Traffic#message-envelope]]
-- [[ReplayGuard|Protocol-and-Network-Traffic#replayguard]]
-- [[Acknowledgements and retries|Protocol-and-Network-Traffic#acknowledgements-and-retries]]
-- [[Outbound traffic map|Protocol-and-Network-Traffic#outbound-traffic-map]]
-- [[What does not leave the process|Protocol-and-Network-Traffic#what-does-not-leave-the-process]]
-- [[Review checklist|Protocol-and-Network-Traffic#review-checklist]]
+## Why the protocol exists
 
-## Purpose of the protocol
+EnthusiaStaff runs one Paper plugin on each backend and one Velocity plugin on the proxy. Network moderation and coordination must work when no player is online, so Minecraft plugin messaging is not sufficient as the durable transport.
 
-EnthusiaStaff has one Paper plugin on each backend and one Velocity plugin on the
-proxy. They need to exchange moderation events even when no player is online.
-Minecraft plugin messaging is tied to player connections, so it is not sufficient
-for durable network-wide enforcement.
+The `protocol` module provides a persistent authenticated TLS connection between each Paper backend and Velocity. Durable database inbox/outbox state determines **what must be delivered**; the socket is transport, not the authority or exactly-once mechanism.
 
-The `protocol` module provides a persistent, authenticated, bidirectional TLS
-connection between each Paper backend and Velocity. It carries messages such as
-network enforcement updates and acknowledgements. Durable database outboxes decide
-what must be sent; the socket is only the transport.
-
-Important source files:
+Primary files:
 
 ```text
 protocol/src/main/java/net/enthusia/staff/protocol/PersistentChannelClient.java
@@ -39,8 +23,7 @@ protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeCodec.java
 
 ## Connection topology
 
-Each Paper backend creates the outbound connection. Velocity listens for backend
-connections.
+Each Paper backend creates the outbound connection; Velocity listens for approved backend connections.
 
 ```text
 Paper backend
@@ -52,52 +35,21 @@ Velocity proxy
   PersistentChannelServer
 ```
 
-Paper reads the destination from:
+Paper uses `channel.host` / `channel.port`; Velocity uses `channel.bind-address` / `channel.port`. The normal deployment intent is a private network boundary, not an unauthenticated public listener.
 
-```text
-channel.host
-channel.port
-```
+Velocity accepts only configured backend IDs with matching application keys. A replacement session for the same backend ID retires the prior connection.
 
-The current defaults are `127.0.0.1` and `28765`. In deployment, `channel.host`
-should point to the private address or hostname where the Velocity channel server
-is listening. It should not be exposed to the public internet unless the network
-and firewall design explicitly require that and have been reviewed.
+## TLS and application authentication
 
-Velocity reads its listening address and port from:
+TLS 1.3 protects the connection. Paper validates the configured server certificate/trust store with hostname verification; Velocity uses its configured key material.
 
-```text
-channel.bind-address
-channel.port
-```
+Each application envelope is also HMAC-SHA256 authenticated. A message is rejected before the application handler when identity/version/time/HMAC/replay checks fail.
 
-The server allows only configured backend IDs with matching keys. A second
-connection for the same backend ID replaces the earlier session.
-
-## TLS and authentication
-
-The channel uses TLS 1.3. Paper validates the configured server certificate using
-its trust store and enables hostname verification. Velocity uses its configured
-key store for the listening socket.
-
-TLS protects the connection in transit. EnthusiaStaff also signs each application
-message with HMAC-SHA256. This provides an application-level identity and integrity
-check even inside the TLS connection.
-
-A message is rejected when:
-
-- the backend or proxy ID is unknown;
-- the protocol version does not match;
-- the timestamp is too old or too far in the future;
-- the HMAC is malformed or incorrect;
-- the nonce was already accepted during the replay window.
-
-Secrets and key-store passwords are loaded from environment variables. They must
-not be written into Wiki pages, YAML, logs, or Git history.
+Secrets and key-store passwords come from protected runtime configuration/environment. They do not belong in Wiki examples, source, logs or exception text.
 
 ## Message envelope
 
-Every authenticated envelope includes:
+Authenticated envelopes include:
 
 - protocol version;
 - message UUID;
@@ -105,142 +57,115 @@ Every authenticated envelope includes:
 - message type;
 - timestamp;
 - random nonce;
-- JSON payload;
-- HMAC over the canonical form of all fields above.
+- bounded JSON payload;
+- HMAC over the canonical envelope fields.
 
-`EnvelopeAuthenticator` serializes the fields in a fixed order and signs the
-result. Verification recomputes the HMAC with the key assigned to the sender and
-uses constant-time comparison.
+The durable message UUID identifies the operation/delivery. The nonce makes a transmitted envelope unique even when a durable message is retried.
 
-The message UUID identifies the durable operation or delivery. The nonce serves a
-different purpose: it makes every transmitted envelope unique even when the same
-message must be retried.
+## ReplayGuard versus durable idempotency
 
-## ReplayGuard
+`ReplayGuard` blocks the same authenticated sender/nonce pair during a bounded in-memory window. It is process-local and intentionally disappears on restart.
 
-`ReplayGuard` prevents an already accepted authenticated envelope from being
-accepted again during a short time window.
+It is **not** the durable exactly-once mechanism. Durable safety comes from message IDs, inbox/outbox constraints, application idempotency/revisions and handlers that recognize already-recorded outcomes.
 
-It stores this key in memory:
+A useful reviewer question is:
 
-```text
-server ID + nonce
-```
-
-Before accepting a message, it:
-
-1. removes expired entries;
-2. checks whether the sender/nonce pair has already been seen;
-3. rejects the envelope as `REPLAYED` when it is a duplicate;
-4. otherwise stores it until the retention time expires;
-5. evicts the oldest entries if the configured maximum is exceeded.
-
-The current verification guards retain up to 100,000 entries for three minutes.
-Access is synchronized because a `LinkedHashMap` is used for ordered eviction.
-
-### What ReplayGuard does not do
-
-ReplayGuard is process-local and intentionally short-lived. Restarting the process
-clears its memory. It is not the durable exactly-once mechanism.
-
-Durable protection comes from message IDs, inbox/outbox database constraints,
-idempotency keys, revision checks, and application handlers that return the prior
-result rather than repeating an effect. ReplayGuard blocks immediate wire replay;
-the persistence layer prevents a retried durable message from applying the same
-punishment or mutation twice.
+> If this process restarts after receiving or sending the bytes but before the final database update, what durable record prevents the business effect from happening twice or disappearing?
 
 ## Acknowledgements and retries
 
-The transport is at-least-once, not exactly-once.
+The transport is at-least-once.
 
-A sender keeps a pending future for the message ID. The receiver verifies the
-envelope, handles it, and sends a signed `ACK` only when the handler reports that
-the message was accepted. The ACK payload contains the original message ID.
+A receiver verifies/authenticates the envelope, performs the bounded handler, and acknowledges only according to the handler's accepted/durable outcome. The sender retains durable delivery state and retries missing destinations with bounded backoff.
 
-Velocity's `NetworkOutboxWorker`:
+Velocity's network outbox path must distinguish:
 
-1. claims a bounded batch of due messages from MariaDB;
-2. prepares one delivery record per required backend;
-3. sends through the backend's existing authenticated session;
-4. waits for an acknowledgement;
-5. records successful destinations;
-6. retries missing destinations with bounded backoff;
-7. dead-letters the message after the configured attempt limit.
+- bytes sent;
+- message accepted/authenticated;
+- business outcome durably recorded;
+- acknowledgement received;
+- destination delivery terminal versus retryable/dead-letter.
 
-An acknowledgement should mean the receiver durably recorded the outcome, not
-merely that bytes reached the socket.
+A socket write alone is not proof of durable enforcement.
 
-## Outbound traffic map
+## Outbound and inbound traffic map
 
 | Source | Destination | Transport | Purpose |
 | --- | --- | --- | --- |
-| Paper backend | Configured Velocity channel host and port | Persistent TLS 1.3 socket | Bidirectional moderation and network messages |
-| Velocity | Connected Paper backends | The same backend-initiated TLS sessions | Durable network-outbox delivery and acknowledgements |
-| Paper and Velocity | Configured MariaDB JDBC endpoint | JDBC/TCP | Cases, sanctions, reports, journals, outboxes, staff state, audit, and recovery |
-| Velocity migration worker | Configured LiteBans database | JDBC/TCP | Import and shadow comparison during migration only |
-| Velocity Discord worker | Four configured Discord webhook URLs | HTTPS POST | `punishments`, `reports`, `logs-staffmode`, and `alerts` destinations |
-| Website or trusted site service | Velocity website API bind address | Inbound HTTP to `WebsiteApiServer` | Restricted punishment/appeal bridge requests |
+| Paper backend | Configured Velocity channel | Persistent TLS 1.3 | Bidirectional moderation/network messages |
+| Velocity | Connected Paper backends | Same backend-initiated TLS sessions | Network outbox delivery and acknowledgements |
+| Paper / Velocity | Configured MariaDB | JDBC/TCP | Cases, sanctions, reports, journals, staff state, identities, outboxes and recovery |
+| Velocity migration runtime | Configured LiteBans source DB | JDBC/TCP | Import/shadow comparison during migration only |
+| Velocity Discord delivery worker | Approved Discord webhook routes | HTTPS POST | Sanitized staff notification destinations |
+| Trusted website service | Velocity website bridge | Inbound HTTP to `WebsiteApiServer` | Restricted punishment/appeal bridge requests |
 
-The website API row is inbound from the perspective of EnthusiaStaff. The plugin
-listens on its configured bind address and does not use `HttpClient` to call the
-website.
+The website bridge is inbound from EnthusiaStaff's perspective. It should not be documented as an outbound site client.
 
-The current repository contains one direct outbound HTTP client:
-`DiscordOutboxWorker`. It sends HTTPS webhook requests, disables redirects, sets a
-request timeout, and disables automatic mentions in the JSON body.
+The current repository's direct webhook HTTP boundary is owned by `DiscordOutboxWorker`; redirects are disabled and request/route policy is bounded. See [[Discord Delivery]].
 
-## What data goes to Discord
+Future interactive Discord staff-bot work is a separate runtime boundary. The merged Discord identity/persistence/authorization foundations described in [[Discord Moderation Platform]] do not currently create another live outbound Discord client on `main`.
 
-Discord delivery begins with a durable outbox row. The worker chooses one of four
-configured webhook destinations and sends the event type plus a bounded summary of
-the **producer-sanitized** JSON payload.
+## Discord notification privacy
 
-`DiscordOutboxWorker` does not redact `payloadJson`; it truncates the final message
-and disables automatic mentions. Every producer must remove private or unsafe data
-before enqueueing the outbox event. Reporter identity, private messages,
-coordinates, raw network identity, internal secrets, and private appeal material
-must not be placed into an outbound payload.
+The current delivery path must **not** post raw stored payload JSON.
 
-## What does not leave the process
+`DiscordEventRenderer` applies destination/event-specific allowlisting and bounds before a staff-facing webhook body is sent. Unexpected nested structures or unsupported payload shapes fail closed rather than being emitted. Automatic mentions are disabled.
 
-Most optional Minecraft integrations are local plugin API calls inside the same
-server process. Examples include supported integrations with RoseChat,
-EnthusiaCurrency, EnthusiaMarket, EnthusiaCommend, Floodgate, ViaVersion, and
-CombatLogX. They may have their own network behavior, but EnthusiaStaff is not
-supposed to bypass them with raw database writes or arbitrary external requests.
+This means privacy has two layers:
 
-`WebsiteApiServer` is an inbound server. `StaffVisibilityService` is an in-process
-Bukkit service. Vanish does not transmit visibility data to an external service
-unless an integration adapter explicitly consumes it.
+1. producers should still avoid placing unnecessary sensitive data in a notification intent;
+2. the delivery renderer is an explicit final projection boundary and does not blindly forward arbitrary `payload_json`.
+
+Private-message evidence, reporter identity, coordinates, raw/protected network identity, secrets, full staff snapshots, confiscated contents and private appeal material do not belong in Discord notification output.
+
+Adding a new producer/event requires a deliberate renderer/privacy review. See [[Discord Delivery]] and [[Privacy and Data Handling]].
+
+## What stays in-process
+
+Most Minecraft integrations are local plugin API/service calls in the same JVM, for example supported RoseChat, EnthusiaCurrency, EnthusiaMarket, EnthusiaCommend, Floodgate, ViaVersion and CombatLogX adapters.
+
+That does not mean the provider itself has no network behavior; it means EnthusiaStaff should not bypass its supported in-process contract with raw provider SQL, reflection into private internals, or arbitrary external requests.
+
+`StaffVisibilityService` is also an in-process boundary. Vanish data only leaves through an integration that explicitly publishes/consumes it.
 
 ## Failure behavior
 
-- If Paper cannot connect to Velocity, network-authoritative writes remain blocked
-  or degraded according to operational mode.
-- Undelivered network messages stay in the durable outbox.
-- A disconnected backend is retried; the worker does not assume delivery.
-- Discord failures use bounded retries, a circuit breaker, and dead-letter state.
-- Missing MariaDB blocks unsafe new writes rather than falling back to memory.
-- Invalid authentication, unsupported versions, expired messages, and replays are
-  rejected before the application handler runs.
+Expected conservative behavior includes:
 
-## Review checklist
+- Paper–Velocity disconnect keeps undelivered durable network work pending and blocks unsafe network-authoritative writes as policy requires;
+- invalid authentication/version/time/replay fails before the business handler;
+- missing MariaDB blocks unsafe new durable writes rather than falling back to process memory;
+- Discord notification failures retry/dead-letter without rolling back a valid moderation commit;
+- a website/authentication failure does not create a second unauthenticated moderation path;
+- reconnects and replacement sessions fence stale callbacks/acks.
 
-When reviewing protocol or network changes, check:
+## Reviewer checklist
 
-- the exact configured bind and destination addresses;
-- TLS 1.3, trust-store, hostname-verification, and secret handling;
-- server-ID allowlisting and key ownership;
-- message-size and frame bounds;
-- timestamp and nonce validation;
-- replay retention and maximum-entry bounds;
-- ACK timing and durable handler semantics;
-- duplicate delivery after restart;
-- bounded connection threads, queues, retries, and backoff;
-- no game-thread or Velocity event-thread socket/JDBC blocking;
-- producer-side payload sanitization before Discord or website exposure;
-- firewall expectations and whether the channel is limited to the private network.
+For protocol/network changes verify:
 
-Related tests include `PersistentChannelTransportTest`,
-`EnvelopeAuthenticatorTest`, `ReplayGuardTest`, and the network/Discord outbox
-integration tests.
+- TLS/trust/hostname verification and secret handling;
+- backend/server identity allowlisting;
+- frame/message/payload bounds;
+- timestamp/nonce/replay checks;
+- sender/receiver thread ownership and no Paper/Velocity event-thread socket/JDBC blocking;
+- durable inbox/outbox constraints and ACK timing;
+- duplicate delivery/restart behavior;
+- stale connection/session fencing;
+- bounded queues, workers, timeouts, retries and backoff;
+- partial backend outage and no-online-player transport;
+- producer plus final-projection privacy for Discord/site output;
+- firewall/private-network assumptions;
+- test evidence versus real topology/staging evidence.
+
+Important tests include protocol authenticator/replay/transport tests and network/Discord outbox integration tests. Passing those tests is not automatically proof of distributed staging; see [[Build and Testing]].
+
+## Go deeper
+
+- [[Architecture]] — module and runtime topology.
+- [[Discord Delivery]] — current webhook outbox/renderer/retry behavior.
+- [[Discord Moderation Platform]] — merged Discord foundations versus future bot runtime.
+- [[Privacy and Data Handling]] — data exposure boundaries.
+- [[Recovery and Troubleshooting]] — network/outbox failure procedure.
+- [[Developer Code Guide]] — exact source traces.
+- [[Code Review Guide]] — distributed/security review.
+- [[Build and Testing]] — evidence interpretation.

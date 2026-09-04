@@ -1,190 +1,182 @@
 # Staff Tools, Investigations, and Player-State Safety
 
-This hub covers workflows that observe or mutate live player state: staff mode, operational tools, vanish, freeze, inventory/Ender access, confiscation, economy actions, alt investigations, client/inspector context, and future controlled test systems.
+This hub answers two questions: **what staff/player-state tooling exists on merged `main`, and where should I go for the exact procedure or implementation?** These workflows are high risk because stale state, scheduler mistakes, disconnects, server switches, crashes or ambiguous recovery can leak staff items, overwrite newer data, lose/duplicate assets, or expose private information.
 
-These areas are high risk because stale state, scheduler mistakes, disconnects, server switches, crashes, or ambiguous recovery can leak staff items, overwrite newer data, lose assets, duplicate assets, or expose private information.
-
-For staff procedure, use [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]], [[Inventory and Confiscation Safety]], or [[Alt Investigations]]. For source tracing, use [[Developer Code Guide]]. For review invariants, use [[Code Review Guide]].
+For staff procedure, start with [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]], [[Cheat Tester]], [[Inventory and Confiscation Safety]], or [[Alt Investigations]]. For source tracing, use [[Developer Code Guide]]. For review invariants, use [[Code Review Guide]].
 
 ## Quick status
 
 | Area | Merged-main state | Main limitation |
 | --- | --- | --- |
-| Durable staff mode | **Implemented, not staging-verified** | Representative Java/Bedrock/Folia/restart/distributed restoration evidence remains. |
-| Operational staff hotbar/tools | **Implemented, not staging-verified** | Real-client/Folia/distributed acceptance and advanced future tools remain. |
+| Durable staff mode | **Implemented, not staging-verified** | Representative Java/Bedrock/Folia/restart/distributed restoration remains. |
+| Operational staff hotbar/tools | **Implemented, not staging-verified** | Real-client/Folia/distributed acceptance remains. |
+| Cheat Tester / fake entities / fake bases | **Implemented, not staging-verified** | Representative distributed Java/Bedrock/ProtocolLib behavior and private runtime acceptance remain. |
 | Vanish | **Available with limitations** | Complete cross-plugin/visual/packet/provider coverage remains. |
 | Freeze | **Partial** | Exhaustive bypass coverage and representative restart/client/backend-switch staging remain. |
 | Online inventory/Ender access | **Partial** | Concurrent viewers, nested data, stale-state and full runtime ownership proof remain. |
-| Offline inventory/queued patches | **Partial** | File/save ownership, login ordering, interruption/recovery and multi-server proof remain. |
+| Offline inventory/queued patches | **Partial** | Login ordering, file/save ownership, interruption/recovery and multi-server proof remain. |
 | Item confiscation/restoration | **Partial** | Full failure injection, movement/container races, restart recovery and dupe/loss proof remain. |
-| Economy moderation/restoration | **Partial / provider-dependent** | Complete supported EnthusiaCurrency moderation contract and end-to-end recovery remain. |
-| Alt/network identity workflows | **Partial** | Confidence/exceptions/inheritance/UI/key-rotation/private-data acceptance remain. |
+| Economy moderation/restoration | **Partial / provider-dependent** | Complete supported EnthusiaCurrency contract and end-to-end recovery remain. |
+| Alt/network identity workflows | **Partial** | Confidence/exceptions/inheritance/UI/key rotation/private-data acceptance remain. |
 | Inspector/client evidence | **Partial** | Complete combined staff view/provider state/privacy/Bedrock presentation remain. |
-| Cheat testers/fake entities/fake bases | **Planned / incomplete** | Controlled evidence-only implementation and exact state restoration are not complete. |
 
-## Staff mode
+`Implemented, not staging-verified` means the feature exists in merged source with automated evidence, not that production/runtime acceptance has passed.
 
-`/staff` creates durable session state before the temporary staff profile is applied. The recovery contract is more important than the hotbar: normal inventory, armor, offhand, XP, health/hunger, effects, location/server, game mode, flight and related state must be restored from the durable original snapshot rather than reconstructed from memory.
+## Staff mode and operational tools
+
+Staff mode creates durable session state before applying the temporary staff profile. The recovery contract is more important than the hotbar: the original inventory, armor, offhand, XP, health/hunger, effects, location/server, game mode, flight and related owned state must be restored from the durable snapshot rather than reconstructed from memory.
 
 Primary paths:
 
-- [StaffModeManager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java)
-- [StaffModeActivationCoordinator](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeActivationCoordinator.java)
-- [StaffModeAccessPolicy](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeAccessPolicy.java)
-- [StaffStateCodec](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffStateCodec.java)
-- [staff domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/staff)
-- [JdbcStaffSessionStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcStaffSessionStore.java)
+- `paper/.../staff/StaffModeManager.java`
+- `paper/.../staff/StaffModeActivationCoordinator.java`
+- `paper/.../staff/StaffToolDispatcher.java`
+- `paper/.../staff/StaffModeWorldInteractionListener.java`
+- `domain/.../staff/`
+- `persistence/.../JdbcStaffSessionStore.java`
 
-Entry/exit/reconnect/restart logic should fail closed when durable state cannot be proved. A failed restore should preserve the recovery snapshot rather than overwrite it with the broken current state.
-
-## Operational staff tools
-
-Current merged staff mode includes the operational hotbar/tool routing layer. The important boundary is that a tool item does **not** grant authority.
-
-Relevant classes include:
-
-- [StaffToolDefinition](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffToolDefinition.java)
-- [StaffToolDispatcher](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffToolDispatcher.java)
-- [StaffToolCooldowns](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffToolCooldowns.java)
-- [StaffModeWorldInteractionListener](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeWorldInteractionListener.java)
-- `paper/command/StaffToolsCommand.java`
-
-The dispatcher rechecks the active session, owner UUID, current session token, canonical slot/material, current explicit rank, and action permission before routing. Command-backed actions continue through their existing service/command boundary so the hotbar cannot bypass authorization, operational modes, provider health, hierarchy, or audit.
-
-Current routes include random-player teleport, inspect, freeze, reports, follow/spectate, vanish, staff chat, and the tools menu. Bedrock users have text/command fallbacks. Advanced cheat-testing functionality is separate and should not be inferred from the existence of a reserved tool slot.
+The hotbar routes random teleport, inspect, freeze, reports, Cheat Tester, follow/spectate, vanish, staff chat and the tools menu. The item itself grants no authority: dispatcher and downstream command/service boundaries recheck session, owner/token, rank, permission, provider health and operational state.
 
 Staff instructions: [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
 
+## Cheat Tester, fake entities and fake bases
+
+Cheat Tester is **merged functionality**. It is an evidence-only system for short bounded probes and does not automatically punish a player.
+
+Current tester types include totem refill, no-fall, velocity, auto-armor and an optional ProtocolLib-backed fake entity. State-changing tests use durable V18 journal state and exact restoration/verification before terminal completion.
+
+Fake bases are client-side virtual block overlays rather than real world mutation. The runtime requires safe already-loaded placement, bounded lifetime/concurrency and durable coordinate-free lifecycle audit. Cleanup sends current real block data back to viewers; a client-session/process loss cannot turn the virtual structure into saved world blocks.
+
+Primary areas:
+
+- `paper/src/main/java/net/enthusia/staff/paper/cheattester/`
+- `paper/src/main/java/net/enthusia/staff/paper/command/CheatTesterCommand.java`
+- `domain/src/main/java/net/enthusia/staff/domain/cheattester/`
+- `persistence/src/main/java/net/enthusia/staff/persistence/JdbcCheatTesterSessionStore.java`
+- `persistence/src/main/resources/db/migration/V18__cheat_tester_session_journal.sql`
+- nearby Paper/domain/integration tests
+
+The repository's overall Flyway history has since advanced to V19; V18 remains the migration that owns Cheat Tester journal state.
+
+Procedure and exact controls: [[Cheat Tester]].
+
 ## Vanish
 
-Vanish uses durable intent plus a rank-aware `StaffVisibilityService`. Current merged behavior includes incremental viewer/target reconciliation, reconnect/session fencing, Paper hide/show application, and narrowly scoped ProtocolLib player-info handling.
+Vanish uses durable intent plus a rank-aware `StaffVisibilityService`. Merged behavior includes incremental viewer/target reconciliation, reconnect/session fencing, Paper hide/show application and narrowly scoped ProtocolLib player-info handling.
 
 Primary paths:
 
-- [StaffVisibilityService](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java)
-- [DefaultStaffVisibilityService](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/visibility/DefaultStaffVisibilityService.java)
-- [VanishManager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java)
-- [visibility package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/visibility)
-- [JdbcVanishStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcVanishStore.java)
+- `paper/.../api/StaffVisibilityService.java`
+- `paper/.../visibility/DefaultStaffVisibilityService.java`
+- `paper/.../visibility/VanishManager.java`
+- `persistence/.../JdbcVanishStore.java`
 
-Do not generalize this to complete invisibility across every plugin, command completion, voice recipient, sound/particle/container effect, scoreboard, public API or analytics integration. Those are explicit integration surfaces.
-
-Deep dive: [[Vanish Internals]].
+Do not generalize this to complete invisibility across every plugin, command completion, voice recipient, sound/particle/container effect, scoreboard, public API or analytics integration. Deep dive: [[Vanish Internals]].
 
 ## Freeze
 
-Freeze is a durable investigation restriction, not a punishment. It must remain consistent across reconnect/restart and must not rely on one movement event while other interaction/teleport/backend paths stay open.
+Freeze is a durable investigation restriction, not a punishment. Review movement, damage, inventory/container, item use, interaction, teleport, command/chat and backend-switch paths separately.
 
 Primary paths:
 
-- [FreezeManager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeManager.java)
-- [FreezeCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/FreezeCommand.java)
-- [freeze domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/freeze)
-- [JdbcFreezeStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcFreezeStore.java)
+- `paper/.../freeze/FreezeManager.java`
+- `paper/.../command/FreezeCommand.java`
+- `domain/.../freeze/`
+- `persistence/.../JdbcFreezeStore.java`
 
-Review movement, damage, inventory/container, item use, block interaction, teleport, command/chat and backend-switch paths separately. Real Java/Bedrock/Folia/restart acceptance is still required.
+A fail-closed restriction while durable status cannot be verified is a safety response, not proof of a freeze record. Real Java/Bedrock/Folia/restart acceptance remains required.
 
-## Online inventory and Ender access
+## Inventory, Ender access and offline patches
 
-The live player remains authoritative. Safe editing should apply the intended current revision/dirty change on the owning scheduler rather than closing a stale cloned inventory and overwriting newer state.
+The live player is authoritative for online editing. Safe mutation applies intended dirty changes on the player's owning scheduler rather than closing a stale full clone over newer state.
 
-Primary paths:
-
-- [InventoryCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/InventoryCommand.java)
-- [InventoryCoordinator](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/inventory/InventoryCoordinator.java)
-- [paper inventory package](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/inventory)
-- [inventory domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/inventory)
-- [JdbcInventoryJournalStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcInventoryJournalStore.java)
-
-High-risk cases include armor/offhand, nested containers, multiple viewers/editors, movement while open, server switch, stale fingerprints and close/save races.
-
-Procedure/deep safety rules: [[Inventory and Confiscation Safety]].
-
-## Offline inventory and queued patches
-
-Offline mutation is safe only when network-wide offline status, owning server/scope, exclusive lease/fence, save state, revision and before snapshot are trustworthy. When direct ownership cannot be proved, a durable queued patch is safer than guessing at a player file.
-
-Relevant source:
-
-- `paper/inventory/InventoryCoordinator.java`
-- `persistence/JdbcInventoryJournalStore.java`
-- `persistence/JdbcInventoryPatchTransitions.java`
-- `domain/inventory/`
-
-The remaining work is concentrated in real file/save ownership, atomic replacement/reread verification, login ordering, interruptions at every stage, retention/conflict behavior and distributed acceptance.
-
-## Item confiscation and restoration
-
-Confiscation is a case-linked destructive workflow. It should identify exact item paths/fingerprints, persist a durable before snapshot, revalidate current state, remove only the selected assets, verify the result, and retain enough journal state for idempotent restore or quarantine.
+Offline editing requires trustworthy network-wide offline status, owning scope, revision/checksum and durable lease/fence. When direct file ownership cannot be proved, a queued patch is safer than guessing at a `.dat` file.
 
 Primary paths:
 
-- [ConfiscationCoordinator](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/inventory/ConfiscationCoordinator.java)
-- `domain/inventory/`
-- `persistence/JdbcInventoryJournalStore.java`
-- `paper/command/CaseCommand.java`
+- `paper/.../inventory/InventoryCoordinator.java`
+- `paper/.../command/InventoryCommand.java`
+- `domain/.../inventory/`
+- `persistence/.../JdbcInventoryJournalStore.java`
+- `persistence/.../JdbcInventoryPatchTransitions.java`
+
+High-risk cases include armor/offhand, nested containers, multiple viewers, movement while open, server switch, login ordering and stale fingerprints. Procedure: [[Inventory and Confiscation Safety]].
+
+## Confiscation and restoration
+
+Confiscation is a case-linked destructive workflow. It should identify exact selected assets, persist a before snapshot, revalidate current state, remove only the selected assets, verify the result and retain enough durable state for idempotent restore or quarantine.
+
+Primary paths include `paper/.../inventory/ConfiscationCoordinator.java`, the inventory domain, `JdbcInventoryJournalStore`, and case commands.
 
 Do not recover by manually recreating items while a durable operation may still be retryable. See [[Recovery and Troubleshooting]].
 
 ## Economy moderation
 
-EnthusiaStaff owns moderation intent, case/audit linkage, operation journaling, verification and recovery. EnthusiaCurrency remains balance authority. Direct balance-table SQL is not an acceptable shortcut.
+EnthusiaStaff owns moderation intent, case/audit linkage, operation journaling, verification and recovery. EnthusiaCurrency remains balance authority. Direct provider-table SQL is not an acceptable shortcut.
 
-Primary paths:
+Primary areas:
 
-- [EconomyCoordinator](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/economy/EconomyCoordinator.java)
-- [EnthusiaCurrencyGateway](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/economy/EnthusiaCurrencyGateway.java)
-- [economy domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/economy)
-- [JdbcEconomyJournalStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcEconomyJournalStore.java)
-- [integration contracts](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts/src/main/java)
+- `paper/.../economy/EconomyCoordinator.java`
+- `paper/.../economy/EnthusiaCurrencyGateway.java`
+- `domain/.../economy/`
+- `persistence/.../JdbcEconomyJournalStore.java`
+- `integration-contracts/`
 
-Complete provider-side API behavior and end-to-end failure/recovery proof remain required.
+Provider-side completion and representative cross-plugin recovery still gate the full claim.
 
 ## Alt relationships and protected network identity
 
-The alt subsystem stores protected equality/evidence state rather than displaying raw addresses as ordinary moderation data. UUID identity and confidence/relationship policy must remain separate from “same address means same player” assumptions.
+The alt subsystem stores protected equality/evidence state rather than displaying raw addresses as ordinary moderation data. UUID identity, relationship confidence and intentional evasion are separate questions.
 
 Primary paths:
 
-- [NetworkIdentityProtector](https://github.com/wsg138/EnthusiaStaff/blob/main/common/src/main/java/net/enthusia/staff/common/security/NetworkIdentityProtector.java)
-- [HmacTokenService](https://github.com/wsg138/EnthusiaStaff/blob/main/common/src/main/java/net/enthusia/staff/common/security/HmacTokenService.java)
-- [alt domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/alt)
-- [JdbcNetworkIdentityStore](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcNetworkIdentityStore.java)
+- `common/.../security/NetworkIdentityProtector.java`
+- `common/.../security/NetworkAddressTextGuard.java`
+- `domain/.../alt/`
+- `persistence/.../JdbcNetworkIdentityStore.java`
 - Velocity presence/network-identity code
 
-Remaining work includes richer confidence/aging and household/approved/not-related lifecycle, inheritance, alerts/UI, key rotation and production-like private-data review.
-
-Staff procedure: [[Alt Investigations]]. Privacy: [[Privacy and Data Handling]].
+Remaining work includes richer operational acceptance, key rotation and production-like private-data validation. Procedure: [[Alt Investigations]]. Privacy: [[Privacy and Data Handling]].
 
 ## Inspector and client evidence
 
-The inspector/client surfaces are intended to assemble identity, current location/server context, verified platform/client information, moderation history, reports, alts, inventory state and authorized actions without leaking private fields to the wrong audience.
+Inspector/client surfaces assemble authorized context such as identity, location/server, platform/client information, moderation history, reports and related investigation state. Provider evidence is context, not automatic proof of cheating.
 
 Primary paths:
 
-- [InspectCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/InspectCommand.java)
-- [ClientCommand](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/command/ClientCommand.java)
-- [client integrations](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client)
-- [evidence domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/evidence)
+- `paper/.../command/InspectCommand.java`
+- `paper/.../command/ClientCommand.java`
+- `paper/.../client/`
+- `domain/.../evidence/`
 
-Provider evidence is context, not automatically proof of cheating. Missing providers should produce an explicit unavailable/unknown state rather than invented results.
+Missing providers should produce explicit unknown/unavailable results rather than invented evidence.
 
-## Cheat testers and fake systems
+## Review priorities
 
-The goals include controlled cheat testers, fake entities and fake bases. These systems are not complete merely because an operational staff-tools slot is reserved or shared primitives exist.
+Changes in this area deserve extra attention to:
 
-When implemented, they must be evidence-oriented and isolated: no permanent world mutation, no player-state loss, exact cleanup/restore, no leaked fake entities to unrelated players, bounded duration/resources, and safe disconnect/restart behavior.
+- Paper/Folia entity/global/region scheduler ownership;
+- stale callback/session fencing;
+- durable-before-side-effect ordering;
+- revision/checksum/lease/fence correctness;
+- disconnect, backend switch, reload, disable and restart recovery;
+- exact restoration rather than “best effort” reconstruction;
+- Java/Bedrock interaction and fallbacks;
+- provider missing/incompatible behavior;
+- privacy of inventories, coordinates, client evidence and network identity;
+- tests that distinguish deterministic state-machine proof from real runtime acceptance.
 
-Until that complete workflow and representative staging exist, document these as planned/incomplete rather than operational staff tools.
+Use [[Code Review Guide]] for the cross-cutting checklist and [[Build and Testing]] for evidence interpretation.
 
 ## Go deeper
 
-- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — staff procedure and current operational-tool behavior.
-- [[Vanish Internals]] — detailed visibility/session/scheduler/packet behavior.
-- [[Inventory and Confiscation Safety]] — inventory/confiscation procedure and invariants.
-- [[Alt Investigations]] — staff alt-investigation procedure.
+- [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]] — staff procedure.
+- [[Cheat Tester]] — tester/fake-entity/fake-base detail.
+- [[Vanish Internals]] — visibility/session/scheduler/packet behavior.
+- [[Inventory and Confiscation Safety]] — inventory/confiscation procedure.
+- [[Alt Investigations]] — alt-investigation procedure.
 - [[Privacy and Data Handling]] — sensitive evidence boundaries.
-- [[Recovery and Troubleshooting]] — safe failure/recovery procedure.
+- [[Recovery and Troubleshooting]] — safe recovery.
 - [[Developer Code Guide]] — detailed source traces.
 - [[Code Review Guide]] — scheduler, player-state, persistence and privacy review.
 - [[Build and Testing]] — evidence limits and runtime acceptance.

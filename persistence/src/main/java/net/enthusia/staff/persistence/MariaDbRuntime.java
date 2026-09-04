@@ -14,16 +14,18 @@ import java.util.function.Supplier;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
+import net.enthusia.staff.domain.ports.AccountLinkAuditStore;
+import net.enthusia.staff.domain.ports.AccountLinkingStore;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
+import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
-import net.enthusia.staff.domain.ports.MarketComplianceStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
@@ -78,10 +80,12 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final InventoryJournalStore inventoryJournalStore;
     private final InventoryRecoveryStore inventoryRecoveryStore;
     private final EconomyJournalStore economyJournalStore;
-    private final MarketComplianceStore marketComplianceStore;
     private final ClientEvidenceStore clientEvidenceStore;
     private final PunishmentDraftStore punishmentDraftStore;
     private final CheatTesterJournalStore cheatTesterJournalStore;
+    private final DiscordModerationPersistenceStore discordModerationPersistenceStore;
+    private final AccountLinkingStore accountLinkingStore;
+    private final AccountLinkAuditStore accountLinkAuditStore;
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this(dataSource, ReportPolicyRuntime::current, Clock.systemUTC());
@@ -97,15 +101,10 @@ public final class MariaDbRuntime implements AutoCloseable {
         Objects.requireNonNull(clock, "clock");
         ObjectMapper json = jsonMapper();
         JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
-        this.moderationStore = new FencedModerationStore(
-                dataSource,
-                new RetryingModerationStore(moderation)
-        );
+        this.moderationStore = new FencedModerationStore(dataSource, new RetryingModerationStore(moderation));
         this.punishmentRequestStore = new FencedPunishmentRequestStore(
                 dataSource,
-                new RetryingPunishmentRequestStore(
-                        new JdbcPunishmentRequestStore(dataSource, json, moderation)
-                )
+                new RetryingPunishmentRequestStore(new JdbcPunishmentRequestStore(dataSource, json, moderation))
         );
         this.punishmentRequestAlertStore = new RetryingPunishmentRequestAlertStore(
                 dataSource,
@@ -143,9 +142,11 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.inventoryRecoveryStore = new JdbcInventoryRecoveryStore(dataSource, json);
         this.cheatTesterJournalStore = assetJournal;
         this.economyJournalStore = new JdbcEconomyJournalStore(dataSource, json);
-        this.marketComplianceStore = new JdbcMarketComplianceStore(dataSource, json);
         this.clientEvidenceStore = new JdbcClientEvidenceStore(dataSource, json);
         this.punishmentDraftStore = new JdbcPunishmentDraftStore(dataSource, json);
+        this.discordModerationPersistenceStore = new JdbcDiscordModerationPersistenceStore(dataSource);
+        this.accountLinkingStore = new JdbcAccountLinkingStore(dataSource);
+        this.accountLinkAuditStore = new JdbcAccountLinkAuditStore(dataSource);
     }
 
     public ModerationStore moderationStore() { return moderationStore; }
@@ -168,10 +169,12 @@ public final class MariaDbRuntime implements AutoCloseable {
     public InventoryJournalStore inventoryJournalStore() { return inventoryJournalStore; }
     public InventoryRecoveryStore inventoryRecoveryStore() { return inventoryRecoveryStore; }
     public EconomyJournalStore economyJournalStore() { return economyJournalStore; }
-    public MarketComplianceStore marketComplianceStore() { return marketComplianceStore; }
     public ClientEvidenceStore clientEvidenceStore() { return clientEvidenceStore; }
     public PunishmentDraftStore punishmentDraftStore() { return punishmentDraftStore; }
     public CheatTesterJournalStore cheatTesterJournalStore() { return cheatTesterJournalStore; }
+    public DiscordModerationPersistenceStore discordModerationPersistenceStore() { return discordModerationPersistenceStore; }
+    public AccountLinkingStore accountLinkingStore() { return accountLinkingStore; }
+    public AccountLinkAuditStore accountLinkAuditStore() { return accountLinkAuditStore; }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {
         return new JdbcWebsiteModerationStore(dataSource, codeProtector, jsonMapper());
@@ -218,8 +221,7 @@ public final class MariaDbRuntime implements AutoCloseable {
             if (result.totalDeleted() > 0 && LOGGER.isInfoEnabled()) {
                 LOGGER.info(
                         "Network identity retention removed {} protected token rows and {} evidence rows",
-                        result.identityTokensDeleted(),
-                        result.evidenceRowsDeleted()
+                        result.identityTokensDeleted(), result.evidenceRowsDeleted()
                 );
             }
         } catch (RuntimeException exception) {

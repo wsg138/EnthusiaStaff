@@ -11,6 +11,7 @@
 - [[Punishment System]]
 - [[Reports and Evidence]]
 - [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
+- [[Cheat Tester]]
 - [[Inventory and Confiscation Safety]]
 - [[Alt Investigations]]
 - [[Incident Playbooks]]
@@ -22,6 +23,8 @@
 - [[Roles and Permissions|Rank-Authority]]
 - [[Configuration]]
 - [[Integrations]]
+- [[Discord Delivery]]
+- [[Discord Moderation Platform]]
 
 ## Operations
 
@@ -53,5 +56,6 @@
 ## Authoritative sources
 
 - [Goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
+- [Discord moderation specification](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/discord-moderation-platform.md)
 - [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
 - [Repository](https://github.com/wsg138/EnthusiaStaff)

@@ -142,7 +142,7 @@ Shutdown stops intake, drains only already-bounded in-memory work, leaves unackn
 
 - RoseChat needs a versioned moderation service for pre-broadcast decisions, current-channel state, recipient filtering, mute enforcement, and private-message evidence capture.
 - EnthusiaCurrency needs an idempotent exact-removal API that can plan, apply, verify, and compensate under an external operation ID.
-- EnthusiaMarket publishes moderation API version 1 for bounded stall lookup, durable snapshot/reservation, human-reviewed ownership hold, exact release/restoration, and revisioned acquisition blacklists. Staff records case-linked intent before calling the provider and never bypasses Market transaction or rent authority. See `docs/market-moderation.md`.
+- EnthusiaMarket needs a moderation API for stall lookup/snapshot, overdue or unowned transitions, ownership removal, and blacklist state without bypassing rent behavior.
 - EnthusiaCommend needs a persistent blacklist API enforced by GUI, command, and public write entry points.
 - Polar 1.7.11-beta is optional. The supplied `PolarLoader.jar` exposes only an enable callback and no violation/punishment event contract, so automatic enforcement remains `DISABLED` until a compatible event API is supplied. The jar stays under `libs/private/` and is never committed or shaded.
 - Other third-party integrations use public APIs behind adapters. Missing adapters never cause reflective guesses or command dispatch as a source of truth.

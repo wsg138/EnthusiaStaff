@@ -7,6 +7,22 @@ EnthusiaStaff is the Enthusia Network moderation and staff runtime. It ships one
 
 The project is pre-release. LiteBans remains authoritative until the documented 168-hour shadow window and final cutover gate pass. Do not install the jars as active moderation authority by merely building them.
 
+## Documentation entry points
+
+- [Feature reference for future server/wiki documentation](docs/feature-reference.md)
+- [Development and validation](docs/development.md)
+- [Architecture](docs/architecture.md)
+- [Database and recovery model](docs/database.md)
+- [Security and authority policy](docs/security.md)
+- [Persistent channel TLS](docs/channel-tls.md)
+- [Punishment workflow and durable drafts](docs/punishment-workflow.md)
+- [Inventory and confiscation safety](docs/inventory-safety.md)
+- [LiteBans migration](docs/litebans-migration.md)
+- [Shadow mode](docs/shadow-mode.md)
+- [Cutover](docs/cutover.md)
+- [Rollback](docs/rollback.md)
+- [Upgrade manifest](UPGRADE-MANIFEST.md)
+
 ## Requirements
 
 - Java 21
@@ -25,20 +41,5 @@ Optional integrations degrade independently. The current Polar 1.7.11-beta loade
 ```
 
 Deployable artifacts are produced as `paper/build/libs/EnthusiaStaff-Paper-<version>.jar` and `velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar`. Build outputs, private dependency jars, local servers, and caches are not source artifacts and must not be committed.
-
-## Operations and design
-
-- [Development and validation](docs/development.md)
-- [Architecture](docs/architecture.md)
-- [Database and recovery model](docs/database.md)
-- [Security and authority policy](docs/security.md)
-- [Persistent channel TLS](docs/channel-tls.md)
-- [Punishment workflow and durable drafts](docs/punishment-workflow.md)
-- [Inventory and confiscation safety](docs/inventory-safety.md)
-- [LiteBans migration](docs/litebans-migration.md)
-- [Shadow mode](docs/shadow-mode.md)
-- [Cutover](docs/cutover.md)
-- [Rollback](docs/rollback.md)
-- [Upgrade manifest](UPGRADE-MANIFEST.md)
 
 No migration, cutover, deployment, jar removal, or production-data operation is performed by the build.

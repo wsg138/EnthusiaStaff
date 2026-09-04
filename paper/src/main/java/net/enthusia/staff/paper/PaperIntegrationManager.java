@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
@@ -18,8 +17,7 @@ import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
-import net.enthusia.staff.domain.ports.CaseLookup;
-import net.enthusia.staff.domain.ports.MarketComplianceStore;
+import net.enthusia.staff.paper.auth.DiscordStaffAuthorityEndpoint;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
 import net.enthusia.staff.paper.economy.CurrencyAssetSource;
@@ -31,16 +29,14 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
+import net.enthusia.staff.paper.integration.ReputationRestrictionSynchronizer;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
-import net.enthusia.staff.paper.market.MarketComplianceCoordinator;
-import net.enthusia.staff.paper.market.MarketCoordinatorRuntime;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import org.bukkit.plugin.java.JavaPlugin;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 final class PaperIntegrationManager {
     private static final String AUTOMOD = "automod";
@@ -60,9 +56,9 @@ final class PaperIntegrationManager {
     private ConfiscationCoordinator confiscation;
     private RoseChatIntegration roseChat;
     private MarketIntegration market;
-    private MarketComplianceCoordinator marketCompliance;
-    private ScheduledTask marketMaintenance;
     private ReputationIntegration reputation;
+    private ReputationRestrictionSynchronizer reputationRestrictions;
+    private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
         this.dependencies = dependencies;
@@ -101,18 +97,22 @@ final class PaperIntegrationManager {
         );
         recordProviderIssue(MARKET, market.availability(), market.issue());
         recordProviderIssue(REPUTATION, reputation.availability(), reputation.issue());
-        marketCompliance = new MarketComplianceCoordinator(
-                new MarketCoordinatorRuntime(
-                        clock(),
-                        dependencies.policy().writeMode(),
-                        dependencies.policy().authorization(),
-                        dependencies.stores().marketCompliance(),
-                        dependencies.stores().cases(),
-                        workers()
-                ),
-                market,
-                java.util.UUID::randomUUID
-        );
+        if (reputation.availability() == IntegrationAvailability.AVAILABLE) {
+            reputationRestrictions = new ReputationRestrictionSynchronizer(
+                    plugin(),
+                    clock(),
+                    reputation,
+                    dependencies.stores().punishmentService(),
+                    () -> {
+                        PunishmentService service = dependencies.stores().punishmentService().get();
+                        return service == null ? null : service::activeSanctions;
+                    },
+                    workers()
+            );
+            reputationRestrictions.start();
+        }
+        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin())
+                .ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
     void initializeAutomod() {
@@ -175,53 +175,23 @@ final class PaperIntegrationManager {
         return market;
     }
 
-    MarketComplianceCoordinator marketCompliance() {
-        return marketCompliance;
-    }
-
     ReputationIntegration reputation() {
         return reputation;
     }
 
     void closeChatBridge() {
         resources.close("RoseChat bridge", roseChat);
+        closeModerationProviders();
+    }
+
+    void closeModerationProviders() {
+        resources.close("Discord staff authority endpoint", discordStaffAuthority);
+        resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
 
     void closeEconomyResources() {
-        if (marketMaintenance != null) {
-            marketMaintenance.cancel();
-        }
         resources.close("economy coordinator", economy);
         resources.close("confiscation coordinator", confiscation);
-    }
-
-    void storageReady() {
-        if (marketCompliance == null) {
-            return;
-        }
-        runMarketMaintenance();
-        marketMaintenance = plugin().getServer().getAsyncScheduler().runAtFixedRate(
-                plugin(),
-                ignored -> runMarketMaintenance(),
-                1L,
-                5L,
-                TimeUnit.MINUTES
-        );
-    }
-
-    private void runMarketMaintenance() {
-        marketCompliance.recoverPending().whenComplete((count, failure) -> {
-            if (failure != null) {
-                plugin().getLogger().log(Level.SEVERE, "Market journal recovery failed safely", failure);
-            } else if (count > 0) {
-                plugin().getLogger().info("Reconciled " + count + " durable market operation(s)");
-            }
-        });
-        marketCompliance.emitDueReviewAlerts().whenComplete((count, failure) -> {
-            if (failure != null) {
-                plugin().getLogger().log(Level.WARNING, "Market review alert scan failed", failure);
-            }
-        });
     }
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {
@@ -268,7 +238,7 @@ final class PaperIntegrationManager {
             return matcher;
         } catch (IllegalArgumentException exception) {
             issue(AUTOMOD, "Exact-variant configuration is invalid; enforcement is disabled");
-            plugin().getLogger().log(Level.SEVERE, "Automod configuration validation failed", exception);
+            plugin().getLogger().log(Level.SEVERE, "Automod integration configuration failed", exception);
             return null;
         }
     }
@@ -354,9 +324,7 @@ final class PaperIntegrationManager {
     record Stores(
             Supplier<PunishmentService> punishmentService,
             Supplier<EconomyJournalStore> economyJournal,
-            Supplier<InventoryJournalStore> inventoryJournal,
-            Supplier<MarketComplianceStore> marketCompliance,
-            Supplier<CaseLookup> cases
+            Supplier<InventoryJournalStore> inventoryJournal
     ) {
     }
 
