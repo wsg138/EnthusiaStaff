@@ -10,11 +10,10 @@ const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'authorId', 'befo
 const JSON_ESCAPES = new Map([
   ['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']
 ]);
-const SOURCE_UNAVAILABLE_BODY = '{"code":"source_unavailable","message":"Moderation data is temporarily unavailable."}';
 
 export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
   const keyHex = readSigningKey(env);
-  if (!keyHex) return unavailable();
+  if (!keyHex) return unavailable('missing_worker_read_key');
   const path = endpointPath(endpoint);
   const body = signedRequestBody(readRequest(session, endpoint, browserInput));
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -35,7 +34,7 @@ export async function proxyModerationRead(env, session, endpoint, browserInput =
     });
     return await sanitizedBackendResponse(response);
   } catch {
-    return unavailable();
+    return unavailable('worker_fetch_exception');
   }
 }
 
@@ -187,20 +186,30 @@ async function signRequest(keyHex, method, path, body, timestamp, nonce) {
 
 async function sanitizedBackendResponse(response) {
   const contentType = response.headers.get('Content-Type') || '';
-  if (!contentType.toLowerCase().startsWith('application/json')) return unavailable();
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    return unavailable(`upstream_http_${safeStatus(response.status)}_non_json`);
+  }
   const body = await response.arrayBuffer();
-  if (body.byteLength > 1_048_576) return unavailable();
+  if (body.byteLength > 1_048_576) return unavailable('upstream_body_too_large');
   return new Response(body, {
     status: response.status,
     headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
   });
 }
 
-function unavailable() {
-  return new Response(SOURCE_UNAVAILABLE_BODY, {
+function unavailable(diagnostic) {
+  return new Response(JSON.stringify({
+    code: 'source_unavailable',
+    message: 'Moderation data is temporarily unavailable.',
+    diagnostic
+  }), {
     status: 503,
     headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
   });
+}
+
+function safeStatus(status) {
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? String(status) : 'unknown';
 }
 
 function randomToken(bytes) {
