@@ -97,7 +97,10 @@ jobs:
         run: |
           set -euo pipefail
           git -C staff diff --check
-          git -C staff diff --name-only -- components/enthusia-market | sort > /tmp/actual
+          {
+            git -C staff diff --name-only -- components/enthusia-market
+            git -C staff ls-files --others --exclude-standard -- components/enthusia-market
+          } | sort -u > /tmp/actual
           cat > /tmp/expected <<'EOF'
           components/enthusia-market/.github/workflows/build.yml
           components/enthusia-market/docs/db-schema.md
