@@ -19,10 +19,17 @@ val forbiddenTransitionBridgeEntries = listOf(
 val requiredTransitionBridgeEntries = listOf(
     "net/enthusia/staff/persistence/TransitionDataRuntime.class",
     "net/enthusia/staff/domain/application/DiscordSrvMigrationService.class",
-    "db/migration/V19__discord_moderation_persistence.sql",
     "org/flywaydb/core/Flyway.class",
     "org/mariadb/jdbc/Driver.class"
 )
+
+val requiredMigrationEntries = project(":persistence")
+    .fileTree("src/main/resources/db/migration") {
+        include("V*.sql")
+    }
+    .files
+    .map { "db/migration/${it.name}" }
+    .sorted()
 
 dependencies {
     implementation(project(":domain"))
@@ -63,6 +70,10 @@ tasks.shadowJar {
             }
             requiredTransitionBridgeEntries.forEach { entry ->
                 check(archive.getEntry(entry) != null) { "Transition bridge is missing required runtime entry: $entry" }
+            }
+            check(requiredMigrationEntries.isNotEmpty()) { "No transition migration resources were discovered at build time" }
+            requiredMigrationEntries.forEach { entry ->
+                check(archive.getEntry(entry) != null) { "Transition bridge is missing migration resource: $entry" }
             }
         }
     }
