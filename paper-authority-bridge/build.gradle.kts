@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.gradleup.shadow")
 }
@@ -55,7 +57,7 @@ tasks.shadowJar {
         exclude(dependency("org.slf4j:slf4j-api:.*"))
     }
     doLast {
-        java.util.zip.ZipFile(archiveFile.get().asFile).use { archive ->
+        ZipFile(archiveFile.get().asFile).use { archive ->
             forbiddenTransitionBridgeEntries.forEach { entry ->
                 check(archive.getEntry(entry) == null) { "Transition bridge contains forbidden runtime class: $entry" }
             }
