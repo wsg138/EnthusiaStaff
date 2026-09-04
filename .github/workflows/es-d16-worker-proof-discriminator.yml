@@ -1,0 +1,71 @@
+name: ES-D16 Worker Proof Discriminator
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-runtime-probe-20260904
+    paths:
+      - ".github/workflows/es-d16-worker-proof-discriminator.yml"
+
+permissions:
+  contents: read
+
+env:
+  PANEL_HOST: staff-staging.enthusia.info
+  GUILD_ID: "1410303324745371709"
+
+jobs:
+  compare:
+    name: Compare Worker proof with repository secret
+    runs-on: ubuntu-latest
+    environment: cloudflare-staging
+    timeout-minutes: 3
+    steps:
+      - name: Compare only sanitized proof equality
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          ticket_file="$(mktemp)"
+          cookie_jar="$(mktemp)"
+          proof_file="$(mktemp)"
+          trap 'rm -f "$ticket_file" "$cookie_jar" "$proof_file"' EXIT
+          chmod 600 "$ticket_file" "$cookie_jar" "$proof_file"
+
+          python3 - "$ticket_file" "$PANEL_HOST" "$GUILD_ID" <<'PY'
+          import base64, hashlib, hmac, os, secrets, sys, time, urllib.parse
+          output_path, host, guild_id = sys.argv[1:]
+          token = os.environ['BOT_TOKEN'].strip()
+          key = hashlib.sha256(b'enthusia-staff-moderation-launch-v1\0' + token.encode()).digest()
+          now = int(time.time())
+          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode()
+          actor = str(10**17 + secrets.randbelow(9 * 10**17))
+          body = f'v1|staging|{nonce}|{actor}|{guild_id}|discord:{actor}|{now}|{now + 120}'
+          encoded = base64.urlsafe_b64encode(body.encode()).rstrip(b'=').decode()
+          signature = base64.urlsafe_b64encode(hmac.new(key, encoded.encode(), hashlib.sha256).digest()).rstrip(b'=').decode()
+          with open(output_path, 'w', encoding='utf-8') as handle:
+              handle.write(f'https://{host}/launch?t={urllib.parse.quote(encoded + "." + signature, safe="")}')
+          PY
+
+          launch_status="$(curl --silent --show-error --cookie-jar "$cookie_jar" --output /dev/null \
+            --write-out '%{http_code}' --max-time 20 "$(cat "$ticket_file")" || true)"
+          [[ "$launch_status" == '303' ]]
+          proof_status="$(curl --silent --show-error --cookie "$cookie_jar" --output "$proof_file" \
+            --write-out '%{http_code}' --max-time 20 "https://${PANEL_HOST}/api/bootstrap" || true)"
+          [[ "$proof_status" == '200' ]]
+
+          python3 - "$proof_file" <<'PY'
+          import base64, hashlib, hmac, json, os, sys
+          with open(sys.argv[1], encoding='utf-8') as handle:
+              proof = json.load(handle)
+          token = os.environ['BOT_TOKEN'].strip()
+          key = hashlib.sha256(b'enthusia-staff-moderation-read-api-v1\0' + token.encode()).digest()
+          body_digest = hashlib.sha256(proof['body'].encode()).hexdigest()
+          canonical = 'v1\n' + proof['method'] + '\n' + proof['path'] + '\n' + proof['timestamp'] + '\n' + proof['nonce'] + '\n' + body_digest
+          expected = base64.urlsafe_b64encode(hmac.new(key, canonical.encode(), hashlib.sha256).digest()).rstrip(b'=').decode()
+          print('diagnostic_worker_proof_match=' + ('yes' if hmac.compare_digest(expected, proof['signature']) else 'no'))
+          if not hmac.compare_digest(expected, proof['signature']):
+              raise SystemExit(1)
+          PY
+          unset BOT_TOKEN
