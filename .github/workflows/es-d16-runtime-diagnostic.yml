@@ -1,0 +1,138 @@
+name: ES-D16 Runtime Transport Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-runtime-probe-20260904
+    paths:
+      - ".github/workflows/es-d16-runtime-diagnostic.yml"
+
+permissions:
+  contents: read
+
+env:
+  PANEL_HOST: staff-staging.enthusia.info
+  READ_HOST: moderation-read-staging.enthusia.info
+  GUILD_ID: "1410303324745371709"
+
+jobs:
+  probe:
+    name: Probe staging runtime without private data
+    runs-on: ubuntu-latest
+    environment: cloudflare-staging
+    timeout-minutes: 5
+    steps:
+      - name: Probe launch, CORS, signed denial, and replay
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.ENTHUSIA_STAFF_BOT_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          ticket_file="$(mktemp)"
+          cookie_jar="$(mktemp)"
+          launch_headers="$(mktemp)"
+          launch_body="$(mktemp)"
+          session_body="$(mktemp)"
+          proof_body="$(mktemp)"
+          signed_body="$(mktemp)"
+          preflight_headers="$(mktemp)"
+          direct_headers="$(mktemp)"
+          direct_body="$(mktemp)"
+          replay_headers="$(mktemp)"
+          replay_body="$(mktemp)"
+          cleanup() {
+            rm -f "$ticket_file" "$cookie_jar" "$launch_headers" "$launch_body" \
+              "$session_body" "$proof_body" "$signed_body" "$preflight_headers" \
+              "$direct_headers" "$direct_body" "$replay_headers" "$replay_body"
+          }
+          trap cleanup EXIT
+          chmod 600 "$ticket_file" "$cookie_jar" "$proof_body" "$signed_body"
+
+          python3 - "$ticket_file" "$PANEL_HOST" "$GUILD_ID" <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import os
+          import secrets
+          import sys
+          import time
+          import urllib.parse
+
+          output_path, host, guild_id = sys.argv[1:]
+          token = os.environ['BOT_TOKEN'].strip()
+          if not token or any(ch.isspace() for ch in token):
+              raise SystemExit('protected bot token is empty or malformed')
+          key = hashlib.sha256(b'enthusia-staff-moderation-launch-v1\0' + token.encode('utf-8')).digest()
+          now = int(time.time())
+          nonce = base64.urlsafe_b64encode(secrets.token_bytes(24)).rstrip(b'=').decode('ascii')
+          actor = str(10**17 + secrets.randbelow(9 * 10**17))
+          body = f'v1|staging|{nonce}|{actor}|{guild_id}|discord:{actor}|{now}|{now + 120}'
+          encoded = base64.urlsafe_b64encode(body.encode('utf-8')).rstrip(b'=').decode('ascii')
+          signature = base64.urlsafe_b64encode(hmac.new(key, encoded.encode('ascii'), hashlib.sha256).digest()).rstrip(b'=').decode('ascii')
+          launch = f'{encoded}.{signature}'
+          with open(output_path, 'w', encoding='utf-8') as handle:
+              handle.write(f'https://{host}/launch?t={urllib.parse.quote(launch, safe="")}')
+          PY
+          unset BOT_TOKEN
+
+          first_status="$(curl --silent --show-error --cookie-jar "$cookie_jar" \
+            --output "$launch_body" --dump-header "$launch_headers" --write-out '%{http_code}' \
+            --max-time 20 "$(cat "$ticket_file")" || true)"
+          echo "diagnostic_launch status=${first_status:-curl_error}"
+          [[ "$first_status" == '303' ]] || exit 1
+
+          session_status="$(curl --silent --show-error --cookie "$cookie_jar" \
+            --output "$session_body" --write-out '%{http_code}' --max-time 20 \
+            "https://${PANEL_HOST}/api/session" || true)"
+          echo "diagnostic_session status=${session_status:-curl_error}"
+          [[ "$session_status" == '200' ]] || exit 1
+
+          proof_status="$(curl --silent --show-error --cookie "$cookie_jar" \
+            --output "$proof_body" --write-out '%{http_code}' --max-time 20 \
+            "https://${PANEL_HOST}/api/bootstrap" || true)"
+          echo "diagnostic_proof status=${proof_status:-curl_error}"
+          [[ "$proof_status" == '200' ]] || exit 1
+          jq -r '.body' "$proof_body" > "$signed_body"
+
+          preflight_status="$(curl --silent --show-error -X OPTIONS \
+            -H "Origin: https://${PANEL_HOST}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,x-enthusia-read-timestamp,x-enthusia-read-nonce,x-enthusia-read-signature' \
+            --dump-header "$preflight_headers" --output /dev/null --write-out '%{http_code}' \
+            --max-time 20 "https://${READ_HOST}/v1/moderation/bootstrap" || true)"
+          preflight_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$preflight_headers")"
+          if [[ "$preflight_origin" == "https://${PANEL_HOST}" ]]; then origin_match=yes; else origin_match=no; fi
+          echo "diagnostic_preflight status=${preflight_status:-curl_error} origin_match=${origin_match}"
+          [[ "$preflight_status" == '204' && "$origin_match" == yes ]] || exit 1
+
+          timestamp="$(jq -r '.timestamp' "$proof_body")"
+          nonce="$(jq -r '.nonce' "$proof_body")"
+          signature="$(jq -r '.signature' "$proof_body")"
+          direct_status="$(curl --silent --show-error -X POST \
+            -H "Origin: https://${PANEL_HOST}" -H 'Accept: application/json' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "X-Enthusia-Read-Timestamp: $timestamp" \
+            -H "X-Enthusia-Read-Nonce: $nonce" \
+            -H "X-Enthusia-Read-Signature: $signature" \
+            --data-binary @"$signed_body" --dump-header "$direct_headers" \
+            --output "$direct_body" --write-out '%{http_code}' --max-time 20 \
+            "https://${READ_HOST}/v1/moderation/bootstrap" || true)"
+          direct_code="$(jq -r '.code // "missing"' "$direct_body" 2>/dev/null || printf 'non_json')"
+          direct_origin="$(awk 'BEGIN { IGNORECASE=1 } /^access-control-allow-origin:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$direct_headers")"
+          if [[ "$direct_origin" == "https://${PANEL_HOST}" ]]; then direct_origin_match=yes; else direct_origin_match=no; fi
+          echo "diagnostic_direct status=${direct_status:-curl_error} code=${direct_code} origin_match=${direct_origin_match}"
+
+          replay_status="$(curl --silent --show-error -X POST \
+            -H "Origin: https://${PANEL_HOST}" -H 'Accept: application/json' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -H "X-Enthusia-Read-Timestamp: $timestamp" \
+            -H "X-Enthusia-Read-Nonce: $nonce" \
+            -H "X-Enthusia-Read-Signature: $signature" \
+            --data-binary @"$signed_body" --dump-header "$replay_headers" \
+            --output "$replay_body" --write-out '%{http_code}' --max-time 20 \
+            "https://${READ_HOST}/v1/moderation/bootstrap" || true)"
+          replay_code="$(jq -r '.code // "missing"' "$replay_body" 2>/dev/null || printf 'non_json')"
+          echo "diagnostic_replay status=${replay_status:-curl_error} code=${replay_code}"
+
+          [[ "$direct_status" == '403' && "$direct_code" == 'forbidden' && "$direct_origin_match" == yes ]]
+          [[ "$replay_status" == '401' && "$replay_code" == 'unauthorized' ]]
