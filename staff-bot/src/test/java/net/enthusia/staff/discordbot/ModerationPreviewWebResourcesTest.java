@@ -18,6 +18,7 @@ class ModerationPreviewWebResourcesTest {
     private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
     private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
     private static final String DIRECT_READ_SCRIPT = "/moderation-preview/direct-read.js";
+    private static final String READ_DIAGNOSTICS_SCRIPT = "/moderation-preview/read-failure-diagnostics.js";
     private static final String REAL_POLICY_SCRIPT = "/moderation-preview/real-policy.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
@@ -28,10 +29,11 @@ class ModerationPreviewWebResourcesTest {
             REVIEW_SCRIPT,
             REAL_DATA_SCRIPT,
             DIRECT_READ_SCRIPT,
+            READ_DIAGNOSTICS_SCRIPT,
             REAL_POLICY_SCRIPT);
     private static final List<String> SCRIPTS = List.of(
             MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT,
-            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, REAL_POLICY_SCRIPT);
+            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, READ_DIAGNOSTICS_SCRIPT, REAL_POLICY_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -51,6 +53,7 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/review.js",
                 "/assets/real-data.js",
                 "/assets/direct-read.js",
+                "/assets/read-failure-diagnostics.js",
                 "/assets/live-loading.js",
                 "/assets/real-policy.js");
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
@@ -68,6 +71,21 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));
+    }
+
+    @Test
+    void failureDiagnosticsExposeOnlySanitizedReadClasses() throws IOException {
+        String diagnostics = resourceText(READ_DIAGNOSTICS_SCRIPT);
+
+        assertTrue(diagnostics.contains("Access denied · staff authority not verified"));
+        assertTrue(diagnostics.contains("Backend unavailable · read source failed"));
+        assertTrue(diagnostics.contains("Read transport unavailable"));
+        assertTrue(diagnostics.contains("response.status === 403"));
+        assertTrue(diagnostics.contains("response.status === 503"));
+        assertFalse(diagnostics.contains("db.password"));
+        assertFalse(diagnostics.contains("authority.secret"));
+        assertFalse(diagnostics.contains("BOT_TOKEN"));
+        assertFalse(diagnostics.contains("console.log"));
     }
 
     @Test
