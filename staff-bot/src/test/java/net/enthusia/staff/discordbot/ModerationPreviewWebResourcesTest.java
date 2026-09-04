@@ -63,8 +63,8 @@ class ModerationPreviewWebResourcesTest {
     void realDataAdapterUsesProtectedReadEndpointsAndTruthfulFailureState() throws IOException {
         String adapter = resourceText(REAL_DATA_SCRIPT);
 
-        assertTrue(adapter.contains("fetch('/api/bootstrap'"));
-        assertTrue(adapter.contains("fetch('/api/messages', {method:'POST'"));
+        assertTrue(adapter.contains("requestDirectModerationRead('/api/bootstrap'"));
+        assertTrue(adapter.contains("requestDirectModerationRead('/api/messages'"));
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));
@@ -75,12 +75,16 @@ class ModerationPreviewWebResourcesTest {
         String adapter = resourceText(DIRECT_READ_SCRIPT);
 
         assertTrue(adapter.contains("https://moderation-read-staging.enthusia.info"));
-        assertTrue(adapter.contains("fetch('/api/bootstrap'"));
-        assertTrue(adapter.contains("fetch('/api/messages'"));
+        assertTrue(adapter.contains("DIRECT_PROOF_PATHS = new Set(['/api/bootstrap', '/api/messages'])"));
+        assertTrue(adapter.contains("if (!DIRECT_PROOF_PATHS.has(proofPath))"));
+        assertTrue(adapter.contains("fetch(proofPath, {...requestInit, cache:'no-store'})"));
         assertTrue(adapter.contains("X-Enthusia-Read-Timestamp"));
         assertTrue(adapter.contains("X-Enthusia-Read-Nonce"));
         assertTrue(adapter.contains("X-Enthusia-Read-Signature"));
         assertTrue(adapter.contains("credentials:'omit'"));
+        assertFalse(adapter.contains("loadSession ="));
+        assertFalse(adapter.contains("loadMessageRequest ="));
+        assertFalse(adapter.contains("channelFilterNode ="));
         assertFalse(adapter.contains("READ_API_SIGNING_KEY_HEX"));
         assertFalse(adapter.contains("ENTHUSIA_STAFF_BOT_TOKEN"));
         assertFalse(adapter.contains("workers.dev"));
