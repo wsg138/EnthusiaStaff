@@ -20,6 +20,7 @@ class AuthorityBridgePluginDescriptorTest {
             assertFalse(descriptor.contains("commands:"));
             assertFalse(descriptor.contains("permissions:"));
             assertTrue(descriptor.contains("depend:\n  - LuckPerms"));
+            assertTrue(descriptor.contains("softdepend:\n  - DiscordSRV"));
             assertTrue(descriptor.contains("EnthusiaStaffAuthorityBridge"));
         }
     }

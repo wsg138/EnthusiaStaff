@@ -10,6 +10,7 @@ val paperApiCoordinate = listOf(
 
 dependencies {
     implementation(project(":domain"))
+    implementation(project(":persistence"))
     implementation(project(":protocol"))
     compileOnly(paperApiCoordinate)
     compileOnly("net.luckperms:api:5.4")
