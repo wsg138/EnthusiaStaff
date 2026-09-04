@@ -4,40 +4,38 @@ const textEncoder = new TextEncoder();
 const DEFAULT_LIMIT = 25;
 const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
-const READ_RELAY_HOST = /^enthusia-moderation-read-relay-staging\.[a-z0-9-]+\.workers\.dev$/;
+const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
 const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
 const JSON_ESCAPES = new Map([
   ['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']
 ]);
 
-export async function proxyModerationRead(env, session, endpoint, browserInput = {}) {
+/**
+ * Mints a short-lived, one-use read proof bound to the server-side moderation session.
+ * The signing key never leaves the Worker; the browser receives only the canonical body
+ * and HMAC proof required for the exact pinned read endpoint.
+ */
+export async function prepareModerationRead(env, session, endpoint, browserInput = {}) {
   const keyHex = readSigningKey(env);
-  if (!keyHex) return unavailable('missing_worker_read_key');
-  const relayOrigin = readRelayOrigin(env);
-  if (!relayOrigin) return unavailable('missing_worker_relay_origin');
+  if (!keyHex) return unavailable();
   const path = endpointPath(endpoint);
   const body = signedRequestBody(readRequest(session, endpoint, browserInput));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const nonce = randomToken(24);
-  try {
-    const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
-    const response = await fetch(new URL(path, relayOrigin), {
-      method: 'POST',
-      redirect: 'error',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        Accept: 'application/json',
-        'X-Enthusia-Read-Timestamp': timestamp,
-        'X-Enthusia-Read-Nonce': nonce,
-        'X-Enthusia-Read-Signature': signature
-      },
-      body
-    });
-    return await sanitizedBackendResponse(response);
-  } catch {
-    return unavailable('relay_fetch_exception');
-  }
+  const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
+  return new Response(JSON.stringify({
+    origin: READ_API_ORIGIN,
+    path,
+    method: 'POST',
+    body,
+    timestamp,
+    nonce,
+    signature
+  }), {
+    status: 200,
+    headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
+  });
 }
 
 export function browserMessageQuery(input) {
@@ -127,20 +125,6 @@ function readSigningKey(env) {
   return /^[0-9a-fA-F]{64}$/.test(keyHex) ? keyHex : null;
 }
 
-function readRelayOrigin(env) {
-  const raw = typeof env.READ_RELAY_ORIGIN === 'string' ? env.READ_RELAY_ORIGIN : '';
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'https:' || url.username || url.password || url.port
-        || url.pathname !== '/' || url.search || url.hash || !READ_RELAY_HOST.test(url.hostname)) {
-      return null;
-    }
-    return url;
-  } catch {
-    return null;
-  }
-}
-
 function snowflakeFilter(value, label) {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') throw new Error(`invalid ${label} filter`);
@@ -200,32 +184,14 @@ async function signRequest(keyHex, method, path, body, timestamp, nonce) {
   return base64Url(new Uint8Array(signature));
 }
 
-async function sanitizedBackendResponse(response) {
-  const contentType = response.headers.get('Content-Type') || '';
-  if (!contentType.toLowerCase().startsWith('application/json')) {
-    return unavailable(`relay_http_${safeStatus(response.status)}_non_json`);
-  }
-  const body = await response.arrayBuffer();
-  if (body.byteLength > 1_048_576) return unavailable('relay_body_too_large');
-  return new Response(body, {
-    status: response.status,
-    headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
-  });
-}
-
-function unavailable(diagnostic) {
+function unavailable() {
   return new Response(JSON.stringify({
     code: 'source_unavailable',
-    message: 'Moderation data is temporarily unavailable.',
-    diagnostic
+    message: 'Moderation data is temporarily unavailable.'
   }), {
     status: 503,
     headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
   });
-}
-
-function safeStatus(status) {
-  return Number.isInteger(status) && status >= 100 && status <= 599 ? String(status) : 'unknown';
 }
 
 function randomToken(bytes) {
