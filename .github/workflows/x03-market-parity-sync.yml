@@ -38,6 +38,19 @@ jobs:
           path: market
           persist-credentials: false
 
+      - name: Allow repository-owned mirrored Market migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='!components/enthusia-market/src/main/resources/migrations/*.sql'
+          if ! grep -Fxq "$marker" staff/.gitignore; then
+            cat >> staff/.gitignore <<'EOF'
+
+          # Repository-owned mirrored Market migrations remain tracked.
+          !components/enthusia-market/src/main/resources/migrations/*.sql
+          EOF
+          fi
+
       - name: Sync only proven divergent product paths
         shell: bash
         run: |
@@ -98,10 +111,11 @@ jobs:
           set -euo pipefail
           git -C staff diff --check
           {
-            git -C staff diff --name-only -- components/enthusia-market
+            git -C staff diff --name-only -- .gitignore components/enthusia-market
             git -C staff ls-files --others --exclude-standard -- components/enthusia-market
           } | sort -u > /tmp/actual
           cat > /tmp/expected <<'EOF'
+          .gitignore
           components/enthusia-market/.github/workflows/build.yml
           components/enthusia-market/docs/db-schema.md
           components/enthusia-market/docs/moderation-provider.md
@@ -133,6 +147,6 @@ jobs:
           set -euo pipefail
           git -C staff config user.name 'github-actions[bot]'
           git -C staff config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C staff add components/enthusia-market
+          git -C staff add .gitignore components/enthusia-market
           git -C staff commit -m 'ES-X03: sync current Market hardening'
           git -C staff push origin HEAD:refs/heads/package/es-x03-market-provider
