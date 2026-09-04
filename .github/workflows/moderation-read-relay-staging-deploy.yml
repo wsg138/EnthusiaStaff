@@ -205,8 +205,16 @@ jobs:
             --write-out '%{http_code}' \
             --max-time 20 \
             "${READ_RELAY_ORIGIN}/v1/moderation/bootstrap")"
+          response_code="$(jq -r '.code // "missing_code"' "$response_file" 2>/dev/null || printf 'non_json')"
+          [[ "$response_code" =~ ^[a-z0-9_]+$ ]] || response_code='invalid_code_shape'
+          echo "::notice::Signed relay probe HTTP ${status} code=${response_code}"
+          {
+            echo "- signed relay probe HTTP status: \`${status}\`"
+            echo "- signed relay probe response code: \`${response_code}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
           [[ "$status" == '403' ]]
-          jq -e '.code == "forbidden" and .message == "Access denied."' "$response_file" >/dev/null
+          [[ "$response_code" == 'forbidden' ]]
+          jq -e '.message == "Access denied."' "$response_file" >/dev/null
 
           cleanup
           trap - EXIT
