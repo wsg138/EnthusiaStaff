@@ -19,9 +19,10 @@ final class ModerationDiscordMessageReader {
     private final ModerationDiscordMessageMapper mapper = new ModerationDiscordMessageMapper();
 
     List<ModerationReadApiModel.ChannelDto> visibleChannels(ModerationReadContext context) {
-        return context.guild().getTextChannels().stream()
+        return context.guild().getChannels().stream()
+                .filter(TextChannel.class::isInstance)
+                .map(TextChannel.class::cast)
                 .filter(channel -> hasReadAccess(context, channel))
-                .sorted(Comparator.comparing(TextChannel::getPosition).thenComparing(TextChannel::getName))
                 .map(ModerationDiscordMessageReader::channelDto)
                 .toList();
     }
