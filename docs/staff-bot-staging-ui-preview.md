@@ -1,6 +1,6 @@
 # Staff bot staging moderation web preview
 
-This runbook covers the owner-directed D16 moderation preview. Discord and the web workspace remain staging-only and simulation-only. A separately authorized temporary live-Paper acceptance path may use the narrow `EnthusiaStaffAuthorityBridge` described below; that exception does not authorize destructive moderation, message deletion, LiteBans mutation/cutover, or deployment of the full EnthusiaStaff Paper moderation runtime solely for D16 acceptance.
+This runbook covers the owner-directed D16 moderation preview. Discord and the web workspace remain staging-only and simulation-only. A separately authorized temporary live-Paper acceptance path may use the narrow `EnthusiaStaffAuthorityBridge` described below; that exception does not authorize destructive moderation, message deletion, LiteBans mutation, cutover, or deployment of the full EnthusiaStaff Paper moderation runtime solely for D16 acceptance.
 
 ## Accepted architecture
 
@@ -12,37 +12,31 @@ This runbook covers the owner-directed D16 moderation preview. Discord and the w
 - For each real-data read, the Worker validates the browser request against the server-side moderation session and mints a short-lived HMAC proof for one exact canonical request body. The browser receives the body plus only that one-use timestamp/nonce/signature, never the signing key.
 - The browser sends that exact signed POST directly to `https://moderation-read-staging.enthusia.info`, whose named Cloudflare Tunnel terminates at the Staff Bot loopback API `127.0.0.1:8766`.
 - The Staff Bot accepts browser CORS only from the exact staging panel origin, re-verifies the HMAC/expiry/replay fence, and then re-authorizes actor, guild, target and channel-read permissions before returning data.
-- D16 attaches the hosted workspace to the existing D03/D06 authority/data model. The Staff Bot remains JDBC read-only.
+- D16 attaches the hosted workspace to the existing D03/D06 read-only authority/data runtime through authenticated private bridges.
 - Destructive punishment, message-deletion, and permission-override operations remain simulation-only.
-- The live Paper acceptance plugin serves current LuckPerms-backed staff rank. Under the owner's 2026-09-04 extension it may additionally run the optional transition collector described below; it still has zero moderation/player mutation commands or adapters.
+- For the owner-authorized live-Paper acceptance path, Paper runs only `EnthusiaStaff-AuthorityBridge.jar`; optional transition collection is separately enabled by `collector.properties` as described below.
 
-The static UI source remains under `staff-bot/src/main/resources/moderation-preview` so the product contract tests and Cloudflare build share exactly one owner-approved asset set. `moderation-web/scripts/build.mjs` copies those assets into the Cloudflare deployment bundle.
+The static UI source remains under `staff-bot/src/main/resources/moderation-preview` so the product contract tests and Cloudflare build share exactly one owner-approved asset set.
 
 ## Safety model
 
-Preview mode can be enabled only for the fixed staging Discord/web environment. A complete `--moderation-config-file` initializes only the read-only D06 data/authority runtime and D16 loopback read API. It does not initialize punishment, deletion, permission-override, or moderation-database mutation adapters.
+Preview mode can be enabled only for the fixed staging Discord/web environment. The D16 read API always binds to `127.0.0.1:8766`; the staging bot supervises `cloudflared` so no public Bloom allocation is required. Browser requests use exact-origin CORS and signed, target-bound one-use read proofs. Browser code never receives MariaDB credentials, Discord credentials, signing keys, authority credentials, component credentials, or Cloudflare tunnel credentials.
 
-The D16 read API always binds to `127.0.0.1:8766`. The staging bot supervises a panel-uploaded `cloudflared` process so the named tunnel can reach that loopback listener without a public Bloom allocation. The browser never receives MariaDB credentials, Discord bot credentials, signing keys, authority credentials, component credentials, or Cloudflare tunnel credentials.
-
-Each Worker-issued read proof is bound to the current Worker session's actor ID, guild ID, target key, endpoint, canonical body, timestamp and random nonce. The Staff Bot's short request window and nonce replay guard prevent reuse. A browser cannot retarget the request without invalidating the signature, and every valid request is re-authorized against current Discord/Paper authority state before data is returned.
-
-Paper remains the current LuckPerms-backed staff authority. The bridge's D16 staff-rank listener accepts only private/loopback peers, requires short-lived HMAC-signed replay-resistant requests, and signs authenticated responses. Discord roles never become an authority source.
+Paper remains the current LuckPerms-backed staff authority. The bridge listens only on the private D16 authority resource, requires short-lived HMAC-signed replay-resistant requests, and signs responses. Discord roles never become an authority source.
 
 ## Runtime secret boundary
 
-The Discord bot token, MariaDB credential, authority credential, component-signing credential, and Cloudflare tunnel token are runtime-only files/values. They must never appear in browser code, public source, URLs, logs, artifacts, issue comments, or chat.
-
-The Cloudflare account API token used by GitHub Actions is not copied to Bloom. Bloom receives only the connector token for the remotely managed staging tunnel, stored in a file and passed to `cloudflared` using `--token-file`.
+The Discord bot token, database credentials, authority credential, component-signing credential, and Cloudflare tunnel token are runtime-only values. They must never appear in browser code, public source, URLs, logs, artifacts, issue comments, or chat.
 
 ## Bloom staff-bot split
 
-Use Java 21 and the exact validated D16 staff-bot JAR. The current owner acceptance split uses:
+Use Java 21 and the exact validated D16 Staff Bot JAR. The current owner acceptance split uses:
 
-- `EnthusiaStaff-StaffBot.jar` — exact validated D16 artifact;
-- `t` — staging Discord bot token only;
-- `m` — D06/D16 database/authority/component configuration;
-- `cloudflared` — current Linux binary with `--token-file` support;
-- `cloudflared-token.txt` — token for the existing `enthusia-moderation-read-staging` tunnel only.
+- `EnthusiaStaff-StaffBot.jar`
+- `t` — staging Discord bot token only
+- `m` — D06/D16 database/authority/component configuration
+- `cloudflared`
+- `cloudflared-token.txt`
 
 ```text
 JAR FILE:
@@ -55,26 +49,11 @@ APP FLAGS:
 --staging-ui-preview --token-file=t --moderation-config-file=m --tunnel-binary-file=cloudflared --tunnel-token-file=cloudflared-token.txt --preview-public-url=https://staff-staging.enthusia.info
 ```
 
-The file `m` contains:
-
-```properties
-db.jdbc-url=jdbc:mariadb://<database-host>:3306/<database-name>
-db.username=<database-user>
-db.password=<database-password>
-authority.url=http://<paper-full-server-id-or-private-hostname>:8771/v1/staff-rank
-authority.transport=bloom-private-split
-authority.secret=<random-value-at-least-32-characters>
-component.secret=<different-random-value-at-least-32-characters>
-# Optional:
-# db.pool-size=4
-# db.timeout-millis=3000
-```
-
-The Staff Bot opens this database in JDBC read-only mode and never invokes Flyway. It must point at the same logical EnthusiaStaff database used by the transition collector/full future runtime, never a parallel moderation database.
+The Staff Bot remains JDBC read-only and never invokes Flyway. It uses the same logical EnthusiaStaff database populated by an authoritative/full runtime or the temporary transition collector below.
 
 ## Owner-authorized temporary live-Paper bridge
 
-This is the current ES-D16 acceptance path. Upload the exact validated artifact as:
+Upload the exact validated artifact to:
 
 ```text
 plugins/EnthusiaStaff-AuthorityBridge.jar
@@ -109,7 +88,7 @@ Use the same logical EnthusiaStaff database as the Staff Bot `m` file. The colle
 ```properties
 db.jdbc-url=jdbc:mariadb://<same-database-host>:3306/<same-database-name>
 db.username=<write-capable-transition-user>
-db.password=<database-password>
+db.credential=<database-credential>
 # Optional bounded settings:
 # db.pool-size=2
 # db.timeout-millis=3000

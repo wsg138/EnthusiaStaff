@@ -64,7 +64,7 @@ public final class TransitionDataRuntime implements AutoCloseable {
     }
 
     private static void migrate(HikariDataSource dataSource) {
-        Flyway.configure(TransitionDataRuntime.class.getClassLoader())
+        Flyway.configure()
                 .dataSource(dataSource)
                 .locations("classpath:db/migration")
                 .validateMigrationNaming(true)

@@ -11,17 +11,19 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class TransitionSnapshotPlannerTest {
+    private static final String DISCORD_USER_ID = "123456789012345678";
+
     @Test
     void onlyObservedPlayersBecomeImportableDiscordSrvLinks() {
         UUID observed = UUID.randomUUID();
         UUID missing = UUID.randomUUID();
         TransitionSnapshotPlanner.Plan plan = TransitionSnapshotPlanner.plan(
-                Map.of("123456789012345678", observed, "223456789012345678", missing),
+                Map.of(DISCORD_USER_ID, observed, "223456789012345678", missing),
                 List.of(new TransitionSnapshotPlanner.Observation(
                         observed, "ObservedPlayer", Instant.parse("2026-09-04T04:00:00Z"), true)));
 
         assertEquals(1, plan.observations().size());
-        assertEquals(Map.of("123456789012345678", observed), plan.importableLinks());
+        assertEquals(Map.of(DISCORD_USER_ID, observed), plan.importableLinks());
         assertEquals(1, plan.skippedLinks());
     }
 
@@ -29,7 +31,7 @@ class TransitionSnapshotPlannerTest {
     void invalidNamesAreRejectedBeforePersistence() {
         UUID player = UUID.randomUUID();
         TransitionSnapshotPlanner.Plan plan = TransitionSnapshotPlanner.plan(
-                Map.of("123456789012345678", player),
+                Map.of(DISCORD_USER_ID, player),
                 List.of(new TransitionSnapshotPlanner.Observation(
                         player, "invalid name!", Instant.parse("2026-09-04T04:00:00Z"), false)));
 
@@ -42,11 +44,11 @@ class TransitionSnapshotPlannerTest {
     void bedrockAliasAndOfflineObservationRemainUsable() {
         UUID player = UUID.randomUUID();
         TransitionSnapshotPlanner.Plan plan = TransitionSnapshotPlanner.plan(
-                Map.of("123456789012345678", player),
+                Map.of(DISCORD_USER_ID, player),
                 List.of(new TransitionSnapshotPlanner.Observation(
                         player, "*BedrockUser", Instant.parse("2026-09-03T23:00:00Z"), false)));
 
         assertFalse(plan.observations().getFirst().online());
-        assertEquals(player, plan.importableLinks().get("123456789012345678"));
+        assertEquals(player, plan.importableLinks().get(DISCORD_USER_ID));
     }
 }
