@@ -1,0 +1,43 @@
+name: ES-D16 Runtime Clock Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-runtime-probe-20260904
+    paths:
+      - ".github/workflows/es-d16-clock-diagnostic.yml"
+
+permissions:
+  contents: read
+
+env:
+  PANEL_HOST: staff-staging.enthusia.info
+  READ_HOST: moderation-read-staging.enthusia.info
+
+jobs:
+  clock:
+    name: Compare public read-endpoint clock
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Compare sanitized HTTP date
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          headers="$(mktemp)"
+          trap 'rm -f "$headers"' EXIT
+          status="$(curl --silent --show-error -X OPTIONS \
+            -H "Origin: https://${PANEL_HOST}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,x-enthusia-read-timestamp,x-enthusia-read-nonce,x-enthusia-read-signature' \
+            --dump-header "$headers" --output /dev/null --write-out '%{http_code}' \
+            --max-time 20 "https://${READ_HOST}/v1/moderation/bootstrap" || true)"
+          http_date="$(awk 'BEGIN { IGNORECASE=1 } /^date:/ { sub(/\r$/, ""); sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$headers")"
+          echo "diagnostic_clock preflight_status=${status:-curl_error} date_header_present=$([[ -n "$http_date" ]] && echo yes || echo no)"
+          if [[ -n "$http_date" ]]; then
+            remote_epoch="$(date -u -d "$http_date" +%s)"
+            local_epoch="$(date -u +%s)"
+            delta=$(( remote_epoch - local_epoch ))
+            if (( delta < 0 )); then abs_delta=$(( -delta )); else abs_delta=$delta; fi
+            echo "diagnostic_clock absolute_delta_seconds=${abs_delta}"
+          fi
