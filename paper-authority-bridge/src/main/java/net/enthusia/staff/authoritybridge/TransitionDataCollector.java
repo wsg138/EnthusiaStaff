@@ -68,8 +68,13 @@ final class TransitionDataCollector implements AutoCloseable {
             throw new IllegalArgumentException("transition collector dependencies must be present");
         }
         TransitionDataRuntime data = TransitionDataRuntime.open(configuration.database());
-        return new TransitionDataCollector(
-                plugin, configuration, data, DiscordSrvTransitionLinkSource.discover(plugin), Clock.systemUTC());
+        try {
+            return new TransitionDataCollector(
+                    plugin, configuration, data, DiscordSrvTransitionLinkSource.discover(plugin), Clock.systemUTC());
+        } catch (RuntimeException exception) {
+            data.close();
+            throw exception;
+        }
     }
 
     void start() {
@@ -125,12 +130,12 @@ final class TransitionDataCollector implements AutoCloseable {
     private Optional<TransitionSnapshotPlanner.Observation> offlineObservation(UUID playerId) {
         OfflinePlayer player = plugin.getServer().getOfflinePlayer(playerId);
         String name = player.getName();
-        long lastPlayed = player.getLastPlayed();
-        if (name == null || name.isBlank() || lastPlayed <= 0L) {
+        long lastSeen = player.getLastSeen();
+        if (name == null || name.isBlank() || lastSeen <= 0L) {
             return Optional.empty();
         }
         return Optional.of(new TransitionSnapshotPlanner.Observation(
-                playerId, name, Instant.ofEpochMilli(lastPlayed), false));
+                playerId, name, Instant.ofEpochMilli(lastSeen), false));
     }
 
     private static boolean currentlyObserved(
@@ -179,6 +184,7 @@ final class TransitionDataCollector implements AutoCloseable {
         try {
             if (!worker.awaitTermination(SHUTDOWN_SECONDS, TimeUnit.SECONDS)) {
                 worker.shutdownNow();
+                worker.awaitTermination(SHUTDOWN_SECONDS, TimeUnit.SECONDS);
             }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();

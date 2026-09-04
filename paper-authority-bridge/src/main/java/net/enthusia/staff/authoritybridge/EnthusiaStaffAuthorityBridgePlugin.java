@@ -45,8 +45,14 @@ public final class EnthusiaStaffAuthorityBridgePlugin extends JavaPlugin {
                 getLogger().info("enthusiastaff_transition_collector_disabled reason=no_config");
                 return;
             }
-            collector = TransitionDataCollector.open(this, configuration.orElseThrow());
-            collector.start();
+            TransitionDataCollector opened = TransitionDataCollector.open(this, configuration.orElseThrow());
+            try {
+                opened.start();
+                collector = opened;
+            } catch (RuntimeException exception) {
+                opened.close();
+                throw exception;
+            }
             getLogger().info(
                     "enthusiastaff_transition_collector_started migrations=true discordsrv=read_only litebans=untouched");
         } catch (RuntimeException exception) {

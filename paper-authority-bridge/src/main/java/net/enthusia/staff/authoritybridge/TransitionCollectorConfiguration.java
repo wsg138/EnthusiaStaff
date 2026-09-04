@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -31,13 +32,13 @@ final class TransitionCollectorConfiguration {
     private TransitionCollectorConfiguration() {
     }
 
-    static java.util.Optional<Value> loadIfPresent(Path dataFolder) {
+    static Optional<Value> loadIfPresent(Path dataFolder) {
         if (dataFolder == null) {
             throw new IllegalArgumentException("data folder must be present");
         }
         Path file = dataFolder.resolve(FILE_NAME);
         if (!Files.exists(file)) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
         Properties properties = load(file);
         rejectUnknown(properties);
@@ -52,7 +53,7 @@ final class TransitionCollectorConfiguration {
             throw new IllegalArgumentException("collector server id is invalid");
         }
         int seconds = boundedInt(properties, INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS, 30, 3_600);
-        return java.util.Optional.of(new Value(database, serverId, Duration.ofSeconds(seconds)));
+        return Optional.of(new Value(database, serverId, Duration.ofSeconds(seconds)));
     }
 
     private static Properties load(Path file) {
@@ -76,7 +77,7 @@ final class TransitionCollectorConfiguration {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("required transition collector property is missing");
         }
-        return value.trim();
+        return value;
     }
 
     private static int boundedInt(Properties properties, String key, int fallback, int min, int max) {

@@ -6,14 +6,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Read-only access to DiscordSRV's inspected AccountLinkManager snapshot API. */
 final class DiscordSrvTransitionLinkSource {
     static final int MAX_LINKS = 5_000;
-    private static final Pattern DISCORD_ID = Pattern.compile("[1-9][0-9]{0,19}");
     private final Object discordSrvPlugin;
 
     private DiscordSrvTransitionLinkSource(Object discordSrvPlugin) {
@@ -43,14 +42,25 @@ final class DiscordSrvTransitionLinkSource {
         }
         Map<String, UUID> result = new LinkedHashMap<>();
         for (Map.Entry<?, ?> entry : raw.entrySet()) {
-            String discordId = entry.getKey() instanceof String text ? text : null;
+            String discordId = normalizedDiscordId(entry.getKey());
             UUID playerId = entry.getValue() instanceof UUID uuid ? uuid : null;
-            if (discordId == null || !DISCORD_ID.matcher(discordId).matches() || playerId == null) {
+            if (discordId == null || playerId == null) {
                 throw new IllegalStateException("DiscordSRV linked-account snapshot contains invalid data");
             }
             result.put(discordId, playerId);
         }
         return Map.copyOf(result);
+    }
+
+    private static String normalizedDiscordId(Object value) {
+        if (!(value instanceof String text)) {
+            return null;
+        }
+        try {
+            return new DiscordUserId(text).value();
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     private static Object invoke(Object target, String methodName) {
