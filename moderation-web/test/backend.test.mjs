@@ -75,16 +75,40 @@ test('private read egress is pinned and rejects redirects', async () => {
   }
 });
 
-test('private backend outage is reported truthfully as unavailable', async () => {
+test('private backend outage is reported truthfully with a sanitized transport diagnostic', async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error('network unavailable'); };
+  globalThis.fetch = async () => { throw new Error('network unavailable SECRET_INTERNAL_DETAIL'); };
   try {
     const {env, session} = readContext();
     const response = await proxyModerationRead(env, session, 'bootstrap');
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), {
-      code: 'source_unavailable', message: 'Moderation data is temporarily unavailable.'
+      code: 'source_unavailable',
+      message: 'Moderation data is temporarily unavailable.',
+      diagnostic: 'worker_fetch_exception'
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('non-json upstream failures expose only the bounded status diagnostic', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('<html>challenge SECRET_EDGE_BODY</html>', {
+    status: 403,
+    headers: {'Content-Type': 'text/html; charset=UTF-8'}
+  });
+  try {
+    const {env, session} = readContext();
+    const response = await proxyModerationRead(env, session, 'bootstrap');
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.deepEqual(payload, {
+      code: 'source_unavailable',
+      message: 'Moderation data is temporarily unavailable.',
+      diagnostic: 'upstream_http_403_non_json'
+    });
+    assert.doesNotMatch(JSON.stringify(payload), /SECRET_EDGE_BODY/);
   } finally {
     globalThis.fetch = originalFetch;
   }
