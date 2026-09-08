@@ -14,19 +14,22 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final LinkedStaffActorResolver actorResolver;
     private final StaffReadAuthorization readAuthorization;
     private final SignedComponentCodec componentCodec;
+    private final MinecraftProfileLookup minecraftProfiles;
 
     private StaffModerationRuntime(
             DiscordStaffReadRuntime data,
             StaffModerationReadService reads,
             LinkedStaffActorResolver actors,
             StaffReadAuthorization authorization,
-            SignedComponentCodec components
+            SignedComponentCodec components,
+            MinecraftProfileLookup profiles
     ) {
         this.data = data;
         this.readService = reads;
         this.actorResolver = actors;
         this.readAuthorization = authorization;
         this.componentCodec = components;
+        this.minecraftProfiles = profiles;
     }
 
     static Optional<StaffModerationRuntime> open(
@@ -61,13 +64,10 @@ final class StaffModerationRuntime implements AutoCloseable {
                     new SecureRandom(),
                     componentReplay
             );
-            return new StaffModerationRuntime(
-                    data,
-                    reads,
-                    new LinkedStaffActorResolver(reads, authority),
-                    new StaffReadAuthorization(),
-                    components
-            );
+            LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
+            StaffReadAuthorization authorization = new StaffReadAuthorization();
+            MinecraftProfileLookup profiles = MinecraftProfileLookup.mojang();
+            return new StaffModerationRuntime(data, reads, actors, authorization, components, profiles);
         } catch (RuntimeException exception) {
             data.close();
             throw exception;
@@ -90,8 +90,16 @@ final class StaffModerationRuntime implements AutoCloseable {
         return componentCodec;
     }
 
+    MinecraftProfileLookup minecraftProfiles() {
+        return minecraftProfiles;
+    }
+
     @Override
     public void close() {
-        data.close();
+        try {
+            minecraftProfiles.close();
+        } finally {
+            data.close();
+        }
     }
 }

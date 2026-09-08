@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -93,6 +94,27 @@ class MinecraftProfileLookupTest {
         assertFalse(ids.isEmpty());
         assertTrue(lookup.profiles(ids).isEmpty());
         assertEquals(32, calls.get());
+    }
+
+    @Test
+    void closeReleasesOwnedRemoteTransport() {
+        AtomicBoolean shutdown = new AtomicBoolean();
+        MinecraftProfileLookup.RemoteFetcher fetcher = new MinecraftProfileLookup.RemoteFetcher() {
+            @Override
+            public CompletableFuture<MinecraftProfileLookup.RemoteResponse> fetch(UUID playerId) {
+                return completed(404, "");
+            }
+
+            @Override
+            public void shutdown() {
+                shutdown.set(true);
+            }
+        };
+        MinecraftProfileLookup lookup = lookup(fetcher);
+
+        lookup.close();
+
+        assertTrue(shutdown.get());
     }
 
     private static MinecraftProfileLookup lookup(MinecraftProfileLookup.RemoteFetcher fetcher) {

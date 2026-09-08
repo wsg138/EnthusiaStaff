@@ -29,6 +29,8 @@ final class MinecraftProfileLookup {
     private static final URI PROFILE_ROOT = URI.create(
             "https://sessionserver.mojang.com/session/minecraft/profile/");
     private static final String TEXTURE_HOST = "textures.minecraft.net";
+    private static final String TEXTURES_PROPERTY = "textures";
+    private static final int HTTP_OK = 200;
     private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
     private static final int MAX_REMOTE_LOOKUPS = 32;
     private static final int MAX_CACHE_ENTRIES = 256;
@@ -54,6 +56,25 @@ final class MinecraftProfileLookup {
     @FunctionalInterface
     interface RemoteFetcher {
         CompletableFuture<RemoteResponse> fetch(UUID playerId);
+
+        default void shutdown() {
+            // Test/custom fetchers normally have no owned transport resource.
+        }
+    }
+
+    private static final class MojangFetcher implements RemoteFetcher {
+        private final HttpClient client = HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build();
+
+        @Override
+        public CompletableFuture<RemoteResponse> fetch(UUID playerId) {
+            return client.sendAsync(request(playerId), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> new RemoteResponse(response.statusCode(), response.body()));
+        }
+
+        @Override
+        public void shutdown() {
+            client.shutdownNow();
+        }
     }
 
     private record CachedProfile(Profile profile, Instant expiresAt) {
@@ -63,14 +84,13 @@ final class MinecraftProfileLookup {
     private final Clock clock;
     private final Duration remoteBudget;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final Object cacheLock = new Object();
+    // Access-order LinkedHashMap requires one lock across lookup, expiry, insertion, and eviction.
+    @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
     private final LinkedHashMap<UUID, CachedProfile> cache = new LinkedHashMap<>(16, 0.75f, true);
 
     static MinecraftProfileLookup mojang() {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build();
-        RemoteFetcher fetcher = playerId -> client.sendAsync(request(playerId), HttpResponse.BodyHandlers.ofString(
-                        StandardCharsets.UTF_8))
-                .thenApply(response -> new RemoteResponse(response.statusCode(), response.body()));
-        return new MinecraftProfileLookup(fetcher, Clock.systemUTC(), REMOTE_BUDGET);
+        return new MinecraftProfileLookup(new MojangFetcher(), Clock.systemUTC(), REMOTE_BUDGET);
     }
 
     MinecraftProfileLookup(RemoteFetcher fetcher, Clock clock, Duration remoteBudget) {
@@ -98,6 +118,10 @@ final class MinecraftProfileLookup {
         await(pending.values());
         collectCompleted(result, pending);
         return Map.copyOf(result);
+    }
+
+    void close() {
+        fetcher.shutdown();
     }
 
     private static List<UUID> boundedIds(List<UUID> playerIds) {
@@ -159,7 +183,7 @@ final class MinecraftProfileLookup {
     }
 
     private Optional<Profile> parse(RemoteResponse response) {
-        if (response.statusCode() != 200) {
+        if (response.statusCode() != HTTP_OK) {
             return Optional.empty();
         }
         try {
@@ -176,18 +200,21 @@ final class MinecraftProfileLookup {
 
     private Optional<String> skinTextureUrl(JsonNode profile) throws java.io.IOException {
         for (JsonNode property : profile.path("properties")) {
-            if (!"textures".equals(property.path("name").asText())) {
-                continue;
+            if (TEXTURES_PROPERTY.equals(property.path("name").asText())) {
+                return texturePropertyUrl(property);
             }
-            String encoded = property.path("value").asText("");
-            if (encoded.isEmpty()) {
-                return Optional.empty();
-            }
-            String decoded = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
-            String rawUrl = mapper.readTree(decoded).path("textures").path("SKIN").path("url").asText("");
-            return trustedTextureUrl(rawUrl);
         }
         return Optional.empty();
+    }
+
+    private Optional<String> texturePropertyUrl(JsonNode property) throws java.io.IOException {
+        String encoded = property.path("value").asText("");
+        if (encoded.isEmpty()) {
+            return Optional.empty();
+        }
+        String decoded = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
+        String rawUrl = mapper.readTree(decoded).path(TEXTURES_PROPERTY).path("SKIN").path("url").asText("");
+        return trustedTextureUrl(rawUrl);
     }
 
     private static Optional<String> trustedTextureUrl(String rawUrl) {
@@ -203,22 +230,26 @@ final class MinecraftProfileLookup {
         }
     }
 
-    private synchronized Optional<Profile> cached(UUID playerId, Instant now) {
-        CachedProfile entry = cache.get(playerId);
-        if (entry == null) {
-            return Optional.empty();
+    private Optional<Profile> cached(UUID playerId, Instant now) {
+        synchronized (cacheLock) {
+            CachedProfile entry = cache.get(playerId);
+            if (entry == null) {
+                return Optional.empty();
+            }
+            if (!entry.expiresAt().isAfter(now)) {
+                cache.remove(playerId);
+                return Optional.empty();
+            }
+            return Optional.of(entry.profile());
         }
-        if (!entry.expiresAt().isAfter(now)) {
-            cache.remove(playerId);
-            return Optional.empty();
-        }
-        return Optional.of(entry.profile());
     }
 
-    private synchronized void remember(UUID playerId, Profile profile, Instant expiresAt) {
-        cache.put(playerId, new CachedProfile(profile, expiresAt));
-        while (cache.size() > MAX_CACHE_ENTRIES) {
-            cache.remove(cache.keySet().iterator().next());
+    private void remember(UUID playerId, Profile profile, Instant expiresAt) {
+        synchronized (cacheLock) {
+            cache.put(playerId, new CachedProfile(profile, expiresAt));
+            while (cache.size() > MAX_CACHE_ENTRIES) {
+                cache.remove(cache.keySet().iterator().next());
+            }
         }
     }
 

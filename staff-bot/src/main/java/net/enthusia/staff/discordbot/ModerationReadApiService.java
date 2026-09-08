@@ -17,7 +17,7 @@ final class ModerationReadApiService {
         }
         this.moderation = moderation;
         this.authorizer = new ModerationReadRequestAuthorizer(guildId, moderation, jda);
-        this.snapshots = new ModerationReadSnapshotMapper(jda);
+        this.snapshots = new ModerationReadSnapshotMapper(jda, moderation.minecraftProfiles());
         this.messages = new ModerationDiscordMessageReader();
     }
 
