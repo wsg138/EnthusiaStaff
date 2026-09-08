@@ -1,63 +1,63 @@
 # ES-D16 — Moderation console real-data read bridge
 
-Status: `ACTIVE` / `ACTIONABLE_CONTINUATION`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
+Status: `BLOCKED` / `PARKED_BLOCKED`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
 
 Run ref: `ES-D16-20260831-real-data-read-bridge`.
+Implementation PR: #187, open/unmerged on `package/es-d16-moderation-read-bridge`.
+Frozen executable candidate: `83bc4e102b85b9db904e9df4e7f956896fa938bf`.
+Validated branch head: `587ea47f6e30aa468021497af6bed77d97c2975a`; exact compare from the executable candidate changes only `moderation-web/README.md`.
 
 ## Objective
 Connect the owner-approved Cloudflare moderation console to real, read-only Enthusia Discord/Minecraft/moderation data while preserving simulation-only punishment/deletion behavior and the existing D03 authority model.
 
 ## Owner production-acceptance authorization
-On 2026-09-02 the owner explicitly authorized using the live Enthusia Paper server for temporary D16 authority/real-data acceptance instead of deploying the full `EnthusiaStaff-Paper.jar`. The dedicated `paper-authority-bridge` therefore serves the signed private LuckPerms rank endpoint while destructive Discord/Minecraft moderation remains prohibited.
+The owner authorized the dedicated live Paper `paper-authority-bridge` instead of deploying the full `EnthusiaStaff-Paper.jar`. After live D16 reads exposed an empty EnthusiaStaff MariaDB, the owner further authorized that temporary bridge to apply the repository's existing Flyway migrations to that owner-configured database and gather bounded transition observations, especially current/cached Minecraft identity and existing DiscordSRV links.
 
-On 2026-09-04 live read acceptance exposed a clean but unmigrated EnthusiaStaff MariaDB: Staff Bot reads reached Bloom successfully but failed with MariaDB 1146 for `moderation_subject_discord_identities`, surfaced as `ModerationPersistenceException`. The owner then explicitly extended the temporary bridge authorization so it can be useful during the transition: initialize the new EnthusiaStaff database, observe player identity data, and read/import existing DiscordSRV links. The owner also suggested LiteBans transition monitoring but allowed that to remain separate if duplicating it would be excessive.
+The exception remains narrow: DiscordSRV is read-only, LiteBans remains authoritative and untouched, ports `8771` and `8766` remain non-public, and no warn/mute/kick/ban/restrict/freeze/inventory/economy/reputation/automod/message-deletion or other player-facing moderation mutation is authorized. Production-derived private values, player data, credentials, raw messages, or reconstructable evidence must not be copied into GitHub, ChatGPT, CI artifacts, or public logs.
 
-The revised authorization remains deliberately bounded:
+## Delivered implementation
+PR #187 provides the real-data read bridge, loopback-only Staff Bot read API, signed and replay-resistant Worker/session/direct-read path, explicit response allowlists, D03/D06 authorization, bounded JDA message reads, private Paper authority bridge, and simulation-only destructive controls.
 
-- do **not** deploy the full `EnthusiaStaff-Paper.jar` solely for D16 acceptance;
-- the bridge may apply the repository's existing Flyway migrations only to the owner-configured EnthusiaStaff database and may persist transition player/link observations there;
-- DiscordSRV is read only: current AccountLinkManager snapshots may be imported through existing conflict/idempotency semantics, but the temporary bridge never invokes legacy link/unlink mutators;
-- LiteBans remains authoritative and untouched; use the repository's dedicated SELECT-only migration/shadow system later rather than duplicating its cutover logic inside this bridge;
-- no warn/mute/kick/ban/restrict/freeze/inventory/economy/reputation/automod/message-deletion or other player-facing moderation mutation is authorized;
-- the LuckPerms rank listener remains private/replay-protected on port `8771`, with no public Bloom allocation;
-- the staging Discord bot and Cloudflare moderation workspace remain staging/simulation-only;
-- production-derived private values, player data, credentials, raw messages, or reconstructable evidence must not be copied into GitHub, ChatGPT, CI artifacts, or public logs.
+The temporary transition collector is opt-in through runtime-only `collector.properties`. It opens the narrow write-capable `TransitionDataRuntime`, applies repository migrations, records bounded player observations, and imports eligible DiscordSRV snapshot links through existing idempotency/conflict semantics. DiscordSRV mutators are never called, LiteBans is not ingested, overlapping passes are skipped, snapshot/cached-player work is bounded, and logs contain aggregate counts/failure classes only. The separate Staff Bot remains JDBC read-only and never runs Flyway.
 
-## Delivered read bridge
-PR #187 implements real selected-target identity, linked-account, sanction/history, case/note, channel/category and bounded Discord-message reads through the existing D03/D06 model; a loopback-only Staff Bot read API on `127.0.0.1:8766`; target-bound Worker sessions/proofs; exact staging-origin CORS; request expiry/replay fences; bounded JDA reads; and simulation-only punishment/deletion/permission-override controls.
+## Live acceptance findings and repair
+A real Discord-generated preview reached the private Staff Bot API but returned allowlisted `503 source_unavailable`. Bloom then recorded MariaDB 1146/42S02 for missing moderation tables, proving the browser/Worker/session/proof/CORS/tunnel/read-API path reached Bloom while the authoritative EnthusiaStaff database had not been initialized.
 
-The Staff Bot is intentionally read-only: `DiscordStaffReadRuntime` opens JDBC read-only and never runs Flyway. That means an empty database must be initialized by an authorized write-capable runtime before D16 can return authoritative data.
+The first owner-authorized transition-collector start connected to MariaDB successfully, but Paper logged `Successfully validated 0 migrations` and `No migrations found`, created only `flyway_schema_history`, and treated the empty schema as current. The shaded bridge JAR did contain the migrations; Flyway was scanning Paper's host thread-context classloader instead of the plugin's owning loader.
 
-## Temporary transition collector
-The owner-authorized bridge now supports an opt-in `collector.properties` alongside the existing `authority.properties`. When present it opens only the narrow `TransitionDataRuntime`, which applies existing migrations and exposes only `PlayerDirectory` plus `DiscordModerationPersistenceStore` to the collector.
+Frozen executable candidate `83bc4e102b85b9db904e9df4e7f956896fa938bf` repairs that Paper-only discovery defect: `TransitionDataRuntime` deliberately gives Flyway its owning classloader, verifies required V1/V19/V20 resources are visible, and fails closed otherwise. Tests emulate a host context classloader that cannot see plugin resources. Clean-database MariaDB/Testcontainers integration coverage proves migration/import/restart behavior. The narrow PMD `UseProperClassLoader` suppression is individually documented because the owning plugin loader is the required behavior for this confirmed Paper boundary.
 
-Collection behavior is bounded and non-destructive:
+## Exact-head validation — PASS
+Exact branch head `587ea47f6e30aa468021497af6bed77d97c2975a` is documentation-only after executable candidate `83bc4e102b85b9db904e9df4e7f956896fa938bf` and passed the applicable full gates:
 
-- current online player observations are recorded; cached offline linked players are processed in batches of at most 128 per pass;
-- DiscordSRV snapshots above 5,000 links are rejected;
-- only links with a usable observed Minecraft identity are eligible for import;
-- imports reuse `DiscordSrvMigrationService`, `MIGRATED_DISCORDSRV`, stable operation keys, unchanged detection, and conflict preservation;
-- no DiscordSRV mutation/mirroring occurs;
-- persistence runs on one bounded worker and overlapping passes are skipped;
-- logs contain aggregate counts/failure classes only;
-- collector failure does not disable the separate LuckPerms authority endpoint.
+- Coverage/full Java 21 `33846514820` / job `100939581796`: PASS; clean build/integration tests; 27 provider API source types / zero runtime leaks; JaCoCo 51.97% lines / 42.27% branches / 54.27% instructions; artifact `9927145819`, digest `sha256:ef4a707b496a61d466af78909333fb7234b54419e062164ffb17dca6e153ba0a`.
+- Moderation Web Staging Deploy `33846511302`: PASS, including permanent Worker deployment, fixed private tunnel/DNS, signed launch/session proof, exact staging-origin CORS, synthetic unauthorized 403, direct-read replay rejection, and one-time launch replay rejection without querying real player/message data.
+- Moderation Web Validation `33846514771`: PASS.
+- Staff Bot Configuration Cache `33846514753`: PASS.
+- Staff Bot PR Artifact `33846514759`: PASS.
+- Sentinel Restart Artifact `33846514754`: PASS.
+- Codacy Static Code Analysis: PASS, zero annotations/new valid findings.
+- Manual final-delta review: no new valid blocker; all historical correctness threads resolved.
 
-This collector intentionally does not ingest LiteBans. The existing LiteBans migration/shadow implementation already provides SELECT-only legacy reads, checksums/high-water marks, protected identities, lifecycle/cutover fencing and shadow comparison; that is the correct future transition path and remains outside this narrow D16 bridge extension.
+Exact authority-bridge artifact from `33846514754`:
+- artifact `9926742858`, `enthusiastaff-authority-bridge`;
+- ZIP digest `sha256:79a561c98ed05298f571cd9b214157bde3390b0fcf66af83ea7db14ead66deca`;
+- source marker `587ea47f6e30aa468021497af6bed77d97c2975a`;
+- contained `EnthusiaStaff-AuthorityBridge.jar` SHA-256 `af0e39fa63b84a397efa28fce0160008d4d65562ddb9c0461d00f9d3b5fb5a80`;
+- independent archive inspection confirms repository migrations V1 through V20 under `db/migration/`.
 
-## Historical evidence
-Earlier exact-head Java/Codacy/CodeRabbit/artifact and protected Cloudflare staging successes remain historical evidence only after executable heads changed. Failed, cancelled, superseded, and wrong-head runs are never relabeled as passing evidence.
+Historical failed/cancelled/superseded runs remain non-passing history and are not relabeled.
 
-The pre-extension Staff Bot head `e6677e143fcf56a10688e630093e6187310a7d74` passed all hosted PR gates and fixed the synthetic missing-Discord-member authorization classification. The owner deployed that Staff Bot, and a real browser request subsequently proved Worker/session/proof/CORS/tunnel ingress reached the Staff Bot; the remaining 503 was traced to the absent DB schema rather than transport.
+## Current blocker and exact unblock
+All safe repository work is complete for this checkpoint. The remaining action requires the owner-operated live Paper process; this worker has no authenticated Bloom mutation surface.
 
-## Remaining acceptance
+The owner must perform one controlled Paper restart after replacing only `plugins/EnthusiaStaff-AuthorityBridge.jar` with the exact artifact above. Existing `plugins/EnthusiaStaffAuthorityBridge/authority.properties` and the already-created `collector.properties` stay unchanged; ports `8771` and `8766` stay without public Bloom allocations. Do not hot-reload the plugin.
 
-1. freeze and pass exact-head Java, integration, Codacy, CodeRabbit, web/config-cache and Sentinel artifact validation for the transition-enabled bridge;
-2. provide the exact authority-bridge JAR/checksum to the owner;
-3. owner replaces only the temporary bridge JAR, adds runtime-only `collector.properties`, and performs one controlled Paper restart; existing `authority.properties` remains unchanged;
-4. verify sanitized bridge startup, Flyway/schema initialization and an aggregate transition-collector pass without exposing credentials/player data;
-5. open a fresh Discord-generated moderation preview and verify real linked identity data; diagnose any remaining truthful source/authorization failure;
-6. complete sanitized D16 acceptance for actor/guild/target/session binding, real identity/link/sanction/history semantics, bounded readable Discord messages, unauthorized/replay/outage rejection, and zero destructive mutation/deletion;
-7. reconcile moving `main` with normal merge history, rerun every invalidated exact-head gate, update canonical records, merge PR #187 normally, prove containment/cleanup, and publish `COMPLETE`.
+Successful unblock evidence is sanitized startup output showing Flyway discovers/applies the repository migrations rather than `0 migrations`, followed by transition collector startup and an aggregate collector pass. The MariaDB 11.8 newer-than-verified Flyway warning is informational unless a migration actually fails. Do not expose the JDBC URL, credentials, secrets, raw player rows, or private messages.
 
-## Explicit exclusions still in force
-The owner production exception does **not** authorize warn/mute/kick/ban/restrict/unmute/unban/unrestrict mutation, Discord message deletion, permission-override application, LiteBans writes or authority change, issue #43 acceptance, cutover, broad production data export, secret disclosure, or player-facing experimentation. ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched. Do not begin D07 as part of this D16 worker.
+## Remaining acceptance after restart
+After schema/transition data is available, open a fresh Discord-generated moderation preview and complete sanitized D16 acceptance for real linked identity and target data, sanction/history semantics, bounded readable Discord messages, actor/guild/target/session binding, unauthorized denial, replay rejection, truthful outage behavior, and zero destructive mutation/deletion. Then reconcile moving `main`, rerun any invalidated exact-head gates, update canonical records, merge PR #187 normally, prove containment/cleanup, publish `COMPLETE`, and stop without starting another package.
+
+ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched. Do not begin ES-D07 as part of this worker.
+
+Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-04-es-d16-paper-migration-classloader-blocked.md`.
