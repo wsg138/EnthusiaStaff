@@ -226,8 +226,8 @@ final class PaperCommandRegistrar {
                 plugin(), clock(), writeMode(), storage(PaperStorageBindings::playerDirectory),
                 storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers()
         );
-        bind("freeze", freezes);
-        bind("unfreeze", freezes);
+        bindCompleting("freeze", freezes, freezes);
+        bindCompleting("unfreeze", freezes, freezes);
         bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
